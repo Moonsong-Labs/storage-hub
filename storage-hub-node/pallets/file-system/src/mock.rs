@@ -1,6 +1,6 @@
 use frame_support::{derive_impl, parameter_types, traits::Everything};
 use frame_system as system;
-use sp_core::H256;
+use sp_core::{ConstU32, H256};
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
 	BuildStorage,
@@ -13,7 +13,7 @@ frame_support::construct_runtime!(
 	pub enum Test
 	{
 		System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
-		TemplateModule: crate::{Pallet, Call, Storage, Event<T>},
+		FilySystemModule: crate::{Pallet, Call, Storage, Event<T>},
 	}
 );
 
@@ -51,6 +51,11 @@ impl system::Config for Test {
 
 impl crate::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
+	type Fingerprint = H256;
+	type StorageUnit = u128;
+	type MaxBsps = ConstU32<5u32>;
+	type MaxFilePathSize = ConstU32<512u32>;
+	type MaxMultiAddressSize = ConstU32<512u32>;
 }
 
 // Build genesis storage according to the mock runtime.

@@ -61,7 +61,7 @@ use weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight};
 use xcm::latest::prelude::BodyId;
 
 /// Import the template pallet.
-pub use pallet_parachain_template;
+pub use pallet_file_system;
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
@@ -487,8 +487,13 @@ impl pallet_collator_selection::Config for Runtime {
 }
 
 /// Configure the pallet template in pallets/template.
-impl pallet_parachain_template::Config for Runtime {
+impl pallet_file_system::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
+	type Fingerprint = Hash;
+	type StorageUnit = u128;
+	type MaxBsps = ConstU32<5u32>;
+	type MaxFilePathSize = ConstU32<512u32>;
+	type MaxMultiAddressSize = ConstU32<512u32>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -520,8 +525,7 @@ construct_runtime!(
 		CumulusXcm: cumulus_pallet_xcm = 32,
 		MessageQueue: pallet_message_queue = 33,
 
-		// Template
-		TemplatePallet: pallet_parachain_template = 50,
+		FileSystem: pallet_file_system = 50,
 	}
 );
 

@@ -1,14 +1,14 @@
-//! Benchmarking setup for pallet-parachain-template
+//! Benchmarking setup for pallet-file-system
 
 use super::*;
 
 #[allow(unused)]
-use crate::Pallet as Template;
+use crate::Pallet as FileSystem;
 use frame_benchmarking::{benchmarks, impl_benchmark_test_suite, whitelisted_caller};
 use frame_system::RawOrigin;
 
 benchmarks! {
-	do_something {
+	request_storage {
 		let s in 0 .. 100;
 		let caller: T::AccountId = whitelisted_caller();
 	}: _(RawOrigin::Signed(caller), s)
@@ -17,4 +17,4 @@ benchmarks! {
 	}
 }
 
-impl_benchmark_test_suite!(Template, crate::mock::new_test_ext(), crate::mock::Test,);
+impl_benchmark_test_suite!(FileSystem, crate::mock::new_test_ext(), crate::mock::Test,);
