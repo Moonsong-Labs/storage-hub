@@ -9,11 +9,7 @@ homepage = "https://moonsonglabs.com/"
 panic = "unwind"
 
 [workspace]
-members = [
-	"runtime",
-	"pallets/*",
-	"node",
-]
+members = ["runtime", "pallets/*", "node"]
 
 [workspace.lints.rust]
 suspicious_double_ref_op = { level = "allow", priority = 2 }
