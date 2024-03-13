@@ -6,6 +6,6 @@ describe("Sample test suite", () => {
 	});
 
 	test("truthy", () => {
-		expect(1 === 1).toBeTrue;
+		expect(1 === Number("1")).toBeTrue;
 	});
 });
