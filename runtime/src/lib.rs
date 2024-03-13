@@ -493,7 +493,7 @@ impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Fingerprint = Hash;
     type StorageUnit = u128;
-    type MaxBsps = ConstU32<5u32>;
+    type MaxBspsPerStorageRequest = ConstU32<5u32>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxMultiAddressSize = ConstU32<512u32>;
 }

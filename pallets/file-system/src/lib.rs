@@ -61,7 +61,7 @@ pub mod pallet {
 
         /// Maximum number of BSPs that can store a file.
         #[pallet::constant]
-        type MaxBsps: Get<u32>;
+        type MaxBspsPerStorageRequest: Get<u32>;
 
         /// Maximum byte size of a file path.
         #[pallet::constant]
@@ -87,7 +87,7 @@ pub mod pallet {
             who: T::AccountId,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            size: StorageCount<T>,
+            size: StorageUnit<T>,
             user_multiaddr: MultiAddress<T>,
         },
 
@@ -121,29 +121,30 @@ pub mod pallet {
             todo!()
         }
 
-        /// Creates a new entry in the StorageRequests with the new file to be stored.
-        ///
-        /// Performs basic checks like user having a minimum amount of funds, the MSP
-        /// selected existing, etc. The extrinsic takes as arguments —at least— the
-        /// bucket selected, file location, fingerprint, size and multiaddress from where
-        /// the user will send the file. Emits a NewFile event that notifies the MSP
-        /// of its selection, and announces the new file for BSPs to volunteer.
+        /// Issue a new storage request for a file
         #[pallet::call_index(1)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn request_storage(
             origin: OriginFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            size: StorageCount<T>,
+            size: StorageUnit<T>,
             user_multiaddr: MultiAddress<T>,
+            overwrite: bool,
         ) -> DispatchResult {
-            // Check that the extrinsic was signed and get the signer.
+            // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
 
-            // Perform validations and register storage request.
-            Self::do_request_storage(location.clone(), fingerprint)?;
+            // Perform validations and register storage request
+            Self::do_request_storage(
+                location.clone(),
+                fingerprint,
+                size,
+                user_multiaddr.clone(),
+                overwrite,
+            )?;
 
-            // BSPs listen to this event and volunteer to store the file.
+            // BSPs listen to this event and volunteer to store the file
             Self::deposit_event(Event::NewStorageRequest {
                 who,
                 location,
@@ -155,17 +156,10 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Delete storage request.
+        /// Delete storage request
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn delete_storage_request(_origin: OriginFor<T>) -> DispatchResult {
-            todo!()
-        }
-
-        /// Overwrite storage request.
-        #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn overwrite_storage_request(_origin: OriginFor<T>) -> DispatchResult {
             todo!()
         }
 

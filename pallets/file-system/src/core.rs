@@ -2,7 +2,7 @@ use frame_support::{ensure, pallet_prelude::DispatchResult, sp_runtime::BoundedV
 
 use crate::{
     pallet,
-    types::{FileLocation, Fingerprint, StorageRequestMetadata},
+    types::{FileLocation, Fingerprint, MultiAddress, StorageRequestMetadata, StorageUnit},
     Error, Pallet, StorageRequests,
 };
 
@@ -30,15 +30,22 @@ where
     pub fn do_request_storage(
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
+        size: StorageUnit<T>,
+        user_multiaddr: MultiAddress<T>,
+        overwrite: bool,
     ) -> DispatchResult {
-        // TODO: Perform various checks of users funds, storage capacity, etc.
-        // TODO: Not relevant for PoC.
+        // TODO: Check user funds and lock them for the storage request.
+        // TODO: Check storage capacity of chosen MSP (when we support MSPs)
+        // TODO: Return error if the file is already stored and overwrite is false.
 
         let file_metadata = StorageRequestMetadata::<T> {
             requested_at: <frame_system::Pallet<T>>::block_number(),
             fingerprint,
+            size,
+            user_multiaddr,
             bsps_volunteered: BoundedVec::default(),
             bsps_confirmed: BoundedVec::default(),
+            overwrite,
         };
 
         // Check that storage request is not already registered.
@@ -58,11 +65,8 @@ where
         location: FileLocation<T>,
         _fingerprint: Fingerprint<T>,
     ) -> DispatchResult {
-        // TODO: Perform various checks of BSP staking, total capacity, etc.
-
-        // TODO add identiy pallet to config
-        // Check that sender is a registered storage provider.
-        // ensure!(<T as Config>::BspsRegistry::get_user(who.clone()).is_some(), Error::<T>::NotBsp);
+        // TODO: Verify BSP has enough storage capacity to store the file
+        // TODO: Check that sender is a registered storage provider
 
         // Check that the storage request exists.
         ensure!(
@@ -83,7 +87,7 @@ where
             Error::<T>::BspAlreadyConfirmed
         );
 
-        // TODO Check that the threshold value is high enough to qualify as BSP for the storage request.
+        // TODO: Check that the threshold value is high enough to qualify as BSP for the storage request.
 
         // Add BSP to storage request metadata.
         file_metadata
@@ -93,7 +97,7 @@ where
         <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
 
         // Check if maximum number of BSPs has been reached.
-        if file_metadata.bsps_volunteered.len() == T::MaxBsps::get() as usize {
+        if file_metadata.bsps_volunteered.len() == T::MaxBspsPerStorageRequest::get() as usize {
             // Clear storage request from StorageRequests.
             <StorageRequests<T>>::remove(&location);
         }

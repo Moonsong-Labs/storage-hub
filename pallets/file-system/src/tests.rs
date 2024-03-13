@@ -1,4 +1,8 @@
-use crate::{mock::*, types::FileLocation, Event};
+use crate::{
+    mock::*,
+    types::{FileLocation, MultiAddress},
+    Event,
+};
 use frame_support::assert_ok;
 use sp_runtime::{
     traits::{BlakeTwo256, Hash},
@@ -23,6 +27,7 @@ fn request_storage_success() {
             fingerprint.clone(),
             4,
             BoundedVec::try_from(vec![1]).unwrap(),
+            false
         ));
 
         // Assert that the correct event was deposited
@@ -62,6 +67,7 @@ fn bsp_volunteer_success() {
             fingerprint.clone(),
             4,
             BoundedVec::try_from(vec![1]).unwrap(),
+            false
         ));
 
         // Dispatch BSP volunteer.
