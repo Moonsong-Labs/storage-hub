@@ -53,20 +53,6 @@ pub mod pallet {
             + MaxEncodedLen
             + HasCompact;
 
-        /// Data type of the Merkle Patricia roots that the runtime will store
-        type MerklePatriciaRoot: Parameter
-            + Member
-            + MaybeSerializeDeserialize
-            + MaybeDisplay
-            + SimpleBitOps
-            + Ord
-            + Default
-            + Copy
-            + CheckEqual
-            + AsRef<[u8]>
-            + AsMut<[u8]>
-            + MaxEncodedLen;
-
         /// The minimum amount that an account has to deposit to become a storage provider.
         #[pallet::constant]
         type SpMinDeposit: Get<BalanceOf<Self>>;
@@ -148,7 +134,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn msp_sign_up(
             origin: OriginFor<T>,
-            data_stored: StorageData<T>,
+            total_data: StorageData<T>,
             multiaddress: MultiAddress<T>,
             value_prop: ValueProposition<T>,
         ) -> DispatchResultWithPostInfo {
@@ -160,10 +146,10 @@ pub mod pallet {
             // 3b. Any value proposition checks??? TODO: Ask
             // 4. Check that the data to be stored is greater than the minimum required by the runtime. TODO: Ask if this applies to MSPs
             // 5. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
-            // 5. Check that the signer has enough funds to pay the deposit
-            // 6. Hold the deposit from the signer
-            // 7. Update the MSP storage to add the signer as an MSP
-            // 8. Emit an event confirming that the registration of the MSP has been successful
+            // 6. Check that the signer has enough funds to pay the deposit
+            // 7. Hold the deposit from the signer
+            // 8. Update the MSP storage to add the signer as an MSP
+            // 9. Emit an event confirming that the registration of the MSP has been successful
 
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
@@ -171,7 +157,8 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             let msp_info = MainStorageProvider {
-                data_stored,
+                total_data,
+                data_used: StorageData::<T>::default(),
                 multiaddress,
                 value_prop,
             };
@@ -189,7 +176,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn bsp_sign_up(
             origin: OriginFor<T>,
-            data_stored: StorageData<T>,
+            total_data: StorageData<T>,
             multiaddress: MultiAddress<T>,
         ) -> DispatchResultWithPostInfo {
             // todo!("Logic to sign up a BSP.");
@@ -213,7 +200,8 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             let bsp_info = BackupStorageProvider {
-                data_stored,
+                total_data,
+                data_used: StorageData::<T>::default(),
                 multiaddress,
             };
             // Update storage.
@@ -274,6 +262,32 @@ pub mod pallet {
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
         }
+
+        /// A dispatchable function that allows users to change their amount of stored data
+        #[pallet::call_index(4)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn change_total_data(
+            origin: OriginFor<T>,
+            new_total_data: StorageData<T>,
+        ) -> DispatchResultWithPostInfo {
+            // TODO: design a way (with timelock probably) to allow a SP to change its stake
+            // This extrinsic should:
+            // 1. Check that the extrinsic was signed and get the signer.
+            // 2. Check that the signer is registered as a SP
+            // 3. Check that enough time has passed since the last time the SP changed its stake
+            // 4. Check that the new total data is greater than the minimum required by the runtime
+            // 5. Check that the new total data is greater than the data used by this SP
+            // 6. Check to see if the new total data is greater or less than the current total data
+            // 	a. If the new total data is greater than the current total data:
+            //		i. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
+            // 		ii. Check that the signer has enough funds to pay this extra deposit
+            // 		iii. Hold the extra deposit from the signer
+            // 	b. If the new total data is less than the current total data, return the extra deposit to the signer
+            // 7. Update the SPs storage to change the total data
+            // 8. Emit an event confirming that the change of the total data has been successful
+
+            Ok(().into())
+        }
     }
 }
 
@@ -283,9 +297,9 @@ impl<T: Config> Pallet<T> {
     /// A helper function to get the total capacity of a storage provider.
     pub fn get_total_capacity(who: &T::AccountId) -> StorageData<T> {
         if let Some(m) = Msps::<T>::get(who) {
-            m.data_stored
+            m.total_data
         } else if let Some(b) = Bsps::<T>::get(who) {
-            b.data_stored
+            b.total_data
         } else {
             StorageData::<T>::default()
         }

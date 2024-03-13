@@ -15,24 +15,25 @@ pub struct ValueProposition<T: Config> {
     // TODO: Add relevant fields here
 }
 
-/// Structure that represents a main storage provider. It holds the data that the MSP is able to store,
-/// its libp2p multiaddress, and its value proposition.
+/// Structure that represents a main storage provider. It holds the amount of data that the MSP is able to store,
+/// the amount of data that it IS storing, its libp2p multiaddress, and its value proposition.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct MainStorageProvider<T: Config> {
-    pub data_stored: StorageData<T>,
+    pub total_data: StorageData<T>,
+    pub data_used: StorageData<T>,
     pub multiaddress: MultiAddress<T>,
     pub value_prop: ValueProposition<T>,
 }
 
-/// Structure that represents a backup storage provider. It holds the data that the BSP is able to store
-/// and its libp2p multiaddress.
+/// Structure that represents a backup storage provider. It holds the amount of data that the BSP is able to store,
+/// the amount of data that it is storing, and its libp2p multiaddress.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct BackupStorageProvider<T: Config> {
-    pub data_stored: StorageData<T>,
+    pub total_data: StorageData<T>,
+    pub data_used: StorageData<T>,
     pub multiaddress: MultiAddress<T>,
-    // pub root: MerklePatriciaRoot<T>, // The root of the Merkle Patricia Forest of this BSP. HANDLED IN FILE SYSTEM PALLET
 }
 
 // Type aliases:
@@ -49,10 +50,6 @@ pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
 /// StorageData is the type of the unit in which we measure data size. We define its required traits in the
 /// pallet configuration so the runtime can use any type that implements them.
 pub type StorageData<T> = <T as crate::Config>::StorageData;
-
-/// MerklePatriciaRoot is the type of the root of the Merkle Patricia Forest of a storage provider or a bucket.
-/// We define its required traits in the pallet configuration so the runtime can use any type that implements them.
-pub type MerklePatriciaRoot<T> = <T as crate::Config>::MerklePatriciaRoot; // TODO: remove this if not needed
 
 /// Protocols is a vector of the protocols that (the runtime is aware of and) the main storage provider supports.
 /// Its maximum size is defined in the runtime configuration, as MaxProtocols.
