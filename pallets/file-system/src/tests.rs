@@ -20,7 +20,7 @@ fn request_storage_success() {
         assert_ok!(FilySystemModule::request_storage(
             user.clone(),
             location.clone(),
-            fingerprint.clone(),
+            fingerprint,
             4,
             BoundedVec::try_from(vec![1]).unwrap(),
             false
@@ -60,7 +60,7 @@ fn bsp_volunteer_success() {
         assert_ok!(FilySystemModule::request_storage(
             user.clone(),
             location.clone(),
-            fingerprint.clone(),
+            fingerprint,
             4,
             BoundedVec::try_from(vec![1]).unwrap(),
             false
@@ -70,7 +70,7 @@ fn bsp_volunteer_success() {
         assert_ok!(FilySystemModule::bsp_volunteer(
             bsp.clone(),
             location.clone(),
-            fingerprint.clone(),
+            fingerprint,
             BoundedVec::try_from(vec![2]).unwrap()
         ));
 

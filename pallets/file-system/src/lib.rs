@@ -76,6 +76,7 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     #[pallet::storage]
+    #[pallet::getter(fn storage_requests)]
     pub type StorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, FileLocation<T>, StorageRequestMetadata<T>>;
 
