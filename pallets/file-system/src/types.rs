@@ -11,20 +11,20 @@ use crate::Config;
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct StorageRequestMetadata<T: Config> {
-	/// Block number at which the storage request was made.
-	///
-	/// Used primarily for tracking the age of the request which is useful for
-	/// cleaning up old requests.
-	pub requested_at: BlockNumberFor<T>,
-	/// Identifier of the data being stored.
-	pub fingerprint: Fingerprint<T>,
-	/// List of BSPs that have volunteered to store the data.
-	pub bsps_volunteered: BoundedVec<StorageProviderId<T>, MaxBsps<T>>,
-	/// List of BSPs that have proven they are storing the data.
-	///
-	/// The storage request will be dropped/complete once all the minimum required BSPs have
-	/// submitted a proof of storage after volunteering to store the data.
-	pub bsps_confirmed: BoundedVec<StorageProviderId<T>, MaxBsps<T>>,
+    /// Block number at which the storage request was made.
+    ///
+    /// Used primarily for tracking the age of the request which is useful for
+    /// cleaning up old requests.
+    pub requested_at: BlockNumberFor<T>,
+    /// Identifier of the data being stored.
+    pub fingerprint: Fingerprint<T>,
+    /// List of BSPs that have volunteered to store the data.
+    pub bsps_volunteered: BoundedVec<StorageProviderId<T>, MaxBsps<T>>,
+    /// List of BSPs that have proven they are storing the data.
+    ///
+    /// The storage request will be dropped/complete once all the minimum required BSPs have
+    /// submitted a proof of storage after volunteering to store the data.
+    pub bsps_confirmed: BoundedVec<StorageProviderId<T>, MaxBsps<T>>,
 }
 
 /// Alias for the `AccoundId` type used in the FileSystem pallet.
