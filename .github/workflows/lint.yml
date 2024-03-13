@@ -1,0 +1,61 @@
+name: Lint and Format
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - perm-*
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: set to pull_request number to execute on external pr
+        required: false
+
+jobs:
+  check-rust-fmt:
+    name: "Check format with rustfmt"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          components: rustfmt
+      - name: Format code with rustfmt
+        run: cargo fmt -- --check
+
+  check-rust-lint:
+    name: "Check lint with clippy"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          components: rustfmt, rust-src
+          target: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
+      - run: cargo clippy --workspace --lib --examples --tests --benches --all-features --locked
+        env:
+          RUSTFLAGS: -D warnings
+
+  check-ts-fmt:
+    name: "Check format with biome"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install
+      - run: bun fmt
+
+  check-ts-lint:
+    name: "Check lint with biome"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install
+      - run: bun lint
