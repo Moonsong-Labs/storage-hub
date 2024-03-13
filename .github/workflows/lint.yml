@@ -1,4 +1,4 @@
-name: Build
+name: Lint and Format
 
 on:
   pull_request:
@@ -17,7 +17,7 @@ jobs:
     name: "Check format with rustfmt"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
           components: rustfmt
@@ -28,12 +28,17 @@ jobs:
     name: "Check lint with clippy"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
-          components: clippy
-      - run: cargo clippy --all-targets --all-features
-  
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - run: cargo clippy --workspace --lib --examples --tests --benches --all-features --locked
+        env:
+          RUSTFLAGS: -D warnings
+
   check-ts-fmt:
     name: "Check format with biome"
     runs-on: ubuntu-latest
@@ -42,7 +47,7 @@ jobs:
       - uses: oven-sh/setup-bun@v1
       - run: bun install
       - run: bun fmt
-  
+
   check-ts-lint:
     name: "Check lint with biome"
     runs-on: ubuntu-latest
