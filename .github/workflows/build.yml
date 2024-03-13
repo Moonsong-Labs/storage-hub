@@ -1,0 +1,53 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - perm-*
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: set to pull_request number to execute on external pr
+        required: false
+
+jobs:
+  check-rust-fmt:
+    name: "Check format with rustfmt"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          components: rustfmt
+      - name: Format code with rustfmt
+        run: cargo fmt -- --check
+
+  check-rust-lint:
+    name: "Check lint with clippy"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          components: clippy
+      - run: cargo clippy --all-targets --all-features
+  
+  check-ts-fmt:
+    name: "Check format with biome"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install
+      - run: bun fmt
+  
+  check-ts-lint:
+    name: "Check lint with biome"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install
+      - run: bun lint
