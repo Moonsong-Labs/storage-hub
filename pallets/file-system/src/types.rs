@@ -28,12 +28,12 @@ pub struct StorageRequestMetadata<T: Config> {
     /// SPs will expect a connection request to be initiated by the user with this multiaddress.
     pub user_multiaddr: MultiAddress<T>,
     /// List of BSPs that have volunteered to store the data.
-    pub bsps_volunteered: BoundedVec<StorageProviderId<T>, MaxBsps<T>>,
+    pub bsps_volunteered: BoundedVec<StorageProviderId<T>, MaxBspsPerStorageRequest<T>>,
     /// List of BSPs that have proven they are storing the data.
     ///
     /// The storage request will be dropped/complete once all the minimum required BSPs have
     /// submitted a proof of storage after volunteering to store the data.
-    pub bsps_confirmed: BoundedVec<StorageProviderId<T>, MaxBsps<T>>,
+    pub bsps_confirmed: BoundedVec<StorageProviderId<T>, MaxBspsPerStorageRequest<T>>,
     /// Overwrite data if it already exists.
     ///
     /// SPs should overwrite any data at the given location if this is set to `true`.
@@ -44,7 +44,7 @@ pub struct StorageRequestMetadata<T: Config> {
 pub type StorageProviderId<T> = <T as frame_system::Config>::AccountId;
 
 /// Alias for the `MaxBsps` type used in the FileSystem pallet.
-pub type MaxBsps<T> = <T as crate::Config>::MaxBspsPerStorageRequest;
+pub type MaxBspsPerStorageRequest<T> = <T as crate::Config>::MaxBspsPerStorageRequest;
 
 /// Alias for the `MaxFilePathSize` type used in the FileSystem pallet.
 pub type MaxFilePathSize<T> = <T as crate::Config>::MaxFilePathSize;

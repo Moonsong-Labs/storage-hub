@@ -98,6 +98,13 @@ pub mod pallet {
             fingerprint: Fingerprint<T>,
             bsp_multiaddress: MultiAddress<T>,
         },
+
+        /// Notifies the revocation of a storage request.
+        RevokedStorageRequest {
+            who: T::AccountId,
+            location: FileLocation<T>,
+            fingerprint: Fingerprint<T>,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -156,10 +163,10 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Delete storage request
+        /// Revoke storage request
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn delete_storage_request(_origin: OriginFor<T>) -> DispatchResult {
+        pub fn revoke_storage_request(_origin: OriginFor<T>) -> DispatchResult {
             todo!()
         }
 
