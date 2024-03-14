@@ -243,9 +243,6 @@ pub mod pallet {
         NotStorageProvider,
     }
 
-    #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
-
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// Introduce a new challenge.
