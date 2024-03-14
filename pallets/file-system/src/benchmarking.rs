@@ -19,7 +19,7 @@ benchmarks! {
         let user_multiaddr: MultiAddress<T> = Default::default();
 
         let _ = FileSystem::<T>::create_bucket(RawOrigin::Signed(caller.clone()).into());
-    }: _(RawOrigin::Signed(caller), location.clone(), fingerprint, size, user_multiaddr, overwrite)
+    }: _(RawOrigin::Signed(caller), location.clone(), fingerprint, size, user_multiaddr)
     verify {
         assert!(FileSystem::<T>::storage_requests(location).is_some());
     }

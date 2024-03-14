@@ -59,6 +59,3 @@ pub type FileLocation<T> = BoundedVec<u8, MaxFilePathSize<T>>;
 
 /// Byte array representing the libp2p multiaddress.
 pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
-
-/// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
-pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;

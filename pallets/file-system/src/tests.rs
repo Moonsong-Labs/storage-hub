@@ -1,8 +1,4 @@
-use crate::{
-    mock::*,
-    types::{FileLocation, StorageRequestTtl},
-    Event,
-};
+use crate::{mock::*, types::FileLocation, Event};
 use frame_support::assert_ok;
 use sp_runtime::{
     traits::{BlakeTwo256, Hash},
