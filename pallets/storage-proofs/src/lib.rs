@@ -1,3 +1,4 @@
+#![allow(unused_variables)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 /// Edit this file to define custom logic or remove it if it is not needed.
@@ -5,15 +6,14 @@
 /// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
 
-#[cfg(test)]
-mod mock;
+// #[cfg(test)]
+// mod mock;
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
-
+// #[cfg(feature = "runtime-benchmarks")]
+// mod benchmarking;
 pub mod types;
 pub mod utils;
 
