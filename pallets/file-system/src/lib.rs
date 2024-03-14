@@ -1,8 +1,32 @@
+//! # Voting Pallet
+//!
+//! - [`Config`]
+//! - [`Call`]
+//!
+//! ## Overview
+//!
+//! The file system pallet provides the following functionality:
+//!
+//! - Tracks Merkle Forest roots for every MSP and BSP
+//! - Manages storage buckets
+//! - Exposes all file related actions a user or storage provider can execute
+//!
+//! ## Interface
+//!
+//! ### Dispatchable Functions
+//!
+//! - `issue_storage_request`: Issue a new storage request to store a file.
+//! - `volunteer_bsp`: BSP volunteers to store a file for a given storage request.
+//!
+//! ## Hooks
+//!
+//! - `on_idle`: Cleanup all expired storage requests.
+//!
+//! ## Dependencies
+//!
+//! TODO
 #![cfg_attr(not(feature = "std"), no_std)]
 
-/// Edit this file to define custom logic or remove it if it is not needed.
-/// Learn more about FRAME and the core library of Substrate FRAME pallets:
-/// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
 
 mod types;
@@ -29,7 +53,6 @@ pub mod pallet {
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use sp_runtime::BoundedVec;
 
-    /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
@@ -148,7 +171,7 @@ pub mod pallet {
         /// Issue a new storage request for a file
         #[pallet::call_index(1)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn request_storage(
+        pub fn issue_storage_request(
             origin: OriginFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,

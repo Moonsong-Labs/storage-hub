@@ -21,7 +21,7 @@ benchmarks! {
         let _ = FileSystem::<T>::create_bucket(RawOrigin::Signed(caller.clone()).into());
     }: _(RawOrigin::Signed(caller), location.clone(), fingerprint, size, user_multiaddr)
     verify {
-        assert!(FileSystem::<T>::storage_requests(location).is_some());
+        assert!(FileSystem::<T>::issue_storage_request(location).is_some());
     }
 }
 
