@@ -182,7 +182,13 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and register storage request
-            Self::do_request_storage(location.clone(), fingerprint, size, user_multiaddr.clone())?;
+            Self::do_request_storage(
+                who.clone(),
+                location.clone(),
+                fingerprint,
+                size,
+                user_multiaddr.clone(),
+            )?;
 
             // BSPs listen to this event and volunteer to store the file
             Self::deposit_event(Event::NewStorageRequest {
@@ -271,10 +277,10 @@ pub mod pallet {
                 None => return used_weight,
             };
 
-            // remove expired storage requests requests
+            // Remove expired storage requests
             for location in expired_requests.drain(..) {
                 // TODO: should probably add some fields to the `StorageRequestExpired` to facilitate SPs filtering the events
-                // that are relevant to them (e.g. include the SPs that have volunteered to store the file)
+                // That are relevant to them (e.g. include the SPs that have volunteered to store the file)
                 let _request = StorageRequests::<T>::take(&location);
 
                 StorageRequests::<T>::remove(&location);

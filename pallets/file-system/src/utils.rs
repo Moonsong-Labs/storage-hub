@@ -28,6 +28,7 @@ where
     T: pallet::Config,
 {
     pub fn do_request_storage(
+        requested_by: T::AccountId,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
         size: StorageUnit<T>,
@@ -39,6 +40,7 @@ where
         let current_block_number = <frame_system::Pallet<T>>::block_number();
         let file_metadata = StorageRequestMetadata::<T> {
             requested_at: current_block_number,
+            requested_by,
             fingerprint,
             size,
             user_multiaddr,
@@ -92,7 +94,7 @@ where
             Error::<T>::BspAlreadyConfirmed
         );
 
-        // TODO: Check that the threshold value is high enough to qualify as BSP for the storage request.
+        // TODO: Check that the BSP XOR is higher then the threshold
 
         // Add BSP to storage request metadata.
         file_metadata

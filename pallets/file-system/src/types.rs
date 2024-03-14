@@ -16,6 +16,8 @@ pub struct StorageRequestMetadata<T: Config> {
     /// Used primarily for tracking the age of the request which is useful for
     /// cleaning up old requests.
     pub requested_at: BlockNumberFor<T>,
+    /// AccountId of the user who requested the storage.
+    pub requested_by: T::AccountId,
     /// Identifier of the data being stored.
     pub fingerprint: Fingerprint<T>,
     /// Size of the data being stored.
@@ -36,7 +38,7 @@ pub struct StorageRequestMetadata<T: Config> {
     pub bsps_confirmed: BoundedVec<StorageProviderId<T>, MaxBspsPerStorageRequest<T>>,
 }
 
-/// Alias for the `AccoundId` type used in the FileSystem pallet.
+/// Alias for the `AccountId` type used in the FileSystem pallet.
 pub type StorageProviderId<T> = <T as frame_system::Config>::AccountId;
 
 /// Alias for the `MaxBsps` type used in the FileSystem pallet.

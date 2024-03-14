@@ -17,7 +17,7 @@ fn request_storage_success() {
         let fingerprint = BlakeTwo256::hash(&file_content);
 
         // Dispatch a signed extrinsic.
-        assert_ok!(FilySystemModule::issue_storage_request(
+        assert_ok!(FileSystemModule::issue_storage_request(
             user.clone(),
             location.clone(),
             fingerprint,
@@ -56,7 +56,7 @@ fn bsp_volunteer_success() {
         // assert_ok!(Identity::register_user(RuntimeOrigin::root(), 2));
 
         // Dispatch storage request.
-        assert_ok!(FilySystemModule::issue_storage_request(
+        assert_ok!(FileSystemModule::issue_storage_request(
             user.clone(),
             location.clone(),
             fingerprint,
@@ -65,7 +65,7 @@ fn bsp_volunteer_success() {
         ));
 
         // Dispatch BSP volunteer.
-        assert_ok!(FilySystemModule::bsp_volunteer(
+        assert_ok!(FileSystemModule::bsp_volunteer(
             bsp.clone(),
             location.clone(),
             fingerprint,
