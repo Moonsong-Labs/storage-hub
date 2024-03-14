@@ -1,5 +1,4 @@
 [workspace.package]
-name = "storage-hub-node"
 authors = ["Moonsong Labs"]
 edition = "2021"
 repository = "https://github.com/Moonsong-Labs/storage-hub-runtime.git"
@@ -11,6 +10,7 @@ panic = "unwind"
 
 [workspace]
 members = ["runtime", "pallets/*", "node", "bsp", "msp", "storage-kit"]
+resolver = "2"
 
 [workspace.lints.rust]
 suspicious_double_ref_op = { level = "allow", priority = 2 }
