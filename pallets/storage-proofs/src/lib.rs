@@ -71,26 +71,10 @@ pub mod pallet {
             + fungible::hold::Inspect<Self::AccountId>
             + fungible::freeze::Inspect<Self::AccountId>;
 
-        /// The type for keys that identify a file within a Merkle Patricia Forest.
+        /// The type for the hashes of Merkle Patricia Forest nodes.
+        /// Applies to file keys (leaf nodes) and root hashes (root nodes).
         /// Generally a hash (the output of a Hasher).
-        type FileKey: Parameter
-            + Member
-            + MaybeSerializeDeserialize
-            + Debug
-            + MaybeDisplay
-            + SimpleBitOps
-            + Ord
-            + Default
-            + Copy
-            + CheckEqual
-            + AsRef<[u8]>
-            + AsMut<[u8]>
-            + MaxEncodedLen
-            + FullCodec;
-
-        /// The type for a root of a Merkle Patricia Forest.
-        /// Generally a hash (the output of a Hasher).
-        type ForestRoot: Parameter
+        type MerkleHash: Parameter
             + Member
             + MaybeSerializeDeserialize
             + Debug

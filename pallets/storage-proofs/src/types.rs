@@ -20,11 +20,13 @@ pub enum ProofRejectionReason {
 /// Syntactic sugar for the AccountId type used in the storage proofs pallet.
 pub type AccountIdFor<T> = <T as frame_system::Config>::AccountId;
 
-/// Syntactic sugar for the FileKey type used in the storage proofs pallet.
-pub type FileKeyFor<T> = <T as crate::Config>::FileKey;
+/// The type for keys that identify a file within a Merkle Patricia Forest.
+/// Syntactic sugar for the MerkleHash type used in the storage proofs pallet.
+pub type FileKeyFor<T> = <T as crate::Config>::MerkleHash;
 
-/// Syntactic sugar for the ForestRoot type used in the storage proofs pallet.
-pub type ForestRootFor<T> = <T as crate::Config>::ForestRoot;
+/// The type for a root of a Merkle Patricia Forest.
+/// Syntactic sugar for the MerkleHash type used in the storage proofs pallet.
+pub type ForestRootFor<T> = <T as crate::Config>::MerkleHash;
 
 /// Syntactic sugar for the MaxChallengesPerBlock type used in the storage proofs pallet.
 pub type MaxChallengesPerBlockFor<T> = <T as crate::Config>::MaxChallengesPerBlock;
