@@ -4,13 +4,13 @@ use scale_info::TypeInfo;
 
 #[derive(Debug, Clone, PartialEq, Decode, Encode, TypeInfo)]
 pub enum ProofRejectionReason {
-	/// The proof was rejected because the root does not match the
-	/// Merkle Patricia Forest root.
-	RootMismatch,
-	/// The proof was rejected because the previous and next existing
-	/// leaves to a challenge were not consecutive, i.e. there is at
-	/// least one more existing leaf in between.
-	NotConsecutiveLeaves,
+    /// The proof was rejected because the root does not match the
+    /// Merkle Patricia Forest root.
+    RootMismatch,
+    /// The proof was rejected because the previous and next existing
+    /// leaves to a challenge were not consecutive, i.e. there is at
+    /// least one more existing leaf in between.
+    NotConsecutiveLeaves,
 }
 
 // ****************************************************************************
@@ -40,9 +40,9 @@ pub type StorageProvidersFor<T> = <T as crate::Config>::StorageProviders;
 
 /// Syntactic sugar for the StorageProvider type used in the storage proofs pallet.
 pub type SpFor<T> =
-	<<T as crate::Config>::StorageProviders as crate::StorageProvidersInterface>::StorageProvider;
+    <<T as crate::Config>::StorageProviders as crate::StorageProvidersInterface>::StorageProvider;
 
 /// Syntactic sugar for the type of Balance used in the NativeBalances pallet.
 pub type BalanceFor<T> = <<T as crate::Config>::NativeBalance as fungible::Inspect<
-	<T as frame_system::Config>::AccountId,
+    <T as frame_system::Config>::AccountId,
 >>::Balance;
