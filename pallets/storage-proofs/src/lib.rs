@@ -170,6 +170,14 @@ pub mod pallet {
         BoundedVec<SpFor<T>, MaxSpsChallengedPerBlockFor<T>>,
     >;
 
+    /// A mapping from a Storage Provider to the last block number they submitted a proof for.
+    /// If for a Storage Provider `sp`, `LastBlockSpSubmittedProofFor[sp]` is `n`, then the
+    /// Storage Provider should submit a proof for block `n + stake_to_challenge_period(sp)`.
+    #[pallet::storage]
+    #[pallet::getter(fn last_block_sp_submitted_proof_for)]
+    pub type LastBlockSpSubmittedProofFor<T: Config> =
+        StorageMap<_, Blake2_128Concat, SpFor<T>, BlockNumberFor<T>>;
+
     /// A queue of file keys that have been challenged manually.
     ///
     /// The elements in this queue will be challenged in the coming blocks,
@@ -196,13 +204,15 @@ pub mod pallet {
     pub type PriorityChallengesQueue<T: Config> =
         StorageValue<_, BoundedVec<FileKeyFor<T>, ChallengesQueueLengthFor<T>>, ValueQuery>;
 
-    /// A mapping from a Storage Provider to the last block number they submitted a proof for.
-    /// If for a Storage Provider `sp`, `LastBlockSpSubmittedProofFor[sp]` is `n`, then the
-    /// Storage Provider should submit a proof for block `n + stake_to_challenge_period(sp)`.
+    /// The block number of the last checkpoint challenge round.
+    ///
+    /// This is used to determine when to include the challenges from the `ChallengesQueue` and
+    /// `PriorityChallengesQueue` in the `BlockToChallenges` StorageMap. These checkpoint challenge
+    /// rounds have to be answered by ALL Storage Providers, and this is enforced by the
+    /// `submit_proof` extrinsic.
     #[pallet::storage]
-    #[pallet::getter(fn last_block_sp_submitted_proof_for)]
-    pub type LastBlockSpSubmittedProofFor<T: Config> =
-        StorageMap<_, Blake2_128Concat, SpFor<T>, BlockNumberFor<T>>;
+    #[pallet::getter(fn last_checkpoint_block)]
+    pub type LastCheckpointBlock<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
