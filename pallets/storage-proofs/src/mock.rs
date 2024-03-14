@@ -13,7 +13,7 @@ frame_support::construct_runtime!(
     pub enum Test
     {
         System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
-        TemplateModule: crate::{Pallet, Call, Storage, Event<T>},
+        // TemplateModule: crate::{Pallet, Call, Storage, Event<T>},
     }
 );
 
@@ -49,9 +49,10 @@ impl system::Config for Test {
     type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
-impl crate::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
-}
+// TODO
+// impl crate::Config for Test {
+//     type RuntimeEvent = RuntimeEvent;
+// }
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
