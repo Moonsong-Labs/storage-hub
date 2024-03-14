@@ -26,7 +26,8 @@ pub mod pallet {
         pallet_prelude::*,
         sp_runtime::traits::{AtLeast32Bit, CheckEqual, MaybeDisplay, SimpleBitOps},
     };
-    use frame_system::pallet_prelude::*;
+    use frame_system::pallet_prelude::{BlockNumberFor, *};
+    use sp_runtime::BoundedVec;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -70,6 +71,14 @@ pub mod pallet {
         /// Maximum byte size of a libp2p multiaddress.
         #[pallet::constant]
         type MaxMultiAddressSize: Get<u32>;
+
+        /// Time-to-live for a storage request.
+        #[pallet::constant]
+        type StorageRequestTtl: Get<u32>;
+
+        /// Maximum number of expired storage requests to clean up in a single block.
+        #[pallet::constant]
+        type MaxExpiredStorageRequests: Get<u32>;
     }
 
     #[pallet::pallet]
@@ -79,6 +88,15 @@ pub mod pallet {
     #[pallet::getter(fn storage_requests)]
     pub type StorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, FileLocation<T>, StorageRequestMetadata<T>>;
+
+    #[pallet::storage]
+    #[pallet::getter(fn storage_requests_expirations)]
+    pub type StorageRequestExpirations<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        BlockNumberFor<T>,
+        BoundedVec<FileLocation<T>, T::MaxExpiredStorageRequests>,
+    >;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -100,12 +118,8 @@ pub mod pallet {
             bsp_multiaddress: MultiAddress<T>,
         },
 
-        /// Notifies the revocation of a storage request.
-        RevokedStorageRequest {
-            who: T::AccountId,
-            location: FileLocation<T>,
-            fingerprint: Fingerprint<T>,
-        },
+        /// Notifies the expiration of a storage request.
+        StorageRequestExpired { location: FileLocation<T> },
     }
 
     // Errors inform users that something went wrong.
@@ -119,6 +133,8 @@ pub mod pallet {
         BspVolunteerFailed,
         /// BSP already confirmed to store the given file.
         BspAlreadyConfirmed,
+        /// No slot available found in blocks to insert storage request expiration time.
+        StorageRequestExpiredNoSlotAvailable,
     }
 
     #[pallet::call]
@@ -138,19 +154,12 @@ pub mod pallet {
             fingerprint: Fingerprint<T>,
             size: StorageUnit<T>,
             user_multiaddr: MultiAddress<T>,
-            overwrite: bool,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
 
             // Perform validations and register storage request
-            Self::do_request_storage(
-                location.clone(),
-                fingerprint,
-                size,
-                user_multiaddr.clone(),
-                overwrite,
-            )?;
+            Self::do_request_storage(location.clone(), fingerprint, size, user_multiaddr.clone())?;
 
             // BSPs listen to this event and volunteer to store the file
             Self::deposit_event(Event::NewStorageRequest {
@@ -209,6 +218,50 @@ pub mod pallet {
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_stop_storing(_origin: OriginFor<T>) -> DispatchResult {
             todo!()
+        }
+    }
+
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
+    where
+        u32: TryFrom<BlockNumberFor<T>>,
+    {
+        fn on_idle(block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
+            let db_weight = T::DbWeight::get();
+
+            // Return early if the remaining weight is not enough to perform the operation
+            if !remaining_weight.all_gte(
+                db_weight.reads_writes(
+                    1,
+                    T::MaxExpiredStorageRequests::get()
+                        .try_into()
+                        .expect("u32 would fit into u64"),
+                ),
+            ) {
+                return Weight::zero();
+            }
+
+            let mut used_weight = db_weight.reads(1);
+
+            let mut expired_requests = match StorageRequestExpirations::<T>::take(&block) {
+                Some(requests) => requests,
+                None => return used_weight,
+            };
+
+            // remove expired storage requests requests
+            for location in expired_requests.drain(..) {
+                // TODO: should probably add some fields to the `StorageRequestExpired` to facilitate SPs filtering the events
+                // that are relevant to them (e.g. include the SPs that have volunteered to store the file)
+                let _request = StorageRequests::<T>::take(&location);
+
+                StorageRequests::<T>::remove(&location);
+                used_weight += db_weight.writes(1);
+
+                Self::deposit_event(Event::StorageRequestExpired { location });
+            }
+
+            // we already checked we have enough `remaining_weight` to cover this `used_weight`
+            used_weight
         }
     }
 }

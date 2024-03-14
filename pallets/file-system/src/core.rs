@@ -3,7 +3,7 @@ use frame_support::{ensure, pallet_prelude::DispatchResult, sp_runtime::BoundedV
 use crate::{
     pallet,
     types::{FileLocation, Fingerprint, MultiAddress, StorageRequestMetadata, StorageUnit},
-    Error, Pallet, StorageRequests,
+    Error, Pallet, StorageRequestExpirations, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -32,20 +32,18 @@ where
         fingerprint: Fingerprint<T>,
         size: StorageUnit<T>,
         user_multiaddr: MultiAddress<T>,
-        overwrite: bool,
     ) -> DispatchResult {
         // TODO: Check user funds and lock them for the storage request.
         // TODO: Check storage capacity of chosen MSP (when we support MSPs)
         // TODO: Return error if the file is already stored and overwrite is false.
-
+        let current_block_number = <frame_system::Pallet<T>>::block_number();
         let file_metadata = StorageRequestMetadata::<T> {
-            requested_at: <frame_system::Pallet<T>>::block_number(),
+            requested_at: current_block_number,
             fingerprint,
             size,
             user_multiaddr,
             bsps_volunteered: BoundedVec::default(),
             bsps_confirmed: BoundedVec::default(),
-            overwrite,
         };
 
         // Check that storage request is not already registered.
@@ -56,6 +54,13 @@ where
 
         // Register storage request.
         <StorageRequests<T>>::insert(&location, file_metadata);
+
+        // TODO: Maybe worth it to loop a few times until we find a free slot. (this should never fail and so a loop is required)
+        <StorageRequestExpirations<T>>::try_append(
+            current_block_number + T::StorageRequestTtl::get().into(),
+            &location,
+        )
+        .map_err(|_| Error::<T>::StorageRequestExpiredNoSlotAvailable)?;
 
         Ok(())
     }

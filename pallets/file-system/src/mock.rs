@@ -56,6 +56,8 @@ impl crate::Config for Test {
     type MaxBspsPerStorageRequest = ConstU32<5u32>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxMultiAddressSize = ConstU32<512u32>;
+    type StorageRequestTtl = ConstU32<40u32>;
+    type MaxExpiredStorageRequests = ConstU32<100u32>;
 }
 
 // Build genesis storage according to the mock runtime.

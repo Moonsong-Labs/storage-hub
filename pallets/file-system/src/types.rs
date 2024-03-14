@@ -34,10 +34,6 @@ pub struct StorageRequestMetadata<T: Config> {
     /// The storage request will be dropped/complete once all the minimum required BSPs have
     /// submitted a proof of storage after volunteering to store the data.
     pub bsps_confirmed: BoundedVec<StorageProviderId<T>, MaxBspsPerStorageRequest<T>>,
-    /// Overwrite data if it already exists.
-    ///
-    /// SPs should overwrite any data at the given location if this is set to `true`.
-    pub overwrite: bool,
 }
 
 /// Alias for the `AccoundId` type used in the FileSystem pallet.
@@ -63,3 +59,6 @@ pub type FileLocation<T> = BoundedVec<u8, MaxFilePathSize<T>>;
 
 /// Byte array representing the libp2p multiaddress.
 pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
+
+/// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
+pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;

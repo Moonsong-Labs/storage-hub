@@ -17,7 +17,6 @@ benchmarks! {
         let fingerprint: Fingerprint<T> = Default::default();
         let size: StorageUnit<T> = Default::default();
         let user_multiaddr: MultiAddress<T> = Default::default();
-        let overwrite: bool = Default::default();
 
         let _ = FileSystem::<T>::create_bucket(RawOrigin::Signed(caller.clone()).into());
     }: _(RawOrigin::Signed(caller), location.clone(), fingerprint, size, user_multiaddr, overwrite)
