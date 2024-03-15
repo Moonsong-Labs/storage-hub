@@ -125,7 +125,8 @@ fn request_storage_expiration_current_block_increment_success() {
             expected_expiration_block_number + 1
         );
 
-        roll_to(1 + expected_expiration_block_number);
+        // Go to block number after which the storage request expirations should be removed
+        roll_to(expected_expiration_block_number + 1);
 
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
         assert_eq!(
@@ -141,6 +142,7 @@ fn request_storage_expiration_current_block_increment_success() {
             expected_expiration_block_number as usize + 1
         );
 
+        // Go to block number after which the second set of storage request expirations should be removed
         roll_to(2 + expected_expiration_block_number);
 
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
