@@ -123,6 +123,7 @@ pub mod pallet {
         Blake2_128Concat,
         BlockNumberFor<T>,
         BoundedVec<FileLocation<T>, T::MaxExpiredStorageRequests>,
+        ValueQuery,
     >;
 
     /// A pointer to the earliest available block to insert a new storage request expiration.
@@ -302,10 +303,7 @@ pub mod pallet {
 
             // TODO: test the behaviour of an on_idle execution when the previous one didn't have enough remaining weight
             // and the current block doesn't match the previous one. (do we need to add extra logic here to take into account those scenarios?)
-            let mut expired_requests = match StorageRequestExpirations::<T>::take(&block) {
-                Some(requests) => requests,
-                None => return used_weight,
-            };
+            let mut expired_requests = StorageRequestExpirations::<T>::take(&block);
 
             // Remove expired storage requests
             for location in expired_requests.drain(..) {

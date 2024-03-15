@@ -65,7 +65,7 @@ where
 
         // Get current storage request expirations vec.
         let curr_storage_request_expirations =
-            <StorageRequestExpirations<T>>::get(block_to_insert_expiration).unwrap_or_default();
+            <StorageRequestExpirations<T>>::get(block_to_insert_expiration);
 
         // Check size of storage request expirations vec.
         if curr_storage_request_expirations.len() >= T::MaxExpiredStorageRequests::get() as usize {
