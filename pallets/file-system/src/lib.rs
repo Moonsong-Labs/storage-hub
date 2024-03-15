@@ -185,9 +185,6 @@ pub mod pallet {
         BspAlreadyConfirmed,
         /// No slot available found in blocks to insert storage request expiration time.
         StorageRequestExpiredNoSlotAvailable,
-        /// `StorageRequestExpirations` returns None when dereferenced at a given block.
-        /// This should never happen, as it is a `ValueQuery` storage map.
-        StorageRequestExpirationSlotDoesNotExist,
         /// The current expiration block has overflowed (i.e. it is larger than the maximum block number).
         StorageRequestExpirationBlockOverflow,
     }
