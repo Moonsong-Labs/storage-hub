@@ -284,6 +284,8 @@ pub mod pallet {
 
             let mut used_weight = db_weight.reads(1);
 
+            // TODO: test the behaviour of an on_idle execution when the previous one didn't have enough remaining weight
+            // and the current block doesn't match the previous one. (do we need to add extra logic here to take into account those scenarios?)
             let mut expired_requests = match StorageRequestExpirations::<T>::take(&block) {
                 Some(requests) => requests,
                 None => return used_weight,
