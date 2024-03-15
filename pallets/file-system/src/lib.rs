@@ -278,12 +278,9 @@ pub mod pallet {
             if !remaining_weight
                 .all_gte(db_weight.reads_writes(1, T::MaxExpiredStorageRequests::get().into()))
             {
-                println!("Not enough remaining weight to perform the operation");
                 CurrentExpirationBlock::<T>::put(block.saturating_add(1u32.into()));
                 return Weight::zero();
             }
-
-            println!("skipped here");
 
             let mut used_weight = db_weight.reads(1);
 
