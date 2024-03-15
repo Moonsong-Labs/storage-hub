@@ -78,6 +78,7 @@ impl crate::Config for Test {
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<1>;
     type DepositPerData = ConstU128<2>;
+    type UserCount = u32;
 }
 
 // Build genesis storage according to the mock runtime.

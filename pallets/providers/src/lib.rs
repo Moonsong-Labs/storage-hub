@@ -49,7 +49,7 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + Default
             + MaybeDisplay
-            + AtLeast32Bit
+            + AtLeast32BitUnsigned
             + Copy
             + MaxEncodedLen
             + HasCompact;
@@ -130,17 +130,14 @@ pub mod pallet {
         /// that MSP's account id, the total data it can store according to its stake, its multiaddress, and its value proposition.
         MspSignUpSuccess {
             who: T::AccountId,
-            total_data: StorageData<T>,
-            multiaddress: MultiAddress<T>,
-            value_prop: ValueProposition<T>,
+            info: MainStorageProvider<T>,
         },
 
         /// Event emitted when a Backup Storage Provider has signed up successfully. Provides information about
         /// that BSP's account id, the total data it can store according to its stake, and its multiaddress.
         BspSignUpSuccess {
             who: T::AccountId,
-            total_data: StorageData<T>,
-            multiaddress: MultiAddress<T>,
+            info: BackupStorageProvider<T>,
         },
 
         /// Event emitted when a Main Storage Provider has signed off successfully. Provides information about
@@ -220,10 +217,13 @@ pub mod pallet {
                 value_prop,
             };
             // Update storage.
-            Self::do_msp_sign_up(&who, msp_info)?;
+            Self::do_msp_sign_up(&who, &msp_info)?;
 
             // Emit an event.
-            Self::deposit_event(Event::SomethingStored(123, who));
+            Self::deposit_event(Event::<T>::MspSignUpSuccess {
+                who,
+                info: msp_info,
+            });
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
         }

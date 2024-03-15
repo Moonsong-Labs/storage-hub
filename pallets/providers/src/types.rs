@@ -1,4 +1,4 @@
-use codec::{Decode, Encode, FullCodec, MaxEncodedLen};
+use codec::{Decode, Encode, FullCodec, HasCompact, MaxEncodedLen};
 use frame_support::traits::fungible::Inspect;
 use frame_support::BoundedVec;
 use frame_support::{
@@ -22,7 +22,7 @@ pub struct ValueProposition<T: Config> {
 
 /// Structure that represents a main storage provider. It holds the amount of data that the MSP is able to store,
 /// the amount of data that it IS storing, its libp2p multiaddress, and its value proposition.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct MainStorageProvider<T: Config> {
     pub total_data: StorageData<T>,
@@ -33,7 +33,7 @@ pub struct MainStorageProvider<T: Config> {
 
 /// Structure that represents a backup storage provider. It holds the amount of data that the BSP is able to store,
 /// the amount of data that it is storing, and its libp2p multiaddress.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct BackupStorageProvider<T: Config> {
     pub total_data: StorageData<T>,
@@ -78,12 +78,7 @@ pub trait StorageProvidersInterface {
         + fungible::hold::Inspect<Self::AccountId>
         + fungible::freeze::Inspect<Self::AccountId>;
     /// The type which represents a registered Storage Provider.
-    type StorageProvider: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Debug
-        + Ord
-        + MaxEncodedLen;
+    type StorageProvider: Encode + Decode + MaxEncodedLen + TypeInfo + PartialEq + Eq + Clone;
     /// The type which represents the total number of registered Storage Provider.
     type UserCount: Parameter
         + Member
@@ -102,7 +97,7 @@ pub trait StorageProvidersInterface {
         + MaybeSerializeDeserialize
         + Default
         + MaybeDisplay
-        + AtLeast32Bit
+        + AtLeast32BitUnsigned
         + Copy
         + MaxEncodedLen
         + HasCompact;
@@ -117,7 +112,9 @@ pub trait StorageProvidersInterface {
     fn total_sps() -> Self::UserCount;
 
     /// Get the stake for a registered Storage Provider.
-    fn get_stake(who: Self::StorageProvider) -> Self::Balance;
+    fn get_stake(
+        who: Self::StorageProvider,
+    ) -> <Self::Balance as Inspect<Self::AccountId>>::Balance;
 
     /// Change the used data of a Storage Provider.
     fn change_data_used(who: &Self::AccountId, data_change: Self::StorageData) -> DispatchResult;
