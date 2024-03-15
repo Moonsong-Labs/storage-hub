@@ -274,17 +274,16 @@ pub mod pallet {
             let db_weight = T::DbWeight::get();
 
             // Return early if the remaining weight is not enough to perform the operation
-            if !remaining_weight.all_gte(
-                db_weight.reads_writes(
-                    1,
-                    T::MaxExpiredStorageRequests::get()
-                        .try_into()
-                        .expect("u32 would fit into u64"),
-                ),
-            ) {
+            // TODO: fix this, it's not working as expected (when the remaining weight is 0, it stil goes through)
+            if !remaining_weight
+                .all_gte(db_weight.reads_writes(1, T::MaxExpiredStorageRequests::get().into()))
+            {
+                println!("Not enough remaining weight to perform the operation");
                 CurrentExpirationBlock::<T>::put(block.saturating_add(1u32.into()));
                 return Weight::zero();
             }
+
+            println!("skipped here");
 
             let mut used_weight = db_weight.reads(1);
 

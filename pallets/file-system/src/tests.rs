@@ -137,7 +137,7 @@ fn request_storage_expiration_current_block_increment_success() {
         );
 
         // Go to block number after which the second set of storage request expirations should be removed
-        roll_to(2 + expected_expiration_block_number);
+        roll_to(expected_expiration_block_number + 2);
 
         expected_expiration_block_number = FileSystem::next_expiration_block_number().into();
 
@@ -146,6 +146,15 @@ fn request_storage_expiration_current_block_increment_success() {
             FileSystem::storage_request_expirations(expected_expiration_block_number),
             None
         );
+
+        // TODO: add this once `on_idle` is fixed for remaining_weight
+        // FileSystem::on_idle(expected_expiration_block_number, Weight::zero());
+
+        // // Assert that the `CurrentExpirationBlock` storage is incremented by 1
+        // assert_eq!(
+        //     FileSystem::current_expiration_block(),
+        //     expected_expiration_block_number + 1
+        // );
     });
 }
 
