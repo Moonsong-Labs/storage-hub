@@ -17,15 +17,16 @@ mod benchmarking;
 #[frame_support::pallet]
 pub mod pallet {
     use super::types::*;
-    use codec::HasCompact;
+    use codec::{FullCodec, HasCompact};
     use frame_support::{
         dispatch::{DispatchResult, DispatchResultWithPostInfo},
         pallet_prelude::*,
-        sp_runtime::traits::{AtLeast32Bit, CheckEqual, MaybeDisplay, SimpleBitOps},
+        sp_runtime::traits::{AtLeast32Bit, AtLeast32BitUnsigned, MaybeDisplay},
         traits::fungible::*,
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::*;
+    use scale_info::prelude::fmt::Debug;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -52,6 +53,19 @@ pub mod pallet {
             + Copy
             + MaxEncodedLen
             + HasCompact;
+
+        /// Type that represents the total number of registered Storage Providers.
+        type UserCount: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Ord
+            + AtLeast32BitUnsigned
+            + FullCodec
+            + Copy
+            + Default
+            + Debug
+            + scale_info::TypeInfo
+            + MaxEncodedLen;
 
         /// The minimum amount that an account has to deposit to become a storage provider.
         #[pallet::constant]
@@ -95,7 +109,7 @@ pub mod pallet {
 
     /// The amount of storage providers (MSPs and BSPs) that are currently registered in the runtime.
     #[pallet::storage]
-    pub type SpCount<T: Config> = StorageValue<_, u64, ValueQuery>;
+    pub type UserCount<T: Config> = StorageValue<_, T::UserCount, ValueQuery>;
 
     /// The total amount of storage capacity all BSPs have. Remember redundancy!
     #[pallet::storage]

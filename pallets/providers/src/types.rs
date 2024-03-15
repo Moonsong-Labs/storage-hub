@@ -1,7 +1,12 @@
-use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::pallet_prelude::RuntimeDebugNoBound;
+use codec::{Decode, Encode, FullCodec, MaxEncodedLen};
 use frame_support::traits::fungible::Inspect;
 use frame_support::BoundedVec;
+use frame_support::{
+    pallet_prelude::*,
+    sp_runtime::traits::{AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, SimpleBitOps},
+    traits::fungible,
+};
+use scale_info::prelude::fmt::Debug;
 use scale_info::TypeInfo;
 
 use crate::Config;
@@ -58,3 +63,62 @@ pub type Protocols<T> = BoundedVec<u8, MaxProtocols<T>>; // TODO: define a type 
 
 /// MaxBsps is the maximum amount of backup storage providers that can exist. It is defined in the runtime configuration.
 pub type MaxBsps<T> = <T as crate::Config>::MaxBsps;
+
+/// Trait definitions:
+///
+///
+/// A trait to lookup registered Storage Providers.
+/// It is abstracted over the `AccountId` type, `StorageProvider` type, total number of users
+/// and Balance type.
+pub trait StorageProvidersInterface {
+    /// The type which can be used to identify accounts.
+    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type corresponding to the staking balance of a registered Storage Provider.
+    type Balance: fungible::Inspect<Self::AccountId>
+        + fungible::hold::Inspect<Self::AccountId>
+        + fungible::freeze::Inspect<Self::AccountId>;
+    /// The type which represents a registered Storage Provider.
+    type StorageProvider: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + Ord
+        + MaxEncodedLen;
+    /// The type which represents the total number of registered Storage Provider.
+    type UserCount: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Ord
+        + AtLeast32BitUnsigned
+        + FullCodec
+        + Copy
+        + Default
+        + Debug
+        + scale_info::TypeInfo
+        + MaxEncodedLen;
+    /// The type which represents the unit in which we measure data size.
+    type StorageData: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Default
+        + MaybeDisplay
+        + AtLeast32Bit
+        + Copy
+        + MaxEncodedLen
+        + HasCompact;
+
+    /// Lookup a registered StorageProvider by their AccountId.
+    fn get_sp(who: Self::AccountId) -> Option<Self::StorageProvider>;
+
+    /// Check if an account is a registered Storage Provider.
+    fn is_sp(who: Self::AccountId) -> bool;
+
+    /// Lookup the total number of registered Storage Providers.
+    fn total_sps() -> Self::UserCount;
+
+    /// Get the stake for a registered Storage Provider.
+    fn get_stake(who: Self::StorageProvider) -> Self::Balance;
+
+    /// Change the used data of a Storage Provider.
+    fn change_data_used(who: &Self::AccountId, data_change: Self::StorageData) -> DispatchResult;
+}
