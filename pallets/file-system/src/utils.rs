@@ -106,7 +106,7 @@ where
             Error::<T>::BspAlreadyConfirmed
         );
 
-        // TODO: Check that the BSP XOR is higher then the threshold
+        // TODO: Check that the BSP XOR is lower than the threshold
 
         // Add BSP to storage request metadata.
         expect_or_err!(

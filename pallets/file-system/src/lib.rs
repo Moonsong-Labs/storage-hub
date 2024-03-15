@@ -127,11 +127,11 @@ pub mod pallet {
 
     /// A pointer to the earliest available block to insert a new storage request expiration.
     ///
-    /// This should always be equal or greater then [`Config::StorageRequestTtl`].
+    /// This should always be equal or greater than `current_block` + [`Config::StorageRequestTtl`].
     ///
-    /// In the event when this value is smaller than the `StorageRequestTtl` value, the
-    /// storage request expiration will be inserted in the block at `StorageRequestTtl` and then
-    /// this value will be reset to block number at `StorageRequestTtl`.
+    /// In the event when this value is smaller than `current_block` + `StorageRequestTtl` value, the
+    /// storage request expiration will be inserted in the block `StorageRequestTtl` ahead, and then
+    /// this value will be reset to block number a `current_block` + `StorageRequestTtl`.
     #[pallet::storage]
     #[pallet::getter(fn current_expiration_block)]
     pub type CurrentExpirationBlock<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
@@ -274,7 +274,7 @@ pub mod pallet {
             let db_weight = T::DbWeight::get();
 
             // Return early if the remaining weight is not enough to perform the operation
-            // TODO: fix this, it's not working as expected (when the remaining weight is 0, it stil goes through)
+            // TODO: fix this, it's not working as expected (when the remaining weight is 0, it still goes through)
             if !remaining_weight
                 .all_gte(db_weight.reads_writes(1, T::MaxExpiredStorageRequests::get().into()))
             {
@@ -294,7 +294,7 @@ pub mod pallet {
             // Remove expired storage requests
             for location in expired_requests.drain(..) {
                 // TODO: should probably add some fields to the `StorageRequestExpired` to facilitate SPs filtering the events
-                // That are relevant to them (e.g. include the SPs that have volunteered to store the file)
+                // that are relevant to them (e.g. include the SPs that have volunteered to store the file)
                 let _request = StorageRequests::<T>::take(&location);
 
                 StorageRequests::<T>::remove(&location);
