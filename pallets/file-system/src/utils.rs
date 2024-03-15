@@ -2,7 +2,7 @@ use core::cmp::max;
 
 use frame_support::{ensure, pallet_prelude::DispatchResult, sp_runtime::BoundedVec, traits::Get};
 use frame_system::pallet_prelude::BlockNumberFor;
-use sp_runtime::traits::Saturating;
+use sp_runtime::traits::CheckedAdd;
 
 use crate::{
     pallet,
@@ -61,20 +61,33 @@ where
         // Register storage request.
         <StorageRequests<T>>::insert(&location, file_metadata);
 
-        let block_to_insert_expiration = Self::next_expiration_block_number();
+        let mut block_to_insert_expiration = Self::next_expiration_block_number();
 
-        // TODO: Maybe worth it to loop a few times until we find a free slot. (this should never fail and so a loop is required)
-        <StorageRequestExpirations<T>>::try_append(block_to_insert_expiration, location)
-            .map_err(|_| Error::<T>::StorageRequestExpiredNoSlotAvailable)?;
+        // Get current storage request expirations vec.
+        let curr_storage_request_expirations = expect_or_err!(
+            <StorageRequestExpirations<T>>::get(block_to_insert_expiration),
+            "Storage request expiration at block should exist, as it is a ValueQuery StorageMap",
+            Error::<T>::StorageRequestExpirationSlotDoesNotExist
+        );
 
-        // Increment the current expiration block pointer if the current storage request expirations reached max capacity at the block which was inserted into.
-        if <StorageRequestExpirations<T>>::get(block_to_insert_expiration)
-            .expect("Storage request expiration at block should exist")
-            .len()
-            == T::MaxExpiredStorageRequests::get() as usize
-        {
-            <CurrentExpirationBlock<T>>::set(block_to_insert_expiration.saturating_add(1u8.into()));
+        // Check size of storage request expirations vec.
+        if curr_storage_request_expirations.len() >= T::MaxExpiredStorageRequests::get() as usize {
+            block_to_insert_expiration = match block_to_insert_expiration.checked_add(&1u8.into()) {
+                Some(block) => block,
+                None => {
+                    return Err(Error::<T>::StorageRequestExpirationBlockOverflow.into());
+                }
+            };
+
+            <CurrentExpirationBlock<T>>::set(block_to_insert_expiration);
         }
+
+        expect_or_err!(
+            // TODO: Verify that try_append gets an empty BoundedVec when appending a first element.
+            <StorageRequestExpirations<T>>::try_append(block_to_insert_expiration, location).ok(),
+            "Storage request expiration should have enough slots available since it was just checked.",
+            Error::<T>::StorageRequestExpiredNoSlotAvailable
+        );
 
         Ok(())
     }

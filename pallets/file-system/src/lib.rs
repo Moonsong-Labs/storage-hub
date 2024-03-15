@@ -136,6 +136,17 @@ pub mod pallet {
     #[pallet::getter(fn current_expiration_block)]
     pub type CurrentExpirationBlock<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
+    /// A pointer to the latest block at which the storage requests were cleaned up.
+    ///
+    /// This value keeps track of the last block at which the storage requests were cleaned up, and
+    /// it is needed because the clean-up process is not guaranteed to happen in every block, since
+    /// it is executed in the `on_idle` hook. If a given block doesn't have enough remaining weight
+    /// to perform the clean-up, the clean-up will be postponed to the next block, and this value
+    /// avoids skipping blocks when the clean-up is postponed.
+    #[pallet::storage]
+    #[pallet::getter(fn last_block_cleaned)]
+    pub type LastBlockCleaned<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -173,6 +184,11 @@ pub mod pallet {
         BspAlreadyConfirmed,
         /// No slot available found in blocks to insert storage request expiration time.
         StorageRequestExpiredNoSlotAvailable,
+        /// `StorageRequestExpirations` returns None when dereferenced at a given block.
+        /// This should never happen, as it is a `ValueQuery` storage map.
+        StorageRequestExpirationSlotDoesNotExist,
+        /// The current expiration block has overflowed (i.e. it is larger than the maximum block number).
+        StorageRequestExpirationBlockOverflow,
     }
 
     #[pallet::call]
@@ -278,7 +294,7 @@ pub mod pallet {
             if !remaining_weight
                 .all_gte(db_weight.reads_writes(1, T::MaxExpiredStorageRequests::get().into()))
             {
-                CurrentExpirationBlock::<T>::put(block.saturating_add(1u32.into()));
+                LastBlockCleaned::<T>::put(block.saturating_add(1u32.into()));
                 return Weight::zero();
             }
 
