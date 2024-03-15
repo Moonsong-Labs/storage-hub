@@ -55,7 +55,7 @@ pub mod pallet {
             + HasCompact;
 
         /// Type that represents the total number of registered Storage Providers.
-        type UserCount: Parameter
+        type SpCount: Parameter
             + Member
             + MaybeSerializeDeserialize
             + Ord
@@ -97,28 +97,24 @@ pub mod pallet {
 
     // Storage:
 
-    /// The mapping from an account id to a main storage provider. Returns `None` if the account isnt a main storage provider.
+    /// The mapping from an account id to a Main Storage Provider. Returns `None` if the account isn't a Main Storage Provider.
     #[pallet::storage]
     pub type Msps<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, MainStorageProvider<T>>;
 
-    /// The mapping from an account id to a backup storage provider. Returns `None` if the account isnt a backup storage provider.
+    /// The mapping from an account id to a Backup Storage Provider. Returns `None` if the account isn't a Backup Storage Provider.
     #[pallet::storage]
     pub type Bsps<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, BackupStorageProvider<T>>;
 
     /// The amount of storage providers (MSPs and BSPs) that are currently registered in the runtime.
     #[pallet::storage]
-    pub type UserCount<T: Config> = StorageValue<_, T::UserCount, ValueQuery>;
+    pub type SpCount<T: Config> = StorageValue<_, T::SpCount, ValueQuery>;
 
     /// The total amount of storage capacity all BSPs have. Remember redundancy!
     #[pallet::storage]
     #[pallet::getter(fn total_bsps_capacity)] // TODO: remove this and add an explicit getter
     pub type TotalBspsCapacity<T: Config> = StorageValue<_, StorageData<T>>;
-
-    /// A vector of account IDs that are BSPs (to draw from for proofs)
-    #[pallet::storage]
-    pub type BspsVec<T: Config> = StorageValue<_, BoundedVec<T::AccountId, T::MaxBsps>, ValueQuery>;
 
     // Events & Errors:
 
@@ -130,14 +126,17 @@ pub mod pallet {
         /// that MSP's account id, the total data it can store according to its stake, its multiaddress, and its value proposition.
         MspSignUpSuccess {
             who: T::AccountId,
-            info: MainStorageProvider<T>,
+            multiaddress: MultiAddress<T>,
+            total_data: StorageData<T>,
+            value_prop: ValueProposition<T>,
         },
 
         /// Event emitted when a Backup Storage Provider has signed up successfully. Provides information about
         /// that BSP's account id, the total data it can store according to its stake, and its multiaddress.
         BspSignUpSuccess {
             who: T::AccountId,
-            info: BackupStorageProvider<T>,
+            multiaddress: MultiAddress<T>,
+            total_data: StorageData<T>,
         },
 
         /// Event emitted when a Main Storage Provider has signed off successfully. Provides information about
@@ -152,6 +151,7 @@ pub mod pallet {
         /// that SP's account id, its old total data that could store, and the new total data.
         TotalDataChanged {
             who: T::AccountId,
+            old_total_data: StorageData<T>,
             new_total_data: StorageData<T>,
         },
     }
@@ -182,7 +182,20 @@ pub mod pallet {
     /// Dispatchables (extrinsics) exposed by this pallet
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// A dispatchable function that allows users to sign up as a main storage provider.
+        /// A dispatchable function that allows users to sign up as a Main Storage Provider.
+        ///
+        /// This extrinsic will:
+        /// 1. Check that the extrinsic was signed and get the signer.
+        /// 2. Check that the signer is not already registered as either a MSP or BSP
+        /// 3. Check that the multiaddress is valid (size and any other relevant checks)
+        /// 3b. Any value proposition checks??? TODO: Ask
+        /// 4. Check that the data to be stored is greater than the minimum required by the runtime. TODO: Ask if this applies to MSPs
+        /// 5. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
+        /// 6. Check that the signer has enough funds to pay the deposit
+        /// 7. Hold the deposit from the signer
+        /// 8. Update the MSP storage to add the signer as an MSP
+        /// 9. Increment the storage that holds total amount of SPs currently in the system
+        /// 10. Emit an event confirming that the registration of the MSP has been successful
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn msp_sign_up(
@@ -192,18 +205,6 @@ pub mod pallet {
             value_prop: ValueProposition<T>,
         ) -> DispatchResultWithPostInfo {
             // todo!("Logic to sign up a MSP.");
-            // This extrinsic should:
-            // 1. Check that the extrinsic was signed and get the signer.
-            // 2. Check that the signer is not already registered as either a MSP or BSP
-            // 3. Check that the multiaddress is valid (size and any other relevant checks)
-            // 3b. Any value proposition checks??? TODO: Ask
-            // 4. Check that the data to be stored is greater than the minimum required by the runtime. TODO: Ask if this applies to MSPs
-            // 5. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
-            // 6. Check that the signer has enough funds to pay the deposit
-            // 7. Hold the deposit from the signer
-            // 8. Update the MSP storage to add the signer as an MSP
-            // 9. Increment the storage that holds total amount of SPs currently in the system
-            // 10. Emit an event confirming that the registration of the MSP has been successful
 
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
@@ -213,8 +214,8 @@ pub mod pallet {
             let msp_info = MainStorageProvider {
                 total_data,
                 data_used: StorageData::<T>::default(),
-                multiaddress,
-                value_prop,
+                multiaddress: multiaddress.clone(),
+                value_prop: value_prop.clone(),
             };
             // Update storage.
             Self::do_msp_sign_up(&who, &msp_info)?;
@@ -222,13 +223,30 @@ pub mod pallet {
             // Emit an event.
             Self::deposit_event(Event::<T>::MspSignUpSuccess {
                 who,
-                info: msp_info,
+                multiaddress,
+                total_data,
+                value_prop,
             });
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
         }
 
-        /// A dispatchable function that allows users to sign up as a backup storage provider.
+        /// A dispatchable function that allows users to sign up as a Backup Storage Provider.
+        ///
+        /// This extrinsic will:
+        /// 1. Check that the extrinsic was signed and get the signer.
+        /// 2. Check that, by adding this new BSP, we won't exceed the max amount of BSPs allowed
+        /// 3. Check that the signer is not already registered as either a MSP or BSP
+        /// 4. Check that the multiaddress is valid (size and any other relevant checks)
+        /// 5. Check that the data to be stored is greater than the minimum required by the runtime
+        /// 6. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
+        /// 7. Check that the signer has enough funds to pay the deposit
+        /// 8. Hold the deposit from the signer
+        /// 9. Update the BSP storage to add the signer as an BSP
+        /// 10. Update the total capacity of all BSPs, adding the new capacity (redundancy is factored in the capacity used)
+        /// 11. Add this BSP to the vector of BSPs to draw from for proofs
+        /// 12. Increment the storage that holds total amount of SPs currently in the system
+        /// 13. Emit an event confirming that the registration of the BSP has been successful
         #[pallet::call_index(1)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn bsp_sign_up(
@@ -237,20 +255,6 @@ pub mod pallet {
             multiaddress: MultiAddress<T>,
         ) -> DispatchResultWithPostInfo {
             // todo!("Logic to sign up a BSP.");
-            // This extrinsic should:
-            // 1. Check that the extrinsic was signed and get the signer.
-            // 2. Check that, by adding this new BSP, we won't exceed the max amount of BSPs allowed
-            // 3. Check that the signer is not already registered as either a MSP or BSP
-            // 4. Check that the multiaddress is valid (size and any other relevant checks)
-            // 5. Check that the data to be stored is greater than the minimum required by the runtime
-            // 6. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
-            // 7. Check that the signer has enough funds to pay the deposit
-            // 8. Hold the deposit from the signer
-            // 9. Update the BSP storage to add the signer as an BSP
-            // 10. Update the total capacity of all BSPs, adding the new capacity (factoring by redundancy)
-            // 11. Add this BSP to the vector of BSPs to draw from for proofs
-            // 12. Increment the storage that holds total amount of SPs currently in the system
-            // 13. Emit an event confirming that the registration of the BSP has been successful
 
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
@@ -269,19 +273,20 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// A dispatchable function that allows users to sign off as a main storage provider.
+        /// A dispatchable function that allows users to sign off as a Main Storage Provider.
+        ///
+        ///  This extrinsic should:
+        /// 1. Check that the extrinsic was signed and get the signer.
+        /// 2. Check that the signer is registered as a MSP
+        /// 3. Check that the MSP has no storage assigned to it
+        /// 4. Update the MSPs storage, removing the signer as an MSP
+        /// 5. Return the deposit to the signer
+        /// 6. Decrement the storage that holds total amount of SPs currently in the system
+        /// 7. Emit an event confirming that the sign off of the MSP has been successful
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn msp_sign_off(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             // todo!("Logic to sign off a MSP.");
-            // This extrinsic should:
-            // 1. Check that the extrinsic was signed and get the signer.
-            // 2. Check that the signer is registered as a MSP
-            // 3. Check that the MSP has no storage assigned to it
-            // 4. Update the MSPs storage, removing the signer as an MSP
-            // 5. Return the deposit to the signer
-            // 6. Decrement the storage that holds total amount of SPs currently in the system
-            // 7. Emit an event confirming that the sign off of the MSP has been successful
 
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
@@ -295,21 +300,22 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// A dispatchable function that allows users to sign off as a backup storage provider.
+        /// A dispatchable function that allows users to sign off as a Backup Storage Provider.
+        ///
+        /// This extrinsic will:
+        /// 1. Check that the extrinsic was signed and get the signer.
+        /// 2. Check that the signer is registered as a BSP
+        /// 3. Check that the BSP has no storage assigned to it
+        /// 4. Update the BSPs storage, removing the signer as an BSP
+        /// 5. Update the total capacity of all BSPs, removing the capacity of the signer (factoring by redundancy)
+        /// 6. Remove this BSP from the vector of BSPs to draw from for proofs
+        /// 7. Return the deposit to the signer
+        /// 8. Decrement the storage that holds total amount of SPs currently in the system
+        /// 9. Emit an event confirming that the sign off of the BSP has been successful
         #[pallet::call_index(3)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn bsp_sign_off(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             // todo!("Logic to sign off a BSP.");
-            // This extrinsic should:
-            // 1. Check that the extrinsic was signed and get the signer.
-            // 2. Check that the signer is registered as a BSP
-            // 3. Check that the BSP has no storage assigned to it
-            // 4. Update the BSPs storage, removing the signer as an BSP
-            // 5. Update the total capacity of all BSPs, removing the capacity of the signer (factoring by redundancy)
-            // 6. Remove this BSP from the vector of BSPs to draw from for proofs
-            // 7. Return the deposit to the signer
-            // 8. Decrement the storage that holds total amount of SPs currently in the system
-            // 9. Emit an event confirming that the sign off of the BSP has been successful
 
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
@@ -324,6 +330,21 @@ pub mod pallet {
         }
 
         /// A dispatchable function that allows users to change their amount of stored data
+        ///
+        /// This extrinsic will:
+        /// 1. Check that the extrinsic was signed and get the signer.
+        /// 2. Check that the signer is registered as a SP
+        /// 3. Check that enough time has passed since the last time the SP changed its stake
+        /// 4. Check that the new total data is greater than the minimum required by the runtime
+        /// 5. Check that the new total data is greater than the data used by this SP
+        /// 6. Check to see if the new total data is greater or less than the current total data
+        /// 	a. If the new total data is greater than the current total data:
+        ///		i. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
+        /// 		ii. Check that the signer has enough funds to pay this extra deposit
+        /// 		iii. Hold the extra deposit from the signer
+        /// 	b. If the new total data is less than the current total data, return the extra deposit to the signer
+        /// 7. Update the SPs storage to change the total data
+        /// 8. Emit an event confirming that the change of the total data has been successful
         #[pallet::call_index(4)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn change_total_data(
@@ -331,20 +352,6 @@ pub mod pallet {
             new_total_data: StorageData<T>,
         ) -> DispatchResultWithPostInfo {
             // TODO: design a way (with timelock probably) to allow a SP to change its stake
-            // This extrinsic should:
-            // 1. Check that the extrinsic was signed and get the signer.
-            // 2. Check that the signer is registered as a SP
-            // 3. Check that enough time has passed since the last time the SP changed its stake
-            // 4. Check that the new total data is greater than the minimum required by the runtime
-            // 5. Check that the new total data is greater than the data used by this SP
-            // 6. Check to see if the new total data is greater or less than the current total data
-            // 	a. If the new total data is greater than the current total data:
-            //		i. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
-            // 		ii. Check that the signer has enough funds to pay this extra deposit
-            // 		iii. Hold the extra deposit from the signer
-            // 	b. If the new total data is less than the current total data, return the extra deposit to the signer
-            // 7. Update the SPs storage to change the total data
-            // 8. Emit an event confirming that the change of the total data has been successful
 
             Ok(().into())
         }
@@ -364,4 +371,69 @@ impl<T: Config> Pallet<T> {
             StorageData::<T>::default()
         }
     }
+}
+
+// Trait definitions:
+
+use codec::{Decode, Encode, FullCodec, HasCompact, MaxEncodedLen};
+use frame_support::traits::fungible::Inspect;
+use frame_support::{
+    pallet_prelude::*,
+    sp_runtime::traits::{AtLeast32BitUnsigned, MaybeDisplay},
+    traits::fungible,
+};
+use scale_info::prelude::fmt::Debug;
+use scale_info::TypeInfo;
+
+/// A trait to lookup registered Storage Providers.
+/// It is abstracted over the `AccountId` type, `StorageProvider` type, total number of users
+/// and Balance type.
+pub trait StorageProvidersInterface {
+    /// The type which can be used to identify accounts.
+    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type corresponding to the staking balance of a registered Storage Provider.
+    type Balance: fungible::Inspect<Self::AccountId>
+        + fungible::hold::Inspect<Self::AccountId>
+        + fungible::freeze::Inspect<Self::AccountId>;
+    /// The type which represents a registered Storage Provider.
+    type StorageProvider: Encode + Decode + MaxEncodedLen + TypeInfo + PartialEq + Eq + Clone;
+    /// The type which represents the total number of registered Storage Provider.
+    type SpCount: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Ord
+        + AtLeast32BitUnsigned
+        + FullCodec
+        + Copy
+        + Default
+        + Debug
+        + scale_info::TypeInfo
+        + MaxEncodedLen;
+    /// The type which represents the unit in which we measure data size.
+    type StorageData: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Default
+        + MaybeDisplay
+        + AtLeast32BitUnsigned
+        + Copy
+        + MaxEncodedLen
+        + HasCompact;
+
+    /// Lookup a registered StorageProvider by their AccountId.
+    fn get_sp(who: Self::AccountId) -> Option<Self::StorageProvider>;
+
+    /// Check if an account is a registered Storage Provider.
+    fn is_sp(who: Self::AccountId) -> bool;
+
+    /// Lookup the total number of registered Storage Providers.
+    fn total_sps() -> Self::SpCount;
+
+    /// Get the stake for a registered Storage Provider.
+    fn get_stake(
+        who: Self::StorageProvider,
+    ) -> <Self::Balance as Inspect<Self::AccountId>>::Balance;
+
+    /// Change the used data of a Storage Provider.
+    fn change_data_used(who: &Self::AccountId, data_change: Self::StorageData) -> DispatchResult;
 }

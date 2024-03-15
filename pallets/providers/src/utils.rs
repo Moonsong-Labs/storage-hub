@@ -49,9 +49,9 @@ impl<T: pallet::Config> StorageProvidersInterface for pallet::Pallet<T> {
     type AccountId = T::AccountId;
     type Balance = T::NativeBalance;
     type StorageData = T::StorageData;
-    /// Since the ones using the interface do not care about the value proposition, we can use the backup storage provider type.
+    /// Since the ones using the interface do not care about the value proposition, we can use the Backup Storage Provider type.
     type StorageProvider = BackupStorageProvider<T>;
-    type UserCount = T::UserCount;
+    type SpCount = T::SpCount;
 
     fn get_sp(who: Self::AccountId) -> Option<Self::StorageProvider> {
         if let Some(m) = Msps::<T>::get(&who) {
@@ -67,8 +67,8 @@ impl<T: pallet::Config> StorageProvidersInterface for pallet::Pallet<T> {
         Msps::<T>::contains_key(&who) || Bsps::<T>::contains_key(&who)
     }
 
-    fn total_sps() -> Self::UserCount {
-        UserCount::<T>::get()
+    fn total_sps() -> Self::SpCount {
+        SpCount::<T>::get()
     }
 
     fn get_stake(who: Self::StorageProvider) -> BalanceOf<T> {
