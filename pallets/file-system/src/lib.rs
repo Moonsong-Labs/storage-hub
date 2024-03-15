@@ -112,14 +112,29 @@ pub mod pallet {
     pub type StorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, FileLocation<T>, StorageRequestMetadata<T>>;
 
+    /// A map of storage requests to their expiration block.
+    ///
+    /// The key is the block number at which the storage request will expire.
+    /// The value is a list of file locations that will expire at the given block number. (file locations map to storage requests)
     #[pallet::storage]
-    #[pallet::getter(fn storage_requests_expirations)]
+    #[pallet::getter(fn storage_request_expirations)]
     pub type StorageRequestExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
         BoundedVec<FileLocation<T>, T::MaxExpiredStorageRequests>,
     >;
+
+    /// A pointer to the earliest available block to insert a new storage request expiration.
+    ///
+    /// This should always be equal or greater then [`Config::StorageRequestTtl`].
+    ///
+    /// In the event when this value is smaller than the `StorageRequestTtl` value, the
+    /// storage request expiration will be inserted in the block at `StorageRequestTtl` and then
+    /// this value will be reset to block number at `StorageRequestTtl`.
+    #[pallet::storage]
+    #[pallet::getter(fn current_expiration_block)]
+    pub type CurrentExpirationBlock<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]

@@ -1,4 +1,8 @@
-use frame_support::{derive_impl, parameter_types, traits::Everything};
+use frame_support::{
+    derive_impl, parameter_types,
+    traits::{Everything, Hooks},
+    weights::Weight,
+};
 use frame_system as system;
 use sp_core::{ConstU32, H256};
 use sp_runtime::{
@@ -7,13 +11,32 @@ use sp_runtime::{
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
+pub(crate) type BlockNumber = u64;
+
+/// Rolls to the desired block. Returns the number of blocks played.
+pub(crate) fn roll_to(n: BlockNumber) -> BlockNumber {
+    let mut num_blocks = 0;
+    let mut block = System::block_number();
+    while block < n {
+        block = roll_one_block();
+        num_blocks += 1;
+    }
+    num_blocks
+}
+
+// Rolls forward one block. Returns the new block number.
+fn roll_one_block() -> BlockNumber {
+    System::set_block_number(System::block_number() + 1);
+    FileSystem::on_idle(System::block_number(), Weight::MAX);
+    System::block_number()
+}
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
     pub enum Test
     {
         System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
-        FileSystemModule: crate::{Pallet, Call, Storage, Event<T>},
+        FileSystem: crate::{Pallet, Call, Storage, Event<T>},
     }
 );
 

@@ -1,9 +1,13 @@
+use core::cmp::max;
+
 use frame_support::{ensure, pallet_prelude::DispatchResult, sp_runtime::BoundedVec, traits::Get};
+use frame_system::pallet_prelude::BlockNumberFor;
+use sp_runtime::traits::Saturating;
 
 use crate::{
     pallet,
     types::{FileLocation, Fingerprint, MultiAddress, StorageRequestMetadata, StorageUnit},
-    Error, Pallet, StorageRequestExpirations, StorageRequests,
+    CurrentExpirationBlock, Error, Pallet, StorageRequestExpirations, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -27,7 +31,7 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
-    pub fn do_request_storage(
+    pub(crate) fn do_request_storage(
         requested_by: T::AccountId,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
@@ -37,9 +41,8 @@ where
         // TODO: Check user funds and lock them for the storage request.
         // TODO: Check storage capacity of chosen MSP (when we support MSPs)
         // TODO: Return error if the file is already stored and overwrite is false.
-        let current_block_number = <frame_system::Pallet<T>>::block_number();
         let file_metadata = StorageRequestMetadata::<T> {
-            requested_at: current_block_number,
+            requested_at: <frame_system::Pallet<T>>::block_number(),
             requested_by,
             fingerprint,
             size,
@@ -58,17 +61,25 @@ where
         // Register storage request.
         <StorageRequests<T>>::insert(&location, file_metadata);
 
+        let block_to_insert_expiration = Self::next_expiration_block_number();
+
         // TODO: Maybe worth it to loop a few times until we find a free slot. (this should never fail and so a loop is required)
-        <StorageRequestExpirations<T>>::try_append(
-            current_block_number + T::StorageRequestTtl::get().into(),
-            &location,
-        )
-        .map_err(|_| Error::<T>::StorageRequestExpiredNoSlotAvailable)?;
+        <StorageRequestExpirations<T>>::try_append(block_to_insert_expiration, location)
+            .map_err(|_| Error::<T>::StorageRequestExpiredNoSlotAvailable)?;
+
+        // Increment the current expiration block pointer if the current storage request expirations reached max capacity at the block which was inserted into.
+        if <StorageRequestExpirations<T>>::get(block_to_insert_expiration)
+            .expect("Storage request expiration at block should exist")
+            .len()
+            == T::MaxExpiredStorageRequests::get() as usize
+        {
+            <CurrentExpirationBlock<T>>::set(block_to_insert_expiration.saturating_add(1u8.into()));
+        }
 
         Ok(())
     }
 
-    pub fn do_bsp_volunteer(
+    pub(crate) fn do_bsp_volunteer(
         who: T::AccountId,
         location: FileLocation<T>,
         _fingerprint: Fingerprint<T>,
@@ -107,5 +118,27 @@ where
         <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
 
         Ok(())
+    }
+
+    /// Get the block number at which the storage request will expire.
+    ///
+    /// This will also update the [`CurrentExpirationBlock`] if the current expiration block pointer is lower then the [`crate::Config::StorageRequestTtl`].
+    pub(crate) fn next_expiration_block_number() -> BlockNumberFor<T>
+    where
+        T: pallet::Config,
+    {
+        let current_block_number = <frame_system::Pallet<T>>::block_number();
+        let min_expiration_block = current_block_number + T::StorageRequestTtl::get().into();
+
+        // Reset the current expiration block pointer if it is lower then the minimum storage request TTL.
+        if <CurrentExpirationBlock<T>>::get() < min_expiration_block {
+            <CurrentExpirationBlock<T>>::set(min_expiration_block);
+        }
+
+        let block_to_insert_expiration = max(
+            current_block_number + T::StorageRequestTtl::get().into(),
+            <CurrentExpirationBlock<T>>::get(),
+        );
+        block_to_insert_expiration
     }
 }
