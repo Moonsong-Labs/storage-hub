@@ -30,6 +30,7 @@ smallvec = "1.11.0"
 
 # Local
 pallet-file-system = { path = "../pallets/file-system", default-features = false }
+pallet-storage-proofs = { path = "../pallets/storage-proofs", default-features = false }
 
 # Substrate
 frame-benchmarking = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false, optional = true }
@@ -108,9 +109,10 @@ std = [
     "pallet-authorship/std",
     "pallet-balances/std",
     "pallet-collator-selection/std",
-    "pallet-message-queue/std",
     "pallet-file-system/std",
+    "pallet-message-queue/std",
     "pallet-session/std",
+    "pallet-storage-proofs/std",
     "pallet-sudo/std",
     "pallet-timestamp/std",
     "pallet-transaction-payment-rpc-runtime-api/std",
@@ -155,6 +157,7 @@ runtime-benchmarks = [
     "pallet-collator-selection/runtime-benchmarks",
     "pallet-message-queue/runtime-benchmarks",
     "pallet-file-system/runtime-benchmarks",
+    "pallet-storage-proofs/runtime-benchmarks",
     "pallet-sudo/runtime-benchmarks",
     "pallet-timestamp/runtime-benchmarks",
     "pallet-xcm/runtime-benchmarks",
@@ -183,6 +186,31 @@ try-runtime = [
     "pallet-message-queue/try-runtime",
     "pallet-file-system/try-runtime",
     "pallet-session/try-runtime",
+    "pallet-sudo/try-runtime",
+    "pallet-timestamp/try-runtime",
+    "pallet-transaction-payment/try-runtime",
+    "pallet-xcm/try-runtime",
+    "parachain-info/try-runtime",
+    "polkadot-runtime-common/try-runtime",
+    "sp-runtime/try-runtime",
+    
+    "cumulus-pallet-aura-ext/try-runtime",
+    "cumulus-pallet-dmp-queue/try-runtime",
+    "cumulus-pallet-parachain-system/try-runtime",
+    "cumulus-pallet-xcm/try-runtime",
+    "cumulus-pallet-xcmp-queue/try-runtime",
+    "frame-executive/try-runtime",
+    "frame-support/try-runtime",
+    "frame-system/try-runtime",
+    "frame-try-runtime/try-runtime",
+    "pallet-aura/try-runtime",
+    "pallet-authorship/try-runtime",
+    "pallet-balances/try-runtime",
+    "pallet-collator-selection/try-runtime",
+    "pallet-message-queue/try-runtime",
+    "pallet-file-system/try-runtime",
+    "pallet-session/try-runtime",
+    "pallet-storage-proofs/try-runtime",
     "pallet-sudo/try-runtime",
     "pallet-timestamp/try-runtime",
     "pallet-transaction-payment/try-runtime",
