@@ -289,7 +289,7 @@ pub mod pallet {
                 Self::deposit_event(Event::StorageRequestExpired { location });
             }
 
-            // we already checked we have enough `remaining_weight` to cover this `used_weight`
+            // We already checked we have enough `remaining_weight` to cover this `used_weight`
             used_weight
         }
     }

@@ -48,6 +48,7 @@ where
             bsps_confirmed: BoundedVec::default(),
         };
 
+        // TODO: if we add the overwrite flag, this would only fail if the overwrite flag is false.
         // Check that storage request is not already registered.
         ensure!(
             !<StorageRequests<T>>::contains_key(&location),
@@ -97,17 +98,13 @@ where
         // TODO: Check that the BSP XOR is higher then the threshold
 
         // Add BSP to storage request metadata.
-        file_metadata
-            .bsps_volunteered
-            .try_push(who.clone())
-            .map_err(|_| Error::<T>::BspVolunteerFailed)?;
-        <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
+        expect_or_err!(
+            file_metadata.bsps_volunteered.try_push(who.clone()).ok(),
+            "BSP volunteer failed",
+            Error::<T>::BspVolunteerFailed
+        );
 
-        // Check if maximum number of BSPs has been reached.
-        if file_metadata.bsps_volunteered.len() == T::MaxBspsPerStorageRequest::get() as usize {
-            // Clear storage request from StorageRequests.
-            <StorageRequests<T>>::remove(&location);
-        }
+        <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
 
         Ok(())
     }
