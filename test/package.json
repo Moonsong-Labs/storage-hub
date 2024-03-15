@@ -12,6 +12,7 @@
 	"license": "ISC",
 	"dependencies": {
 		"@types/bun": "1.0.8",
+		"testcontainers": "10.7.2",
 		"typescript": "5.4.2"
 	},
 	"devDependencies": {
