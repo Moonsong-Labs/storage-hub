@@ -93,6 +93,10 @@ pub mod pallet {
     pub type Bsps<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, BackupStorageProvider<T>>;
 
+    /// The amount of storage providers (MSPs and BSPs) that are currently registered in the runtime.
+    #[pallet::storage]
+    pub type SpCount<T: Config> = StorageValue<_, u64, ValueQuery>;
+
     /// The total amount of storage capacity all BSPs have. Remember redundancy!
     #[pallet::storage]
     #[pallet::getter(fn total_bsps_capacity)] // TODO: remove this and add an explicit getter
@@ -108,18 +112,56 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// Event documentation should end with an array that provides descriptive names for event
-        /// parameters. [something, who]
-        SomethingStored(u32, T::AccountId),
+        /// Event emitted when a Main Storage Provider has signed up successfully. Provides information about
+        /// that MSP's account id, the total data it can store according to its stake, its multiaddress, and its value proposition.
+        MspSignUpSuccess {
+            who: T::AccountId,
+            total_data: StorageData<T>,
+            multiaddress: MultiAddress<T>,
+            value_prop: ValueProposition<T>,
+        },
+
+        /// Event emitted when a Backup Storage Provider has signed up successfully. Provides information about
+        /// that BSP's account id, the total data it can store according to its stake, and its multiaddress.
+        BspSignUpSuccess {
+            who: T::AccountId,
+            total_data: StorageData<T>,
+            multiaddress: MultiAddress<T>,
+        },
+
+        /// Event emitted when a Main Storage Provider has signed off successfully. Provides information about
+        /// that MSP's account id.
+        MspSignOffSuccess { who: T::AccountId },
+
+        /// Event emitted when a Backup Storage Provider has signed off successfully. Provides information about
+        /// that BSP's account id.
+        BspSignOffSuccess { who: T::AccountId },
+
+        /// Event emitted when a SP has changed is total data (stake) successfully. Provides information about
+        /// that SP's account id, its old total data that could store, and the new total data.
+        TotalDataChanged {
+            who: T::AccountId,
+            new_total_data: StorageData<T>,
+        },
     }
 
     /// The errors that can be thrown by this pallet to inform users about what went wrong
     #[pallet::error]
     pub enum Error<T> {
-        /// Error names should be descriptive.
-        NoneValue,
-        /// Errors should have helpful documentation associated with them.
-        StorageOverflow,
+        /// Error thrown when a user tries to sign up as a SP but is already registered as a MSP or BSP.
+        AlreadyRegistered,
+        /// Error thrown when a user tries to sign up or change its stake to store less storage than the minimum required by the runtime.
+        StorageTooLow,
+        /// Error thrown when a user does not have enough balance to pay the deposit that it would incur by signing up as a SP or changing its total data (stake).
+        NotEnoughBalance,
+        /// Error thrown when a user tries to sign up as a BSP but the maximum amount of BSPs has been reached.
+        MaxBspsReached,
+        /// Error thrown when a user tries to sign off as a SP but is not registered as a MSP or BSP.
+        NotRegistered,
+        /// Error thrown when a user tries to sign off as a SP but still has used storage.
+        StorageStillInUse,
+        /// Error thrown when a SP tries to change its total data (stake) but it has not been enough time since the last time it changed it.
+        NotEnoughTimePassed,
     }
 
     /// The hooks that this pallet utilizes (TODO: Check this, we might not need any)
@@ -149,7 +191,8 @@ pub mod pallet {
             // 6. Check that the signer has enough funds to pay the deposit
             // 7. Hold the deposit from the signer
             // 8. Update the MSP storage to add the signer as an MSP
-            // 9. Emit an event confirming that the registration of the MSP has been successful
+            // 9. Increment the storage that holds total amount of SPs currently in the system
+            // 10. Emit an event confirming that the registration of the MSP has been successful
 
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
@@ -192,7 +235,8 @@ pub mod pallet {
             // 9. Update the BSP storage to add the signer as an BSP
             // 10. Update the total capacity of all BSPs, adding the new capacity (factoring by redundancy)
             // 11. Add this BSP to the vector of BSPs to draw from for proofs
-            // 12. Emit an event confirming that the registration of the BSP has been successful
+            // 12. Increment the storage that holds total amount of SPs currently in the system
+            // 13. Emit an event confirming that the registration of the BSP has been successful
 
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
@@ -222,7 +266,8 @@ pub mod pallet {
             // 3. Check that the MSP has no storage assigned to it
             // 4. Update the MSPs storage, removing the signer as an MSP
             // 5. Return the deposit to the signer
-            // 6. Emit an event confirming that the sign off of the MSP has been successful
+            // 6. Decrement the storage that holds total amount of SPs currently in the system
+            // 7. Emit an event confirming that the sign off of the MSP has been successful
 
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
@@ -244,12 +289,13 @@ pub mod pallet {
             // This extrinsic should:
             // 1. Check that the extrinsic was signed and get the signer.
             // 2. Check that the signer is registered as a BSP
-            // 3. Check that the BSP has no storage assigned to it (TODO: not entirely sure how this would work, ask)
+            // 3. Check that the BSP has no storage assigned to it
             // 4. Update the BSPs storage, removing the signer as an BSP
             // 5. Update the total capacity of all BSPs, removing the capacity of the signer (factoring by redundancy)
             // 6. Remove this BSP from the vector of BSPs to draw from for proofs
             // 7. Return the deposit to the signer
-            // 8. Emit an event confirming that the sign off of the BSP has been successful
+            // 8. Decrement the storage that holds total amount of SPs currently in the system
+            // 9. Emit an event confirming that the sign off of the BSP has been successful
 
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
