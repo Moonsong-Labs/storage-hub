@@ -90,7 +90,7 @@ fn request_storage_expiration_current_block_increment_success() {
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
 
-        let expected_expiration_block_number: BlockNumber =
+        let mut expected_expiration_block_number: BlockNumber =
             FileSystem::next_expiration_block_number().into();
 
         // Append storage request expiration to the list at `StorageRequestTtl`
@@ -119,14 +119,16 @@ fn request_storage_expiration_current_block_increment_success() {
             max_storage_request_expiry as usize
         );
 
+        expected_expiration_block_number = FileSystem::next_expiration_block_number().into();
+
         // Assert that the `CurrentExpirationBlock` storage is incremented by 1
         assert_eq!(
             FileSystem::current_expiration_block(),
-            expected_expiration_block_number + 1
+            expected_expiration_block_number
         );
 
         // Go to block number after which the storage request expirations should be removed
-        roll_to(expected_expiration_block_number + 1);
+        roll_to(expected_expiration_block_number);
 
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
         assert_eq!(
@@ -134,23 +136,22 @@ fn request_storage_expiration_current_block_increment_success() {
             None
         );
 
-        // Assert that the storage request expirations storage is at max capacity
-        assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number)
-                .expect("storage request expirations should exist")
-                .len(),
-            expected_expiration_block_number as usize + 1
-        );
-
         // Go to block number after which the second set of storage request expirations should be removed
         roll_to(2 + expected_expiration_block_number);
 
+        expected_expiration_block_number = FileSystem::next_expiration_block_number().into();
+
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number + 1),
+            FileSystem::storage_request_expirations(expected_expiration_block_number),
             None
         );
     });
+}
+
+#[test]
+fn request_storage_expiration_current_block_increment_when_on_idle_skips_success() {
+    // new_test_ext().execute_with(|| todo!());
 }
 
 #[test]

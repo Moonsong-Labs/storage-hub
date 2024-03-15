@@ -48,7 +48,7 @@ pub mod pallet {
     use frame_support::{
         dispatch::DispatchResult,
         pallet_prelude::*,
-        sp_runtime::traits::{AtLeast32Bit, CheckEqual, MaybeDisplay, SimpleBitOps},
+        sp_runtime::traits::{AtLeast32Bit, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps},
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use sp_runtime::BoundedVec;
@@ -282,6 +282,7 @@ pub mod pallet {
                         .expect("u32 would fit into u64"),
                 ),
             ) {
+                CurrentExpirationBlock::<T>::put(block.saturating_add(1u32.into()));
                 return Weight::zero();
             }
 
