@@ -64,11 +64,8 @@ where
         let mut block_to_insert_expiration = Self::next_expiration_block_number();
 
         // Get current storage request expirations vec.
-        let curr_storage_request_expirations = expect_or_err!(
-            <StorageRequestExpirations<T>>::get(block_to_insert_expiration),
-            "Storage request expiration at block should exist, as it is a ValueQuery StorageMap",
-            Error::<T>::StorageRequestExpirationSlotDoesNotExist
-        );
+        let curr_storage_request_expirations =
+            <StorageRequestExpirations<T>>::get(block_to_insert_expiration);
 
         // Check size of storage request expirations vec.
         if curr_storage_request_expirations.len() >= T::MaxExpiredStorageRequests::get() as usize {

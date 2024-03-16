@@ -64,8 +64,7 @@ fn request_storage_expiration_clear_success() {
 
         // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number as u64)
-                .expect("storage request expirations should exist"),
+            FileSystem::storage_request_expirations(expected_expiration_block_number as u64),
             vec![location]
         );
 
@@ -74,7 +73,7 @@ fn request_storage_expiration_clear_success() {
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
         assert_eq!(
             FileSystem::storage_request_expirations(expected_expiration_block_number as u64),
-            None
+            vec![]
         );
     });
 }
@@ -113,9 +112,7 @@ fn request_storage_expiration_current_block_increment_success() {
 
         // Assert that the storage request expirations storage is at max capacity
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number)
-                .expect("storage request expirations should exist")
-                .len(),
+            FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
             max_storage_request_expiry as usize
         );
 
@@ -133,7 +130,7 @@ fn request_storage_expiration_current_block_increment_success() {
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
         assert_eq!(
             FileSystem::storage_request_expirations(expected_expiration_block_number),
-            None
+            vec![]
         );
 
         // Go to block number after which the second set of storage request expirations should be removed
@@ -144,7 +141,7 @@ fn request_storage_expiration_current_block_increment_success() {
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
         assert_eq!(
             FileSystem::storage_request_expirations(expected_expiration_block_number),
-            None
+            vec![]
         );
 
         // TODO: add this once `on_idle` is fixed for remaining_weight
