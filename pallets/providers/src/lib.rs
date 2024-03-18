@@ -457,6 +457,26 @@ pub mod pallet {
 
             Ok(().into())
         }
+
+        /// A dispatchable function only callable by an MSP that allows it to add a value proposition to its service
+        ///
+        /// This extrinsic will:
+        /// 1. Check that the extrinsic was signed and get the signer.
+        /// 2. Check that the signer is registered as a MSP
+        /// 3. Check that the MSP has not reached the maximum amount of value propositions
+        /// 4. Check that the value proposition is valid (size and any other relevant checks)
+        /// 5. Update the MSPs storage to add the value proposition (with its identifier)
+        /// 6. Emit an event confirming that the addition of the value proposition has been successful
+        #[pallet::call_index(5)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn add_value_prop(
+            origin: OriginFor<T>,
+            new_value_prop: ValueProposition<T>,
+        ) -> DispatchResultWithPostInfo {
+            // TODO: implement this
+
+            Ok(().into())
+        }
     }
 }
 
