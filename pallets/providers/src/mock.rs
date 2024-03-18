@@ -79,6 +79,9 @@ impl crate::Config for Test {
     type SpMinCapacity = ConstU32<1>;
     type DepositPerData = ConstU128<2>;
     type SpCount = u32;
+    type UserId = H256;
+    type BucketId = H256;
+    type MerklePatriciaRoot = H256;
 }
 
 // Build genesis storage according to the mock runtime.

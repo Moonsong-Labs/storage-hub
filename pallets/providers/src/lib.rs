@@ -19,9 +19,9 @@ pub mod pallet {
     use super::types::*;
     use codec::{FullCodec, HasCompact};
     use frame_support::{
-        dispatch::{DispatchResult, DispatchResultWithPostInfo},
+        dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
-        sp_runtime::traits::{AtLeast32Bit, AtLeast32BitUnsigned, MaybeDisplay},
+        sp_runtime::traits::{AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, One, SimpleBitOps},
         traits::fungible::*,
         Blake2_128Concat,
     };
@@ -67,6 +67,54 @@ pub mod pallet {
             + scale_info::TypeInfo
             + MaxEncodedLen;
 
+        /// The type of the Merkle Patricia Root of the storage trie for BSPs and MSPs' buckets (a hash).
+        type MerklePatriciaRoot: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + MaybeDisplay
+            + SimpleBitOps
+            + Ord
+            + Default
+            + Copy
+            + CheckEqual
+            + AsRef<[u8]>
+            + AsMut<[u8]>
+            + MaxEncodedLen
+            + FullCodec;
+
+        /// The type of the user ID for an MSP (probably a hash of its AccountId)
+        type UserId: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + MaybeDisplay
+            + SimpleBitOps
+            + Ord
+            + Default
+            + Copy
+            + CheckEqual
+            + AsRef<[u8]>
+            + AsMut<[u8]>
+            + MaxEncodedLen
+            + FullCodec;
+
+        /// The type of the bucket ID for an MSP (probably a hash of the UserId that owns it concatenated with the bucket's number/name)
+        type BucketId: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + MaybeDisplay
+            + SimpleBitOps
+            + Ord
+            + Default
+            + Copy
+            + CheckEqual
+            + AsRef<[u8]>
+            + AsMut<[u8]>
+            + MaxEncodedLen
+            + FullCodec;
+
         /// The minimum amount that an account has to deposit to become a storage provider.
         #[pallet::constant]
         type SpMinDeposit: Get<BalanceOf<Self>>;
@@ -81,7 +129,7 @@ pub mod pallet {
 
         /// The maximum amount of BSPs that can exist.
         #[pallet::constant]
-        type MaxBsps: Get<u32>;
+        type MaxBsps: Get<Self::SpCount>;
 
         /// The maximum size of a multiaddress.
         #[pallet::constant]
@@ -107,9 +155,28 @@ pub mod pallet {
     pub type Bsps<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, BackupStorageProvider<T>>;
 
-    /// The amount of storage providers (MSPs and BSPs) that are currently registered in the runtime.
+    /// The mapping from an MSP, to its user IDs, to its bucket IDs, to the root of the Merkle Patricia Trie of the bucket.
+    #[pallet::storage]
+    pub type MspToUserToBucketToRoot<T: Config> = StorageNMap<
+        _,
+        (
+            NMapKey<Blake2_128Concat, MainStorageProvider<T>>,
+            NMapKey<Blake2_128Concat, T::UserId>,
+            NMapKey<Blake2_128Concat, T::BucketId>,
+        ),
+        MerklePatriciaRoot<T>,
+    >;
+
+    /// The amount of Storage Providers (MSPs and BSPs) that are currently registered in the runtime.
     #[pallet::storage]
     pub type SpCount<T: Config> = StorageValue<_, T::SpCount, ValueQuery>;
+
+    /// The amount of Backup Storage Providers that are currently registered in the runtime.
+    ///
+    /// This is a separate storage item from SpCount because it's used to check if the maximum amount of BSPs has been reached.
+    /// todo!("this is weird, ask if we should use SpCount instead and have an unified limit or remove SpCount altogether, or replace it with a MspCount to have them separated")
+    #[pallet::storage]
+    pub type BspCount<T: Config> = StorageValue<_, T::SpCount, ValueQuery>;
 
     /// The total amount of storage capacity all BSPs have. Remember redundancy!
     #[pallet::storage]
@@ -173,6 +240,10 @@ pub mod pallet {
         StorageStillInUse,
         /// Error thrown when a SP tries to change its total data (stake) but it has not been enough time since the last time it changed it.
         NotEnoughTimePassed,
+        /// Error thrown when trying to get a root from a MSP without passing a User ID
+        NoUserId,
+        /// Error thrown when trying to get a root from a MSP without passing a Bucket ID
+        NoBucketId,
     }
 
     /// The hooks that this pallet utilizes (TODO: Check this, we might not need any)
@@ -245,7 +316,7 @@ pub mod pallet {
         /// 9. Update the BSP storage to add the signer as an BSP
         /// 10. Update the total capacity of all BSPs, adding the new capacity (redundancy is factored in the capacity used)
         /// 11. Add this BSP to the vector of BSPs to draw from for proofs
-        /// 12. Increment the storage that holds total amount of SPs currently in the system
+        /// 12. Increment the storage that holds total amount of SPs and BSPs currently in the system
         /// 13. Emit an event confirming that the registration of the BSP has been successful
         #[pallet::call_index(1)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
@@ -261,10 +332,17 @@ pub mod pallet {
             // https://docs.substrate.io/v3/runtime/origins
             let who = ensure_signed(origin)?;
 
+            let new_bsp_amount = BspCount::<T>::get() + T::SpCount::one();
+            ensure!(
+                new_bsp_amount <= MaxBsps::<T>::get(),
+                Error::<T>::MaxBspsReached
+            );
+
             let bsp_info = BackupStorageProvider {
                 total_data,
                 data_used: StorageData::<T>::default(),
                 multiaddress,
+                root: MerklePatriciaRoot::<T>::default(),
             };
             // Update storage.
             Self::do_bsp_sign_up(&who, bsp_info)?;
@@ -379,7 +457,7 @@ use codec::{Decode, Encode, FullCodec, HasCompact, MaxEncodedLen};
 use frame_support::traits::fungible::Inspect;
 use frame_support::{
     pallet_prelude::*,
-    sp_runtime::traits::{AtLeast32BitUnsigned, MaybeDisplay},
+    sp_runtime::traits::{AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, SimpleBitOps},
     traits::fungible,
 };
 use scale_info::prelude::fmt::Debug;
@@ -391,12 +469,15 @@ use scale_info::TypeInfo;
 pub trait StorageProvidersInterface {
     /// The type which can be used to identify accounts.
     type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+
     /// The type corresponding to the staking balance of a registered Storage Provider.
     type Balance: fungible::Inspect<Self::AccountId>
         + fungible::hold::Inspect<Self::AccountId>
         + fungible::freeze::Inspect<Self::AccountId>;
+
     /// The type which represents a registered Storage Provider.
     type StorageProvider: Encode + Decode + MaxEncodedLen + TypeInfo + PartialEq + Eq + Clone;
+
     /// The type which represents the total number of registered Storage Provider.
     type SpCount: Parameter
         + Member
@@ -409,6 +490,7 @@ pub trait StorageProvidersInterface {
         + Debug
         + scale_info::TypeInfo
         + MaxEncodedLen;
+
     /// The type which represents the unit in which we measure data size.
     type StorageData: Parameter
         + Member
@@ -419,6 +501,54 @@ pub trait StorageProvidersInterface {
         + Copy
         + MaxEncodedLen
         + HasCompact;
+
+    /// The type of the Merkle Patricia Root of the storage trie for BSPs and MSPs' buckets (a hash).
+    type MerklePatriciaRoot: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+
+    /// The type of the user ID for an MSP (probably a hash of its AccountId)
+    type UserId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+
+    /// The type of the bucket ID for an MSP (probably a hash of the UserId that owns it concatenated with the bucket's number/name)
+    type BucketId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
 
     /// Lookup a registered StorageProvider by their AccountId.
     fn get_sp(who: Self::AccountId) -> Option<Self::StorageProvider>;
@@ -436,4 +566,29 @@ pub trait StorageProvidersInterface {
 
     /// Change the used data of a Storage Provider.
     fn change_data_used(who: &Self::AccountId, data_change: Self::StorageData) -> DispatchResult;
+
+    /// Add or change a root for a BSP or a bucket of an MSP.
+    fn add_or_change_root(
+        who: &Self::AccountId,
+        new_root: Self::MerklePatriciaRoot,
+        user_id: Option<Self::UserId>,
+        bucket_id: Option<Self::BucketId>,
+    ) -> DispatchResult;
+
+    /// Remove a root from a BSP or a bucket of an MSP.
+    ///
+    /// If it's a BSP, it will delete its storage completely
+    fn remove_root(
+        who: &Self::AccountId,
+        user_id: Option<Self::UserId>,
+        bucket_id: Option<Self::BucketId>,
+    ) -> DispatchResult;
+
+    /// Check if a Merkle Patricia Root is valid for a Storage Provider.
+    fn is_valid_root_for_sp(
+        who: &Self::AccountId,
+        root: Self::MerklePatriciaRoot,
+        user_id: Option<Self::UserId>,
+        bucket_id: Option<Self::BucketId>,
+    ) -> bool;
 }
