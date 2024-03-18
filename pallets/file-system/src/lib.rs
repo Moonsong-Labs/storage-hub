@@ -47,10 +47,11 @@ pub mod pallet {
     use codec::HasCompact;
     use frame_support::{
         dispatch::DispatchResult,
-        pallet_prelude::*,
-        sp_runtime::traits::{AtLeast32Bit, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps},
+        pallet_prelude::{ValueQuery, *},
+        sp_runtime::traits::{AtLeast32Bit, CheckEqual, MaybeDisplay, SimpleBitOps},
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
+    use sp_runtime::traits::CheckedAdd;
     use sp_runtime::BoundedVec;
 
     #[pallet::config]
@@ -134,8 +135,9 @@ pub mod pallet {
     /// storage request expiration will be inserted in the block `StorageRequestTtl` ahead, and then
     /// this value will be reset to block number a `current_block` + `StorageRequestTtl`.
     #[pallet::storage]
-    #[pallet::getter(fn current_expiration_block)]
-    pub type CurrentExpirationBlock<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    #[pallet::getter(fn next_available_expiration_insertion_block)]
+    pub type NextAvailableExpirationInsertionBlock<T: Config> =
+        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     /// A pointer to the latest block at which the storage requests were cleaned up.
     ///
@@ -145,8 +147,8 @@ pub mod pallet {
     /// to perform the clean-up, the clean-up will be postponed to the next block, and this value
     /// avoids skipping blocks when the clean-up is postponed.
     #[pallet::storage]
-    #[pallet::getter(fn last_block_cleaned)]
-    pub type LastBlockCleaned<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    #[pallet::getter(fn next_starting_block_to_clean_up)]
+    pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -170,6 +172,9 @@ pub mod pallet {
 
         /// Notifies the expiration of a storage request.
         StorageRequestExpired { location: FileLocation<T> },
+
+        /// Notifies that a storage request has been revoked by the user who initiated it.
+        StorageRequestRevoked { location: FileLocation<T> },
     }
 
     // Errors inform users that something went wrong.
@@ -187,6 +192,10 @@ pub mod pallet {
         StorageRequestExpiredNoSlotAvailable,
         /// The current expiration block has overflowed (i.e. it is larger than the maximum block number).
         StorageRequestExpirationBlockOverflow,
+        /// Not authorized to delete the storage request.
+        StorageRequestNotAuthorized,
+        /// Reached maximum block number :O
+        MaxBlockNumberReached,
     }
 
     #[pallet::call]
@@ -234,8 +243,20 @@ pub mod pallet {
         /// Revoke storage request
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn revoke_storage_request(_origin: OriginFor<T>) -> DispatchResult {
-            todo!()
+        pub fn revoke_storage_request(
+            origin: OriginFor<T>,
+            location: FileLocation<T>,
+        ) -> DispatchResult {
+            // Check that the extrinsic was signed and get the signer
+            let who = ensure_signed(origin)?;
+
+            // Perform validations and revoke storage request
+            Self::do_revoke_storage_request(who, location.clone())?;
+
+            // Emit event.
+            Self::deposit_event(Event::StorageRequestRevoked { location });
+
+            Ok(())
         }
 
         /// Used by a BSP to volunteer for storing a file.
@@ -284,38 +305,53 @@ pub mod pallet {
     where
         u32: TryFrom<BlockNumberFor<T>>,
     {
-        fn on_idle(block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
+        fn on_idle(current_block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
             let db_weight = T::DbWeight::get();
 
-            // Return early if the remaining weight is not enough to perform the operation
-            // TODO: fix this, it's not working as expected (when the remaining weight is 0, it still goes through)
-            if !remaining_weight
-                .all_gte(db_weight.reads_writes(1, T::MaxExpiredStorageRequests::get().into()))
+            // Determine the starting block for cleanup, using `NextBlockToCleanup` if available,
+            // or defaulting to the current block
+            let start_block = NextStartingBlockToCleanUp::<T>::get();
+            let mut block_to_clean = start_block;
+
+            // Total weight used to avoid exceeding the remaining weight
+            let mut total_used_weight = Weight::zero();
+
+            let required_weight_for_iteration =
+                db_weight.reads_writes(1, T::MaxExpiredStorageRequests::get().into());
+
+            // Iterate over blocks from the start block to the current block,
+            // cleaning up storage requests until the remaining weight is insufficient
+            while block_to_clean <= current_block
+                && remaining_weight
+                    .all_gte(total_used_weight.saturating_add(required_weight_for_iteration))
             {
-                LastBlockCleaned::<T>::put(block.saturating_add(1u32.into()));
-                return Weight::zero();
+                let mut used_weight = db_weight.reads(1);
+                let expired_requests = StorageRequestExpirations::<T>::take(&block_to_clean);
+
+                // Remove expired storage requests for the block
+                for location in expired_requests {
+                    StorageRequests::<T>::remove(&location);
+                    used_weight += db_weight.writes(1);
+                    Self::deposit_event(Event::StorageRequestExpired { location });
+                }
+
+                // Accumulate the weight used for cleanup operations
+                total_used_weight += used_weight;
+                // Increment the block to clean up for the next iteration
+                block_to_clean = match block_to_clean.checked_add(&1u8.into()) {
+                    Some(block) => block,
+                    None => {
+                        return total_used_weight;
+                    }
+                };
             }
 
-            let mut used_weight = db_weight.reads(1);
-
-            // TODO: test the behaviour of an on_idle execution when the previous one didn't have enough remaining weight
-            // and the current block doesn't match the previous one. (do we need to add extra logic here to take into account those scenarios?)
-            let mut expired_requests = StorageRequestExpirations::<T>::take(&block);
-
-            // Remove expired storage requests
-            for location in expired_requests.drain(..) {
-                // TODO: should probably add some fields to the `StorageRequestExpired` to facilitate SPs filtering the events
-                // that are relevant to them (e.g. include the SPs that have volunteered to store the file)
-                let _request = StorageRequests::<T>::take(&location);
-
-                StorageRequests::<T>::remove(&location);
-                used_weight += db_weight.writes(1);
-
-                Self::deposit_event(Event::StorageRequestExpired { location });
+            // `NextStartingBlockToCleanUp` is always updated to start from the block we reached in the current `on_idle` call.
+            if block_to_clean > start_block {
+                NextStartingBlockToCleanUp::<T>::put(block_to_clean);
             }
 
-            // We already checked we have enough `remaining_weight` to cover this `used_weight`
-            used_weight
+            total_used_weight
         }
     }
 }
