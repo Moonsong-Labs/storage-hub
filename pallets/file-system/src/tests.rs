@@ -121,7 +121,7 @@ fn request_storage_expiration_current_block_increment_success() {
 
         // Assert that the `CurrentExpirationBlock` storage is incremented by 1
         assert_eq!(
-            FileSystem::current_expiration_block(),
+            FileSystem::next_available_expiration_insertion_block(),
             expected_expiration_block_number
         );
 
@@ -179,7 +179,7 @@ fn request_storage_expiration_current_block_increment_when_on_idle_skips_success
 
         // Assert that the `CurrentExpirationBlock` storage is incremented by 1
         assert_eq!(
-            FileSystem::current_expiration_block(),
+            FileSystem::next_available_expiration_insertion_block(),
             expected_expiration_block_number
         );
 
