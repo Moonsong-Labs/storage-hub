@@ -281,11 +281,21 @@ pub mod pallet {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
+            // Getting provider from the origin if none is provided.
+            let provider = match provider {
+                Some(provider) => provider,
+                None => {
+                    let sp =
+                        T::ProvidersPallet::get_sp(who.clone()).ok_or(Error::<T>::NotProvider)?;
+                    sp
+                }
+            };
+
             // TODO: Handle result of verification.
-            Self::do_submit_proof(&who, &proof)?;
+            Self::do_submit_proof(&provider, &proof)?;
 
             // TODO: Emit correct event.
-            // Self::deposit_event(Event::ProofAccepted(who, proof));
+            Self::deposit_event(Event::ProofAccepted(provider, proof));
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -410,6 +420,9 @@ pub trait ProvidersInterface {
 
     /// Check if an account is a registered Provider.
     fn is_sp(who: Self::Provider) -> bool;
+
+    // Get Provider from AccountId, if it is a registered Provider.
+    fn get_sp(who: Self::AccountId) -> Option<Self::Provider>;
 
     /// Get the root for a registered Provider.
     fn get_root(who: Self::Provider) -> Option<Self::MerkleHash>;
