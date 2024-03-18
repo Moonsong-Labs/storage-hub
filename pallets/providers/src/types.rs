@@ -59,7 +59,7 @@ pub type StorageData<T> = <T as crate::Config>::StorageData;
 /// Protocols is a vector of the protocols that (the runtime is aware of and) the Main Storage Provider supports.
 /// Its maximum size is defined in the runtime configuration, as MaxProtocols.
 pub type MaxProtocols<T> = <T as crate::Config>::MaxProtocols;
-pub type Protocols<T> = BoundedVec<u8, MaxProtocols<T>>; // TODO: define a type for protocols
+pub type Protocols<T> = BoundedVec<u8, MaxProtocols<T>>; // todo!("Define a type for protocols")
 
 /// MaxBsps is the maximum amount of Backup Storage Providers that can exist. It is defined in the runtime configuration.
 pub type MaxBsps<T> = <T as crate::Config>::MaxBsps;

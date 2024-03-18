@@ -259,8 +259,8 @@ pub mod pallet {
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that the signer is not already registered as either a MSP or BSP
         /// 3. Check that the multiaddress is valid (size and any other relevant checks)
-        /// 3b. Any value proposition checks??? TODO: Ask
-        /// 4. Check that the data to be stored is greater than the minimum required by the runtime. TODO: Ask if this applies to MSPs
+        /// 3b. Any value proposition checks??? todo!("ask this")
+        /// 4. Check that the data to be stored is greater than the minimum required by the runtime. todo!("Ask if this applies to MSPs")
         /// 5. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
         /// 6. Check that the signer has enough funds to pay the deposit
         /// 7. Hold the deposit from the signer
@@ -275,7 +275,7 @@ pub mod pallet {
             multiaddress: MultiAddress<T>,
             value_prop: ValueProposition<T>,
         ) -> DispatchResultWithPostInfo {
-            // todo!("Logic to sign up a MSP.");
+            // TODO: Logic to sign up an MSP
 
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
@@ -325,7 +325,7 @@ pub mod pallet {
             total_data: StorageData<T>,
             multiaddress: MultiAddress<T>,
         ) -> DispatchResultWithPostInfo {
-            // todo!("Logic to sign up a BSP.");
+            // TODO: Logic to sign up a BSP
 
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
@@ -364,7 +364,7 @@ pub mod pallet {
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn msp_sign_off(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-            // todo!("Logic to sign off a MSP.");
+            // TODO: Logic to sign off a MSP
 
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
@@ -393,7 +393,7 @@ pub mod pallet {
         #[pallet::call_index(3)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn bsp_sign_off(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-            // todo!("Logic to sign off a BSP.");
+            // TODO: Logic to sign off a BSP
 
             // Check that the extrinsic was signed and get the signer.
             // This function will return an error if the extrinsic is not signed.
