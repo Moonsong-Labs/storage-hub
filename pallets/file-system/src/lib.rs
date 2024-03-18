@@ -134,7 +134,7 @@ pub mod pallet {
     /// storage request expiration will be inserted in the block `StorageRequestTtl` ahead, and then
     /// this value will be reset to block number a `current_block` + `StorageRequestTtl`.
     #[pallet::storage]
-    #[pallet::getter(fn current_expiration_block)]
+    #[pallet::getter(fn next_available_expiration_insertion_block)]
     pub type NextAvailableExpirationInsertionBlock<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
@@ -172,7 +172,7 @@ pub mod pallet {
         /// Notifies the expiration of a storage request.
         StorageRequestExpired { location: FileLocation<T> },
 
-        /// Notifies that a storage request has been deleted.
+        /// Notifies that a storage request has been revoked by the user who initiated it.
         StorageRequestRevoked { location: FileLocation<T> },
     }
 
