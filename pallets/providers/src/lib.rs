@@ -115,6 +115,22 @@ pub mod pallet {
             + MaxEncodedLen
             + FullCodec;
 
+        /// The type of the identifier of the value proposition of a MSP (probably a hash of that value proposition)
+        type ValuePropIdentifier: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + MaybeDisplay
+            + SimpleBitOps
+            + Ord
+            + Default
+            + Copy
+            + CheckEqual
+            + AsRef<[u8]>
+            + AsMut<[u8]>
+            + MaxEncodedLen
+            + FullCodec;
+
         /// The minimum amount that an account has to deposit to become a storage provider.
         #[pallet::constant]
         type SpMinDeposit: Get<BalanceOf<Self>>;
@@ -131,9 +147,19 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBsps: Get<Self::SpCount>;
 
+        /// The maximum amount of MSPs that can exist.
+        #[pallet::constant]
+        type MaxMsps: Get<Self::SpCount>;
+
+        // TODO: Change these next constants to a more generic type
+
         /// The maximum size of a multiaddress.
         #[pallet::constant]
         type MaxMultiAddressSize: Get<u32>;
+
+        /// The maximum amount of multiaddresses that a Storage Provider can have.
+        #[pallet::constant]
+        type MaxMultiAddressAmount: Get<u32>;
 
         /// The maximum number of protocols the MSP can support (at least within the runtime).
         #[pallet::constant]
@@ -167,14 +193,11 @@ pub mod pallet {
         MerklePatriciaRoot<T>,
     >;
 
-    /// The amount of Storage Providers (MSPs and BSPs) that are currently registered in the runtime.
+    /// The amount of Main Storage Providers that are currently registered in the runtime.
     #[pallet::storage]
-    pub type SpCount<T: Config> = StorageValue<_, T::SpCount, ValueQuery>;
+    pub type MspCount<T: Config> = StorageValue<_, T::SpCount, ValueQuery>;
 
     /// The amount of Backup Storage Providers that are currently registered in the runtime.
-    ///
-    /// This is a separate storage item from SpCount because it's used to check if the maximum amount of BSPs has been reached.
-    /// todo!("this is weird, ask if we should use SpCount instead and have an unified limit or remove SpCount altogether, or replace it with a MspCount to have them separated")
     #[pallet::storage]
     pub type BspCount<T: Config> = StorageValue<_, T::SpCount, ValueQuery>;
 
@@ -193,7 +216,7 @@ pub mod pallet {
         /// that MSP's account id, the total data it can store according to its stake, its multiaddress, and its value proposition.
         MspSignUpSuccess {
             who: T::AccountId,
-            multiaddress: MultiAddress<T>,
+            multiaddress: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             total_data: StorageData<T>,
             value_prop: ValueProposition<T>,
         },
@@ -202,7 +225,7 @@ pub mod pallet {
         /// that BSP's account id, the total data it can store according to its stake, and its multiaddress.
         BspSignUpSuccess {
             who: T::AccountId,
-            multiaddress: MultiAddress<T>,
+            multiaddress: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             total_data: StorageData<T>,
         },
 
@@ -257,22 +280,23 @@ pub mod pallet {
         ///
         /// This extrinsic will:
         /// 1. Check that the extrinsic was signed and get the signer.
-        /// 2. Check that the signer is not already registered as either a MSP or BSP
-        /// 3. Check that the multiaddress is valid (size and any other relevant checks)
-        /// 3b. Any value proposition checks??? todo!("ask this")
-        /// 4. Check that the data to be stored is greater than the minimum required by the runtime. todo!("Ask if this applies to MSPs")
-        /// 5. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
-        /// 6. Check that the signer has enough funds to pay the deposit
-        /// 7. Hold the deposit from the signer
-        /// 8. Update the MSP storage to add the signer as an MSP
-        /// 9. Increment the storage that holds total amount of SPs currently in the system
-        /// 10. Emit an event confirming that the registration of the MSP has been successful
+        /// 2. Check that, by registering this new MSP, we would not go over the MaxMsps limit
+        /// 3. Check that the signer is not already registered as either a MSP or BSP
+        /// 4. Check that the multiaddress is valid (size and any other relevant checks)
+        /// 4b. Any value proposition checks??? todo!("ask this")
+        /// 5. Check that the data to be stored is greater than the minimum required by the runtime. todo!("Ask if this applies to MSPs")
+        /// 6. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
+        /// 7. Check that the signer has enough funds to pay the deposit
+        /// 8. Hold the deposit from the signer
+        /// 9. Update the MSP storage to add the signer as an MSP
+        /// 10. Increment the storage that holds total amount of SPs currently in the system
+        /// 11. Emit an event confirming that the registration of the MSP has been successful
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn msp_sign_up(
             origin: OriginFor<T>,
             total_data: StorageData<T>,
-            multiaddress: MultiAddress<T>,
+            multiaddress: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             value_prop: ValueProposition<T>,
         ) -> DispatchResultWithPostInfo {
             // TODO: Logic to sign up an MSP
@@ -323,7 +347,7 @@ pub mod pallet {
         pub fn bsp_sign_up(
             origin: OriginFor<T>,
             total_data: StorageData<T>,
-            multiaddress: MultiAddress<T>,
+            multiaddress: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
         ) -> DispatchResultWithPostInfo {
             // TODO: Logic to sign up a BSP
 
@@ -334,7 +358,7 @@ pub mod pallet {
 
             let new_bsp_amount = BspCount::<T>::get() + T::SpCount::one();
             ensure!(
-                new_bsp_amount <= MaxBsps::<T>::get(),
+                new_bsp_amount <= T::MaxBsps::get(),
                 Error::<T>::MaxBspsReached
             );
 
@@ -453,142 +477,61 @@ impl<T: Config> Pallet<T> {
 
 // Trait definitions:
 
-use codec::{Decode, Encode, FullCodec, HasCompact, MaxEncodedLen};
-use frame_support::traits::fungible::Inspect;
-use frame_support::{
-    pallet_prelude::*,
-    sp_runtime::traits::{AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, SimpleBitOps},
-    traits::fungible,
-};
-use scale_info::prelude::fmt::Debug;
-use scale_info::TypeInfo;
+use frame_support::pallet_prelude::DispatchResult;
 
 /// A trait to lookup registered Storage Providers.
 /// It is abstracted over the `AccountId` type, `StorageProvider` type, total number of users
 /// and Balance type.
-pub trait StorageProvidersInterface {
-    /// The type which can be used to identify accounts.
-    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-
-    /// The type corresponding to the staking balance of a registered Storage Provider.
-    type Balance: fungible::Inspect<Self::AccountId>
-        + fungible::hold::Inspect<Self::AccountId>
-        + fungible::freeze::Inspect<Self::AccountId>;
-
-    /// The type which represents a registered Storage Provider.
-    type StorageProvider: Encode + Decode + MaxEncodedLen + TypeInfo + PartialEq + Eq + Clone;
-
-    /// The type which represents the total number of registered Storage Provider.
-    type SpCount: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Ord
-        + AtLeast32BitUnsigned
-        + FullCodec
-        + Copy
-        + Default
-        + Debug
-        + scale_info::TypeInfo
-        + MaxEncodedLen;
-
-    /// The type which represents the unit in which we measure data size.
-    type StorageData: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Default
-        + MaybeDisplay
-        + AtLeast32BitUnsigned
-        + Copy
-        + MaxEncodedLen
-        + HasCompact;
-
-    /// The type of the Merkle Patricia Root of the storage trie for BSPs and MSPs' buckets (a hash).
-    type MerklePatriciaRoot: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Debug
-        + MaybeDisplay
-        + SimpleBitOps
-        + Ord
-        + Default
-        + Copy
-        + CheckEqual
-        + AsRef<[u8]>
-        + AsMut<[u8]>
-        + MaxEncodedLen
-        + FullCodec;
-
-    /// The type of the user ID for an MSP (probably a hash of its AccountId)
-    type UserId: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Debug
-        + MaybeDisplay
-        + SimpleBitOps
-        + Ord
-        + Default
-        + Copy
-        + CheckEqual
-        + AsRef<[u8]>
-        + AsMut<[u8]>
-        + MaxEncodedLen
-        + FullCodec;
-
-    /// The type of the bucket ID for an MSP (probably a hash of the UserId that owns it concatenated with the bucket's number/name)
-    type BucketId: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Debug
-        + MaybeDisplay
-        + SimpleBitOps
-        + Ord
-        + Default
-        + Copy
-        + CheckEqual
-        + AsRef<[u8]>
-        + AsMut<[u8]>
-        + MaxEncodedLen
-        + FullCodec;
-
+pub trait StorageProvidersInterface<T: Config> {
     /// Lookup a registered StorageProvider by their AccountId.
-    fn get_sp(who: Self::AccountId) -> Option<Self::StorageProvider>;
+    ///
+    /// If the account is a Main Storage Provider, it will still return a BackupStorageProvider option as
+    /// the pallets using this interface should not care about the value proposition.
+    /// TODO: This could be refined in the future.
+    fn get_sp(who: T::AccountId) -> Option<BackupStorageProvider<T>>;
 
     /// Check if an account is a registered Storage Provider.
-    fn is_sp(who: Self::AccountId) -> bool;
+    fn is_sp(who: T::AccountId) -> bool;
 
     /// Lookup the total number of registered Storage Providers.
-    fn total_sps() -> Self::SpCount;
+    fn total_sps() -> T::SpCount;
 
     /// Get the stake for a registered Storage Provider.
-    fn get_stake(
-        who: Self::StorageProvider,
-    ) -> <Self::Balance as Inspect<Self::AccountId>>::Balance;
+    fn get_stake(who: BackupStorageProvider<T>) -> BalanceOf<T>;
 
-    /// Change the used data of a Storage Provider.
-    fn change_data_used(who: &Self::AccountId, data_change: Self::StorageData) -> DispatchResult;
+    /// Change the used data of a Storage Provider (generic, MSP or BSP).
+    fn change_data_used(who: &T::AccountId, data_change: T::StorageData) -> DispatchResult;
 
-    /// Add or change a root for a BSP or a bucket of an MSP.
-    fn add_or_change_root(
-        who: &Self::AccountId,
-        new_root: Self::MerklePatriciaRoot,
-        user_id: Option<Self::UserId>,
-        bucket_id: Option<Self::BucketId>,
+    /// Add or change a root for a bucket of an MSP.
+    fn add_or_change_root_msp(
+        who: &T::AccountId,
+        new_root: MerklePatriciaRoot<T>,
+        user_id: T::UserId,
+        bucket_id: T::BucketId,
     ) -> DispatchResult;
 
-    /// Remove a root from a BSP or a bucket of an MSP.
-    ///
-    /// If it's a BSP, it will delete its storage completely
-    fn remove_root(
-        who: &Self::AccountId,
-        user_id: Option<Self::UserId>,
-        bucket_id: Option<Self::BucketId>,
+    /// Remove a root from a bucket of a MSP, removing the whole bucket from storage
+    fn remove_root_msp(
+        who: &T::AccountId,
+        user_id: T::UserId,
+        bucket_id: T::BucketId,
     ) -> DispatchResult;
 
-    /// Check if a Merkle Patricia Root is valid for a Storage Provider.
-    fn is_valid_root_for_sp(
-        who: &Self::AccountId,
-        root: Self::MerklePatriciaRoot,
-        user_id: Option<Self::UserId>,
-        bucket_id: Option<Self::BucketId>,
+    /// Check if the given root is an actual root of a bucket that belongs to a specific user of a specific MSP
+    fn is_valid_root_for_msp(
+        who: &T::AccountId,
+        root: MerklePatriciaRoot<T>,
+        user_id: T::UserId,
+        bucket_id: T::BucketId,
     ) -> bool;
+
+    /// Change the root of a BSP
+    fn change_root_bsp(who: &T::AccountId, new_root: MerklePatriciaRoot<T>) -> DispatchResult;
+
+    /// Remove a root from a BSP. It will remove the whole BSP from storage, so it should only be called when the BSP is being removed.
+    /// todo!("If the only way to remove a BSP is by this pallet (bsp_sign_off), then is this function actually needed?")
+    fn remove_root_bsp(who: &T::AccountId) -> DispatchResult;
+
+    /// Check if the given root is the root of that BSP
+    fn is_valid_root_for_bsp(who: &T::AccountId, root: MerklePatriciaRoot<T>) -> bool;
 }

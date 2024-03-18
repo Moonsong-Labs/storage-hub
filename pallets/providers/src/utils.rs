@@ -43,19 +43,8 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
 }
 
 /// Implement the StorageProvidersInterface trait for the Storage Providers pallet.
-impl<T: pallet::Config> StorageProvidersInterface for pallet::Pallet<T> {
-    /// Trait types
-    type AccountId = T::AccountId;
-    type Balance = T::NativeBalance;
-    type StorageData = T::StorageData;
-    /// Since the ones using the interface do not care about the value proposition, we can use the Backup Storage Provider type.
-    type StorageProvider = BackupStorageProvider<T>;
-    type SpCount = T::SpCount;
-    type MerklePatriciaRoot = T::MerklePatriciaRoot;
-    type UserId = T::UserId;
-    type BucketId = T::BucketId;
-
-    fn get_sp(who: Self::AccountId) -> Option<Self::StorageProvider> {
+impl<T: pallet::Config> StorageProvidersInterface<T> for pallet::Pallet<T> {
+    fn get_sp(who: T::AccountId) -> Option<BackupStorageProvider<T>> {
         if let Some(m) = Msps::<T>::get(&who) {
             Some(m.into())
         } else if let Some(b) = Bsps::<T>::get(&who) {
@@ -65,21 +54,23 @@ impl<T: pallet::Config> StorageProvidersInterface for pallet::Pallet<T> {
         }
     }
 
-    fn is_sp(who: Self::AccountId) -> bool {
+    fn is_sp(who: T::AccountId) -> bool {
         Msps::<T>::contains_key(&who) || Bsps::<T>::contains_key(&who)
     }
 
-    fn total_sps() -> Self::SpCount {
-        SpCount::<T>::get()
+    fn total_sps() -> T::SpCount {
+        // TODO: Add checks
+        MspCount::<T>::get() + BspCount::<T>::get()
     }
 
-    fn get_stake(_who: Self::StorageProvider) -> BalanceOf<T> {
+    fn get_stake(_who: BackupStorageProvider<T>) -> BalanceOf<T> {
         T::SpMinDeposit::get()
         // TODO: Implement this
         //T::SpMinDeposit::get() + (T::DepositPerData::get() * who.total_data.into())
     }
 
-    fn change_data_used(who: &Self::AccountId, data_change: Self::StorageData) -> DispatchResult {
+    fn change_data_used(who: &T::AccountId, data_change: T::StorageData) -> DispatchResult {
+        // TODO: refine this logic, add checks
         if let Some(m) = Msps::<T>::get(&who) {
             Msps::<T>::insert(
                 who,
@@ -102,24 +93,56 @@ impl<T: pallet::Config> StorageProvidersInterface for pallet::Pallet<T> {
         Ok(())
     }
 
-    // todo!("ASK IF THIS SHOULDN'T BE TWO DIFFERENT SET OF FUNCTIONS (for MSPs and BSPs)")
-    fn add_or_change_root(
-        who: &Self::AccountId,
-        new_root: Self::MerklePatriciaRoot,
-        user_id: Option<Self::UserId>,
-        bucket_id: Option<Self::BucketId>,
+    // MSP specific functions:
+
+    fn add_or_change_root_msp(
+        who: &T::AccountId,
+        new_root: MerklePatriciaRoot<T>,
+        user_id: T::UserId,
+        bucket_id: T::BucketId,
     ) -> DispatchResult {
         if let Some(m) = Msps::<T>::get(&who) {
-            if let Some(u) = user_id {
-                if let Some(b) = bucket_id {
-                    MspToUserToBucketToRoot::<T>::insert((&m, &u, &b), &new_root);
-                } else {
-                    return Err(Error::<T>::NoBucketId.into());
-                }
+            MspToUserToBucketToRoot::<T>::insert((&m, &user_id, &bucket_id), &new_root);
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        }
+        Ok(())
+    }
+
+    fn remove_root_msp(
+        who: &<T>::AccountId,
+        user_id: <T as Config>::UserId,
+        bucket_id: <T as Config>::BucketId,
+    ) -> DispatchResult {
+        if let Some(m) = Msps::<T>::get(&who) {
+            MspToUserToBucketToRoot::<T>::remove((&m, &user_id, &bucket_id));
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        }
+        Ok(())
+    }
+
+    fn is_valid_root_for_msp(
+        who: &<T>::AccountId,
+        root: MerklePatriciaRoot<T>,
+        user_id: <T as Config>::UserId,
+        bucket_id: <T as Config>::BucketId,
+    ) -> bool {
+        if let Some(m) = Msps::<T>::get(&who) {
+            if let Some(r) = MspToUserToBucketToRoot::<T>::get((&m, &user_id, &bucket_id)) {
+                r == root
             } else {
-                return Err(Error::<T>::NoUserId.into());
+                false
             }
-        } else if let Some(b) = Bsps::<T>::get(&who) {
+        } else {
+            false
+        }
+    }
+
+    // BSP specific functions:
+
+    fn change_root_bsp(who: &<T>::AccountId, new_root: MerklePatriciaRoot<T>) -> DispatchResult {
+        if let Some(b) = Bsps::<T>::get(&who) {
             Bsps::<T>::insert(
                 who,
                 BackupStorageProvider {
@@ -133,51 +156,14 @@ impl<T: pallet::Config> StorageProvidersInterface for pallet::Pallet<T> {
         Ok(())
     }
 
-    fn remove_root(
-        who: &Self::AccountId,
-        user_id: Option<Self::UserId>,
-        bucket_id: Option<Self::BucketId>,
-    ) -> DispatchResult {
-        if let Some(m) = Msps::<T>::get(&who) {
-            if let Some(u) = user_id {
-                if let Some(b) = bucket_id {
-                    MspToUserToBucketToRoot::<T>::remove((&m, &u, &b));
-                } else {
-                    return Err(Error::<T>::NoBucketId.into());
-                }
-            } else {
-                return Err(Error::<T>::NoUserId.into());
-            }
-        } else if let Some(_b) = Bsps::<T>::get(&who) {
-            Bsps::<T>::remove(who);
-        } else {
-            return Err(Error::<T>::NotRegistered.into());
-        }
+    fn remove_root_bsp(who: &<T>::AccountId) -> DispatchResult {
+        Bsps::<T>::remove(&who);
         Ok(())
     }
 
-    // todo!("Ask Facu if this works for him, as I'm not sure if he has access to the user IDs and bucket IDs")
-    // The alternative would be to iterate through all existing users and buckets, and check if the root is valid for any of them.
-    // That would be awful...
-    fn is_valid_root_for_sp(
-        who: &Self::AccountId,
-        root: Self::MerklePatriciaRoot,
-        user_id: Option<Self::UserId>,
-        bucket_id: Option<Self::BucketId>,
-    ) -> bool {
+    fn is_valid_root_for_bsp(who: &<T>::AccountId, root: MerklePatriciaRoot<T>) -> bool {
         if let Some(b) = Bsps::<T>::get(&who) {
             b.root == root
-        } else if let Some(m) = Msps::<T>::get(&who) {
-            match (user_id, bucket_id) {
-                (Some(u), Some(b)) => {
-                    if let Some(r) = MspToUserToBucketToRoot::<T>::get((&m, &u, &b)) {
-                        r == root
-                    } else {
-                        false
-                    }
-                }
-                _ => false,
-            }
         } else {
             false
         }

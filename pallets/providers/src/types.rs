@@ -10,6 +10,7 @@ use crate::Config;
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct ValueProposition<T: Config> {
+    pub identifier: ValuePropIdentifier<T>,
     pub data_limit: StorageData<T>,
     pub protocols: BoundedVec<Protocols<T>, MaxProtocols<T>>,
     // todo!("add relevant fields here")
@@ -22,7 +23,7 @@ pub struct ValueProposition<T: Config> {
 pub struct MainStorageProvider<T: Config> {
     pub total_data: StorageData<T>,
     pub data_used: StorageData<T>,
-    pub multiaddress: MultiAddress<T>,
+    pub multiaddress: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub value_prop: ValueProposition<T>,
 }
 
@@ -33,7 +34,7 @@ pub struct MainStorageProvider<T: Config> {
 pub struct BackupStorageProvider<T: Config> {
     pub total_data: StorageData<T>,
     pub data_used: StorageData<T>,
-    pub multiaddress: MultiAddress<T>,
+    pub multiaddress: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub root: MerklePatriciaRoot<T>,
 }
 
@@ -45,6 +46,8 @@ pub type BalanceOf<T> =
 
 /// MaxMultiAddressSize is the maximum size of the libp2p multiaddress of a Storage Provider in bytes.
 pub type MaxMultiAddressSize<T> = <T as crate::Config>::MaxMultiAddressSize;
+/// MaxMultiAddressAmount is the maximum amount of MultiAddresses that a Storage Provider can have.
+pub type MaxMultiAddressAmount<T> = <T as crate::Config>::MaxMultiAddressAmount;
 /// MultiAddress is a byte array that represents the libp2p multiaddress of a Storage Provider.
 /// Its maximum size is defined in the runtime configuration, as MaxMultiAddressSize.
 pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
@@ -61,7 +64,5 @@ pub type StorageData<T> = <T as crate::Config>::StorageData;
 pub type MaxProtocols<T> = <T as crate::Config>::MaxProtocols;
 pub type Protocols<T> = BoundedVec<u8, MaxProtocols<T>>; // todo!("Define a type for protocols")
 
-/// MaxBsps is the maximum amount of Backup Storage Providers that can exist. It is defined in the runtime configuration.
-pub type MaxBsps<T> = <T as crate::Config>::MaxBsps;
-
-// todo!("ask if we should also have a limit of MSPs")
+// Identifier is the type that identifies the different Main Storage Provider value propositions, to allow tiered solutions
+pub type ValuePropIdentifier<T> = <T as crate::Config>::ValuePropIdentifier;

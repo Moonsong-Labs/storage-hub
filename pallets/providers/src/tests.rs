@@ -1,4 +1,4 @@
-use crate::{mock::*, Error, ValueProposition};
+use crate::{mock::*, Error, ValuePropIdentifier, ValueProposition};
 use frame_support::{assert_noop, assert_ok};
 use sp_runtime::BoundedVec;
 
@@ -11,6 +11,7 @@ fn it_does_something() {
             42,
             BoundedVec::new(),
             ValueProposition {
+                identifier: ValuePropIdentifier::<Test>::default(),
                 data_limit: 10,
                 protocols: BoundedVec::new()
             }
