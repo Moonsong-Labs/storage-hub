@@ -59,13 +59,6 @@ pub mod pallet {
         /// To check if whoever submits a proof is a registered Storage Provider.
         type StorageProviders: crate::StorageProvidersInterface<AccountId = Self::AccountId>;
 
-        /// The File System pallet.
-        /// To check if the root submitted in a proof is valid for the Storage Provider.
-        type FileSystem: crate::FileSystemInterface<
-            StorageProvider = SpFor<Self>,
-            ForestRoot = ForestRootFor<Self>,
-        >;
-
         /// Type to access the Balances Pallet.
         type NativeBalance: fungible::Inspect<Self::AccountId>
             + fungible::hold::Inspect<Self::AccountId>
@@ -430,40 +423,6 @@ pub trait StorageProvidersInterface {
 
     /// Get the stake for a registered Storage Provider.
     fn get_stake(who: Self::StorageProvider) -> Self::Balance;
-}
-
-// TODO: Move this to File System pallet.
-/// A trait to lookup registered Storage Providers.
-///
-/// It is abstracted over the, `StorageProvider` type and `ForestRoot` type.
-pub trait FileSystemInterface {
-    /// The type which represents a registered user.
-    type StorageProvider: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Debug
-        + Ord
-        + MaxEncodedLen;
-
-    /// The type for a root of a Merkle Patricia Forest.
-    /// Generally a hash (the output of a Hasher).
-    type ForestRoot: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Debug
-        + MaybeDisplay
-        + SimpleBitOps
-        + Ord
-        + Default
-        + Copy
-        + CheckEqual
-        + AsRef<[u8]>
-        + AsMut<[u8]>
-        + MaxEncodedLen
-        + FullCodec;
-
-    /// Check if a Merkle Patricia Forest root hash belongs to a given Storage Provider.
-    fn is_valid_root_for_sp(who: Self::StorageProvider, root: Self::ForestRoot) -> bool;
 }
 
 // TODO: Move this to a primitives crate.
