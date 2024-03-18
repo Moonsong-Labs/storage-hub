@@ -428,7 +428,7 @@ pub trait ProvidersInterface {
     fn get_root(who: Self::Provider) -> Option<Self::MerkleHash>;
 
     /// Get the stake for a registered  Provider.
-    fn get_stake(who: Self::Provider) -> Self::Balance;
+    fn get_stake(who: Self::Provider) -> Option<Self::Balance>;
 }
 
 // TODO: Move this to a primitives crate.
