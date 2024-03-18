@@ -6,8 +6,8 @@ use sp_trie::CompactProof;
 
 use crate::{
     pallet,
-    types::{AccountIdFor, BalanceFor, FileKeyFor, StorageProvidersFor},
-    ChallengesQueue, Error, Pallet, StorageProvidersInterface,
+    types::{AccountIdFor, BalanceFor, FileKeyFor, ProvidersPalletFor},
+    ChallengesQueue, Error, Pallet, ProvidersInterface,
 };
 
 impl<T> Pallet<T>
@@ -37,10 +37,10 @@ where
     // TODO: Document and add proper parameters.
     #[allow(unused_variables)]
     pub fn do_submit_proof(submitter: &AccountIdFor<T>, proof: &CompactProof) -> DispatchResult {
-        // Check if submitter is a registered Storage Provider.
+        // Check if submitter is a registered Provider.
         ensure!(
-            StorageProvidersFor::<T>::is_sp(submitter.clone()),
-            Error::<T>::NotStorageProvider
+            ProvidersPalletFor::<T>::is_sp(submitter.clone()),
+            Error::<T>::NotProvider
         );
 
         // TODO

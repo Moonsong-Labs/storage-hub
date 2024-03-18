@@ -22,7 +22,7 @@ use frame_support::{
     inherent::IsFatalError,
     pallet_prelude::*,
     sp_runtime::{
-        traits::{AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, SimpleBitOps},
+        traits::{CheckEqual, MaybeDisplay, SimpleBitOps},
         RuntimeString,
     },
     traits::fungible,
@@ -45,7 +45,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
     use sp_trie::CompactProof;
-    use types::SpFor;
+    use types::ProviderFor;
 
     use crate::types::*;
     use crate::*;
@@ -55,9 +55,9 @@ pub mod pallet {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// The Storage Providers pallet.
-        /// To check if whoever submits a proof is a registered Storage Provider.
-        type StorageProviders: crate::StorageProvidersInterface<AccountId = Self::AccountId>;
+        /// The Providers pallet.
+        /// To check if whoever submits a proof is a registered Provider.
+        type ProvidersPallet: crate::ProvidersInterface<AccountId = Self::AccountId>;
 
         /// Type to access the Balances Pallet.
         type NativeBalance: fungible::Inspect<Self::AccountId>
@@ -90,9 +90,9 @@ pub mod pallet {
         #[pallet::constant]
         type MaxChallengesPerBlock: Get<u32> + FullCodec;
 
-        /// The maximum number of Storage Providers that can be challenged in block.
+        /// The maximum number of Providers that can be challenged in block.
         #[pallet::constant]
-        type MaxSpsChallengedPerBlock: Get<u32> + FullCodec;
+        type MaxProvidersChallengedPerBlock: Get<u32> + FullCodec;
 
         /// The number of blocks that challenges history is kept for.
         /// After this many blocks, challenges are removed from `Challenges` StorageMap.
@@ -108,7 +108,7 @@ pub mod pallet {
         /// The number of blocks in between a checkpoint challenges round (i.e. with custom challenges).
         /// This is used to determine when to include the challenges from the `ChallengesQueue` and
         /// `PriorityChallengesQueue` in the `BlockToChallenges` StorageMap. These checkpoint challenge
-        /// rounds have to be answered by ALL Storage Providers, and this is enforced by the
+        /// rounds have to be answered by ALL Providers, and this is enforced by the
         /// `submit_proof` extrinsic.
         #[pallet::constant]
         type CheckpointChallengePeriod: Get<u32>;
@@ -131,10 +131,10 @@ pub mod pallet {
         BoundedVec<FileKeyFor<T>, MaxChallengesPerBlockFor<T>>,
     >;
 
-    /// A mapping from block number to a vector of challenged Storage Providers for that block.
+    /// A mapping from block number to a vector of challenged Providers for that block.
     ///
-    /// This is used to keep track of the Storage Providers that have been challenged, and should
-    /// submit a proof by the time of the block used as the key. Storage Providers who do submit
+    /// This is used to keep track of the Providers that have been challenged, and should
+    /// submit a proof by the time of the block used as the key. Providers who do submit
     /// a proof are removed from their respective entry and pushed forward to the next block in
     /// which they should submit a proof. Those who are still in the entry by the time the block
     /// is reached are considered to have failed to submit a proof and subject to slashing.
@@ -144,16 +144,16 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
-        BoundedVec<SpFor<T>, MaxSpsChallengedPerBlockFor<T>>,
+        BoundedVec<ProviderFor<T>, MaxSpsChallengedPerBlockFor<T>>,
     >;
 
-    /// A mapping from a Storage Provider to the last block number they submitted a proof for.
-    /// If for a Storage Provider `sp`, `LastBlockSpSubmittedProofFor[sp]` is `n`, then the
-    /// Storage Provider should submit a proof for block `n + stake_to_challenge_period(sp)`.
+    /// A mapping from a Provider to the last block number they submitted a proof for.
+    /// If for a Provider `sp`, `LastBlockSpSubmittedProofFor[sp]` is `n`, then the
+    /// Provider should submit a proof for block `n + stake_to_challenge_period(sp)`.
     #[pallet::storage]
     #[pallet::getter(fn last_block_sp_submitted_proof_for)]
     pub type LastBlockSpSubmittedProofFor<T: Config> =
-        StorageMap<_, Blake2_128Concat, SpFor<T>, BlockNumberFor<T>>;
+        StorageMap<_, Blake2_128Concat, ProviderFor<T>, BlockNumberFor<T>>;
 
     /// A queue of file keys that have been challenged manually.
     ///
@@ -185,7 +185,7 @@ pub mod pallet {
     ///
     /// This is used to determine when to include the challenges from the `ChallengesQueue` and
     /// `PriorityChallengesQueue` in the `BlockToChallenges` StorageMap. These checkpoint challenge
-    /// rounds have to be answered by ALL Storage Providers, and this is enforced by the
+    /// rounds have to be answered by ALL Providers, and this is enforced by the
     /// `submit_proof` extrinsic.
     #[pallet::storage]
     #[pallet::getter(fn last_checkpoint_block)]
@@ -200,13 +200,13 @@ pub mod pallet {
         /// [who, file_key_challenged]
         NewChallenge(AccountIdFor<T>, FileKeyFor<T>),
 
-        /// A storage proof was rejected.
-        /// [storage_provider, proof, reason]
-        ProofRejected(AccountIdFor<T>, CompactProof, ProofRejectionReason),
+        /// A proof was rejected.
+        /// [provider, proof, reason]
+        ProofRejected(ProviderFor<T>, CompactProof, ProofRejectionReason),
 
-        /// A storage proof was accepted.
-        /// [storage_provider, proof]
-        ProofAccepted(AccountIdFor<T>, CompactProof),
+        /// A proof was accepted.
+        /// [provider, proof]
+        ProofAccepted(ProviderFor<T>, CompactProof),
     }
 
     // Errors inform users that something went wrong.
@@ -216,8 +216,8 @@ pub mod pallet {
         /// until some of the challenges in the queue are dispatched.
         ChallengesQueueOverflow,
 
-        /// The proof submitter is not a registered Storage Provider.
-        NotStorageProvider,
+        /// The proof submitter is not a registered Provider.
+        NotProvider,
     }
 
     #[pallet::call]
@@ -227,7 +227,7 @@ pub mod pallet {
         /// This function allows anyone to add a new challenge to the `ChallengesQueue`.
         /// The challenge will be dispatched in the coming blocks.
         /// Regular users are charged a small fee for submitting a challenge, which
-        /// goes to the Treasury. Unless the one calling is a registered Storage Provider.
+        /// goes to the Treasury. Unless the one calling is a registered Provider.
         ///
         /// TODO: Consider checking also if there was a request to change MSP.
         #[pallet::call_index(0)]
@@ -248,25 +248,25 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// For a Storage Provider to submit a storage proof.
+        /// For a Provider to submit a proof.
         ///
-        /// Checks that `storage_provider` is a registered Storage Provider. If none
-        /// is provided, the proof submitter is considered to be the Storage Provider.
-        /// Relies on a File System pallet to check if the root is valid for the Storage Provider.
+        /// Checks that `provider` is a registered Provider. If none
+        /// is provided, the proof submitter is considered to be the Provider.
+        /// Relies on a File System pallet to check if the root is valid for the Provider.
         /// Validates that the proof corresponds to a challenge that was made in the past,
-        /// by checking the `BlockToChallenges` StorageMap. The block number that the Storage
+        /// by checking the `BlockToChallenges` StorageMap. The block number that the
         /// Provider should have submitted a proof is calculated based on the last block they
         /// submitted a proof for (`LastBlockSpSubmittedProofFor`), and the proving period for
-        /// that Storage Provider, which is a function of their stake.
+        /// that Provider, which is a function of their stake.
         /// This extrinsic also checks that there hasn't been a checkpoint challenge round
-        /// in between the last time the Storage Provider submitted a proof for and the block
-        /// for which the proof is being submitted. If there has been, the Storage Provider is
+        /// in between the last time the Provider submitted a proof for and the block
+        /// for which the proof is being submitted. If there has been, the Provider is
         /// subject to slashing.
         ///
         /// If valid:
-        /// - Pushes forward the Storage Provider in the `BlockToChallengedSps` StorageMap a number
-        /// of blocks corresponding to the stake of the Storage Provider.
-        /// - Registers this block as the last block in which the Storage Provider submitted a proof.
+        /// - Pushes forward the Provider in the `BlockToChallengedSps` StorageMap a number
+        /// of blocks corresponding to the stake of the Provider.
+        /// - Registers this block as the last block in which the Provider submitted a proof.
         ///
         /// Execution of this extrinsic should be refunded if the proof is valid.
         #[pallet::call_index(1)]
@@ -276,7 +276,7 @@ pub mod pallet {
             proof: CompactProof,
             root: ForestRootFor<T>,
             challenge_block: BlockNumberFor<T>,
-            storage_provider: Option<AccountIdFor<T>>,
+            provider: Option<ProviderFor<T>>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -285,7 +285,7 @@ pub mod pallet {
             Self::do_submit_proof(&who, &proof)?;
 
             // TODO: Emit correct event.
-            Self::deposit_event(Event::ProofAccepted(who, proof));
+            // Self::deposit_event(Event::ProofAccepted(who, proof));
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -301,9 +301,9 @@ pub mod pallet {
         /// `PriorityChallengesQueue`. This custom challenges are only included in "checkpoint"
         /// blocks
         ///
-        /// Additionally, it takes care of checking if there are Storage Providers that have
+        /// Additionally, it takes care of checking if there are Providers that have
         /// failed to submit a proof, and should have submitted one by this block. It does so
-        /// by checking the `BlockToChallengedSps` StorageMap. If a Storage Provider is found
+        /// by checking the `BlockToChallengedSps` StorageMap. If a Provider is found
         /// to have failed to submit a proof, it is subject to slashing.
         ///
         /// Finally, it cleans up:
@@ -380,49 +380,42 @@ impl InherentError {
     }
 }
 
-// TODO: Move this to Storage Providers pallet.
-/// A trait to lookup registered Storage Providers.
+/// A trait to lookup registered Providers, their Merkle Patricia Trie roots and their stake.
 ///
-/// It is abstracted over the `AccountId` type, `StorageProvider` type, total number of users
-/// and Balance type.
-pub trait StorageProvidersInterface {
+/// It is abstracted over the `AccountId` type, `Provider` type, `Balance` type and `MerkleHash` type.
+pub trait ProvidersInterface {
     /// The type which can be used to identify accounts.
     type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-    /// The type corresponding to the staking balance of a registered Storage Provider.
+    /// The type which represents a registered Provider.
+    type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type corresponding to the staking balance of a registered Provider.
     type Balance: fungible::Inspect<Self::AccountId>
         + fungible::hold::Inspect<Self::AccountId>
         + fungible::freeze::Inspect<Self::AccountId>;
-    /// The type which represents a registered Storage Provider.
-    type StorageProvider: Parameter
+    /// The type corresponding to the root of a registered Provider.
+    type MerkleHash: Parameter
         + Member
         + MaybeSerializeDeserialize
         + Debug
+        + MaybeDisplay
+        + SimpleBitOps
         + Ord
-        + MaxEncodedLen;
-    /// The type which represents the total number of registered Storage Provider.
-    type UserCount: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Ord
-        + AtLeast32BitUnsigned
-        + FullCodec
-        + Copy
         + Default
-        + Debug
-        + scale_info::TypeInfo
-        + MaxEncodedLen;
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
 
-    /// Lookup a registered StorageProvider by their AccountId.
-    fn get_sp(who: Self::AccountId) -> Option<Self::StorageProvider>;
+    /// Check if an account is a registered Provider.
+    fn is_sp(who: Self::Provider) -> bool;
 
-    /// Check if an account is a registered Storage Provider.
-    fn is_sp(who: Self::AccountId) -> bool;
+    /// Get the root for a registered Provider.
+    fn get_root(who: Self::Provider) -> Option<Self::MerkleHash>;
 
-    /// Lookup the total number of registered Storage Providers.
-    fn total_sps() -> Self::UserCount;
-
-    /// Get the stake for a registered Storage Provider.
-    fn get_stake(who: Self::StorageProvider) -> Self::Balance;
+    /// Get the stake for a registered  Provider.
+    fn get_stake(who: Self::Provider) -> Self::Balance;
 }
 
 // TODO: Move this to a primitives crate.
