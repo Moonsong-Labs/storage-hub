@@ -1,5 +1,5 @@
 use crate::{mock::*, types::FileLocation, Config, Event, StorageRequestExpirations};
-use frame_support::assert_ok;
+use frame_support::{assert_ok, traits::Hooks, weights::Weight};
 use sp_runtime::{
     traits::{BlakeTwo256, Get, Hash},
     BoundedVec,
@@ -59,20 +59,20 @@ fn request_storage_expiration_clear_success() {
             BoundedVec::try_from(vec![1]).unwrap(),
         ));
 
-        let expected_expiration_block_number: BlockNumber =
-            FileSystem::next_expiration_block_number().into();
+        let expected_expiration_inserted_at_block_number: BlockNumber =
+            FileSystem::next_expiration_insertion_block_number().into();
 
         // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number as u64),
+            FileSystem::storage_request_expirations(expected_expiration_inserted_at_block_number),
             vec![location]
         );
 
-        roll_to(1 + expected_expiration_block_number as u64);
+        roll_to(expected_expiration_inserted_at_block_number + 1);
 
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number as u64),
+            FileSystem::storage_request_expirations(expected_expiration_inserted_at_block_number),
             vec![]
         );
     });
@@ -90,7 +90,7 @@ fn request_storage_expiration_current_block_increment_success() {
         let fingerprint = BlakeTwo256::hash(&file_content);
 
         let mut expected_expiration_block_number: BlockNumber =
-            FileSystem::next_expiration_block_number().into();
+            FileSystem::next_expiration_insertion_block_number().into();
 
         // Append storage request expiration to the list at `StorageRequestTtl`
         let max_storage_request_expiry: u32 = <Test as Config>::MaxExpiredStorageRequests::get();
@@ -116,7 +116,8 @@ fn request_storage_expiration_current_block_increment_success() {
             max_storage_request_expiry as usize
         );
 
-        expected_expiration_block_number = FileSystem::next_expiration_block_number().into();
+        expected_expiration_block_number =
+            FileSystem::next_expiration_insertion_block_number().into();
 
         // Assert that the `CurrentExpirationBlock` storage is incremented by 1
         assert_eq!(
@@ -132,32 +133,120 @@ fn request_storage_expiration_current_block_increment_success() {
             FileSystem::storage_request_expirations(expected_expiration_block_number),
             vec![]
         );
+    });
+}
 
-        // Go to block number after which the second set of storage request expirations should be removed
+#[test]
+fn request_storage_expiration_current_block_increment_when_on_idle_skips_success() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited
+        System::set_block_number(1);
+
+        let user = RuntimeOrigin::signed(1);
+        let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+        let file_content = b"test".to_vec();
+        let fingerprint = BlakeTwo256::hash(&file_content);
+
+        let mut expected_expiration_block_number: BlockNumber =
+            FileSystem::next_expiration_insertion_block_number().into();
+
+        // Append storage request expiration to the list at `StorageRequestTtl`
+        let max_storage_request_expiry: u32 = <Test as Config>::MaxExpiredStorageRequests::get();
+        for _ in 0..(max_storage_request_expiry - 1) {
+            assert_ok!(StorageRequestExpirations::<Test>::try_append(
+                expected_expiration_block_number,
+                location.clone()
+            ));
+        }
+
+        // Dispatch a signed extrinsic.
+        assert_ok!(FileSystem::issue_storage_request(
+            user.clone(),
+            location.clone(),
+            fingerprint,
+            4,
+            BoundedVec::try_from(vec![1]).unwrap(),
+        ));
+
+        // Assert that the storage request expirations storage is at max capacity
+        assert_eq!(
+            FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
+            max_storage_request_expiry as usize
+        );
+
+        expected_expiration_block_number =
+            FileSystem::next_expiration_insertion_block_number().into();
+
+        // Assert that the `CurrentExpirationBlock` storage is incremented by 1
+        assert_eq!(
+            FileSystem::current_expiration_block(),
+            expected_expiration_block_number
+        );
+
+        System::set_block_number(expected_expiration_block_number);
+
+        FileSystem::on_idle(System::block_number(), Weight::zero());
+
+        // Assert that the storage request expirations storage is at max capacity
+        assert_eq!(
+            FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
+            max_storage_request_expiry as usize
+        );
+
+        // Assert that the `NextExpirationInsertionBlockNumber` storage is set to the current block number that was not cleaned
+        assert_eq!(
+            FileSystem::next_starting_block_to_clean_up().expect("should be set"),
+            expected_expiration_block_number
+        );
+
+        // Go to block number after which the storage request expirations should be removed
         roll_to(expected_expiration_block_number + 2);
-
-        expected_expiration_block_number = FileSystem::next_expiration_block_number().into();
 
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
         assert_eq!(
             FileSystem::storage_request_expirations(expected_expiration_block_number),
             vec![]
         );
-
-        // TODO: add this once `on_idle` is fixed for remaining_weight
-        // FileSystem::on_idle(expected_expiration_block_number, Weight::zero());
-
-        // // Assert that the `CurrentExpirationBlock` storage is incremented by 1
-        // assert_eq!(
-        //     FileSystem::current_expiration_block(),
-        //     expected_expiration_block_number + 1
-        // );
     });
 }
 
 #[test]
-fn request_storage_expiration_current_block_increment_when_on_idle_skips_success() {
-    // new_test_ext().execute_with(|| todo!());
+fn revoke_request_storage_success() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited
+        System::set_block_number(1);
+
+        let user = RuntimeOrigin::signed(1);
+        let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+        let file_content = b"test".to_vec();
+        let fingerprint = BlakeTwo256::hash(&file_content);
+
+        // Dispatch a signed extrinsic.
+        assert_ok!(FileSystem::issue_storage_request(
+            user.clone(),
+            location.clone(),
+            fingerprint,
+            4,
+            BoundedVec::try_from(vec![1]).unwrap(),
+        ));
+
+        // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
+        assert_eq!(
+            FileSystem::storage_request_expirations(
+                FileSystem::next_expiration_insertion_block_number()
+            ),
+            vec![location.clone()]
+        );
+
+        // Dispatch a signed extrinsic.
+        assert_ok!(FileSystem::revoke_storage_request(
+            user.clone(),
+            location.clone()
+        ));
+
+        // Assert that the correct event was deposited
+        System::assert_last_event(Event::StorageRequestRevoked { location }.into());
+    });
 }
 
 #[test]

@@ -7,7 +7,8 @@ use sp_runtime::traits::CheckedAdd;
 use crate::{
     pallet,
     types::{FileLocation, Fingerprint, MultiAddress, StorageRequestMetadata, StorageUnit},
-    CurrentExpirationBlock, Error, Pallet, StorageRequestExpirations, StorageRequests,
+    Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestExpirations,
+    StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -61,7 +62,7 @@ where
         // Register storage request.
         <StorageRequests<T>>::insert(&location, file_metadata);
 
-        let mut block_to_insert_expiration = Self::next_expiration_block_number();
+        let mut block_to_insert_expiration = Self::next_expiration_insertion_block_number();
 
         // Get current storage request expirations vec.
         let curr_storage_request_expirations =
@@ -76,7 +77,7 @@ where
                 }
             };
 
-            <CurrentExpirationBlock<T>>::set(block_to_insert_expiration);
+            <NextAvailableExpirationInsertionBlock<T>>::set(block_to_insert_expiration);
         }
 
         expect_or_err!(
@@ -130,10 +131,40 @@ where
         Ok(())
     }
 
+    /// Revoke a storage request.
+    pub(crate) fn do_revoke_storage_request(
+        who: T::AccountId,
+        location: FileLocation<T>,
+    ) -> DispatchResult {
+        // Check that the storage request exists.
+        ensure!(
+            <StorageRequests<T>>::contains_key(&location),
+            Error::<T>::StorageRequestNotRegistered
+        );
+
+        // Get storage request metadata.
+        let file_metadata = expect_or_err!(
+            <StorageRequests<T>>::get(&location),
+            "Storage request should exist",
+            Error::<T>::StorageRequestNotRegistered
+        );
+
+        // Check that the sender is the same as the one who requested the storage.
+        ensure!(
+            file_metadata.requested_by == who,
+            Error::<T>::StorageRequestNotAuthorized
+        );
+
+        // Remove storage request.
+        <StorageRequests<T>>::remove(&location);
+
+        Ok(())
+    }
+
     /// Get the block number at which the storage request will expire.
     ///
     /// This will also update the [`CurrentExpirationBlock`] if the current expiration block pointer is lower then the [`crate::Config::StorageRequestTtl`].
-    pub(crate) fn next_expiration_block_number() -> BlockNumberFor<T>
+    pub(crate) fn next_expiration_insertion_block_number() -> BlockNumberFor<T>
     where
         T: pallet::Config,
     {
@@ -141,13 +172,13 @@ where
         let min_expiration_block = current_block_number + T::StorageRequestTtl::get().into();
 
         // Reset the current expiration block pointer if it is lower then the minimum storage request TTL.
-        if <CurrentExpirationBlock<T>>::get() < min_expiration_block {
-            <CurrentExpirationBlock<T>>::set(min_expiration_block);
+        if <NextAvailableExpirationInsertionBlock<T>>::get() < min_expiration_block {
+            <NextAvailableExpirationInsertionBlock<T>>::set(min_expiration_block);
         }
 
         let block_to_insert_expiration = max(
-            current_block_number + T::StorageRequestTtl::get().into(),
-            <CurrentExpirationBlock<T>>::get(),
+            min_expiration_block,
+            <NextAvailableExpirationInsertionBlock<T>>::get(),
         );
         block_to_insert_expiration
     }
