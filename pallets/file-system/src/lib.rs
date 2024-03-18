@@ -313,24 +313,18 @@ pub mod pallet {
             let start_block = NextStartingBlockToCleanUp::<T>::get();
             let mut block_to_clean = start_block;
 
-            // Calculate the weight required to process the cleanup
-            let required_weight =
-                db_weight.reads_writes(1, (T::MaxExpiredStorageRequests::get() + 1u32).into()); // Adding 1 for `NextBlockToCleanup` write at the end
-
-            // Check if there is enough weight to process entire `on_idle` execution with a single block cleanup iteration
-            remaining_weight.all_gte(required_weight);
-
             // Total weight used to avoid exceeding the remaining weight
             let mut total_used_weight = Weight::zero();
 
+            let required_weight_for_iteration =
+                db_weight.reads_writes(1, T::MaxExpiredStorageRequests::get().into());
+
             // Iterate over blocks from the start block to the current block,
             // cleaning up storage requests until the remaining weight is insufficient
-            while block_to_clean <= current_block && remaining_weight.all_gte(total_used_weight) {
-                // Check if there is enough weight left to process the cleanup for one more block
-                if required_weight.all_gte(remaining_weight.saturating_sub(total_used_weight)) {
-                    break;
-                }
-
+            while block_to_clean <= current_block
+                && remaining_weight
+                    .all_gte(total_used_weight.saturating_add(required_weight_for_iteration))
+            {
                 let mut used_weight = db_weight.reads(1);
                 let expired_requests = StorageRequestExpirations::<T>::take(&block_to_clean);
 
