@@ -185,7 +185,13 @@ fn request_storage_expiration_current_block_increment_when_on_idle_skips_success
 
         System::set_block_number(expected_expiration_block_number);
 
-        FileSystem::on_idle(System::block_number(), Weight::zero());
+        // Assert that the `NextExpirationInsertionBlockNumber` storage is set to 0 initially
+        assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
+
+        let used_weight = FileSystem::on_idle(System::block_number(), Weight::zero());
+
+        // Assert that the weight used is zero
+        assert_eq!(used_weight, Weight::zero());
 
         // Assert that the storage request expirations storage is at max capacity
         assert_eq!(
@@ -193,19 +199,22 @@ fn request_storage_expiration_current_block_increment_when_on_idle_skips_success
             max_storage_request_expiry as usize
         );
 
-        // Assert that the `NextExpirationInsertionBlockNumber` storage is set to the current block number that was not cleaned
-        assert_eq!(
-            FileSystem::next_starting_block_to_clean_up().expect("should be set"),
-            expected_expiration_block_number
-        );
+        // Assert that the `NextExpirationInsertionBlockNumber` storage did not update
+        assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
 
         // Go to block number after which the storage request expirations should be removed
-        roll_to(expected_expiration_block_number + 2);
+        roll_to(expected_expiration_block_number + 1);
 
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
         assert_eq!(
             FileSystem::storage_request_expirations(expected_expiration_block_number),
             vec![]
+        );
+
+        // Assert that the `NextExpirationInsertionBlockNumber` storage is set to the next block number
+        assert_eq!(
+            FileSystem::next_starting_block_to_clean_up(),
+            System::block_number() + 1
         );
     });
 }

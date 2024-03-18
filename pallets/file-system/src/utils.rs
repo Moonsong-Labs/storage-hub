@@ -158,6 +158,8 @@ where
         // Remove storage request.
         <StorageRequests<T>>::remove(&location);
 
+        // TODO: initiate deletion request for SPs.
+
         Ok(())
     }
 

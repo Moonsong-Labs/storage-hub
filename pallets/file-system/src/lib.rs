@@ -47,10 +47,11 @@ pub mod pallet {
     use codec::HasCompact;
     use frame_support::{
         dispatch::DispatchResult,
-        pallet_prelude::*,
-        sp_runtime::traits::{AtLeast32Bit, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps},
+        pallet_prelude::{ValueQuery, *},
+        sp_runtime::traits::{AtLeast32Bit, CheckEqual, MaybeDisplay, SimpleBitOps},
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
+    use sp_runtime::traits::CheckedAdd;
     use sp_runtime::BoundedVec;
 
     #[pallet::config]
@@ -147,7 +148,7 @@ pub mod pallet {
     /// avoids skipping blocks when the clean-up is postponed.
     #[pallet::storage]
     #[pallet::getter(fn next_starting_block_to_clean_up)]
-    pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>>;
+    pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -193,6 +194,8 @@ pub mod pallet {
         StorageRequestExpirationBlockOverflow,
         /// Not authorized to delete the storage request.
         StorageRequestNotAuthorized,
+        /// Reached maximum block number :O
+        MaxBlockNumberReached,
     }
 
     #[pallet::call]
@@ -307,8 +310,15 @@ pub mod pallet {
 
             // Determine the starting block for cleanup, using `NextBlockToCleanup` if available,
             // or defaulting to the current block
-            let start_block = NextStartingBlockToCleanUp::<T>::get().unwrap_or(current_block);
+            let start_block = NextStartingBlockToCleanUp::<T>::get();
             let mut block_to_clean = start_block;
+
+            // Calculate the weight required to process the cleanup
+            let required_weight =
+                db_weight.reads_writes(1, (T::MaxExpiredStorageRequests::get() + 1u32).into()); // Adding 1 for `NextBlockToCleanup` write at the end
+
+            // Check if there is enough weight to process entire `on_idle` execution with a single block cleanup iteration
+            remaining_weight.all_gte(required_weight);
 
             // Total weight used to avoid exceeding the remaining weight
             let mut total_used_weight = Weight::zero();
@@ -316,10 +326,6 @@ pub mod pallet {
             // Iterate over blocks from the start block to the current block,
             // cleaning up storage requests until the remaining weight is insufficient
             while block_to_clean <= current_block && remaining_weight.all_gte(total_used_weight) {
-                // Calculate the weight required to process the cleanup
-                let required_weight =
-                    db_weight.reads_writes(1, T::MaxExpiredStorageRequests::get().into());
-
                 // Check if there is enough weight left to process the cleanup for one more block
                 if required_weight.all_gte(remaining_weight.saturating_sub(total_used_weight)) {
                     break;
@@ -338,21 +344,17 @@ pub mod pallet {
                 // Accumulate the weight used for cleanup operations
                 total_used_weight += used_weight;
                 // Increment the block to clean up for the next iteration
-                block_to_clean = block_to_clean.saturating_add(1u32.into());
+                block_to_clean = match block_to_clean.checked_add(&1u8.into()) {
+                    Some(block) => block,
+                    None => {
+                        return total_used_weight;
+                    }
+                };
             }
 
-            // Update `NextStartingBlockToCleanUp`
-            match NextStartingBlockToCleanUp::<T>::get() {
-                // `NextStartingBlockToCleanUp` is always updated to start from the block we reached in the current `on_idle` call.
-                Some(start_block) if block_to_clean > start_block => {
-                    NextStartingBlockToCleanUp::<T>::put(block_to_clean);
-                }
-                // `NextStartingBlockToCleanUp` is initialized here for the first time if we have not cleaned up the current block.
-                None if block_to_clean == current_block => {
-                    NextStartingBlockToCleanUp::<T>::put(block_to_clean);
-                }
-                // In all other cases, this means we processed all the blocks up to the current block
-                _ => {}
+            // `NextStartingBlockToCleanUp` is always updated to start from the block we reached in the current `on_idle` call.
+            if block_to_clean > start_block {
+                NextStartingBlockToCleanUp::<T>::put(block_to_clean);
             }
 
             total_used_weight
