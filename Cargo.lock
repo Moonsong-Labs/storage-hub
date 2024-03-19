@@ -6711,6 +6711,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-trie",
+ "storage-hub-traits",
 ]
 
 [[package]]
@@ -6954,6 +6955,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
+ "storage-hub-traits",
 ]
 
 [[package]]
@@ -12466,6 +12468,21 @@ dependencies = [
  "staging-xcm-builder",
  "staging-xcm-executor",
  "substrate-wasm-builder",
+]
+
+[[package]]
+name = "storage-hub-traits"
+version = "0.1.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
 ]
 
 [[package]]

@@ -9,7 +9,7 @@ homepage = "https://moonsonglabs.com/"
 panic = "unwind"
 
 [workspace]
-members = ["runtime", "pallets/*", "node", "bsp", "msp", "storage-kit"]
+members = ["runtime", "pallets/*", "node", "bsp", "msp", "storage-kit", "support/*"]
 resolver = "2"
 
 [workspace.lints.rust]
