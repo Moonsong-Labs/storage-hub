@@ -6698,7 +6698,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-proofs-dealer-trie"
+name = "pallet-proofs-dealer"
 version = "0.1.0"
 dependencies = [
  "frame-benchmarking",
@@ -12420,7 +12420,7 @@ dependencies = [
  "pallet-collator-selection",
  "pallet-file-system",
  "pallet-message-queue",
- "pallet-proofs-dealer-trie",
+ "pallet-proofs-dealer",
  "pallet-session",
  "pallet-sudo",
  "pallet-timestamp",

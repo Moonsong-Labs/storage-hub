@@ -30,7 +30,7 @@ smallvec = "1.11.0"
 
 # Local
 pallet-file-system = { path = "../pallets/file-system", default-features = false }
-pallet-proofs-dealer-trie = { path = "../pallets/storage-proofs", default-features = false }
+pallet-proofs-dealer = { path = "../pallets/storage-proofs", default-features = false }
 
 # Substrate
 frame-benchmarking = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false, optional = true }
@@ -112,7 +112,7 @@ std = [
     "pallet-file-system/std",
     "pallet-message-queue/std",
     "pallet-session/std",
-    "pallet-proofs-dealer-trie/std",
+    "pallet-proofs-dealer/std",
     "pallet-sudo/std",
     "pallet-timestamp/std",
     "pallet-transaction-payment-rpc-runtime-api/std",
@@ -157,7 +157,7 @@ runtime-benchmarks = [
     "pallet-collator-selection/runtime-benchmarks",
     "pallet-message-queue/runtime-benchmarks",
     "pallet-file-system/runtime-benchmarks",
-    "pallet-proofs-dealer-trie/runtime-benchmarks",
+    "pallet-proofs-dealer/runtime-benchmarks",
     "pallet-sudo/runtime-benchmarks",
     "pallet-timestamp/runtime-benchmarks",
     "pallet-xcm/runtime-benchmarks",
@@ -210,7 +210,7 @@ try-runtime = [
     "pallet-message-queue/try-runtime",
     "pallet-file-system/try-runtime",
     "pallet-session/try-runtime",
-    "pallet-proofs-dealer-trie/try-runtime",
+    "pallet-proofs-dealer/try-runtime",
     "pallet-sudo/try-runtime",
     "pallet-timestamp/try-runtime",
     "pallet-transaction-payment/try-runtime",
