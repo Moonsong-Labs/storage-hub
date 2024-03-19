@@ -1,19 +1,42 @@
-use frame_support::{derive_impl, parameter_types, traits::Everything};
+use frame_support::{
+    derive_impl, parameter_types,
+    traits::{Everything, Hooks},
+    weights::Weight,
+};
 use frame_system as system;
-use sp_core::H256;
+use sp_core::{ConstU32, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
     BuildStorage,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
+pub(crate) type BlockNumber = u64;
+
+/// Rolls to the desired block. Returns the number of blocks played.
+pub(crate) fn roll_to(n: BlockNumber) -> BlockNumber {
+    let mut num_blocks = 0;
+    let mut block = System::block_number();
+    while block < n {
+        block = roll_one_block();
+        num_blocks += 1;
+    }
+    num_blocks
+}
+
+// Rolls forward one block. Returns the new block number.
+fn roll_one_block() -> BlockNumber {
+    System::set_block_number(System::block_number() + 1);
+    FileSystem::on_idle(System::block_number(), Weight::MAX);
+    System::block_number()
+}
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
     pub enum Test
     {
         System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
-        TemplateModule: crate::{Pallet, Call, Storage, Event<T>},
+        FileSystem: crate::{Pallet, Call, Storage, Event<T>},
     }
 );
 
@@ -51,6 +74,13 @@ impl system::Config for Test {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type Fingerprint = H256;
+    type StorageUnit = u128;
+    type MaxBspsPerStorageRequest = ConstU32<5u32>;
+    type MaxFilePathSize = ConstU32<512u32>;
+    type MaxMultiAddressSize = ConstU32<512u32>;
+    type StorageRequestTtl = ConstU32<40u32>;
+    type MaxExpiredStorageRequests = ConstU32<100u32>;
 }
 
 // Build genesis storage according to the mock runtime.

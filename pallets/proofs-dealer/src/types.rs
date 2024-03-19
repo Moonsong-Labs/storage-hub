@@ -17,32 +17,32 @@ pub enum ProofRejectionReason {
 // ********************* Syntactic sugar for types ****************************
 // ****************************************************************************
 
-/// Syntactic sugar for the AccountId type used in the storage proofs pallet.
+/// Syntactic sugar for the AccountId type used in the proofs pallet.
 pub type AccountIdFor<T> = <T as frame_system::Config>::AccountId;
 
 /// The type for keys that identify a file within a Merkle Patricia Forest.
-/// Syntactic sugar for the MerkleHash type used in the storage proofs pallet.
+/// Syntactic sugar for the MerkleHash type used in the proofs pallet.
 pub type FileKeyFor<T> = <T as crate::Config>::MerkleHash;
 
 /// The type for a root of a Merkle Patricia Forest.
-/// Syntactic sugar for the MerkleHash type used in the storage proofs pallet.
+/// Syntactic sugar for the MerkleHash type used in the proofs pallet.
 pub type ForestRootFor<T> = <T as crate::Config>::MerkleHash;
 
-/// Syntactic sugar for the MaxChallengesPerBlock type used in the storage proofs pallet.
+/// Syntactic sugar for the MaxChallengesPerBlock type used in the proofs pallet.
 pub type MaxChallengesPerBlockFor<T> = <T as crate::Config>::MaxChallengesPerBlock;
 
-/// Syntactic sugar for the MaxSpsChallengedPerBlock type used in the storage proofs pallet.
-pub type MaxSpsChallengedPerBlockFor<T> = <T as crate::Config>::MaxSpsChallengedPerBlock;
+/// Syntactic sugar for the MaxSpsChallengedPerBlock type used in the proofs pallet.
+pub type MaxSpsChallengedPerBlockFor<T> = <T as crate::Config>::MaxProvidersChallengedPerBlock;
 
-/// Syntactic sugar for the ChallengesQueueLength type used in the storage proofs pallet.
+/// Syntactic sugar for the ChallengesQueueLength type used in the proofs pallet.
 pub type ChallengesQueueLengthFor<T> = <T as crate::Config>::ChallengesQueueLength;
 
-/// Syntactic sugar for the StorageProviders type used in the storage proofs pallet.
-pub type StorageProvidersFor<T> = <T as crate::Config>::StorageProviders;
+/// Syntactic sugar for the Providers type used in the proofs pallet.
+pub type ProvidersPalletFor<T> = <T as crate::Config>::ProvidersPallet;
 
-/// Syntactic sugar for the StorageProvider type used in the storage proofs pallet.
-pub type SpFor<T> =
-    <<T as crate::Config>::StorageProviders as crate::StorageProvidersInterface>::StorageProvider;
+/// Syntactic sugar for the Provider type used in the proofs pallet.
+pub type ProviderFor<T> =
+    <<T as crate::Config>::ProvidersPallet as crate::ProvidersInterface>::Provider;
 
 /// Syntactic sugar for the type of Balance used in the NativeBalances pallet.
 pub type BalanceFor<T> = <<T as crate::Config>::NativeBalance as fungible::Inspect<

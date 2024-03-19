@@ -6413,6 +6413,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-file-system"
+version = "0.1.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+]
+
+[[package]]
 name = "pallet-grandpa"
 version = "4.0.0-dev"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.5.0#a3dc2f15f23b3fd25ada62917bfab169a01f2b0d"
@@ -6666,21 +6681,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-parachain-template"
-version = "0.1.0"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "scale-info",
- "serde",
- "sp-core",
- "sp-io",
- "sp-runtime",
-]
-
-[[package]]
 name = "pallet-preimage"
 version = "4.0.0-dev"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.5.0#a3dc2f15f23b3fd25ada62917bfab169a01f2b0d"
@@ -6695,6 +6695,22 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std 8.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.5.0)",
+]
+
+[[package]]
+name = "pallet-proofs-dealer"
+version = "0.1.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-trie",
 ]
 
 [[package]]
@@ -6922,22 +6938,6 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std 8.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.5.0)",
-]
-
-[[package]]
-name = "pallet-storage-proofs"
-version = "0.1.0"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "scale-info",
- "serde",
- "sp-core",
- "sp-io",
- "sp-runtime",
- "sp-trie",
 ]
 
 [[package]]
@@ -12434,10 +12434,10 @@ dependencies = [
  "pallet-authorship",
  "pallet-balances",
  "pallet-collator-selection",
+ "pallet-file-system",
  "pallet-message-queue",
- "pallet-parachain-template",
+ "pallet-proofs-dealer",
  "pallet-session",
- "pallet-storage-proofs",
  "pallet-sudo",
  "pallet-timestamp",
  "pallet-transaction-payment",
