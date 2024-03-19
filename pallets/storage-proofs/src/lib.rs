@@ -399,9 +399,7 @@ pub trait ProvidersInterface {
     /// The type which represents a registered Provider.
     type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
     /// The type corresponding to the staking balance of a registered Provider.
-    type Balance: fungible::Inspect<Self::AccountId>
-        + fungible::hold::Inspect<Self::AccountId>
-        + fungible::freeze::Inspect<Self::AccountId>;
+    type Balance: fungible::hold::Inspect<Self::AccountId>;
     /// The type corresponding to the root of a registered Provider.
     type MerkleHash: Parameter
         + Member
