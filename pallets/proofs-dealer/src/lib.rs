@@ -399,7 +399,7 @@ pub trait ProvidersInterface {
     /// The type which represents a registered Provider.
     type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
     /// The type corresponding to the staking balance of a registered Provider.
-    type Balance: fungible::hold::Inspect<Self::AccountId>;
+    type Balance: fungible::Inspect<Self::AccountId> + fungible::hold::Inspect<Self::AccountId>;
     /// The type corresponding to the root of a registered Provider.
     type MerkleHash: Parameter
         + Member
@@ -426,7 +426,9 @@ pub trait ProvidersInterface {
     fn get_root(who: Self::Provider) -> Option<Self::MerkleHash>;
 
     /// Get the stake for a registered  Provider.
-    fn get_stake(who: Self::Provider) -> Option<Self::Balance>;
+    fn get_stake(
+        who: Self::Provider,
+    ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
 }
 
 // TODO: Move this to a primitives crate.
