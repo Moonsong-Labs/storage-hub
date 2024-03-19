@@ -30,7 +30,7 @@ smallvec = "1.11.0"
 
 # Local
 pallet-file-system = { path = "../pallets/file-system", default-features = false }
-pallet-proofs-dealer = { path = "../pallets/storage-proofs", default-features = false }
+pallet-proofs-dealer = { path = "../pallets/proofs-dealer", default-features = false }
 
 # Substrate
 frame-benchmarking = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false, optional = true }
