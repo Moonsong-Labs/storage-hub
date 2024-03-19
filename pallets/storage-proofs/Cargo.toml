@@ -1,6 +1,6 @@
 [package]
-name = "pallet-storage-proofs"
-description = "Pallet for managing, challenging and veryfing storage proofs in StorageHub."
+name = "pallet-proofs-dealer"
+description = "Pallet for managing, challenging and veryfing proofs submitted by providers, where each provider's information is stored as a Merkle Patricia Trie."
 version = "0.1.0"
 homepage = { workspace = true }
 license = { workspace = true }
