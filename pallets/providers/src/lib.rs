@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
-use types::{BackupStorageProviderId, MainStorageProviderId, UserId};
+use types::{BackupStorageProviderId, MainStorageProviderId};
 
 mod types;
 mod utils;
@@ -103,22 +103,6 @@ pub mod pallet {
 
         /// The type of the Merkle Patricia Root of the storage trie for BSPs and MSPs' buckets (a hash).
         type MerklePatriciaRoot: Parameter
-            + Member
-            + MaybeSerializeDeserialize
-            + Debug
-            + MaybeDisplay
-            + SimpleBitOps
-            + Ord
-            + Default
-            + Copy
-            + CheckEqual
-            + AsRef<[u8]>
-            + AsMut<[u8]>
-            + MaxEncodedLen
-            + FullCodec;
-
-        /// The type of the user ID for an MSP (probably a hash of its AccountId)
-        type UserId: Parameter
             + Member
             + MaybeSerializeDeserialize
             + Debug
@@ -559,7 +543,7 @@ pub trait StorageProvidersInterfaceForFileSystem<T: Config> {
     /// Add a new Bucket as a Provider
     fn add_bucket(
         msp_id: MainStorageProviderId<T>,
-        user_id: UserId<T>,
+        user_id: T::AccountId,
         bucket_id: BucketId<T>,
         bucket_root: MerklePatriciaRoot<T>,
     ) -> DispatchResult;

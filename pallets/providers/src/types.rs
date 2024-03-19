@@ -12,7 +12,7 @@ use crate::Config;
 // (Where the StorageProviderId is saved depends on how the SP registered itself)
 // 3) A mapping from BackupStorageProviderId to BackupStorageProvider (metadata such as root, total data available, total data used, multiaddresses, etc)
 // 4) A mapping from MainStorageProviderId to MainStorageProvider (metadata such as vector of bucket ids, total data available, total data used, multiaddresses, etc)
-// 5) A mapping from BucketId to Bucket (metadata such as root, UserId, MainStorageProviderId, etc)
+// 5) A mapping from BucketId to Bucket (metadata such as root, User ID, MainStorageProviderId, etc)
 // (It probably makes sense to have a basic MerkleTrieHolder structure that has the root and any general metadata, and then have the BackupStorageProvider and Bucket structs that inherit from MerkleTrieHolder and have any extra metadata)
 
 // Then, we can cover the needed functionality for the Proofs pallet:
@@ -54,13 +54,13 @@ pub struct BackupStorageProvider<T: Config> {
     pub root: MerklePatriciaRoot<T>,
 }
 
-/// Structure that represents a Bucket. It holds the root of the Merkle Patricia Trie, the UserId that owns the bucket,
+/// Structure that represents a Bucket. It holds the root of the Merkle Patricia Trie, the User ID that owns the bucket,
 /// and the MainStorageProviderId that the bucket belongs to.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct Bucket<T: Config> {
     pub root: MerklePatriciaRoot<T>,
-    pub user_id: UserId<T>,
+    pub user_id: T::AccountId,
     pub msp_id: MainStorageProviderId<T>,
 }
 
@@ -106,6 +106,3 @@ pub type BucketId<T> = <T as crate::Config>::MerkleTrieHolderId;
 pub type MaxBuckets<T> = <T as crate::Config>::MaxBuckets;
 /// Buckets is a vector of the buckets that a Main Storage Provider has.
 pub type Buckets<T> = BoundedVec<Bucket<T>, MaxBuckets<T>>;
-
-/// UserId is the type that identifies the different users that a Main Storage Provider can have.
-pub type UserId<T> = <T as crate::Config>::UserId;

@@ -70,7 +70,7 @@ impl<T: pallet::Config> StorageProvidersInterfaceForFileSystem<T> for pallet::Pa
     // Bucket specific functions:
     fn add_bucket(
         msp_id: MainStorageProviderId<T>,
-        user_id: UserId<T>,
+        user_id: T::AccountId,
         bucket_id: BucketId<T>,
         bucket_root: MerklePatriciaRoot<T>,
     ) -> DispatchResult {

@@ -75,8 +75,6 @@ impl crate::Config for Test {
     type SpCount = u32;
     type MainStorageProviderId = H256;
     type MerkleTrieHolderId = H256;
-
-    type UserId = H256;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
     type MaxMultiAddressSize = ConstU32<100>;
