@@ -1,6 +1,5 @@
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::*;
-use frame_support::traits::fungible::hold;
 use frame_support::traits::fungible::Inspect;
 use frame_support::BoundedVec;
 use scale_info::TypeInfo;

@@ -494,8 +494,8 @@ pub mod pallet {
         #[pallet::call_index(4)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn change_total_data(
-            origin: OriginFor<T>,
-            new_total_data: StorageData<T>,
+            _origin: OriginFor<T>,
+            _new_total_data: StorageData<T>,
         ) -> DispatchResultWithPostInfo {
             // TODO: design a way (with timelock probably) to allow a SP to change its stake
 
@@ -514,8 +514,8 @@ pub mod pallet {
         #[pallet::call_index(5)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn add_value_prop(
-            origin: OriginFor<T>,
-            new_value_prop: ValueProposition<T>,
+            _origin: OriginFor<T>,
+            _new_value_prop: ValueProposition<T>,
         ) -> DispatchResultWithPostInfo {
             // TODO: implement this
 

@@ -1,6 +1,6 @@
-//! Benchmarking setup for pallet-parachain-template
+//! Benchmarking setup for pallet-providers
 
-use super::*;
+/* use super::*;
 
 #[allow(unused)]
 use crate::Pallet as StorageProviders;
@@ -21,4 +21,4 @@ impl_benchmark_test_suite!(
     StorageProviders,
     crate::mock::new_test_ext(),
     crate::mock::Test,
-);
+); */

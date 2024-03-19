@@ -1,6 +1,6 @@
+use crate::mock::*;
 use crate::types::{ValuePropId, ValueProposition};
-use crate::{mock::*, Error};
-use frame_support::{assert_noop, assert_ok};
+use frame_support::assert_ok;
 use sp_runtime::BoundedVec;
 
 #[test]
