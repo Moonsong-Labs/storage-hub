@@ -6711,6 +6711,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-trie",
+ "storage-hub-traits",
 ]
 
 [[package]]
@@ -6938,6 +6939,23 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std 8.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.5.0)",
+]
+
+[[package]]
+name = "pallet-storage-providers"
+version = "0.1.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "pallet-balances",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "storage-hub-traits",
 ]
 
 [[package]]
@@ -12450,6 +12468,21 @@ dependencies = [
  "staging-xcm-builder",
  "staging-xcm-executor",
  "substrate-wasm-builder",
+]
+
+[[package]]
+name = "storage-hub-traits"
+version = "0.1.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
 ]
 
 [[package]]

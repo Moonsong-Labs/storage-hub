@@ -17,16 +17,7 @@ pub use pallet::*;
 pub mod types;
 pub mod utils;
 
-use codec::FullCodec;
-use frame_support::{
-    inherent::IsFatalError,
-    pallet_prelude::*,
-    sp_runtime::{
-        traits::{CheckEqual, MaybeDisplay, SimpleBitOps},
-        RuntimeString,
-    },
-    traits::fungible,
-};
+use frame_support::{inherent::IsFatalError, pallet_prelude::*, sp_runtime::RuntimeString};
 use scale_info::prelude::fmt::Debug;
 use sp_trie::CompactProof;
 
@@ -45,6 +36,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
     use sp_trie::CompactProof;
+    use storage_hub_traits::ProvidersInterface;
     use types::ProviderFor;
 
     use crate::types::*;
@@ -57,7 +49,7 @@ pub mod pallet {
 
         /// The Providers pallet.
         /// To check if whoever submits a proof is a registered Provider.
-        type ProvidersPallet: crate::ProvidersInterface<AccountId = Self::AccountId>;
+        type ProvidersPallet: ProvidersInterface<AccountId = Self::AccountId>;
 
         /// Type to access the Balances Pallet.
         type NativeBalance: fungible::Inspect<Self::AccountId>
@@ -388,47 +380,6 @@ impl InherentError {
             None
         }
     }
-}
-
-/// A trait to lookup registered Providers, their Merkle Patricia Trie roots and their stake.
-///
-/// It is abstracted over the `AccountId` type, `Provider` type, `Balance` type and `MerkleHash` type.
-pub trait ProvidersInterface {
-    /// The type which can be used to identify accounts.
-    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-    /// The type which represents a registered Provider.
-    type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-    /// The type corresponding to the staking balance of a registered Provider.
-    type Balance: fungible::Inspect<Self::AccountId> + fungible::hold::Inspect<Self::AccountId>;
-    /// The type corresponding to the root of a registered Provider.
-    type MerkleHash: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Debug
-        + MaybeDisplay
-        + SimpleBitOps
-        + Ord
-        + Default
-        + Copy
-        + CheckEqual
-        + AsRef<[u8]>
-        + AsMut<[u8]>
-        + MaxEncodedLen
-        + FullCodec;
-
-    /// Check if an account is a registered Provider.
-    fn is_provider(who: Self::Provider) -> bool;
-
-    // Get Provider from AccountId, if it is a registered Provider.
-    fn get_provider(who: Self::AccountId) -> Option<Self::Provider>;
-
-    /// Get the root for a registered Provider.
-    fn get_root(who: Self::Provider) -> Option<Self::MerkleHash>;
-
-    /// Get the stake for a registered  Provider.
-    fn get_stake(
-        who: Self::Provider,
-    ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
 }
 
 // TODO: Move this to a primitives crate.
