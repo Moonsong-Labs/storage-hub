@@ -1,14 +1,21 @@
 use core::cmp::max;
 
-use frame_support::{ensure, pallet_prelude::DispatchResult, sp_runtime::BoundedVec, traits::Get};
+use frame_support::{ensure, pallet_prelude::DispatchResult, traits::Get};
 use frame_system::pallet_prelude::BlockNumberFor;
-use sp_runtime::traits::CheckedAdd;
+use sp_runtime::Saturating;
+use sp_runtime::{
+    traits::{CheckedAdd, Zero},
+    BoundedVec,
+};
 
 use crate::{
     pallet,
-    types::{FileLocation, Fingerprint, MultiAddress, StorageRequestMetadata, StorageUnit},
-    Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestExpirations,
-    StorageRequests,
+    types::{
+        FileLocation, Fingerprint, MaxBspsPerStorageRequest, MultiAddresses, StorageProviderId,
+        StorageRequestBspsMetadata, StorageRequestMetadata, StorageUnit,
+    },
+    Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
+    StorageRequestExpirations, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -32,24 +39,43 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
+    /// Request storage for a file.
+    ///
+    /// In the event that a storage request is created without any user multiaddresses (checkout `do_bsp_stop_storing`),
+    /// it is expected that storage providers that do have this file in storage already, will be able to send a
+    /// transaction to the chain to add themselves as a data server for the storage request.
     pub(crate) fn do_request_storage(
-        requested_by: T::AccountId,
+        owner: T::AccountId,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
         size: StorageUnit<T>,
-        user_multiaddr: MultiAddress<T>,
+        bsps_required: Option<T::StorageRequestBspsRequiredType>,
+        user_multiaddresses: Option<MultiAddresses<T>>,
+        data_server_sps: BoundedVec<StorageProviderId<T>, MaxBspsPerStorageRequest<T>>,
     ) -> DispatchResult {
         // TODO: Check user funds and lock them for the storage request.
         // TODO: Check storage capacity of chosen MSP (when we support MSPs)
         // TODO: Return error if the file is already stored and overwrite is false.
+
+        let bsps_required = bsps_required.unwrap_or(T::DefaultBspsRequired::get());
+
+        if bsps_required.is_zero() {
+            return Err(Error::<T>::BspsRequiredCannotBeZero)?;
+        }
+
+        if bsps_required > MaxBspsPerStorageRequest::<T>::get().into() {
+            return Err(Error::<T>::BspsRequiredExceedsMax)?;
+        }
+
         let file_metadata = StorageRequestMetadata::<T> {
             requested_at: <frame_system::Pallet<T>>::block_number(),
-            requested_by,
+            owner,
             fingerprint,
             size,
-            user_multiaddr,
-            bsps_volunteered: BoundedVec::default(),
-            bsps_confirmed: BoundedVec::default(),
+            user_multiaddresses: user_multiaddresses.unwrap_or_default(),
+            data_server_sps,
+            bsps_required,
+            bsps_confirmed: T::StorageRequestBspsRequiredType::zero(),
         };
 
         // TODO: if we add the overwrite flag, this would only fail if the overwrite flag is false.
@@ -65,15 +91,15 @@ where
         let mut block_to_insert_expiration = Self::next_expiration_insertion_block_number();
 
         // Get current storage request expirations vec.
-        let curr_storage_request_expirations =
+        let storage_request_expirations =
             <StorageRequestExpirations<T>>::get(block_to_insert_expiration);
 
         // Check size of storage request expirations vec.
-        if curr_storage_request_expirations.len() >= T::MaxExpiredStorageRequests::get() as usize {
+        if storage_request_expirations.len() >= T::MaxExpiredStorageRequests::get() as usize {
             block_to_insert_expiration = match block_to_insert_expiration.checked_add(&1u8.into()) {
                 Some(block) => block,
                 None => {
-                    return Err(Error::<T>::StorageRequestExpirationBlockOverflow.into());
+                    return Err(Error::<T>::MaxBlockNumberReached.into());
                 }
             };
 
@@ -99,31 +125,34 @@ where
         // TODO: Check that sender is a registered storage provider
 
         // Check that the storage request exists.
-        ensure!(
-            <StorageRequests<T>>::contains_key(&location),
-            Error::<T>::StorageRequestNotRegistered
-        );
-
-        // Get storage request metadata.
-        let mut file_metadata = expect_or_err!(
+        let file_metadata = expect_or_err!(
             <StorageRequests<T>>::get(&location),
             "Storage request should exist",
-            Error::<T>::StorageRequestNotRegistered
+            Error::<T>::StorageRequestNotFound
         );
 
-        // Check if the BSP is not already registered for this storage request.
+        // Check that the storage request did not reach the required bsps.
         ensure!(
-            !file_metadata.bsps_volunteered.contains(&who),
-            Error::<T>::BspAlreadyConfirmed
+            file_metadata.bsps_confirmed < file_metadata.bsps_required,
+            Error::<T>::StorageRequestBspsRequiredFullfilled
+        );
+
+        // Check if the BSP is already volunteered for this storage request.
+        ensure!(
+            !<StorageRequestBsps<T>>::contains_key(&location, &who),
+            Error::<T>::BspAlreadyVolunteered
         );
 
         // TODO: Check that the BSP XOR is lower than the threshold
 
         // Add BSP to storage request metadata.
-        expect_or_err!(
-            file_metadata.bsps_volunteered.try_push(who.clone()).ok(),
-            "BSP volunteer failed",
-            Error::<T>::BspVolunteerFailed
+        <StorageRequestBsps<T>>::insert(
+            &location,
+            &who,
+            StorageRequestBspsMetadata::<T> {
+                confirmed: false,
+                _phantom: Default::default(),
+            },
         );
 
         <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
@@ -139,19 +168,19 @@ where
         // Check that the storage request exists.
         ensure!(
             <StorageRequests<T>>::contains_key(&location),
-            Error::<T>::StorageRequestNotRegistered
+            Error::<T>::StorageRequestNotFound
         );
 
         // Get storage request metadata.
         let file_metadata = expect_or_err!(
             <StorageRequests<T>>::get(&location),
             "Storage request should exist",
-            Error::<T>::StorageRequestNotRegistered
+            Error::<T>::StorageRequestNotFound
         );
 
         // Check that the sender is the same as the one who requested the storage.
         ensure!(
-            file_metadata.requested_by == who,
+            file_metadata.owner == who,
             Error::<T>::StorageRequestNotAuthorized
         );
 
@@ -159,6 +188,64 @@ where
         <StorageRequests<T>>::remove(&location);
 
         // TODO: initiate deletion request for SPs.
+
+        Ok(())
+    }
+
+    /// BSP stops storing a file.
+    ///
+    /// `can_serve` is a flag that indicates if the BSP can serve the file. This is useful for
+    /// the case where the BSP lost the file somehow and cannot send it to other BSPs. When it is `true`,
+    /// the multiaddresses of the BSP are fetched from the `pallet-storage-providers` and added to the storage request.
+    /// When it is `false`, the storage request will be created without any multiaddresses and `do_request_storage`
+    /// will handle triggering the appropriate event and pending storage request.
+    pub(crate) fn do_bsp_stop_storing(
+        who: StorageProviderId<T>,
+        location: FileLocation<T>,
+        owner: T::AccountId,
+        fingerprint: Fingerprint<T>,
+        size: StorageUnit<T>,
+        can_serve: bool,
+    ) -> DispatchResult {
+        // Check that the storage request exists.
+        ensure!(
+            <StorageRequests<T>>::contains_key(&location),
+            Error::<T>::StorageRequestNotFound
+        );
+
+        // If the storage request exists, then we should reduce the number of bsps confirmed and
+        match <StorageRequests<T>>::get(&location) {
+            Some(mut metadata) => {
+                // Remove BSP from storage request and challenge if has confirmed having stored this file.
+                if let Some(bsp) = <StorageRequestBsps<T>>::get(&location, &who) {
+                    // TODO: challenge the BSP to force update its storage
+
+                    if bsp.confirmed {
+                        metadata.bsps_confirmed =
+                            metadata.bsps_confirmed.saturating_sub(1u32.into());
+
+                        <StorageRequests<T>>::set(&location, Some(metadata));
+                    }
+
+                    <StorageRequestBsps<T>>::remove(&location, &who);
+                }
+            }
+            None => {
+                Self::do_request_storage(
+                    owner,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    Some(1u32.into()),
+                    None,
+                    if can_serve {
+                        BoundedVec::try_from(vec![who]).unwrap()
+                    } else {
+                        BoundedVec::default()
+                    },
+                )?;
+            }
+        };
 
         Ok(())
     }

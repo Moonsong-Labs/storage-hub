@@ -493,11 +493,14 @@ impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Fingerprint = Hash;
     type StorageUnit = u128;
-    type MaxBspsPerStorageRequest = ConstU32<5u32>;
+    type StorageRequestBspsRequiredType = u32;
+    type DefaultBspsRequired = ConstU32<1>;
+    type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxFilePathSize = ConstU32<512u32>;
-    type MaxMultiAddressSize = ConstU32<512u32>;
-    type StorageRequestTtl = ConstU32<40u32>;
-    type MaxExpiredStorageRequests = ConstU32<100u32>;
+    type MaxMultiAddresses = ConstU32<10>;
+    type MaxMultiAddressSize = ConstU32<512>;
+    type StorageRequestTtl = ConstU32<40>;
+    type MaxExpiredStorageRequests = ConstU32<100>;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.

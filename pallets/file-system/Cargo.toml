@@ -1,6 +1,6 @@
 [package]
 name = "pallet-file-system"
-description = "FRAME pallet template for defining custom runtime logic."
+description = "Pallet exposing storage related actions actors can execute within Storage Hub."
 version = "0.1.0"
 homepage = { workspace = true }
 license = { workspace = true }
@@ -28,6 +28,7 @@ frame-support = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = 
 frame-system = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
 
 sp-runtime = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
+sp-std = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
 
 [dev-dependencies]
 serde = { version = "1.0.193" }

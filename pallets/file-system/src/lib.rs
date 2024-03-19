@@ -51,7 +51,7 @@ pub mod pallet {
         sp_runtime::traits::{AtLeast32Bit, CheckEqual, MaybeDisplay, SimpleBitOps},
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
-    use sp_runtime::traits::CheckedAdd;
+    use sp_runtime::traits::{CheckedAdd, Zero};
     use sp_runtime::BoundedVec;
 
     #[pallet::config]
@@ -84,6 +84,26 @@ pub mod pallet {
             + MaxEncodedLen
             + HasCompact;
 
+        /// Unit representing the size of a file.
+        type StorageRequestBspsRequiredType: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Default
+            + MaybeDisplay
+            + AtLeast32Bit
+            + Copy
+            + MaxEncodedLen
+            + HasCompact
+            + Copy
+            + Default
+            + scale_info::TypeInfo
+            + MaybeSerializeDeserialize
+            + Zero;
+
+        /// Minimum number of BSPs required to store a file.
+        #[pallet::constant]
+        type DefaultBspsRequired: Get<Self::StorageRequestBspsRequiredType>;
+
         /// Maximum number of BSPs that can store a file.
         #[pallet::constant]
         type MaxBspsPerStorageRequest: Get<u32>;
@@ -95,6 +115,10 @@ pub mod pallet {
         /// Maximum byte size of a libp2p multiaddress.
         #[pallet::constant]
         type MaxMultiAddressSize: Get<u32>;
+
+        /// Maximum number of multiaddresses for a storage request.
+        #[pallet::constant]
+        type MaxMultiAddresses: Get<u32>;
 
         /// Time-to-live for a storage request.
         #[pallet::constant]
@@ -113,10 +137,25 @@ pub mod pallet {
     pub type StorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, FileLocation<T>, StorageRequestMetadata<T>>;
 
-    /// A map of storage requests to their expiration block.
+    /// A double map of [`storage request`](FileLocation) to [`BSPs`](StorageProviderId) that volunteered to store data.
     ///
-    /// The key is the block number at which the storage request will expire.
-    /// The value is a list of file locations that will expire at the given block number. (file locations map to storage requests)
+    /// Any BSP under a storage request is considered to be a volunteer and can be removed at any time.
+    /// Once a BSP submits a valid proof to the `pallet-proofs-dealer-trie`, the `confirmed` field in [`StorageRequestBsps`] should be set to `true`.
+    ///
+    /// When a storage request is expired or removed, the corresponding storage request key in this map should be removed.
+    #[pallet::storage]
+    #[pallet::getter(fn storage_request_bsps)]
+    pub type StorageRequestBsps<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        FileLocation<T>,
+        Blake2_128Concat,
+        StorageProviderId<T>,
+        StorageRequestBspsMetadata<T>,
+        OptionQuery,
+    >;
+
+    /// A map of blocks to expired storage requests.
     #[pallet::storage]
     #[pallet::getter(fn storage_request_expirations)]
     pub type StorageRequestExpirations<T: Config> = StorageMap<
@@ -129,23 +168,17 @@ pub mod pallet {
 
     /// A pointer to the earliest available block to insert a new storage request expiration.
     ///
-    /// This should always be equal or greater than `current_block` + [`Config::StorageRequestTtl`].
-    ///
-    /// In the event when this value is smaller than `current_block` + `StorageRequestTtl` value, the
-    /// storage request expiration will be inserted in the block `StorageRequestTtl` ahead, and then
-    /// this value will be reset to block number a `current_block` + `StorageRequestTtl`.
+    /// This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
     #[pallet::storage]
     #[pallet::getter(fn next_available_expiration_insertion_block)]
     pub type NextAvailableExpirationInsertionBlock<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
-    /// A pointer to the latest block at which the storage requests were cleaned up.
+    /// A pointer to the starting block to clean up expired storage requests.
     ///
-    /// This value keeps track of the last block at which the storage requests were cleaned up, and
-    /// it is needed because the clean-up process is not guaranteed to happen in every block, since
-    /// it is executed in the `on_idle` hook. If a given block doesn't have enough remaining weight
-    /// to perform the clean-up, the clean-up will be postponed to the next block, and this value
-    /// avoids skipping blocks when the clean-up is postponed.
+    /// If this block is behind the current block number, the cleanup algorithm in `on_idle` will
+    /// attempt to accelerate this block pointer as close to or up to the current block number if there is
+    /// enough remaining weight to do so.
     #[pallet::storage]
     #[pallet::getter(fn next_starting_block_to_clean_up)]
     pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
@@ -159,7 +192,7 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageUnit<T>,
-            user_multiaddr: MultiAddress<T>,
+            multiaddresses: BoundedVec<MultiAddress<T>, T::MaxMultiAddresses>,
         },
 
         /// Notifies that a BSP has been accepted to store a given file.
@@ -167,7 +200,7 @@ pub mod pallet {
             who: T::AccountId,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            bsp_multiaddress: MultiAddress<T>,
+            multiaddresses: MultiAddresses<T>,
         },
 
         /// Notifies the expiration of a storage request.
@@ -175,6 +208,12 @@ pub mod pallet {
 
         /// Notifies that a storage request has been revoked by the user who initiated it.
         StorageRequestRevoked { location: FileLocation<T> },
+
+        /// Notifies that a BSP has stopped storing a file.
+        BspStoppedStoring {
+            bsp: T::AccountId,
+            location: FileLocation<T>,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -183,18 +222,23 @@ pub mod pallet {
         /// Storage request already registered for the given file.
         StorageRequestAlreadyRegistered,
         /// Storage request not registered for the given file.
-        StorageRequestNotRegistered,
+        StorageRequestNotFound,
+        /// BSPs required for storage request cannot be 0.
+        BspsRequiredCannotBeZero,
+        /// BSPs required for storage request cannot exceed the maximum allowed.
+        BspsRequiredExceedsMax,
         /// BSP already volunteered to store the given file.
         BspVolunteerFailed,
-        /// BSP already confirmed to store the given file.
-        BspAlreadyConfirmed,
+        /// Number of BSPs required for storage request has been reached.
+        StorageRequestBspsRequiredFullfilled,
+        /// BSP already volunteered to store the given file.
+        BspAlreadyVolunteered,
         /// No slot available found in blocks to insert storage request expiration time.
         StorageRequestExpiredNoSlotAvailable,
-        /// The current expiration block has overflowed (i.e. it is larger than the maximum block number).
-        StorageRequestExpirationBlockOverflow,
         /// Not authorized to delete the storage request.
         StorageRequestNotAuthorized,
-        /// Reached maximum block number :O
+        /// Error created in 2024. If you see this, you are well beyond the singularity and should
+        /// probably stop using this pallet.
         MaxBlockNumberReached,
     }
 
@@ -214,7 +258,7 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageUnit<T>,
-            user_multiaddr: MultiAddress<T>,
+            multiaddresses: MultiAddresses<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
@@ -225,7 +269,9 @@ pub mod pallet {
                 location.clone(),
                 fingerprint,
                 size,
-                user_multiaddr.clone(),
+                None,
+                Some(multiaddresses.clone()),
+                Default::default(),
             )?;
 
             // BSPs listen to this event and volunteer to store the file
@@ -234,7 +280,7 @@ pub mod pallet {
                 location,
                 fingerprint,
                 size,
-                user_multiaddr,
+                multiaddresses,
             });
 
             Ok(())
@@ -271,7 +317,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            bsp_multiaddress: MultiAddress<T>,
+            multiaddresses: MultiAddresses<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -284,7 +330,7 @@ pub mod pallet {
                 who,
                 location,
                 fingerprint,
-                bsp_multiaddress,
+                multiaddresses,
             });
 
             Ok(())
@@ -292,11 +338,37 @@ pub mod pallet {
 
         /// Executed by a BSP to stop storing a file.
         ///
-        /// A compensation should be provided for the user, to deter this behaviour. A successful execution of this extrinsic automatically generates a storage request for that file with one remaining_bsps_slot left, and if a storage request for that file already exists, the slots left are incremented in one. It also automatically registers a challenge for this file, for the next round of storage proofs, so that the other BSPs and MSP who are storing it would be forced to disclose themselves then.
+        /// In the event when a storage request no longer exists for the data the BSP no longer stores,
+        /// it is required that the BSP still has access to the metadata of the initial storage request.
+        /// If they do not, they will at least need the necessary data to reconstruct the bucket ID and
+        /// request the metadata from an MSP. This metadata is necessary since it is needed to reconstruct
+        /// the leaf node key in the storage provider's merkle trie.
         #[pallet::call_index(5)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
-        pub fn bsp_stop_storing(_origin: OriginFor<T>) -> DispatchResult {
-            todo!()
+        pub fn bsp_stop_storing(
+            origin: OriginFor<T>,
+            location: FileLocation<T>,
+            owner: T::AccountId,
+            fingerprint: Fingerprint<T>,
+            size: StorageUnit<T>,
+            can_serve: bool,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            // Perform validations and stop storing the file.
+            Self::do_bsp_stop_storing(
+                who.clone(),
+                location.clone(),
+                owner,
+                fingerprint,
+                size,
+                can_serve,
+            )?;
+
+            // Emit event.
+            Self::deposit_event(Event::BspStoppedStoring { bsp: who, location });
+
+            Ok(())
         }
     }
 
@@ -313,8 +385,9 @@ pub mod pallet {
             let start_block = NextStartingBlockToCleanUp::<T>::get();
             let mut block_to_clean = start_block;
 
-            // Total weight used to avoid exceeding the remaining weight
-            let mut total_used_weight = Weight::zero();
+            // Total weight used to avoid exceeding the remaining weight.
+            // We count one write for the `NextBlockToCleanup` storage item updated at the end.
+            let mut total_used_weight = db_weight.writes(1);
 
             let required_weight_for_iteration =
                 db_weight.reads_writes(1, T::MaxExpiredStorageRequests::get().into());

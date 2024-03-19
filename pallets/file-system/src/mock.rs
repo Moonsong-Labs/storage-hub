@@ -76,7 +76,10 @@ impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Fingerprint = H256;
     type StorageUnit = u128;
-    type MaxBspsPerStorageRequest = ConstU32<5u32>;
+    type StorageRequestBspsRequiredType = u32;
+    type DefaultBspsRequired = ConstU32<1>;
+    type MaxBspsPerStorageRequest = ConstU32<5>;
+    type MaxMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxMultiAddressSize = ConstU32<512u32>;
     type StorageRequestTtl = ConstU32<40u32>;

@@ -1,4 +1,8 @@
-use crate::{mock::*, types::FileLocation, Config, Event, StorageRequestExpirations};
+use crate::{
+    mock::*,
+    types::{FileLocation, MultiAddress},
+    Config, Event, StorageRequestExpirations,
+};
 use frame_support::{assert_ok, traits::Hooks, weights::Weight};
 use sp_runtime::{
     traits::{BlakeTwo256, Get, Hash},
@@ -15,6 +19,9 @@ fn request_storage_success() {
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
+        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
+        let multiaddresses: BoundedVec<MultiAddress<Test>, <Test as Config>::MaxMultiAddresses> =
+            BoundedVec::try_from(vec![multiaddr]).unwrap();
 
         // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::issue_storage_request(
@@ -22,7 +29,7 @@ fn request_storage_success() {
             location.clone(),
             fingerprint,
             4,
-            BoundedVec::try_from(vec![1]).unwrap(),
+            multiaddresses.clone(),
         ));
 
         // Assert that the correct event was deposited
@@ -32,7 +39,7 @@ fn request_storage_success() {
                 location: location.clone(),
                 fingerprint,
                 size: 4,
-                user_multiaddr: BoundedVec::try_from(vec![1]).unwrap(),
+                multiaddresses,
             }
             .into(),
         );
@@ -49,6 +56,9 @@ fn request_storage_expiration_clear_success() {
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
+        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
+        let multiaddresses: BoundedVec<MultiAddress<Test>, <Test as Config>::MaxMultiAddresses> =
+            BoundedVec::try_from(vec![multiaddr]).unwrap();
 
         // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::issue_storage_request(
@@ -56,7 +66,7 @@ fn request_storage_expiration_clear_success() {
             location.clone(),
             fingerprint,
             4,
-            BoundedVec::try_from(vec![1]).unwrap(),
+            multiaddresses,
         ));
 
         let expected_expiration_inserted_at_block_number: BlockNumber =
@@ -88,6 +98,9 @@ fn request_storage_expiration_current_block_increment_success() {
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
+        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
+        let multiaddresses: BoundedVec<MultiAddress<Test>, <Test as Config>::MaxMultiAddresses> =
+            BoundedVec::try_from(vec![multiaddr]).unwrap();
 
         let mut expected_expiration_block_number: BlockNumber =
             FileSystem::next_expiration_insertion_block_number().into();
@@ -107,7 +120,7 @@ fn request_storage_expiration_current_block_increment_success() {
             location.clone(),
             fingerprint,
             4,
-            BoundedVec::try_from(vec![1]).unwrap(),
+            multiaddresses,
         ));
 
         // Assert that the storage request expirations storage is at max capacity
@@ -137,7 +150,7 @@ fn request_storage_expiration_current_block_increment_success() {
 }
 
 #[test]
-fn request_storage_expiration_current_block_increment_when_on_idle_skips_success() {
+fn request_storage_clear_old_expirations_success() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited
         System::set_block_number(1);
@@ -146,6 +159,9 @@ fn request_storage_expiration_current_block_increment_when_on_idle_skips_success
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
+        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
+        let multiaddresses: BoundedVec<MultiAddress<Test>, <Test as Config>::MaxMultiAddresses> =
+            BoundedVec::try_from(vec![multiaddr]).unwrap();
 
         let mut expected_expiration_block_number: BlockNumber =
             FileSystem::next_expiration_insertion_block_number().into();
@@ -165,7 +181,7 @@ fn request_storage_expiration_current_block_increment_when_on_idle_skips_success
             location.clone(),
             fingerprint,
             4,
-            BoundedVec::try_from(vec![1]).unwrap(),
+            multiaddresses,
         ));
 
         // Assert that the storage request expirations storage is at max capacity
@@ -188,12 +204,19 @@ fn request_storage_expiration_current_block_increment_when_on_idle_skips_success
         // Assert that the `NextExpirationInsertionBlockNumber` storage is set to 0 initially
         assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
 
+        // Assert that the storage request expirations storage is at max capacity
+        assert_eq!(
+            FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
+            max_storage_request_expiry as usize
+        );
+
         let used_weight = FileSystem::on_idle(System::block_number(), Weight::zero());
 
         // Assert that the weight used is zero
         assert_eq!(used_weight, Weight::zero());
 
         // Assert that the storage request expirations storage is at max capacity
+        // TODO: Fix this test...
         assert_eq!(
             FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
             max_storage_request_expiry as usize
@@ -236,7 +259,7 @@ fn revoke_request_storage_success() {
             location.clone(),
             fingerprint,
             4,
-            BoundedVec::try_from(vec![1]).unwrap(),
+            Default::default()
         ));
 
         // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
@@ -269,10 +292,9 @@ fn bsp_volunteer_success() {
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
-
-        // TODO add this after adding identity pallet
-        // Register BSP in Identity Pallet.
-        // assert_ok!(Identity::register_user(RuntimeOrigin::root(), 2));
+        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
+        let multiaddresses: BoundedVec<MultiAddress<Test>, <Test as Config>::MaxMultiAddresses> =
+            BoundedVec::try_from(vec![multiaddr]).unwrap();
 
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
@@ -280,7 +302,7 @@ fn bsp_volunteer_success() {
             location.clone(),
             fingerprint,
             4,
-            BoundedVec::try_from(vec![1]).unwrap(),
+            multiaddresses.clone(),
         ));
 
         // Dispatch BSP volunteer.
@@ -288,7 +310,7 @@ fn bsp_volunteer_success() {
             bsp.clone(),
             location.clone(),
             fingerprint,
-            BoundedVec::try_from(vec![2]).unwrap()
+            multiaddresses.clone()
         ));
 
         // Assert that the correct event was deposited
@@ -297,7 +319,7 @@ fn bsp_volunteer_success() {
                 who: 2,
                 location,
                 fingerprint,
-                bsp_multiaddress: BoundedVec::try_from(vec![2]).unwrap(),
+                multiaddresses,
             }
             .into(),
         );
