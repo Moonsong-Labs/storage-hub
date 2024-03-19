@@ -1,6 +1,7 @@
 use codec::{Decode, Encode};
 use frame_support::traits::fungible;
 use scale_info::TypeInfo;
+use storage_hub_traits::ProvidersInterface;
 
 #[derive(Debug, Clone, PartialEq, Decode, Encode, TypeInfo)]
 pub enum ProofRejectionReason {
@@ -41,8 +42,7 @@ pub type ChallengesQueueLengthFor<T> = <T as crate::Config>::ChallengesQueueLeng
 pub type ProvidersPalletFor<T> = <T as crate::Config>::ProvidersPallet;
 
 /// Syntactic sugar for the Provider type used in the proofs pallet.
-pub type ProviderFor<T> =
-    <<T as crate::Config>::ProvidersPallet as crate::ProvidersInterface>::Provider;
+pub type ProviderFor<T> = <<T as crate::Config>::ProvidersPallet as ProvidersInterface>::Provider;
 
 /// Syntactic sugar for the type of Balance used in the NativeBalances pallet.
 pub type BalanceFor<T> = <<T as crate::Config>::NativeBalance as fungible::Inspect<

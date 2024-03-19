@@ -3,11 +3,12 @@
 use frame_support::{ensure, pallet_prelude::DispatchResult};
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_trie::CompactProof;
+use storage_hub_traits::ProvidersInterface;
 
 use crate::{
     pallet,
     types::{AccountIdFor, BalanceFor, FileKeyFor, ProviderFor, ProvidersPalletFor},
-    ChallengesQueue, Error, Pallet, ProvidersInterface,
+    ChallengesQueue, Error, Pallet,
 };
 
 impl<T> Pallet<T>
