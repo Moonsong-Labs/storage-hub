@@ -1,3 +1,4 @@
+use crate::types::{Bucket, MainStorageProvider};
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::traits::Get;
 
@@ -9,7 +10,9 @@ where
 {
     pub fn do_msp_sign_up(who: &T::AccountId, msp_info: &MainStorageProvider<T>) -> DispatchResult {
         // todo!()
-        <Msps<T>>::insert(&who, msp_info);
+        let msp_id =
+            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+        <MainStorageProviders<T>>::insert(&msp_id, msp_info);
         Ok(())
     }
 
@@ -18,7 +21,9 @@ where
         bsp_info: BackupStorageProvider<T>,
     ) -> DispatchResult {
         // todo!()
-        <Bsps<T>>::insert(&who, bsp_info);
+        let bsp_id =
+            AccountIdToBackupStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+        <BackupStorageProviders<T>>::insert(&bsp_id, bsp_info);
         Ok(())
     }
 
@@ -36,114 +41,80 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
         BackupStorageProvider {
             total_data: msp.total_data,
             data_used: msp.data_used,
-            multiaddress: msp.multiaddress,
+            multiaddresses: msp.multiaddresses,
             root: MerklePatriciaRoot::<T>::default(),
         }
     }
 }
 
 /// Implement the StorageProvidersInterface trait for the Storage Providers pallet.
-impl<T: pallet::Config> StorageProvidersInterface<T> for pallet::Pallet<T> {
-    fn get_sp(who: T::AccountId) -> Option<BackupStorageProvider<T>> {
-        if let Some(m) = Msps::<T>::get(&who) {
-            Some(m.into())
-        } else if let Some(b) = Bsps::<T>::get(&who) {
-            Some(b)
-        } else {
-            None
-        }
-    }
-
-    fn is_sp(who: T::AccountId) -> bool {
-        Msps::<T>::contains_key(&who) || Bsps::<T>::contains_key(&who)
-    }
-
-    fn total_sps() -> T::SpCount {
-        // TODO: Add checks
-        MspCount::<T>::get() + BspCount::<T>::get()
-    }
-
-    fn get_stake(_who: BackupStorageProvider<T>) -> BalanceOf<T> {
-        T::SpMinDeposit::get()
-        // TODO: Implement this
-        //T::SpMinDeposit::get() + (T::DepositPerData::get() * who.total_data.into())
-    }
-
+impl<T: pallet::Config> StorageProvidersInterfaceForFileSystem<T> for pallet::Pallet<T> {
     fn change_data_used(who: &T::AccountId, data_change: T::StorageData) -> DispatchResult {
         // TODO: refine this logic, add checks
-        if let Some(m) = Msps::<T>::get(&who) {
-            Msps::<T>::insert(
-                who,
-                MainStorageProvider {
-                    data_used: m.data_used + data_change,
-                    ..m
-                },
-            );
-        } else if let Some(b) = Bsps::<T>::get(&who) {
-            Bsps::<T>::insert(
-                who,
-                BackupStorageProvider {
-                    data_used: b.data_used + data_change,
-                    ..b
-                },
-            );
+        if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            let mut msp =
+                MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+            msp.data_used += data_change;
+            MainStorageProviders::<T>::insert(&msp_id, msp);
+        } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            let mut bsp =
+                BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
+            bsp.data_used += data_change;
+            BackupStorageProviders::<T>::insert(&bsp_id, bsp);
         } else {
             return Err(Error::<T>::NotRegistered.into());
         }
         Ok(())
     }
 
-    // MSP specific functions:
+    // Bucket specific functions:
+    fn add_bucket(
+        msp_id: MainStorageProviderId<T>,
+        user_id: UserId<T>,
+        bucket_id: BucketId<T>,
+        bucket_root: MerklePatriciaRoot<T>,
+    ) -> DispatchResult {
+        // TODO: Check that the bucket does not exist yet
+        // TODO: Get BucketId by hashing Bucket with salt, add it to the MSP vector of buckets
+        let bucket = Bucket {
+            root: bucket_root,
+            user_id,
+            msp_id,
+        };
+        Buckets::<T>::insert(&bucket_id, &bucket);
+        Ok(())
+    }
 
-    fn add_or_change_root_msp(
-        who: &T::AccountId,
+    fn change_root_bucket(
+        bucket_id: BucketId<T>,
         new_root: MerklePatriciaRoot<T>,
-        user_id: T::UserId,
-        bucket_id: T::BucketId,
     ) -> DispatchResult {
-        if let Some(m) = Msps::<T>::get(&who) {
-            MspToUserToBucketToRoot::<T>::insert((&m, &user_id, &bucket_id), &new_root);
+        if let Some(bucket) = Buckets::<T>::get(&bucket_id) {
+            Buckets::<T>::insert(
+                &bucket_id,
+                Bucket {
+                    root: new_root,
+                    ..bucket
+                },
+            );
         } else {
             return Err(Error::<T>::NotRegistered.into());
         }
         Ok(())
     }
 
-    fn remove_root_msp(
-        who: &<T>::AccountId,
-        user_id: <T as Config>::UserId,
-        bucket_id: <T as Config>::BucketId,
-    ) -> DispatchResult {
-        if let Some(m) = Msps::<T>::get(&who) {
-            MspToUserToBucketToRoot::<T>::remove((&m, &user_id, &bucket_id));
-        } else {
-            return Err(Error::<T>::NotRegistered.into());
-        }
+    fn remove_root_bucket(bucket_id: BucketId<T>) -> DispatchResult {
+        Buckets::<T>::remove(&bucket_id);
         Ok(())
-    }
-
-    fn is_valid_root_for_msp(
-        who: &<T>::AccountId,
-        root: MerklePatriciaRoot<T>,
-        user_id: <T as Config>::UserId,
-        bucket_id: <T as Config>::BucketId,
-    ) -> bool {
-        if let Some(m) = Msps::<T>::get(&who) {
-            if let Some(r) = MspToUserToBucketToRoot::<T>::get((&m, &user_id, &bucket_id)) {
-                r == root
-            } else {
-                false
-            }
-        } else {
-            false
-        }
     }
 
     // BSP specific functions:
-
-    fn change_root_bsp(who: &<T>::AccountId, new_root: MerklePatriciaRoot<T>) -> DispatchResult {
-        if let Some(b) = Bsps::<T>::get(&who) {
-            Bsps::<T>::insert(
+    fn change_root_bsp(
+        who: BackupStorageProviderId<T>,
+        new_root: MerklePatriciaRoot<T>,
+    ) -> DispatchResult {
+        if let Some(b) = BackupStorageProviders::<T>::get(&who) {
+            BackupStorageProviders::<T>::insert(
                 who,
                 BackupStorageProvider {
                     root: new_root,
@@ -157,15 +128,49 @@ impl<T: pallet::Config> StorageProvidersInterface<T> for pallet::Pallet<T> {
     }
 
     fn remove_root_bsp(who: &<T>::AccountId) -> DispatchResult {
-        Bsps::<T>::remove(&who);
+        let bsp_id =
+            AccountIdToBackupStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+        BackupStorageProviders::<T>::remove(&bsp_id);
+        AccountIdToBackupStorageProviderId::<T>::remove(&who);
         Ok(())
     }
+}
 
-    fn is_valid_root_for_bsp(who: &<T>::AccountId, root: MerklePatriciaRoot<T>) -> bool {
-        if let Some(b) = Bsps::<T>::get(&who) {
-            b.root == root
+impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
+    type AccountId = T::AccountId;
+    type Provider = MerkleTrieHolderId<T>;
+    type Balance = T::NativeBalance;
+    type MerkleHash = MerklePatriciaRoot<T>;
+
+    // TODO: Refine, add checks and tests for all the logic in this implementation
+
+    fn is_provider(who: Self::Provider) -> bool {
+        BackupStorageProviders::<T>::contains_key(&who) || Buckets::<T>::contains_key(&who)
+    }
+
+    fn get_provider(who: Self::AccountId) -> Option<Self::Provider> {
+        AccountIdToBackupStorageProviderId::<T>::get(&who)
+    }
+
+    fn get_root(who: Self::Provider) -> Option<Self::MerkleHash> {
+        if let Some(bucket) = Buckets::<T>::get(&who) {
+            Some(bucket.root)
+        } else if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
+            Some(bsp.root)
         } else {
-            false
+            None
+        }
+    }
+
+    fn get_stake(who: Self::Provider) -> Option<BalanceOf<T>> {
+        // TODO: This is not the stake, this logic will be done later down the line
+        if let Some(bucket) = Buckets::<T>::get(&who) {
+            let related_msp = MainStorageProviders::<T>::get(bucket.msp_id);
+            Some(T::SpMinDeposit::get())
+        } else if let Some(_bsp) = BackupStorageProviders::<T>::get(&who) {
+            Some(T::SpMinDeposit::get())
+        } else {
+            None
         }
     }
 }

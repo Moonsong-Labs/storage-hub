@@ -1,4 +1,5 @@
-use crate::{mock::*, Error, ValuePropIdentifier, ValueProposition};
+use crate::types::{ValuePropId, ValueProposition};
+use crate::{mock::*, Error};
 use frame_support::{assert_noop, assert_ok};
 use sp_runtime::BoundedVec;
 
@@ -11,12 +12,12 @@ fn it_does_something() {
             42,
             BoundedVec::new(),
             ValueProposition {
-                identifier: ValuePropIdentifier::<Test>::default(),
+                identifier: ValuePropId::<Test>::default(),
                 data_limit: 10,
                 protocols: BoundedVec::new()
             }
         ));
         // Read pallet storage and assert an expected result.
-        assert_eq!(StorageProviders::get_total_capacity(&1), 42);
+        assert_eq!(StorageProviders::get_total_capacity(&1).unwrap(), 42);
     });
 }

@@ -73,15 +73,18 @@ impl crate::Config for Test {
     type NativeBalance = Balances;
     type StorageData = u32;
     type SpCount = u32;
+    type MainStorageProviderId = H256;
+    type MerkleTrieHolderId = H256;
+
     type UserId = H256;
-    type BucketId = H256;
     type MerklePatriciaRoot = H256;
-    type ValuePropIdentifier = H256;
+    type ValuePropId = H256;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
+    type MaxBuckets = ConstU32<10000>;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<1>;
     type DepositPerData = ConstU128<2>;

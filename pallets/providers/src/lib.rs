@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
+use types::{BackupStorageProviderId, MainStorageProviderId, UserId};
 
 mod types;
 mod utils;
@@ -18,6 +19,7 @@ mod benchmarking;
 pub mod pallet {
     use super::types::*;
     use codec::{FullCodec, HasCompact};
+    use frame_support::testing_prelude::bounded_vec;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
@@ -42,6 +44,38 @@ pub mod pallet {
             + hold::Mutate<Self::AccountId>
             + freeze::Inspect<Self::AccountId>
             + freeze::Mutate<Self::AccountId>;
+
+        /// The type of ID that uniquely identifies a Storage Provider from an AccountId
+        type MainStorageProviderId: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + MaybeDisplay
+            + SimpleBitOps
+            + Ord
+            + Default
+            + Copy
+            + CheckEqual
+            + AsRef<[u8]>
+            + AsMut<[u8]>
+            + MaxEncodedLen
+            + FullCodec;
+
+        /// The type of ID that uniquely identifies a Merkle Trie Holder (BSPs/Buckets) from an AccountId
+        type MerkleTrieHolderId: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + MaybeDisplay
+            + SimpleBitOps
+            + Ord
+            + Default
+            + Copy
+            + CheckEqual
+            + AsRef<[u8]>
+            + AsMut<[u8]>
+            + MaxEncodedLen
+            + FullCodec;
 
         /// Data type for the measurement of storage size
         type StorageData: Parameter
@@ -99,24 +133,8 @@ pub mod pallet {
             + MaxEncodedLen
             + FullCodec;
 
-        /// The type of the bucket ID for an MSP (probably a hash of the UserId that owns it concatenated with the bucket's number/name)
-        type BucketId: Parameter
-            + Member
-            + MaybeSerializeDeserialize
-            + Debug
-            + MaybeDisplay
-            + SimpleBitOps
-            + Ord
-            + Default
-            + Copy
-            + CheckEqual
-            + AsRef<[u8]>
-            + AsMut<[u8]>
-            + MaxEncodedLen
-            + FullCodec;
-
         /// The type of the identifier of the value proposition of a MSP (probably a hash of that value proposition)
-        type ValuePropIdentifier: Parameter
+        type ValuePropId: Parameter
             + Member
             + MaybeSerializeDeserialize
             + Debug
@@ -164,6 +182,10 @@ pub mod pallet {
         /// The maximum number of protocols the MSP can support (at least within the runtime).
         #[pallet::constant]
         type MaxProtocols: Get<u32>;
+
+        /// The maximum amount of Buckets that a MSP can have.
+        #[pallet::constant]
+        type MaxBuckets: Get<u32>;
     }
 
     #[pallet::pallet]
@@ -171,27 +193,42 @@ pub mod pallet {
 
     // Storage:
 
-    /// The mapping from an account id to a Main Storage Provider. Returns `None` if the account isn't a Main Storage Provider.
+    /// The mapping from an AccountId to a MainStorageProviderId
+    ///
+    /// This is used to get a Main Storage Provider's unique identifier to access its relevant data
     #[pallet::storage]
-    pub type Msps<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, MainStorageProvider<T>>;
+    pub type AccountIdToMainStorageProviderId<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, MainStorageProviderId<T>>;
 
-    /// The mapping from an account id to a Backup Storage Provider. Returns `None` if the account isn't a Backup Storage Provider.
+    /// The mapping from a MainStorageProviderId to a MainStorageProvider
+    ///
+    /// This is used to get a Main Storage Provider's relevant data.
+    /// It returns `None` if the Main Storage Provider ID does not correspond to any registered Main Storage Provider.
     #[pallet::storage]
-    pub type Bsps<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, BackupStorageProvider<T>>;
+    pub type MainStorageProviders<T: Config> =
+        StorageMap<_, Blake2_128Concat, MainStorageProviderId<T>, MainStorageProvider<T>>;
 
-    /// The mapping from an MSP, to its user IDs, to its bucket IDs, to the root of the Merkle Patricia Trie of the bucket.
+    /// The mapping from a BucketId to that bucket's metadata
+    ///
+    /// This is used to get a bucket's relevant data, such as root, user ID, and MSP ID.
+    /// It returns `None` if the Bucket ID does not correspond to any registered bucket.
     #[pallet::storage]
-    pub type MspToUserToBucketToRoot<T: Config> = StorageNMap<
-        _,
-        (
-            NMapKey<Blake2_128Concat, MainStorageProvider<T>>,
-            NMapKey<Blake2_128Concat, T::UserId>,
-            NMapKey<Blake2_128Concat, T::BucketId>,
-        ),
-        MerklePatriciaRoot<T>,
-    >;
+    pub type Buckets<T: Config> = StorageMap<_, Blake2_128Concat, BucketId<T>, Bucket<T>>;
+
+    /// The mapping from an AccountId to a BackupStorageProviderId
+    ///
+    /// This is used to get a Backup Storage Provider's unique identifier to access its relevant data
+    #[pallet::storage]
+    pub type AccountIdToBackupStorageProviderId<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, BackupStorageProviderId<T>>;
+
+    /// The mapping from a BackupStorageProviderId to a BackupStorageProvider
+    ///
+    /// This is used to get a Backup Storage Provider's relevant data.
+    /// It returns `None` if the Backup Storage Provider ID does not correspond to any registered Backup Storage Provider.
+    #[pallet::storage]
+    pub type BackupStorageProviders<T: Config> =
+        StorageMap<_, Blake2_128Concat, BackupStorageProviderId<T>, BackupStorageProvider<T>>;
 
     /// The amount of Main Storage Providers that are currently registered in the runtime.
     #[pallet::storage]
@@ -307,9 +344,10 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             let msp_info = MainStorageProvider {
+                buckets: bounded_vec![],
                 total_data,
                 data_used: StorageData::<T>::default(),
-                multiaddress: multiaddress.clone(),
+                multiaddresses: multiaddress.clone(),
                 value_prop: value_prop.clone(),
             };
             // Update storage.
@@ -347,7 +385,7 @@ pub mod pallet {
         pub fn bsp_sign_up(
             origin: OriginFor<T>,
             total_data: StorageData<T>,
-            multiaddress: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
         ) -> DispatchResultWithPostInfo {
             // TODO: Logic to sign up a BSP
 
@@ -365,7 +403,7 @@ pub mod pallet {
             let bsp_info = BackupStorageProvider {
                 total_data,
                 data_used: StorageData::<T>::default(),
-                multiaddress,
+                multiaddresses,
                 root: MerklePatriciaRoot::<T>::default(),
             };
             // Update storage.
@@ -380,7 +418,7 @@ pub mod pallet {
         ///  This extrinsic should:
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that the signer is registered as a MSP
-        /// 3. Check that the MSP has no storage assigned to it
+        /// 3. Check that the MSP has no storage assigned to it (no buckets or data used by it)
         /// 4. Update the MSPs storage, removing the signer as an MSP
         /// 5. Return the deposit to the signer
         /// 6. Decrement the storage that holds total amount of SPs currently in the system
@@ -395,8 +433,11 @@ pub mod pallet {
             // https://docs.substrate.io/v3/runtime/origins
             let who = ensure_signed(origin)?;
 
+            let msp_id = AccountIdToMainStorageProviderId::<T>::get(&who)
+                .ok_or(Error::<T>::NotRegistered)?;
+
             // Update storage.
-            <Msps<T>>::remove(&who);
+            <MainStorageProviders<T>>::remove(&msp_id);
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -424,8 +465,11 @@ pub mod pallet {
             // https://docs.substrate.io/v3/runtime/origins
             let who = ensure_signed(origin)?;
 
+            let bsp_id = AccountIdToBackupStorageProviderId::<T>::get(&who)
+                .ok_or(Error::<T>::NotRegistered)?;
+
             // Update storage.
-            <Bsps<T>>::remove(&who);
+            <BackupStorageProviders<T>>::remove(&bsp_id);
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -480,17 +524,25 @@ pub mod pallet {
     }
 }
 
+// FOREST IDENTIFIER!!! Check that it exists as a BSP root or bucket ID root
+// Mapping from bucket ID to bucket metadata
+// Get a SP identifier! Account ID + Salt
+
+use crate::types::{
+    BackupStorageProvider, BalanceOf, BucketId, MerklePatriciaRoot, MerkleTrieHolderId, StorageData,
+};
 /// Helper functions (getters, setters, etc.) for this pallet
-use crate::types::*;
 impl<T: Config> Pallet<T> {
     /// A helper function to get the total capacity of a storage provider.
-    pub fn get_total_capacity(who: &T::AccountId) -> StorageData<T> {
-        if let Some(m) = Msps::<T>::get(who) {
-            m.total_data
-        } else if let Some(b) = Bsps::<T>::get(who) {
-            b.total_data
+    pub fn get_total_capacity(who: &T::AccountId) -> Result<StorageData<T>, Error<T>> {
+        if let Some(m_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            let msp = MainStorageProviders::<T>::get(m_id).ok_or(Error::<T>::NotRegistered)?;
+            Ok(msp.total_data)
+        } else if let Some(b_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            let bsp = BackupStorageProviders::<T>::get(b_id).ok_or(Error::<T>::NotRegistered)?;
+            Ok(bsp.total_data)
         } else {
-            StorageData::<T>::default()
+            Err(Error::<T>::NotRegistered)
         }
     }
 }
@@ -499,59 +551,84 @@ impl<T: Config> Pallet<T> {
 
 use frame_support::pallet_prelude::DispatchResult;
 
-/// A trait to lookup registered Storage Providers.
-/// It is abstracted over the `AccountId` type, `StorageProvider` type, total number of users
-/// and Balance type.
-pub trait StorageProvidersInterface<T: Config> {
-    /// Lookup a registered StorageProvider by their AccountId.
-    ///
-    /// If the account is a Main Storage Provider, it will still return a BackupStorageProvider option as
-    /// the pallets using this interface should not care about the value proposition.
-    /// TODO: This could be refined in the future.
-    fn get_sp(who: T::AccountId) -> Option<BackupStorageProvider<T>>;
-
-    /// Check if an account is a registered Storage Provider.
-    fn is_sp(who: T::AccountId) -> bool;
-
-    /// Lookup the total number of registered Storage Providers.
-    fn total_sps() -> T::SpCount;
-
-    /// Get the stake for a registered Storage Provider.
-    fn get_stake(who: BackupStorageProvider<T>) -> BalanceOf<T>;
-
+/// Interface to allow the File System pallet to modify the data used by the Storage Providers pallet.
+pub trait StorageProvidersInterfaceForFileSystem<T: Config> {
     /// Change the used data of a Storage Provider (generic, MSP or BSP).
     fn change_data_used(who: &T::AccountId, data_change: T::StorageData) -> DispatchResult;
 
-    /// Add or change a root for a bucket of an MSP.
-    fn add_or_change_root_msp(
-        who: &T::AccountId,
+    /// Add a new Bucket as a Provider
+    fn add_bucket(
+        msp_id: MainStorageProviderId<T>,
+        user_id: UserId<T>,
+        bucket_id: BucketId<T>,
+        bucket_root: MerklePatriciaRoot<T>,
+    ) -> DispatchResult;
+
+    /// Change the root of a bucket
+    fn change_root_bucket(
+        bucket_id: BucketId<T>,
         new_root: MerklePatriciaRoot<T>,
-        user_id: T::UserId,
-        bucket_id: T::BucketId,
+    ) -> DispatchResult;
+
+    /// Change the root of a BSP
+    fn change_root_bsp(
+        bsp_id: BackupStorageProviderId<T>,
+        new_root: MerklePatriciaRoot<T>,
     ) -> DispatchResult;
 
     /// Remove a root from a bucket of a MSP, removing the whole bucket from storage
-    fn remove_root_msp(
-        who: &T::AccountId,
-        user_id: T::UserId,
-        bucket_id: T::BucketId,
-    ) -> DispatchResult;
-
-    /// Check if the given root is an actual root of a bucket that belongs to a specific user of a specific MSP
-    fn is_valid_root_for_msp(
-        who: &T::AccountId,
-        root: MerklePatriciaRoot<T>,
-        user_id: T::UserId,
-        bucket_id: T::BucketId,
-    ) -> bool;
-
-    /// Change the root of a BSP
-    fn change_root_bsp(who: &T::AccountId, new_root: MerklePatriciaRoot<T>) -> DispatchResult;
+    fn remove_root_bucket(bucket_id: BucketId<T>) -> DispatchResult;
 
     /// Remove a root from a BSP. It will remove the whole BSP from storage, so it should only be called when the BSP is being removed.
     /// todo!("If the only way to remove a BSP is by this pallet (bsp_sign_off), then is this function actually needed?")
     fn remove_root_bsp(who: &T::AccountId) -> DispatchResult;
+}
 
-    /// Check if the given root is the root of that BSP
-    fn is_valid_root_for_bsp(who: &T::AccountId, root: MerklePatriciaRoot<T>) -> bool;
+use codec::FullCodec;
+use frame_support::pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member};
+use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
+use frame_support::traits::fungible;
+use frame_support::Parameter;
+use scale_info::prelude::fmt::Debug;
+/// A trait to lookup registered Providers, their Merkle Patricia Trie roots and their stake.
+///
+/// It is abstracted over the `AccountId` type, `Provider` type, `Balance` type and `MerkleHash` type.
+pub trait ProvidersInterface {
+    /// The type which can be used to identify accounts.
+    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a registered Provider.
+    type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type corresponding to the staking balance of a registered Provider.
+    type Balance: fungible::Inspect<Self::AccountId>
+        + fungible::hold::Inspect<Self::AccountId>
+        + fungible::freeze::Inspect<Self::AccountId>;
+    /// The type corresponding to the root of a registered Provider.
+    type MerkleHash: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+
+    /// Check if an account is a registered Provider.
+    fn is_provider(who: Self::Provider) -> bool;
+
+    // Get Provider from AccountId, if it is a registered Provider.
+    fn get_provider(who: Self::AccountId) -> Option<Self::Provider>;
+
+    /// Get the root for a registered Provider.
+    fn get_root(who: Self::Provider) -> Option<Self::MerkleHash>;
+
+    /// Get the stake for a registered  Provider.
+    fn get_stake(
+        who: Self::Provider,
+    ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
 }
