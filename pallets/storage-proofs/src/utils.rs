@@ -39,7 +39,7 @@ where
     pub fn do_submit_proof(submitter: &ProviderFor<T>, proof: &CompactProof) -> DispatchResult {
         // Check if submitter is a registered Provider.
         ensure!(
-            ProvidersPalletFor::<T>::is_sp(submitter.clone()),
+            ProvidersPalletFor::<T>::is_provider(submitter.clone()),
             Error::<T>::NotProvider
         );
 

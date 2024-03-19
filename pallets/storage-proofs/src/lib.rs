@@ -285,8 +285,8 @@ pub mod pallet {
             let provider = match provider {
                 Some(provider) => provider,
                 None => {
-                    let sp =
-                        T::ProvidersPallet::get_sp(who.clone()).ok_or(Error::<T>::NotProvider)?;
+                    let sp = T::ProvidersPallet::get_provider(who.clone())
+                        .ok_or(Error::<T>::NotProvider)?;
                     sp
                 }
             };
@@ -419,10 +419,10 @@ pub trait ProvidersInterface {
         + FullCodec;
 
     /// Check if an account is a registered Provider.
-    fn is_sp(who: Self::Provider) -> bool;
+    fn is_provider(who: Self::Provider) -> bool;
 
     // Get Provider from AccountId, if it is a registered Provider.
-    fn get_sp(who: Self::AccountId) -> Option<Self::Provider>;
+    fn get_provider(who: Self::AccountId) -> Option<Self::Provider>;
 
     /// Get the root for a registered Provider.
     fn get_root(who: Self::Provider) -> Option<Self::MerkleHash>;
