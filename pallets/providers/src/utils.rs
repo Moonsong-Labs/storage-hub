@@ -1,6 +1,7 @@
 use crate::types::{Bucket, MainStorageProvider};
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::traits::Get;
+use storage_hub_traits::ProvidersInterface;
 
 use crate::*;
 
@@ -8,11 +9,14 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
-    pub fn do_msp_sign_up(who: &T::AccountId, msp_info: &MainStorageProvider<T>) -> DispatchResult {
+    pub fn do_msp_sign_up(
+        _who: &T::AccountId,
+        _msp_info: &MainStorageProvider<T>,
+    ) -> DispatchResult {
         // todo!()
-        let msp_id =
-            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
-        <MainStorageProviders<T>>::insert(&msp_id, msp_info);
+        // let msp_id =
+        //    AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+        // <MainStorageProviders<T>>::insert(&msp_id, msp_info);
         Ok(())
     }
 
@@ -48,7 +52,7 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
 }
 
 /// Implement the StorageProvidersInterface trait for the Storage Providers pallet.
-impl<T: pallet::Config> StorageProvidersInterfaceForFileSystem<T> for pallet::Pallet<T> {
+impl<T: pallet::Config> StorageProvidersInterface<T> for pallet::Pallet<T> {
     fn change_data_used(who: &T::AccountId, data_change: T::StorageData) -> DispatchResult {
         // TODO: refine this logic, add checks
         if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
@@ -138,18 +142,26 @@ impl<T: pallet::Config> StorageProvidersInterfaceForFileSystem<T> for pallet::Pa
 
 impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
     type AccountId = T::AccountId;
-    type Provider = MerkleTrieHolderId<T>;
+    type Provider = HashId<T>;
     type Balance = T::NativeBalance;
     type MerkleHash = MerklePatriciaRoot<T>;
 
     // TODO: Refine, add checks and tests for all the logic in this implementation
 
     fn is_provider(who: Self::Provider) -> bool {
-        BackupStorageProviders::<T>::contains_key(&who) || Buckets::<T>::contains_key(&who)
+        BackupStorageProviders::<T>::contains_key(&who)
+            || MainStorageProviders::<T>::contains_key(&who)
+            || Buckets::<T>::contains_key(&who)
     }
 
     fn get_provider(who: Self::AccountId) -> Option<Self::Provider> {
-        AccountIdToBackupStorageProviderId::<T>::get(&who)
+        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(&who) {
+            Some(bsp_id)
+        } else if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(&who) {
+            Some(msp_id)
+        } else {
+            None
+        }
     }
 
     fn get_root(who: Self::Provider) -> Option<Self::MerkleHash> {

@@ -71,9 +71,9 @@ pub type BalanceOf<T> =
     <<T as Config>::NativeBalance as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
 /// BackupStorageProviderId is the type that represents an ID of a Backup Storage Provider, uniquely linked with an AccountId
-pub type BackupStorageProviderId<T> = <T as crate::Config>::MerkleTrieHolderId;
-/// MainStorageProviderId is the type that represents an ID of a Main Storage Provider, uniquely linked with an AccountId
-pub type MainStorageProviderId<T> = <T as crate::Config>::MainStorageProviderId;
+pub type BackupStorageProviderId<T> = <T as crate::Config>::HashId;
+/// HashId is the type that represents an ID of a Main Storage Provider, uniquely linked with an AccountId
+pub type MainStorageProviderId<T> = <T as crate::Config>::HashId;
 
 /// MaxMultiAddressSize is the maximum size of the libp2p multiaddress of a Storage Provider in bytes.
 pub type MaxMultiAddressSize<T> = <T as crate::Config>::MaxMultiAddressSize;
@@ -86,7 +86,7 @@ pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
 /// MerklePatriciaRoot is the type of the root of a Merkle Patricia Trie, either the root of a BSP or a bucket from an MSP.
 pub type MerklePatriciaRoot<T> = <T as crate::Config>::MerklePatriciaRoot;
 /// MerkleTrieHolderId is the type that identifies the different Merkle Patricia Trie holders (BSPs and buckets).
-pub type MerkleTrieHolderId<T> = <T as crate::Config>::MerkleTrieHolderId;
+pub type HashId<T> = <T as crate::Config>::HashId;
 
 /// StorageData is the type of the unit in which we measure data size. We define its required traits in the
 /// pallet configuration so the runtime can use any type that implements them.
@@ -101,7 +101,7 @@ pub type Protocols<T> = BoundedVec<u8, MaxProtocols<T>>; // todo!("Define a type
 pub type ValuePropId<T> = <T as crate::Config>::ValuePropId;
 
 /// BucketId is the type that identifies the different buckets that a Main Storage Provider can have.
-pub type BucketId<T> = <T as crate::Config>::MerkleTrieHolderId;
+pub type BucketId<T> = <T as crate::Config>::HashId;
 /// MaxBuckets is the maximum amount of buckets that a Main Storage Provider can have.
 pub type MaxBuckets<T> = <T as crate::Config>::MaxBuckets;
 /// Buckets is a vector of the buckets that a Main Storage Provider has.

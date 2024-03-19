@@ -73,8 +73,7 @@ impl crate::Config for Test {
     type NativeBalance = Balances;
     type StorageData = u32;
     type SpCount = u32;
-    type MainStorageProviderId = H256;
-    type MerkleTrieHolderId = H256;
+    type HashId = H256;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
     type MaxMultiAddressSize = ConstU32<100>;
