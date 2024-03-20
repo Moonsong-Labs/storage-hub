@@ -1,6 +1,9 @@
 use crate::{
     mock::*,
-    types::{FileLocation, MultiAddress, StorageRequestBspsMetadata},
+    types::{
+        DefaultBspsRequired, FileLocation, MultiAddress, StorageRequestBspsMetadata,
+        StorageRequestMetadata,
+    },
     Config, Event, StorageRequestExpirations,
 };
 use frame_support::{assert_ok, traits::Hooks, weights::Weight};
@@ -15,8 +18,10 @@ fn request_storage_success() {
         // Go past genesis block so events get deposited
         System::set_block_number(1);
 
-        let user = RuntimeOrigin::signed(1);
+        let owner = 1;
+        let user = RuntimeOrigin::signed(owner);
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+        let size = 4;
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
         let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
@@ -28,9 +33,24 @@ fn request_storage_success() {
             user.clone(),
             location.clone(),
             fingerprint,
-            4,
+            size,
             multiaddresses.clone(),
         ));
+
+        // Assert that the storage was updated
+        assert_eq!(
+            FileSystem::storage_requests(location.clone()),
+            Some(StorageRequestMetadata {
+                requested_at: 1,
+                owner,
+                fingerprint,
+                size,
+                user_multiaddresses: multiaddresses.clone(),
+                data_server_sps: BoundedVec::default(),
+                bsps_required: DefaultBspsRequired::<Test>::get(),
+                bsps_confirmed: 0,
+            })
+        );
 
         // Assert that the correct event was deposited
         System::assert_last_event(
@@ -378,6 +398,20 @@ fn bsp_stop_storing_success() {
         // Assert that the RequestStorageBsps has the correct value
         assert!(FileSystem::storage_request_bsps(location.clone(), 2).is_none());
 
+        // Assert that the storage was updated
+        assert_eq!(
+            FileSystem::storage_requests(location.clone()),
+            Some(StorageRequestMetadata {
+                requested_at: 1,
+                owner,
+                fingerprint,
+                size,
+                user_multiaddresses: multiaddresses.clone(),
+                data_server_sps: BoundedVec::default(),
+                bsps_required: DefaultBspsRequired::<Test>::get(),
+                bsps_confirmed: 0,
+            })
+        );
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {

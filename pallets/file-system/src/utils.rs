@@ -8,6 +8,7 @@ use sp_runtime::{
     BoundedVec,
 };
 
+use crate::types::DefaultBspsRequired;
 use crate::{
     pallet,
     types::{
@@ -57,7 +58,7 @@ where
         // TODO: Check storage capacity of chosen MSP (when we support MSPs)
         // TODO: Return error if the file is already stored and overwrite is false.
 
-        let bsps_required = bsps_required.unwrap_or(T::DefaultBspsRequired::get());
+        let bsps_required = bsps_required.unwrap_or(DefaultBspsRequired::<T>::get());
 
         if bsps_required.is_zero() {
             return Err(Error::<T>::BspsRequiredCannotBeZero)?;
