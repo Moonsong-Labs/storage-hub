@@ -7,6 +7,7 @@ use sp_runtime::{
     traits::{CheckedAdd, Zero},
     BoundedVec,
 };
+use sp_std::vec;
 
 use crate::types::DefaultBspsRequired;
 use crate::{
