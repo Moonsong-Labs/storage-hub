@@ -1,6 +1,6 @@
 use crate::{
     mock::*,
-    types::{FileLocation, MultiAddress},
+    types::{FileLocation, MultiAddress, StorageRequestBspsMetadata},
     Config, Event, StorageRequestExpirations,
 };
 use frame_support::{assert_ok, traits::Hooks, weights::Weight};
@@ -298,6 +298,16 @@ fn bsp_volunteer_success() {
             multiaddresses.clone()
         ));
 
+        // Assert that the RequestStorageBsps has the correct value
+        assert_eq!(
+            FileSystem::storage_request_bsps(location.clone(), 2)
+                .expect("BSP should exist in storage"),
+            StorageRequestBspsMetadata::<Test> {
+                confirmed: false,
+                _phantom: Default::default()
+            }
+        );
+
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::AcceptedBspVolunteer {
@@ -305,6 +315,75 @@ fn bsp_volunteer_success() {
                 location,
                 fingerprint,
                 multiaddresses,
+            }
+            .into(),
+        );
+    });
+}
+
+#[test]
+fn bsp_stop_storing_success() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited
+        System::set_block_number(1);
+
+        let owner = 1;
+        let user = RuntimeOrigin::signed(owner);
+        let bsp = RuntimeOrigin::signed(2);
+        let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+        let size = 4;
+        let file_content = b"test".to_vec();
+        let fingerprint = BlakeTwo256::hash(&file_content);
+        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
+        let multiaddresses: BoundedVec<MultiAddress<Test>, <Test as Config>::MaxMultiAddresses> =
+            BoundedVec::try_from(vec![multiaddr]).unwrap();
+
+        // Dispatch storage request.
+        assert_ok!(FileSystem::issue_storage_request(
+            user.clone(),
+            location.clone(),
+            fingerprint,
+            size,
+            multiaddresses.clone(),
+        ));
+
+        // Dispatch BSP volunteer.
+        assert_ok!(FileSystem::bsp_volunteer(
+            bsp.clone(),
+            location.clone(),
+            fingerprint,
+            multiaddresses.clone()
+        ));
+
+        // Assert that the RequestStorageBsps has the correct value
+        assert_eq!(
+            FileSystem::storage_request_bsps(location.clone(), 2)
+                .expect("BSP should exist in storage"),
+            StorageRequestBspsMetadata::<Test> {
+                confirmed: false,
+                _phantom: Default::default()
+            }
+        );
+
+        // Dispatch BSP stop storing.
+        assert_ok!(FileSystem::bsp_stop_storing(
+            bsp.clone(),
+            location.clone(),
+            owner,
+            fingerprint,
+            size,
+            false
+        ));
+
+        // Assert that the RequestStorageBsps has the correct value
+        assert!(FileSystem::storage_request_bsps(location.clone(), 2).is_none());
+
+        // Assert that the correct event was deposited
+        System::assert_last_event(
+            Event::BspStoppedStoring {
+                bsp: 2,
+                owner,
+                location,
             }
             .into(),
         );

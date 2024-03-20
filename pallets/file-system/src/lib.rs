@@ -212,6 +212,7 @@ pub mod pallet {
         /// Notifies that a BSP has stopped storing a file.
         BspStoppedStoring {
             bsp: T::AccountId,
+            owner: T::AccountId,
             location: FileLocation<T>,
         },
     }
@@ -359,14 +360,18 @@ pub mod pallet {
             Self::do_bsp_stop_storing(
                 who.clone(),
                 location.clone(),
-                owner,
+                owner.clone(),
                 fingerprint,
                 size,
                 can_serve,
             )?;
 
             // Emit event.
-            Self::deposit_event(Event::BspStoppedStoring { bsp: who, location });
+            Self::deposit_event(Event::BspStoppedStoring {
+                bsp: who,
+                owner,
+                location,
+            });
 
             Ok(())
         }
