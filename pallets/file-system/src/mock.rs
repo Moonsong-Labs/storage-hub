@@ -1,7 +1,7 @@
 use frame_support::{
     derive_impl, parameter_types,
     traits::{Everything, Hooks},
-    weights::Weight,
+    weights::{constants::RocksDbWeight, Weight},
 };
 use frame_system as system;
 use sp_core::{ConstU32, H256};
@@ -50,7 +50,7 @@ impl system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
     type BlockLength = ();
-    type DbWeight = ();
+    type DbWeight = RocksDbWeight;
     type RuntimeOrigin = RuntimeOrigin;
     type RuntimeCall = RuntimeCall;
     type Nonce = u64;

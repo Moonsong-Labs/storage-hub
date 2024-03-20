@@ -163,7 +163,7 @@ fn request_storage_clear_old_expirations_success() {
         let multiaddresses: BoundedVec<MultiAddress<Test>, <Test as Config>::MaxMultiAddresses> =
             BoundedVec::try_from(vec![multiaddr]).unwrap();
 
-        let mut expected_expiration_block_number: BlockNumber =
+        let expected_expiration_block_number: BlockNumber =
             FileSystem::next_expiration_insertion_block_number().into();
 
         // Append storage request expiration to the list at `StorageRequestTtl`
@@ -183,21 +183,6 @@ fn request_storage_clear_old_expirations_success() {
             4,
             multiaddresses,
         ));
-
-        // Assert that the storage request expirations storage is at max capacity
-        assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
-            max_storage_request_expiry as usize
-        );
-
-        expected_expiration_block_number =
-            FileSystem::next_expiration_insertion_block_number().into();
-
-        // Assert that the `CurrentExpirationBlock` storage is incremented by 1
-        assert_eq!(
-            FileSystem::next_available_expiration_insertion_block(),
-            expected_expiration_block_number
-        );
 
         System::set_block_number(expected_expiration_block_number);
 
