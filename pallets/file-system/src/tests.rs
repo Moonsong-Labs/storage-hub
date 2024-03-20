@@ -7,6 +7,7 @@ use crate::{
     Config, Event, StorageRequestExpirations,
 };
 use frame_support::{assert_ok, traits::Hooks, weights::Weight};
+use sp_core::H256;
 use sp_runtime::{
     traits::{BlakeTwo256, Get, Hash},
     BoundedVec,
@@ -350,6 +351,7 @@ fn bsp_stop_storing_success() {
         let owner = 1;
         let user = RuntimeOrigin::signed(owner);
         let bsp = RuntimeOrigin::signed(2);
+        let file_key = H256::from_slice(&[1; 32]);
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let size = 4;
         let file_content = b"test".to_vec();
@@ -388,6 +390,7 @@ fn bsp_stop_storing_success() {
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
             bsp.clone(),
+            file_key,
             location.clone(),
             owner,
             fingerprint,
@@ -416,6 +419,7 @@ fn bsp_stop_storing_success() {
         System::assert_last_event(
             Event::BspStoppedStoring {
                 bsp: 2,
+                file_key,
                 owner,
                 location,
             }

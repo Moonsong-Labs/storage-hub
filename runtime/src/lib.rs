@@ -32,7 +32,7 @@ use frame_support::{
     dispatch::DispatchClass,
     genesis_builder_helper::{build_config, create_default_config},
     parameter_types,
-    traits::{ConstBool, ConstU32, ConstU64, ConstU8, EitherOfDiverse, TransformOrigin},
+    traits::{ConstBool, ConstU128, ConstU32, ConstU64, ConstU8, EitherOfDiverse, TransformOrigin},
     weights::{
         constants::WEIGHT_REF_TIME_PER_SECOND, ConstantMultiplier, Weight, WeightToFeeCoefficient,
         WeightToFeeCoefficients, WeightToFeePolynomial,
@@ -488,6 +488,38 @@ impl pallet_collator_selection::Config for Runtime {
     type WeightInfo = ();
 }
 
+impl pallet_storage_providers::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type NativeBalance = Balances;
+    type StorageData = u32;
+    type SpCount = u32;
+    type HashId = Hash;
+    type MerklePatriciaRoot = Hash;
+    type ValuePropId = Hash;
+    type MaxMultiAddressSize = ConstU32<100>;
+    type MaxMultiAddressAmount = ConstU32<5>;
+    type MaxProtocols = ConstU32<100>;
+    type MaxBsps = ConstU32<100>;
+    type MaxMsps = ConstU32<100>;
+    type MaxBuckets = ConstU32<10000>;
+    type SpMinDeposit = ConstU128<10>;
+    type SpMinCapacity = ConstU32<1>;
+    type DepositPerData = ConstU128<2>;
+}
+
+impl pallet_proofs_dealer::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type ProvidersPallet = Providers;
+    type NativeBalance = Balances;
+    type MerkleHash = Hash;
+    type TrieVerifier = Providers;
+    type MaxChallengesPerBlock = ConstU32<10>;
+    type MaxProvidersChallengedPerBlock = ConstU32<10>;
+    type ChallengeHistoryLength = ConstU32<10>;
+    type ChallengesQueueLength = ConstU32<10>;
+    type CheckpointChallengePeriod = ConstU32<10>;
+}
+
 /// Configure the pallet template in pallets/template.
 impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
@@ -532,7 +564,9 @@ construct_runtime!(
         CumulusXcm: cumulus_pallet_xcm = 32,
         MessageQueue: pallet_message_queue = 33,
 
-        FileSystem: pallet_file_system = 40,
+        Providers: pallet_storage_providers = 40,
+        FileSystem: pallet_file_system = 41,
+        ProofsDealer: pallet_proofs_dealer = 42,
     }
 );
 

@@ -55,7 +55,7 @@ pub mod pallet {
     use sp_runtime::BoundedVec;
 
     #[pallet::config]
-    pub trait Config: frame_system::Config {
+    pub trait Config: frame_system::Config + pallet_proofs_dealer::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -212,6 +212,7 @@ pub mod pallet {
         /// Notifies that a BSP has stopped storing a file.
         BspStoppedStoring {
             bsp: T::AccountId,
+            file_key: FileKey<T>,
             owner: T::AccountId,
             location: FileLocation<T>,
         },
@@ -348,6 +349,7 @@ pub mod pallet {
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_stop_storing(
             origin: OriginFor<T>,
+            file_key: FileKey<T>,
             location: FileLocation<T>,
             owner: T::AccountId,
             fingerprint: Fingerprint<T>,
@@ -359,6 +361,7 @@ pub mod pallet {
             // Perform validations and stop storing the file.
             Self::do_bsp_stop_storing(
                 who.clone(),
+                file_key,
                 location.clone(),
                 owner.clone(),
                 fingerprint,
@@ -369,6 +372,7 @@ pub mod pallet {
             // Emit event.
             Self::deposit_event(Event::BspStoppedStoring {
                 bsp: who,
+                file_key,
                 owner,
                 location,
             });

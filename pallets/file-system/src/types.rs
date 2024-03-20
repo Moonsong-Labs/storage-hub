@@ -89,3 +89,6 @@ pub type MaxMultiAddresses<T> = <T as crate::Config>::MaxMultiAddresses;
 
 /// Alias for a bounded vector of [`MultiAddress`].
 pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;
+
+/// Alias for the `FileKey` type used in the proofs-dealer pallet.
+pub type FileKey<T> = <T as pallet_proofs_dealer::Config>::MerkleHash;

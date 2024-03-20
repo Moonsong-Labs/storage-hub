@@ -19,7 +19,7 @@ pub mod utils;
 
 use frame_support::{inherent::IsFatalError, pallet_prelude::*, sp_runtime::RuntimeString};
 use scale_info::prelude::fmt::Debug;
-use sp_trie::CompactProof;
+pub use sp_trie::CompactProof;
 
 // TODO: Define this.
 const INHERENT_IDENTIFIER: InherentIdentifier = *b"todo____";
@@ -80,11 +80,11 @@ pub mod pallet {
 
         /// The maximum number of challenges that can be made in a single block.
         #[pallet::constant]
-        type MaxChallengesPerBlock: Get<u32> + FullCodec;
+        type MaxChallengesPerBlock: Get<u32>;
 
         /// The maximum number of Providers that can be challenged in block.
         #[pallet::constant]
-        type MaxProvidersChallengedPerBlock: Get<u32> + FullCodec;
+        type MaxProvidersChallengedPerBlock: Get<u32>;
 
         /// The number of blocks that challenges history is kept for.
         /// After this many blocks, challenges are removed from `Challenges` StorageMap.

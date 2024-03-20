@@ -9,8 +9,23 @@ homepage = "https://moonsonglabs.com/"
 panic = "unwind"
 
 [workspace]
-members = ["runtime", "pallets/*", "node", "bsp", "msp", "storage-kit", "support/*"]
+members = [
+    "runtime",
+    "pallets/*",
+    "node",
+    "bsp",
+    "msp",
+    "storage-kit",
+    "support/*",
+]
 resolver = "2"
+
+[workspace.dependencies]
+storage-hub-traits = { path = "support/traits", default-features = false }
+
+pallet-storage-providers = { path = "pallets/providers", default-features = false }
+pallet-file-system = { path = "pallets/file-system", default-features = false }
+pallet-proofs-dealer = { path = "pallets/proofs-dealer", default-features = false }
 
 [workspace.lints.rust]
 suspicious_double_ref_op = { level = "allow", priority = 2 }

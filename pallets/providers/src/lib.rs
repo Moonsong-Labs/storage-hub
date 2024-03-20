@@ -511,6 +511,17 @@ impl<T: Config> Pallet<T> {
     }
 }
 
+impl<T: Config> pallet_proofs_dealer::TrieVerifier for Pallet<T> {
+    fn verify_proof(
+        _root: &[u8; 32],
+        _challenges: &[u8; 32],
+        _proof: &pallet_proofs_dealer::CompactProof,
+    ) -> bool {
+        // TODO: implement this
+        todo!()
+    }
+}
+
 // Trait definitions:
 
 use frame_support::pallet_prelude::DispatchResult;

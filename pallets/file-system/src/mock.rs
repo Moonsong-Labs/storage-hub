@@ -4,7 +4,7 @@ use frame_support::{
     weights::{constants::RocksDbWeight, Weight},
 };
 use frame_system as system;
-use sp_core::{ConstU32, H256};
+use sp_core::{ConstU128, ConstU32, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
     BuildStorage,
@@ -12,6 +12,7 @@ use sp_runtime::{
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
+type Balance = u128;
 
 /// Rolls to the desired block. Returns the number of blocks played.
 pub(crate) fn roll_to(n: BlockNumber) -> BlockNumber {
@@ -36,7 +37,10 @@ frame_support::construct_runtime!(
     pub enum Test
     {
         System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
+        Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
         FileSystem: crate::{Pallet, Call, Storage, Event<T>},
+        Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>},
+        ProofsDealer: pallet_proofs_dealer::{Pallet, Call, Storage, Event<T>},
     }
 );
 
@@ -63,13 +67,62 @@ impl system::Config for Test {
     type BlockHashCount = BlockHashCount;
     type Version = ();
     type PalletInfo = PalletInfo;
-    type AccountData = ();
+    type AccountData = pallet_balances::AccountData<Balance>;
     type OnNewAccount = ();
     type OnKilledAccount = ();
     type SystemWeightInfo = ();
     type SS58Prefix = SS58Prefix;
     type OnSetCode = ();
     type MaxConsumers = frame_support::traits::ConstU32<16>;
+}
+
+impl pallet_balances::Config for Test {
+    type Balance = Balance;
+    type DustRemoval = ();
+    type RuntimeEvent = RuntimeEvent;
+    type ExistentialDeposit = ConstU128<1>;
+    type AccountStore = System;
+    type WeightInfo = ();
+    type MaxLocks = ConstU32<10>;
+    type MaxReserves = ();
+    type ReserveIdentifier = [u8; 8];
+    type RuntimeHoldReason = ();
+    type RuntimeFreezeReason = ();
+    type FreezeIdentifier = ();
+    type MaxHolds = ConstU32<10>;
+    type MaxFreezes = ConstU32<10>;
+}
+
+impl pallet_storage_providers::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type NativeBalance = Balances;
+    type StorageData = u32;
+    type SpCount = u32;
+    type HashId = H256;
+    type MerklePatriciaRoot = H256;
+    type ValuePropId = H256;
+    type MaxMultiAddressSize = ConstU32<100>;
+    type MaxMultiAddressAmount = ConstU32<5>;
+    type MaxProtocols = ConstU32<100>;
+    type MaxBsps = ConstU32<100>;
+    type MaxMsps = ConstU32<100>;
+    type MaxBuckets = ConstU32<10000>;
+    type SpMinDeposit = ConstU128<10>;
+    type SpMinCapacity = ConstU32<1>;
+    type DepositPerData = ConstU128<2>;
+}
+
+impl pallet_proofs_dealer::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type ProvidersPallet = Providers;
+    type NativeBalance = Balances;
+    type MerkleHash = H256;
+    type TrieVerifier = Providers;
+    type MaxChallengesPerBlock = ConstU32<10>;
+    type MaxProvidersChallengedPerBlock = ConstU32<10>;
+    type ChallengeHistoryLength = ConstU32<10>;
+    type ChallengesQueueLength = ConstU32<10>;
+    type CheckpointChallengePeriod = ConstU32<10>;
 }
 
 impl crate::Config for Test {

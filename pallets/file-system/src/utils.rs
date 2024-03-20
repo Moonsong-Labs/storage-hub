@@ -9,7 +9,7 @@ use sp_runtime::{
 };
 use sp_std::vec;
 
-use crate::types::DefaultBspsRequired;
+use crate::types::{DefaultBspsRequired, FileKey};
 use crate::{
     pallet,
     types::{
@@ -203,6 +203,7 @@ where
     /// will handle triggering the appropriate event and pending storage request.
     pub(crate) fn do_bsp_stop_storing(
         who: StorageProviderId<T>,
+        file_key: FileKey<T>,
         location: FileLocation<T>,
         owner: T::AccountId,
         fingerprint: Fingerprint<T>,
@@ -214,6 +215,8 @@ where
             <StorageRequests<T>>::contains_key(&location),
             Error::<T>::StorageRequestNotFound
         );
+
+        // TODO: Check that the hash of all the metadata is equal to the `file_key` hash.
 
         // If the storage request exists, then we should reduce the number of bsps confirmed and
         match <StorageRequests<T>>::get(&location) {
@@ -241,7 +244,7 @@ where
                     Some(1u32.into()),
                     None,
                     if can_serve {
-                        BoundedVec::try_from(vec![who]).unwrap()
+                        BoundedVec::try_from(vec![who.clone()]).unwrap()
                     } else {
                         BoundedVec::default()
                     },
@@ -249,7 +252,8 @@ where
             }
         };
 
-        // TODO: Challenge the BSP to force update its root.
+        // Challenge BSP to force update its storage root to uninclude the file.
+        pallet_proofs_dealer::Pallet::<T>::do_challenge(&who, &file_key)?;
 
         Ok(())
     }
