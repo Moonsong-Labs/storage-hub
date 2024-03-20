@@ -21,8 +21,8 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
           components: rustfmt
-      - name: Format code with rustfmt
-        run: cargo fmt -- --check
+      - name: Rustfmt Check
+        uses: actions-rust-lang/rustfmt@v1
 
   check-rust-lint:
     name: "Check lint with clippy"

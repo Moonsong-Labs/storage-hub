@@ -1,0 +1,87 @@
+name: Lint and Format
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: set to pull_request number to execute on external pr
+        required: false
+
+jobs:
+  build:
+    name: "Build node"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Build All
+        run: cargo build --release
+      - name: Prepare artefacts
+        run: |
+          mkdir -p runtimes
+          mkdir -p build
+          cp target/release/storage-hub-node build/
+          cp target/release/wbuild/storage*/storage*_runtime.compact.compressed.wasm runtimes/
+      - name: Upload runtimes
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtimes
+          path: runtimes
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: storage-hub-node
+          path: build
+
+  create_docker_image:
+    needs: build
+    name: "Package node"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - uses: actions/download-artifact@v4
+        with:
+          name: storage-hub-node
+      - run: bun docker:build:sh-node
+      - name: Save Docker Image
+        run: bun docker:save:sh-node
+      - name: Upload image
+        uses: actions/upload-artifact@v4
+        with:
+          name: sh-node-image
+          path: storage-hub-node.tar
+
+  zombie_test:
+    needs: create_docker_image
+    name: "Start a simple network using zombienet"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sh-node-image
+      - name: Load Docker image
+        run: |
+          docker load -i storage-hub-node/sh-node-image.tar
+      - uses: medyagh/setup-minikube@latest
+      - name: Setup Docker Registry
+        run: |
+          bun docker:registry:start
+          bun docker:registry:push
+      - name: Setup Zombienet
+        run: |
+          wget https://github.com/paritytech/zombienet/releases/download/v1.3.95/zombienet-linux-x64 -O zombienet
+          chmod +x zombienet
+      - name: Run Zombienet Test!
+        run: |
+         ./zombie test configs/simple.zndsl
