@@ -19,7 +19,6 @@ mod benchmarking;
 pub mod pallet {
     use super::types::*;
     use codec::{FullCodec, HasCompact};
-    use frame_support::testing_prelude::bounded_vec;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
@@ -312,7 +311,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             let msp_info = MainStorageProvider {
-                buckets: bounded_vec![],
+                buckets: BoundedVec::default(),
                 total_data,
                 data_used: StorageData::<T>::default(),
                 multiaddresses: multiaddress.clone(),
