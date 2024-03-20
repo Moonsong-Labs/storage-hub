@@ -188,6 +188,7 @@ try-runtime = [
     "pallet-collator-selection/try-runtime",
     "pallet-message-queue/try-runtime",
     "pallet-file-system/try-runtime",
+    "pallet-proofs-dealer/try-runtime",
     "pallet-session/try-runtime",
     "pallet-sudo/try-runtime",
     "pallet-storage-providers/try-runtime",
