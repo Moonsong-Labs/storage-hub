@@ -38,7 +38,7 @@ jobs:
           cache-on-failure: true
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
-      - run: cargo clippy --workspace --lib --examples --tests --benches --all-features --locked
+      - run: SKIP_WASM_BUILD=1 cargo clippy --workspace --lib --examples --tests --benches --all-features --locked
         env:
           RUSTFLAGS: -D warnings
 
