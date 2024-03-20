@@ -1,6 +1,7 @@
 use frame_support::{derive_impl, parameter_types, traits::Everything};
 use frame_system as system;
-use sp_core::{ConstU128, ConstU32, H256};
+use pallet_babe::{RandomnessFromOneEpochAgo, SameAuthoritiesForever};
+use sp_core::{ConstU128, ConstU32, Void, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
     BuildStorage,
@@ -15,6 +16,8 @@ frame_support::construct_runtime!(
     {
         System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
+        BabeRandomness: pallet_babe::{Pallet, Call, Storage},
+        Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
         StorageProviders: crate::{Pallet, Call, Storage, Event<T>},
     }
 );
@@ -68,6 +71,25 @@ impl pallet_balances::Config for Test {
     type MaxFreezes = ConstU32<10>;
 }
 
+impl pallet_babe::Config for Test {
+    type EpochDuration = ();
+    type ExpectedBlockTime = ();
+    type EpochChangeTrigger = SameAuthoritiesForever;
+    type KeyOwnerProof = Void;
+    type WeightInfo = ();
+    type DisabledValidators = ();
+    type MaxAuthorities = ConstU32<100>;
+    type MaxNominators = ConstU32<100>;
+    type EquivocationReportSystem = ();
+}
+
+impl pallet_timestamp::Config for Test {
+    type MinimumPeriod = ();
+    type WeightInfo = ();
+    type Moment = u64;
+    type OnTimestampSet = ();
+}
+
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -85,6 +107,8 @@ impl crate::Config for Test {
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<1>;
     type DepositPerData = ConstU128<2>;
+
+    type ProvidersRandomness = RandomnessFromOneEpochAgo<Test>;
 }
 
 // Build genesis storage according to the mock runtime.

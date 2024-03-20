@@ -20,6 +20,7 @@ pub mod pallet {
     use super::types::*;
     use codec::{FullCodec, HasCompact};
     use frame_support::testing_prelude::bounded_vec;
+    use frame_support::traits::Randomness;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
@@ -35,6 +36,9 @@ pub mod pallet {
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
+        /// Type to access randomness to salt AccountIds and get the corresponding HashId
+        type ProvidersRandomness: Randomness<Self::HashId, BlockNumberFor<Self>>;
 
         /// Type to access the Balances pallet (using the fungible trait from frame_support)
         type NativeBalance: Inspect<Self::AccountId>
@@ -221,7 +225,7 @@ pub mod pallet {
         /// that MSP's account id, the total data it can store according to its stake, its multiaddress, and its value proposition.
         MspSignUpSuccess {
             who: T::AccountId,
-            multiaddress: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             total_data: StorageData<T>,
             value_prop: ValueProposition<T>,
         },
@@ -230,7 +234,7 @@ pub mod pallet {
         /// that BSP's account id, the total data it can store according to its stake, and its multiaddress.
         BspSignUpSuccess {
             who: T::AccountId,
-            multiaddress: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             total_data: StorageData<T>,
         },
 
@@ -301,7 +305,7 @@ pub mod pallet {
         pub fn msp_sign_up(
             origin: OriginFor<T>,
             total_data: StorageData<T>,
-            multiaddress: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             value_prop: ValueProposition<T>,
         ) -> DispatchResultWithPostInfo {
             // TODO: Logic to sign up an MSP
@@ -315,7 +319,7 @@ pub mod pallet {
                 buckets: bounded_vec![],
                 total_data,
                 data_used: StorageData::<T>::default(),
-                multiaddresses: multiaddress.clone(),
+                multiaddresses: multiaddresses.clone(),
                 value_prop: value_prop.clone(),
             };
             // Update storage.
@@ -324,7 +328,7 @@ pub mod pallet {
             // Emit an event.
             Self::deposit_event(Event::<T>::MspSignUpSuccess {
                 who,
-                multiaddress,
+                multiaddresses,
                 total_data,
                 value_prop,
             });

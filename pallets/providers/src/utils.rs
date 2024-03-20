@@ -1,6 +1,8 @@
 use crate::types::{Bucket, MainStorageProvider};
+use codec::Encode;
+use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
-use frame_support::traits::Get;
+use frame_support::traits::{Get, Randomness};
 use storage_hub_traits::ProvidersInterface;
 
 use crate::*;
@@ -9,14 +11,29 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
-    pub fn do_msp_sign_up(
-        _who: &T::AccountId,
-        _msp_info: &MainStorageProvider<T>,
-    ) -> DispatchResult {
-        // todo!()
-        // let msp_id =
-        //    AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
-        // <MainStorageProviders<T>>::insert(&msp_id, msp_info);
+    pub fn do_msp_sign_up(who: &T::AccountId, msp_info: &MainStorageProvider<T>) -> DispatchResult {
+        // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
+
+        // We first check that the account is not already registered either as a Main Storage Provider or a Backup Storage Provider
+        ensure!(
+            AccountIdToMainStorageProviderId::<T>::get(who).is_none()
+                && AccountIdToBackupStorageProviderId::<T>::get(who).is_none(),
+            Error::<T>::AlreadyRegistered
+        );
+
+        // We then get the MainStorageProviderId by using the AccountId as the seed for a random generator
+        let (msp_id, block_number_when_random) =
+            T::ProvidersRandomness::random(who.encode().as_ref());
+
+        // We should check that the block number when this randomness is valid is bigger than the current one
+        // TODO: implement this check and, if not valid, save somehow the randomness and the account id to retry later, probably in a queue
+
+        // We then insert the MainStorageProviderId into the mapping
+        AccountIdToMainStorageProviderId::<T>::insert(who, msp_id);
+
+        // After that, we save the MainStorageProvider information in storage
+        MainStorageProviders::<T>::insert(&msp_id, msp_info);
+
         Ok(())
     }
 
@@ -24,7 +41,7 @@ where
         who: &T::AccountId,
         bsp_info: BackupStorageProvider<T>,
     ) -> DispatchResult {
-        // todo!()
+        // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
         let bsp_id =
             AccountIdToBackupStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
         <BackupStorageProviders<T>>::insert(&bsp_id, bsp_info);
