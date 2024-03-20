@@ -388,3 +388,10 @@ impl InherentError {
 pub trait TrieVerifier {
     fn verify_proof(root: &[u8; 32], challenges: &[u8; 32], proof: &CompactProof) -> bool;
 }
+
+impl<T: Config> TrieVerifier for Pallet<T> {
+    fn verify_proof(_root: &[u8; 32], _challenges: &[u8; 32], _proof: &CompactProof) -> bool {
+        // TODO: implement this
+        todo!()
+    }
+}

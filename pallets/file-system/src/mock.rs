@@ -117,7 +117,7 @@ impl pallet_proofs_dealer::Config for Test {
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
     type MerkleHash = H256;
-    type TrieVerifier = Providers;
+    type TrieVerifier = ProofsDealer;
     type MaxChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
     type ChallengeHistoryLength = ConstU32<10>;

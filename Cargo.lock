@@ -6953,7 +6953,6 @@ dependencies = [
  "frame-support",
  "frame-system",
  "pallet-balances",
- "pallet-proofs-dealer",
  "parity-scale-codec",
  "scale-info",
  "serde",
