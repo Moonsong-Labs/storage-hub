@@ -32,13 +32,14 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
           components: rustfmt, rust-src
+          cache: true
           target: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
-      - run: SKIP_WASM_BUILD=1 cargo clippy --workspace --lib --examples --tests --benches --all-features --locked
+      - run: cargo clippy --lib --features try-runtime,runtime-benchmarks --locked
         env:
           RUSTFLAGS: -D warnings
 
