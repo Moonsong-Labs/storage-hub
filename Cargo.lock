@@ -6699,6 +6699,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-proofs-dealer"
+version = "0.1.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-trie",
+ "storage-hub-traits",
+]
+
+[[package]]
 name = "pallet-proxy"
 version = "4.0.0-dev"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.5.0#a3dc2f15f23b3fd25ada62917bfab169a01f2b0d"
@@ -6926,19 +6943,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-storage-proofs"
+name = "pallet-storage-providers"
 version = "0.1.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "pallet-balances",
  "parity-scale-codec",
  "scale-info",
  "serde",
  "sp-core",
  "sp-io",
  "sp-runtime",
- "sp-trie",
+ "storage-hub-traits",
 ]
 
 [[package]]
@@ -12421,8 +12439,8 @@ dependencies = [
  "pallet-collator-selection",
  "pallet-file-system",
  "pallet-message-queue",
+ "pallet-proofs-dealer",
  "pallet-session",
- "pallet-storage-proofs",
  "pallet-sudo",
  "pallet-timestamp",
  "pallet-transaction-payment",
@@ -12451,6 +12469,21 @@ dependencies = [
  "staging-xcm-builder",
  "staging-xcm-executor",
  "substrate-wasm-builder",
+]
+
+[[package]]
+name = "storage-hub-traits"
+version = "0.1.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
 ]
 
 [[package]]
