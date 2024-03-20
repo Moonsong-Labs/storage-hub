@@ -247,6 +247,8 @@ where
             }
         };
 
+        // TODO: Challenge the BSP to force update its root.
+
         Ok(())
     }
 
