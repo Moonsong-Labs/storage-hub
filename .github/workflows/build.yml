@@ -54,9 +54,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: storage-hub-node
-      - run: bun docker:build:sh-node
-      - name: Save Docker Image
-        run: bun docker:save:sh-node
+      - run: |
+          cd test
+          bun docker:build:sh-node
+          bun docker:save:sh-node
       - name: Upload image
         uses: actions/upload-artifact@v4
         with:
