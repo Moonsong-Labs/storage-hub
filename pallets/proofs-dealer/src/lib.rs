@@ -34,7 +34,6 @@ pub mod pallet {
         traits::fungible,
     };
     use frame_system::pallet_prelude::*;
-    use scale_info::prelude::fmt::Debug;
     use sp_trie::CompactProof;
     use storage_hub_traits::ProvidersInterface;
     use types::ProviderFor;
