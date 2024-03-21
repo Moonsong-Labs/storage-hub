@@ -29,6 +29,8 @@ jobs:
       - uses: arduino/setup-protoc@v3
       - name: Build All
         run: cargo build --release
+      - name: Check Built By Mold
+        run: readelf -p .comment target/release/storage-hub-node
       - name: Prepare artefacts
         run: |
           mkdir -p runtimes
@@ -74,7 +76,13 @@ jobs:
       - name: Setup Docker Registry
         run: |
           bun docker:registry:start
+          
+          # Wait for registry to start
+          sleep 5 
+
           bun docker:registry:push
+          docker images
+          
       - name: Setup Zombienet
         run: |
           wget https://github.com/paritytech/zombienet/releases/download/v1.3.95/zombienet-linux-x64 -O zombienet
