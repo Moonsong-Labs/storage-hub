@@ -30,10 +30,7 @@ fn challenge_submit_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::challenge(
-            RuntimeOrigin::signed(1),
-            file_key.clone()
-        ));
+        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -84,7 +81,7 @@ fn challenge_submit_twice_succeed() {
         // Dispatch challenge extrinsic twice.
         assert_ok!(ProofsDealer::challenge(
             RuntimeOrigin::signed(1),
-            file_key_1.clone()
+            file_key_1
         ));
 
         // Check that the event is emitted.
@@ -98,7 +95,7 @@ fn challenge_submit_twice_succeed() {
 
         assert_ok!(ProofsDealer::challenge(
             RuntimeOrigin::signed(2),
-            file_key_2.clone()
+            file_key_2
         ));
 
         // Check that the event is emitted.
@@ -147,14 +144,8 @@ fn challenge_submit_existing_challenge_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic twice.
-        assert_ok!(ProofsDealer::challenge(
-            RuntimeOrigin::signed(1),
-            file_key.clone()
-        ));
-        assert_ok!(ProofsDealer::challenge(
-            RuntimeOrigin::signed(1),
-            file_key.clone()
-        ));
+        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -197,10 +188,7 @@ fn challenge_submit_in_two_rounds_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic twice.
-        assert_ok!(ProofsDealer::challenge(
-            RuntimeOrigin::signed(1),
-            file_key.clone()
-        ));
+        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -229,10 +217,7 @@ fn challenge_submit_in_two_rounds_succeed() {
 
         // Dispatch challenge extrinsic twice.
         let file_key = BlakeTwo256::hash(b"file_key_2");
-        assert_ok!(ProofsDealer::challenge(
-            RuntimeOrigin::signed(1),
-            file_key.clone()
-        ));
+        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -274,10 +259,7 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::challenge(
-            RuntimeOrigin::signed(1),
-            file_key.clone()
-        ));
+        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -306,7 +288,7 @@ fn challenge_wrong_origin_fail() {
 
         // Dispatch challenge extrinsic with wrong origin.
         assert_noop!(
-            ProofsDealer::challenge(RuntimeOrigin::none(), file_key.clone()),
+            ProofsDealer::challenge(RuntimeOrigin::none(), file_key),
             DispatchError::BadOrigin
         );
     });
@@ -326,7 +308,7 @@ fn challenge_submit_by_regular_user_with_no_funds_fail() {
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key.clone()),
+            ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key),
             crate::Error::<Test>::FeeChargeFailed
         );
     });
@@ -353,15 +335,12 @@ fn challenge_overflow_challenges_queue_fail() {
         let queue_size: u32 = <Test as crate::Config>::ChallengesQueueLength::get();
         for i in 0..queue_size {
             let file_key = BlakeTwo256::hash(&i.to_le_bytes());
-            assert_ok!(ProofsDealer::challenge(
-                RuntimeOrigin::signed(1),
-                file_key.clone()
-            ));
+            assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
         }
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key.clone()),
+            ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key),
             crate::Error::<Test>::ChallengesQueueOverflow
         );
     });
