@@ -538,7 +538,7 @@ impl pallet_file_system::Config for Runtime {
     type Fingerprint = Hash;
     type StorageUnit = u128;
     type StorageRequestBspsRequiredType = u32;
-    type DefaultBspsRequired = ConstU32<1>;
+    type TargetBspsRequired = ConstU32<1>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxMultiAddresses = ConstU32<10>;

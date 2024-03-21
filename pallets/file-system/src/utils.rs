@@ -9,7 +9,7 @@ use sp_runtime::{
 };
 use sp_std::vec;
 
-use crate::types::{DefaultBspsRequired, FileKey};
+use crate::types::{FileKey, TargetBspsRequired};
 use crate::{
     pallet,
     types::{
@@ -59,7 +59,7 @@ where
         // TODO: Check storage capacity of chosen MSP (when we support MSPs)
         // TODO: Return error if the file is already stored and overwrite is false.
 
-        let bsps_required = bsps_required.unwrap_or(DefaultBspsRequired::<T>::get());
+        let bsps_required = bsps_required.unwrap_or(TargetBspsRequired::<T>::get());
 
         if bsps_required.is_zero() {
             return Err(Error::<T>::BspsRequiredCannotBeZero)?;

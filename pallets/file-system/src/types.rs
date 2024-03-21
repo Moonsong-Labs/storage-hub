@@ -72,8 +72,8 @@ pub type Fingerprint<T> = <T as crate::Config>::Fingerprint;
 /// Alias for the `StorageCount` type used in the FileSystem pallet.
 pub type StorageUnit<T> = <T as crate::Config>::StorageUnit;
 
-/// Alias for the `DefaultBspsRequired` type used in the FileSystem pallet.
-pub type DefaultBspsRequired<T> = <T as crate::Config>::DefaultBspsRequired;
+/// Alias for the `TargetBspsRequired` type used in the FileSystem pallet.
+pub type TargetBspsRequired<T> = <T as crate::Config>::TargetBspsRequired;
 
 /// Byte array representing the file path.
 pub type FileLocation<T> = BoundedVec<u8, MaxFilePathSize<T>>;

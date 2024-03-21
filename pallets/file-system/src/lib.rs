@@ -101,10 +101,15 @@ pub mod pallet {
             + Zero;
 
         /// Minimum number of BSPs required to store a file.
+        ///
+        /// This is also used as a default value if the BSPs required are not specified when creating a storage request.
         #[pallet::constant]
-        type DefaultBspsRequired: Get<Self::StorageRequestBspsRequiredType>;
+        type TargetBspsRequired: Get<Self::StorageRequestBspsRequiredType>;
 
         /// Maximum number of BSPs that can store a file.
+        ///
+        /// This is used to limit the number of BSPs storing a file and claiming rewards for it.
+        /// If this number is to high, then the reward for storing a file might be to diluted and pointless to store.
         #[pallet::constant]
         type MaxBspsPerStorageRequest: Get<u32>;
 
@@ -400,21 +405,7 @@ pub mod pallet {
             let mut total_used_weight = Weight::zero();
 
             let required_weight_for_iteration =
-                db_weight.reads_writes(1, T::MaxExpiredStorageRequests::get().into());
-
-            // Check if we can process a single iteration and update the `NextStartingBlockToCleanUp` storage item
-            if !remaining_weight.all_gte(
-                match total_used_weight.checked_add(&required_weight_for_iteration) {
-                    Some(weight) => {
-                        // Update `total_used_weight` to take into account the final write operation
-                        total_used_weight = db_weight.writes(1);
-                        weight
-                    }
-                    None => return Weight::zero(),
-                },
-            ) {
-                return Weight::zero();
-            }
+                db_weight.reads_writes(1, (T::MaxExpiredStorageRequests::get() + 1).into());
 
             // Iterate over blocks from the start block to the current block,
             // cleaning up storage requests until the remaining weight is insufficient
@@ -446,6 +437,7 @@ pub mod pallet {
             // `NextStartingBlockToCleanUp` is always updated to start from the block we reached in the current `on_idle` call.
             if block_to_clean > start_block {
                 NextStartingBlockToCleanUp::<T>::put(block_to_clean);
+                total_used_weight += db_weight.writes(1);
             }
 
             total_used_weight

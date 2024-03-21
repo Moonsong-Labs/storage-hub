@@ -1,8 +1,8 @@
 use crate::{
     mock::*,
     types::{
-        DefaultBspsRequired, FileLocation, MultiAddress, StorageRequestBspsMetadata,
-        StorageRequestMetadata,
+        FileLocation, MultiAddress, StorageRequestBspsMetadata, StorageRequestMetadata,
+        TargetBspsRequired,
     },
     Config, Event, StorageRequestExpirations,
 };
@@ -48,7 +48,7 @@ fn request_storage_success() {
                 size,
                 user_multiaddresses: multiaddresses.clone(),
                 data_server_sps: BoundedVec::default(),
-                bsps_required: DefaultBspsRequired::<Test>::get(),
+                bsps_required: TargetBspsRequired::<Test>::get(),
                 bsps_confirmed: 0,
             })
         );
@@ -411,7 +411,7 @@ fn bsp_stop_storing_success() {
                 size,
                 user_multiaddresses: multiaddresses.clone(),
                 data_server_sps: BoundedVec::default(),
-                bsps_required: DefaultBspsRequired::<Test>::get(),
+                bsps_required: TargetBspsRequired::<Test>::get(),
                 bsps_confirmed: 0,
             })
         );
