@@ -19,12 +19,13 @@ mod benchmarking;
 pub mod pallet {
     use super::types::*;
     use codec::{FullCodec, HasCompact};
-    use frame_support::testing_prelude::bounded_vec;
     use frame_support::traits::Randomness;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
-        sp_runtime::traits::{AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, One, SimpleBitOps},
+        sp_runtime::traits::{
+            AtLeast32BitUnsigned, CheckEqual, Hash, MaybeDisplay, One, SimpleBitOps,
+        },
         traits::fungible::*,
         Blake2_128Concat,
     };
@@ -43,13 +44,17 @@ pub mod pallet {
         /// Type to access the Balances pallet (using the fungible trait from frame_support)
         type NativeBalance: Inspect<Self::AccountId>
             + Mutate<Self::AccountId>
-            + hold::Inspect<Self::AccountId>
+            + hold::Inspect<Self::AccountId, Reason = Self::RuntimeHoldReason>
             // , Reason = Self::HoldReason> We will probably have to hold deposits
-            + hold::Mutate<Self::AccountId>
+            + hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>
             + freeze::Inspect<Self::AccountId>
             + freeze::Mutate<Self::AccountId>;
 
-        /// The type of ID that uniquely identifies a Merkle Trie Holder (BSPs/Buckets) from an AccountId
+        /// The overarching hold reason
+        type RuntimeHoldReason: From<HoldReason>;
+
+        /// The type of ID that uniquely identifies a Storage Provider (MSPs/BSPs) from an AccountId
+        /// It is also used to identify a Bucket of data inside a MSP
         type HashId: Parameter
             + Member
             + MaybeSerializeDeserialize
@@ -60,10 +65,13 @@ pub mod pallet {
             + Default
             + Copy
             + CheckEqual
+            + std::hash::Hash
             + AsRef<[u8]>
             + AsMut<[u8]>
-            + MaxEncodedLen
-            + FullCodec;
+            + MaxEncodedLen;
+
+        /// The hashing system (algorithm) being used in the runtime (e.g. Blake2).
+        type Hashing: Hash<Output = Self::HashId> + TypeInfo;
 
         /// Data type for the measurement of storage size
         type StorageData: Parameter
@@ -74,7 +82,8 @@ pub mod pallet {
             + AtLeast32BitUnsigned
             + Copy
             + MaxEncodedLen
-            + HasCompact;
+            + HasCompact
+            + Into<BalanceOf<Self>>;
 
         /// Type that represents the total number of registered Storage Providers.
         type SpCount: Parameter
@@ -266,6 +275,8 @@ pub mod pallet {
         NotEnoughBalance,
         /// Error thrown when a user tries to sign up as a BSP but the maximum amount of BSPs has been reached.
         MaxBspsReached,
+        /// Error thrown when a user tries to sign up as a MSP but the maximum amount of MSPs has been reached.
+        MaxMspsReached,
         /// Error thrown when a user tries to sign off as a SP but is not registered as a MSP or BSP.
         NotRegistered,
         /// Error thrown when a user tries to sign off as a SP but still has used storage.
@@ -276,6 +287,18 @@ pub mod pallet {
         NoUserId,
         /// Error thrown when trying to get a root from a MSP without passing a Bucket ID
         NoBucketId,
+    }
+
+    /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
+    ///
+    /// This allows us to hold tokens and be able to identify in the future that those held tokens were
+    /// held because of this pallet
+    #[pallet::composite_enum]
+    pub enum HoldReason {
+        /// Deposit that a Storage Provider has to pay to be registered as such
+        StorageProviderDeposit,
+        // TODO: Only for testing, remove this for production
+        AnotherUnrelatedHold,
     }
 
     /// The hooks that this pallet utilizes (TODO: Check this, we might not need any)
@@ -316,7 +339,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             let msp_info = MainStorageProvider {
-                buckets: bounded_vec![],
+                buckets: BoundedVec::default(),
                 total_data,
                 data_used: StorageData::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
