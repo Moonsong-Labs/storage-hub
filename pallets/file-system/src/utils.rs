@@ -21,7 +21,8 @@ use crate::{
 };
 
 macro_rules! expect_or_err {
-    ($optional:expr, $error_msg:expr, $error_type:path) => {
+    // Handle Option type
+    ($optional:expr, $error_msg:expr, $error_type:path) => {{
         match $optional {
             Some(value) => value,
             None => {
@@ -30,11 +31,23 @@ macro_rules! expect_or_err {
 
                 #[allow(unreachable_code)]
                 {
-                    Err($error_type)?
+                    return Err($error_type.into());
                 }
             }
         }
-    };
+    }};
+    // Handle boolean type
+    ($condition:expr, $error_msg:expr, $error_type:path, bool) => {{
+        if !$condition {
+            #[cfg(test)]
+            unreachable!($error_msg);
+
+            #[allow(unreachable_code)]
+            {
+                return Err($error_type.into());
+            }
+        }
+    }};
 }
 
 impl<T> Pallet<T>
@@ -133,10 +146,11 @@ where
             Error::<T>::StorageRequestNotFound
         );
 
-        // Check that the storage request did not reach the required bsps.
-        ensure!(
+        expect_or_err!(
             file_metadata.bsps_confirmed < file_metadata.bsps_required,
-            Error::<T>::StorageRequestBspsRequiredFulfilled
+            "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
+            Error::<T>::StorageRequestBspsRequiredFulfilled,
+            bool
         );
 
         // Check if the BSP is already volunteered for this storage request.
@@ -252,6 +266,7 @@ where
             }
         };
 
+        // TODO: loose couple this with a trait
         // Challenge BSP to force update its storage root to uninclude the file.
         pallet_proofs_dealer::Pallet::<T>::do_challenge(&who, &file_key)?;
 

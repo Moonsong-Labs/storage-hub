@@ -400,12 +400,16 @@ pub mod pallet {
             let start_block = NextStartingBlockToCleanUp::<T>::get();
             let mut block_to_clean = start_block;
 
+            let writes = match T::MaxExpiredStorageRequests::get().checked_add(1) {
+                Some(writes) => writes,
+                None => return Weight::zero(),
+            };
+
             // Total weight used to avoid exceeding the remaining weight.
             // We count one write for the `NextBlockToCleanup` storage item updated at the end.
             let mut total_used_weight = Weight::zero();
 
-            let required_weight_for_iteration =
-                db_weight.reads_writes(1, (T::MaxExpiredStorageRequests::get() + 1).into());
+            let required_weight_for_iteration = db_weight.reads_writes(1, writes.into());
 
             // Iterate over blocks from the start block to the current block,
             // cleaning up storage requests until the remaining weight is insufficient
