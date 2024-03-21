@@ -18,7 +18,7 @@ RUN apt-get update && \
 	useradd -m -u 1337 -U -s /bin/sh -d /storage-hub storage-hub && \
 	mkdir -p /data /storage-hub/.local/share && \
 	chown -R storage-hub:storage-hub /data && \
-	ln -s /data /storage-hub/.local/share/parachain-template-node && \
+	ln -s /data /storage-hub/.local/share/storage-hub-node && \
 	mkdir -p /specs
 
 USER storage-hub
