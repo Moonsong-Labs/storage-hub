@@ -10,6 +10,7 @@ mod weights;
 pub mod xcm_config;
 
 use cumulus_pallet_parachain_system::RelayNumberStrictlyIncreases;
+use pallet_proofs_dealer::{CompactProof, TrieVerifier};
 use polkadot_runtime_common::xcm_sender::NoPriceForMessageDelivery;
 use smallvec::smallvec;
 use sp_api::impl_runtime_apis;
@@ -512,12 +513,23 @@ impl pallet_proofs_dealer::Config for Runtime {
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
     type MerkleHash = Hash;
-    type TrieVerifier = ProofsDealer;
+    type TrieVerifier = ProofTrieVerifier;
     type MaxChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
     type ChallengeHistoryLength = ConstU32<10>;
     type ChallengesQueueLength = ConstU32<10>;
     type CheckpointChallengePeriod = ConstU32<10>;
+}
+
+/// Structure to mock a verifier that returns `true` when `proof` is not empty
+/// and `false` otherwise.
+pub struct ProofTrieVerifier;
+
+/// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
+impl TrieVerifier for ProofTrieVerifier {
+    fn verify_proof(_root: &[u8; 32], _challenges: &[u8; 32], proof: &CompactProof) -> bool {
+        proof.encoded_nodes.len() > 0
+    }
 }
 
 /// Configure the pallet template in pallets/template.

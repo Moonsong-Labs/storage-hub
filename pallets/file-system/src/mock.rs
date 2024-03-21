@@ -4,6 +4,7 @@ use frame_support::{
     weights::{constants::RocksDbWeight, Weight},
 };
 use frame_system as system;
+use pallet_proofs_dealer::{CompactProof, TrieVerifier};
 use sp_core::{ConstU128, ConstU32, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
@@ -117,12 +118,23 @@ impl pallet_proofs_dealer::Config for Test {
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
     type MerkleHash = H256;
-    type TrieVerifier = ProofsDealer;
+    type TrieVerifier = MockVerifier;
     type MaxChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
     type ChallengeHistoryLength = ConstU32<10>;
     type ChallengesQueueLength = ConstU32<10>;
     type CheckpointChallengePeriod = ConstU32<10>;
+}
+
+/// Structure to mock a verifier that returns `true` when `proof` is not empty
+/// and `false` otherwise.
+pub struct MockVerifier;
+
+/// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
+impl TrieVerifier for MockVerifier {
+    fn verify_proof(_root: &[u8; 32], _challenges: &[u8; 32], proof: &CompactProof) -> bool {
+        proof.encoded_nodes.len() > 0
+    }
 }
 
 impl crate::Config for Test {

@@ -84,7 +84,7 @@ pub mod pallet {
             + MaxEncodedLen
             + HasCompact;
 
-        /// Unit representing the size of a file.
+        /// Type representing the storage request bsps size type.
         type StorageRequestBspsRequiredType: Parameter
             + Member
             + MaybeSerializeDeserialize
