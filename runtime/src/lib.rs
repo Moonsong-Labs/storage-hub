@@ -14,7 +14,7 @@ use pallet_proofs_dealer::{CompactProof, TrieVerifier};
 use polkadot_runtime_common::xcm_sender::NoPriceForMessageDelivery;
 use smallvec::smallvec;
 use sp_api::impl_runtime_apis;
-use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
+use sp_core::{crypto::KeyTypeId, Get, OpaqueMetadata};
 use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
     traits::{BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
@@ -47,6 +47,7 @@ use frame_system::{
 use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
+use sp_runtime::AccountId32;
 pub use sp_runtime::{MultiAddress, Perbill, Permill};
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
@@ -508,6 +509,14 @@ impl pallet_storage_providers::Config for Runtime {
     type DepositPerData = ConstU128<2>;
 }
 
+// TODO: remove this and replace with pallet treasury
+pub struct TreasuryAccount;
+impl Get<AccountId32> for TreasuryAccount {
+    fn get() -> AccountId32 {
+        AccountId32::from([0; 32])
+    }
+}
+
 impl pallet_proofs_dealer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
@@ -519,6 +528,8 @@ impl pallet_proofs_dealer::Config for Runtime {
     type ChallengeHistoryLength = ConstU32<10>;
     type ChallengesQueueLength = ConstU32<10>;
     type CheckpointChallengePeriod = ConstU32<10>;
+    type ChallengesFee = ConstU128<1_000_000>;
+    type Treasury = TreasuryAccount;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty

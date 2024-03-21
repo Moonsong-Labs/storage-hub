@@ -5,10 +5,10 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_proofs_dealer::{CompactProof, TrieVerifier};
-use sp_core::{ConstU128, ConstU32, H256};
+use sp_core::{ConstU128, ConstU32, Get, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage,
+    AccountId32, BuildStorage,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -113,6 +113,14 @@ impl pallet_storage_providers::Config for Test {
     type DepositPerData = ConstU128<2>;
 }
 
+// TODO: remove this and replace with pallet treasury
+pub struct TreasuryAccount;
+impl Get<AccountId32> for TreasuryAccount {
+    fn get() -> AccountId32 {
+        AccountId32::from([0; 32])
+    }
+}
+
 impl pallet_proofs_dealer::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
@@ -124,6 +132,8 @@ impl pallet_proofs_dealer::Config for Test {
     type ChallengeHistoryLength = ConstU32<10>;
     type ChallengesQueueLength = ConstU32<10>;
     type CheckpointChallengePeriod = ConstU32<10>;
+    type ChallengesFee = ConstU128<1_000_000>;
+    type Treasury = TreasuryAccount;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty

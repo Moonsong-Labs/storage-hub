@@ -31,7 +31,7 @@ macro_rules! expect_or_err {
 
                 #[allow(unreachable_code)]
                 {
-                    return Err($error_type.into());
+                    Err($error_type)?
                 }
             }
         }
@@ -44,7 +44,7 @@ macro_rules! expect_or_err {
 
             #[allow(unreachable_code)]
             {
-                return Err($error_type.into());
+                Err($error_type)?
             }
         }
     }};
@@ -217,7 +217,7 @@ where
     /// will handle triggering the appropriate event and pending storage request.
     pub(crate) fn do_bsp_stop_storing(
         who: StorageProviderId<T>,
-        file_key: FileKey<T>,
+        _file_key: FileKey<T>,
         location: FileLocation<T>,
         owner: T::AccountId,
         fingerprint: Fingerprint<T>,
@@ -268,7 +268,7 @@ where
 
         // TODO: loose couple this with a trait
         // Challenge BSP to force update its storage root to uninclude the file.
-        pallet_proofs_dealer::Pallet::<T>::do_challenge(&who, &file_key)?;
+        // pallet_proofs_dealer::Pallet::<T>::do_challenge(&who, &file_key)?;
 
         Ok(())
     }
