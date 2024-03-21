@@ -8,12 +8,13 @@ use pallet_proofs_dealer::{CompactProof, TrieVerifier};
 use sp_core::{ConstU128, ConstU32, Get, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
-    AccountId32, BuildStorage,
+    BuildStorage,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
 type Balance = u128;
+type AccountId = u64;
 
 /// Rolls to the desired block. Returns the number of blocks played.
 pub(crate) fn roll_to(n: BlockNumber) -> BlockNumber {
@@ -61,7 +62,7 @@ impl system::Config for Test {
     type Nonce = u64;
     type Hash = H256;
     type Hashing = BlakeTwo256;
-    type AccountId = u64;
+    type AccountId = AccountId;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Block = Block;
     type RuntimeEvent = RuntimeEvent;
@@ -115,9 +116,9 @@ impl pallet_storage_providers::Config for Test {
 
 // TODO: remove this and replace with pallet treasury
 pub struct TreasuryAccount;
-impl Get<AccountId32> for TreasuryAccount {
-    fn get() -> AccountId32 {
-        AccountId32::from([0; 32])
+impl Get<AccountId> for TreasuryAccount {
+    fn get() -> AccountId {
+        1
     }
 }
 
