@@ -38,11 +38,20 @@ pub type MaxSpsChallengedPerBlockFor<T> = <T as crate::Config>::MaxProvidersChal
 /// Syntactic sugar for the ChallengesQueueLength type used in the proofs pallet.
 pub type ChallengesQueueLengthFor<T> = <T as crate::Config>::ChallengesQueueLength;
 
+/// Syntactic sugar for the ChallengesFee type used in the proofs pallet.
+pub type ChallengesFeeFor<T> = <T as crate::Config>::ChallengesFee;
+
+/// Syntactic sugar for the Treasury type used in the proofs pallet.
+pub type TreasuryAccountFor<T> = <T as crate::Config>::Treasury;
+
 /// Syntactic sugar for the Providers type used in the proofs pallet.
 pub type ProvidersPalletFor<T> = <T as crate::Config>::ProvidersPallet;
 
 /// Syntactic sugar for the Provider type used in the proofs pallet.
 pub type ProviderFor<T> = <<T as crate::Config>::ProvidersPallet as ProvidersInterface>::Provider;
+
+/// Syntactic sugar for the type of NativeBalance pallet.
+pub type BalancePalletFor<T> = <T as crate::Config>::NativeBalance;
 
 /// Syntactic sugar for the type of Balance used in the NativeBalances pallet.
 pub type BalanceFor<T> = <<T as crate::Config>::NativeBalance as fungible::Inspect<
