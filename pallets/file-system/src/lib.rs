@@ -140,7 +140,7 @@ pub mod pallet {
     /// A double map of [`storage request`](FileLocation) to [`BSPs`](StorageProviderId) that volunteered to store data.
     ///
     /// Any BSP under a storage request is considered to be a volunteer and can be removed at any time.
-    /// Once a BSP submits a valid proof to the `pallet-proofs-dealer-trie`, the `confirmed` field in [`StorageRequestBsps`] should be set to `true`.
+    /// Once a BSP submits a valid proof to the `pallet-proofs-dealer`, the `confirmed` field in [`StorageRequestBsps`] should be set to `true`.
     ///
     /// When a storage request is expired or removed, the corresponding storage request key in this map should be removed.
     #[pallet::storage]
@@ -177,8 +177,8 @@ pub mod pallet {
     /// A pointer to the starting block to clean up expired storage requests.
     ///
     /// If this block is behind the current block number, the cleanup algorithm in `on_idle` will
-    /// attempt to accelerate this block pointer as close to or up to the current block number if there is
-    /// enough remaining weight to do so.
+    /// attempt to accelerate this block pointer as close to or up to the current block number. This
+    /// will execute provided that there is enough remaining weight to do so.
     #[pallet::storage]
     #[pallet::getter(fn next_starting_block_to_clean_up)]
     pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
@@ -232,7 +232,7 @@ pub mod pallet {
         /// BSP already volunteered to store the given file.
         BspVolunteerFailed,
         /// Number of BSPs required for storage request has been reached.
-        StorageRequestBspsRequiredFullfilled,
+        StorageRequestBspsRequiredFulfilled,
         /// BSP already volunteered to store the given file.
         BspAlreadyVolunteered,
         /// No slot available found in blocks to insert storage request expiration time.
@@ -342,9 +342,10 @@ pub mod pallet {
         ///
         /// In the event when a storage request no longer exists for the data the BSP no longer stores,
         /// it is required that the BSP still has access to the metadata of the initial storage request.
-        /// If they do not, they will at least need the necessary data to reconstruct the bucket ID and
-        /// request the metadata from an MSP. This metadata is necessary since it is needed to reconstruct
-        /// the leaf node key in the storage provider's merkle trie.
+        /// If they do not, they will at least need that metadata to reconstruct the File ID and. Wherever
+        /// the BSP gets the data it needs is up to it, but one example could be the assigned MSP.
+        /// This metadata is necessary since it is needed to reconstruct the leaf node key in the storage
+        /// provider's Merkle Forest.
         #[pallet::call_index(5)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_stop_storing(

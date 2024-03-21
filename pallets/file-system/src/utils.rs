@@ -136,7 +136,7 @@ where
         // Check that the storage request did not reach the required bsps.
         ensure!(
             file_metadata.bsps_confirmed < file_metadata.bsps_required,
-            Error::<T>::StorageRequestBspsRequiredFullfilled
+            Error::<T>::StorageRequestBspsRequiredFulfilled
         );
 
         // Check if the BSP is already volunteered for this storage request.

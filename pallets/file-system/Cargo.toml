@@ -1,6 +1,6 @@
 [package]
 name = "pallet-file-system"
-description = "Pallet exposing storage related actions actors can execute within Storage Hub."
+description = "Pallet exposing storage related actions actors can execute within StorageHub."
 version = "0.1.0"
 homepage = { workspace = true }
 license = { workspace = true }
