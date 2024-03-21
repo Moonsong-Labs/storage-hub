@@ -72,7 +72,7 @@ pub type BalanceOf<T> =
 
 /// BackupStorageProviderId is the type that represents an ID of a Backup Storage Provider, uniquely linked with an AccountId
 pub type BackupStorageProviderId<T> = <T as crate::Config>::HashId;
-/// HashId is the type that represents an ID of a Main Storage Provider, uniquely linked with an AccountId
+/// MainStorageProviderId is the type that represents an ID of a Main Storage Provider, uniquely linked with an AccountId
 pub type MainStorageProviderId<T> = <T as crate::Config>::HashId;
 
 /// MaxMultiAddressSize is the maximum size of the libp2p multiaddress of a Storage Provider in bytes.
@@ -85,7 +85,7 @@ pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
 
 /// MerklePatriciaRoot is the type of the root of a Merkle Patricia Trie, either the root of a BSP or a bucket from an MSP.
 pub type MerklePatriciaRoot<T> = <T as crate::Config>::MerklePatriciaRoot;
-/// MerkleTrieHolderId is the type that identifies the different Merkle Patricia Trie holders (BSPs and buckets).
+/// HashId is the type that uniquely identifies either a Storage Provider (MSP or BSP) or a Bucket.
 pub type HashId<T> = <T as crate::Config>::HashId;
 
 /// StorageData is the type of the unit in which we measure data size. We define its required traits in the
