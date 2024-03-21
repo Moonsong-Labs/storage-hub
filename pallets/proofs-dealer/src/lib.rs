@@ -1,3 +1,4 @@
+// TODO: Remove this attribute.
 #![allow(unused_variables)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -6,11 +7,11 @@
 /// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
 
-// #[cfg(test)]
-// mod mock;
+#[cfg(test)]
+mod mock;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 // #[cfg(feature = "runtime-benchmarks")]
 // mod benchmarking;
@@ -52,8 +53,9 @@ pub mod pallet {
 
         /// Type to access the Balances Pallet.
         type NativeBalance: fungible::Inspect<Self::AccountId>
+            + fungible::Mutate<Self::AccountId>
             + fungible::hold::Inspect<Self::AccountId>
-            + fungible::freeze::Inspect<Self::AccountId>;
+            + fungible::hold::Mutate<Self::AccountId>;
 
         /// The type for the hashes of Merkle Patricia Forest nodes.
         /// Applies to file keys (leaf nodes) and root hashes (root nodes).
@@ -103,6 +105,19 @@ pub mod pallet {
         /// `submit_proof` extrinsic.
         #[pallet::constant]
         type CheckpointChallengePeriod: Get<u32>;
+
+        /// The fee charged for submitting a challenge.
+        /// This fee goes to the Treasury, and is used to prevent spam. Registered Providers are
+        /// exempt from this fee.
+        #[pallet::constant]
+        type ChallengesFee: Get<BalanceFor<Self>>;
+
+        /// The Treasury AccountId.
+        /// The account to which:
+        /// - The fees for submitting a challenge are transferred.
+        /// - The slashed funds are transferred.
+        #[pallet::constant]
+        type Treasury: Get<Self::AccountId>;
     }
 
     #[pallet::pallet]
@@ -188,16 +203,23 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// A manual challenge was submitted.
-        /// [who, file_key_challenged]
-        NewChallenge(AccountIdFor<T>, FileKeyFor<T>),
+        NewChallenge {
+            who: AccountIdFor<T>,
+            file_key_challenged: FileKeyFor<T>,
+        },
 
         /// A proof was rejected.
-        /// [provider, proof, reason]
-        ProofRejected(ProviderFor<T>, CompactProof, ProofRejectionReason),
+        ProofRejected {
+            provider: ProviderFor<T>,
+            proof: CompactProof,
+            reason: ProofRejectionReason,
+        },
 
         /// A proof was accepted.
-        /// [provider, proof]
-        ProofAccepted(ProviderFor<T>, CompactProof),
+        ProofAccepted {
+            provider: ProviderFor<T>,
+            proof: CompactProof,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -209,6 +231,9 @@ pub mod pallet {
 
         /// The proof submitter is not a registered Provider.
         NotProvider,
+
+        /// The fee for submitting a challenge could not be charged.
+        FeeChargeFailed,
     }
 
     #[pallet::call]
@@ -233,7 +258,10 @@ pub mod pallet {
             Self::do_challenge(&who, &file_key)?;
 
             // Emit event.
-            Self::deposit_event(Event::NewChallenge(who, file_key));
+            Self::deposit_event(Event::NewChallenge {
+                who,
+                file_key_challenged: file_key,
+            });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -286,7 +314,7 @@ pub mod pallet {
             Self::do_submit_proof(&provider, &proof)?;
 
             // TODO: Emit correct event.
-            Self::deposit_event(Event::ProofAccepted(provider, proof));
+            Self::deposit_event(Event::ProofAccepted { provider, proof });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())

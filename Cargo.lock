@@ -6708,6 +6708,8 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "pallet-balances",
+ "pallet-storage-providers",
  "parity-scale-codec",
  "scale-info",
  "serde",
