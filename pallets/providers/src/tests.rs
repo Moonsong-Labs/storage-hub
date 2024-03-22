@@ -4,7 +4,10 @@ use crate::{
     Error, Event,
 };
 use frame_support::pallet_prelude::Weight;
-use frame_support::traits::{fungible::InspectHold, Get, OnFinalize, OnIdle, OnInitialize};
+use frame_support::traits::{
+    fungible::{InspectHold, Mutate},
+    Get, OnFinalize, OnIdle, OnInitialize,
+};
 use frame_support::BoundedVec;
 use frame_support::{assert_noop, assert_ok};
 use storage_hub_traits::ProvidersInterface;
@@ -14,9 +17,12 @@ use crate::types::{BalanceOf, MaxMultiAddressAmount, MultiAddress};
 type NativeBalance = <Test as crate::Config>::NativeBalance;
 type AccountId = <Test as frame_system::Config>::AccountId;
 
+// Pallet constants:
 type SpMinDeposit = <Test as crate::Config>::SpMinDeposit;
 type SpMinCapacity = <Test as crate::Config>::SpMinCapacity;
 type DepositPerData = <Test as crate::Config>::DepositPerData;
+type MaxMsps = <Test as crate::Config>::MaxMsps;
+type MaxBsps = <Test as crate::Config>::MaxBsps;
 
 /// Helper functions:
 ///
@@ -254,6 +260,89 @@ mod sign_up {
                     multiaddresses.clone(),
                 ),
                 Error::<Test>::AlreadyRegistered
+            );
+        });
+    }
+
+    #[test]
+    fn msp_fails_when_max_amount_of_msps_reached() {
+        ExtBuilder::build().execute_with(|| {
+            // Initialize variables:
+            let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+                BoundedVec::new();
+            let value_prop: ValueProposition<Test> = ValueProposition {
+                identifier: ValuePropId::<Test>::default(),
+                data_limit: 10,
+                protocols: BoundedVec::new(),
+            };
+            let storage_amount: StorageData<Test> = 100;
+
+            // Get the Account Id of Alice
+            let alice: AccountId = 0;
+
+            // Sign up the maximum amount of Main Storage Providers
+            for i in 1..<MaxMsps as Get<u32>>::get() + 1 {
+                let account_id = i as AccountId;
+                let account_new_balance = 1_000_000_000_000_000;
+                assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+                    &account_id,
+                    account_new_balance
+                ));
+                assert_ok!(StorageProviders::msp_sign_up(
+                    RuntimeOrigin::signed(account_id),
+                    storage_amount,
+                    multiaddresses.clone(),
+                    value_prop.clone()
+                ));
+            }
+
+            // Try to sign up Alice as a Main Storage Provider
+            assert_noop!(
+                StorageProviders::msp_sign_up(
+                    RuntimeOrigin::signed(alice),
+                    storage_amount,
+                    multiaddresses.clone(),
+                    value_prop.clone()
+                ),
+                Error::<Test>::MaxMspsReached
+            );
+        });
+    }
+
+    #[test]
+    fn bsp_fails_when_max_amount_of_bsps_reached() {
+        ExtBuilder::build().execute_with(|| {
+            // Initialize variables:
+            let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+                BoundedVec::new();
+            let storage_amount: StorageData<Test> = 100;
+
+            // Get the Account Id of Alice
+            let alice: AccountId = 0;
+
+            // Sign up the maximum amount of Main Storage Providers
+            for i in 1..<MaxBsps as Get<u32>>::get() + 1 {
+                let account_id = i as AccountId;
+                let account_new_balance = 1_000_000_000_000_000;
+                assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+                    &account_id,
+                    account_new_balance
+                ));
+                assert_ok!(StorageProviders::bsp_sign_up(
+                    RuntimeOrigin::signed(account_id),
+                    storage_amount,
+                    multiaddresses.clone(),
+                ));
+            }
+
+            // Try to sign up Alice as a Main Storage Provider
+            assert_noop!(
+                StorageProviders::bsp_sign_up(
+                    RuntimeOrigin::signed(alice),
+                    storage_amount,
+                    multiaddresses.clone(),
+                ),
+                Error::<Test>::MaxBspsReached
             );
         });
     }
