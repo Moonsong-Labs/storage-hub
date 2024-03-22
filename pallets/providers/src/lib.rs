@@ -315,8 +315,7 @@ pub mod pallet {
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that, by registering this new MSP, we would not go over the MaxMsps limit
         /// 3. Check that the signer is not already registered as either a MSP or BSP
-        /// 4. Check that the multiaddress is valid (size and any other relevant checks)
-        /// 4b. Any value proposition checks??? todo!("ask this")
+        /// 4. Check that the multiaddress is valid
         /// 5. Check that the data to be stored is greater than the minimum required by the runtime. todo!("Ask if this applies to MSPs")
         /// 6. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
         /// 7. Check that the signer has enough funds to pay the deposit
@@ -366,7 +365,7 @@ pub mod pallet {
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that, by adding this new BSP, we won't exceed the max amount of BSPs allowed
         /// 3. Check that the signer is not already registered as either a MSP or BSP
-        /// 4. Check that the multiaddress is valid (size and any other relevant checks)
+        /// 4. Check that the multiaddress is valid
         /// 5. Check that the data to be stored is greater than the minimum required by the runtime
         /// 6. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
         /// 7. Check that the signer has enough funds to pay the deposit

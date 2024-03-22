@@ -3,7 +3,7 @@ use codec::Encode;
 use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::sp_runtime::{
-    traits::{CheckedAdd, Hash, One},
+    traits::{CheckedAdd, CheckedMul, CheckedSub, Hash, One},
     ArithmeticError, DispatchError,
 };
 use frame_support::traits::{
@@ -62,21 +62,30 @@ where
             Error::<T>::StorageTooLow
         );
 
-        // TODO: Any value proposition checks?
-
         // Calculate how much deposit will the signer have to pay to register with this amount of data
+        let capacity_over_minimum = msp_info
+            .capacity
+            .checked_sub(&T::SpMinCapacity::get())
+            .ok_or(Error::<T>::StorageTooLow)?;
+        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
+            .checked_mul(&capacity_over_minimum.into())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
         let deposit = T::SpMinDeposit::get()
-            + T::DepositPerData::get() * (msp_info.capacity - T::SpMinCapacity::get()).into();
+            .checked_add(&deposit_for_capacity_over_minimum)
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
         // Check if the user has enough balance to pay the deposit
         let user_balance =
             T::NativeBalance::reducible_balance(who, Preservation::Preserve, Fortitude::Polite);
         ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
+
         // Check if we can hold the deposit from the user
         ensure!(
             T::NativeBalance::can_hold(&HoldReason::StorageProviderDeposit.into(), who, deposit),
             // TODO: Change this error to something more descriptive
             Error::<T>::NotEnoughBalance
         );
+
         // Hold the deposit from the user
         T::NativeBalance::hold(&HoldReason::StorageProviderDeposit.into(), who, deposit)?;
 
@@ -155,18 +164,29 @@ where
         );
 
         // Calculate how much deposit will the signer have to pay to register with this amount of data
+        let capacity_over_minimum = bsp_info
+            .capacity
+            .checked_sub(&T::SpMinCapacity::get())
+            .ok_or(Error::<T>::StorageTooLow)?;
+        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
+            .checked_mul(&capacity_over_minimum.into())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
         let deposit = T::SpMinDeposit::get()
-            + T::DepositPerData::get() * (bsp_info.capacity - T::SpMinCapacity::get()).into();
+            .checked_add(&deposit_for_capacity_over_minimum)
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
         // Check if the user has enough balance to pay the deposit
         let user_balance =
             T::NativeBalance::reducible_balance(who, Preservation::Preserve, Fortitude::Polite);
         ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
+
         // Check if we can hold the deposit from the user
         ensure!(
             T::NativeBalance::can_hold(&HoldReason::StorageProviderDeposit.into(), who, deposit),
             // TODO: Change this error to something more descriptive
             Error::<T>::NotEnoughBalance
         );
+
         // Hold the deposit from the user
         T::NativeBalance::hold(&HoldReason::StorageProviderDeposit.into(), who, deposit)?;
 
