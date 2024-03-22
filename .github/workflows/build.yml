@@ -1,0 +1,96 @@
+name: Build and Test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: set to pull_request number to execute on external pr
+        required: false
+
+jobs:
+  build_image:
+    name: "Build node image"
+    runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          components: rust-src
+          target: wasm32-unknown-unknown
+      - uses: rui314/setup-mold@v1
+      - uses: oven-sh/setup-bun@v1
+      - uses: arduino/setup-protoc@v3
+      - name: Build All
+        run: cargo build --release
+      - name: Check Built By Mold
+        run: readelf -p .comment target/release/storage-hub-node
+      - name: Prepare artefacts
+        run: |
+          mkdir -p runtimes
+          mkdir -p build
+          cp target/release/storage-hub-node build/
+          cp target/release/wbuild/storage*/storage*_runtime.compact.compressed.wasm runtimes/
+      - name: Create Docker image file
+        run: |
+          cd test
+          bun docker:build:sh-node
+          bun docker:save:sh-node
+      - name: Upload image
+        uses: actions/upload-artifact@v4
+        with:
+          name: sh-node-image
+          path: test/storage-hub-node.tar
+
+  zombie_test:
+    needs: build_image
+    name: "Test Simple Network"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sh-node-image
+          path: test
+      - name: Load Docker image
+        run: |
+          docker load -i storage-hub-node.tar
+      - name: Start local k8 cluster
+        uses: medyagh/setup-minikube@latest
+        with:
+          cache: true
+          driver: docker
+          cpus: 4
+          memory: 12000
+      - name: Setup Docker Registry
+        run: |
+          bun docker:registry:start
+
+          # Wait for registry to start
+          sleep 5 
+
+          bun docker:registry:push
+          docker images
+
+      - name: Setup Zombienet
+        run: |
+          wget https://github.com/paritytech/zombienet/releases/download/v1.3.95/zombienet-linux-x64 -O zombienet
+          chmod +x zombienet
+          mkdir -p tmp
+          mv zombienet tmp/
+      - name: Run Zombienet Test!
+        run: tmp/zombienet test configs/simple.zndsl
