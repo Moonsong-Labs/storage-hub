@@ -17,7 +17,7 @@ use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, Get, OpaqueMetadata};
 use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
-    traits::{BlakeTwo256, Block as BlockT, IdentifyAccount, Keccak256, Verify},
+    traits::{BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
     transaction_validity::{TransactionSource, TransactionValidity},
     ApplyExtrinsicResult, MultiSignature,
 };
@@ -495,7 +495,6 @@ impl pallet_storage_providers::Config for Runtime {
     type NativeBalance = Balances;
     type StorageData = u32;
     type SpCount = u32;
-    type HashId = Hash;
     type MerklePatriciaRoot = Hash;
     type ValuePropId = Hash;
     type MaxMultiAddressSize = ConstU32<100>;
@@ -507,7 +506,6 @@ impl pallet_storage_providers::Config for Runtime {
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
-    type Hashing = Keccak256;
     type RuntimeHoldReason = RuntimeHoldReason;
     // TODO: type ProvidersRandomness = RandomnessFromOneEpochAgo<Runtime>;
 }

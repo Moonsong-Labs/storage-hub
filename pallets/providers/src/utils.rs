@@ -97,13 +97,13 @@ where
         let msp_id: MainStorageProviderId<T> =
             <T as frame_system::Config>::Hashing::hash(who.encode().as_ref());
 
-        // We then insert the MainStorageProviderId into the mapping
+        // Insert the MainStorageProviderId into the mapping
         AccountIdToMainStorageProviderId::<T>::insert(who, msp_id);
 
-        // After that, we save the MainStorageProvider information in storage
+        // Save the MainStorageProvider information in storage
         MainStorageProviders::<T>::insert(&msp_id, msp_info);
 
-        // And we increment the counter of Main Storage Providers registered
+        // Increment the counter of Main Storage Providers registered
         MspCount::<T>::set(new_amount_of_msps);
         Ok(())
     }
@@ -189,13 +189,13 @@ where
         let bsp_id: BackupStorageProviderId<T> =
             <T as frame_system::Config>::Hashing::hash(who.encode().as_ref());
 
-        // We then insert the BackupStorageProviderId into the mapping
+        // Insert the BackupStorageProviderId into the mapping
         AccountIdToBackupStorageProviderId::<T>::insert(who, bsp_id);
 
-        // After that, we save the BackupStorageProvider information in storage
+        // Save the BackupStorageProvider information in storage
         BackupStorageProviders::<T>::insert(&bsp_id, bsp_info.clone());
 
-        // We increment the total capacity of the network (which is the sum of all BSPs capacities)
+        // Increment the total capacity of the network (which is the sum of all BSPs capacities)
         TotalBspsCapacity::<T>::mutate(|n| {
             let new_total_bsp_capacity = n.checked_add(&bsp_info.capacity);
             match new_total_bsp_capacity {
@@ -207,7 +207,7 @@ where
             }
         })?;
 
-        // And we increment the counter of Backup Storage Providers registered
+        // Increment the counter of Backup Storage Providers registered
         BspCount::<T>::set(new_amount_of_bsps);
         Ok(())
     }
