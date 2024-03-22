@@ -316,13 +316,10 @@ pub mod pallet {
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             value_prop: ValueProposition<T>,
         ) -> DispatchResultWithPostInfo {
-            // TODO: Logic to sign up an MSP
-
             // Check that the extrinsic was signed and get the signer.
-            // This function will return an error if the extrinsic is not signed.
-            // https://docs.substrate.io/v3/runtime/origins
             let who = ensure_signed(origin)?;
 
+            // Set up a structure with the information of the new MSP
             let msp_info = MainStorageProvider {
                 buckets: BoundedVec::default(),
                 capacity,
@@ -330,16 +327,18 @@ pub mod pallet {
                 multiaddresses: multiaddresses.clone(),
                 value_prop: value_prop.clone(),
             };
-            // Update storage.
+
+            // Sign up the new MSP (if possible), updating storage
             Self::do_msp_sign_up(&who, &msp_info)?;
 
-            // Emit an event.
+            // Emit the corresponding event
             Self::deposit_event(Event::<T>::MspSignUpSuccess {
                 who,
                 multiaddresses,
                 capacity,
                 value_prop,
             });
+
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
         }
@@ -367,13 +366,10 @@ pub mod pallet {
             capacity: StorageData<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
         ) -> DispatchResultWithPostInfo {
-            // TODO: Logic to sign up a BSP
-
             // Check that the extrinsic was signed and get the signer.
-            // This function will return an error if the extrinsic is not signed.
-            // https://docs.substrate.io/v3/runtime/origins
             let who = ensure_signed(origin)?;
 
+            // Set up a structure with the information of the new BSP
             let bsp_info = BackupStorageProvider {
                 capacity,
                 data_used: StorageData::<T>::default(),
@@ -381,10 +377,10 @@ pub mod pallet {
                 root: MerklePatriciaRoot::<T>::default(),
             };
 
-            // Update storage.
+            // Sign up the new BSP (if possible), updating storage
             Self::do_bsp_sign_up(&who, bsp_info)?;
 
-            // Emit an event.
+            // Emit the corresponding event
             Self::deposit_event(Event::<T>::BspSignUpSuccess {
                 who,
                 multiaddresses,
