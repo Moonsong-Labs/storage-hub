@@ -23,9 +23,7 @@ pub mod pallet {
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
-        sp_runtime::traits::{
-            AtLeast32BitUnsigned, CheckEqual, Hash, MaybeDisplay, One, SimpleBitOps,
-        },
+        sp_runtime::traits::{AtLeast32BitUnsigned, CheckEqual, Hash, MaybeDisplay, SimpleBitOps},
         traits::fungible::*,
         Blake2_128Concat,
     };
@@ -222,7 +220,7 @@ pub mod pallet {
     /// The total amount of storage capacity all BSPs have. Remember redundancy!
     #[pallet::storage]
     #[pallet::getter(fn total_bsps_capacity)] // TODO: remove this and add an explicit getter
-    pub type TotalBspsCapacity<T: Config> = StorageValue<_, StorageData<T>>;
+    pub type TotalBspsCapacity<T: Config> = StorageValue<_, StorageData<T>, ValueQuery>;
 
     // Events & Errors:
 
@@ -321,7 +319,7 @@ pub mod pallet {
         /// 7. Check that the signer has enough funds to pay the deposit
         /// 8. Hold the deposit from the signer
         /// 9. Update the MSP storage to add the signer as an MSP
-        /// 10. Increment the storage that holds total amount of SPs currently in the system
+        /// 10. Increment the storage that holds total amount of MSPs currently in the system
         /// 11. Emit an event confirming that the registration of the MSP has been successful
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
@@ -373,7 +371,7 @@ pub mod pallet {
         /// 9. Update the BSP storage to add the signer as an BSP
         /// 10. Update the total capacity of all BSPs, adding the new capacity (redundancy is factored in the capacity used)
         /// 11. Add this BSP to the vector of BSPs to draw from for proofs
-        /// 12. Increment the storage that holds total amount of SPs and BSPs currently in the system
+        /// 12. Increment the storage that holds total amount of BSPs currently in the system
         /// 13. Emit an event confirming that the registration of the BSP has been successful
         #[pallet::call_index(1)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
@@ -389,20 +387,22 @@ pub mod pallet {
             // https://docs.substrate.io/v3/runtime/origins
             let who = ensure_signed(origin)?;
 
-            let new_bsp_amount = BspCount::<T>::get() + T::SpCount::one();
-            ensure!(
-                new_bsp_amount <= T::MaxBsps::get(),
-                Error::<T>::MaxBspsReached
-            );
-
             let bsp_info = BackupStorageProvider {
                 total_data,
                 data_used: StorageData::<T>::default(),
-                multiaddresses,
+                multiaddresses: multiaddresses.clone(),
                 root: MerklePatriciaRoot::<T>::default(),
             };
+
             // Update storage.
             Self::do_bsp_sign_up(&who, bsp_info)?;
+
+            // Emit an event.
+            Self::deposit_event(Event::<T>::BspSignUpSuccess {
+                who,
+                multiaddresses,
+                total_data,
+            });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
