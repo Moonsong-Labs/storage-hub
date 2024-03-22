@@ -28,9 +28,6 @@ jobs:
           components: rust-src
           target: wasm32-unknown-unknown
       - uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
       - uses: actions/cache@v4
         with:
           path: |
