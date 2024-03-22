@@ -109,7 +109,7 @@ impl crate::Config for Test {
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type SpMinDeposit = ConstU128<10>;
-    type SpMinCapacity = ConstU32<1>;
+    type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
     type ProvidersRandomness = RandomnessFromOneEpochAgo<Test>;
 }

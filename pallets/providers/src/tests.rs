@@ -168,7 +168,7 @@ mod sign_up {
     }
 
     #[test]
-    fn msp_and_bsp_sign_up_fails_when_already_registered_as_msp() {
+    fn msp_and_bsp_sign_up_fail_when_already_registered_as_msp() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
             let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
@@ -217,7 +217,7 @@ mod sign_up {
     }
 
     #[test]
-    fn msp_and_bsp_sign_up_fails_when_already_registered_as_bsp() {
+    fn msp_and_bsp_sign_up_fail_when_already_registered_as_bsp() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
             let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
@@ -265,7 +265,7 @@ mod sign_up {
     }
 
     #[test]
-    fn msp_fails_when_max_amount_of_msps_reached() {
+    fn msp_sign_up_fails_when_max_amount_of_msps_reached() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
             let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
@@ -310,7 +310,7 @@ mod sign_up {
     }
 
     #[test]
-    fn bsp_fails_when_max_amount_of_bsps_reached() {
+    fn bsp_sign_up_fails_when_max_amount_of_bsps_reached() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
             let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
@@ -343,6 +343,45 @@ mod sign_up {
                     multiaddresses.clone(),
                 ),
                 Error::<Test>::MaxBspsReached
+            );
+        });
+    }
+
+    #[test]
+    fn msp_and_bsp_sign_up_fail_when_under_min_capacity() {
+        ExtBuilder::build().execute_with(|| {
+            // Initialize variables:
+            let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+                BoundedVec::new();
+            let value_prop: ValueProposition<Test> = ValueProposition {
+                identifier: ValuePropId::<Test>::default(),
+                data_limit: 10,
+                protocols: BoundedVec::new(),
+            };
+            let storage_amount: StorageData<Test> = 1;
+
+            // Get the Account Id of Alice
+            let alice: AccountId = 0;
+
+            // Try to sign up Alice as a Main Storage Provider with less than the minimum capacity
+            assert_noop!(
+                StorageProviders::msp_sign_up(
+                    RuntimeOrigin::signed(alice),
+                    storage_amount,
+                    multiaddresses.clone(),
+                    value_prop.clone()
+                ),
+                Error::<Test>::StorageTooLow
+            );
+
+            // Try to sign up Alice as a Backup Storage Provider with less than the minimum capacity
+            assert_noop!(
+                StorageProviders::bsp_sign_up(
+                    RuntimeOrigin::signed(alice),
+                    storage_amount,
+                    multiaddresses.clone(),
+                ),
+                Error::<Test>::StorageTooLow
             );
         });
     }
