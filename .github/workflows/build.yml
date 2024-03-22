@@ -37,7 +37,7 @@ jobs:
       - uses: oven-sh/setup-bun@v1
       - uses: arduino/setup-protoc@v3
       - name: Build All
-        run: cargo build --release --incremental
+        run: cargo build --release
       - name: Check Built By Mold
         run: readelf -p .comment target/release/storage-hub-node
       - name: Prepare artefacts
