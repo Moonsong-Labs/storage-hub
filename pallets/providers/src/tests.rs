@@ -168,7 +168,7 @@ mod sign_up {
     }
 
     #[test]
-    fn msp_and_bsp_sign_up_fail_when_already_registered_as_msp() {
+    fn msp_and_bsp_sign_up_fails_when_already_registered_as_msp() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
             let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
@@ -217,7 +217,7 @@ mod sign_up {
     }
 
     #[test]
-    fn msp_and_bsp_sign_up_fail_when_already_registered_as_bsp() {
+    fn msp_and_bsp_sign_up_fails_when_already_registered_as_bsp() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
             let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
@@ -348,7 +348,7 @@ mod sign_up {
     }
 
     #[test]
-    fn msp_and_bsp_sign_up_fail_when_under_min_capacity() {
+    fn msp_and_bsp_sign_up_fails_when_under_min_capacity() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
             let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
@@ -382,6 +382,45 @@ mod sign_up {
                     multiaddresses.clone(),
                 ),
                 Error::<Test>::StorageTooLow
+            );
+        });
+    }
+
+    #[test]
+    fn msp_and_bsp_sign_up_fails_when_under_needed_balance() {
+        ExtBuilder::build().execute_with(|| {
+            // Initialize variables:
+            let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+                BoundedVec::new();
+            let value_prop: ValueProposition<Test> = ValueProposition {
+                identifier: ValuePropId::<Test>::default(),
+                data_limit: 10,
+                protocols: BoundedVec::new(),
+            };
+            let storage_amount: StorageData<Test> = 100;
+
+            // Get the Account Id of Helen (who has no balance)
+            let helen: AccountId = 7;
+
+            // Try to sign up Helen as a Main Storage Provider
+            assert_noop!(
+                StorageProviders::msp_sign_up(
+                    RuntimeOrigin::signed(helen),
+                    storage_amount,
+                    multiaddresses.clone(),
+                    value_prop.clone()
+                ),
+                Error::<Test>::NotEnoughBalance
+            );
+
+            // Try to sign up Helen as a Backup Storage Provider
+            assert_noop!(
+                StorageProviders::bsp_sign_up(
+                    RuntimeOrigin::signed(helen),
+                    storage_amount,
+                    multiaddresses.clone(),
+                ),
+                Error::<Test>::NotEnoughBalance
             );
         });
     }
