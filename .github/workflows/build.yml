@@ -15,6 +15,10 @@ jobs:
   build_image:
     name: "Build node image"
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v4
       - name: Run sccache-cache
@@ -56,6 +60,9 @@ jobs:
         with:
           name: sh-node-image
           path: test/storage-hub-node.tar
+      - name: Run sccache stat for check
+        shell: bash
+        run: ${SCCACHE_PATH} --show-stats
 
   zombie_test:
     needs: build_image
@@ -85,13 +92,13 @@ jobs:
       - name: Setup Docker Registry
         run: |
           bun docker:registry:start
-          
+
           # Wait for registry to start
           sleep 5 
 
           bun docker:registry:push
           docker images
-          
+
       - name: Setup Zombienet
         run: |
           wget https://github.com/paritytech/zombienet/releases/download/v1.3.95/zombienet-linux-x64 -O zombienet
