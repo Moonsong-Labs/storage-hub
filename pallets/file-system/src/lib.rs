@@ -402,6 +402,8 @@ pub mod pallet {
 
             let writes = match T::MaxExpiredStorageRequests::get().checked_add(1) {
                 Some(writes) => writes,
+                // This should never happen. It would mean that MaxExpiredStorageRequests is u32::MAX,
+                // which is an irrational number to set as a limit.
                 None => return Weight::zero(),
             };
 
