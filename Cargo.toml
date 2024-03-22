@@ -21,8 +21,30 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
+serde = { version = "1.0.130" }
+codec = { package = "parity-scale-codec", version = "3.0.0", features = [
+    "derive",
+], default-features = false }
+scale-info = { version = "2.10.0", default-features = false, features = [
+    "derive",
+] }
+
 storage-hub-traits = { path = "support/traits", default-features = false }
 
+# Substrate
+frame-benchmarking = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
+frame-support = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
+frame-system = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
+
+sp-core = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
+sp-io = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
+sp-runtime = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
+sp-std = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
+sp-trie = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
+
+pallet-balances = { version = "4.0.0-dev", git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0" }
+
+# Local Pallets
 pallet-storage-providers = { path = "pallets/providers", default-features = false }
 pallet-file-system = { path = "pallets/file-system", default-features = false }
 pallet-proofs-dealer = { path = "pallets/proofs-dealer", default-features = false }
