@@ -6954,7 +6954,6 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "multiaddr",
  "pallet-balances",
  "parity-scale-codec",
  "scale-info",

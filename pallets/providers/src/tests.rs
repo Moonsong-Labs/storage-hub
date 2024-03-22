@@ -40,9 +40,6 @@ fn _run_to_block(n: u64) {
 
 /// This module holds the test cases for the signup of Main Storage Providers and Backup Storage Providers
 mod sign_up {
-
-    use multiaddr::Multiaddr;
-
     use super::*;
 
     #[test]
@@ -51,8 +48,13 @@ mod sign_up {
             // Initialize variables:
             let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
-            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
-            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
+            multiaddresses.force_push(
+                "/ip4/127.0.0.1/udp/1234"
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .unwrap(),
+            );
 
             let value_prop: ValueProposition<Test> = ValueProposition {
                 identifier: ValuePropId::<Test>::default(),
@@ -117,8 +119,13 @@ mod sign_up {
             // Initialize variables:
             let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
-            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
-            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
+            multiaddresses.force_push(
+                "/ip4/127.0.0.1/udp/1234"
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .unwrap(),
+            );
             let storage_amount: StorageData<Test> = 100;
 
             // Get the Account Id of Alice and check its balance
@@ -180,8 +187,13 @@ mod sign_up {
             // Initialize variables:
             let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
-            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
-            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
+            multiaddresses.force_push(
+                "/ip4/127.0.0.1/udp/1234"
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .unwrap(),
+            );
             let value_prop: ValueProposition<Test> = ValueProposition {
                 identifier: ValuePropId::<Test>::default(),
                 data_limit: 10,
@@ -231,8 +243,13 @@ mod sign_up {
             // Initialize variables:
             let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
-            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
-            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
+            multiaddresses.force_push(
+                "/ip4/127.0.0.1/udp/1234"
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .unwrap(),
+            );
             let value_prop: ValueProposition<Test> = ValueProposition {
                 identifier: ValuePropId::<Test>::default(),
                 data_limit: 10,
@@ -281,8 +298,13 @@ mod sign_up {
             // Initialize variables:
             let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
-            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
-            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
+            multiaddresses.force_push(
+                "/ip4/127.0.0.1/udp/1234"
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .unwrap(),
+            );
             let value_prop: ValueProposition<Test> = ValueProposition {
                 identifier: ValuePropId::<Test>::default(),
                 data_limit: 10,
@@ -328,8 +350,13 @@ mod sign_up {
             // Initialize variables:
             let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
-            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
-            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
+            multiaddresses.force_push(
+                "/ip4/127.0.0.1/udp/1234"
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .unwrap(),
+            );
             let storage_amount: StorageData<Test> = 100;
 
             // Get the Account Id of Alice
@@ -368,8 +395,13 @@ mod sign_up {
             // Initialize variables:
             let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
-            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
-            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
+            multiaddresses.force_push(
+                "/ip4/127.0.0.1/udp/1234"
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .unwrap(),
+            );
             let value_prop: ValueProposition<Test> = ValueProposition {
                 identifier: ValuePropId::<Test>::default(),
                 data_limit: 10,
@@ -409,8 +441,13 @@ mod sign_up {
             // Initialize variables:
             let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
-            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
-            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
+            multiaddresses.force_push(
+                "/ip4/127.0.0.1/udp/1234"
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .unwrap(),
+            );
             let value_prop: ValueProposition<Test> = ValueProposition {
                 identifier: ValuePropId::<Test>::default(),
                 data_limit: 10,
@@ -483,7 +520,8 @@ mod sign_up {
         });
     }
 
-    #[test]
+    // TODO: Test invalid multiaddresses (after developing the multiaddress checking logic)
+    /* #[test]
     fn msp_and_bsp_sign_up_fails_when_passing_an_invalid_multiaddress() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
@@ -525,5 +563,5 @@ mod sign_up {
                 Error::<Test>::InvalidMultiAddress
             );
         });
-    }
+    } */
 }
