@@ -21,11 +21,11 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-serde = { version = "1.0.130" }
+serde = { version = "1.0.197" }
 codec = { package = "parity-scale-codec", version = "3.0.0", features = [
     "derive",
 ], default-features = false }
-scale-info = { version = "2.10.0", default-features = false, features = [
+scale-info = { version = "2.11.0", default-features = false, features = [
     "derive",
 ] }
 
