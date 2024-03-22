@@ -92,7 +92,7 @@ mod sign_up {
                 Event::<Test>::MspSignUpSuccess {
                     who: alice,
                     multiaddresses,
-                    total_data: storage_amount,
+                    capacity: storage_amount,
                     value_prop,
                 }
                 .into(),
@@ -154,7 +154,7 @@ mod sign_up {
                 Event::<Test>::BspSignUpSuccess {
                     who: alice,
                     multiaddresses,
-                    total_data: storage_amount,
+                    capacity: storage_amount,
                 }
                 .into(),
             );

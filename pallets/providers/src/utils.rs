@@ -42,7 +42,7 @@ where
 
         // Check that the data to be stored is bigger than the minimum required by the runtime
         ensure!(
-            msp_info.total_data >= T::SpMinCapacity::get(),
+            msp_info.capacity >= T::SpMinCapacity::get(),
             Error::<T>::StorageTooLow
         );
 
@@ -50,7 +50,7 @@ where
 
         // Calculate how much deposit will the signer have to pay to register with this amount of data
         let deposit = T::SpMinDeposit::get()
-            + T::DepositPerData::get() * (msp_info.total_data - T::SpMinCapacity::get()).into();
+            + T::DepositPerData::get() * (msp_info.capacity - T::SpMinCapacity::get()).into();
         // Check if the user has enough balance to pay the deposit
         let user_balance =
             T::NativeBalance::reducible_balance(who, Preservation::Preserve, Fortitude::Polite);
@@ -120,13 +120,13 @@ where
 
         // Check that the data to be stored is bigger than the minimum required by the runtime
         ensure!(
-            bsp_info.total_data >= T::SpMinCapacity::get(),
+            bsp_info.capacity >= T::SpMinCapacity::get(),
             Error::<T>::StorageTooLow
         );
 
         // Calculate how much deposit will the signer have to pay to register with this amount of data
         let deposit = T::SpMinDeposit::get()
-            + T::DepositPerData::get() * (bsp_info.total_data - T::SpMinCapacity::get()).into();
+            + T::DepositPerData::get() * (bsp_info.capacity - T::SpMinCapacity::get()).into();
         // Check if the user has enough balance to pay the deposit
         let user_balance =
             T::NativeBalance::reducible_balance(who, Preservation::Preserve, Fortitude::Polite);
@@ -159,7 +159,7 @@ where
 
         // We increment the total capacity of the network (which is the sum of all BSPs capacities)
         TotalBspsCapacity::<T>::mutate(|n| {
-            let new_total_bsp_capacity = n.checked_add(&bsp_info.total_data);
+            let new_total_bsp_capacity = n.checked_add(&bsp_info.capacity);
             match new_total_bsp_capacity {
                 Some(new_total_bsp_capacity) => {
                     *n = new_total_bsp_capacity;
@@ -196,7 +196,7 @@ where
 impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
     fn from(msp: MainStorageProvider<T>) -> Self {
         BackupStorageProvider {
-            total_data: msp.total_data,
+            capacity: msp.capacity,
             data_used: msp.data_used,
             multiaddresses: msp.multiaddresses,
             root: MerklePatriciaRoot::<T>::default(),

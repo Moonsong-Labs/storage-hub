@@ -233,7 +233,7 @@ pub mod pallet {
         MspSignUpSuccess {
             who: T::AccountId,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
-            total_data: StorageData<T>,
+            capacity: StorageData<T>,
             value_prop: ValueProposition<T>,
         },
 
@@ -242,7 +242,7 @@ pub mod pallet {
         BspSignUpSuccess {
             who: T::AccountId,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
-            total_data: StorageData<T>,
+            capacity: StorageData<T>,
         },
 
         /// Event emitted when a Main Storage Provider has signed off successfully. Provides information about
@@ -257,8 +257,8 @@ pub mod pallet {
         /// that SP's account id, its old total data that could store, and the new total data.
         TotalDataChanged {
             who: T::AccountId,
-            old_total_data: StorageData<T>,
-            new_total_data: StorageData<T>,
+            old_capacity: StorageData<T>,
+            new_capacity: StorageData<T>,
         },
     }
 
@@ -325,7 +325,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn msp_sign_up(
             origin: OriginFor<T>,
-            total_data: StorageData<T>,
+            capacity: StorageData<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             value_prop: ValueProposition<T>,
         ) -> DispatchResultWithPostInfo {
@@ -338,7 +338,7 @@ pub mod pallet {
 
             let msp_info = MainStorageProvider {
                 buckets: BoundedVec::default(),
-                total_data,
+                capacity,
                 data_used: StorageData::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
                 value_prop: value_prop.clone(),
@@ -350,7 +350,7 @@ pub mod pallet {
             Self::deposit_event(Event::<T>::MspSignUpSuccess {
                 who,
                 multiaddresses,
-                total_data,
+                capacity,
                 value_prop,
             });
             // Return a successful DispatchResultWithPostInfo
@@ -377,7 +377,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn bsp_sign_up(
             origin: OriginFor<T>,
-            total_data: StorageData<T>,
+            capacity: StorageData<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
         ) -> DispatchResultWithPostInfo {
             // TODO: Logic to sign up a BSP
@@ -388,7 +388,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             let bsp_info = BackupStorageProvider {
-                total_data,
+                capacity,
                 data_used: StorageData::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
                 root: MerklePatriciaRoot::<T>::default(),
@@ -401,7 +401,7 @@ pub mod pallet {
             Self::deposit_event(Event::<T>::BspSignUpSuccess {
                 who,
                 multiaddresses,
-                total_data,
+                capacity,
             });
 
             // Return a successful DispatchResultWithPostInfo
@@ -488,9 +488,9 @@ pub mod pallet {
         /// 8. Emit an event confirming that the change of the total data has been successful
         #[pallet::call_index(4)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn change_total_data(
+        pub fn change_capacity(
             _origin: OriginFor<T>,
-            _new_total_data: StorageData<T>,
+            _new_capacity: StorageData<T>,
         ) -> DispatchResultWithPostInfo {
             // TODO: design a way (with timelock probably) to allow a SP to change its stake
 
@@ -528,10 +528,10 @@ impl<T: Config> Pallet<T> {
     pub fn get_total_capacity(who: &T::AccountId) -> Result<StorageData<T>, Error<T>> {
         if let Some(m_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             let msp = MainStorageProviders::<T>::get(m_id).ok_or(Error::<T>::NotRegistered)?;
-            Ok(msp.total_data)
+            Ok(msp.capacity)
         } else if let Some(b_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
             let bsp = BackupStorageProviders::<T>::get(b_id).ok_or(Error::<T>::NotRegistered)?;
-            Ok(bsp.total_data)
+            Ok(bsp.capacity)
         } else {
             Err(Error::<T>::NotRegistered)
         }

@@ -31,13 +31,15 @@ pub struct ValueProposition<T: Config> {
     // todo!("add relevant fields here")
 }
 
+// TODO: Rename total_data to capacity for clarity
+
 /// Structure that represents a Main Storage Provider. It holds the buckets that the MSP has, the total data that the MSP is able to store,
 /// the amount of data that it is storing, and its libp2p multiaddresses.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct MainStorageProvider<T: Config> {
     pub buckets: Buckets<T>,
-    pub total_data: StorageData<T>,
+    pub capacity: StorageData<T>,
     pub data_used: StorageData<T>,
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub value_prop: ValueProposition<T>,
@@ -48,7 +50,7 @@ pub struct MainStorageProvider<T: Config> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct BackupStorageProvider<T: Config> {
-    pub total_data: StorageData<T>,
+    pub capacity: StorageData<T>,
     pub data_used: StorageData<T>,
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub root: MerklePatriciaRoot<T>,
