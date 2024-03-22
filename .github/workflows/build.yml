@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
           components: rust-src
@@ -25,10 +27,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/sccache
+          key: ${{ runner.os }}-sccache-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-sccache-
       - uses: oven-sh/setup-bun@v1
       - uses: arduino/setup-protoc@v3
       - name: Build All
-        run: cargo build --release
+        run: cargo build --release --incremental
       - name: Check Built By Mold
         run: readelf -p .comment target/release/storage-hub-node
       - name: Prepare artefacts
