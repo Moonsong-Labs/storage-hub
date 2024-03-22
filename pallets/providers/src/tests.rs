@@ -41,14 +41,19 @@ fn _run_to_block(n: u64) {
 /// This module holds the test cases for the signup of Main Storage Providers and Backup Storage Providers
 mod sign_up {
 
+    use multiaddr::Multiaddr;
+
     use super::*;
 
     #[test]
     fn msp_sign_up_works() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
-            let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+            let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
+            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
+            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
+
             let value_prop: ValueProposition<Test> = ValueProposition {
                 identifier: ValuePropId::<Test>::default(),
                 data_limit: 10,
@@ -110,8 +115,10 @@ mod sign_up {
     fn bsp_sign_up_works() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
-            let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+            let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
+            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
+            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
             let storage_amount: StorageData<Test> = 100;
 
             // Get the Account Id of Alice and check its balance
@@ -171,8 +178,10 @@ mod sign_up {
     fn msp_and_bsp_sign_up_fails_when_already_registered_as_msp() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
-            let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+            let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
+            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
+            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
             let value_prop: ValueProposition<Test> = ValueProposition {
                 identifier: ValuePropId::<Test>::default(),
                 data_limit: 10,
@@ -220,8 +229,10 @@ mod sign_up {
     fn msp_and_bsp_sign_up_fails_when_already_registered_as_bsp() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
-            let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+            let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
+            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
+            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
             let value_prop: ValueProposition<Test> = ValueProposition {
                 identifier: ValuePropId::<Test>::default(),
                 data_limit: 10,
@@ -268,8 +279,10 @@ mod sign_up {
     fn msp_sign_up_fails_when_max_amount_of_msps_reached() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
-            let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+            let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
+            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
+            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
             let value_prop: ValueProposition<Test> = ValueProposition {
                 identifier: ValuePropId::<Test>::default(),
                 data_limit: 10,
@@ -313,8 +326,10 @@ mod sign_up {
     fn bsp_sign_up_fails_when_max_amount_of_bsps_reached() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
-            let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+            let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
+            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
+            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
             let storage_amount: StorageData<Test> = 100;
 
             // Get the Account Id of Alice
@@ -351,8 +366,10 @@ mod sign_up {
     fn msp_and_bsp_sign_up_fails_when_under_min_capacity() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
-            let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+            let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
+            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
+            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
             let value_prop: ValueProposition<Test> = ValueProposition {
                 identifier: ValuePropId::<Test>::default(),
                 data_limit: 10,
@@ -390,8 +407,10 @@ mod sign_up {
     fn msp_and_bsp_sign_up_fails_when_under_needed_balance() {
         ExtBuilder::build().execute_with(|| {
             // Initialize variables:
-            let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+            let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
                 BoundedVec::new();
+            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
+            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
             let value_prop: ValueProposition<Test> = ValueProposition {
                 identifier: ValuePropId::<Test>::default(),
                 data_limit: 10,
@@ -421,6 +440,89 @@ mod sign_up {
                     multiaddresses.clone(),
                 ),
                 Error::<Test>::NotEnoughBalance
+            );
+        });
+    }
+
+    #[test]
+    fn msp_and_bsp_sign_up_fails_when_passing_no_multiaddresses() {
+        ExtBuilder::build().execute_with(|| {
+            // Initialize variables:
+            let multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+                BoundedVec::new();
+            let value_prop: ValueProposition<Test> = ValueProposition {
+                identifier: ValuePropId::<Test>::default(),
+                data_limit: 10,
+                protocols: BoundedVec::new(),
+            };
+            let storage_amount: StorageData<Test> = 100;
+
+            // Get the Account Id of Alice
+            let alice: AccountId = 0;
+
+            // Try to sign up Alice as a Main Storage Provider with no multiaddresses
+            assert_noop!(
+                StorageProviders::msp_sign_up(
+                    RuntimeOrigin::signed(alice),
+                    storage_amount,
+                    multiaddresses.clone(),
+                    value_prop.clone()
+                ),
+                Error::<Test>::NoMultiAddress
+            );
+
+            // Try to sign up Alice as a Backup Storage Provider with no multiaddresses
+            assert_noop!(
+                StorageProviders::bsp_sign_up(
+                    RuntimeOrigin::signed(alice),
+                    storage_amount,
+                    multiaddresses.clone(),
+                ),
+                Error::<Test>::NoMultiAddress
+            );
+        });
+    }
+
+    #[test]
+    fn msp_and_bsp_sign_up_fails_when_passing_an_invalid_multiaddress() {
+        ExtBuilder::build().execute_with(|| {
+            // Initialize variables:
+            let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+                BoundedVec::new();
+            let valid_multiaddress: Multiaddr = "/ip4/127.0.0.1/udp/1234".parse().unwrap();
+            let invalid_multiaddress = "/ip4/127.0.0.1/udp/1234".as_bytes().to_vec();
+            multiaddresses.force_push(valid_multiaddress.to_vec().try_into().unwrap());
+            multiaddresses.force_push(invalid_multiaddress.try_into().unwrap());
+
+            let value_prop: ValueProposition<Test> = ValueProposition {
+                identifier: ValuePropId::<Test>::default(),
+                data_limit: 10,
+                protocols: BoundedVec::new(),
+            };
+            let storage_amount: StorageData<Test> = 100;
+
+            // Get the Account Id of Alice
+            let alice: AccountId = 0;
+
+            // Try to sign up Alice as a Main Storage Provider with an invalid multiaddress
+            assert_noop!(
+                StorageProviders::msp_sign_up(
+                    RuntimeOrigin::signed(alice),
+                    storage_amount,
+                    multiaddresses.clone(),
+                    value_prop.clone()
+                ),
+                Error::<Test>::InvalidMultiAddress
+            );
+
+            // Try to sign up Alice as a Backup Storage Provider with an invalid multiaddress
+            assert_noop!(
+                StorageProviders::bsp_sign_up(
+                    RuntimeOrigin::signed(alice),
+                    storage_amount,
+                    multiaddresses.clone(),
+                ),
+                Error::<Test>::InvalidMultiAddress
             );
         });
     }

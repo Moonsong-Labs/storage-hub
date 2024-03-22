@@ -13,6 +13,8 @@ use frame_support::traits::{
 };
 use storage_hub_traits::ProvidersInterface;
 
+use multiaddr::Multiaddr;
+
 use crate::*;
 
 impl<T> Pallet<T>
@@ -38,7 +40,21 @@ where
             Error::<T>::AlreadyRegistered
         );
 
-        // TODO: Check that the multiaddresses are valid
+        // Check that the multiaddresses vector is not empty (SPs have to register with at least one)
+        ensure!(
+            !msp_info.multiaddresses.is_empty(),
+            Error::<T>::NoMultiAddress
+        );
+
+        // Check that the multiaddresses are valid
+        for multiaddress in msp_info.multiaddresses.iter() {
+            let multiaddress_vec = multiaddress.to_vec();
+            let valid_multiaddress = Multiaddr::try_from(multiaddress_vec);
+            match valid_multiaddress {
+                Ok(_) => (),
+                Err(_) => return Err(Error::<T>::InvalidMultiAddress.into()),
+            }
+        }
 
         // Check that the data to be stored is bigger than the minimum required by the runtime
         ensure!(
@@ -116,7 +132,21 @@ where
             Error::<T>::AlreadyRegistered
         );
 
-        // TODO: Check that the multiaddresses are valid
+        // Check that the multiaddresses vector is not empty (SPs have to register with at least one)
+        ensure!(
+            !bsp_info.multiaddresses.is_empty(),
+            Error::<T>::NoMultiAddress
+        );
+
+        // Check that the multiaddresses are valid
+        for multiaddress in bsp_info.multiaddresses.iter() {
+            let multiaddress_vec = multiaddress.to_vec();
+            let valid_multiaddress = Multiaddr::try_from(multiaddress_vec);
+            match valid_multiaddress {
+                Ok(_) => (),
+                Err(_) => return Err(Error::<T>::InvalidMultiAddress.into()),
+            }
+        }
 
         // Check that the data to be stored is bigger than the minimum required by the runtime
         ensure!(

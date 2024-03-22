@@ -284,6 +284,10 @@ pub mod pallet {
         NoUserId,
         /// Error thrown when trying to get a root from a MSP without passing a Bucket ID
         NoBucketId,
+        /// Error thrown when a user tries to sign up without any multiaddress
+        NoMultiAddress,
+        /// Error thrown when a user tries to sign up as a SP but any of the provided multiaddresses is invalid
+        InvalidMultiAddress,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
