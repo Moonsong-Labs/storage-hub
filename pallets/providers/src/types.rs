@@ -31,8 +31,6 @@ pub struct ValueProposition<T: Config> {
     // todo!("add relevant fields here")
 }
 
-// TODO: Rename total_data to capacity for clarity
-
 /// Structure that represents a Main Storage Provider. It holds the buckets that the MSP has, the total data that the MSP is able to store,
 /// the amount of data that it is storing, and its libp2p multiaddresses.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, Clone)]
