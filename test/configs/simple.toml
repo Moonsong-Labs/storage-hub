@@ -1,0 +1,21 @@
+[relaychain]
+default_image = "docker.io/parity/polkadot:latest"
+default_args = ["-lparachain=debug"]
+chain = "rococo-local"
+
+[[relaychain.nodes]]
+name = "alice"
+validator = true
+
+[[relaychain.nodes]]
+name = "bob"
+validator = true
+
+[[parachains]]
+id = 2000
+cumulus_based = true
+
+[[parachains.collator]]
+name = "storage-hub-collator-01"
+image = "localhost:5000/storage-hub-node:local"
+args = ["-lparachain=debug", "--unsafe-rpc-external", "--rpc-cors=all"]
