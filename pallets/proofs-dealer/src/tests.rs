@@ -253,7 +253,7 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
 
         // Register user as a Provider in Providers pallet.
         let provider_id = BlakeTwo256::hash(b"provider_id");
-        pallet_providers::AccountIdToMainStorageProviderId::<Test>::insert(&1, provider_id);
+        pallet_storage_providers::AccountIdToMainStorageProviderId::<Test>::insert(&1, provider_id);
 
         // Mock a FileKey.
         let file_key = BlakeTwo256::hash(b"file_key");
