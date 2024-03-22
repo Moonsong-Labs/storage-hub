@@ -19,7 +19,7 @@ mod benchmarking;
 pub mod pallet {
     use super::types::*;
     use codec::{FullCodec, HasCompact};
-    use frame_support::traits::Randomness;
+    // TODO: use frame_support::traits::Randomness;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
@@ -36,8 +36,8 @@ pub mod pallet {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// Type to access randomness to salt AccountIds and get the corresponding HashId
-        type ProvidersRandomness: Randomness<Self::HashId, BlockNumberFor<Self>>;
+        /// TODO: Type to access randomness to salt AccountIds and get the corresponding HashId
+        //type ProvidersRandomness: Randomness<Self::HashId, BlockNumberFor<Self>>;
 
         /// Type to access the Balances pallet (using the fungible trait from frame_support)
         type NativeBalance: Inspect<Self::AccountId>
