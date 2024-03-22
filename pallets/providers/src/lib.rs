@@ -23,7 +23,7 @@ pub mod pallet {
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
-        sp_runtime::traits::{AtLeast32BitUnsigned, CheckEqual, Hash, MaybeDisplay, SimpleBitOps},
+        sp_runtime::traits::{AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, SimpleBitOps},
         traits::fungible::*,
         Blake2_128Concat,
     };
@@ -50,25 +50,6 @@ pub mod pallet {
 
         /// The overarching hold reason
         type RuntimeHoldReason: From<HoldReason>;
-
-        /// The type of ID that uniquely identifies a Storage Provider (MSPs/BSPs) from an AccountId
-        /// It is also used to identify a Bucket of data inside a MSP
-        type HashId: Parameter
-            + Member
-            + MaybeSerializeDeserialize
-            + Debug
-            + MaybeDisplay
-            + SimpleBitOps
-            + Ord
-            + Default
-            + Copy
-            + CheckEqual
-            + AsRef<[u8]>
-            + AsMut<[u8]>
-            + MaxEncodedLen;
-
-        /// The hashing system (algorithm) being used in the runtime (e.g. Blake2).
-        type Hashing: Hash<Output = Self::HashId> + TypeInfo;
 
         /// Data type for the measurement of storage size
         type StorageData: Parameter
@@ -270,6 +251,8 @@ pub mod pallet {
         StorageTooLow,
         /// Error thrown when a user does not have enough balance to pay the deposit that it would incur by signing up as a SP or changing its total data (stake).
         NotEnoughBalance,
+        /// Error thrown when the runtime cannot hold the required deposit from the account to register it as a SP
+        CannotHoldDeposit,
         /// Error thrown when a user tries to sign up as a BSP but the maximum amount of BSPs has been reached.
         MaxBspsReached,
         /// Error thrown when a user tries to sign up as a MSP but the maximum amount of MSPs has been reached.
@@ -288,6 +271,8 @@ pub mod pallet {
         NoMultiAddress,
         /// Error thrown when a user tries to sign up as a SP but any of the provided multiaddresses is invalid
         InvalidMultiAddress,
+        /// Error thrown when overflowing after doing math operations
+        Overflow,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately

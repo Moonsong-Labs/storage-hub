@@ -99,8 +99,6 @@ impl crate::Config for Test {
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageData = u32;
     type SpCount = u32;
-    type HashId = H256;
-    type Hashing = BlakeTwo256;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
     type MaxMultiAddressSize = ConstU32<100>;
