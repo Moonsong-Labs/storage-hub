@@ -6419,12 +6419,16 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "pallet-balances",
+ "pallet-proofs-dealer",
+ "pallet-storage-providers",
  "parity-scale-codec",
  "scale-info",
  "serde",
  "sp-core",
  "sp-io",
  "sp-runtime",
+ "sp-std 8.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.5.0)",
 ]
 
 [[package]]
@@ -12444,6 +12448,7 @@ dependencies = [
  "pallet-message-queue",
  "pallet-proofs-dealer",
  "pallet-session",
+ "pallet-storage-providers",
  "pallet-sudo",
  "pallet-timestamp",
  "pallet-transaction-payment",
