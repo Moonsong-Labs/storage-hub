@@ -20,7 +20,7 @@ pub mod utils;
 
 use frame_support::{inherent::IsFatalError, pallet_prelude::*, sp_runtime::RuntimeString};
 use scale_info::prelude::fmt::Debug;
-use sp_trie::CompactProof;
+pub use sp_trie::CompactProof;
 
 // TODO: Define this.
 const INHERENT_IDENTIFIER: InherentIdentifier = *b"todo____";
@@ -35,7 +35,6 @@ pub mod pallet {
         traits::fungible,
     };
     use frame_system::pallet_prelude::*;
-    use scale_info::prelude::fmt::Debug;
     use sp_trie::CompactProof;
     use storage_hub_traits::ProvidersInterface;
     use types::ProviderFor;
