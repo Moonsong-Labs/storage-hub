@@ -63,7 +63,6 @@ pub mod pallet {
             + Default
             + Copy
             + CheckEqual
-            + std::hash::Hash
             + AsRef<[u8]>
             + AsMut<[u8]>
             + MaxEncodedLen;
