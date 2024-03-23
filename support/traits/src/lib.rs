@@ -49,6 +49,11 @@ pub trait ProvidersInterface {
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
 }
 
+/// The interface for the ProofsDealer pallet.
+///
+/// It is abstracted over the `Provider` type, `Proof` type and `MerkleHash` type.
+/// It provides the functions to verify a proof, submit a new proof challenge and
+/// submit a new challenge with priority.
 pub trait ProofsDealerInterface {
     /// The type which represents a registered Provider.
     type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
