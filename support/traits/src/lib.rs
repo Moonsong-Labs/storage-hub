@@ -88,3 +88,51 @@ pub trait ProofsDealerInterface {
     /// Submit a new challenge with priority.
     fn challenge_with_priority(key_challenged: &Self::MerkleHash) -> DispatchResult;
 }
+
+/// A trait to verify proofs based on commitments and challenges.
+///
+/// It is abstracted over the `Proof` type, `Commitment` type and `Challenge` type.
+pub trait CommitmentVerifier {
+    /// The type that represents the proof.
+    type Proof: Parameter + Member + Debug;
+    /// The type corresponding to the commitment, generally some hash.
+    /// For example, in vector commitments like Merkle proofs, this would be the root hash.
+    type Commitment: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+    /// The type corresponding to a challenge, generally some hash.
+    /// For example, in vector commitments like Merkle proofs, this would be the
+    /// leaf hash being challenged.
+    type Challenge: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+
+    /// Verify a proof based on a commitment and a set of challenges.
+    fn verify_proof(
+        commitment: &Self::Commitment,
+        challenges: &[Self::Challenge],
+        proof: &Self::Proof,
+    ) -> bool;
+}
