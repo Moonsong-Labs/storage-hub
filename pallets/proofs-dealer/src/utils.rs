@@ -8,7 +8,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_trie::CompactProof;
-use storage_hub_traits::{ProofsDealer, ProvidersInterface};
+use storage_hub_traits::{ProofsDealerInterface, ProvidersInterface};
 
 use crate::{
     pallet,
@@ -131,7 +131,7 @@ where
     }
 }
 
-impl<T: pallet::Config> ProofsDealer for Pallet<T> {
+impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     type Provider = ProviderFor<T>;
     type Proof = CompactProof;
     type MerkleHash = T::MerkleHash;

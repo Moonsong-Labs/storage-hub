@@ -49,7 +49,7 @@ pub trait ProvidersInterface {
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
 }
 
-pub trait ProofsDealer {
+pub trait ProofsDealerInterface {
     /// The type which represents a registered Provider.
     type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
     /// The type that represents the proof.
