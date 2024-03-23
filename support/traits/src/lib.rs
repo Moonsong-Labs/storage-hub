@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::FullCodec;
+use frame_support::dispatch::DispatchResult;
 use frame_support::pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member};
 use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
 use frame_support::traits::fungible;
@@ -46,4 +47,39 @@ pub trait ProvidersInterface {
     fn get_stake(
         who: Self::Provider,
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
+}
+
+pub trait ProofsDealer {
+    /// The type which represents a registered Provider.
+    type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type that represents the proof.
+    type Proof: Parameter + Member + Debug;
+    /// The type corresponding to the root of a registered Provider.
+    type MerkleHash: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+
+    /// Verify a proof for a given Provider, who should have a given Root.
+    fn verify_proof(
+        who: &Self::Provider,
+        root: &Self::MerkleHash,
+        proof: &Self::Proof,
+    ) -> DispatchResult;
+
+    /// Submit a new proof challenge.
+    fn challenge(key_challenged: &Self::MerkleHash) -> DispatchResult;
+
+    /// Submit a new challenge with priority.
+    fn challenge_with_priority(key_challenged: &Self::MerkleHash) -> DispatchResult;
 }

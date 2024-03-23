@@ -36,7 +36,7 @@ fn challenge_submit_succeed() {
         System::assert_last_event(
             Event::NewChallenge {
                 who: 1,
-                file_key_challenged: file_key,
+                key_challenged: file_key,
             }
             .into(),
         );
@@ -88,7 +88,7 @@ fn challenge_submit_twice_succeed() {
         System::assert_last_event(
             Event::NewChallenge {
                 who: 1,
-                file_key_challenged: file_key_1,
+                key_challenged: file_key_1,
             }
             .into(),
         );
@@ -102,7 +102,7 @@ fn challenge_submit_twice_succeed() {
         System::assert_last_event(
             Event::NewChallenge {
                 who: 2,
-                file_key_challenged: file_key_2,
+                key_challenged: file_key_2,
             }
             .into(),
         );
@@ -151,7 +151,7 @@ fn challenge_submit_existing_challenge_succeed() {
         System::assert_last_event(
             Event::NewChallenge {
                 who: 1,
-                file_key_challenged: file_key,
+                key_challenged: file_key,
             }
             .into(),
         );
@@ -194,7 +194,7 @@ fn challenge_submit_in_two_rounds_succeed() {
         System::assert_last_event(
             Event::NewChallenge {
                 who: 1,
-                file_key_challenged: file_key,
+                key_challenged: file_key,
             }
             .into(),
         );
@@ -223,7 +223,7 @@ fn challenge_submit_in_two_rounds_succeed() {
         System::assert_last_event(
             Event::NewChallenge {
                 who: 1,
-                file_key_challenged: file_key,
+                key_challenged: file_key,
             }
             .into(),
         );
@@ -265,7 +265,7 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
         System::assert_last_event(
             Event::NewChallenge {
                 who: 1,
-                file_key_challenged: file_key,
+                key_challenged: file_key,
             }
             .into(),
         );
