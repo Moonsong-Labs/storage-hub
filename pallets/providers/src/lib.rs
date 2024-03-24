@@ -399,23 +399,18 @@ pub mod pallet {
         /// 3. Check that the MSP has no storage assigned to it (no buckets or data used by it)
         /// 4. Update the MSPs storage, removing the signer as an MSP
         /// 5. Return the deposit to the signer
-        /// 6. Decrement the storage that holds total amount of SPs currently in the system
+        /// 6. Decrement the storage that holds total amount of MSPs currently in the system
         /// 7. Emit an event confirming that the sign off of the MSP has been successful
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn msp_sign_off(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-            // TODO: Logic to sign off a MSP
-
             // Check that the extrinsic was signed and get the signer.
-            // This function will return an error if the extrinsic is not signed.
-            // https://docs.substrate.io/v3/runtime/origins
             let who = ensure_signed(origin)?;
 
-            let msp_id = AccountIdToMainStorageProviderId::<T>::get(&who)
-                .ok_or(Error::<T>::NotRegistered)?;
+            Self::do_msp_sign_off(&who)?;
 
-            // Update storage.
-            <MainStorageProviders<T>>::remove(&msp_id);
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::MspSignOffSuccess { who });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -428,26 +423,20 @@ pub mod pallet {
         /// 2. Check that the signer is registered as a BSP
         /// 3. Check that the BSP has no storage assigned to it
         /// 4. Update the BSPs storage, removing the signer as an BSP
-        /// 5. Update the total capacity of all BSPs, removing the capacity of the signer (factoring by redundancy)
-        /// 6. Remove this BSP from the vector of BSPs to draw from for proofs
-        /// 7. Return the deposit to the signer
-        /// 8. Decrement the storage that holds total amount of SPs currently in the system
-        /// 9. Emit an event confirming that the sign off of the BSP has been successful
+        /// 5. Update the total capacity of all BSPs, removing the capacity of the signer
+        /// 6. Return the deposit to the signer
+        /// 7. Decrement the storage that holds total amount of BSPs currently in the system
+        /// 8. Emit an event confirming that the sign off of the BSP has been successful
         #[pallet::call_index(3)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn bsp_sign_off(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-            // TODO: Logic to sign off a BSP
-
             // Check that the extrinsic was signed and get the signer.
-            // This function will return an error if the extrinsic is not signed.
-            // https://docs.substrate.io/v3/runtime/origins
             let who = ensure_signed(origin)?;
 
-            let bsp_id = AccountIdToBackupStorageProviderId::<T>::get(&who)
-                .ok_or(Error::<T>::NotRegistered)?;
+            Self::do_bsp_sign_off(&who)?;
 
-            // Update storage.
-            <BackupStorageProviders<T>>::remove(&bsp_id);
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::BspSignOffSuccess { who });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
