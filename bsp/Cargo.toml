@@ -6,3 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+storage-kit = { path = "../storage-kit" }
+
+tokio = "1.36.0"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
