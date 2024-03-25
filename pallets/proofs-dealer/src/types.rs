@@ -23,7 +23,7 @@ pub type AccountIdFor<T> = <T as frame_system::Config>::AccountId;
 
 /// The type for keys that identify a file within a Merkle Patricia Forest.
 /// Syntactic sugar for the MerkleHash type used in the proofs pallet.
-pub type FileKeyFor<T> = <T as crate::Config>::MerkleHash;
+pub type KeyFor<T> = <T as crate::Config>::MerkleHash;
 
 /// The type for a root of a Merkle Patricia Forest.
 /// Syntactic sugar for the MerkleHash type used in the proofs pallet.
