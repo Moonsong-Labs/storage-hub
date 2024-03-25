@@ -508,7 +508,7 @@ use crate::types::{
 /// Helper functions (getters, setters, etc.) for this pallet
 impl<T: Config> Pallet<T> {
     /// A helper function to get the total capacity of a storage provider.
-    pub fn get_total_capacity(who: &T::AccountId) -> Result<StorageData<T>, Error<T>> {
+    pub fn get_total_capacity_of_sp(who: &T::AccountId) -> Result<StorageData<T>, Error<T>> {
         if let Some(m_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             let msp = MainStorageProviders::<T>::get(m_id).ok_or(Error::<T>::NotRegistered)?;
             Ok(msp.capacity)
@@ -518,6 +518,11 @@ impl<T: Config> Pallet<T> {
         } else {
             Err(Error::<T>::NotRegistered)
         }
+    }
+
+    /// A helper function to get the total capacity of all BSPs.
+    pub fn get_total_bsp_capacity() -> StorageData<T> {
+        TotalBspsCapacity::<T>::get()
     }
 }
 
