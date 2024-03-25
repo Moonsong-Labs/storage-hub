@@ -1,7 +1,7 @@
+use crate::traits::SpawnableActor;
+use crate::{ActorHandle, Port};
 use anyhow::Result;
 use libp2p::identity::Keypair;
-use crate::{ActorHandle, Port};
-use crate::traits::SpawnableActor;
 
 const DEFAULT_P2P_PORT: Port = 30333;
 
@@ -29,21 +29,21 @@ impl StorageKitBuilder {
     pub fn new() -> Self {
         Self {
             port: DEFAULT_P2P_PORT,
-            identity: None
+            identity: None,
         }
     }
 
     pub fn with_port(port: Port) -> Self {
         Self {
             port,
-            identity: None
+            identity: None,
         }
     }
 
     pub fn with_identity(identity: Keypair) -> Self {
         Self {
             port: DEFAULT_P2P_PORT,
-            identity: Some(identity)
+            identity: Some(identity),
         }
     }
 
@@ -59,7 +59,10 @@ impl StorageKitBuilder {
 
         let p2p_module_handle = p2p.spawn();
         let blockchain_module_handle = blockchain.spawn();
-        
-        Ok(StorageKitManager {p2p_module_handle, blockchain_module_handle})
+
+        Ok(StorageKitManager {
+            p2p_module_handle,
+            blockchain_module_handle,
+        })
     }
 }
