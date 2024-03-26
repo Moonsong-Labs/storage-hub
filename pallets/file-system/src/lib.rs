@@ -68,8 +68,7 @@ pub mod pallet {
             Provider = <Self::Providers as storage_hub_traits::ProvidersInterface>::Provider,
         >;
 
-        /// The threshold that the randomness criteria operation result should
-        /// meet, for the caller to instantly be eligible as BSP for that file.
+        /// Type representing the threshold a BSP must meet to be eligible to volunteer to store a file.
         type AssignmentThreshold: Parameter
             + Member
             + MaybeSerializeDeserialize
@@ -82,14 +81,11 @@ pub mod pallet {
             + Decode
             + HasCompact;
 
-        /// The threshold that the randomness criteria operation result should
-        /// meet, for the caller to instantly be eligible as BSP for that file.
+        /// The multiplier increases the threshold over time (blocks) which increases the
+        /// likelihood of a BSP successfully vulenteering to store a file.
         type AssignmentThresholdMultiplier: Get<u32>;
 
-        /// The minimum threshold that the randomness criteria operation result
-        /// should meet, for the caller to instantly be eligible as BSP for that
-        /// file. This minimum threshold should decrease when more BSPs are
-        /// added to the system, and increased if BSPs leave the system.
+        /// Minimum BSP assignment threshold.
         #[pallet::constant]
         type MinBspsAssignmentThreshold: Get<Self::AssignmentThreshold>;
 
@@ -298,7 +294,7 @@ pub mod pallet {
         /// Failed to decode threshold.
         FailedToDecodeThreshold,
         /// BSP did not succeed threshold check.
-        ThresholdTooLow,
+        ThresholdTooHigh,
     }
 
     #[pallet::call]

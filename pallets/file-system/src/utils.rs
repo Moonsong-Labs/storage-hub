@@ -184,7 +184,7 @@ where
 
         let threshold = rate_increase.saturating_add(T::MinBspsAssignmentThreshold::get());
 
-        ensure!(bsp_threshold <= threshold, Error::<T>::ThresholdTooLow);
+        ensure!(bsp_threshold <= threshold, Error::<T>::ThresholdTooHigh);
 
         // Add BSP to storage request metadata.
         <StorageRequestBsps<T>>::insert(
