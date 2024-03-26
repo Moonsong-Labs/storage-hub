@@ -56,13 +56,13 @@ impl system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
     type BlockLength = ();
-    type DbWeight = RocksDbWeight;
+    type DbWeight = ();
     type RuntimeOrigin = RuntimeOrigin;
     type RuntimeCall = RuntimeCall;
     type Nonce = u64;
     type Hash = H256;
     type Hashing = BlakeTwo256;
-    type AccountId = AccountId;
+    type AccountId = u64;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Block = Block;
     type RuntimeEvent = RuntimeEvent;
@@ -88,7 +88,7 @@ impl pallet_balances::Config for Test {
     type MaxLocks = ConstU32<10>;
     type MaxReserves = ();
     type ReserveIdentifier = [u8; 8];
-    type RuntimeHoldReason = ();
+    type RuntimeHoldReason = RuntimeHoldReason;
     type RuntimeFreezeReason = ();
     type FreezeIdentifier = ();
     type MaxHolds = ConstU32<10>;
@@ -98,9 +98,9 @@ impl pallet_balances::Config for Test {
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
+    type RuntimeHoldReason = RuntimeHoldReason;
     type StorageData = u32;
     type SpCount = u32;
-    type HashId = H256;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
     type MaxMultiAddressSize = ConstU32<100>;
@@ -110,7 +110,7 @@ impl pallet_storage_providers::Config for Test {
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type SpMinDeposit = ConstU128<10>;
-    type SpMinCapacity = ConstU32<1>;
+    type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
 }
 
