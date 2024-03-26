@@ -17,5 +17,5 @@ cumulus_based = true
 
 [[parachains.collator]]
 name = "storage-hub-collator-01"
-image = "localhost:5000/storage-hub-node:local"
+image = "{{SH_IMAGE}}"
 args = ["-lparachain=debug", "--unsafe-rpc-external", "--rpc-cors=all"]

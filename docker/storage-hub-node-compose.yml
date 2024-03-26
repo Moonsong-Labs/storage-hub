@@ -1,7 +1,6 @@
-version: '3'
 services:
   storage-hub-node:
-    image: storage-hub-node:latest
+    image: moonsonglabs/storage-hub:latest
     ports:
       - "9944:9944"
     command: /usr/bin/storage-hub-node --dev --unsafe-rpc-external --rpc-cors=all

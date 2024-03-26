@@ -84,6 +84,8 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: ${{ steps.prep.outputs.tags }}
+          cache-from: type=registry,ref=moonsonglabs/storage-hub:cache
+          cache-to: type=registry,ref=moonsonglabs/storage-hub:cache,mode=max
           labels: |
             org.opencontainers.image.title=${{ github.event.repository.name }}
             org.opencontainers.image.description=${{ github.event.repository.description }}
@@ -96,6 +98,8 @@ jobs:
     needs: [build_image, set-tags]
     name: "Test Simple Network"
     runs-on: ubuntu-latest
+    env:
+      SH_IMAGE: ${{ needs.set-tags.outputs.image-tag }}
     defaults:
       run:
         working-directory: test
@@ -103,7 +107,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v1
       - name: Pull Docker image
-        run: docker pull moonsonglabs/storage-hub:sha-${{ needs.set-tags.outputs.image-tag }}
+        run: docker pull moonsonglabs/storage-hub:${{ needs.set-tags.outputs.image-tag }}
       - name: Start local k8 cluster
         uses: medyagh/setup-minikube@latest
         with:
