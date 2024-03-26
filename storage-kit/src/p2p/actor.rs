@@ -63,11 +63,14 @@ impl P2PModule {
     }
 }
 
+/// Event loop for the P2PModule actor.
 pub struct P2PEventLoop {
     receiver: Receiver<P2PModuleCommand>,
     actor: P2PModule,
 }
 
+/// Since this actor is a network service, it needs to handle both incoming network events and
+/// messages from other actors, hence the need for a custom `ActorEventLoop`.
 impl ActorEventLoop<P2PModule> for P2PEventLoop {
     fn new(actor: P2PModule, receiver: Receiver<P2PModuleCommand>) -> Self {
         Self { actor, receiver }

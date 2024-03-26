@@ -1,4 +1,4 @@
-use storage_kit::manager::StorageKitBuilder;
+use storage_kit::manager::{Role, StorageKitBuilder};
 use tracing_subscriber::util::SubscriberInitExt;
 
 #[tokio::main]
@@ -9,11 +9,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .finish()
         .try_init()?;
 
-    let mut storage_kit_manager = StorageKitBuilder::new()
-        .start()
-        .expect("Failed to start StorageKit");
-
-    storage_kit_manager.start_as_bsp();
+    let _storage_kit_manager = StorageKitBuilder::new().build()?.start(Role::Bsp);
 
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
