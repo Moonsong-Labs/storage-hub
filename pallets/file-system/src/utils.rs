@@ -274,7 +274,7 @@ where
         })?;
 
         // Add data to storage provider.
-        <T::Providers as storage_hub_traits::MutateProvidersInterface>::change_data_used(
+        <T::Providers as storage_hub_traits::MutateProvidersInterface>::increase_data_used(
             &who,
             file_metadata.size,
         )?;
@@ -310,7 +310,7 @@ where
         // Remove storage request.
         <StorageRequests<T>>::remove(&location);
 
-        // TODO: initiate deletion request for SPs.
+        // Challenge BSP to force update its storage root to uninclude the file.
         ensure!(
             <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
                 &file_key
@@ -351,13 +351,13 @@ where
             Some(mut metadata) => {
                 // Remove BSP from storage request and challenge if has confirmed having stored this file.
                 if let Some(bsp) = <StorageRequestBsps<T>>::get(&location, &who) {
-                    // TODO: challenge the BSP to force update its storage
-
                     if bsp.confirmed {
                         metadata.bsps_confirmed =
                             metadata.bsps_confirmed.saturating_sub(1u32.into());
 
                         <StorageRequests<T>>::set(&location, Some(metadata));
+
+                        Self::challenge_and_reduce_data_used(&who, &file_key, size)?;
                     }
 
                     <StorageRequestBsps<T>>::remove(&location, &who);
@@ -377,17 +377,10 @@ where
                         BoundedVec::default()
                     },
                 )?;
+
+                Self::challenge_and_reduce_data_used(&who, &file_key, size)?;
             }
         };
-
-        // Challenge BSP to force update its storage root to uninclude the file.
-        ensure!(
-            <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
-                &file_key
-            )
-            .is_ok(),
-            Error::<T>::InvalidProof
-        );
 
         Ok(())
     }
@@ -412,6 +405,30 @@ where
             <NextAvailableExpirationInsertionBlock<T>>::get(),
         );
         block_to_insert_expiration
+    }
+
+    /// Challenge `file_key` to force the BSP to update its storage root to uninclude the
+    /// file and reduce the data used by the storage provider.
+    fn challenge_and_reduce_data_used(
+        who: &StorageProviderId<T>,
+        file_key: &FileKey<T>,
+        size: StorageData<T>,
+    ) -> DispatchResult {
+        // Challenge BSP to force update its storage root to uninclude the file.
+        ensure!(
+            <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
+                file_key
+            )
+            .is_ok(),
+            Error::<T>::InvalidProof
+        );
+
+        // Reduce data used by the storage provider.
+        <T::Providers as storage_hub_traits::MutateProvidersInterface>::decrease_data_used(
+            who, size,
+        )?;
+
+        Ok(())
     }
 
     /// Calculate the XOR of the fingerprint and the BSP.

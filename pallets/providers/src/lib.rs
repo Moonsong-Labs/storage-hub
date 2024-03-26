@@ -23,7 +23,9 @@ pub mod pallet {
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
-        sp_runtime::traits::{AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, SimpleBitOps},
+        sp_runtime::traits::{
+            AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps,
+        },
         traits::fungible::*,
         Blake2_128Concat,
     };
@@ -58,6 +60,7 @@ pub mod pallet {
             + Default
             + MaybeDisplay
             + AtLeast32BitUnsigned
+            + Saturating
             + Copy
             + MaxEncodedLen
             + HasCompact

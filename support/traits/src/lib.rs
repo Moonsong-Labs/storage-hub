@@ -97,8 +97,11 @@ pub trait MutateProvidersInterface {
         + MaxEncodedLen
         + FullCodec;
 
-    /// Change the used data of a Storage Provider (generic, MSP or BSP).
-    fn change_data_used(who: &Self::AccountId, data_change: Self::StorageData) -> DispatchResult;
+    /// Increase the used data of a Storage Provider (generic, MSP or BSP).
+    fn increase_data_used(who: &Self::AccountId, delta: Self::StorageData) -> DispatchResult;
+
+    /// Decrease the used data of a Storage Provider (generic, MSP or BSP).
+    fn decrease_data_used(who: &Self::AccountId, delta: Self::StorageData) -> DispatchResult;
 
     /// Add a new Bucket as a Provider
     fn add_bucket(

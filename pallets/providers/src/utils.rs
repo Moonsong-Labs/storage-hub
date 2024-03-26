@@ -3,7 +3,7 @@ use codec::Encode;
 use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::sp_runtime::{
-    traits::{CheckedAdd, CheckedMul, CheckedSub, Hash, One},
+    traits::{CheckedAdd, CheckedMul, CheckedSub, Hash, One, Saturating},
     ArithmeticError, DispatchError,
 };
 use frame_support::traits::{
@@ -240,17 +240,35 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
     type BucketId = HashId<T>;
     type MerklePatriciaRoot = T::MerklePatriciaRoot;
 
-    fn change_data_used(who: &T::AccountId, data_change: T::StorageData) -> DispatchResult {
+    fn increase_data_used(who: &T::AccountId, delta: T::StorageData) -> DispatchResult {
         // TODO: refine this logic, add checks
         if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             let mut msp =
                 MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
-            msp.data_used += data_change;
+            msp.data_used = msp.data_used.saturating_add(delta);
             MainStorageProviders::<T>::insert(&msp_id, msp);
         } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
             let mut bsp =
                 BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
-            bsp.data_used += data_change;
+            bsp.data_used = bsp.data_used.saturating_add(delta);
+            BackupStorageProviders::<T>::insert(&bsp_id, bsp);
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        }
+        Ok(())
+    }
+
+    fn decrease_data_used(who: &Self::AccountId, delta: Self::StorageData) -> DispatchResult {
+        // TODO: refine this logic, add checks
+        if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            let mut msp =
+                MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+            msp.data_used = msp.data_used.saturating_sub(delta);
+            MainStorageProviders::<T>::insert(&msp_id, msp);
+        } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            let mut bsp =
+                BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
+            bsp.data_used = bsp.data_used.saturating_sub(delta);
             BackupStorageProviders::<T>::insert(&bsp_id, bsp);
         } else {
             return Err(Error::<T>::NotRegistered.into());
