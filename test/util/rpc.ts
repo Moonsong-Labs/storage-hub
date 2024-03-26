@@ -1,6 +1,6 @@
-export const sendRPCRequest = async (method: string, params?: any[]) => {
-  let response;
-  let json: RpcResponse | undefined
+export const sendRPCRequest = async (method: string, params?: Params[]) => {
+  let response: Response | undefined;
+  let json: RpcResponse | undefined;
   try {
     response = await fetch("http://localhost:9944", {
       method: "POST",
@@ -15,18 +15,19 @@ export const sendRPCRequest = async (method: string, params?: any[]) => {
       }),
     });
 
-    json = (await response.json()) as RpcResponse
+    json = (await response.json()) as RpcResponse;
   } catch (e) {
     console.log(e);
-    response = { status: 500 };
+    response = response || ({ status: 500 } as Response);
   }
 
   return { status: response.status, payload: json };
 };
 
-
 export interface RpcResponse {
-    jsonrpc: string;
-    result: object
-    id: number;
+  jsonrpc: string;
+  result: object;
+  id: number;
 }
+
+type Params = string | number | boolean | object | null;
