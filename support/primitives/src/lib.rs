@@ -112,66 +112,6 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
                     }
                 }
             }
-
-            // // Check if the challenge is exactly equal to the next_leaf.
-            // if next_leaf.0 == challenge.as_ref().to_vec() {
-            //     // TODO: Provide a closure argument to execute in this case.
-            //     todo!("Provide a closure argument to execute in this case.");
-            // } else {
-            //     // If next_leaf is not equal to the challenge, then by this point it is
-            //     // known that it is in between prev_leaf and next_leaf.
-            //     // TODO: Check that they are consecutive leaves in the trie, i.e. that there
-            //     // TODO: is no empty leaf in between them.
-            //     todo!("Check that they are consecutive leaves in the trie.")
-            // }
-
-            // // Check if the challenge is exactly equal to the previous leaf.
-            // if prev_leaf.0 == challenge.as_ref().to_vec() {
-            //     // TODO: Provide a closure argument to execute in this case.
-            //     todo!("Provide a closure argument to execute in this case.");
-            // } else {
-            //     // If prev_leaf is not equal to the challenge, then there should be a post_leaf.
-            //     post_leaf = match leaves.next() {
-            //         Some(leaf) => leaf,
-            //         None => return Err("Not enough leaves in the trie.".into()),
-            //     };
-
-            //     // Check that the challenge is numerically in between the two leaves.
-            //     if prev_leaf.0 > challenge.as_ref().to_vec()
-            //         || post_leaf.0 < challenge.as_ref().to_vec()
-            //     {
-            //         return Err("Challenge is not in between the two leaves.".into());
-            //     }
-
-            //     // TODO: Check that they are consecutive leaves in the trie.
-            // }
-
-            // // Peek next challenge to decide how to update prev_leaf.
-            // // If there is no next challenge, then we are done.
-            // let next_challenge = match challenges_iter.peek() {
-            //     Some(challenge) => challenge,
-            //     None => continue,
-            // };
-
-            // // Peek next leaf to decide how to update prev_leaf.
-            // let next_leaf = leaves.peek();
-
-            // match (prev_leaf.0, post_leaf.0, next_leaf) {
-            //     // Next challenge is still between prev_leaf and post_leaf.
-            //     (prev_key, post_key, _)
-            //         if prev_key < next_challenge.as_ref().to_vec()
-            //             && post_key > next_challenge.as_ref().to_vec() =>
-            //     {
-            //         // Nothing to update.
-            //         continue;
-            //     }
-
-            //     // Next challenge is between the post_leaf and the next_leaf.
-            //     (_, post_key) if post_key <= next_challenge.as_ref().to_vec() => {
-            //         // Update prev_leaf to post_leaf.
-            //         prev_leaf = post_leaf;
-            //     } // Next challenge
-            // }
         }
 
         return Ok(());
