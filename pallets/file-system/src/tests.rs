@@ -10,7 +10,7 @@ use frame_support::{assert_ok, traits::Hooks, weights::Weight};
 use sp_core::H256;
 use sp_runtime::{
     traits::{BlakeTwo256, Get, Hash},
-    BoundedVec,
+    AccountId32, BoundedVec,
 };
 
 #[test]
@@ -19,8 +19,8 @@ fn request_storage_success() {
         // Go past genesis block so events get deposited
         System::set_block_number(1);
 
-        let owner = 1;
-        let user = RuntimeOrigin::signed(owner);
+        let owner_account_id = AccountId32::new([1; 32]);
+        let user = RuntimeOrigin::signed(owner_account_id.clone());
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let size = 4;
         let file_content = b"test".to_vec();
@@ -43,7 +43,7 @@ fn request_storage_success() {
             FileSystem::storage_requests(location.clone()),
             Some(StorageRequestMetadata {
                 requested_at: 1,
-                owner,
+                owner: owner_account_id.clone(),
                 fingerprint,
                 size,
                 user_multiaddresses: multiaddresses.clone(),
@@ -56,7 +56,7 @@ fn request_storage_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::NewStorageRequest {
-                who: 1,
+                who: owner_account_id,
                 location: location.clone(),
                 fingerprint,
                 size: 4,
@@ -73,7 +73,7 @@ fn request_storage_expiration_clear_success() {
         // Go past genesis block so events get deposited
         System::set_block_number(1);
 
-        let user = RuntimeOrigin::signed(1);
+        let owner = RuntimeOrigin::signed(AccountId32::new([1; 32]));
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
@@ -83,7 +83,7 @@ fn request_storage_expiration_clear_success() {
 
         // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::issue_storage_request(
-            user.clone(),
+            owner.clone(),
             location.clone(),
             fingerprint,
             4,
@@ -115,7 +115,7 @@ fn request_storage_expiration_current_block_increment_success() {
         // Go past genesis block so events get deposited
         System::set_block_number(1);
 
-        let user = RuntimeOrigin::signed(1);
+        let owner = RuntimeOrigin::signed(AccountId32::new([1; 32]));
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
@@ -137,7 +137,7 @@ fn request_storage_expiration_current_block_increment_success() {
 
         // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::issue_storage_request(
-            user.clone(),
+            owner.clone(),
             location.clone(),
             fingerprint,
             4,
@@ -176,7 +176,7 @@ fn request_storage_clear_old_expirations_success() {
         // Go past genesis block so events get deposited
         System::set_block_number(1);
 
-        let user = RuntimeOrigin::signed(1);
+        let owner = RuntimeOrigin::signed(AccountId32::new([1; 32]));
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
@@ -198,7 +198,7 @@ fn request_storage_clear_old_expirations_success() {
 
         // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::issue_storage_request(
-            user.clone(),
+            owner.clone(),
             location.clone(),
             fingerprint,
             4,
@@ -254,14 +254,14 @@ fn revoke_request_storage_success() {
         // Go past genesis block so events get deposited
         System::set_block_number(1);
 
-        let user = RuntimeOrigin::signed(1);
+        let owner = RuntimeOrigin::signed(AccountId32::new([1; 32]));
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
 
         // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::issue_storage_request(
-            user.clone(),
+            owner.clone(),
             location.clone(),
             fingerprint,
             4,
@@ -278,7 +278,7 @@ fn revoke_request_storage_success() {
 
         // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::revoke_storage_request(
-            user.clone(),
+            owner.clone(),
             location.clone()
         ));
 
@@ -293,18 +293,19 @@ fn bsp_volunteer_success() {
         // Go past genesis block so events get deposited
         System::set_block_number(1);
 
-        let user = RuntimeOrigin::signed(1);
-        let bsp = RuntimeOrigin::signed(2);
+        let owner = RuntimeOrigin::signed(AccountId32::new([1; 32]));
+        let bsp_account_id = AccountId32::new([2; 32]);
+        let bsp = RuntimeOrigin::signed(bsp_account_id.clone());
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-        let file_content = b"test".to_vec();
-        let fingerprint = BlakeTwo256::hash(&file_content);
+        // bypass the volunteer assignment threshold
+        let fingerprint = H256::zero();
         let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
         let multiaddresses: BoundedVec<MultiAddress<Test>, <Test as Config>::MaxMultiAddresses> =
             BoundedVec::try_from(vec![multiaddr]).unwrap();
 
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
-            user.clone(),
+            owner.clone(),
             location.clone(),
             fingerprint,
             4,
@@ -321,7 +322,7 @@ fn bsp_volunteer_success() {
 
         // Assert that the RequestStorageBsps has the correct value
         assert_eq!(
-            FileSystem::storage_request_bsps(location.clone(), 2)
+            FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone())
                 .expect("BSP should exist in storage"),
             StorageRequestBspsMetadata::<Test> {
                 confirmed: false,
@@ -332,7 +333,7 @@ fn bsp_volunteer_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::AcceptedBspVolunteer {
-                who: 2,
+                who: bsp_account_id,
                 location,
                 fingerprint,
                 multiaddresses,
@@ -348,21 +349,22 @@ fn bsp_stop_storing_success() {
         // Go past genesis block so events get deposited
         System::set_block_number(1);
 
-        let owner = 1;
-        let user = RuntimeOrigin::signed(owner);
-        let bsp = RuntimeOrigin::signed(2);
+        let owner_account_id = AccountId32::new([1; 32]);
+        let owner = RuntimeOrigin::signed(owner_account_id.clone());
+        let bsp_account_id = AccountId32::new([2; 32]);
+        let bsp = RuntimeOrigin::signed(bsp_account_id.clone());
         let file_key = H256::from_slice(&[1; 32]);
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let size = 4;
-        let file_content = b"test".to_vec();
-        let fingerprint = BlakeTwo256::hash(&file_content);
+        // bypass the volunteer assignment threshold
+        let fingerprint = H256::zero();
         let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
         let multiaddresses: BoundedVec<MultiAddress<Test>, <Test as Config>::MaxMultiAddresses> =
             BoundedVec::try_from(vec![multiaddr]).unwrap();
 
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
-            user.clone(),
+            owner.clone(),
             location.clone(),
             fingerprint,
             size,
@@ -379,7 +381,7 @@ fn bsp_stop_storing_success() {
 
         // Assert that the RequestStorageBsps has the correct value
         assert_eq!(
-            FileSystem::storage_request_bsps(location.clone(), 2)
+            FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone())
                 .expect("BSP should exist in storage"),
             StorageRequestBspsMetadata::<Test> {
                 confirmed: false,
@@ -392,21 +394,23 @@ fn bsp_stop_storing_success() {
             bsp.clone(),
             file_key,
             location.clone(),
-            owner,
+            owner_account_id.clone(),
             fingerprint,
             size,
             false
         ));
 
         // Assert that the RequestStorageBsps has the correct value
-        assert!(FileSystem::storage_request_bsps(location.clone(), 2).is_none());
+        assert!(
+            FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone()).is_none()
+        );
 
         // Assert that the storage was updated
         assert_eq!(
             FileSystem::storage_requests(location.clone()),
             Some(StorageRequestMetadata {
                 requested_at: 1,
-                owner,
+                owner: owner_account_id.clone(),
                 fingerprint,
                 size,
                 user_multiaddresses: multiaddresses.clone(),
@@ -418,9 +422,9 @@ fn bsp_stop_storing_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
-                bsp: 2,
+                bsp: bsp_account_id,
                 file_key,
-                owner,
+                owner: owner_account_id,
                 location,
             }
             .into(),

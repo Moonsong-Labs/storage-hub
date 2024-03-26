@@ -32,7 +32,7 @@ pub struct StorageRequestMetadata<T: Config> {
     ///
     /// This is useful when a BSP stops serving data and automatically creates a new storage request with no user multiaddresses, since
     /// SPs can prove and serve the data to be replicated to other BSPs without the user having this stored on their local machine.
-    pub data_server_sps: BoundedVec<StorageProviderId<T>, MaxBspsPerStorageRequest<T>>, // TODO: Change the Maximum data servers to be the maximum SPs allowed
+    pub data_server_sps: BoundedVec<T::AccountId, MaxBspsPerStorageRequest<T>>, // TODO: Change the Maximum data servers to be the maximum SPs allowed
     /// Number of BSPs requested to store the data.
     ///
     ///
@@ -59,6 +59,14 @@ pub struct StorageRequestBspsMetadata<T: Config> {
 
 /// Alias for the `AccountId` type used in the FileSystem pallet.
 pub type StorageProviderId<T> = <T as frame_system::Config>::AccountId;
+
+/// Alias for the `MerkleHash` type used in the ProofsDealerInterface.
+pub type FileKey<T> =
+    <<T as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash;
+
+/// Alias for the `Proof` type used in the ProofsDealerInterface.
+pub type Proof<T> =
+    <<T as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::Proof;
 
 /// Alias for the `MaxBsps` type used in the FileSystem pallet.
 pub type MaxBspsPerStorageRequest<T> = <T as crate::Config>::MaxBspsPerStorageRequest;
@@ -89,6 +97,3 @@ pub type MaxMultiAddresses<T> = <T as crate::Config>::MaxMultiAddresses;
 
 /// Alias for a bounded vector of [`MultiAddress`].
 pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;
-
-/// Alias for the `FileKey` type used in the proofs-dealer pallet.
-pub type FileKey<T> = <T as pallet_proofs_dealer::Config>::MerkleHash;

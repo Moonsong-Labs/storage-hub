@@ -546,6 +546,11 @@ impl TrieVerifier for ProofTrieVerifier {
 /// Configure the pallet template in pallets/template.
 impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type Providers = Providers;
+    type ProofDealer = ProofsDealer;
+    type AssignmentThreshold = u128;
+    type AssignmentThresholdMultiplier = ConstU32<100>;
+    type MinBspsAssignmentThreshold = ConstU128<{ u128::MAX / 2 }>;
     type Fingerprint = Hash;
     type StorageUnit = u128;
     type StorageRequestBspsRequiredType = u32;

@@ -1,20 +1,21 @@
 use core::cmp::max;
 
+use codec::{Decode, Encode};
 use frame_support::{ensure, pallet_prelude::DispatchResult, traits::Get};
 use frame_system::pallet_prelude::BlockNumberFor;
-use sp_runtime::Saturating;
 use sp_runtime::{
-    traits::{CheckedAdd, Zero},
+    traits::{CheckedAdd, One, Zero},
     BoundedVec,
 };
+use sp_runtime::{SaturatedConversion, Saturating};
 use sp_std::vec;
 
 use crate::types::{FileKey, TargetBspsRequired};
 use crate::{
     pallet,
     types::{
-        FileLocation, Fingerprint, MaxBspsPerStorageRequest, MultiAddresses, StorageProviderId,
-        StorageRequestBspsMetadata, StorageRequestMetadata, StorageUnit,
+        FileLocation, Fingerprint, MaxBspsPerStorageRequest, MultiAddresses, Proof,
+        StorageProviderId, StorageRequestBspsMetadata, StorageRequestMetadata, StorageUnit,
     },
     Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
     StorageRequestExpirations, StorageRequests,
@@ -60,7 +61,7 @@ where
     /// it is expected that storage providers that do have this file in storage already, will be able to send a
     /// transaction to the chain to add themselves as a data server for the storage request.
     pub(crate) fn do_request_storage(
-        owner: T::AccountId,
+        owner: StorageProviderId<T>,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
         size: StorageUnit<T>,
@@ -132,9 +133,9 @@ where
     }
 
     pub(crate) fn do_bsp_volunteer(
-        who: T::AccountId,
+        who: StorageProviderId<T>,
         location: FileLocation<T>,
-        _fingerprint: Fingerprint<T>,
+        fingerprint: Fingerprint<T>,
     ) -> DispatchResult {
         // TODO: Verify BSP has enough storage capacity to store the file
         // TODO: Check that sender is a registered storage provider
@@ -159,7 +160,31 @@ where
             Error::<T>::BspAlreadyVolunteered
         );
 
-        // TODO: Check that the BSP XOR is lower than the threshold
+        // Check that the threshold value is high enough to qualify as BSP for the storage request.
+        let threshold = Self::calculate_xor(
+            fingerprint
+                .as_ref()
+                .try_into()
+                .map_err(|_| Error::<T>::FailedToEncodeFingerprint)?,
+            &who.encode()
+                .try_into()
+                .map_err(|_| Error::<T>::FailedToEncodeBsp)?,
+        );
+
+        let bsp_threshold = T::AssignmentThreshold::decode(&mut &threshold[..])
+            .map_err(|_| Error::<T>::FailedToDecodeThreshold)?;
+
+        let blocks_since_requested = <frame_system::Pallet<T>>::block_number()
+            .saturating_sub(file_metadata.requested_at)
+            .saturated_into::<u32>();
+
+        let rate_increase = blocks_since_requested
+            .saturating_mul(T::AssignmentThresholdMultiplier::get())
+            .saturated_into::<T::AssignmentThreshold>();
+
+        let threshold = rate_increase.saturating_add(T::MinBspsAssignmentThreshold::get());
+
+        ensure!(bsp_threshold <= threshold, Error::<T>::ThresholdTooLow);
 
         // Add BSP to storage request metadata.
         <StorageRequestBsps<T>>::insert(
@@ -176,9 +201,83 @@ where
         Ok(())
     }
 
+    pub(crate) fn do_bsp_confirm_storing(
+        who: StorageProviderId<T>,
+        location: FileLocation<T>,
+        root: FileKey<T>,
+        proof: Proof<T>,
+    ) -> DispatchResult {
+        let bsp = match <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(
+            who.clone(),
+        ) {
+            Some(bsp) => bsp,
+            None => return Err(Error::<T>::NotABsp.into()),
+        };
+
+        // Check that the storage request exists.
+        let file_metadata = expect_or_err!(
+            <StorageRequests<T>>::get(&location),
+            "Storage request should exist",
+            Error::<T>::StorageRequestNotFound
+        );
+
+        expect_or_err!(
+                    file_metadata.bsps_confirmed < file_metadata.bsps_required,
+                    "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
+                    Error::<T>::StorageRequestBspsRequiredFulfilled,
+                    bool
+                );
+
+        // Check that the sender is a registered storage provider.
+        ensure!(
+            <StorageRequestBsps<T>>::contains_key(&location, &who),
+            Error::<T>::BspNotVolunteered
+        );
+
+        // Check that the storage provider has not already confirmed storing the file.
+        ensure!(
+            !<StorageRequestBsps<T>>::get(&location, &who)
+                .expect("BSP should exist since we checked it above")
+                .confirmed,
+            Error::<T>::BspAlreadyConfirmed
+        );
+
+        // Check that the proof is valid.
+        ensure!(
+            <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::verify_proof(
+                &bsp, &root, &proof,
+            )
+            .is_ok(),
+            Error::<T>::InvalidProof
+        );
+
+        // Increment the number of confirmed storage providers.
+        <StorageRequests<T>>::try_mutate(&location, |file_metadata| -> DispatchResult {
+            let file_metadata = file_metadata
+                .as_mut()
+                .ok_or(Error::<T>::StorageRequestNotFound)?;
+
+            match file_metadata
+                .bsps_confirmed
+                .checked_add(&T::StorageRequestBspsRequiredType::one())
+            {
+                Some(bsps_confirmed) => {
+                    file_metadata.bsps_confirmed = bsps_confirmed;
+                }
+                None => {
+                    return Err(Error::<T>::StorageRequestBspsRequiredFulfilled.into());
+                }
+            }
+
+            Ok(())
+        })?;
+
+        Ok(())
+    }
+
     /// Revoke a storage request.
     pub(crate) fn do_revoke_storage_request(
-        who: T::AccountId,
+        who: StorageProviderId<T>,
         location: FileLocation<T>,
     ) -> DispatchResult {
         // Check that the storage request exists.
@@ -217,9 +316,9 @@ where
     /// will handle triggering the appropriate event and pending storage request.
     pub(crate) fn do_bsp_stop_storing(
         who: StorageProviderId<T>,
-        _file_key: FileKey<T>,
+        file_key: FileKey<T>,
         location: FileLocation<T>,
-        owner: T::AccountId,
+        owner: StorageProviderId<T>,
         fingerprint: Fingerprint<T>,
         size: StorageUnit<T>,
         can_serve: bool,
@@ -268,7 +367,13 @@ where
 
         // TODO: loose couple this with a trait
         // Challenge BSP to force update its storage root to uninclude the file.
-        // pallet_proofs_dealer::Pallet::<T>::do_challenge(&who, &file_key)?;
+        ensure!(
+            <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
+                &file_key
+            )
+            .is_ok(),
+            Error::<T>::InvalidProof
+        );
 
         Ok(())
     }
@@ -293,5 +398,15 @@ where
             <NextAvailableExpirationInsertionBlock<T>>::get(),
         );
         block_to_insert_expiration
+    }
+
+    /// Calculate the XOR of the fingerprint and the BSP.
+    fn calculate_xor(fingerprint: &[u8; 32], bsp: &[u8; 32]) -> Vec<u8> {
+        let mut xor_result = Vec::with_capacity(32);
+        for i in 0..32 {
+            xor_result.push(fingerprint[i] ^ bsp[i]);
+        }
+
+        xor_result
     }
 }
