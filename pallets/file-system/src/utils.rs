@@ -8,7 +8,7 @@ use sp_runtime::{
     BoundedVec,
 };
 use sp_runtime::{SaturatedConversion, Saturating};
-use sp_std::vec;
+use sp_std::{vec, vec::Vec};
 
 use crate::types::{FileKey, TargetBspsRequired};
 use crate::{

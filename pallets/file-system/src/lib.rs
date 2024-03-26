@@ -408,12 +408,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and confirm storage.
-            Self::do_bsp_confirm_storing(
-                who.clone(),
-                location.clone(),
-                root.clone(),
-                proof.clone(),
-            )?;
+            Self::do_bsp_confirm_storing(who.clone(), location.clone(), root, proof.clone())?;
 
             // Emit event.
             Self::deposit_event(Event::BspConfirmedStoring { who, location });
