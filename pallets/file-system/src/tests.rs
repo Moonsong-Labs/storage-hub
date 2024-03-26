@@ -258,6 +258,7 @@ fn revoke_request_storage_success() {
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
+        let file_key = H256::zero();
 
         // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::issue_storage_request(
@@ -279,7 +280,8 @@ fn revoke_request_storage_success() {
         // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::revoke_storage_request(
             owner.clone(),
-            location.clone()
+            location.clone(),
+            file_key
         ));
 
         // Assert that the correct event was deposited

@@ -337,12 +337,13 @@ pub mod pallet {
         pub fn revoke_storage_request(
             origin: OriginFor<T>,
             location: FileLocation<T>,
+            file_key: FileKey<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
 
             // Perform validations and revoke storage request
-            Self::do_revoke_storage_request(who, location.clone())?;
+            Self::do_revoke_storage_request(who, location.clone(), file_key)?;
 
             // Emit event.
             Self::deposit_event(Event::StorageRequestRevoked { location });

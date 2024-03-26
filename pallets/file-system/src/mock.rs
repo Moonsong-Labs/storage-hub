@@ -1,5 +1,5 @@
 use frame_support::{
-    derive_impl, parameter_types,
+    construct_runtime, derive_impl, parameter_types,
     traits::{Everything, Hooks},
     weights::{constants::RocksDbWeight, Weight},
 };
@@ -35,13 +35,13 @@ fn roll_one_block() -> BlockNumber {
 }
 
 // Configure a mock runtime to test the pallet.
-frame_support::construct_runtime!(
+construct_runtime!(
     pub enum Test
     {
         System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
         FileSystem: crate::{Pallet, Call, Storage, Event<T>},
-        Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>},
+        Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>, HoldReason},
         ProofsDealer: pallet_proofs_dealer::{Pallet, Call, Storage, Event<T>},
     }
 );
@@ -49,6 +49,7 @@ frame_support::construct_runtime!(
 parameter_types! {
     pub const BlockHashCount: u64 = 250;
     pub const SS58Prefix: u8 = 42;
+    pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::Providers(pallet_storage_providers::HoldReason::StorageProviderDeposit);
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig as frame_system::DefaultConfig)]
@@ -56,13 +57,13 @@ impl system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
     type BlockLength = ();
-    type DbWeight = ();
+    type DbWeight = RocksDbWeight;
     type RuntimeOrigin = RuntimeOrigin;
     type RuntimeCall = RuntimeCall;
     type Nonce = u64;
     type Hash = H256;
     type Hashing = BlakeTwo256;
-    type AccountId = u64;
+    type AccountId = AccountId;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Block = Block;
     type RuntimeEvent = RuntimeEvent;
@@ -89,7 +90,7 @@ impl pallet_balances::Config for Test {
     type MaxReserves = ();
     type ReserveIdentifier = [u8; 8];
     type RuntimeHoldReason = RuntimeHoldReason;
-    type RuntimeFreezeReason = ();
+    type RuntimeFreezeReason = RuntimeFreezeReason;
     type FreezeIdentifier = ();
     type MaxHolds = ConstU32<10>;
     type MaxFreezes = ConstU32<10>;

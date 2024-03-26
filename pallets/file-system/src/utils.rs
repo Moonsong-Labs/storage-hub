@@ -85,7 +85,7 @@ where
 
         let file_metadata = StorageRequestMetadata::<T> {
             requested_at: <frame_system::Pallet<T>>::block_number(),
-            owner,
+            owner: owner.clone(),
             fingerprint,
             size,
             user_multiaddresses: user_multiaddresses.unwrap_or_default(),
@@ -122,6 +122,7 @@ where
             <NextAvailableExpirationInsertionBlock<T>>::set(block_to_insert_expiration);
         }
 
+        // Add storage request expiration at next available block.
         expect_or_err!(
             // TODO: Verify that try_append gets an empty BoundedVec when appending a first element.
             <StorageRequestExpirations<T>>::try_append(block_to_insert_expiration, location).ok(),
@@ -272,6 +273,12 @@ where
             Ok(())
         })?;
 
+        // Add data to storage provider.
+        <T::Providers as storage_hub_traits::MutateProvidersInterface>::change_data_used(
+            &who,
+            file_metadata.size,
+        )?;
+
         Ok(())
     }
 
@@ -279,6 +286,7 @@ where
     pub(crate) fn do_revoke_storage_request(
         who: StorageProviderId<T>,
         location: FileLocation<T>,
+        file_key: FileKey<T>,
     ) -> DispatchResult {
         // Check that the storage request exists.
         ensure!(
@@ -303,6 +311,13 @@ where
         <StorageRequests<T>>::remove(&location);
 
         // TODO: initiate deletion request for SPs.
+        ensure!(
+            <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
+                &file_key
+            )
+            .is_ok(),
+            Error::<T>::InvalidProof
+        );
 
         Ok(())
     }
@@ -365,7 +380,6 @@ where
             }
         };
 
-        // TODO: loose couple this with a trait
         // Challenge BSP to force update its storage root to uninclude the file.
         ensure!(
             <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
