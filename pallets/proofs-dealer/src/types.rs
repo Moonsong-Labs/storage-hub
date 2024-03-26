@@ -1,7 +1,7 @@
 use codec::{Decode, Encode};
 use frame_support::traits::fungible;
 use scale_info::TypeInfo;
-use storage_hub_traits::ProvidersInterface;
+use storage_hub_traits::ReadProvidersInterface;
 
 #[derive(Debug, Clone, PartialEq, Decode, Encode, TypeInfo)]
 pub enum ProofRejectionReason {
@@ -48,7 +48,8 @@ pub type TreasuryAccountFor<T> = <T as crate::Config>::Treasury;
 pub type ProvidersPalletFor<T> = <T as crate::Config>::ProvidersPallet;
 
 /// Syntactic sugar for the Provider type used in the proofs pallet.
-pub type ProviderFor<T> = <<T as crate::Config>::ProvidersPallet as ProvidersInterface>::Provider;
+pub type ProviderFor<T> =
+    <<T as crate::Config>::ProvidersPallet as ReadProvidersInterface>::Provider;
 
 /// Syntactic sugar for the type of NativeBalance pallet.
 pub type BalancePalletFor<T> = <T as crate::Config>::NativeBalance;

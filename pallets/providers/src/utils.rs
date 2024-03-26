@@ -1,7 +1,7 @@
 use crate::types::{Bucket, MainStorageProvider};
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::traits::Get;
-use storage_hub_traits::ProvidersInterface;
+use storage_hub_traits::{MutateProvidersInterface, ReadProvidersInterface};
 
 use crate::*;
 
@@ -52,7 +52,13 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
 }
 
 /// Implement the StorageProvidersInterface trait for the Storage Providers pallet.
-impl<T: pallet::Config> StorageProvidersInterface<T> for pallet::Pallet<T> {
+impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
+    type AccountId = T::AccountId;
+    type Provider = T::HashId;
+    type StorageData = T::StorageData;
+    type BucketId = T::HashId;
+    type MerklePatriciaRoot = T::MerklePatriciaRoot;
+
     fn change_data_used(who: &T::AccountId, data_change: T::StorageData) -> DispatchResult {
         // TODO: refine this logic, add checks
         if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
@@ -140,7 +146,7 @@ impl<T: pallet::Config> StorageProvidersInterface<T> for pallet::Pallet<T> {
     }
 }
 
-impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
+impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     type AccountId = T::AccountId;
     type Provider = HashId<T>;
     type Balance = T::NativeBalance;

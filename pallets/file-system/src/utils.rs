@@ -14,8 +14,8 @@ use crate::types::{FileKey, TargetBspsRequired};
 use crate::{
     pallet,
     types::{
-        FileLocation, Fingerprint, MaxBspsPerStorageRequest, MultiAddresses, Proof,
-        StorageProviderId, StorageRequestBspsMetadata, StorageRequestMetadata, StorageUnit,
+        FileLocation, Fingerprint, MaxBspsPerStorageRequest, MultiAddresses, Proof, StorageData,
+        StorageProviderId, StorageRequestBspsMetadata, StorageRequestMetadata,
     },
     Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
     StorageRequestExpirations, StorageRequests,
@@ -64,7 +64,7 @@ where
         owner: StorageProviderId<T>,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
-        size: StorageUnit<T>,
+        size: StorageData<T>,
         bsps_required: Option<T::StorageRequestBspsRequiredType>,
         user_multiaddresses: Option<MultiAddresses<T>>,
         data_server_sps: BoundedVec<StorageProviderId<T>, MaxBspsPerStorageRequest<T>>,
@@ -207,7 +207,7 @@ where
         root: FileKey<T>,
         proof: Proof<T>,
     ) -> DispatchResult {
-        let bsp = match <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(
+        let bsp = match <T::Providers as storage_hub_traits::ReadProvidersInterface>::get_provider(
             who.clone(),
         ) {
             Some(bsp) => bsp,
@@ -320,7 +320,7 @@ where
         location: FileLocation<T>,
         owner: StorageProviderId<T>,
         fingerprint: Fingerprint<T>,
-        size: StorageUnit<T>,
+        size: StorageData<T>,
         can_serve: bool,
     ) -> DispatchResult {
         // Check that the storage request exists.

@@ -60,12 +60,13 @@ pub mod pallet {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// The trait for issuing challenges and verifying proofs.
-        type Providers: storage_hub_traits::ProvidersInterface<AccountId = Self::AccountId>;
+        /// The trait for reading and mutating storage provider data.
+        type Providers: storage_hub_traits::ReadProvidersInterface<AccountId = Self::AccountId>
+            + storage_hub_traits::MutateProvidersInterface<AccountId = Self::AccountId>;
 
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: storage_hub_traits::ProofsDealerInterface<
-            Provider = <Self::Providers as storage_hub_traits::ProvidersInterface>::Provider,
+            Provider = <Self::Providers as storage_hub_traits::ReadProvidersInterface>::Provider,
         >;
 
         /// Type representing the threshold a BSP must meet to be eligible to volunteer to store a file.
@@ -102,17 +103,6 @@ pub mod pallet {
             + AsRef<[u8]>
             + AsMut<[u8]>
             + MaxEncodedLen;
-
-        /// Unit representing the size of a file.
-        type StorageUnit: Parameter
-            + Member
-            + MaybeSerializeDeserialize
-            + Default
-            + MaybeDisplay
-            + AtLeast32Bit
-            + Copy
-            + MaxEncodedLen
-            + HasCompact;
 
         /// Type representing the storage request bsps size type.
         type StorageRequestBspsRequiredType: Parameter
@@ -227,7 +217,7 @@ pub mod pallet {
             who: StorageProviderId<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            size: StorageUnit<T>,
+            size: StorageData<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, T::MaxMultiAddresses>,
         },
         /// Notifies that a BSP has been accepted to store a given file.
@@ -312,7 +302,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            size: StorageUnit<T>,
+            size: StorageData<T>,
             multiaddresses: MultiAddresses<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
@@ -428,7 +418,7 @@ pub mod pallet {
             location: FileLocation<T>,
             owner: StorageProviderId<T>,
             fingerprint: Fingerprint<T>,
-            size: StorageUnit<T>,
+            size: StorageData<T>,
             can_serve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;

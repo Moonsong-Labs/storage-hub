@@ -552,7 +552,6 @@ impl pallet_file_system::Config for Runtime {
     type AssignmentThresholdMultiplier = ConstU32<100>;
     type MinBspsAssignmentThreshold = ConstU128<{ u128::MAX / 2 }>;
     type Fingerprint = Hash;
-    type StorageUnit = u128;
     type StorageRequestBspsRequiredType = u32;
     type TargetBspsRequired = ConstU32<1>;
     type MaxBspsPerStorageRequest = ConstU32<5>;

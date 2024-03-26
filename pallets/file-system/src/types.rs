@@ -23,7 +23,7 @@ pub struct StorageRequestMetadata<T: Config> {
     ///
     /// SPs will use this to determine if they have enough space to store the data.
     /// This is also used to verify that the data sent by the user matches the size specified here.
-    pub size: StorageUnit<T>,
+    pub size: StorageData<T>,
     /// Multiaddress of the user who requested the storage.
     ///
     /// SPs will expect a connection request to be initiated by the user with this multiaddress.
@@ -78,7 +78,8 @@ pub type MaxFilePathSize<T> = <T as crate::Config>::MaxFilePathSize;
 pub type Fingerprint<T> = <T as crate::Config>::Fingerprint;
 
 /// Alias for the `StorageCount` type used in the FileSystem pallet.
-pub type StorageUnit<T> = <T as crate::Config>::StorageUnit;
+pub type StorageData<T> =
+    <<T as crate::Config>::Providers as storage_hub_traits::MutateProvidersInterface>::StorageData;
 
 /// Alias for the `TargetBspsRequired` type used in the FileSystem pallet.
 pub type TargetBspsRequired<T> = <T as crate::Config>::TargetBspsRequired;
