@@ -89,7 +89,6 @@ jobs:
       - name: Run Tests
         run: |
           bun install
-          cd test
           bun run test:simple
 
   zombie_test:
