@@ -29,6 +29,7 @@ This repo contains all aspects relating to StorageHub, including clients, the ru
 ├── pallets                <---- storage-hub pallets
 ├── runtime                <---- storage-hub runtime
 ├── storage-kit            <---- storage provider library kit
+├── support                <---- traits and implementations used by storage-hub
 ├── test                   <---- TypeScript module
 ├── tmp.txt
 ├── tsconfig.json

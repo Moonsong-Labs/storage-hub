@@ -12418,6 +12418,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "storage-hub-primitives"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-trie",
+ "storage-hub-traits",
+]
+
+[[package]]
 name = "storage-hub-runtime"
 version = "0.1.0"
 dependencies = [
@@ -12481,9 +12496,7 @@ dependencies = [
 name = "storage-hub-traits"
 version = "0.1.0"
 dependencies = [
- "frame-benchmarking",
  "frame-support",
- "frame-system",
  "parity-scale-codec",
  "scale-info",
  "serde",
