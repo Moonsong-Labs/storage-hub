@@ -1,6 +1,6 @@
 [package]
-name = "storage-hub-traits"
-description = "Support traits used in StorageHub"
+name = "storage-hub-primitives"
+description = "Support primitives used in StorageHub"
 version = "0.1.0"
 homepage = { workspace = true }
 license = { workspace = true }
@@ -18,8 +18,11 @@ targets = ["x86_64-unknown-linux-gnu"]
 codec = { workspace = true }
 scale-info = { workspace = true }
 
-# Frame
-frame-support = { workspace = true }
+# Local
+storage-hub-traits = { workspace = true }
+
+# Substrate
+sp-trie = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
@@ -29,11 +32,15 @@ sp-core = { workspace = true }
 sp-io = { workspace = true }
 sp-runtime = { workspace = true }
 
+# Frame
+frame-support = { workspace = true }
+
 [features]
 default = ["std"]
 runtime-benchmarks = [
     "frame-support/runtime-benchmarks",
     "sp-runtime/runtime-benchmarks",
+    "storage-hub-traits/runtime-benchmarks",
 ]
 std = [
     "codec/std",
@@ -42,8 +49,11 @@ std = [
     "sp-core/std",
     "sp-io/std",
     "sp-runtime/std",
+    "sp-trie/std",
+    "storage-hub-traits/std",
 ]
 try-runtime = [
     "frame-support/try-runtime",
     "sp-runtime/try-runtime",
+    "storage-hub-traits/try-runtime",
 ]

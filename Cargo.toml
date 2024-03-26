@@ -29,8 +29,6 @@ scale-info = { version = "2.11.0", default-features = false, features = [
     "derive",
 ] }
 
-storage-hub-traits = { path = "support/traits", default-features = false }
-
 # Substrate
 frame-benchmarking = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
 frame-support = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
@@ -44,10 +42,11 @@ sp-trie = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polka
 
 pallet-balances = { version = "4.0.0-dev", git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false}
 
-# Local Pallets
+# Local
 pallet-storage-providers = { path = "pallets/providers", default-features = false }
 pallet-file-system = { path = "pallets/file-system", default-features = false }
 pallet-proofs-dealer = { path = "pallets/proofs-dealer", default-features = false }
+storage-hub-traits = { path = "support/traits", default-features = false }
 
 [workspace.lints.rust]
 suspicious_double_ref_op = { level = "allow", priority = 2 }
