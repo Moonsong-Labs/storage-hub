@@ -19,10 +19,11 @@ mod benchmarking;
 pub mod pallet {
     use super::types::*;
     use codec::{FullCodec, HasCompact};
+    // TODO: use frame_support::traits::Randomness;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
-        sp_runtime::traits::{AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, One, SimpleBitOps},
+        sp_runtime::traits::{AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, SimpleBitOps},
         traits::fungible::*,
         Blake2_128Concat,
     };
@@ -35,30 +36,20 @@ pub mod pallet {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
+        /// TODO: Type to access randomness to salt AccountIds and get the corresponding HashId
+        //type ProvidersRandomness: Randomness<Self::HashId, BlockNumberFor<Self>>;
+
         /// Type to access the Balances pallet (using the fungible trait from frame_support)
         type NativeBalance: Inspect<Self::AccountId>
             + Mutate<Self::AccountId>
-            + hold::Inspect<Self::AccountId>
+            + hold::Inspect<Self::AccountId, Reason = Self::RuntimeHoldReason>
             // , Reason = Self::HoldReason> We will probably have to hold deposits
-            + hold::Mutate<Self::AccountId>
+            + hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>
             + freeze::Inspect<Self::AccountId>
             + freeze::Mutate<Self::AccountId>;
 
-        /// The type of ID that uniquely identifies a Merkle Trie Holder (BSPs/Buckets) from an AccountId
-        type HashId: Parameter
-            + Member
-            + MaybeSerializeDeserialize
-            + Debug
-            + MaybeDisplay
-            + SimpleBitOps
-            + Ord
-            + Default
-            + Copy
-            + CheckEqual
-            + AsRef<[u8]>
-            + AsMut<[u8]>
-            + MaxEncodedLen
-            + FullCodec;
+        /// The overarching hold reason
+        type RuntimeHoldReason: From<HoldReason>;
 
         /// Data type for the measurement of storage size
         type StorageData: Parameter
@@ -69,7 +60,8 @@ pub mod pallet {
             + AtLeast32BitUnsigned
             + Copy
             + MaxEncodedLen
-            + HasCompact;
+            + HasCompact
+            + Into<BalanceOf<Self>>;
 
         /// Type that represents the total number of registered Storage Providers.
         type SpCount: Parameter
@@ -208,7 +200,7 @@ pub mod pallet {
     /// The total amount of storage capacity all BSPs have. Remember redundancy!
     #[pallet::storage]
     #[pallet::getter(fn total_bsps_capacity)] // TODO: remove this and add an explicit getter
-    pub type TotalBspsCapacity<T: Config> = StorageValue<_, StorageData<T>>;
+    pub type TotalBspsCapacity<T: Config> = StorageValue<_, StorageData<T>, ValueQuery>;
 
     // Events & Errors:
 
@@ -220,8 +212,8 @@ pub mod pallet {
         /// that MSP's account id, the total data it can store according to its stake, its multiaddress, and its value proposition.
         MspSignUpSuccess {
             who: T::AccountId,
-            multiaddress: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
-            total_data: StorageData<T>,
+            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            capacity: StorageData<T>,
             value_prop: ValueProposition<T>,
         },
 
@@ -229,8 +221,8 @@ pub mod pallet {
         /// that BSP's account id, the total data it can store according to its stake, and its multiaddress.
         BspSignUpSuccess {
             who: T::AccountId,
-            multiaddress: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
-            total_data: StorageData<T>,
+            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            capacity: StorageData<T>,
         },
 
         /// Event emitted when a Main Storage Provider has signed off successfully. Provides information about
@@ -245,8 +237,8 @@ pub mod pallet {
         /// that SP's account id, its old total data that could store, and the new total data.
         TotalDataChanged {
             who: T::AccountId,
-            old_total_data: StorageData<T>,
-            new_total_data: StorageData<T>,
+            old_capacity: StorageData<T>,
+            new_capacity: StorageData<T>,
         },
     }
 
@@ -259,8 +251,12 @@ pub mod pallet {
         StorageTooLow,
         /// Error thrown when a user does not have enough balance to pay the deposit that it would incur by signing up as a SP or changing its total data (stake).
         NotEnoughBalance,
+        /// Error thrown when the runtime cannot hold the required deposit from the account to register it as a SP
+        CannotHoldDeposit,
         /// Error thrown when a user tries to sign up as a BSP but the maximum amount of BSPs has been reached.
         MaxBspsReached,
+        /// Error thrown when a user tries to sign up as a MSP but the maximum amount of MSPs has been reached.
+        MaxMspsReached,
         /// Error thrown when a user tries to sign off as a SP but is not registered as a MSP or BSP.
         NotRegistered,
         /// Error thrown when a user tries to sign off as a SP but still has used storage.
@@ -271,6 +267,24 @@ pub mod pallet {
         NoUserId,
         /// Error thrown when trying to get a root from a MSP without passing a Bucket ID
         NoBucketId,
+        /// Error thrown when a user tries to sign up without any multiaddress
+        NoMultiAddress,
+        /// Error thrown when a user tries to sign up as a SP but any of the provided multiaddresses is invalid
+        InvalidMultiAddress,
+        /// Error thrown when overflowing after doing math operations
+        Overflow,
+    }
+
+    /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
+    ///
+    /// This allows us to hold tokens and be able to identify in the future that those held tokens were
+    /// held because of this pallet
+    #[pallet::composite_enum]
+    pub enum HoldReason {
+        /// Deposit that a Storage Provider has to pay to be registered as such
+        StorageProviderDeposit,
+        // TODO: Only for testing, remove this for production
+        AnotherUnrelatedHold,
     }
 
     /// The hooks that this pallet utilizes (TODO: Check this, we might not need any)
@@ -286,47 +300,45 @@ pub mod pallet {
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that, by registering this new MSP, we would not go over the MaxMsps limit
         /// 3. Check that the signer is not already registered as either a MSP or BSP
-        /// 4. Check that the multiaddress is valid (size and any other relevant checks)
-        /// 4b. Any value proposition checks??? todo!("ask this")
+        /// 4. Check that the multiaddress is valid
         /// 5. Check that the data to be stored is greater than the minimum required by the runtime. todo!("Ask if this applies to MSPs")
         /// 6. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
         /// 7. Check that the signer has enough funds to pay the deposit
         /// 8. Hold the deposit from the signer
         /// 9. Update the MSP storage to add the signer as an MSP
-        /// 10. Increment the storage that holds total amount of SPs currently in the system
+        /// 10. Increment the storage that holds total amount of MSPs currently in the system
         /// 11. Emit an event confirming that the registration of the MSP has been successful
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn msp_sign_up(
             origin: OriginFor<T>,
-            total_data: StorageData<T>,
-            multiaddress: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            capacity: StorageData<T>,
+            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             value_prop: ValueProposition<T>,
         ) -> DispatchResultWithPostInfo {
-            // TODO: Logic to sign up an MSP
-
             // Check that the extrinsic was signed and get the signer.
-            // This function will return an error if the extrinsic is not signed.
-            // https://docs.substrate.io/v3/runtime/origins
             let who = ensure_signed(origin)?;
 
+            // Set up a structure with the information of the new MSP
             let msp_info = MainStorageProvider {
                 buckets: BoundedVec::default(),
-                total_data,
+                capacity,
                 data_used: StorageData::<T>::default(),
-                multiaddresses: multiaddress.clone(),
+                multiaddresses: multiaddresses.clone(),
                 value_prop: value_prop.clone(),
             };
-            // Update storage.
+
+            // Sign up the new MSP (if possible), updating storage
             Self::do_msp_sign_up(&who, &msp_info)?;
 
-            // Emit an event.
+            // Emit the corresponding event
             Self::deposit_event(Event::<T>::MspSignUpSuccess {
                 who,
-                multiaddress,
-                total_data,
+                multiaddresses,
+                capacity,
                 value_prop,
             });
+
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
         }
@@ -337,7 +349,7 @@ pub mod pallet {
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that, by adding this new BSP, we won't exceed the max amount of BSPs allowed
         /// 3. Check that the signer is not already registered as either a MSP or BSP
-        /// 4. Check that the multiaddress is valid (size and any other relevant checks)
+        /// 4. Check that the multiaddress is valid
         /// 5. Check that the data to be stored is greater than the minimum required by the runtime
         /// 6. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
         /// 7. Check that the signer has enough funds to pay the deposit
@@ -345,36 +357,35 @@ pub mod pallet {
         /// 9. Update the BSP storage to add the signer as an BSP
         /// 10. Update the total capacity of all BSPs, adding the new capacity (redundancy is factored in the capacity used)
         /// 11. Add this BSP to the vector of BSPs to draw from for proofs
-        /// 12. Increment the storage that holds total amount of SPs and BSPs currently in the system
+        /// 12. Increment the storage that holds total amount of BSPs currently in the system
         /// 13. Emit an event confirming that the registration of the BSP has been successful
         #[pallet::call_index(1)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn bsp_sign_up(
             origin: OriginFor<T>,
-            total_data: StorageData<T>,
+            capacity: StorageData<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
         ) -> DispatchResultWithPostInfo {
-            // TODO: Logic to sign up a BSP
-
             // Check that the extrinsic was signed and get the signer.
-            // This function will return an error if the extrinsic is not signed.
-            // https://docs.substrate.io/v3/runtime/origins
             let who = ensure_signed(origin)?;
 
-            let new_bsp_amount = BspCount::<T>::get() + T::SpCount::one();
-            ensure!(
-                new_bsp_amount <= T::MaxBsps::get(),
-                Error::<T>::MaxBspsReached
-            );
-
+            // Set up a structure with the information of the new BSP
             let bsp_info = BackupStorageProvider {
-                total_data,
+                capacity,
                 data_used: StorageData::<T>::default(),
-                multiaddresses,
+                multiaddresses: multiaddresses.clone(),
                 root: MerklePatriciaRoot::<T>::default(),
             };
-            // Update storage.
+
+            // Sign up the new BSP (if possible), updating storage
             Self::do_bsp_sign_up(&who, bsp_info)?;
+
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::BspSignUpSuccess {
+                who,
+                multiaddresses,
+                capacity,
+            });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -460,9 +471,9 @@ pub mod pallet {
         /// 8. Emit an event confirming that the change of the total data has been successful
         #[pallet::call_index(4)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn change_total_data(
+        pub fn change_capacity(
             _origin: OriginFor<T>,
-            _new_total_data: StorageData<T>,
+            _new_capacity: StorageData<T>,
         ) -> DispatchResultWithPostInfo {
             // TODO: design a way (with timelock probably) to allow a SP to change its stake
 
@@ -497,16 +508,21 @@ use crate::types::{
 /// Helper functions (getters, setters, etc.) for this pallet
 impl<T: Config> Pallet<T> {
     /// A helper function to get the total capacity of a storage provider.
-    pub fn get_total_capacity(who: &T::AccountId) -> Result<StorageData<T>, Error<T>> {
+    pub fn get_total_capacity_of_sp(who: &T::AccountId) -> Result<StorageData<T>, Error<T>> {
         if let Some(m_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             let msp = MainStorageProviders::<T>::get(m_id).ok_or(Error::<T>::NotRegistered)?;
-            Ok(msp.total_data)
+            Ok(msp.capacity)
         } else if let Some(b_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
             let bsp = BackupStorageProviders::<T>::get(b_id).ok_or(Error::<T>::NotRegistered)?;
-            Ok(bsp.total_data)
+            Ok(bsp.capacity)
         } else {
             Err(Error::<T>::NotRegistered)
         }
+    }
+
+    /// A helper function to get the total capacity of all BSPs.
+    pub fn get_total_bsp_capacity() -> StorageData<T> {
+        TotalBspsCapacity::<T>::get()
     }
 }
 

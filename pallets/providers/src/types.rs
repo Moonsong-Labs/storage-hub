@@ -37,7 +37,7 @@ pub struct ValueProposition<T: Config> {
 #[scale_info(skip_type_params(T))]
 pub struct MainStorageProvider<T: Config> {
     pub buckets: Buckets<T>,
-    pub total_data: StorageData<T>,
+    pub capacity: StorageData<T>,
     pub data_used: StorageData<T>,
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub value_prop: ValueProposition<T>,
@@ -48,7 +48,7 @@ pub struct MainStorageProvider<T: Config> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct BackupStorageProvider<T: Config> {
-    pub total_data: StorageData<T>,
+    pub capacity: StorageData<T>,
     pub data_used: StorageData<T>,
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub root: MerklePatriciaRoot<T>,
@@ -71,9 +71,9 @@ pub type BalanceOf<T> =
     <<T as Config>::NativeBalance as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
 /// BackupStorageProviderId is the type that represents an ID of a Backup Storage Provider, uniquely linked with an AccountId
-pub type BackupStorageProviderId<T> = <T as crate::Config>::HashId;
-/// HashId is the type that represents an ID of a Main Storage Provider, uniquely linked with an AccountId
-pub type MainStorageProviderId<T> = <T as crate::Config>::HashId;
+pub type BackupStorageProviderId<T> = <T as frame_system::Config>::Hash;
+/// MainStorageProviderId is the type that represents an ID of a Main Storage Provider, uniquely linked with an AccountId
+pub type MainStorageProviderId<T> = <T as frame_system::Config>::Hash;
 
 /// MaxMultiAddressSize is the maximum size of the libp2p multiaddress of a Storage Provider in bytes.
 pub type MaxMultiAddressSize<T> = <T as crate::Config>::MaxMultiAddressSize;
@@ -85,8 +85,8 @@ pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
 
 /// MerklePatriciaRoot is the type of the root of a Merkle Patricia Trie, either the root of a BSP or a bucket from an MSP.
 pub type MerklePatriciaRoot<T> = <T as crate::Config>::MerklePatriciaRoot;
-/// MerkleTrieHolderId is the type that identifies the different Merkle Patricia Trie holders (BSPs and buckets).
-pub type HashId<T> = <T as crate::Config>::HashId;
+/// HashId is the type that uniquely identifies either a Storage Provider (MSP or BSP) or a Bucket.
+pub type HashId<T> = <T as frame_system::Config>::Hash;
 
 /// StorageData is the type of the unit in which we measure data size. We define its required traits in the
 /// pallet configuration so the runtime can use any type that implements them.
@@ -101,7 +101,7 @@ pub type Protocols<T> = BoundedVec<u8, MaxProtocols<T>>; // todo!("Define a type
 pub type ValuePropId<T> = <T as crate::Config>::ValuePropId;
 
 /// BucketId is the type that identifies the different buckets that a Main Storage Provider can have.
-pub type BucketId<T> = <T as crate::Config>::HashId;
+pub type BucketId<T> = <T as frame_system::Config>::Hash;
 /// MaxBuckets is the maximum amount of buckets that a Main Storage Provider can have.
 pub type MaxBuckets<T> = <T as crate::Config>::MaxBuckets;
 /// Buckets is a vector of the buckets that a Main Storage Provider has.
