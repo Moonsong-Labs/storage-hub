@@ -12,7 +12,19 @@ on:
         required: false
 
 jobs:
+  set-tags:
+    runs-on: ubuntu-latest
+    outputs:
+      sha8: ${{ steps.get-sha.outputs.sha8 }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get Sha
+        id: get-sha
+        run: |
+          echo "sha8=$(git log -1 --format='%H' | cut -c1-8)" >> $GITHUB_OUTPUT
+
   build_image:
+    needs: set-tags
     name: "Build node image"
     runs-on: ubuntu-latest
     env:
@@ -40,19 +52,43 @@ jobs:
           mkdir -p build
           cp target/release/storage-hub-node build/
           cp target/release/wbuild/storage*/storage*_runtime.compact.compressed.wasm runtimes/
-      - name: Create Docker image file
+      - name: Prepare
+        id: prep
         run: |
-          cd test
-          bun docker:build:sh-node
-          bun docker:save:sh-node
-      - name: Upload image
-        uses: actions/upload-artifact@v4
+          DOCKER_IMAGE=moonsonglabs/storage-hub
+          TAGS="${DOCKER_IMAGE}:sha-${{ needs.set-tags.outputs.sha8 }}"
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
         with:
-          name: sh-node-image
-          path: test/storage-hub-node.tar
+          version: latest
+          driver-opts: |
+            image=moby/buildkit:master
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          file: ./docker/storage-hub-node.Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.prep.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=${{ github.event.repository.name }}
+            org.opencontainers.image.description=${{ github.event.repository.description }}
+            org.opencontainers.image.url=${{ github.event.repository.html_url }}
+            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
 
   zombie_test:
-    needs: build_image
+    needs: [build_image, set-tags]
     name: "Test Simple Network"
     runs-on: ubuntu-latest
     defaults:
@@ -61,14 +97,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v1
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: sh-node-image
-          path: test
-      - name: Load Docker image
-        run: |
-          docker load -i storage-hub-node.tar
+      - name: Pull Docker image
+        run: docker pull moonsonglabs/storage-hub:sha-${{ needs.set-tags.outputs.sha8 }}
       - name: Start local k8 cluster
         uses: medyagh/setup-minikube@latest
         with:
@@ -76,15 +106,6 @@ jobs:
           driver: docker
           cpus: 4
           memory: 12000
-      - name: Setup Docker Registry
-        run: |
-          bun docker:registry:start
-
-          # Wait for registry to start
-          sleep 5 
-
-          bun docker:registry:push
-          docker images
 
       - name: Setup Zombienet
         run: |
