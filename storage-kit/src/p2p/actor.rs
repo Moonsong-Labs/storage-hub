@@ -10,7 +10,7 @@ use tokio::{
 };
 use tracing::*;
 
-use crate::{Actor, ActorEventLoop, Port};
+use crate::{Actor, ActorEventLoop, ActorHandle, Port};
 
 /// Defines max_negotiating_inbound_streams constant for the swarm.
 /// It must be set for large plots.
@@ -132,5 +132,26 @@ impl Actor for P2PModule {
                     .unwrap();
             }
         }
+    }
+}
+
+/// Convenience methods for interacting with the P2PModule.
+impl ActorHandle<P2PModule> {
+    /// Dial an external peer.
+    pub async fn external_dial(&self, multiaddr: Multiaddr) -> Result<()> {
+        let (channel, receiver) = oneshot::channel();
+        self.send(P2PModuleCommand::ExternalDial { multiaddr, channel })
+            .await;
+        receiver.await?
+    }
+
+    /// Get the current list of multiaddresses we are listening on.
+    pub async fn multiaddresses(&self) -> Result<Vec<Multiaddr>> {
+        let (channel, receiver) = oneshot::channel();
+        self.send(P2PModuleCommand::Multiaddresses { channel })
+            .await;
+        receiver
+            .await
+            .map_err(|_| anyhow!("Failed to get multiaddresses"))
     }
 }
