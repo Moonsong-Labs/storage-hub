@@ -1,26 +1,27 @@
 {
-	"name": "@storagehub/test",
-	"version": "0.1.0",
-	"description": "Test package for storagehub",
-	"main": "index.js",
-	"type": "module",
-	"scripts": {
-		"docker:registry:start":"docker run -d -p 5000:5000 --restart=always --name registry registry:2",
-		"docker:registry:push":"docker tag storage-hub-node:local localhost:5000/storage-hub-node:local && docker push localhost:5000/storage-hub-node:local",
-		"docker:build:sh-node": "docker build -t storage-hub-node:local -f ../docker/storage-hub-node.Dockerfile ../.",
-		"docker:save:sh-node": "docker save -o storage-hub-node.tar storage-hub-node:local",
-		"docker:run:sh-node": "docker compose -f docker/storage-hub-node-compose.yml up -d",
-		"test": "bun test"
-	},
-	"keywords": [],
-	"author": "",
-	"license": "ISC",
-	"dependencies": {
-		"@types/bun": "1.0.8",
-		"testcontainers": "10.7.2",
-		"typescript": "5.4.2"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "1.6.1"
-	}
+  "name": "@storagehub/test",
+  "version": "0.1.0",
+  "description": "Test package for storagehub",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "docker:registry:start": "docker run -d -p 5000:5000 --restart=always --name registry registry:2",
+    "docker:registry:push": "docker tag storage-hub-node:local localhost:5000/storage-hub-node:local && docker push localhost:5000/storage-hub-node:local",
+    "docker:build:sh-node": "docker build -t storage-hub-node:local -f ../docker/storage-hub-node.Dockerfile ../.",
+    "docker:save:sh-node": "docker save -o storage-hub-node.tar storage-hub-node:local",
+    "docker:run:sh-node": "docker compose -f docker/storage-hub-node-compose.yml up -d",
+    "test:simple": "tsx scripts/startSimpleNetwork.ts && bun test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/bun": "1.0.8",
+    "testcontainers": "^10.7.2",
+    "tsx": "^4.7.1",
+    "typescript": "5.4.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.6.1"
+  }
 }
