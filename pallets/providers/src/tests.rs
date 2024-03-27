@@ -964,7 +964,11 @@ mod sign_off {
             assert_eq!(StorageProviders::get_msp_count(), 1);
 
             // Check that Alice does not have any used storage
-            assert_eq!(StorageProviders::get_used_storage(&alice).unwrap(), 0);
+            let alice_sp_id = StorageProviders::get_provider(alice).unwrap();
+            assert_eq!(
+                StorageProviders::get_used_storage_of_msp(&alice_sp_id).unwrap(),
+                0
+            );
 
             // Add used storage to Alice (simulating that she has accepted to store a file)
             assert_ok!(
@@ -1012,7 +1016,11 @@ mod sign_off {
             assert_eq!(StorageProviders::get_total_bsp_capacity(), storage_amount);
 
             // Check that Alice does not have any used storage
-            assert_eq!(StorageProviders::get_used_storage(&alice).unwrap(), 0);
+            let alice_sp_id = StorageProviders::get_provider(alice).unwrap();
+            assert_eq!(
+                StorageProviders::get_used_storage_of_bsp(&alice_sp_id).unwrap(),
+                0
+            );
 
             // Add used storage to Alice (simulating that she has accepted to store a file)
             assert_ok!(

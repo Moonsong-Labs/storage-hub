@@ -516,17 +516,20 @@ impl<T: Config> Pallet<T> {
         TotalBspsCapacity::<T>::get()
     }
 
-    /// A helper function to get the total data used by a storage provider.
-    pub fn get_used_storage(who: &T::AccountId) -> Result<StorageData<T>, Error<T>> {
-        if let Some(m_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
-            let msp = MainStorageProviders::<T>::get(m_id).ok_or(Error::<T>::NotRegistered)?;
-            Ok(msp.data_used)
-        } else if let Some(b_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
-            let bsp = BackupStorageProviders::<T>::get(b_id).ok_or(Error::<T>::NotRegistered)?;
-            Ok(bsp.data_used)
-        } else {
-            Err(Error::<T>::NotRegistered)
-        }
+    /// A helper function to get the total data used by a Main Storage Provider
+    pub fn get_used_storage_of_msp(
+        who: &MainStorageProviderId<T>,
+    ) -> Result<StorageData<T>, Error<T>> {
+        let msp = MainStorageProviders::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+        Ok(msp.data_used)
+    }
+
+    /// A helper function to get the total data used by a Backup Storage Provider
+    pub fn get_used_storage_of_bsp(
+        who: &BackupStorageProviderId<T>,
+    ) -> Result<StorageData<T>, Error<T>> {
+        let bsp = BackupStorageProviders::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+        Ok(bsp.data_used)
     }
 
     /// A helper function to get the total amount of BSPs that have registered
