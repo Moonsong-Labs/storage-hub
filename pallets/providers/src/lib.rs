@@ -407,6 +407,7 @@ pub mod pallet {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
+            // Execute checks and logic, update storage
             Self::do_msp_sign_off(&who)?;
 
             // Emit the corresponding event
@@ -433,6 +434,7 @@ pub mod pallet {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
+            // Execute checks and logic, update storage
             Self::do_bsp_sign_off(&who)?;
 
             // Emit the corresponding event
