@@ -1,3 +1,22 @@
+# Storage Hub: Parachain CI/CD Workflow
+#
+# Overview:
+# 1. Setup: This attempts to determine two things:
+#     - If the parachain node needs to be rebuilt based on changes to src code,
+#       or if an explicit skip tag has been set in the PR.
+#     - The tag name to use for the Docker image based on the outcome of the first check.
+# 2. Build Image: Conditionally executes based on the outcome of the setup job. If a new
+#    build is determined nessecary, it proceeds to build a Docker image of the parachain node.
+# 3. Zombie Test: Executes integration tests using Zombienet. This job pulls the relevant Docker image
+#    based on the setup job's output and runs tests to ensure network functionality.
+#
+# Note: This workflow assumes the presence of repo secrets for Docker Hub authentication
+#
+# TODO:
+# - Add parachain test suite (when ready)
+# - Publish runtime to docker
+# - Add upgrade tests for runtime
+
 name: Storage Hub Parachain CI/CD
 
 on:
