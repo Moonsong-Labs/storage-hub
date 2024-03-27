@@ -5,7 +5,7 @@ services:
       - "9944:9944"
     command:
       [
-        "/storage-hub/storage-hub-node",
+        "storage-hub-node",
         "--dev",
         "--unsafe-rpc-external",
         "--rpc-cors=all",

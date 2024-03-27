@@ -18,7 +18,7 @@ id = 2000
 [parachains.collator]
 # Renable when we have a working parachain spec
 # image = "{{SH_IMAGE}}"
-# command = "/usr/bin/storage-hub-node"
+# command = "storage-hub-node"
 name = "sh"
 args = ["--no-hardware-benchmarks", "-lparachain=debug", "--database=paritydb"]
 

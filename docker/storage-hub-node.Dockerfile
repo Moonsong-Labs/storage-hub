@@ -24,12 +24,12 @@ RUN apt-get update && \
 USER storage-hub
 
 # copy the compiled binary to the container
-COPY --chown=storage-hub:storage-hub --chmod=774 build/storage-hub-node /storage-hub/storage-hub-node
+COPY --chown=storage-hub:storage-hub --chmod=774 build/storage-hub-node /usr/bin/storage-hub-node
 
 # check if executable works in this container
-RUN /storage-hub/storage-hub-node --version
+RUN storage-hub-node --version
 
 # ws_port
 EXPOSE 9333 9944 30333 30334
 
-CMD ["/storage-hub/storage-hub-node"]
+CMD ["storage-hub-node"]
