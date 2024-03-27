@@ -515,6 +515,29 @@ impl<T: Config> Pallet<T> {
     pub fn get_total_bsp_capacity() -> StorageData<T> {
         TotalBspsCapacity::<T>::get()
     }
+
+    /// A helper function to get the total data used by a storage provider.
+    pub fn get_used_storage(who: &T::AccountId) -> Result<StorageData<T>, Error<T>> {
+        if let Some(m_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            let msp = MainStorageProviders::<T>::get(m_id).ok_or(Error::<T>::NotRegistered)?;
+            Ok(msp.data_used)
+        } else if let Some(b_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            let bsp = BackupStorageProviders::<T>::get(b_id).ok_or(Error::<T>::NotRegistered)?;
+            Ok(bsp.data_used)
+        } else {
+            Err(Error::<T>::NotRegistered)
+        }
+    }
+
+    /// A helper function to get the total amount of BSPs that have registered
+    pub fn get_bsp_count() -> T::SpCount {
+        BspCount::<T>::get()
+    }
+
+    /// A helper function to get the total amount of MSPs that have registered
+    pub fn get_msp_count() -> T::SpCount {
+        MspCount::<T>::get()
+    }
 }
 
 // Trait definitions:
