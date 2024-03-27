@@ -1,6 +1,6 @@
 # STORAGE_HUB_NODE DOCKERFILE
 #
-# Requires to run from repository root and to copy the binary in the build folder
+# Requires to run from /test folder and to copy the binary in the build folder
 # (This can be done as part of the release workflow or manually)
 
 FROM docker.io/library/ubuntu:rolling AS builder
@@ -24,12 +24,12 @@ RUN apt-get update && \
 USER storage-hub
 
 # copy the compiled binary to the container
-COPY --chown=storage-hub:storage-hub --chmod=774 build/storage-hub-node /usr/bin/storage-hub-node
+COPY --chown=storage-hub:storage-hub --chmod=774 build/storage-hub-node /storage-hub/storage-hub-node
 
 # check if executable works in this container
-RUN /usr/bin/storage-hub-node --version
+RUN /storage-hub/storage-hub-node --version
 
 # ws_port
 EXPOSE 9333 9944 30333 30334
 
-CMD ["/usr/bin/storage-hub-node"]
+CMD ["/storage-hub/storage-hub-node"]

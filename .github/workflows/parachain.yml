@@ -152,12 +152,7 @@ jobs:
           driver: docker
           cpus: 4
           memory: 12000
-
-      - name: Setup Zombienet
-        run: |
-          wget https://github.com/paritytech/zombienet/releases/download/v1.3.95/zombienet-linux-x64 -O zombienet
-          chmod +x zombienet
-          mkdir -p tmp
-          mv zombienet tmp/
       - name: Run Zombienet Test!
-        run: tmp/zombienet test configs/simple.zndsl
+        run: |
+          bun install
+          bun zombienet test configs/simple.zndsl
