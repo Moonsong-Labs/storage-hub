@@ -125,10 +125,6 @@ pub trait MutateProvidersInterface {
 
     /// Remove a root from a bucket of a MSP, removing the whole bucket from storage
     fn remove_root_bucket(bucket_id: Self::BucketId) -> DispatchResult;
-
-    /// Remove a root from a BSP. It will remove the whole BSP from storage, so it should only be called when the BSP is being removed.
-    /// todo!("If the only way to remove a BSP is by this pallet (bsp_sign_off), then is this function actually needed?")
-    fn remove_root_bsp(who: &Self::AccountId) -> DispatchResult;
 }
 
 /// The interface for the ProofsDealer pallet.
