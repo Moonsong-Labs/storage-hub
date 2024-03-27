@@ -36,7 +36,7 @@ fn challenge_submit_succeed() {
         System::assert_last_event(
             Event::NewChallenge {
                 who: 1,
-                file_key_challenged: file_key,
+                key_challenged: file_key,
             }
             .into(),
         );
@@ -88,7 +88,7 @@ fn challenge_submit_twice_succeed() {
         System::assert_last_event(
             Event::NewChallenge {
                 who: 1,
-                file_key_challenged: file_key_1,
+                key_challenged: file_key_1,
             }
             .into(),
         );
@@ -102,7 +102,7 @@ fn challenge_submit_twice_succeed() {
         System::assert_last_event(
             Event::NewChallenge {
                 who: 2,
-                file_key_challenged: file_key_2,
+                key_challenged: file_key_2,
             }
             .into(),
         );
@@ -151,7 +151,7 @@ fn challenge_submit_existing_challenge_succeed() {
         System::assert_last_event(
             Event::NewChallenge {
                 who: 1,
-                file_key_challenged: file_key,
+                key_challenged: file_key,
             }
             .into(),
         );
@@ -194,7 +194,7 @@ fn challenge_submit_in_two_rounds_succeed() {
         System::assert_last_event(
             Event::NewChallenge {
                 who: 1,
-                file_key_challenged: file_key,
+                key_challenged: file_key,
             }
             .into(),
         );
@@ -223,7 +223,7 @@ fn challenge_submit_in_two_rounds_succeed() {
         System::assert_last_event(
             Event::NewChallenge {
                 who: 1,
-                file_key_challenged: file_key,
+                key_challenged: file_key,
             }
             .into(),
         );
@@ -253,7 +253,7 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
 
         // Register user as a Provider in Providers pallet.
         let provider_id = BlakeTwo256::hash(b"provider_id");
-        pallet_providers::AccountIdToMainStorageProviderId::<Test>::insert(&1, provider_id);
+        pallet_storage_providers::AccountIdToMainStorageProviderId::<Test>::insert(&1, provider_id);
 
         // Mock a FileKey.
         let file_key = BlakeTwo256::hash(b"file_key");
@@ -265,7 +265,7 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
         System::assert_last_event(
             Event::NewChallenge {
                 who: 1,
-                file_key_challenged: file_key,
+                key_challenged: file_key,
             }
             .into(),
         );
@@ -342,6 +342,105 @@ fn challenge_overflow_challenges_queue_fail() {
         assert_noop!(
             ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key),
             crate::Error::<Test>::ChallengesQueueOverflow
+        );
+    });
+}
+
+#[test]
+fn proofs_dealer_trait_verify_proof_succeed() {
+    new_test_ext().execute_with(|| {
+        // TODO
+        assert!(true)
+    });
+}
+
+#[test]
+fn proofs_dealer_trait_verify_proof_fail() {
+    new_test_ext().execute_with(|| {
+        // TODO
+        assert!(true)
+    });
+}
+
+#[test]
+fn proofs_dealer_trait_challenge_succeed() {
+    new_test_ext().execute_with(|| {
+        // Mock a FileKey.
+        let file_key = BlakeTwo256::hash(b"file_key");
+
+        // Challenge using trait.
+        <ProofsDealer as storage_hub_traits::ProofsDealerInterface>::challenge(&file_key).unwrap();
+
+        // Check that the challenge is in the queue.
+        let challenges_queue = crate::ChallengesQueue::<Test>::get();
+        assert_eq!(challenges_queue.len(), 1);
+        assert_eq!(challenges_queue[0], file_key);
+    });
+}
+
+#[test]
+fn proofs_dealer_trait_challenge_overflow_challenges_queue_fail() {
+    new_test_ext().execute_with(|| {
+        // Mock a FileKey.
+        let file_key = BlakeTwo256::hash(b"file_key");
+
+        // Fill the challenges queue.
+        let queue_size: u32 = <Test as crate::Config>::ChallengesQueueLength::get();
+        for i in 0..queue_size {
+            let file_key = BlakeTwo256::hash(&i.to_le_bytes());
+            assert_ok!(
+                <ProofsDealer as storage_hub_traits::ProofsDealerInterface>::challenge(&file_key)
+            );
+        }
+
+        // Dispatch challenge extrinsic.
+        assert_noop!(
+            <ProofsDealer as storage_hub_traits::ProofsDealerInterface>::challenge(&file_key),
+            crate::Error::<Test>::ChallengesQueueOverflow
+        );
+    });
+}
+
+#[test]
+fn proofs_dealer_trait_challenge_with_priority_succeed() {
+    new_test_ext().execute_with(|| {
+        // Mock a FileKey.
+        let file_key = BlakeTwo256::hash(b"file_key");
+
+        // Challenge using trait.
+        <ProofsDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
+            &file_key,
+        )
+        .unwrap();
+
+        // Check that the challenge is in the queue.
+        let priority_challenges_queue = crate::PriorityChallengesQueue::<Test>::get();
+        assert_eq!(priority_challenges_queue.len(), 1);
+        assert_eq!(priority_challenges_queue[0], file_key);
+    });
+}
+
+#[test]
+fn proofs_dealer_trait_challenge_with_priority_overflow_challenges_queue_fail() {
+    new_test_ext().execute_with(|| {
+        // Mock a FileKey.
+        let file_key = BlakeTwo256::hash(b"file_key");
+
+        // Fill the challenges queue.
+        let queue_size: u32 = <Test as crate::Config>::ChallengesQueueLength::get();
+        for i in 0..queue_size {
+            let file_key = BlakeTwo256::hash(&i.to_le_bytes());
+            assert_ok!(
+                <ProofsDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
+                    &file_key
+                )
+            );
+        }
+
+        // Dispatch challenge extrinsic.
+        assert_noop!(
+            <ProofsDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(&file_key),
+            crate::Error::<Test>::PriorityChallengesQueueOverflow
         );
     });
 }

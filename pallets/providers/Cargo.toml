@@ -28,7 +28,7 @@ frame-system = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
-pallet-balances = { workspace = true }
+pallet-balances = { version = "4.0.0-dev", git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0" }
 
 # Substrate
 sp-core = { workspace = true }

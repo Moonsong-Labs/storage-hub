@@ -24,20 +24,6 @@ type DepositPerData = <Test as crate::Config>::DepositPerData;
 type MaxMsps = <Test as crate::Config>::MaxMsps;
 type MaxBsps = <Test as crate::Config>::MaxBsps;
 
-/// Helper functions:
-///
-/// This function advances the blockchain until block n, executing the hooks for each block
-fn _run_to_block(n: u64) {
-    assert!(n > System::block_number(), "Cannot go back in time");
-
-    while System::block_number() < n {
-        AllPalletsWithSystem::on_finalize(System::block_number());
-        System::set_block_number(System::block_number() + 1);
-        AllPalletsWithSystem::on_initialize(System::block_number());
-        AllPalletsWithSystem::on_idle(System::block_number(), Weight::MAX);
-    }
-}
-
 /// This module holds the test cases for the signup of Main Storage Providers and Backup Storage Providers
 mod sign_up {
     use super::*;
@@ -100,12 +86,137 @@ mod sign_up {
                 deposit_for_storage_amount
             );
 
+            // Check that Alice is now a Storage Provider
+            let alice_sp_id = StorageProviders::get_provider(alice);
+            assert!(alice_sp_id.is_some());
+            assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
+
             // Check the event was emitted
             System::assert_has_event(
                 Event::<Test>::MspSignUpSuccess {
                     who: alice,
                     multiaddresses,
                     capacity: storage_amount,
+                    value_prop,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn multiple_users_can_sign_up_as_msp() {
+        ExtBuilder::build().execute_with(|| {
+            // Initialize variables:
+            let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+                BoundedVec::new();
+            multiaddresses.force_push(
+                "/ip4/127.0.0.1/udp/1234"
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .unwrap(),
+            );
+
+            let value_prop: ValueProposition<Test> = ValueProposition {
+                identifier: ValuePropId::<Test>::default(),
+                data_limit: 10,
+                protocols: BoundedVec::new(),
+            };
+            let storage_amount_alice: StorageData<Test> = 100;
+            let storage_amount_bob: StorageData<Test> = 300;
+
+            // Get the Account Id of Alice and check its balance
+            let alice: AccountId = 0;
+            assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+            assert_eq!(
+                NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                0
+            );
+
+            // Do the same for Bob
+            let bob: AccountId = 1;
+            assert_eq!(NativeBalance::free_balance(&bob), 10_000_000);
+            assert_eq!(
+                NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
+                0
+            );
+
+            // Alice is going to sign up as a Main Storage Provider with 100 StorageData units
+            // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
+            // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
+            let deposit_for_storage_amount_alice: BalanceOf<Test> =
+                <SpMinDeposit as Get<u128>>::get().saturating_add(
+                    <DepositPerData as Get<u128>>::get().saturating_mul(
+                        (storage_amount_alice - <SpMinCapacity as Get<u32>>::get()).into(),
+                    ),
+                );
+
+            // Bob is going to sign up as a Main Storage Provider with 300 StorageData units
+            // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
+            // In this case, the deposit would be 10 + 2 * (300 - 1) = 608
+            let deposit_for_storage_amount_bob: BalanceOf<Test> =
+                <SpMinDeposit as Get<u128>>::get().saturating_add(
+                    <DepositPerData as Get<u128>>::get().saturating_mul(
+                        (storage_amount_bob - <SpMinCapacity as Get<u32>>::get()).into(),
+                    ),
+                );
+
+            // Sign up Alice as a Main Storage Provider
+            assert_ok!(StorageProviders::msp_sign_up(
+                RuntimeOrigin::signed(alice),
+                storage_amount_alice,
+                multiaddresses.clone(),
+                value_prop.clone()
+            ));
+
+            // Sign up Bob as a Main Storage Provider
+            assert_ok!(StorageProviders::msp_sign_up(
+                RuntimeOrigin::signed(bob),
+                storage_amount_bob,
+                multiaddresses.clone(),
+                value_prop.clone()
+            ));
+
+            // Check the new free balance of Alice
+            assert_eq!(
+                NativeBalance::free_balance(&alice),
+                5_000_000 - deposit_for_storage_amount_alice
+            );
+            // Check the new held balance of Alice
+            assert_eq!(
+                NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                deposit_for_storage_amount_alice
+            );
+
+            // Check the new free balance of Bob
+            assert_eq!(
+                NativeBalance::free_balance(&bob),
+                10_000_000 - deposit_for_storage_amount_bob
+            );
+            // Check the new held balance of Bob
+            assert_eq!(
+                NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
+                deposit_for_storage_amount_bob
+            );
+
+            // Check that Alice's event was emitted
+            System::assert_has_event(
+                Event::<Test>::MspSignUpSuccess {
+                    who: alice,
+                    multiaddresses: multiaddresses.clone(),
+                    capacity: storage_amount_alice,
+                    value_prop: value_prop.clone(),
+                }
+                .into(),
+            );
+
+            // Check that Bob's event was emitted
+            System::assert_has_event(
+                Event::<Test>::MspSignUpSuccess {
+                    who: bob,
+                    multiaddresses,
+                    capacity: storage_amount_bob,
                     value_prop,
                 }
                 .into(),
@@ -136,7 +247,7 @@ mod sign_up {
                 0
             );
 
-            // Alice is going to sign up as a Main Storage Provider with 100 StorageData units
+            // Alice is going to sign up as a Backup Storage Provider with 100 StorageData units
             // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
             // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
             let deposit_for_storage_amount: BalanceOf<Test> = <SpMinDeposit as Get<u128>>::get()
@@ -169,12 +280,151 @@ mod sign_up {
             assert!(alice_sp_id.is_some());
             assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
 
+            // Check that the total capacity of the Backup Storage Providers has increased
+            assert_eq!(StorageProviders::get_total_bsp_capacity(), storage_amount);
+
             // Check the event was emitted
             System::assert_has_event(
                 Event::<Test>::BspSignUpSuccess {
                     who: alice,
                     multiaddresses,
                     capacity: storage_amount,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn multiple_users_can_sign_up_as_bsp() {
+        ExtBuilder::build().execute_with(|| {
+            // Initialize variables:
+            let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+                BoundedVec::new();
+            multiaddresses.force_push(
+                "/ip4/127.0.0.1/udp/1234"
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .unwrap(),
+            );
+            let storage_amount_alice: StorageData<Test> = 100;
+            let storage_amount_bob: StorageData<Test> = 300;
+
+            // Get the Account Id of Alice and check its balance
+            let alice: AccountId = 0;
+            assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+            assert_eq!(
+                NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                0
+            );
+
+            // Get the Account Id of Bob and check its balance
+            let bob: AccountId = 1;
+            assert_eq!(NativeBalance::free_balance(&bob), 10_000_000);
+            assert_eq!(
+                NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
+                0
+            );
+
+            // Alice is going to sign up as a Backup Storage Provider with 100 StorageData units
+            // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
+            // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
+            let deposit_for_storage_amount_alice: BalanceOf<Test> =
+                <SpMinDeposit as Get<u128>>::get().saturating_add(
+                    <DepositPerData as Get<u128>>::get().saturating_mul(
+                        (storage_amount_alice - <SpMinCapacity as Get<u32>>::get()).into(),
+                    ),
+                );
+
+            // Bob is going to sign up as a Backup Storage Provider with 300 StorageData units
+            // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
+            // In this case, the deposit would be 10 + 2 * (300 - 1) = 608
+            let deposit_for_storage_amount_bob: BalanceOf<Test> =
+                <SpMinDeposit as Get<u128>>::get().saturating_add(
+                    <DepositPerData as Get<u128>>::get().saturating_mul(
+                        (storage_amount_bob - <SpMinCapacity as Get<u32>>::get()).into(),
+                    ),
+                );
+
+            // Sign up Alice as a Backup Storage Provider
+            assert_ok!(StorageProviders::bsp_sign_up(
+                RuntimeOrigin::signed(alice),
+                storage_amount_alice,
+                multiaddresses.clone(),
+            ));
+
+            // Check the new free balance of Alice
+            assert_eq!(
+                NativeBalance::free_balance(&alice),
+                5_000_000 - deposit_for_storage_amount_alice
+            );
+            // Check the new held balance of Alice
+            assert_eq!(
+                NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                deposit_for_storage_amount_alice
+            );
+
+            // Check that Alice is a Backup Storage Provider
+            let alice_sp_id = StorageProviders::get_provider(alice);
+            assert!(alice_sp_id.is_some());
+            assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
+
+            // Check that the total capacity of the Backup Storage Providers has increased
+            assert_eq!(
+                StorageProviders::get_total_bsp_capacity(),
+                storage_amount_alice
+            );
+
+            // Check that Alice registration event has been emitted
+            System::assert_has_event(
+                Event::<Test>::BspSignUpSuccess {
+                    who: alice,
+                    multiaddresses: multiaddresses.clone(),
+                    capacity: storage_amount_alice,
+                }
+                .into(),
+            );
+
+            // Check that Bob is not a Backup Storage Provider
+            let bob_sp_id = StorageProviders::get_provider(bob);
+            assert!(bob_sp_id.is_none());
+
+            // Sign up Bob as a Backup Storage Provider
+            assert_ok!(StorageProviders::bsp_sign_up(
+                RuntimeOrigin::signed(bob),
+                storage_amount_bob,
+                multiaddresses.clone(),
+            ));
+
+            // Check the new free balance of Bob
+            assert_eq!(
+                NativeBalance::free_balance(&bob),
+                10_000_000 - deposit_for_storage_amount_bob
+            );
+            // Check the new held balance of Bob
+            assert_eq!(
+                NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
+                deposit_for_storage_amount_bob
+            );
+
+            // Check that Bob is now a Backup Storage Provider
+            let bob_sp_id = StorageProviders::get_provider(bob);
+            assert!(bob_sp_id.is_some());
+            assert!(StorageProviders::is_provider(bob_sp_id.unwrap()));
+
+            // Check that the total capacity of the Backup Storage Providers has increased
+            assert_eq!(
+                StorageProviders::get_total_bsp_capacity(),
+                storage_amount_alice + storage_amount_bob
+            );
+
+            // Check that Bob registration event has been emitted
+            System::assert_has_event(
+                Event::<Test>::BspSignUpSuccess {
+                    who: bob,
+                    multiaddresses,
+                    capacity: storage_amount_bob,
                 }
                 .into(),
             );
@@ -756,4 +1006,16 @@ fn register_account_as_bsp(
 
     // Return the deposit amount that was utilized from the account's balance
     deposit_for_storage_amount
+}
+
+/// This function advances the blockchain until block n, executing the hooks for each block
+fn _run_to_block(n: u64) {
+    assert!(n > System::block_number(), "Cannot go back in time");
+
+    while System::block_number() < n {
+        AllPalletsWithSystem::on_finalize(System::block_number());
+        System::set_block_number(System::block_number() + 1);
+        AllPalletsWithSystem::on_initialize(System::block_number());
+        AllPalletsWithSystem::on_idle(System::block_number(), Weight::MAX);
+    }
 }

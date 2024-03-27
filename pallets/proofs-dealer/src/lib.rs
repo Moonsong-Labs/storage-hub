@@ -134,7 +134,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
-        BoundedVec<FileKeyFor<T>, MaxChallengesPerBlockFor<T>>,
+        BoundedVec<KeyFor<T>, MaxChallengesPerBlockFor<T>>,
     >;
 
     /// A mapping from block number to a vector of challenged Providers for that block.
@@ -170,7 +170,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn challenges_queue)]
     pub type ChallengesQueue<T: Config> =
-        StorageValue<_, BoundedVec<FileKeyFor<T>, ChallengesQueueLengthFor<T>>, ValueQuery>;
+        StorageValue<_, BoundedVec<KeyFor<T>, ChallengesQueueLengthFor<T>>, ValueQuery>;
 
     /// A priority queue of file keys that have been challenged manually.
     ///
@@ -185,7 +185,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn priority_challenges_queue)]
     pub type PriorityChallengesQueue<T: Config> =
-        StorageValue<_, BoundedVec<FileKeyFor<T>, ChallengesQueueLengthFor<T>>, ValueQuery>;
+        StorageValue<_, BoundedVec<KeyFor<T>, ChallengesQueueLengthFor<T>>, ValueQuery>;
 
     /// The block number of the last checkpoint challenge round.
     ///
@@ -205,7 +205,7 @@ pub mod pallet {
         /// A manual challenge was submitted.
         NewChallenge {
             who: AccountIdFor<T>,
-            file_key_challenged: FileKeyFor<T>,
+            key_challenged: KeyFor<T>,
         },
 
         /// A proof was rejected.
@@ -229,6 +229,10 @@ pub mod pallet {
         /// until some of the challenges in the queue are dispatched.
         ChallengesQueueOverflow,
 
+        /// The PriorityChallengesQueue is full. No more priority challenges can be made
+        /// until some of the challenges in the queue are dispatched.
+        PriorityChallengesQueueOverflow,
+
         /// The proof submitter is not a registered Provider.
         NotProvider,
 
@@ -248,19 +252,16 @@ pub mod pallet {
         /// TODO: Consider checking also if there was a request to change MSP.
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn challenge(
-            origin: OriginFor<T>,
-            file_key: FileKeyFor<T>,
-        ) -> DispatchResultWithPostInfo {
+        pub fn challenge(origin: OriginFor<T>, key: KeyFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
-            Self::do_challenge(&who, &file_key)?;
+            Self::do_challenge(&who, &key)?;
 
             // Emit event.
             Self::deposit_event(Event::NewChallenge {
                 who,
-                file_key_challenged: file_key,
+                key_challenged: key,
             });
 
             // Return a successful DispatchResultWithPostInfo
