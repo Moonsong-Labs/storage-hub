@@ -27,8 +27,8 @@ jobs:
       - name: Set tag name
         id: set-tag
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-          echo "tag=latest" >> $GITHUB_OUTPUT
+          if [[ "${{ steps.node_check.outputs.changed }}" == 'false' || "${{ github.ref }}" == 'refs/heads/main' ]]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
           else
             echo "tag=sha-$(git log -1 --format='%H' | cut -c1-8)" >> $GITHUB_OUTPUT
           fi
