@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Check if /node has changes
+      - name: Check if Parachain Node needs rebuild
         id: node_check
         run: |
           BASE_SHA="${{ github.event.pull_request.base.sha || github.event.before }}"
