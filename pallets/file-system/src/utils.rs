@@ -161,8 +161,8 @@ where
             Error::<T>::BspAlreadyVolunteered
         );
 
-        // Check that the threshold value is high enough to qualify as BSP for the storage request.
-        let threshold = Self::calculate_xor(
+        // Compute BSP's threshold
+        let bsp_threshold = Self::compute_bsp_xor(
             fingerprint
                 .as_ref()
                 .try_into()
@@ -170,21 +170,22 @@ where
             &who.encode()
                 .try_into()
                 .map_err(|_| Error::<T>::FailedToEncodeBsp)?,
-        );
+        )?;
 
-        let bsp_threshold = T::AssignmentThreshold::decode(&mut &threshold[..])
-            .map_err(|_| Error::<T>::FailedToDecodeThreshold)?;
-
+        // Get number of blocks since the storage request was issued.
         let blocks_since_requested = <frame_system::Pallet<T>>::block_number()
             .saturating_sub(file_metadata.requested_at)
             .saturated_into::<u32>();
 
+        // Compute the threshold increasing rate.
         let rate_increase = blocks_since_requested
             .saturating_mul(T::AssignmentThresholdMultiplier::get())
             .saturated_into::<T::AssignmentThreshold>();
 
+        // Compute current threshold needed to volunteer.
         let threshold = rate_increase.saturating_add(T::MinBspsAssignmentThreshold::get());
 
+        // Check that the BSP's threshold is under the threshold required to qualify as BSP for the storage request.
         ensure!(bsp_threshold <= threshold, Error::<T>::ThresholdTooHigh);
 
         // Add BSP to storage request metadata.
@@ -432,12 +433,16 @@ where
     }
 
     /// Calculate the XOR of the fingerprint and the BSP.
-    fn calculate_xor(fingerprint: &[u8; 32], bsp: &[u8; 32]) -> Vec<u8> {
+    fn compute_bsp_xor(
+        fingerprint: &[u8; 32],
+        bsp: &[u8; 32],
+    ) -> Result<T::AssignmentThreshold, Error<T>> {
         let mut xor_result = Vec::with_capacity(32);
         for i in 0..32 {
             xor_result.push(fingerprint[i] ^ bsp[i]);
         }
 
-        xor_result
+        T::AssignmentThreshold::decode(&mut &xor_result[..])
+            .map_err(|_| Error::<T>::FailedToDecodeThreshold)
     }
 }

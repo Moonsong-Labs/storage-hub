@@ -77,7 +77,7 @@ pub type MaxFilePathSize<T> = <T as crate::Config>::MaxFilePathSize;
 /// Alias for the `Fingerprint` type used in the FileSystem pallet.
 pub type Fingerprint<T> = <T as crate::Config>::Fingerprint;
 
-/// Alias for the `StorageCount` type used in the FileSystem pallet.
+/// Alias for the `StorageData` type used in the MutateProvidersInterface.
 pub type StorageData<T> =
     <<T as crate::Config>::Providers as storage_hub_traits::MutateProvidersInterface>::StorageData;
 
