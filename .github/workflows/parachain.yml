@@ -106,6 +106,7 @@ jobs:
 
   zombie_test:
     needs: [build_image, setup]
+    if: always()
     name: "Test Simple Network"
     runs-on: ubuntu-latest
     env:
