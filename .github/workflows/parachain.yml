@@ -26,7 +26,7 @@ jobs:
           HEAD_SHA="${{ github.sha }}"
 
           echo "Checking changes from $BASE_SHA to $HEAD_SHA"
-          if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" != "true" && git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^(node|pallets|runtime)/' ]]; then
+          if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" != "true" ]] && git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^(node|pallets|runtime)/'; then
             echo "changed=true" >> $GITHUB_OUTPUT
           else
             echo "changed=false" >> $GITHUB_OUTPUT
