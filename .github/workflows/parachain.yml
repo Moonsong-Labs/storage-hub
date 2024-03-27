@@ -16,13 +16,18 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-
+        with:
+          fetch-depth: 0
       - name: Check if /node has changes
         id: node_check
         run: |
-          echo "changed=false" >> $GITHUB_OUTPUT
-          if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^node/'; then
+          BASE_SHA="${{ github.event.pull_request.base.sha || github.event.before }}"
+          HEAD_SHA="${{ github.sha }}"
+          echo "Checking changes from $BASE_SHA to $HEAD_SHA"
+          if git diff --name-only $BASE_SHA $HEAD_SHA | grep '^node/'; then
             echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
           fi
       - name: Set tag name
         id: set-tag
