@@ -818,6 +818,8 @@ mod sign_up {
 
 /// This module holds the test cases for the sign-off of Main Storage Providers and Backup Storage Providers
 mod sign_off {
+    use crate::StorageProvidersInterface;
+
     use super::*;
 
     #[test]
@@ -838,6 +840,9 @@ mod sign_off {
                 deposit_amount
             );
 
+            // Check the counter of registered MSPs
+            assert_eq!(StorageProviders::get_msp_count(), 1);
+
             // Sign off Alice as a Main Storage Provider
             assert_ok!(StorageProviders::msp_sign_off(RuntimeOrigin::signed(alice)));
 
@@ -847,6 +852,9 @@ mod sign_off {
                 NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                 0
             );
+
+            // Check that the counter of registered MSPs has decreased
+            assert_eq!(StorageProviders::get_msp_count(), 0);
 
             // Check that Alice is not a Main Storage Provider anymore
             let alice_sp_id = StorageProviders::get_provider(alice);
@@ -875,12 +883,17 @@ mod sign_off {
                 deposit_amount
             );
 
-            // TODO: Check the capacity of all the BSPs
+            // Check the capacity of all the BSPs
+            assert_eq!(StorageProviders::get_total_bsp_capacity(), storage_amount);
+
+            // Check the counter of registered BSPs
+            assert_eq!(StorageProviders::get_bsp_count(), 1);
 
             // Sign off Alice as a Backup Storage Provider
             assert_ok!(StorageProviders::bsp_sign_off(RuntimeOrigin::signed(alice)));
 
-            // TODO: Check the new capacity of all BSPs
+            // Check the new capacity of all BSPs
+            assert_eq!(StorageProviders::get_total_bsp_capacity(), 0);
 
             // Check the new free and held balance of Alice
             assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
@@ -893,8 +906,135 @@ mod sign_off {
             let alice_sp_id = StorageProviders::get_provider(alice);
             assert!(alice_sp_id.is_none());
 
+            // Check that the counter of registered BSPs has decreased
+            assert_eq!(StorageProviders::get_bsp_count(), 0);
+
             // Check the BSP Sign Off event was emitted
             System::assert_has_event(Event::<Test>::BspSignOffSuccess { who: alice }.into());
+        });
+    }
+
+    #[test]
+    fn msp_sign_off_fails_when_not_registered_as_msp() {
+        ExtBuilder::build().execute_with(|| {
+            // Get the Account Id of Alice
+            let alice: AccountId = 0;
+
+            // Try to sign off Alice as a Main Storage Provider
+            assert_noop!(
+                StorageProviders::msp_sign_off(RuntimeOrigin::signed(alice)),
+                Error::<Test>::NotRegistered
+            );
+        });
+    }
+
+    #[test]
+    fn bsp_sign_off_fails_when_not_registered_as_bsp() {
+        ExtBuilder::build().execute_with(|| {
+            // Get the Account Id of Alice
+            let alice: AccountId = 0;
+
+            // Try to sign off Alice as a Backup Storage Provider
+            assert_noop!(
+                StorageProviders::bsp_sign_off(RuntimeOrigin::signed(alice)),
+                Error::<Test>::NotRegistered
+            );
+        });
+    }
+
+    #[test]
+    fn msp_sign_off_fails_when_it_still_has_used_storage() {
+        ExtBuilder::build().execute_with(|| {
+            // Register Alice as MSP:
+            let alice: AccountId = 0;
+            let storage_amount: StorageData<Test> = 100;
+            let deposit_amount = register_account_as_msp(alice, storage_amount);
+
+            // Check the new free and held balance of Alice
+            assert_eq!(
+                NativeBalance::free_balance(&alice),
+                5_000_000 - deposit_amount
+            );
+            assert_eq!(
+                NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                deposit_amount
+            );
+
+            // Check the counter of registered MSPs
+            assert_eq!(StorageProviders::get_msp_count(), 1);
+
+            // Check that Alice does not have any used storage
+            assert_eq!(StorageProviders::get_used_storage(&alice).unwrap(), 0);
+
+            // Add used storage to Alice (simulating that she has accepted to store a file)
+            assert_ok!(
+                <StorageProviders as StorageProvidersInterface<Test>>::change_data_used(&alice, 10)
+            );
+
+            // Try to sign off Alice as a Main Storage Provider
+            assert_noop!(
+                StorageProviders::msp_sign_off(RuntimeOrigin::signed(alice)),
+                Error::<Test>::StorageStillInUse
+            );
+
+            // Make sure that Alice is still registered as a Main Storage Provider
+            let alice_sp_id = StorageProviders::get_provider(alice);
+            assert!(alice_sp_id.is_some());
+            assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
+
+            // Check that the counter of registered MSPs has not changed
+            assert_eq!(StorageProviders::get_msp_count(), 1);
+        });
+    }
+
+    #[test]
+    fn bsp_sign_off_fails_when_it_still_has_used_storage() {
+        ExtBuilder::build().execute_with(|| {
+            // Register Alice as BSP:
+            let alice: AccountId = 0;
+            let storage_amount: StorageData<Test> = 100;
+            let deposit_amount = register_account_as_bsp(alice, storage_amount);
+
+            // Check the new free and held balance of Alice
+            assert_eq!(
+                NativeBalance::free_balance(&alice),
+                5_000_000 - deposit_amount
+            );
+            assert_eq!(
+                NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                deposit_amount
+            );
+
+            // Check the counter of registered BSPs
+            assert_eq!(StorageProviders::get_bsp_count(), 1);
+
+            // Check the total capacity of the Backup Storage Providers
+            assert_eq!(StorageProviders::get_total_bsp_capacity(), storage_amount);
+
+            // Check that Alice does not have any used storage
+            assert_eq!(StorageProviders::get_used_storage(&alice).unwrap(), 0);
+
+            // Add used storage to Alice (simulating that she has accepted to store a file)
+            assert_ok!(
+                <StorageProviders as StorageProvidersInterface<Test>>::change_data_used(&alice, 10)
+            );
+
+            // Try to sign off Alice as a Backup Storage Provider
+            assert_noop!(
+                StorageProviders::bsp_sign_off(RuntimeOrigin::signed(alice)),
+                Error::<Test>::StorageStillInUse
+            );
+
+            // Make sure that Alice is still registered as a Backup Storage Provider
+            let alice_sp_id = StorageProviders::get_provider(alice);
+            assert!(alice_sp_id.is_some());
+            assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
+
+            // Make sure the total capacity of the Backup Storage Providers has not changed
+            assert_eq!(StorageProviders::get_total_bsp_capacity(), storage_amount);
+
+            // Check that the counter of registered BSPs has not changed
+            assert_eq!(StorageProviders::get_bsp_count(), 1);
         });
     }
 }
@@ -1008,7 +1148,7 @@ fn register_account_as_bsp(
     deposit_for_storage_amount
 }
 
-/// This function advances the blockchain until block n, executing the hooks for each block
+/// Helper function that advances the blockchain until block n, executing the hooks for each block
 fn _run_to_block(n: u64) {
     assert!(n > System::block_number(), "Cannot go back in time");
 
