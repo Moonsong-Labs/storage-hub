@@ -67,10 +67,13 @@ jobs:
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+      - name: Cache Docker layers
+        uses: actions/cache@v4
         with:
-          version: latest
-          driver-opts: |
-            image=moby/buildkit:master
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -84,8 +87,8 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: ${{ steps.prep.outputs.tags }}
-          cache-from: type=registry,ref=moonsonglabs/storage-hub:cache
-          cache-to: type=registry,ref=moonsonglabs/storage-hub:cache,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
           labels: |
             org.opencontainers.image.title=${{ github.event.repository.name }}
             org.opencontainers.image.description=${{ github.event.repository.description }}
