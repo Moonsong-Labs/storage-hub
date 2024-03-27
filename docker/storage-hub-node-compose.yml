@@ -3,4 +3,4 @@ services:
     image: moonsonglabs/storage-hub:latest
     ports:
       - "9944:9944"
-    command: /usr/bin/storage-hub-node --dev --unsafe-rpc-external --rpc-cors=all
+    command: /usr/bin/storage-hub-node --dev --unsafe-rpc-external --rpc-cors=all --no-hardware-benchmarks
