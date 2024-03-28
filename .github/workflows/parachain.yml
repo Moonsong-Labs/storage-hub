@@ -6,7 +6,7 @@
 #       or if an explicit skip tag has been set in the PR.
 #     - The tag name to use for the Docker image based on the outcome of the first check.
 # 2. Build Image: Conditionally executes based on the outcome of the setup job. If a new
-#    build is determined nessecary, it proceeds to build a Docker image of the parachain node.
+#    build is determined necessary, it proceeds to build a Docker image of the parachain node.
 # 3. Zombie Test: Executes integration tests using Zombienet. This job pulls the relevant Docker image
 #    based on the setup job's output and runs tests to ensure network functionality.
 #
