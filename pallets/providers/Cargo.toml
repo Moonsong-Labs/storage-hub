@@ -27,9 +27,9 @@ frame-support = { workspace = true }
 frame-system = { workspace = true }
 
 [dev-dependencies]
-serde = { workspace = true }
-pallet-balances = { workspace = true }
+pallet-balances = { workspace = true, features = ["std"] }
 
+serde = { workspace = true }
 # Substrate
 sp-core = { workspace = true }
 sp-io = { workspace = true }
