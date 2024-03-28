@@ -2,11 +2,11 @@
 pub type Port = u16;
 
 /// Placeholder for the (Merkle) hash type.
-pub struct Hash([u8; 32]);
+pub struct Hash(pub [u8; 32]);
 
 /// FileKey is the identifier for a file.
 /// Computed as the hash of the FileMetadata.
-pub struct FileKey(Hash);
+pub struct FileKey(pub Hash);
 
 /// Metadata contains information about a file.
 /// Most importantly, the fingerprint which is the root Merkle hash of the file.
@@ -18,4 +18,4 @@ pub struct FileMetadata {
 const CHUNK_SIZE: usize = 1024 * 1024;
 
 /// Typed chunk of a file. This is what is stored in the leaf of the stored Merkle tree.
-pub struct FileChunk([u8; CHUNK_SIZE]);
+pub struct FileChunk(pub [u8; CHUNK_SIZE]);
