@@ -8,5 +8,6 @@ edition = "2021"
 [dependencies]
 storage-kit = { path = "../storage-kit" }
 
-tokio = "1.36.0"
+tokio = { workspace = true }
+
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }

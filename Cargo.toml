@@ -21,6 +21,9 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
+anyhow = { version = "1.0.81" }
+tokio = { version = "1.36.0" }
+tracing = { version = "0.1.40", features = ["log"] }
 serde = { version = "1.0.197" }
 codec = { package = "parity-scale-codec", version = "3.0.0", features = [
     "derive",
@@ -41,7 +44,7 @@ sp-trie = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polka
 frame-benchmarking = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
 frame-support = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
 frame-system = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
-pallet-balances = { version = "4.0.0-dev", git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false}
+pallet-balances = { version = "4.0.0-dev", git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
 
 # Local Pallets
 pallet-storage-providers = { path = "pallets/providers", default-features = false }
