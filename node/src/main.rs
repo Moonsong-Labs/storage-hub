@@ -5,6 +5,7 @@
 mod chain_spec;
 mod cli;
 mod command;
+mod provider_requests_protocol;
 mod rpc;
 mod service;
 

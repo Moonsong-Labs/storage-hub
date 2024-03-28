@@ -3,6 +3,7 @@
 // std
 use std::{sync::Arc, time::Duration};
 
+use async_channel::Sender;
 use cumulus_client_cli::CollatorOptions;
 // Local Runtime Types
 use storage_hub_runtime::{
@@ -28,13 +29,27 @@ use sc_consensus::ImportQueue;
 use sc_executor::{
     HeapAllocStrategy, NativeElseWasmExecutor, WasmExecutor, DEFAULT_HEAP_ALLOC_STRATEGY,
 };
-use sc_network::NetworkBlock;
+use sc_network::{request_responses::ProtocolConfig, NetworkBlock, ProtocolName};
 use sc_network_sync::SyncingService;
 use sc_service::{Configuration, PartialComponents, TFullBackend, TFullClient, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::KeystorePtr;
 use substrate_prometheus_endpoint::Registry;
+
+use crate::provider_requests_protocol::handler::ProviderRequestsHandler;
+
+// Undocumented, but according to JS the bitswap messages have a max size of 512*1024 bytes
+// https://github.com/ipfs/js-ipfs-bitswap/blob/
+// d8f80408aadab94c962f6b88f343eb9f39fa0fcc/src/decision-engine/index.js#L16
+// We set it to the same value as max substrate protocol message
+const MAX_PACKET_SIZE: u64 = 16 * 1024 * 1024;
+
+/// Max number of queued responses before denying requests.
+const MAX_REQUEST_QUEUE: usize = 500;
+
+/// Bitswap protocol name
+const PROTOCOL_NAME: &'static str = "/storagehub/rr/0.0.1";
 
 /// Native executor type.
 pub struct ParachainNativeExecutor;
@@ -169,11 +184,26 @@ async fn start_node_impl(
 
     let params = new_partial(&parachain_config)?;
     let (block_import, mut telemetry, telemetry_worker_handle) = params.other;
-    let net_config = sc_network::config::FullNetworkConfiguration::new(&parachain_config.network);
+    let mut net_config =
+        sc_network::config::FullNetworkConfiguration::new(&parachain_config.network);
 
     let client = params.client.clone();
     let backend = params.backend.clone();
     let mut task_manager = params.task_manager;
+
+    let provider_requests_protocol_config = {
+        // Allow both outgoing and incoming requests.
+        let (handler, protocol_config) =
+            ProviderRequestsHandler::new(parachain_config.chain_spec.fork_id(), client.clone());
+        task_manager.spawn_handle().spawn(
+            "provider-requests-handler",
+            Some("networking"),
+            handler.run(),
+        );
+        protocol_config
+    };
+
+    net_config.add_request_response_protocol(provider_requests_protocol_config);
 
     let (relay_chain_interface, collator_key) = build_relay_chain_interface(
         polkadot_config,
