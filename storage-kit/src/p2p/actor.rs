@@ -127,8 +127,7 @@ impl Actor for P2PModule {
                     .unwrap();
             }
             P2PModuleCommand::Multiaddresses { channel } => {
-                let multiaddresses: Vec<Multiaddr> =
-                    self.swarm.listeners().map(|addr| addr.clone()).collect();
+                let multiaddresses: Vec<Multiaddr> = self.swarm.listeners().cloned().collect();
 
                 channel
                     .send(multiaddresses)

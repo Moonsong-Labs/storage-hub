@@ -1,6 +1,6 @@
 use crate::{EventBus, EventBusMessage, ProvidesEventBus};
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct BlockchainEventBusProvider {
     challenge_request_event_bus: EventBus<ChallengeRequest>,
 }

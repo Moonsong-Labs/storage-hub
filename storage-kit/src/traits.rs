@@ -168,6 +168,12 @@ pub struct EventBus<T: EventBusMessage> {
     sender: broadcast::Sender<T>,
 }
 
+impl<T: EventBusMessage> Default for EventBus<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: EventBusMessage> EventBus<T> {
     pub fn new() -> Self {
         let (sender, _) = broadcast::channel(8);

@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use tokio::{
     select,
     sync::{mpsc::Receiver, oneshot},
-    time::{self, sleep},
+    time,
 };
 use tracing::info;
 

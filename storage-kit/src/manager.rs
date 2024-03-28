@@ -71,6 +71,12 @@ impl StorageKitBuilder {
     }
 }
 
+impl Default for StorageKitBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// StorageHub client roles.
 ///
 /// The StorageHub client can be configured to run as a user, main storage provider, or backup
