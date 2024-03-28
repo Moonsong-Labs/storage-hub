@@ -6429,6 +6429,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std 8.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.5.0)",
+ "storage-hub-traits",
 ]
 
 [[package]]

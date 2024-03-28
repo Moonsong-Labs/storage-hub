@@ -341,7 +341,7 @@ impl pallet_balances::Config for Runtime {
     type RuntimeHoldReason = RuntimeHoldReason;
     type RuntimeFreezeReason = RuntimeFreezeReason;
     type FreezeIdentifier = ();
-    type MaxHolds = ConstU32<0>;
+    type MaxHolds = ConstU32<100>;
     type MaxFreezes = ConstU32<0>;
 }
 
@@ -547,8 +547,12 @@ impl TrieVerifier for ProofTrieVerifier {
 /// Configure the pallet template in pallets/template.
 impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type Providers = Providers;
+    type ProofDealer = ProofsDealer;
+    type AssignmentThreshold = u128;
+    type AssignmentThresholdMultiplier = ConstU32<100>;
+    type MinBspsAssignmentThreshold = ConstU128<{ u128::MAX / 2 }>;
     type Fingerprint = Hash;
-    type StorageUnit = u128;
     type StorageRequestBspsRequiredType = u32;
     type TargetBspsRequired = ConstU32<1>;
     type MaxBspsPerStorageRequest = ConstU32<5>;

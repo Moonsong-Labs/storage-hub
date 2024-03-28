@@ -3,7 +3,7 @@ use codec::Encode;
 use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::sp_runtime::{
-    traits::{CheckedAdd, CheckedMul, CheckedSub, Hash, One},
+    traits::{CheckedAdd, CheckedMul, CheckedSub, Hash, One, Saturating},
     ArithmeticError, DispatchError,
 };
 use frame_support::traits::{
@@ -11,7 +11,7 @@ use frame_support::traits::{
     tokens::{Fortitude, Preservation},
     Get,
 };
-use storage_hub_traits::ProvidersInterface;
+use storage_hub_traits::{MutateProvidersInterface, ReadProvidersInterface};
 
 use crate::*;
 
@@ -219,6 +219,15 @@ where
     pub fn do_bsp_sign_off(_who: &T::AccountId) -> DispatchResult {
         todo!()
     }
+
+    /// Remove a root from a BSP. It will remove the whole BSP from storage, so it should only be called when the BSP is being removed.
+    fn _remove_root_bsp(who: &<T>::AccountId) -> DispatchResult {
+        let bsp_id =
+            AccountIdToBackupStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+        BackupStorageProviders::<T>::remove(&bsp_id);
+        AccountIdToBackupStorageProviderId::<T>::remove(&who);
+        Ok(())
+    }
 }
 
 impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
@@ -233,18 +242,42 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
 }
 
 /// Implement the StorageProvidersInterface trait for the Storage Providers pallet.
-impl<T: pallet::Config> StorageProvidersInterface<T> for pallet::Pallet<T> {
-    fn change_data_used(who: &T::AccountId, data_change: T::StorageData) -> DispatchResult {
+impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
+    type AccountId = T::AccountId;
+    type Provider = HashId<T>;
+    type StorageData = T::StorageData;
+    type BucketId = HashId<T>;
+    type MerklePatriciaRoot = T::MerklePatriciaRoot;
+
+    fn increase_data_used(who: &T::AccountId, delta: T::StorageData) -> DispatchResult {
         // TODO: refine this logic, add checks
         if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             let mut msp =
                 MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
-            msp.data_used += data_change;
+            msp.data_used = msp.data_used.saturating_add(delta);
             MainStorageProviders::<T>::insert(&msp_id, msp);
         } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
             let mut bsp =
                 BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
-            bsp.data_used += data_change;
+            bsp.data_used = bsp.data_used.saturating_add(delta);
+            BackupStorageProviders::<T>::insert(&bsp_id, bsp);
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        }
+        Ok(())
+    }
+
+    fn decrease_data_used(who: &Self::AccountId, delta: Self::StorageData) -> DispatchResult {
+        // TODO: refine this logic, add checks
+        if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            let mut msp =
+                MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+            msp.data_used = msp.data_used.saturating_sub(delta);
+            MainStorageProviders::<T>::insert(&msp_id, msp);
+        } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            let mut bsp =
+                BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
+            bsp.data_used = bsp.data_used.saturating_sub(delta);
             BackupStorageProviders::<T>::insert(&bsp_id, bsp);
         } else {
             return Err(Error::<T>::NotRegistered.into());
@@ -311,17 +344,9 @@ impl<T: pallet::Config> StorageProvidersInterface<T> for pallet::Pallet<T> {
         }
         Ok(())
     }
-
-    fn remove_root_bsp(who: &<T>::AccountId) -> DispatchResult {
-        let bsp_id =
-            AccountIdToBackupStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
-        BackupStorageProviders::<T>::remove(&bsp_id);
-        AccountIdToBackupStorageProviderId::<T>::remove(&who);
-        Ok(())
-    }
 }
 
-impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
+impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     type AccountId = T::AccountId;
     type Provider = HashId<T>;
     type Balance = T::NativeBalance;

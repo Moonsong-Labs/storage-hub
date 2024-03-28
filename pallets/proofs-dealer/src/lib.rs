@@ -36,7 +36,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use sp_trie::CompactProof;
-    use storage_hub_traits::ProvidersInterface;
+    use storage_hub_traits::ReadProvidersInterface;
     use types::ProviderFor;
 
     use crate::types::*;
@@ -49,7 +49,7 @@ pub mod pallet {
 
         /// The Providers pallet.
         /// To check if whoever submits a proof is a registered Provider.
-        type ProvidersPallet: ProvidersInterface<AccountId = Self::AccountId>;
+        type ProvidersPallet: ReadProvidersInterface<AccountId = Self::AccountId>;
 
         /// Type to access the Balances Pallet.
         type NativeBalance: fungible::Inspect<Self::AccountId>

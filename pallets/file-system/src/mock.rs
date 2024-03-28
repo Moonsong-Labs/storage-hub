@@ -1,5 +1,5 @@
 use frame_support::{
-    derive_impl, parameter_types,
+    construct_runtime, derive_impl, parameter_types,
     traits::{Everything, Hooks},
     weights::{constants::RocksDbWeight, Weight},
 };
@@ -8,13 +8,13 @@ use pallet_proofs_dealer::{CompactProof, TrieVerifier};
 use sp_core::{ConstU128, ConstU32, Get, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage,
+    AccountId32, BuildStorage,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
 type Balance = u128;
-type AccountId = u64;
+type AccountId = AccountId32;
 
 /// Rolls to the desired block. Returns the number of blocks played.
 pub(crate) fn roll_to(n: BlockNumber) -> BlockNumber {
@@ -35,13 +35,13 @@ fn roll_one_block() -> BlockNumber {
 }
 
 // Configure a mock runtime to test the pallet.
-frame_support::construct_runtime!(
+construct_runtime!(
     pub enum Test
     {
         System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
         FileSystem: crate::{Pallet, Call, Storage, Event<T>},
-        Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>},
+        Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>, HoldReason},
         ProofsDealer: pallet_proofs_dealer::{Pallet, Call, Storage, Event<T>},
     }
 );
@@ -49,6 +49,7 @@ frame_support::construct_runtime!(
 parameter_types! {
     pub const BlockHashCount: u64 = 250;
     pub const SS58Prefix: u8 = 42;
+    pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::Providers(pallet_storage_providers::HoldReason::StorageProviderDeposit);
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig as frame_system::DefaultConfig)]
@@ -88,19 +89,19 @@ impl pallet_balances::Config for Test {
     type MaxLocks = ConstU32<10>;
     type MaxReserves = ();
     type ReserveIdentifier = [u8; 8];
-    type RuntimeHoldReason = ();
-    type RuntimeFreezeReason = ();
+    type RuntimeHoldReason = RuntimeHoldReason;
+    type RuntimeFreezeReason = RuntimeFreezeReason;
     type FreezeIdentifier = ();
-    type MaxHolds = ConstU32<10>;
+    type MaxHolds = ConstU32<100>;
     type MaxFreezes = ConstU32<10>;
 }
 
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
+    type RuntimeHoldReason = RuntimeHoldReason;
     type StorageData = u32;
     type SpCount = u32;
-    type HashId = H256;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
     type MaxMultiAddressSize = ConstU32<100>;
@@ -110,7 +111,7 @@ impl pallet_storage_providers::Config for Test {
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type SpMinDeposit = ConstU128<10>;
-    type SpMinCapacity = ConstU32<1>;
+    type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
 }
 
@@ -118,7 +119,7 @@ impl pallet_storage_providers::Config for Test {
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
-        1
+        AccountId::new([0; 32])
     }
 }
 
@@ -150,8 +151,12 @@ impl TrieVerifier for MockVerifier {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type Providers = Providers;
+    type ProofDealer = ProofsDealer;
+    type AssignmentThreshold = u128;
+    type AssignmentThresholdMultiplier = ConstU32<100>;
+    type MinBspsAssignmentThreshold = ConstU128<{ u128::MAX / 2 }>;
     type Fingerprint = H256;
-    type StorageUnit = u128;
     type StorageRequestBspsRequiredType = u32;
     type TargetBspsRequired = ConstU32<1>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
