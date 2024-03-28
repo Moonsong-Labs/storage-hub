@@ -6,3 +6,28 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+
+libp2p = { version = "0.53.2", features = [
+    "cbor",
+    "tcp",
+    "tls",
+    "dns",
+    "tokio",
+    "noise",
+    "yamux",
+    "websocket",
+    "ping",
+    "macros",
+    "identify",
+    "quic",
+    "request-response",
+] }
+subxt = { version = "0.34.0", features = [
+    "sp-core",
+    "substrate-compat",
+    "unstable-light-client",
+] }
