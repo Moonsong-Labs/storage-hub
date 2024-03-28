@@ -1,6 +1,7 @@
 pub mod blockchain;
 pub mod manager;
 pub mod p2p;
+pub mod tasks;
 pub mod traits;
 pub mod types;
 

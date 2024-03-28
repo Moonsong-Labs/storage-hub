@@ -114,6 +114,7 @@ pub enum P2PModuleCommand {
 impl Actor for P2PModule {
     type Message = P2PModuleCommand;
     type EventLoop = P2PEventLoop;
+    type EventBusProvider = ();
 
     async fn handle_message(&mut self, command: Self::Message) {
         match command {
@@ -135,6 +136,10 @@ impl Actor for P2PModule {
                     .unwrap();
             }
         }
+    }
+
+    fn get_event_bus_provider(&self) -> &Self::EventBusProvider {
+        &()
     }
 }
 

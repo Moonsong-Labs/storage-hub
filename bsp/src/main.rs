@@ -1,9 +1,9 @@
 use storage_kit::manager::{Role, StorageKitBuilder};
 use tracing_subscriber::util::SubscriberInitExt;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()?;
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_default();
     tracing_subscriber::FmtSubscriber::builder()
         .with_env_filter(filter)
         .finish()

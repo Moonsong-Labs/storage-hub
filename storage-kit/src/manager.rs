@@ -1,13 +1,16 @@
+use crate::tasks::ResolveBlockchainChallengeRequests;
 use crate::traits::SpawnableActor;
-use crate::{ActorHandle, Port};
+use crate::{ActorHandle, EventHandler, Port};
 use anyhow::Result;
 use libp2p::identity::Keypair;
+use tracing::debug;
 
 const DEFAULT_P2P_PORT: Port = 30333;
 
 use crate::blockchain::actor::BlockchainModule;
 use crate::p2p::actor::P2PModule;
 
+#[derive(Clone)]
 pub struct StorageKitManager {
     pub blockchain_module_handle: ActorHandle<BlockchainModule>,
     pub p2p_module_handle: ActorHandle<P2PModule>,
@@ -15,8 +18,10 @@ pub struct StorageKitManager {
 
 impl StorageKitManager {
     pub fn start_bsp_tasks(&mut self) {
-        // self.register_sp_check_storage_proof_requests_task();
-        // self.register_file_transfer_task();
+        debug!("Starting BSP tasks.");
+        ResolveBlockchainChallengeRequests::new(self.clone())
+            .subscribe_to(&self.blockchain_module_handle)
+            .start();
     }
 
     pub fn start_msp_tasks(&mut self) {}
