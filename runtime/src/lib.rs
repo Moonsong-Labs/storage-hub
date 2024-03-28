@@ -495,7 +495,6 @@ impl pallet_storage_providers::Config for Runtime {
     type NativeBalance = Balances;
     type StorageData = u32;
     type SpCount = u32;
-    type HashId = Hash;
     type MerklePatriciaRoot = Hash;
     type ValuePropId = Hash;
     type MaxMultiAddressSize = ConstU32<100>;
@@ -505,8 +504,10 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type SpMinDeposit = ConstU128<10>;
-    type SpMinCapacity = ConstU32<1>;
+    type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
+    type RuntimeHoldReason = RuntimeHoldReason;
+    // TODO: type ProvidersRandomness = RandomnessFromOneEpochAgo<Runtime>;
 }
 
 // TODO: remove this and replace with pallet treasury

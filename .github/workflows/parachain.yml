@@ -1,0 +1,158 @@
+# Storage Hub: Parachain CI/CD Workflow
+#
+# Overview:
+# 1. Setup: This attempts to determine two things:
+#     - If the parachain node needs to be rebuilt based on changes to src code,
+#       or if an explicit skip tag has been set in the PR.
+#     - The tag name to use for the Docker image based on the outcome of the first check.
+# 2. Build Image: Conditionally executes based on the outcome of the setup job. If a new
+#    build is determined necessary, it proceeds to build a Docker image of the parachain node.
+# 3. Zombie Test: Executes integration tests using Zombienet. This job pulls the relevant Docker image
+#    based on the setup job's output and runs tests to ensure network functionality.
+#
+# Note: This workflow assumes the presence of repo secrets for Docker Hub authentication
+#
+# TODO:
+# - Add parachain test suite (when ready)
+# - Publish runtime to docker
+# - Add upgrade tests for runtime
+
+name: Storage Hub Parachain CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      node_changed: ${{ steps.node_check.outputs.changed }}
+      image-tag: ${{ steps.set-tag.outputs.tag }}
+    env:
+      SKIP_BUILD_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'skip-node-build') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check if Parachain Node needs rebuild
+        id: node_check
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha || github.event.before }}"
+          HEAD_SHA="${{ github.sha }}"
+
+          if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" != "true" ]] && git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^(node|pallets|runtime)/'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "Comparing changes from $BASE_SHA to $HEAD_SHA"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Set tag name
+        id: set-tag
+        run: |
+          if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" || "${{ steps.node_check.outputs.changed }}" == 'false' || "${{ github.ref }}" == 'refs/heads/main' ]]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          else
+            echo "tag=sha-$(git log -1 --format='%H' | cut -c1-8)" >> $GITHUB_OUTPUT
+          fi
+
+  build_image:
+    needs: [setup]
+    if: needs.setup.outputs.node_changed == 'true'
+    name: "Build node image"
+    runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          cache: false
+      - uses: rui314/setup-mold@v1
+      - uses: oven-sh/setup-bun@v1
+      - uses: arduino/setup-protoc@v3
+      - name: Build All
+        # TODO: Make this only build the parachain node project
+        run: cargo build --release
+      - name: Check Built By Mold
+        run: readelf -p .comment target/release/storage-hub-node
+      - name: Prepare artefacts
+        run: |
+          mkdir -p runtimes
+          mkdir -p build
+          cp target/release/storage-hub-node build/
+          cp target/release/wbuild/storage*/storage*_runtime.compact.compressed.wasm runtimes/
+      - name: Prepare
+        id: prep
+        run: |
+          DOCKER_IMAGE=moonsonglabs/storage-hub
+          TAGS="${DOCKER_IMAGE}:${{ needs.setup.outputs.image-tag }}"
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/storage-hub-node.Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.prep.outputs.tags }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
+          labels: |
+            org.opencontainers.image.title=${{ github.event.repository.name }}
+            org.opencontainers.image.description=${{ github.event.repository.description }}
+            org.opencontainers.image.url=${{ github.event.repository.html_url }}
+            org.opencontainers.image.source=${{ github.event.repository.clone_url }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id }}
+
+  zombie_test:
+    needs: [build_image, setup]
+    if: always()
+    name: "Test Simple Network"
+    runs-on: ubuntu-latest
+    env:
+      SH_IMAGE: ${{ needs.setup.outputs.image-tag }}
+    defaults:
+      run:
+        working-directory: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - name: Pull Docker image
+        run: docker pull moonsonglabs/storage-hub:${{ needs.setup.outputs.image-tag }}
+      - name: Start local k8 cluster
+        uses: medyagh/setup-minikube@latest
+        with:
+          cache: true
+          driver: docker
+          cpus: 4
+          memory: 12000
+      - name: Run Zombienet Test!
+        run: |
+          bun install
+          bun zombienet test configs/simple.zndsl

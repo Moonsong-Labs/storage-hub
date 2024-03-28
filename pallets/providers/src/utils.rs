@@ -1,22 +1,140 @@
 use crate::types::{Bucket, MainStorageProvider};
+use codec::Encode;
+use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
-use frame_support::traits::Get;
+use frame_support::sp_runtime::{
+    traits::{CheckedAdd, CheckedMul, CheckedSub, Hash, One, Zero},
+    ArithmeticError, DispatchError,
+};
+use frame_support::traits::{
+    fungible::{Inspect, InspectHold, MutateHold},
+    tokens::{Fortitude, Preservation},
+    Get,
+};
 use storage_hub_traits::ProvidersInterface;
 
 use crate::*;
+
+macro_rules! expect_or_err {
+    // Handle Option type
+    ($optional:expr, $error_msg:expr, $error_type:path) => {{
+        match $optional {
+            Some(value) => value,
+            None => {
+                #[cfg(test)]
+                unreachable!($error_msg);
+
+                #[allow(unreachable_code)]
+                {
+                    Err($error_type)?
+                }
+            }
+        }
+    }};
+    // Handle boolean type
+    ($condition:expr, $error_msg:expr, $error_type:path, bool) => {{
+        if !$condition {
+            #[cfg(test)]
+            unreachable!($error_msg);
+
+            #[allow(unreachable_code)]
+            {
+                Err($error_type)?
+            }
+        }
+    }};
+}
 
 impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
-    pub fn do_msp_sign_up(
-        _who: &T::AccountId,
-        _msp_info: &MainStorageProvider<T>,
-    ) -> DispatchResult {
-        // todo!()
-        // let msp_id =
-        //    AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
-        // <MainStorageProviders<T>>::insert(&msp_id, msp_info);
+    pub fn do_msp_sign_up(who: &T::AccountId, msp_info: &MainStorageProvider<T>) -> DispatchResult {
+        // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
+
+        // Check that, by registering this Main Storage Provider, we are not exceeding the maximum number of Main Storage Providers
+        let new_amount_of_msps = MspCount::<T>::get()
+            .checked_add(&T::SpCount::one())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        ensure!(
+            new_amount_of_msps <= T::MaxMsps::get(),
+            Error::<T>::MaxMspsReached
+        );
+
+        // Check that the account is not already registered either as a Main Storage Provider or a Backup Storage Provider
+        ensure!(
+            AccountIdToMainStorageProviderId::<T>::get(who).is_none()
+                && AccountIdToBackupStorageProviderId::<T>::get(who).is_none(),
+            Error::<T>::AlreadyRegistered
+        );
+
+        // Check that the multiaddresses vector is not empty (SPs have to register with at least one)
+        ensure!(
+            !msp_info.multiaddresses.is_empty(),
+            Error::<T>::NoMultiAddress
+        );
+
+        // TODO: Check that the multiaddresses are valid
+        /* for multiaddress in msp_info.multiaddresses.iter() {
+            let multiaddress_vec = multiaddress.to_vec();
+            let valid_multiaddress = Multiaddr::try_from(multiaddress_vec);
+            match valid_multiaddress {
+                Ok(_) => (),
+                Err(_) => return Err(Error::<T>::InvalidMultiAddress.into()),
+            }
+        } */
+
+        // Check that the data to be stored is bigger than the minimum required by the runtime
+        ensure!(
+            msp_info.capacity >= T::SpMinCapacity::get(),
+            Error::<T>::StorageTooLow
+        );
+
+        // Calculate how much deposit will the signer have to pay to register with this amount of data
+        let capacity_over_minimum = msp_info
+            .capacity
+            .checked_sub(&T::SpMinCapacity::get())
+            .ok_or(Error::<T>::StorageTooLow)?;
+        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
+            .checked_mul(&capacity_over_minimum.into())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        let deposit = T::SpMinDeposit::get()
+            .checked_add(&deposit_for_capacity_over_minimum)
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Check if the user has enough balance to pay the deposit
+        let user_balance =
+            T::NativeBalance::reducible_balance(who, Preservation::Preserve, Fortitude::Polite);
+        ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
+
+        // Check if we can hold the deposit from the user
+        ensure!(
+            T::NativeBalance::can_hold(&HoldReason::StorageProviderDeposit.into(), who, deposit),
+            Error::<T>::CannotHoldDeposit
+        );
+
+        // Hold the deposit from the user
+        T::NativeBalance::hold(&HoldReason::StorageProviderDeposit.into(), who, deposit)?;
+
+        // TODO:
+        // We then get the MainStorageProviderId by using the AccountId as the seed for a random generator
+        // let (msp_id, block_number_when_random) =
+        //    T::ProvidersRandomness::random(who.encode().as_ref());
+        // And we should check that the block number when this randomness is valid is bigger than the current one
+        // TODO: implement this check and, if not valid, save somehow the randomness and the account id to retry later, probably in a queue
+
+        // Temporary, replace with random salt generated by a VRF (pseudocode above)
+        let msp_id: MainStorageProviderId<T> =
+            <T as frame_system::Config>::Hashing::hash(who.encode().as_ref());
+
+        // Insert the MainStorageProviderId into the mapping
+        AccountIdToMainStorageProviderId::<T>::insert(who, msp_id);
+
+        // Save the MainStorageProvider information in storage
+        MainStorageProviders::<T>::insert(&msp_id, msp_info);
+
+        // Increment the counter of Main Storage Providers registered
+        MspCount::<T>::set(new_amount_of_msps);
         Ok(())
     }
 
@@ -24,26 +142,209 @@ where
         who: &T::AccountId,
         bsp_info: BackupStorageProvider<T>,
     ) -> DispatchResult {
-        // todo!()
-        let bsp_id =
-            AccountIdToBackupStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
-        <BackupStorageProviders<T>>::insert(&bsp_id, bsp_info);
+        // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
+
+        // Check that, by registering this Backup Storage Provider, we are not exceeding the maximum number of Backup Storage Providers
+        let new_amount_of_bsps = BspCount::<T>::get()
+            .checked_add(&T::SpCount::one())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        ensure!(
+            new_amount_of_bsps <= T::MaxBsps::get(),
+            Error::<T>::MaxBspsReached
+        );
+
+        // Check that the account is not already registered either as a Main Storage Provider or a Backup Storage Provider
+        ensure!(
+            AccountIdToMainStorageProviderId::<T>::get(who).is_none()
+                && AccountIdToBackupStorageProviderId::<T>::get(who).is_none(),
+            Error::<T>::AlreadyRegistered
+        );
+
+        // Check that the multiaddresses vector is not empty (SPs have to register with at least one)
+        ensure!(
+            !bsp_info.multiaddresses.is_empty(),
+            Error::<T>::NoMultiAddress
+        );
+
+        // TODO: Check that the multiaddresses are valid
+        /* for multiaddress in bsp_info.multiaddresses.iter() {
+            let multiaddress_vec = multiaddress.to_vec();
+            let valid_multiaddress = Multiaddr::try_from(multiaddress_vec);
+            match valid_multiaddress {
+                Ok(_) => (),
+                Err(_) => return Err(Error::<T>::InvalidMultiAddress.into()),
+            }
+        } */
+
+        // Check that the data to be stored is bigger than the minimum required by the runtime
+        ensure!(
+            bsp_info.capacity >= T::SpMinCapacity::get(),
+            Error::<T>::StorageTooLow
+        );
+
+        // Calculate how much deposit will the signer have to pay to register with this amount of data
+        let capacity_over_minimum = bsp_info
+            .capacity
+            .checked_sub(&T::SpMinCapacity::get())
+            .ok_or(Error::<T>::StorageTooLow)?;
+        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
+            .checked_mul(&capacity_over_minimum.into())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        let deposit = T::SpMinDeposit::get()
+            .checked_add(&deposit_for_capacity_over_minimum)
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Check if the user has enough balance to pay the deposit
+        let user_balance =
+            T::NativeBalance::reducible_balance(who, Preservation::Preserve, Fortitude::Polite);
+        ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
+
+        // Check if we can hold the deposit from the user
+        ensure!(
+            T::NativeBalance::can_hold(&HoldReason::StorageProviderDeposit.into(), who, deposit),
+            Error::<T>::CannotHoldDeposit
+        );
+
+        // Hold the deposit from the user
+        T::NativeBalance::hold(&HoldReason::StorageProviderDeposit.into(), who, deposit)?;
+
+        // TODO:
+        // We then get the BainStorageProviderId by using the AccountId as the seed for a random generator
+        // let (bsp_id, block_number_when_random) =
+        //    T::ProvidersRandomness::random(who.encode().as_ref());
+        // And we should check that the block number when this randomness is valid is bigger than the current one
+        // TODO: implement this check and, if not valid, save somehow the randomness and the account id to retry later, probably in a queue
+
+        // Temporary, replace with random salt generated by a VRF (pseudocode above)
+        let bsp_id: BackupStorageProviderId<T> =
+            <T as frame_system::Config>::Hashing::hash(who.encode().as_ref());
+
+        // Insert the BackupStorageProviderId into the mapping
+        AccountIdToBackupStorageProviderId::<T>::insert(who, bsp_id);
+
+        // Save the BackupStorageProvider information in storage
+        BackupStorageProviders::<T>::insert(&bsp_id, bsp_info.clone());
+
+        // Increment the total capacity of the network (which is the sum of all BSPs capacities)
+        TotalBspsCapacity::<T>::mutate(|n| {
+            let new_total_bsp_capacity = n.checked_add(&bsp_info.capacity);
+            match new_total_bsp_capacity {
+                Some(new_total_bsp_capacity) => {
+                    *n = new_total_bsp_capacity;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Overflow)),
+            }
+        })?;
+
+        // Increment the counter of Backup Storage Providers registered
+        BspCount::<T>::set(new_amount_of_bsps);
         Ok(())
     }
 
-    pub fn do_msp_sign_off(_who: &T::AccountId) -> DispatchResult {
-        todo!()
+    pub fn do_msp_sign_off(who: &T::AccountId) -> DispatchResult {
+        // Check that the signer is registered as a MSP and get its info
+        let msp_id =
+            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        let msp = expect_or_err!(
+            MainStorageProviders::<T>::get(&msp_id),
+            "MSP is registered (has a MSP ID), it should also have metadata",
+            Error::<T>::SpRegisteredButDataNotFound
+        );
+
+        // Check that the MSP has no storage assigned to it (no buckets or data used by it)
+        ensure!(
+            msp.data_used == T::StorageData::zero(),
+            Error::<T>::StorageStillInUse
+        );
+
+        // Update the MSPs storage, removing the signer as an MSP
+        AccountIdToMainStorageProviderId::<T>::remove(who);
+        MainStorageProviders::<T>::remove(&msp_id);
+
+        // Return the deposit to the signer (if all funds cannot be returned, it will fail and revert with the reason)
+        T::NativeBalance::release_all(
+            &HoldReason::StorageProviderDeposit.into(),
+            who,
+            frame_support::traits::tokens::Precision::Exact,
+        )?;
+
+        // Decrement the storage that holds total amount of MSPs currently in the system
+        MspCount::<T>::mutate(|n| {
+            let new_amount_of_msps = n.checked_sub(&T::SpCount::one());
+            match new_amount_of_msps {
+                Some(new_amount_of_msps) => {
+                    *n = new_amount_of_msps;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+            }
+        })?;
+
+        Ok(())
     }
 
-    pub fn do_bsp_sign_off(_who: &T::AccountId) -> DispatchResult {
-        todo!()
+    pub fn do_bsp_sign_off(who: &T::AccountId) -> DispatchResult {
+        // Check that the signer is registered as a BSP and get its info
+        let bsp_id =
+            AccountIdToBackupStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        let bsp = expect_or_err!(
+            BackupStorageProviders::<T>::get(&bsp_id),
+            "BSP is registered (has a BSP ID), it should also have metadata",
+            Error::<T>::SpRegisteredButDataNotFound
+        );
+
+        // Check that the BSP has no storage assigned to it (it is not currently storing any files)
+        ensure!(
+            bsp.data_used == T::StorageData::zero(),
+            Error::<T>::StorageStillInUse
+        );
+
+        // Update the BSPs storage, removing the signer as an BSP
+        AccountIdToBackupStorageProviderId::<T>::remove(who);
+        BackupStorageProviders::<T>::remove(&bsp_id);
+
+        // Update the total capacity of the network (which is the sum of all BSPs capacities)
+        TotalBspsCapacity::<T>::mutate(|n| {
+            let new_total_bsp_capacity = n.checked_sub(&bsp.capacity);
+            match new_total_bsp_capacity {
+                Some(new_total_bsp_capacity) => {
+                    *n = new_total_bsp_capacity;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+            }
+        })?;
+
+        // Return the deposit to the signer (if all funds cannot be returned, it will fail and revert with the reason)
+        T::NativeBalance::release_all(
+            &HoldReason::StorageProviderDeposit.into(),
+            who,
+            frame_support::traits::tokens::Precision::Exact,
+        )?;
+
+        // Decrement the storage that holds total amount of BSPs currently in the system
+        BspCount::<T>::mutate(|n| {
+            let new_amount_of_bsps = n.checked_sub(&T::SpCount::one());
+            match new_amount_of_bsps {
+                Some(new_amount_of_bsps) => {
+                    *n = new_amount_of_bsps;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+            }
+        })?;
+
+        Ok(())
     }
 }
 
 impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
     fn from(msp: MainStorageProvider<T>) -> Self {
         BackupStorageProvider {
-            total_data: msp.total_data,
+            capacity: msp.capacity,
             data_used: msp.data_used,
             multiaddresses: msp.multiaddresses,
             root: MerklePatriciaRoot::<T>::default(),

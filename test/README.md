@@ -28,43 +28,60 @@ Visit their [docs](https://minikube.sigs.k8s.io/docs/) for a guide on GettingSta
 minikube start
 ```
 
-#### Creating Local Docker Image (Required)
+#### Creating Local Docker Image
 
 _In `test/` directory:_
 
-1. Run `bun docker:registry:start` to start a docker registry
-2. Run `bun docker:build:sh-node` to build docker image locally
-3. Run `bun docker:registry:push` to push new docker image to local registry
+Run:
+
+```sh
+bun docker:build
+```
+
+to create a local Docker image `storage-hub:local`.
+
+#### Running Local built via Docker
+
+```sh
+docker compose -f docker/local-node-compose.yml up -d
+```
+
+#### Running Latest built via Docker
+
+```sh
+docker compose -f docker/latest-node-compose.yml up -d
+```
 
 #### Zombienet
 
-Easiest way to get the latest zombienet runner binary is via their [Releases](https://github.com/paritytech/zombienet/releases) page. For example:
+In `/test` run: `bun install` to install zombienet
 
-```sh
-wget https://github.com/paritytech/zombienet/releases/download/v1.3.95/zombienet-linux-x64
-chmod +x zombienet-linux-x64
-```
-
-> [!IMPORTANT]  
-> If using a Mac use the `macos` binary
-
-### Running Tests
+### Running Standard Tests
 
 ```sh
 bun test
 ```
 
-### Running Zombienet manually
-
-Now that (finally) all the pieces are together, let's start a StorageHub parachain connected to a rococco relaychain.
-
-`<zombienet-bin-name> spawn <config_path>`
-
-For example:
+### Running ZombieNet Tests
 
 ```sh
-./zombienet-linux-x64 spawn configs/simple.toml
+bun zombie:test:latest
 ```
+
+### Spawning ZombieNet
+
+> [!WARNING]
+> Currently ZombieNet doesn't work with SH due to how we make our chainspecs. WIP
+
+To launch a non-ephemeral ZombieNetwork, use:
+
+```sh
+bun install
+bun zombienet spawn <config_path>
+```
+
+> [!INFO]  
+> For example: `bun zombienet spawn
 
 From here you should see in the terminal, the different nodes being spun up. When the network is fully launched, you should see something like this:
 
