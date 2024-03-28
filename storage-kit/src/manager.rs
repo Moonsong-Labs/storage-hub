@@ -1,11 +1,10 @@
+use crate::constants::DEFAULT_P2P_PORT;
 use crate::tasks::ResolveBlockchainChallengeRequests;
 use crate::traits::SpawnableActor;
 use crate::{ActorHandle, EventHandler, Port};
 use anyhow::Result;
 use libp2p::identity::Keypair;
 use tracing::debug;
-
-const DEFAULT_P2P_PORT: Port = 30333;
 
 use crate::blockchain::actor::BlockchainModule;
 use crate::p2p::actor::P2PModule;

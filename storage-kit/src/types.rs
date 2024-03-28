@@ -1,3 +1,5 @@
+use crate::constants::FILE_CHUNK_SIZE;
+
 /// Typed version of u16 for the port number.
 pub type Port = u16;
 
@@ -15,7 +17,5 @@ pub struct FileMetadata {
     pub fingerprint: Hash,
 }
 
-const CHUNK_SIZE: usize = 1024 * 1024;
-
 /// Typed chunk of a file. This is what is stored in the leaf of the stored Merkle tree.
-pub struct FileChunk(pub [u8; CHUNK_SIZE]);
+pub struct FileChunk(pub [u8; FILE_CHUNK_SIZE]);

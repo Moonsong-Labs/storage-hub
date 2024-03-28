@@ -3,23 +3,18 @@ use libp2p::{
     futures::StreamExt, identify, identity::Keypair, noise, swarm::NetworkBehaviour, Multiaddr,
     Swarm,
 };
-use std::time::Duration;
 use tokio::{
     select,
     sync::{mpsc::Receiver, oneshot},
 };
 use tracing::*;
 
-use crate::{Actor, ActorEventLoop, ActorHandle, Port};
-
-/// Defines max_negotiating_inbound_streams constant for the swarm.
-/// It must be set for large plots.
-const SWARM_MAX_NEGOTIATING_INBOUND_STREAMS: usize = 100000;
-
-/// How long will connection be allowed to be open without any usage.
-const IDLE_CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
-
-pub const IDENTIFY_PROTOCOL: &str = "/storagehub/id/0.0.1";
+use crate::{
+    constants::{
+        IDENTIFY_PROTOCOL, IDLE_CONNECTION_TIMEOUT, SWARM_MAX_NEGOTIATING_INBOUND_STREAMS,
+    },
+    Actor, ActorEventLoop, ActorHandle, Port,
+};
 
 #[derive(NetworkBehaviour)]
 pub(crate) struct Behaviour {

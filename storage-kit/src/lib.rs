@@ -1,4 +1,5 @@
 pub mod blockchain;
+pub mod constants;
 pub mod manager;
 pub mod p2p;
 pub mod tasks;
