@@ -15,6 +15,36 @@ use storage_hub_traits::ProvidersInterface;
 
 use crate::*;
 
+macro_rules! expect_or_err {
+    // Handle Option type
+    ($optional:expr, $error_msg:expr, $error_type:path) => {{
+        match $optional {
+            Some(value) => value,
+            None => {
+                #[cfg(test)]
+                unreachable!($error_msg);
+
+                #[allow(unreachable_code)]
+                {
+                    Err($error_type)?
+                }
+            }
+        }
+    }};
+    // Handle boolean type
+    ($condition:expr, $error_msg:expr, $error_type:path, bool) => {{
+        if !$condition {
+            #[cfg(test)]
+            unreachable!($error_msg);
+
+            #[allow(unreachable_code)]
+            {
+                Err($error_type)?
+            }
+        }
+    }};
+}
+
 impl<T> Pallet<T>
 where
     T: pallet::Config,
@@ -217,7 +247,11 @@ where
         let msp_id =
             AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
 
-        let msp = MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+        let msp = expect_or_err!(
+            MainStorageProviders::<T>::get(&msp_id),
+            "MSP is registered (has a MSP ID), it should also have metadata",
+            Error::<T>::SpRegisteredButDataNotFound
+        );
 
         // Check that the MSP has no storage assigned to it (no buckets or data used by it)
         ensure!(
@@ -256,9 +290,13 @@ where
         let bsp_id =
             AccountIdToBackupStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
 
-        let bsp = BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
+        let bsp = expect_or_err!(
+            BackupStorageProviders::<T>::get(&bsp_id),
+            "BSP is registered (has a BSP ID), it should also have metadata",
+            Error::<T>::SpRegisteredButDataNotFound
+        );
 
-        // Check that the BSP has no storage assigned to it (no buckets or data used by it)
+        // Check that the BSP has no storage assigned to it (it is not currently storing any files)
         ensure!(
             bsp.data_used == T::StorageData::zero(),
             Error::<T>::StorageStillInUse

@@ -259,6 +259,8 @@ pub mod pallet {
         MaxMspsReached,
         /// Error thrown when a user tries to sign off as a SP but is not registered as a MSP or BSP.
         NotRegistered,
+        /// Error thrown when a user has a SP ID assigned to it but the SP data does not exist in storage (Inconsistency error).
+        SpRegisteredButDataNotFound,
         /// Error thrown when a user tries to sign off as a SP but still has used storage.
         StorageStillInUse,
         /// Error thrown when a SP tries to change its total data (stake) but it has not been enough time since the last time it changed it.
