@@ -16,14 +16,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-//! Helper for incoming light client requests.
+//! Helper for incoming provider client requests.
 //!
-//! Handle (i.e. answer) incoming light client requests from a remote peer received via
+//! Handle (i.e. answer) incoming provider client requests from a remote peer received via
 //! `crate::request_responses::RequestResponsesBehaviour` with
 //! [`LightClientRequestHandler`](handler::LightClientRequestHandler).
 
-use crate::schema;
-use codec::{self, Decode, Encode};
+use crate::provider_requests_protocol::schema;
 use futures::prelude::*;
 use libp2p_identity::PeerId;
 use log::{debug, trace};
@@ -33,23 +32,20 @@ use sc_network::{
     request_responses::{IncomingRequest, OutgoingResponse, ProtocolConfig},
     ReputationChange,
 };
-use sp_core::{
-    hexdisplay::HexDisplay,
-    storage::{ChildInfo, ChildType, PrefixedStorageKey},
-};
+use sp_core::hexdisplay::HexDisplay;
 use sp_runtime::traits::Block;
 use std::{marker::PhantomData, sync::Arc};
 
 const LOG_TARGET: &str = "provider-requests-handler";
 
-/// Max number of queued responses before denying requests.
+/// Max number of queued requests.
 const MAX_PROVIDER_REQUESTS_QUEUE: usize = 500;
 
-/// Handler for incoming light client requests from a remote peer.
+/// Handler for incoming provider requests from a remote peer.
 pub struct ProviderRequestsHandler<B, Client> {
     request_receiver: async_channel::Receiver<IncomingRequest>,
     /// Blockchain client.
-    client: Arc<Client>,
+    _client: Arc<Client>,
     _block: PhantomData<B>,
 }
 
@@ -74,7 +70,7 @@ where
 
         (
             Self {
-                client,
+                _client: client,
                 request_receiver,
                 _block: PhantomData::default(),
             },
@@ -82,7 +78,7 @@ where
         )
     }
 
-    /// Run [`LightClientRequestHandler`].
+    /// Run [`ProviderRequestsHandler`].
     pub async fn run(mut self) {
         while let Some(request) = self.request_receiver.next().await {
             let IncomingRequest {
@@ -102,7 +98,7 @@ where
                     match pending_response.send(response) {
                         Ok(()) => trace!(
                             target: LOG_TARGET,
-                            "Handled light client request from {}.",
+                            "Handled provider client request from {}.",
                             peer,
                         ),
                         Err(_) => debug!(
@@ -116,7 +112,7 @@ where
                 Err(e) => {
                     debug!(
                         target: LOG_TARGET,
-                        "Failed to handle light client request from {}: {}", peer, e,
+                        "Failed to handle provider client request from {}: {}", peer, e,
                     );
 
                     let reputation_changes = match e {
@@ -135,7 +131,7 @@ where
                     if pending_response.send(response).is_err() {
                         debug!(
                             target: LOG_TARGET,
-                            "Failed to handle light client request from {}: {}",
+                            "Failed to handle provider client request from {}: {}",
                             peer,
                             HandleRequestError::SendResponse,
                         );
@@ -150,17 +146,14 @@ where
         peer: PeerId,
         payload: Vec<u8>,
     ) -> Result<Vec<u8>, HandleRequestError> {
-        let request = schema::v1::light::Request::decode(&payload[..])?;
+        let request = schema::v1::provider::Request::decode(&payload[..])?;
 
         let response = match &request.request {
-            Some(schema::v1::light::request::Request::RemoteCallRequest(r)) => {
-                self.on_remote_call_request(&peer, r)?
+            Some(schema::v1::provider::request::Request::RemoteUploadDataRequest(r)) => {
+                self.on_remote_upload_data_request(&peer, r)?
             }
-            Some(schema::v1::light::request::Request::RemoteReadRequest(r)) => {
+            Some(schema::v1::provider::request::Request::RemoteReadRequest(r)) => {
                 self.on_remote_read_request(&peer, r)?
-            }
-            Some(schema::v1::light::request::Request::RemoteReadChildRequest(r)) => {
-                self.on_remote_read_child_request(&peer, r)?
             }
             None => {
                 return Err(HandleRequestError::BadRequest(
@@ -175,147 +168,50 @@ where
         Ok(data)
     }
 
-    fn on_remote_call_request(
+    fn on_remote_upload_data_request(
         &mut self,
         peer: &PeerId,
-        request: &schema::v1::light::RemoteCallRequest,
-    ) -> Result<schema::v1::light::Response, HandleRequestError> {
-        trace!(
-            "Remote call request from {} ({} at {:?}).",
-            peer,
-            request.method,
-            request.block,
-        );
+        request: &schema::v1::provider::RemoteUploadDataRequest,
+    ) -> Result<schema::v1::provider::Response, HandleRequestError> {
+        trace!("Remote call request from {}.", peer,);
 
-        let block = Decode::decode(&mut request.block.as_ref())?;
-
-        let response = match self
-            .client
-            .execution_proof(block, &request.method, &request.data)
-        {
-            Ok((_, proof)) => schema::v1::light::RemoteCallResponse {
-                proof: Some(proof.encode()),
-            },
-            Err(e) => {
-                trace!(
-                    "remote call request from {} ({} at {:?}) failed with: {}",
-                    peer,
-                    request.method,
-                    request.block,
-                    e,
-                );
-                schema::v1::light::RemoteCallResponse { proof: None }
-            }
+        // TODO actually save data.
+        let response = schema::v1::provider::RemoteUploadDataResponse {
+            location: request.location.clone(),
         };
 
-        Ok(schema::v1::light::Response {
-            response: Some(schema::v1::light::response::Response::RemoteCallResponse(
-                response,
-            )),
+        Ok(schema::v1::provider::Response {
+            response: Some(
+                schema::v1::provider::response::Response::RemoteUploadDataResponse(response),
+            ),
         })
     }
 
     fn on_remote_read_request(
         &mut self,
         peer: &PeerId,
-        request: &schema::v1::light::RemoteReadRequest,
-    ) -> Result<schema::v1::light::Response, HandleRequestError> {
-        if request.keys.is_empty() {
+        request: &schema::v1::provider::RemoteReadRequest,
+    ) -> Result<schema::v1::provider::Response, HandleRequestError> {
+        if request.locations.is_empty() {
             debug!("Invalid remote read request sent by {}.", peer);
             return Err(HandleRequestError::BadRequest(
-                "Remote read request without keys.",
+                "Remote read request without locations.",
             ));
         }
 
         trace!(
-            "Remote read request from {} ({} at {:?}).",
+            "Remote read request from {} ({}).",
             peer,
-            fmt_keys(request.keys.first(), request.keys.last()),
-            request.block,
+            fmt_keys(request.locations.first(), request.locations.last()),
         );
 
-        let block = Decode::decode(&mut request.block.as_ref())?;
-
-        let response = match self
-            .client
-            .read_proof(block, &mut request.keys.iter().map(AsRef::as_ref))
-        {
-            Ok(proof) => schema::v1::light::RemoteReadResponse {
-                proof: Some(proof.encode()),
-            },
-            Err(error) => {
-                trace!(
-                    "remote read request from {} ({} at {:?}) failed with: {}",
-                    peer,
-                    fmt_keys(request.keys.first(), request.keys.last()),
-                    request.block,
-                    error,
-                );
-                schema::v1::light::RemoteReadResponse { proof: None }
-            }
+        // TODO actually read data.
+        let response = schema::v1::provider::RemoteReadResponse {
+            data: request.locations.clone(),
         };
 
-        Ok(schema::v1::light::Response {
-            response: Some(schema::v1::light::response::Response::RemoteReadResponse(
-                response,
-            )),
-        })
-    }
-
-    fn on_remote_read_child_request(
-        &mut self,
-        peer: &PeerId,
-        request: &schema::v1::light::RemoteReadChildRequest,
-    ) -> Result<schema::v1::light::Response, HandleRequestError> {
-        if request.keys.is_empty() {
-            debug!("Invalid remote child read request sent by {}.", peer);
-            return Err(HandleRequestError::BadRequest(
-                "Remove read child request without keys.",
-            ));
-        }
-
-        trace!(
-            "Remote read child request from {} ({} {} at {:?}).",
-            peer,
-            HexDisplay::from(&request.storage_key),
-            fmt_keys(request.keys.first(), request.keys.last()),
-            request.block,
-        );
-
-        let block = Decode::decode(&mut request.block.as_ref())?;
-
-        let prefixed_key = PrefixedStorageKey::new_ref(&request.storage_key);
-        let child_info = match ChildType::from_prefixed_key(prefixed_key) {
-            Some((ChildType::ParentKeyId, storage_key)) => Ok(ChildInfo::new_default(storage_key)),
-            None => Err(sp_blockchain::Error::InvalidChildStorageKey),
-        };
-        let response = match child_info.and_then(|child_info| {
-            self.client.read_child_proof(
-                block,
-                &child_info,
-                &mut request.keys.iter().map(AsRef::as_ref),
-            )
-        }) {
-            Ok(proof) => schema::v1::light::RemoteReadResponse {
-                proof: Some(proof.encode()),
-            },
-            Err(error) => {
-                trace!(
-                    "remote read child request from {} ({} {} at {:?}) failed with: {}",
-                    peer,
-                    HexDisplay::from(&request.storage_key),
-                    fmt_keys(request.keys.first(), request.keys.last()),
-                    request.block,
-                    error,
-                );
-                schema::v1::light::RemoteReadResponse { proof: None }
-            }
-        };
-
-        Ok(schema::v1::light::Response {
-            response: Some(schema::v1::light::response::Response::RemoteReadResponse(
-                response,
-            )),
+        Ok(schema::v1::provider::Response {
+            response: Some(schema::v1::provider::response::Response::RemoteReadResponse(response)),
         })
     }
 }
