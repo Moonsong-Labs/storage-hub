@@ -1,0 +1,48 @@
+// Schema definition for provider messages.
+
+syntax = "proto3";
+
+package api.v1.provider;
+
+// Enumerate all possible provider request messages.
+message Request {
+	oneof request {
+		RemoteUploadDataRequest remote_upload_data_request = 1;
+		RemoteReadRequest remote_read_request = 2;
+	}
+}
+
+// Enumerate all possible provider response messages.
+message Response {
+	oneof response {
+		RemoteUploadDataResponse remote_upload_data_response = 1;
+		RemoteReadResponse remote_read_response = 2;
+	}
+}
+
+// Remote data upload request.
+message RemoteUploadDataRequest {
+	// Location to store data.
+	string location = 2;
+	// Data to store.
+	bytes data = 3;
+}
+
+// Remote data upload response.
+message RemoteUploadDataResponse {
+    // Location where data was stored.
+    string location = 1;
+}
+
+// Remote storage read request.
+message RemoteReadRequest {
+	// Data locations to read from.
+	repeated bytes locations = 3;
+}
+
+// Remote read response.
+message RemoteReadResponse {
+	// Read data stored in provider. No data means that the provider
+	// couldn't retrieve the data at the requested locations.
+	repeated bytes data = 1;
+}
