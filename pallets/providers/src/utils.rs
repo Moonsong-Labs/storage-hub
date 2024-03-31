@@ -3,7 +3,7 @@ use codec::Encode;
 use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::sp_runtime::{
-    traits::{CheckedAdd, CheckedMul, CheckedSub, Hash, One},
+    traits::{CheckedAdd, CheckedMul, CheckedSub, Hash, One, Zero},
     ArithmeticError, DispatchError,
 };
 use frame_support::traits::{
@@ -14,6 +14,36 @@ use frame_support::traits::{
 use storage_hub_traits::ProvidersInterface;
 
 use crate::*;
+
+macro_rules! expect_or_err {
+    // Handle Option type
+    ($optional:expr, $error_msg:expr, $error_type:path) => {{
+        match $optional {
+            Some(value) => value,
+            None => {
+                #[cfg(test)]
+                unreachable!($error_msg);
+
+                #[allow(unreachable_code)]
+                {
+                    Err($error_type)?
+                }
+            }
+        }
+    }};
+    // Handle boolean type
+    ($condition:expr, $error_msg:expr, $error_type:path, bool) => {{
+        if !$condition {
+            #[cfg(test)]
+            unreachable!($error_msg);
+
+            #[allow(unreachable_code)]
+            {
+                Err($error_type)?
+            }
+        }
+    }};
+}
 
 impl<T> Pallet<T>
 where
@@ -212,12 +242,102 @@ where
         Ok(())
     }
 
-    pub fn do_msp_sign_off(_who: &T::AccountId) -> DispatchResult {
-        todo!()
+    pub fn do_msp_sign_off(who: &T::AccountId) -> DispatchResult {
+        // Check that the signer is registered as a MSP and get its info
+        let msp_id =
+            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        let msp = expect_or_err!(
+            MainStorageProviders::<T>::get(&msp_id),
+            "MSP is registered (has a MSP ID), it should also have metadata",
+            Error::<T>::SpRegisteredButDataNotFound
+        );
+
+        // Check that the MSP has no storage assigned to it (no buckets or data used by it)
+        ensure!(
+            msp.data_used == T::StorageData::zero(),
+            Error::<T>::StorageStillInUse
+        );
+
+        // Update the MSPs storage, removing the signer as an MSP
+        AccountIdToMainStorageProviderId::<T>::remove(who);
+        MainStorageProviders::<T>::remove(&msp_id);
+
+        // Return the deposit to the signer (if all funds cannot be returned, it will fail and revert with the reason)
+        T::NativeBalance::release_all(
+            &HoldReason::StorageProviderDeposit.into(),
+            who,
+            frame_support::traits::tokens::Precision::Exact,
+        )?;
+
+        // Decrement the storage that holds total amount of MSPs currently in the system
+        MspCount::<T>::mutate(|n| {
+            let new_amount_of_msps = n.checked_sub(&T::SpCount::one());
+            match new_amount_of_msps {
+                Some(new_amount_of_msps) => {
+                    *n = new_amount_of_msps;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+            }
+        })?;
+
+        Ok(())
     }
 
-    pub fn do_bsp_sign_off(_who: &T::AccountId) -> DispatchResult {
-        todo!()
+    pub fn do_bsp_sign_off(who: &T::AccountId) -> DispatchResult {
+        // Check that the signer is registered as a BSP and get its info
+        let bsp_id =
+            AccountIdToBackupStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        let bsp = expect_or_err!(
+            BackupStorageProviders::<T>::get(&bsp_id),
+            "BSP is registered (has a BSP ID), it should also have metadata",
+            Error::<T>::SpRegisteredButDataNotFound
+        );
+
+        // Check that the BSP has no storage assigned to it (it is not currently storing any files)
+        ensure!(
+            bsp.data_used == T::StorageData::zero(),
+            Error::<T>::StorageStillInUse
+        );
+
+        // Update the BSPs storage, removing the signer as an BSP
+        AccountIdToBackupStorageProviderId::<T>::remove(who);
+        BackupStorageProviders::<T>::remove(&bsp_id);
+
+        // Update the total capacity of the network (which is the sum of all BSPs capacities)
+        TotalBspsCapacity::<T>::mutate(|n| {
+            let new_total_bsp_capacity = n.checked_sub(&bsp.capacity);
+            match new_total_bsp_capacity {
+                Some(new_total_bsp_capacity) => {
+                    *n = new_total_bsp_capacity;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+            }
+        })?;
+
+        // Return the deposit to the signer (if all funds cannot be returned, it will fail and revert with the reason)
+        T::NativeBalance::release_all(
+            &HoldReason::StorageProviderDeposit.into(),
+            who,
+            frame_support::traits::tokens::Precision::Exact,
+        )?;
+
+        // Decrement the storage that holds total amount of BSPs currently in the system
+        BspCount::<T>::mutate(|n| {
+            let new_amount_of_bsps = n.checked_sub(&T::SpCount::one());
+            match new_amount_of_bsps {
+                Some(new_amount_of_bsps) => {
+                    *n = new_amount_of_bsps;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+            }
+        })?;
+
+        Ok(())
     }
 }
 
