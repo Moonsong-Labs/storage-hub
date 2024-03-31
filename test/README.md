@@ -12,6 +12,8 @@
 
 ### Pre-requisites
 
+The following instructions will guide you through the setup for running a full StorageHub network locally. If you're just interested in running a StorageHub node and try out the runtime, skip to [Running with just Zombienet](#running-with-just-zombienet)
+
 #### Bun
 
 [Bun](https://bun.sh) is used in this project as the Javascript runtime to execute tests in. To install it you can follow the official instructions at: [https://bun.sh/docs/installation](https://bun.sh/docs/installation)
@@ -92,3 +94,24 @@ From here you can interact via the websockets exposed in the direct links, in th
 - Alice (relay): `35005`
 - Bob (relay): `37613`
 - Collator (storage-hub): `45615`
+
+### Running with just Zombienet
+
+This is the simplest way of running a StorageHub node, as it doesn't require the full setup of a local kubernetes cluster, docker or the use of bun. The only requirement, is having downloaded the zombienet binary.
+
+If running on Linux, you can download the `polkadot` binaries to the local `test` directory:
+
+```sh
+wget https://github.com/paritytech/polkadot-sdk/releases/download/polkadot-v1.5.0/polkadot
+wget https://github.com/paritytech/polkadot-sdk/releases/download/polkadot-v1.5.0/polkadot-prepare-worker
+wget https://github.com/paritytech/polkadot-sdk/releases/download/polkadot-v1.5.0/polkadot-execute-worker
+chmod +x polkadot polkadot-prepare-worker polkadot-execute-worker
+```
+
+Else, if running on Mac, clone the `polkadot-sdk` [repository](https://github.com/paritytech/polkadot-sdk) and build the binaries.
+
+Now run the following command:
+
+```sh
+<zombienet-bin-name> spawn configs/pure_zombie.toml -p native
+```
