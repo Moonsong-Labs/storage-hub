@@ -14,7 +14,7 @@ use crate::{
     pallet,
     types::{
         FileLocation, Fingerprint, MaxBspsPerStorageRequest, MultiAddresses, Proof, StorageData,
-        StorageProviderId, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestBspsMetadata, StorageRequestMetadata,
     },
     Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
     StorageRequestExpirations, StorageRequests,
@@ -64,13 +64,13 @@ where
     /// it is expected that storage providers that do have this file in storage already, will be able to send a
     /// transaction to the chain to add themselves as a data server for the storage request.
     pub(crate) fn do_request_storage(
-        owner: StorageProviderId<T>,
+        owner: T::AccountId,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         bsps_required: Option<T::StorageRequestBspsRequiredType>,
         user_multiaddresses: Option<MultiAddresses<T>>,
-        data_server_sps: BoundedVec<StorageProviderId<T>, MaxBspsPerStorageRequest<T>>,
+        data_server_sps: BoundedVec<T::AccountId, MaxBspsPerStorageRequest<T>>,
     ) -> DispatchResult {
         // TODO: Check user funds and lock them for the storage request.
         // TODO: Check storage capacity of chosen MSP (when we support MSPs)
@@ -88,7 +88,7 @@ where
 
         let file_metadata = StorageRequestMetadata::<T> {
             requested_at: <frame_system::Pallet<T>>::block_number(),
-            owner: owner.clone(),
+            owner,
             fingerprint,
             size,
             user_multiaddresses: user_multiaddresses.unwrap_or_default(),
@@ -137,7 +137,7 @@ where
     }
 
     pub(crate) fn do_bsp_volunteer(
-        who: StorageProviderId<T>,
+        who: T::AccountId,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
     ) -> DispatchResult {
@@ -145,11 +145,8 @@ where
         // TODO: Check that sender is a registered storage provider
 
         // Check that the storage request exists.
-        let file_metadata = expect_or_err!(
-            <StorageRequests<T>>::get(&location),
-            "Storage request should exist",
-            Error::<T>::StorageRequestNotFound
-        );
+        let file_metadata =
+            <StorageRequests<T>>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         expect_or_err!(
             file_metadata.bsps_confirmed < file_metadata.bsps_required,
@@ -207,7 +204,7 @@ where
     }
 
     pub(crate) fn do_bsp_confirm_storing(
-        who: StorageProviderId<T>,
+        who: T::AccountId,
         location: FileLocation<T>,
         root: FileKey<T>,
         proof: Proof<T>,
@@ -220,11 +217,8 @@ where
         };
 
         // Check that the storage request exists.
-        let file_metadata = expect_or_err!(
-            <StorageRequests<T>>::get(&location),
-            "Storage request should exist",
-            Error::<T>::StorageRequestNotFound
-        );
+        let file_metadata =
+            <StorageRequests<T>>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         expect_or_err!(
                     file_metadata.bsps_confirmed < file_metadata.bsps_required,
@@ -247,35 +241,29 @@ where
             Error::<T>::BspAlreadyConfirmed
         );
 
-        // Check that the proof is valid.
-        ensure!(
-            <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::verify_proof(
-                &bsp, &root, &proof,
-            )
-            .is_ok(),
-            Error::<T>::InvalidProof
-        );
+        let mut file_metadata =
+            <StorageRequests<T>>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
 
-        // Increment the number of confirmed storage providers.
-        <StorageRequests<T>>::try_mutate(&location, |file_metadata| -> DispatchResult {
-            let file_metadata = file_metadata
-                .as_mut()
-                .ok_or(Error::<T>::StorageRequestNotFound)?;
-
-            match file_metadata
-                .bsps_confirmed
-                .checked_add(&T::StorageRequestBspsRequiredType::one())
-            {
-                Some(bsps_confirmed) => {
-                    file_metadata.bsps_confirmed = bsps_confirmed;
-                }
-                None => {
-                    return Err(Error::<T>::StorageRequestBspsRequiredFulfilled.into());
-                }
+        // Check that the number of confirmed bsps is less than the required bsps and increment it.
+        match file_metadata
+            .bsps_confirmed
+            .checked_add(&T::StorageRequestBspsRequiredType::one())
+        {
+            Some(bsps_confirmed) => {
+                file_metadata.bsps_confirmed = bsps_confirmed;
             }
+            None => {
+                return Err(Error::<T>::StorageRequestBspsRequiredFulfilled.into());
+            }
+        }
 
-            Ok(())
-        })?;
+        // Check that the proof is valid.
+        <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::verify_proof(
+            &bsp, &root, &proof,
+        )?;
+
+        // Update storage request metadata.
+        <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
 
         // Add data to storage provider.
         <T::Providers as storage_hub_traits::MutateProvidersInterface>::increase_data_used(
@@ -288,7 +276,7 @@ where
 
     /// Revoke a storage request.
     pub(crate) fn do_revoke_storage_request(
-        who: StorageProviderId<T>,
+        who: T::AccountId,
         location: FileLocation<T>,
         file_key: FileKey<T>,
     ) -> DispatchResult {
@@ -315,13 +303,9 @@ where
         <StorageRequests<T>>::remove(&location);
 
         // Challenge BSP to force update its storage root to uninclude the file.
-        ensure!(
-            <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
-                &file_key
-            )
-            .is_ok(),
-            Error::<T>::InvalidProof
-        );
+        <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
+            &file_key,
+        )?;
 
         Ok(())
     }
@@ -334,10 +318,10 @@ where
     /// When it is `false`, the storage request will be created without any multiaddresses and `do_request_storage`
     /// will handle triggering the appropriate event and pending storage request.
     pub(crate) fn do_bsp_stop_storing(
-        who: StorageProviderId<T>,
+        who: T::AccountId,
         file_key: FileKey<T>,
         location: FileLocation<T>,
-        owner: StorageProviderId<T>,
+        owner: T::AccountId,
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         can_serve: bool,
@@ -414,18 +398,14 @@ where
     /// Challenge `file_key` to force the BSP to update its storage root to uninclude the
     /// file and reduce the data used by the storage provider.
     fn challenge_and_reduce_data_used(
-        who: &StorageProviderId<T>,
+        who: &T::AccountId,
         file_key: &FileKey<T>,
         size: StorageData<T>,
     ) -> DispatchResult {
         // Challenge BSP to force update its storage root to uninclude the file.
-        ensure!(
-            <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
-                file_key
-            )
-            .is_ok(),
-            Error::<T>::InvalidProof
-        );
+        <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
+            file_key,
+        )?;
 
         // Reduce data used by the storage provider.
         <T::Providers as storage_hub_traits::MutateProvidersInterface>::decrease_data_used(
@@ -440,10 +420,11 @@ where
         fingerprint: &[u8; 32],
         bsp: &[u8; 32],
     ) -> Result<T::ThresholdType, Error<T>> {
-        let mut xor_result = Vec::with_capacity(32);
-        for i in 0..32 {
-            xor_result.push(fingerprint[i] ^ bsp[i]);
-        }
+        let xor_result = fingerprint
+            .iter()
+            .zip(bsp.iter())
+            .map(|(&x1, &x2)| x1 ^ x2)
+            .collect::<Vec<_>>();
 
         T::ThresholdType::decode(&mut &xor_result[..])
             .map_err(|_| Error::<T>::FailedToDecodeThreshold)

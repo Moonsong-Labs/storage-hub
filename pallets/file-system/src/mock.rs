@@ -164,7 +164,7 @@ impl crate::Config for Test {
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type ThresholdType = ThresholdType;
-    type AssignmentThresholdDecayFunction = ThresholdDecayFunction;
+    type AssignmentThresholdDecayFactor = ThresholdDecayFunction;
     type AssignmentThresholdAsymptote = ConstI128<{ i128::MAX }>;
     type AssignmentThresholdMultiplier = ConstI128<100i128>;
     type Fingerprint = H256;

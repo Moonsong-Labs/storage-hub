@@ -341,7 +341,7 @@ where
     }
 
     /// Remove a root from a BSP. It will remove the whole BSP from storage, so it should only be called when the BSP is being removed.
-    fn _remove_root_bsp(who: &<T>::AccountId) -> DispatchResult {
+    pub fn remove_root_bsp(who: &<T>::AccountId) -> DispatchResult {
         let bsp_id =
             AccountIdToBackupStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
         BackupStorageProviders::<T>::remove(&bsp_id);

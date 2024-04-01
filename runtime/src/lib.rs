@@ -563,7 +563,7 @@ impl pallet_file_system::Config for Runtime {
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type ThresholdType = ThresholdType;
-    type AssignmentThresholdDecayFunction = ThresholdDecayFunction;
+    type AssignmentThresholdDecayFactor = ThresholdDecayFunction;
     type AssignmentThresholdAsymptote = ConstI128<100i128>;
     type AssignmentThresholdMultiplier = ConstI128<100i128>;
     type Fingerprint = Hash;

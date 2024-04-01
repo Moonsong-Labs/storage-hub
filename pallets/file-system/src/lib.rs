@@ -90,14 +90,14 @@ pub mod pallet {
             + From<BlockNumberFor<Self>>;
 
         /// The multiplier increases the threshold over time (blocks) which increases the
-        /// likelihood of a BSP successfully vulenteering to store a file.
+        /// likelihood of a BSP successfully volunteering to store a file.
         type AssignmentThresholdMultiplier: Get<Self::ThresholdType>;
 
         /// Horizontal asymptote which the volunteering threshold approaches as more BSPs are registered in the system.
         type AssignmentThresholdAsymptote: Get<Self::ThresholdType>;
 
         /// Asymptotic decay function for the assignment threshold.
-        type AssignmentThresholdDecayFunction: Get<Self::ThresholdType>;
+        type AssignmentThresholdDecayFactor: Get<Self::ThresholdType>;
 
         /// Type for identifying a file, generally a hash.
         type Fingerprint: Parameter
@@ -185,7 +185,7 @@ pub mod pallet {
         Blake2_128Concat,
         FileLocation<T>,
         Blake2_128Concat,
-        StorageProviderId<T>,
+        T::AccountId,
         StorageRequestBspsMetadata<T>,
         OptionQuery,
     >;
@@ -236,7 +236,7 @@ pub mod pallet {
             let total_bsps =
                 <T::Providers as storage_hub_traits::ReadProvidersInterface>::get_number_of_bsps();
 
-            let asymptotic_decay_fn = T::AssignmentThresholdDecayFunction::get().saturating_pow(
+            let asymptotic_decay_fn = T::AssignmentThresholdDecayFactor::get().saturating_pow(
                 total_bsps
                     .try_into()
                     .unwrap_or_else(|_| panic!("Threshold overflow")),
@@ -248,7 +248,7 @@ pub mod pallet {
                 };
 
             Self {
-                bsp_assignment_threshold: bsp_assignment_threshold,
+                bsp_assignment_threshold,
             }
         }
     }
@@ -265,7 +265,7 @@ pub mod pallet {
     pub enum Event<T: Config> {
         /// Notifies that a new file has been requested to be stored.
         NewStorageRequest {
-            who: StorageProviderId<T>,
+            who: T::AccountId,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
@@ -273,14 +273,14 @@ pub mod pallet {
         },
         /// Notifies that a BSP has been accepted to store a given file.
         AcceptedBspVolunteer {
-            who: StorageProviderId<T>,
+            who: T::AccountId,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             multiaddresses: MultiAddresses<T>,
         },
         /// Notifies that a BSP confirmed storing a file.
         BspConfirmedStoring {
-            who: StorageProviderId<T>,
+            who: T::AccountId,
             location: FileLocation<T>,
         },
         /// Notifies the expiration of a storage request.
@@ -289,9 +289,9 @@ pub mod pallet {
         StorageRequestRevoked { location: FileLocation<T> },
         /// Notifies that a BSP has stopped storing a file.
         BspStoppedStoring {
-            bsp: StorageProviderId<T>,
+            bsp: T::AccountId,
             file_key: FileKey<T>,
-            owner: StorageProviderId<T>,
+            owner: T::AccountId,
             location: FileLocation<T>,
         },
     }
@@ -326,8 +326,6 @@ pub mod pallet {
         /// Error created in 2024. If you see this, you are well beyond the singularity and should
         /// probably stop using this pallet.
         MaxBlockNumberReached,
-        /// Invalid proof.
-        InvalidProof,
         /// Failed to encode BSP id as slice.
         FailedToEncodeBsp,
         /// Failed to encode fingerprint as slice.
@@ -470,7 +468,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             file_key: FileKey<T>,
             location: FileLocation<T>,
-            owner: StorageProviderId<T>,
+            owner: T::AccountId,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
             can_serve: bool,
@@ -564,7 +562,7 @@ pub mod pallet {
     }
 
     impl<T: Config> storage_hub_traits::SubscribeProvidersInterface for Pallet<T> {
-        type Provider = StorageProviderId<T>;
+        type Provider = T::AccountId;
 
         fn subscribe_bsp_sign_up(_who: &Self::Provider) {
             // Adjust bsp assignment threshold by applying the decay function after removing the asymptote
@@ -574,7 +572,7 @@ pub mod pallet {
                 .unwrap_or_else(|| panic!("Underflow in threshold calculation during sign-up"));
 
             bsp_assignment_threshold = base_threshold
-                .checked_mul(&T::AssignmentThresholdDecayFunction::get())
+                .checked_mul(&T::AssignmentThresholdDecayFactor::get())
                 .unwrap_or_else(|| panic!("Overflow in threshold calculation during sign-up"))
                 .checked_add(&T::AssignmentThresholdAsymptote::get())
                 .unwrap_or_else(|| panic!("Overflow in threshold calculation during sign-up"));
@@ -590,7 +588,7 @@ pub mod pallet {
                 .unwrap_or_else(|| panic!("Underflow in threshold calculation during sign-off"));
 
             bsp_assignment_threshold = base_threshold
-                .checked_div(&T::AssignmentThresholdDecayFunction::get())
+                .checked_div(&T::AssignmentThresholdDecayFactor::get())
                 .unwrap_or_else(|| panic!("Overflow in threshold calculation during sign-off"))
                 .checked_add(&T::AssignmentThresholdAsymptote::get())
                 .unwrap_or_else(|| panic!("Overflow in threshold calculation during sign-off"));

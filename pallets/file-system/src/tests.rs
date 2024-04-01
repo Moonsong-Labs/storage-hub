@@ -281,7 +281,7 @@ fn bsp_volunteer_success() {
         let bsp_account_id = AccountId32::new([2; 32]);
         let bsp = RuntimeOrigin::signed(bsp_account_id.clone());
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-        // bypass the volunteer assignment threshold
+        // TODO: right now we are bypassing the volunteer assignment threshold
         let fingerprint = H256::zero();
         let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
         let multiaddresses: BoundedVec<MultiAddress<Test>, <Test as Config>::MaxMultiAddresses> =
@@ -337,7 +337,7 @@ fn bsp_stop_storing_success() {
         let file_key = H256::from_slice(&[1; 32]);
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let size = 4;
-        // bypass the volunteer assignment threshold
+        // TODO: right now we are bypassing the volunteer assignment threshold
         let fingerprint = H256::zero();
         let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
         let multiaddresses: BoundedVec<MultiAddress<Test>, <Test as Config>::MaxMultiAddresses> =

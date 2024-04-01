@@ -57,9 +57,6 @@ pub struct StorageRequestBspsMetadata<T: Config> {
     pub _phantom: core::marker::PhantomData<T>,
 }
 
-/// Alias for the `AccountId` type used in the FileSystem pallet.
-pub type StorageProviderId<T> = <T as frame_system::Config>::AccountId;
-
 /// Alias for the `MerkleHash` type used in the ProofsDealerInterface.
 pub type FileKey<T> =
     <<T as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash;
