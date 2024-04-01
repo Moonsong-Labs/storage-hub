@@ -52,7 +52,9 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use sp_runtime::traits::{CheckedAdd, One, Zero};
+    use sp_runtime::traits::{
+        CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero,
+    };
     use sp_runtime::BoundedVec;
 
     #[pallet::config]
@@ -70,25 +72,32 @@ pub mod pallet {
         >;
 
         /// Type representing the threshold a BSP must meet to be eligible to volunteer to store a file.
-        type AssignmentThreshold: Parameter
+        type ThresholdType: Parameter
             + Member
             + MaybeSerializeDeserialize
             + Debug
             + Default
             + MaybeDisplay
-            + AtLeast32Bit
             + Copy
             + MaxEncodedLen
             + Decode
-            + HasCompact;
+            + Saturating
+            + CheckedMul
+            + CheckedDiv
+            + CheckedAdd
+            + CheckedSub
+            + PartialOrd
+            + From<BlockNumberFor<Self>>;
 
         /// The multiplier increases the threshold over time (blocks) which increases the
         /// likelihood of a BSP successfully vulenteering to store a file.
-        type AssignmentThresholdMultiplier: Get<u32>;
+        type AssignmentThresholdMultiplier: Get<Self::ThresholdType>;
 
-        /// Minimum BSP assignment threshold.
-        #[pallet::constant]
-        type MinBspsAssignmentThreshold: Get<Self::AssignmentThreshold>;
+        /// Horizontal asymptote which the volunteering threshold approaches as more BSPs are registered in the system.
+        type AssignmentThresholdAsymptote: Get<Self::ThresholdType>;
+
+        /// Asymptotic decay function for the assignment threshold.
+        type AssignmentThresholdDecayFunction: Get<Self::ThresholdType>;
 
         /// Type for identifying a file, generally a hash.
         type Fingerprint: Parameter
@@ -209,6 +218,48 @@ pub mod pallet {
     #[pallet::getter(fn next_starting_block_to_clean_up)]
     pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
+    /// Minimum BSP assignment threshold.
+    ///
+    /// This is the minimum threshold that a BSP must have to be assigned to store a file.
+    /// It is reduced or increased when BSPs sign off or sign up respectively.
+    #[pallet::storage]
+    #[pallet::getter(fn bsps_assignment_threshold)]
+    pub type BspsAssignmentThreshold<T: Config> = StorageValue<_, T::ThresholdType, ValueQuery>;
+
+    #[pallet::genesis_config]
+    pub struct GenesisConfig<T: Config> {
+        pub bsp_assignment_threshold: T::ThresholdType,
+    }
+
+    impl<T: Config> Default for GenesisConfig<T> {
+        fn default() -> Self {
+            let total_bsps =
+                <T::Providers as storage_hub_traits::ReadProvidersInterface>::get_number_of_bsps();
+
+            let asymptotic_decay_fn = T::AssignmentThresholdDecayFunction::get().saturating_pow(
+                total_bsps
+                    .try_into()
+                    .unwrap_or_else(|_| panic!("Threshold overflow")),
+            );
+            let bsp_assignment_threshold =
+                match asymptotic_decay_fn.checked_add(&T::AssignmentThresholdAsymptote::get()) {
+                    Some(threshold) => threshold,
+                    None => panic!("Threshold overflow"),
+                };
+
+            Self {
+                bsp_assignment_threshold: bsp_assignment_threshold,
+            }
+        }
+    }
+
+    #[pallet::genesis_build]
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+        fn build(&self) {
+            BspsAssignmentThreshold::<T>::put(self.bsp_assignment_threshold);
+        }
+    }
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -285,6 +336,8 @@ pub mod pallet {
         FailedToDecodeThreshold,
         /// BSP did not succeed threshold check.
         ThresholdTooHigh,
+        /// Failed to convert block number to threshold.
+        FailedToConvertBlockNumber,
     }
 
     #[pallet::call]
@@ -507,6 +560,42 @@ pub mod pallet {
             }
 
             total_used_weight
+        }
+    }
+
+    impl<T: Config> storage_hub_traits::SubscribeProvidersInterface for Pallet<T> {
+        type Provider = StorageProviderId<T>;
+
+        fn subscribe_bsp_sign_up(_who: &Self::Provider) {
+            // Adjust bsp assignment threshold by applying the decay function after removing the asymptote
+            let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
+            let base_threshold = bsp_assignment_threshold
+                .checked_sub(&T::AssignmentThresholdAsymptote::get())
+                .unwrap_or_else(|| panic!("Underflow in threshold calculation during sign-up"));
+
+            bsp_assignment_threshold = base_threshold
+                .checked_mul(&T::AssignmentThresholdDecayFunction::get())
+                .unwrap_or_else(|| panic!("Overflow in threshold calculation during sign-up"))
+                .checked_add(&T::AssignmentThresholdAsymptote::get())
+                .unwrap_or_else(|| panic!("Overflow in threshold calculation during sign-up"));
+
+            BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
+        }
+
+        fn subscribe_bsp_sign_off(_who: &Self::Provider) {
+            // Adjust bsp assignment threshold by applying the inverse of the decay function after removing the asymptote
+            let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
+            let base_threshold = bsp_assignment_threshold
+                .checked_sub(&T::AssignmentThresholdAsymptote::get())
+                .unwrap_or_else(|| panic!("Underflow in threshold calculation during sign-off"));
+
+            bsp_assignment_threshold = base_threshold
+                .checked_div(&T::AssignmentThresholdDecayFunction::get())
+                .unwrap_or_else(|| panic!("Overflow in threshold calculation during sign-off"))
+                .checked_add(&T::AssignmentThresholdAsymptote::get())
+                .unwrap_or_else(|| panic!("Overflow in threshold calculation during sign-off"));
+
+            BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
         }
     }
 }

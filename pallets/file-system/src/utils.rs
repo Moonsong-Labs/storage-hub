@@ -3,14 +3,13 @@ use core::cmp::max;
 use codec::{Decode, Encode};
 use frame_support::{ensure, pallet_prelude::DispatchResult, traits::Get};
 use frame_system::pallet_prelude::BlockNumberFor;
+use sp_runtime::Saturating;
 use sp_runtime::{
     traits::{CheckedAdd, One, Zero},
     BoundedVec,
 };
-use sp_runtime::{SaturatedConversion, Saturating};
 use sp_std::{vec, vec::Vec};
 
-use crate::types::{FileKey, TargetBspsRequired};
 use crate::{
     pallet,
     types::{
@@ -19,6 +18,10 @@ use crate::{
     },
     Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
     StorageRequestExpirations, StorageRequests,
+};
+use crate::{
+    types::{FileKey, TargetBspsRequired},
+    BspsAssignmentThreshold,
 };
 
 macro_rules! expect_or_err {
@@ -162,7 +165,7 @@ where
         );
 
         // Compute BSP's threshold
-        let bsp_threshold = Self::compute_bsp_xor(
+        let bsp_threshold: T::ThresholdType = Self::compute_bsp_xor(
             fingerprint
                 .as_ref()
                 .try_into()
@@ -173,20 +176,20 @@ where
         )?;
 
         // Get number of blocks since the storage request was issued.
-        let blocks_since_requested = <frame_system::Pallet<T>>::block_number()
+        let blocks_since_requested: T::ThresholdType = <frame_system::Pallet<T>>::block_number()
             .saturating_sub(file_metadata.requested_at)
-            .saturated_into::<u32>();
+            .try_into()
+            .map_err(|_| Error::<T>::FailedToConvertBlockNumber)?;
 
         // Compute the threshold increasing rate.
-        let rate_increase = blocks_since_requested
-            .saturating_mul(T::AssignmentThresholdMultiplier::get())
-            .saturated_into::<T::AssignmentThreshold>();
+        let rate_increase =
+            blocks_since_requested.saturating_mul(T::AssignmentThresholdMultiplier::get());
 
         // Compute current threshold needed to volunteer.
-        let threshold = rate_increase.saturating_add(T::MinBspsAssignmentThreshold::get());
+        let threshold = rate_increase.saturating_add(BspsAssignmentThreshold::<T>::get());
 
         // Check that the BSP's threshold is under the threshold required to qualify as BSP for the storage request.
-        ensure!(bsp_threshold <= threshold, Error::<T>::ThresholdTooHigh);
+        ensure!(bsp_threshold <= (threshold), Error::<T>::ThresholdTooHigh);
 
         // Add BSP to storage request metadata.
         <StorageRequestBsps<T>>::insert(
@@ -436,13 +439,13 @@ where
     fn compute_bsp_xor(
         fingerprint: &[u8; 32],
         bsp: &[u8; 32],
-    ) -> Result<T::AssignmentThreshold, Error<T>> {
+    ) -> Result<T::ThresholdType, Error<T>> {
         let mut xor_result = Vec::with_capacity(32);
         for i in 0..32 {
             xor_result.push(fingerprint[i] ^ bsp[i]);
         }
 
-        T::AssignmentThreshold::decode(&mut &xor_result[..])
+        T::ThresholdType::decode(&mut &xor_result[..])
             .map_err(|_| Error::<T>::FailedToDecodeThreshold)
     }
 }

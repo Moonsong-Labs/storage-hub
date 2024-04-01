@@ -34,6 +34,18 @@ pub trait ReadProvidersInterface {
         + AsMut<[u8]>
         + MaxEncodedLen
         + FullCodec;
+    /// Type that represents the total number of registered Storage Providers.
+    type SpCount: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Ord
+        + AtLeast32BitUnsigned
+        + FullCodec
+        + Copy
+        + Default
+        + Debug
+        + scale_info::TypeInfo
+        + MaxEncodedLen;
 
     /// Check if an account is a registered Provider.
     fn is_provider(who: Self::Provider) -> bool;
@@ -48,6 +60,9 @@ pub trait ReadProvidersInterface {
     fn get_stake(
         who: Self::Provider,
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
+
+    /// Get number of registered BSPs.
+    fn get_number_of_bsps() -> Self::SpCount;
 }
 
 /// Interface to allow the File System pallet to modify the data used by the Storage Providers pallet.
@@ -125,6 +140,18 @@ pub trait MutateProvidersInterface {
 
     /// Remove a root from a bucket of a MSP, removing the whole bucket from storage
     fn remove_root_bucket(bucket_id: Self::BucketId) -> DispatchResult;
+}
+
+/// The interface to subscribe to updates on the Storage Providers pallet.
+pub trait SubscribeProvidersInterface {
+    /// The type which represents a registered Provider.
+    type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+
+    /// Subscribe to the sign off of a BSP.
+    fn subscribe_bsp_sign_off(who: &Self::Provider);
+
+    /// Subscribe to the sign up of a BSP.
+    fn subscribe_bsp_sign_up(who: &Self::Provider);
 }
 
 /// The interface for the ProofsDealer pallet.

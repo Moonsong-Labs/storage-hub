@@ -33,7 +33,10 @@ use frame_support::{
     dispatch::DispatchClass,
     genesis_builder_helper::{build_config, create_default_config},
     parameter_types,
-    traits::{ConstBool, ConstU128, ConstU32, ConstU64, ConstU8, EitherOfDiverse, TransformOrigin},
+    traits::{
+        ConstBool, ConstI128, ConstU128, ConstU32, ConstU64, ConstU8, EitherOfDiverse,
+        TransformOrigin,
+    },
     weights::{
         constants::WEIGHT_REF_TIME_PER_SECOND, ConstantMultiplier, Weight, WeightToFeeCoefficient,
         WeightToFeeCoefficients, WeightToFeePolynomial,
@@ -507,6 +510,7 @@ impl pallet_storage_providers::Config for Runtime {
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
     type RuntimeHoldReason = RuntimeHoldReason;
+    type Subscribers = FileSystem;
     // TODO: type ProvidersRandomness = RandomnessFromOneEpochAgo<Runtime>;
 }
 
@@ -544,14 +548,24 @@ impl TrieVerifier for ProofTrieVerifier {
     }
 }
 
+type ThresholdType = i128;
+
+pub struct ThresholdDecayFunction;
+impl Get<ThresholdType> for ThresholdDecayFunction {
+    fn get() -> ThresholdType {
+        1 / 2
+    }
+}
+
 /// Configure the pallet template in pallets/template.
 impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
-    type AssignmentThreshold = u128;
-    type AssignmentThresholdMultiplier = ConstU32<100>;
-    type MinBspsAssignmentThreshold = ConstU128<{ u128::MAX / 2 }>;
+    type ThresholdType = ThresholdType;
+    type AssignmentThresholdDecayFunction = ThresholdDecayFunction;
+    type AssignmentThresholdAsymptote = ConstI128<100i128>;
+    type AssignmentThresholdMultiplier = ConstI128<100i128>;
     type Fingerprint = Hash;
     type StorageRequestBspsRequiredType = u32;
     type TargetBspsRequired = ConstU32<1>;

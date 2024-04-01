@@ -31,6 +31,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
+    use storage_hub_traits::SubscribeProvidersInterface;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -148,6 +149,9 @@ pub mod pallet {
         /// The maximum amount of Buckets that a MSP can have.
         #[pallet::constant]
         type MaxBuckets: Get<u32>;
+
+        /// Subscribers to important updates
+        type Subscribers: SubscribeProvidersInterface;
     }
 
     #[pallet::pallet]

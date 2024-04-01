@@ -471,6 +471,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     type Provider = HashId<T>;
     type Balance = T::NativeBalance;
     type MerkleHash = MerklePatriciaRoot<T>;
+    type SpCount = T::SpCount;
 
     // TODO: Refine, add checks and tests for all the logic in this implementation
 
@@ -510,5 +511,9 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         } else {
             None
         }
+    }
+
+    fn get_number_of_bsps() -> Self::SpCount {
+        Self::get_bsp_count()
     }
 }

@@ -5,10 +5,10 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_proofs_dealer::{CompactProof, TrieVerifier};
-use sp_core::{ConstU128, ConstU32, Get, H256};
+use sp_core::{ConstI128, ConstU128, ConstU32, Get, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
-    AccountId32, BuildStorage,
+    AccountId32, BuildStorage, FixedI128, FixedI64,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -113,6 +113,7 @@ impl pallet_storage_providers::Config for Test {
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
+    type Subscribers = FileSystem;
 }
 
 // TODO: remove this and replace with pallet treasury
@@ -149,13 +150,23 @@ impl TrieVerifier for MockVerifier {
     }
 }
 
+type ThresholdType = i128;
+
+pub struct ThresholdDecayFunction;
+impl Get<ThresholdType> for ThresholdDecayFunction {
+    fn get() -> ThresholdType {
+        1 / 2
+    }
+}
+
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
-    type AssignmentThreshold = u128;
-    type AssignmentThresholdMultiplier = ConstU32<100>;
-    type MinBspsAssignmentThreshold = ConstU128<{ u128::MAX / 2 }>;
+    type ThresholdType = ThresholdType;
+    type AssignmentThresholdDecayFunction = ThresholdDecayFunction;
+    type AssignmentThresholdAsymptote = ConstI128<100i128>;
+    type AssignmentThresholdMultiplier = ConstI128<100i128>;
     type Fingerprint = H256;
     type StorageRequestBspsRequiredType = u32;
     type TargetBspsRequired = ConstU32<1>;
