@@ -8,7 +8,7 @@ use pallet_proofs_dealer::{CompactProof, TrieVerifier};
 use sp_core::{ConstI128, ConstU128, ConstU32, Get, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
-    AccountId32, BuildStorage, FixedI128, FixedI64,
+    AccountId32, BuildStorage,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -155,7 +155,7 @@ type ThresholdType = i128;
 pub struct ThresholdDecayFunction;
 impl Get<ThresholdType> for ThresholdDecayFunction {
     fn get() -> ThresholdType {
-        1 / 2
+        0
     }
 }
 
@@ -165,7 +165,7 @@ impl crate::Config for Test {
     type ProofDealer = ProofsDealer;
     type ThresholdType = ThresholdType;
     type AssignmentThresholdDecayFunction = ThresholdDecayFunction;
-    type AssignmentThresholdAsymptote = ConstI128<100i128>;
+    type AssignmentThresholdAsymptote = ConstI128<{ i128::MAX }>;
     type AssignmentThresholdMultiplier = ConstI128<100i128>;
     type Fingerprint = H256;
     type StorageRequestBspsRequiredType = u32;
@@ -180,8 +180,17 @@ impl crate::Config for Test {
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-    system::GenesisConfig::<Test>::default()
+    let mut t = system::GenesisConfig::<Test>::default()
         .build_storage()
-        .unwrap()
-        .into()
+        .unwrap();
+
+    crate::GenesisConfig::<Test> {
+        bsp_assignment_threshold: i128::MAX,
+    }
+    .assimilate_storage(&mut t)
+    .unwrap();
+
+    let mut ext = sp_io::TestExternalities::new(t);
+    ext.execute_with(|| System::set_block_number(1));
+    ext
 }

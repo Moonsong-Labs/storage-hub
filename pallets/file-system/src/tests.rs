@@ -16,9 +16,6 @@ use sp_runtime::{
 #[test]
 fn request_storage_success() {
     new_test_ext().execute_with(|| {
-        // Go past genesis block so events get deposited
-        System::set_block_number(1);
-
         let owner_account_id = AccountId32::new([1; 32]);
         let user = RuntimeOrigin::signed(owner_account_id.clone());
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
@@ -70,9 +67,6 @@ fn request_storage_success() {
 #[test]
 fn request_storage_expiration_clear_success() {
     new_test_ext().execute_with(|| {
-        // Go past genesis block so events get deposited
-        System::set_block_number(1);
-
         let owner = RuntimeOrigin::signed(AccountId32::new([1; 32]));
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
@@ -112,9 +106,6 @@ fn request_storage_expiration_clear_success() {
 #[test]
 fn request_storage_expiration_current_block_increment_success() {
     new_test_ext().execute_with(|| {
-        // Go past genesis block so events get deposited
-        System::set_block_number(1);
-
         let owner = RuntimeOrigin::signed(AccountId32::new([1; 32]));
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
@@ -173,9 +164,6 @@ fn request_storage_expiration_current_block_increment_success() {
 #[test]
 fn request_storage_clear_old_expirations_success() {
     new_test_ext().execute_with(|| {
-        // Go past genesis block so events get deposited
-        System::set_block_number(1);
-
         let owner = RuntimeOrigin::signed(AccountId32::new([1; 32]));
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
@@ -251,9 +239,6 @@ fn request_storage_clear_old_expirations_success() {
 #[test]
 fn revoke_request_storage_success() {
     new_test_ext().execute_with(|| {
-        // Go past genesis block so events get deposited
-        System::set_block_number(1);
-
         let owner = RuntimeOrigin::signed(AccountId32::new([1; 32]));
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
@@ -292,9 +277,6 @@ fn revoke_request_storage_success() {
 #[test]
 fn bsp_volunteer_success() {
     new_test_ext().execute_with(|| {
-        // Go past genesis block so events get deposited
-        System::set_block_number(1);
-
         let owner = RuntimeOrigin::signed(AccountId32::new([1; 32]));
         let bsp_account_id = AccountId32::new([2; 32]);
         let bsp = RuntimeOrigin::signed(bsp_account_id.clone());
@@ -348,9 +330,6 @@ fn bsp_volunteer_success() {
 #[test]
 fn bsp_stop_storing_success() {
     new_test_ext().execute_with(|| {
-        // Go past genesis block so events get deposited
-        System::set_block_number(1);
-
         let owner_account_id = AccountId32::new([1; 32]);
         let owner = RuntimeOrigin::signed(owner_account_id.clone());
         let bsp_account_id = AccountId32::new([2; 32]);

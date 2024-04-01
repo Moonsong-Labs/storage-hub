@@ -8,6 +8,7 @@ use sp_runtime::{
     BuildStorage,
 };
 use sp_trie::CompactProof;
+use storage_hub_traits::SubscribeProvidersInterface;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -72,6 +73,14 @@ impl pallet_balances::Config for Test {
     type MaxFreezes = ConstU32<10>;
 }
 
+pub struct FakeImpl;
+impl SubscribeProvidersInterface for FakeImpl {
+    type Provider = u64;
+
+    fn subscribe_bsp_sign_up(_who: &Self::Provider) {}
+    fn subscribe_bsp_sign_off(_who: &Self::Provider) {}
+}
+
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -89,6 +98,7 @@ impl pallet_storage_providers::Config for Test {
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
+    type Subscribers = FakeImpl;
 }
 
 impl crate::Config for Test {

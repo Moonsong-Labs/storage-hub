@@ -7,6 +7,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
     BuildStorage,
 };
+use storage_hub_traits::SubscribeProvidersInterface;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -93,6 +94,14 @@ impl pallet_timestamp::Config for Test {
     type OnTimestampSet = ();
 } */
 
+pub struct FakeImpl;
+impl SubscribeProvidersInterface for FakeImpl {
+    type Provider = u64;
+
+    fn subscribe_bsp_sign_up(_who: &Self::Provider) {}
+    fn subscribe_bsp_sign_off(_who: &Self::Provider) {}
+}
+
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -110,6 +119,7 @@ impl crate::Config for Test {
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
+    type Subscribers = FakeImpl;
     // TODO: type ProvidersRandomness = RandomnessFromOneEpochAgo<Test>;
 }
 
