@@ -5,9 +5,9 @@
 mod chain_spec;
 mod cli;
 mod command;
-mod provider_requests_protocol;
 mod rpc;
 mod service;
+mod services;
 
 fn main() -> sc_cli::Result<()> {
     command::run()

@@ -21,16 +21,29 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-serde = { version = "1.0.197" }
 codec = { package = "parity-scale-codec", version = "3.0.0", features = [
     "derive",
 ], default-features = false }
+futures = "0.3.30"
+log = { version = "0.4.21", default-features = false }
+parking_lot = "0.12.1"
 scale-info = { version = "2.11.0", default-features = false, features = [
     "derive",
 ] }
+serde = { version = "1.0.197" }
+tokio = "1.36.0"
 
+# Local
+shc-mapping-sync ={ path = "client/mapping-sync", default-features = false }
 
-# Substrate
+# Substrate Client
+sc-client-api = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.5.0" }
+sc-utils = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.5.0" }
+
+# Substrate Primitives
+sp-api = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.5.0", default-features = false }
+sp-blockchain = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.5.0" }
+sp-consensus = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.5.0" }
 sp-core = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
 sp-io = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
 sp-runtime = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }

@@ -36,7 +36,7 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::KeystorePtr;
 use substrate_prometheus_endpoint::Registry;
 
-use crate::provider_requests_protocol::handler::ProviderRequestsHandler;
+use crate::services::file_transfer::spawn_file_transfer_service;
 
 /// Native executor type.
 pub struct ParachainNativeExecutor;
@@ -53,13 +53,14 @@ impl sc_executor::NativeExecutionDispatch for ParachainNativeExecutor {
     }
 }
 
-type ParachainExecutor = NativeElseWasmExecutor<ParachainNativeExecutor>;
+pub(crate) type ParachainExecutor = NativeElseWasmExecutor<ParachainNativeExecutor>;
 
-type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
+pub(crate) type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
 
-type ParachainBackend = TFullBackend<Block>;
+pub(crate) type ParachainBackend = TFullBackend<Block>;
 
-type ParachainBlockImport = TParachainBlockImport<Block, Arc<ParachainClient>, ParachainBackend>;
+pub(crate) type ParachainBlockImport =
+    TParachainBlockImport<Block, Arc<ParachainClient>, ParachainBackend>;
 
 /// Starts a `ServiceBuilder` for a full service.
 ///
@@ -178,19 +179,23 @@ async fn start_node_impl(
     let backend = params.backend.clone();
     let mut task_manager = params.task_manager;
 
-    let provider_requests_protocol_config = {
-        // Allow both outgoing and incoming requests.
-        let (handler, protocol_config) =
-            ProviderRequestsHandler::new(parachain_config.chain_spec.fork_id(), client.clone());
-        task_manager.spawn_handle().spawn(
-            "provider-requests-handler",
-            Some("networking"),
-            handler.run(),
-        );
-        protocol_config
-    };
+    // Sinks for pubsub notifications.
+    // Everytime a new subscription is created, a new mpsc channel is added to the sink pool.
+    // The MappingSyncWorker sends through the channel on block import and the subscription emits a notification to the subscriber on receiving a message through this channel.
+    // This way we avoid race conditions when using native substrate block import notification stream.
+    let pubsub_notification_sinks: shc_mapping_sync::StorageHubBlockNotificationSinks<
+        shc_mapping_sync::StorageHubBlockNotification<Block>,
+    > = Default::default();
+    let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
 
-    net_config.add_request_response_protocol(provider_requests_protocol_config);
+    spawn_file_transfer_service(
+        &task_manager,
+        client.clone(),
+        pubsub_notification_sinks.clone(),
+        &parachain_config,
+        &mut net_config,
+    )
+    .await;
 
     let (relay_chain_interface, collator_key) = build_relay_chain_interface(
         polkadot_config,

@@ -30,6 +30,7 @@ thiserror = { version = "1.0.48" }
 
 # Local
 storage-hub-runtime = { path = "../runtime" }
+shc-mapping-sync ={ workspace = true, default-features = true}
 
 # Substrate
 frame-benchmarking = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0" }
