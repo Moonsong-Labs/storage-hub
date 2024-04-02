@@ -12,7 +12,7 @@ async function main() {
       const downloadUri = `${ghRoot}polkadot-v${version}/${binary}`;
       console.log(`💾 Downloading ${binary} from ${downloadUri}`);
 
-      const writePath = path.join(writeDir, binary)
+      const writePath = path.join(writeDir, binary);
       const blob = await fetch(downloadUri);
       await Bun.write(writePath, blob);
       fs.chmod(writePath, 0o755, (err) => {
