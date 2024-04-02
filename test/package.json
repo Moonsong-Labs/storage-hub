@@ -6,9 +6,10 @@
   "type": "module",
   "scripts": {
     "docker:build": "docker build -t storage-hub:local -f ../docker/storage-hub-node.Dockerfile ../.",
-    "docker:run:sh-node": "docker compose -f docker/storage-hub-node-compose.yml up -d",
+    "docker:run:node": "docker compose -f ../docker/local-node-compose.yml up -d",
     "zombie:run:latest":"SH_IMAGE=docker.io/moonsonglabs/storage-hub:latest bun zombienet spawn configs/simple.toml",
-    "zombie:run:local":"SH_IMAGE=storage-hub:local bun zombienet spawn configs/simple.toml",
+    "zombie:run:local":"DOCKER_BUILDKIT=0  SH_IMAGE=storage-hub:local bun zombienet spawn configs/simple.toml",
+    "zombie:run:native": "bun run scripts/downloadPolkadot.ts 1.5.0  && bun zombienet spawn configs/simpleLocalNative.toml",
     "zombie:test:local": "SH_IMAGE=storage-hub:local bun zombienet test configs/simple.zndsl",
     "zombie:test:latest": "SH_IMAGE=docker.io/moonsonglabs/storage-hub:latest bun zombienet test configs/simple.zndsl",
     "test": "bun test"
