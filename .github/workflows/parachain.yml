@@ -171,13 +171,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v1
       - run: mkdir -p target/release/
-      - name: Start local k8 cluster
-        uses: medyagh/setup-minikube@latest
-        with:
-          cache: true
-          driver: docker
-          cpus: 4
-          memory: 12000
       - name: Get Node Binary if changed
         if: needs.setup.outputs.node_changed == 'true'
         uses: actions/download-artifact@v4
@@ -195,4 +188,5 @@ jobs:
         run: |
           cd test
           bun install
-          bun zombienet test configs/simpleNative.zndsl
+          bun run scripts/downloadPolkadot.ts 1.5.0
+          bun zombienet test --provider native configs/simpleNative.zndsl
