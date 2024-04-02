@@ -96,6 +96,10 @@ impl pallet_balances::Config for Test {
     type MaxFreezes = ConstU32<10>;
 }
 
+parameter_types! {
+    pub const MaxMultiAddressSize: u32 = 100;
+}
+
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -104,7 +108,7 @@ impl pallet_storage_providers::Config for Test {
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
-    type MaxMultiAddressSize = ConstU32<100>;
+    type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
     type MaxBsps = ConstU32<100>;
@@ -169,11 +173,11 @@ impl crate::Config for Test {
     type AssignmentThresholdMultiplier = ConstU128<100>;
     type Fingerprint = H256;
     type StorageRequestBspsRequiredType = u32;
-    type TargetBspsRequired = ConstU32<1>;
+    type TargetBspsRequired = ConstU32<3>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
-    type MaxMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
+    type MaxDataServerMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
+    type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxFilePathSize = ConstU32<512u32>;
-    type MaxMultiAddressSize = ConstU32<512u32>;
     type StorageRequestTtl = ConstU32<40u32>;
     type MaxExpiredStorageRequests = ConstU32<100u32>;
 }
@@ -186,6 +190,20 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 
     crate::GenesisConfig::<Test> {
         bsp_assignment_threshold: u128::MAX,
+    }
+    .assimilate_storage(&mut t)
+    .unwrap();
+
+    pallet_balances::GenesisConfig::<Test> {
+        balances: vec![
+            (AccountId32::new([1; 32]), 1_000_000_000_000_000),
+            (AccountId32::new([2; 32]), 1_000_000_000_000_000),
+            (AccountId32::new([3; 32]), 1_000_000_000_000_000),
+            (AccountId32::new([4; 32]), 1_000_000_000_000_000),
+            (AccountId32::new([5; 32]), 1_000_000_000_000_000),
+            (AccountId32::new([6; 32]), 1_000_000_000_000_000),
+            (AccountId32::new([7; 32]), 1_000_000_000_000_000),
+        ],
     }
     .assimilate_storage(&mut t)
     .unwrap();

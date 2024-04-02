@@ -50,8 +50,14 @@ pub trait ReadProvidersInterface {
     /// Check if an account is a registered Provider.
     fn is_provider(who: Self::Provider) -> bool;
 
-    // Get Provider from AccountId, if it is a registered Provider.
+    /// Get Provider from AccountId, if it is a registered Provider.
     fn get_provider(who: Self::AccountId) -> Option<Self::Provider>;
+
+    /// Check if provider is a BSP.
+    fn is_bsp(who: &Self::Provider) -> bool;
+
+    /// Check if provider is a MSP.
+    fn is_msp(who: &Self::Provider) -> bool;
 
     /// Get the root for a registered Provider.
     fn get_root(who: Self::Provider) -> Option<Self::MerkleHash>;

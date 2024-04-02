@@ -91,7 +91,7 @@ pub type MaxMultiAddressSize<T> = <T as crate::Config>::MaxMultiAddressSize;
 pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
 
 /// Alias for the `MaxMultiAddresses` type used in the FileSystem pallet.
-pub type MaxMultiAddresses<T> = <T as crate::Config>::MaxMultiAddresses;
+pub type MaxMultiAddresses<T> = <T as crate::Config>::MaxDataServerMultiAddresses;
 
 /// Alias for a bounded vector of [`MultiAddress`].
 pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;

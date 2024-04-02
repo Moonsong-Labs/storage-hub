@@ -209,12 +209,15 @@ where
         root: FileKey<T>,
         proof: Proof<T>,
     ) -> DispatchResult {
-        let bsp = match <T::Providers as storage_hub_traits::ReadProvidersInterface>::get_provider(
-            who.clone(),
-        ) {
-            Some(bsp) => bsp,
-            None => return Err(Error::<T>::NotABsp.into()),
-        };
+        let bsp =
+            <T::Providers as storage_hub_traits::ReadProvidersInterface>::get_provider(who.clone())
+                .ok_or(Error::<T>::NotAProvider)?;
+
+        // Check that the provider is indeed a BSP.
+        ensure!(
+            <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_bsp(&bsp),
+            Error::<T>::NotABsp
+        );
 
         // Check that the storage request exists.
         let file_metadata =
@@ -227,7 +230,7 @@ where
                     bool
                 );
 
-        // Check that the sender is a registered storage provider.
+        // Check that the BSP has volunteered for the storage request.
         ensure!(
             <StorageRequestBsps<T>>::contains_key(&location, &who),
             Error::<T>::BspNotVolunteered
@@ -262,8 +265,27 @@ where
             &bsp, &root, &proof,
         )?;
 
-        // Update storage request metadata.
-        <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
+        // Remove storage request if we reached the required number of bsps.
+        // TODO this should be modified to also take into account if the MSP confirmed storing the file once we add MSP functionality.
+        if file_metadata.bsps_confirmed == file_metadata.bsps_required {
+            // Remove storage request metadata.
+            <StorageRequests<T>>::remove(&location);
+
+            const REMOVE_LIMIT: u32 = u32::MAX;
+
+            // Remove storage request bsps
+            let _ = <StorageRequestBsps<T>>::clear_prefix(&location, REMOVE_LIMIT, None);
+        } else {
+            // Update storage request metadata.
+            <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
+
+            // Update bsp for storage request.
+            <StorageRequestBsps<T>>::mutate(&location, &who, |bsp| {
+                if let Some(bsp) = bsp {
+                    bsp.confirmed = true;
+                }
+            });
+        }
 
         // Add data to storage provider.
         <T::Providers as storage_hub_traits::MutateProvidersInterface>::increase_data_used(

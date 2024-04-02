@@ -153,7 +153,7 @@ pub mod pallet {
 
         /// Maximum number of multiaddresses for a storage request.
         #[pallet::constant]
-        type MaxMultiAddresses: Get<u32>;
+        type MaxDataServerMultiAddresses: Get<u32>;
 
         /// Time-to-live for a storage request.
         #[pallet::constant]
@@ -269,7 +269,7 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
-            multiaddresses: BoundedVec<MultiAddress<T>, T::MaxMultiAddresses>,
+            multiaddresses: BoundedVec<MultiAddress<T>, T::MaxDataServerMultiAddresses>,
         },
         /// Notifies that a BSP has been accepted to store a given file.
         AcceptedBspVolunteer {
@@ -309,6 +309,8 @@ pub mod pallet {
         BspsRequiredExceedsMax,
         /// BSP already volunteered to store the given file.
         BspVolunteerFailed,
+        /// Account is not a Storage Provider.
+        NotAProvider,
         /// Account is not a BSP.
         NotABsp,
         /// BSP has not volunteered to store the given file.

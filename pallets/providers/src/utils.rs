@@ -491,6 +491,14 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         }
     }
 
+    fn is_bsp(who: &Self::Provider) -> bool {
+        BackupStorageProviders::<T>::contains_key(&who)
+    }
+
+    fn is_msp(who: &Self::Provider) -> bool {
+        MainStorageProviders::<T>::contains_key(&who)
+    }
+
     fn get_root(who: Self::Provider) -> Option<Self::MerkleHash> {
         if let Some(bucket) = Buckets::<T>::get(&who) {
             Some(bucket.root)
