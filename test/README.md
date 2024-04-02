@@ -54,6 +54,9 @@ docker compose -f docker/latest-node-compose.yml up -d
 
 #### Zombienet
 
+> [!NOTE]  
+> Please ensure the rust project is built first e.g. `cargo build --release`
+
 In `/test` run: `bun install` to install zombienet
 
 ### Running Standard Tests
@@ -65,23 +68,20 @@ bun test
 ### Running ZombieNet Tests
 
 ```sh
-bun zombie:test:latest
+bun zombie:test:native
 ```
 
 ### Spawning ZombieNet
 
-> [!WARNING]
-> Currently ZombieNet doesn't work with SH due to how we make our chainspecs. WIP
+> [!INFORMATION]
+> Currently SH on k8 is having issue due to how we are generating chain specs, hence why we use native provider
 
-To launch a non-ephemeral ZombieNetwork, use:
+To launch a non-ephemeral ZombieNetwork by executing the following in: `/test` directory:
 
 ```sh
 bun install
-bun zombienet spawn <config_path>
+bun zombie:run:native
 ```
-
-> [!INFO]  
-> For example: `bun zombienet spawn
 
 From here you should see in the terminal, the different nodes being spun up. When the network is fully launched, you should see something like this:
 
