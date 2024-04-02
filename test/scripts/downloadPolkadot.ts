@@ -9,10 +9,15 @@ async function main() {
 
   try {
     for (const binary of binaries) {
+      const writePath = path.join(writeDir, binary);
+
+      if (fs.existsSync(writePath)) {
+        console.log(`📂 ${binary} already exists at ${writePath}`);
+        continue;
+      }
+
       const downloadUri = `${ghRoot}polkadot-v${version}/${binary}`;
       console.log(`💾 Downloading ${binary} from ${downloadUri}`);
-
-      const writePath = path.join(writeDir, binary);
       const blob = await fetch(downloadUri);
       await Bun.write(writePath, blob);
       fs.chmod(writePath, 0o755, (err) => {
@@ -26,7 +31,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`✅ Polkadot binaries successfully downloaded to: ${process.cwd()}`);
+  console.log(`✅ Polkadot downloader script completed at: ${process.cwd()}`);
 }
 
 function getVersionArg() {

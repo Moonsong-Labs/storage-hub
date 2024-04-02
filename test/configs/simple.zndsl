@@ -2,7 +2,6 @@ Description: Simple Network Smoke Test
 Network: ./simple.toml
 Creds: config
 
-
 relay-0: is up
 relay-1: is up
 relay-0: parachain 2000 is registered within 225 seconds

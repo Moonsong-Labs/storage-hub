@@ -1,5 +1,6 @@
 Description: Simple Network Smoke Test
 Network: ./simpleNative.toml
+Creds: config
 
 relay-0: is up
 relay-1: is up
