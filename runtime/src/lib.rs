@@ -33,10 +33,7 @@ use frame_support::{
     dispatch::DispatchClass,
     genesis_builder_helper::{build_config, create_default_config},
     parameter_types,
-    traits::{
-        ConstBool, ConstI128, ConstU128, ConstU32, ConstU64, ConstU8, EitherOfDiverse,
-        TransformOrigin,
-    },
+    traits::{ConstBool, ConstU128, ConstU32, ConstU64, ConstU8, EitherOfDiverse, TransformOrigin},
     weights::{
         constants::WEIGHT_REF_TIME_PER_SECOND, ConstantMultiplier, Weight, WeightToFeeCoefficient,
         WeightToFeeCoefficients, WeightToFeePolynomial,
@@ -548,12 +545,11 @@ impl TrieVerifier for ProofTrieVerifier {
     }
 }
 
-type ThresholdType = i128;
-
+type ThresholdType = u128;
 pub struct ThresholdDecayFunction;
 impl Get<ThresholdType> for ThresholdDecayFunction {
     fn get() -> ThresholdType {
-        1 / 2
+        2
     }
 }
 
@@ -564,8 +560,8 @@ impl pallet_file_system::Config for Runtime {
     type ProofDealer = ProofsDealer;
     type ThresholdType = ThresholdType;
     type AssignmentThresholdDecayFactor = ThresholdDecayFunction;
-    type AssignmentThresholdAsymptote = ConstI128<100i128>;
-    type AssignmentThresholdMultiplier = ConstI128<100i128>;
+    type AssignmentThresholdAsymptote = ConstU128<100>;
+    type AssignmentThresholdMultiplier = ConstU128<100>;
     type Fingerprint = Hash;
     type StorageRequestBspsRequiredType = u32;
     type TargetBspsRequired = ConstU32<1>;

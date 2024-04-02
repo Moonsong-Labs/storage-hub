@@ -148,10 +148,10 @@ pub trait SubscribeProvidersInterface {
     type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
 
     /// Subscribe to the sign off of a BSP.
-    fn subscribe_bsp_sign_off(who: &Self::Provider);
+    fn subscribe_bsp_sign_off(who: &Self::Provider) -> DispatchResult;
 
     /// Subscribe to the sign up of a BSP.
-    fn subscribe_bsp_sign_up(who: &Self::Provider);
+    fn subscribe_bsp_sign_up(who: &Self::Provider) -> DispatchResult;
 }
 
 /// The interface for the ProofsDealer pallet.

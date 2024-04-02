@@ -336,6 +336,8 @@ pub mod pallet {
         ThresholdTooHigh,
         /// Failed to convert block number to threshold.
         FailedToConvertBlockNumber,
+        /// Arithmetic error in threshold calculation.
+        ThresholdArithmeticError,
     }
 
     #[pallet::call]
@@ -564,36 +566,40 @@ pub mod pallet {
     impl<T: Config> storage_hub_traits::SubscribeProvidersInterface for Pallet<T> {
         type Provider = T::AccountId;
 
-        fn subscribe_bsp_sign_up(_who: &Self::Provider) {
+        fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
             // Adjust bsp assignment threshold by applying the decay function after removing the asymptote
             let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
             let base_threshold = bsp_assignment_threshold
                 .checked_sub(&T::AssignmentThresholdAsymptote::get())
-                .unwrap_or_else(|| panic!("Underflow in threshold calculation during sign-up"));
+                .ok_or(Error::<T>::ThresholdArithmeticError)?;
 
             bsp_assignment_threshold = base_threshold
                 .checked_mul(&T::AssignmentThresholdDecayFactor::get())
-                .unwrap_or_else(|| panic!("Overflow in threshold calculation during sign-up"))
+                .ok_or(Error::<T>::ThresholdArithmeticError)?
                 .checked_add(&T::AssignmentThresholdAsymptote::get())
-                .unwrap_or_else(|| panic!("Overflow in threshold calculation during sign-up"));
+                .ok_or(Error::<T>::ThresholdArithmeticError)?;
 
             BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
+
+            Ok(())
         }
 
-        fn subscribe_bsp_sign_off(_who: &Self::Provider) {
+        fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
             // Adjust bsp assignment threshold by applying the inverse of the decay function after removing the asymptote
             let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
             let base_threshold = bsp_assignment_threshold
                 .checked_sub(&T::AssignmentThresholdAsymptote::get())
-                .unwrap_or_else(|| panic!("Underflow in threshold calculation during sign-off"));
+                .ok_or(Error::<T>::ThresholdArithmeticError)?;
 
             bsp_assignment_threshold = base_threshold
                 .checked_div(&T::AssignmentThresholdDecayFactor::get())
-                .unwrap_or_else(|| panic!("Overflow in threshold calculation during sign-off"))
+                .ok_or(Error::<T>::ThresholdArithmeticError)?
                 .checked_add(&T::AssignmentThresholdAsymptote::get())
-                .unwrap_or_else(|| panic!("Overflow in threshold calculation during sign-off"));
+                .ok_or(Error::<T>::ThresholdArithmeticError)?;
 
             BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
+
+            Ok(())
         }
     }
 }

@@ -5,7 +5,7 @@ use frame_system as system;
 use sp_core::{ConstU128, ConstU32, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage,
+    BuildStorage, DispatchResult,
 };
 use storage_hub_traits::SubscribeProvidersInterface;
 
@@ -98,8 +98,12 @@ pub struct FakeImpl;
 impl SubscribeProvidersInterface for FakeImpl {
     type Provider = u64;
 
-    fn subscribe_bsp_sign_up(_who: &Self::Provider) {}
-    fn subscribe_bsp_sign_off(_who: &Self::Provider) {}
+    fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
+        Ok(())
+    }
+    fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
+        Ok(())
+    }
 }
 
 impl crate::Config for Test {
