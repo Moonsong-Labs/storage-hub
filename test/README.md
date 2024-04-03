@@ -92,3 +92,20 @@ From here you can interact via the websockets exposed in the direct links, in th
 - Alice (relay): `35005`
 - Bob (relay): `37613`
 - Collator (storage-hub): `45615`
+
+### Generating new Type Interfaces
+
+This repo uses Parity's [polkadot-api](https://github.com/polkadot-api/polkadot-api) AKA PAPI. 
+To generate new type interfaces run the following in `/test`:
+
+```sh
+bun zombie:run:native
+```
+
+In another terminal window in `/test`:
+
+```sh
+bun typegen
+```
+
+This will create type interface files in `/typegen` directory, which is used throughout the tests to interact with the chain.

@@ -7,9 +7,16 @@ default_args = [
     "--database=paritydb",
 ]
 
-[[relaychain.node_groups]]
-count = 2
-name = "relay"
+
+[[relaychain.nodes]]
+name = "relay-0"
+validator = true
+ws_port = 39459
+
+[[relaychain.nodes]]
+name = "relay-1"
+validator = true
+
 
 [[parachains]]
 id = 2000
@@ -18,6 +25,7 @@ id = 2000
 command = "../target/release/storage-hub-node"
 name = "sh"
 args = ["--no-hardware-benchmarks", "-lparachain=debug"]
+ws_port = 42933
 
 
 [types.Header]
