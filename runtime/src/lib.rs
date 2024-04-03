@@ -546,8 +546,8 @@ impl TrieVerifier for ProofTrieVerifier {
 }
 
 type ThresholdType = u128;
-pub struct ThresholdDecayFunction;
-impl Get<ThresholdType> for ThresholdDecayFunction {
+pub struct ThresholdDecayFactor;
+impl Get<ThresholdType> for ThresholdDecayFactor {
     fn get() -> ThresholdType {
         2
     }
@@ -559,7 +559,7 @@ impl pallet_file_system::Config for Runtime {
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type ThresholdType = ThresholdType;
-    type AssignmentThresholdDecayFactor = ThresholdDecayFunction;
+    type AssignmentThresholdDecayFactor = ThresholdDecayFactor;
     type AssignmentThresholdAsymptote = ConstU128<100>;
     type AssignmentThresholdMultiplier = ConstU128<100>;
     type Fingerprint = Hash;

@@ -25,7 +25,7 @@ type MaxBsps = <Test as crate::Config>::MaxBsps;
 
 /// This module holds the test cases for the signup of Main Storage Providers and Backup Storage Providers
 mod sign_up {
-    use storage_hub_traits::ReadProvidersInterface;
+    use storage_hub_traits::ProvidersInterface;
 
     use super::*;
 
@@ -819,10 +819,9 @@ mod sign_up {
 
 /// This module holds the test cases for the sign-off of Main Storage Providers and Backup Storage Providers
 mod sign_off {
-    use storage_hub_traits::MutateProvidersInterface;
-    use storage_hub_traits::ReadProvidersInterface;
-
     use super::*;
+    use storage_hub_traits::MutateProvidersInterface;
+    use storage_hub_traits::ProvidersInterface;
 
     #[test]
     fn msp_sign_off_works() {

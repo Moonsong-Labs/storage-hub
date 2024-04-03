@@ -3,10 +3,9 @@ use core::cmp::max;
 use codec::{Decode, Encode};
 use frame_support::{ensure, pallet_prelude::DispatchResult, traits::Get};
 use frame_system::pallet_prelude::BlockNumberFor;
-use sp_runtime::Saturating;
 use sp_runtime::{
-    traits::{CheckedAdd, One, Zero},
-    BoundedVec,
+    traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
+    ArithmeticError, BoundedVec,
 };
 use sp_std::{vec, vec::Vec};
 
@@ -95,6 +94,7 @@ where
             data_server_sps,
             bsps_required,
             bsps_confirmed: T::StorageRequestBspsRequiredType::zero(),
+            bsps_volunteered: T::StorageRequestBspsRequiredType::zero(),
         };
 
         // TODO: if we add the overwrite flag, this would only fail if the overwrite flag is false.
@@ -145,7 +145,7 @@ where
         // TODO: Check that sender is a registered storage provider
 
         // Check that the storage request exists.
-        let file_metadata =
+        let mut file_metadata =
             <StorageRequests<T>>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         expect_or_err!(
@@ -198,6 +198,19 @@ where
             },
         );
 
+        // Increment the number of bsps volunteered.
+        match file_metadata
+            .bsps_volunteered
+            .checked_add(&T::StorageRequestBspsRequiredType::one())
+        {
+            Some(inc_bsps_volunteered) => {
+                file_metadata.bsps_volunteered = inc_bsps_volunteered;
+            }
+            None => {
+                return Err(ArithmeticError::Overflow.into());
+            }
+        }
+
         <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
 
         Ok(())
@@ -210,7 +223,7 @@ where
         proof: Proof<T>,
     ) -> DispatchResult {
         let bsp =
-            <T::Providers as storage_hub_traits::ReadProvidersInterface>::get_provider(who.clone())
+            <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(who.clone())
                 .ok_or(Error::<T>::NotAProvider)?;
 
         // Check that the provider is indeed a BSP.
@@ -248,15 +261,23 @@ where
             <StorageRequests<T>>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         // Check that the number of confirmed bsps is less than the required bsps and increment it.
+        expect_or_err!(
+            file_metadata.bsps_confirmed < file_metadata.bsps_required,
+            "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
+            Error::<T>::StorageRequestBspsRequiredFulfilled,
+            bool
+        );
+
+        // Increment the number of bsps confirmed.
         match file_metadata
             .bsps_confirmed
             .checked_add(&T::StorageRequestBspsRequiredType::one())
         {
-            Some(bsps_confirmed) => {
-                file_metadata.bsps_confirmed = bsps_confirmed;
+            Some(inc_bsps_confirmed) => {
+                file_metadata.bsps_confirmed = inc_bsps_confirmed;
             }
             None => {
-                return Err(Error::<T>::StorageRequestBspsRequiredFulfilled.into());
+                return Err(ArithmeticError::Overflow.into());
             }
         }
 
@@ -286,6 +307,9 @@ where
                 }
             });
         }
+
+        // Update root of bsp.
+        <T::Providers as storage_hub_traits::MutateProvidersInterface>::change_root_bsp(bsp, root)?;
 
         // Add data to storage provider.
         <T::Providers as storage_hub_traits::MutateProvidersInterface>::increase_data_used(
@@ -321,13 +345,32 @@ where
             Error::<T>::StorageRequestNotAuthorized
         );
 
+        if file_metadata.bsps_confirmed >= T::StorageRequestBspsRequiredType::zero() {
+            // Challenge BSPs who confirmed this storage request, to force update its storage root to uninclude the file.
+            <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
+                &file_key,
+            )?;
+        }
+
+        // There should only be the number of bsps volunteered under the storage request prefix.
+        let remove_limit: u32 = file_metadata
+            .bsps_volunteered
+            .try_into()
+            .map_err(|_| Error::<T>::FailedTypeConversion)?;
+
+        // Remove storage request bsps
+        let removed = <StorageRequestBsps<T>>::clear_prefix(&location, remove_limit, None);
+
+        // Make sure that the expected number of bsps were removed.
+        expect_or_err!(
+            removed.backend == remove_limit,
+            "Number of volunteered bsps for storage request should have been removed",
+            Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
+            bool
+        );
+
         // Remove storage request.
         <StorageRequests<T>>::remove(&location);
-
-        // Challenge BSP to force update its storage root to uninclude the file.
-        <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
-            &file_key,
-        )?;
 
         Ok(())
     }
@@ -341,39 +384,44 @@ where
     /// will handle triggering the appropriate event and pending storage request.
     pub(crate) fn do_bsp_stop_storing(
         who: T::AccountId,
-        file_key: FileKey<T>,
+        _file_key: FileKey<T>,
         location: FileLocation<T>,
         owner: T::AccountId,
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         can_serve: bool,
     ) -> DispatchResult {
-        // Check that the storage request exists.
-        ensure!(
-            <StorageRequests<T>>::contains_key(&location),
-            Error::<T>::StorageRequestNotFound
-        );
-
+        // TODO: charge SP for this action.
+        // TODO: Require & verify proof that the file key is indeed stored by the BSP and a proof of removal with the new root to update in pallet providers.
         // TODO: Check that the hash of all the metadata is equal to the `file_key` hash.
 
         // If the storage request exists, then we should reduce the number of bsps confirmed and
         match <StorageRequests<T>>::get(&location) {
             Some(mut metadata) => {
-                // Remove BSP from storage request and challenge if has confirmed having stored this file.
-                if let Some(bsp) = <StorageRequestBsps<T>>::get(&location, &who) {
-                    if bsp.confirmed {
-                        metadata.bsps_confirmed =
-                            metadata.bsps_confirmed.saturating_sub(1u32.into());
+                match <StorageRequestBsps<T>>::get(&location, &who) {
+                    // Remove BSP from storage request.
+                    Some(bsp) => {
+                        if bsp.confirmed {
+                            // TODO verify proof and update the storage root in pallet providers.
+                            metadata.bsps_confirmed =
+                                metadata.bsps_confirmed.saturating_sub(1u32.into());
+                        }
+
+                        metadata.bsps_volunteered =
+                            metadata.bsps_volunteered.saturating_sub(1u32.into());
 
                         <StorageRequests<T>>::set(&location, Some(metadata));
-
-                        Self::challenge_and_reduce_data_used(&who, &file_key, size)?;
+                        <StorageRequestBsps<T>>::remove(&location, &who);
                     }
-
-                    <StorageRequestBsps<T>>::remove(&location, &who);
+                    // The BSP did not volunteer for this storage request.
+                    None => {
+                        return Err(Error::<T>::BspNotVolunteered.into());
+                    }
                 }
             }
             None => {
+                // TODO verify proof and update the storage root in pallet providers.
+
                 Self::do_request_storage(
                     owner,
                     location.clone(),
@@ -387,8 +435,6 @@ where
                         BoundedVec::default()
                     },
                 )?;
-
-                Self::challenge_and_reduce_data_used(&who, &file_key, size)?;
             }
         };
 
@@ -417,26 +463,6 @@ where
         block_to_insert_expiration
     }
 
-    /// Challenge `file_key` to force the BSP to update its storage root to uninclude the
-    /// file and reduce the data used by the storage provider.
-    fn challenge_and_reduce_data_used(
-        who: &T::AccountId,
-        file_key: &FileKey<T>,
-        size: StorageData<T>,
-    ) -> DispatchResult {
-        // Challenge BSP to force update its storage root to uninclude the file.
-        <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
-            file_key,
-        )?;
-
-        // Reduce data used by the storage provider.
-        <T::Providers as storage_hub_traits::MutateProvidersInterface>::decrease_data_used(
-            who, size,
-        )?;
-
-        Ok(())
-    }
-
     /// Calculate the XOR of the fingerprint and the BSP.
     fn compute_bsp_xor(
         fingerprint: &[u8; 32],
@@ -450,5 +476,45 @@ where
 
         T::ThresholdType::decode(&mut &xor_result[..])
             .map_err(|_| Error::<T>::FailedToDecodeThreshold)
+    }
+}
+
+impl<T: crate::Config> storage_hub_traits::SubscribeProvidersInterface for Pallet<T> {
+    type Provider = T::AccountId;
+
+    fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
+        // Adjust bsp assignment threshold by applying the decay function after removing the asymptote
+        let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
+        let base_threshold = bsp_assignment_threshold
+            .checked_sub(&T::AssignmentThresholdAsymptote::get())
+            .ok_or(Error::<T>::ThresholdArithmeticError)?;
+
+        bsp_assignment_threshold = base_threshold
+            .checked_mul(&T::AssignmentThresholdDecayFactor::get())
+            .ok_or(Error::<T>::ThresholdArithmeticError)?
+            .checked_add(&T::AssignmentThresholdAsymptote::get())
+            .ok_or(Error::<T>::ThresholdArithmeticError)?;
+
+        BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
+
+        Ok(())
+    }
+
+    fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
+        // Adjust bsp assignment threshold by applying the inverse of the decay function after removing the asymptote
+        let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
+        let base_threshold = bsp_assignment_threshold
+            .checked_sub(&T::AssignmentThresholdAsymptote::get())
+            .ok_or(Error::<T>::ThresholdArithmeticError)?;
+
+        bsp_assignment_threshold = base_threshold
+            .checked_div(&T::AssignmentThresholdDecayFactor::get())
+            .ok_or(Error::<T>::ThresholdArithmeticError)?
+            .checked_add(&T::AssignmentThresholdAsymptote::get())
+            .ok_or(Error::<T>::ThresholdArithmeticError)?;
+
+        BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
+
+        Ok(())
     }
 }

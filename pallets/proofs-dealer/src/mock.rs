@@ -73,18 +73,6 @@ impl pallet_balances::Config for Test {
     type MaxFreezes = ConstU32<10>;
 }
 
-pub struct FakeImpl;
-impl SubscribeProvidersInterface for FakeImpl {
-    type Provider = u64;
-
-    fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
-        Ok(())
-    }
-    fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
-        Ok(())
-    }
-}
-
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -102,7 +90,7 @@ impl pallet_storage_providers::Config for Test {
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
-    type Subscribers = FakeImpl;
+    type Subscribers = MockedProvidersSubscriber;
 }
 
 impl crate::Config for Test {
@@ -118,6 +106,18 @@ impl crate::Config for Test {
     type CheckpointChallengePeriod = ConstU32<2>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = ConstU64<181222>;
+}
+
+pub struct MockedProvidersSubscriber;
+impl SubscribeProvidersInterface for MockedProvidersSubscriber {
+    type Provider = u64;
+
+    fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
+        Ok(())
+    }
+    fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
+        Ok(())
+    }
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty

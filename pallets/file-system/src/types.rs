@@ -44,6 +44,10 @@ pub struct StorageRequestMetadata<T: Config> {
     /// This starts at 0 and increases up to `bsps_required`. Once this reaches `bsps_required`, the
     /// storage request is considered complete and will be deleted..
     pub bsps_confirmed: T::StorageRequestBspsRequiredType,
+    /// Number of BSPs that have volunteered to store the data.
+    ///
+    /// There can be more than `bsps_required` volunteers, but it is essentially a race for BSPs to confirm that they are storing the data.
+    pub bsps_volunteered: T::StorageRequestBspsRequiredType,
 }
 
 /// Ephemeral BSP storage request tracking metadata.

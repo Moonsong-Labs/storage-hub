@@ -94,18 +94,6 @@ impl pallet_timestamp::Config for Test {
     type OnTimestampSet = ();
 } */
 
-pub struct FakeImpl;
-impl SubscribeProvidersInterface for FakeImpl {
-    type Provider = u64;
-
-    fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
-        Ok(())
-    }
-    fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
-        Ok(())
-    }
-}
-
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -123,7 +111,7 @@ impl crate::Config for Test {
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
-    type Subscribers = FakeImpl;
+    type Subscribers = MockedProvidersSubscriber;
     // TODO: type ProvidersRandomness = RandomnessFromOneEpochAgo<Test>;
 }
 
@@ -159,5 +147,17 @@ impl ExtBuilder {
         let mut ext = sp_io::TestExternalities::new(t);
         ext.execute_with(|| System::set_block_number(1));
         ext
+    }
+}
+
+pub struct MockedProvidersSubscriber;
+impl SubscribeProvidersInterface for MockedProvidersSubscriber {
+    type Provider = u64;
+
+    fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
+        Ok(())
+    }
+    fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
+        Ok(())
     }
 }

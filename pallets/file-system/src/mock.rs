@@ -156,8 +156,8 @@ impl TrieVerifier for MockVerifier {
 
 type ThresholdType = u128;
 
-pub struct ThresholdDecayFunction;
-impl Get<ThresholdType> for ThresholdDecayFunction {
+pub struct ThresholdDecayFactor;
+impl Get<ThresholdType> for ThresholdDecayFactor {
     fn get() -> ThresholdType {
         0
     }
@@ -168,7 +168,7 @@ impl crate::Config for Test {
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type ThresholdType = ThresholdType;
-    type AssignmentThresholdDecayFactor = ThresholdDecayFunction;
+    type AssignmentThresholdDecayFactor = ThresholdDecayFactor;
     type AssignmentThresholdAsymptote = ConstU128<{ u128::MAX }>;
     type AssignmentThresholdMultiplier = ConstU128<100>;
     type Fingerprint = H256;

@@ -9,14 +9,24 @@ use frame_support::Parameter;
 use scale_info::prelude::fmt::Debug;
 use sp_runtime::traits::AtLeast32BitUnsigned;
 
-/// A trait to lookup registered Providers, their Merkle Patricia Trie roots and their stake.
+/// A trait to lookup registered Providers.
 ///
-/// It is abstracted over the `AccountId` type, `Provider` type, `Balance` type and `MerkleHash` type.
-pub trait ReadProvidersInterface {
+/// It is abstracted over the `AccountId` type, `Provider` type.
+pub trait ProvidersInterface {
     /// The type which can be used to identify accounts.
     type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
     /// The type which represents a registered Provider.
     type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+
+    /// Check if an account is a registered Provider.
+    fn is_provider(who: Self::Provider) -> bool;
+
+    /// Get Provider from AccountId, if it is a registered Provider.
+    fn get_provider(who: Self::AccountId) -> Option<Self::Provider>;
+}
+
+/// A trait to lookup registered Providers, their Merkle Patricia Trie roots and their stake.
+pub trait ReadProvidersInterface: ProvidersInterface {
     /// The type corresponding to the staking balance of a registered Provider.
     type Balance: fungible::Inspect<Self::AccountId> + fungible::hold::Inspect<Self::AccountId>;
     /// The type corresponding to the root of a registered Provider.
@@ -46,12 +56,6 @@ pub trait ReadProvidersInterface {
         + Debug
         + scale_info::TypeInfo
         + MaxEncodedLen;
-
-    /// Check if an account is a registered Provider.
-    fn is_provider(who: Self::Provider) -> bool;
-
-    /// Get Provider from AccountId, if it is a registered Provider.
-    fn get_provider(who: Self::AccountId) -> Option<Self::Provider>;
 
     /// Check if provider is a BSP.
     fn is_bsp(who: &Self::Provider) -> bool;

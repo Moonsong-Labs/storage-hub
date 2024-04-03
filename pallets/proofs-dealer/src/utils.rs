@@ -8,7 +8,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_trie::CompactProof;
-use storage_hub_traits::{ProofsDealerInterface, ReadProvidersInterface};
+use storage_hub_traits::{ProofsDealerInterface, ProvidersInterface};
 
 use crate::{
     pallet,

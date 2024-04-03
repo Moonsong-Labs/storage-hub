@@ -63,12 +63,12 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         /// The trait for reading and mutating storage provider data.
-        type Providers: storage_hub_traits::ReadProvidersInterface<AccountId = Self::AccountId>
-            + storage_hub_traits::MutateProvidersInterface<AccountId = Self::AccountId>;
+        type Providers: storage_hub_traits::ReadProvidersInterface<AccountId = Self::AccountId, Provider = <Self::Providers as storage_hub_traits::MutateProvidersInterface>::Provider>
+            + storage_hub_traits::MutateProvidersInterface<AccountId = Self::AccountId, MerklePatriciaRoot = <Self::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash>;
 
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: storage_hub_traits::ProofsDealerInterface<
-            Provider = <Self::Providers as storage_hub_traits::ReadProvidersInterface>::Provider,
+            Provider = <Self::Providers as storage_hub_traits::ProvidersInterface>::Provider,
         >;
 
         /// Type representing the threshold a BSP must meet to be eligible to volunteer to store a file.
@@ -172,12 +172,12 @@ pub mod pallet {
     pub type StorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, FileLocation<T>, StorageRequestMetadata<T>>;
 
-    /// A double map of [`storage request`](FileLocation) to [`BSPs`](StorageProviderId) that volunteered to store data.
+    /// A double map of [`storage request`](FileLocation) to BSP `AccountId`s that volunteered to store data.
     ///
-    /// Any BSP under a storage request is considered to be a volunteer and can be removed at any time.
-    /// Once a BSP submits a valid proof to the `pallet-proofs-dealer`, the `confirmed` field in [`StorageRequestBsps`] should be set to `true`.
+    /// Any BSP under a storage request prefix is considered to be a volunteer and can be removed at any time.
+    /// Once a BSP submits a valid proof to the via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
     ///
-    /// When a storage request is expired or removed, the corresponding storage request key in this map should be removed.
+    /// When a storage request is expired or removed, the corresponding storage request prefix in this map is removed.
     #[pallet::storage]
     #[pallet::getter(fn storage_request_bsps)]
     pub type StorageRequestBsps<T: Config> = StorageDoubleMap<
@@ -236,16 +236,17 @@ pub mod pallet {
             let total_bsps =
                 <T::Providers as storage_hub_traits::ReadProvidersInterface>::get_number_of_bsps();
 
-            let asymptotic_decay_fn = T::AssignmentThresholdDecayFactor::get().saturating_pow(
+            let asymptotic_decay_factor = T::AssignmentThresholdDecayFactor::get().saturating_pow(
                 total_bsps
                     .try_into()
                     .unwrap_or_else(|_| panic!("Threshold overflow")),
             );
-            let bsp_assignment_threshold =
-                match asymptotic_decay_fn.checked_add(&T::AssignmentThresholdAsymptote::get()) {
-                    Some(threshold) => threshold,
-                    None => panic!("Threshold overflow"),
-                };
+            let bsp_assignment_threshold = match asymptotic_decay_factor
+                .checked_add(&T::AssignmentThresholdAsymptote::get())
+            {
+                Some(threshold) => threshold,
+                None => panic!("Threshold overflow"),
+            };
 
             Self {
                 bsp_assignment_threshold,
@@ -321,6 +322,8 @@ pub mod pallet {
         StorageRequestBspsRequiredFulfilled,
         /// BSP already volunteered to store the given file.
         BspAlreadyVolunteered,
+        /// Number of removed BSPs volunteered from storage request prefix did not match the expected number.
+        UnexpectedNumberOfRemovedVolunteeredBsps,
         /// No slot available found in blocks to insert storage request expiration time.
         StorageRequestExpiredNoSlotAvailable,
         /// Not authorized to delete the storage request.
@@ -340,6 +343,8 @@ pub mod pallet {
         FailedToConvertBlockNumber,
         /// Arithmetic error in threshold calculation.
         ThresholdArithmeticError,
+        /// Failed to convert to primitive type.
+        FailedTypeConversion,
     }
 
     #[pallet::call]
@@ -562,46 +567,6 @@ pub mod pallet {
             }
 
             total_used_weight
-        }
-    }
-
-    impl<T: Config> storage_hub_traits::SubscribeProvidersInterface for Pallet<T> {
-        type Provider = T::AccountId;
-
-        fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
-            // Adjust bsp assignment threshold by applying the decay function after removing the asymptote
-            let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
-            let base_threshold = bsp_assignment_threshold
-                .checked_sub(&T::AssignmentThresholdAsymptote::get())
-                .ok_or(Error::<T>::ThresholdArithmeticError)?;
-
-            bsp_assignment_threshold = base_threshold
-                .checked_mul(&T::AssignmentThresholdDecayFactor::get())
-                .ok_or(Error::<T>::ThresholdArithmeticError)?
-                .checked_add(&T::AssignmentThresholdAsymptote::get())
-                .ok_or(Error::<T>::ThresholdArithmeticError)?;
-
-            BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
-
-            Ok(())
-        }
-
-        fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
-            // Adjust bsp assignment threshold by applying the inverse of the decay function after removing the asymptote
-            let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
-            let base_threshold = bsp_assignment_threshold
-                .checked_sub(&T::AssignmentThresholdAsymptote::get())
-                .ok_or(Error::<T>::ThresholdArithmeticError)?;
-
-            bsp_assignment_threshold = base_threshold
-                .checked_div(&T::AssignmentThresholdDecayFactor::get())
-                .ok_or(Error::<T>::ThresholdArithmeticError)?
-                .checked_add(&T::AssignmentThresholdAsymptote::get())
-                .ok_or(Error::<T>::ThresholdArithmeticError)?;
-
-            BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
-
-            Ok(())
         }
     }
 }

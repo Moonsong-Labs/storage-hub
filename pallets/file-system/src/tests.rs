@@ -49,6 +49,7 @@ fn request_storage_success() {
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
                 bsps_confirmed: 0,
+                bsps_volunteered: 0,
             })
         );
 
@@ -102,6 +103,7 @@ fn request_storage_expiration_clear_success() {
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
                 bsps_confirmed: 0,
+                bsps_volunteered: 0,
             })
         );
 
@@ -425,6 +427,7 @@ fn bsp_confirm_storing_success() {
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
                 bsps_confirmed: 1,
+                bsps_volunteered: 1,
             })
         );
 
@@ -484,7 +487,7 @@ fn bsp_stop_storing_success() {
             multiaddresses.clone()
         ));
 
-        // Assert that the RequestStorageBsps has the correct value
+        // Assert that the RequestStorageBsps now contains the BSP under the location
         assert_eq!(
             FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone())
                 .expect("BSP should exist in storage"),
@@ -492,6 +495,22 @@ fn bsp_stop_storing_success() {
                 confirmed: false,
                 _phantom: Default::default()
             }
+        );
+
+        // Assert that the storage was updated
+        assert_eq!(
+            FileSystem::storage_requests(location.clone()),
+            Some(StorageRequestMetadata {
+                requested_at: 1,
+                owner: owner_account_id.clone(),
+                fingerprint,
+                size,
+                user_multiaddresses: multiaddresses.clone(),
+                data_server_sps: BoundedVec::default(),
+                bsps_required: TargetBspsRequired::<Test>::get(),
+                bsps_confirmed: 0,
+                bsps_volunteered: 1,
+            })
         );
 
         // Dispatch BSP stop storing.
@@ -522,8 +541,10 @@ fn bsp_stop_storing_success() {
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
                 bsps_confirmed: 0,
+                bsps_volunteered: 0,
             })
         );
+
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
