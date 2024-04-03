@@ -35,11 +35,11 @@ describe("Simple zombieTest", async () => {
   );
   const api = client.getTypedApi(relayTypes);
 
-  console.log("getting the latest runtime")
-  const runtime = await api.runtime.latest()
+  console.log("getting the latest runtime");
+  const runtime = await api.runtime.latest();
 
   test("Consts check", async () => {
-    const blob=   api.constants.System.SS58Prefix(runtime)
-    console.log( blob);
+    const blob = api.constants.System.SS58Prefix(runtime);
+    console.log(blob);
   });
 });
