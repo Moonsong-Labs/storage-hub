@@ -1,12 +1,10 @@
-import { expect, test, describe, beforeAll } from "bun:test";
+import { test, describe } from "bun:test";
 import { createClient as createRawClient } from "@polkadot-api/substrate-client";
 import { createClient } from "@polkadot-api/client";
 import { WebSocketProvider } from "@polkadot-api/ws-provider/node";
 import { start } from "smoldot";
-import { getChain } from "@polkadot-api/node-polkadot-provider";
 import { getSmProvider } from "@polkadot-api/sm-provider";
-import relayTypes from "../../typegen/relaychain";
-import rawspec from "../../rawSpec.json" assert { type: "json" };
+import { relaychain } from "@polkadot-api/descriptors";
 
 describe("Simple zombieTest", async () => {
   // biome-ignore lint/complexity/noBannedTypes: WIP
@@ -23,23 +21,26 @@ describe("Simple zombieTest", async () => {
   const rawClient = createRawClient(WebSocketProvider("ws://127.0.0.1:39459/"));
   const modified = {
     ...(await getChainspec()),
-    bootNodes: [
-      "/ip4/127.0.0.1/tcp/36123/ws/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp",
-    ],
   };
+  rawClient.destroy();
 
   const spec = JSON.stringify(modified);
   const smoldot = start();
-  const client = createClient(
-    getChain({ provider: getSmProvider(smoldot, { chainSpec: spec }), keyring: [] })
-  );
-  const api = client.getTypedApi(relayTypes);
-
-  console.log("getting the latest runtime");
+  const client = createClient(getSmProvider(smoldot.addChain({ chainSpec: spec })));
+  const api = client.getTypedApi(relaychain);
   const runtime = await api.runtime.latest();
 
   test("Consts check", async () => {
+    console.log("Getting the SS58Prefix");
     const blob = api.constants.System.SS58Prefix(runtime);
     console.log(blob);
   });
+
+
+  test("Test Spec Version", async () => {
+    const {spec_name, spec_version} = api.constants.System.Version(runtime);
+    console.log(spec_name);
+    console.log(spec_version);
+
+  })
 });

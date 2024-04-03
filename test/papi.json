@@ -1,11 +1,5 @@
 {
-  "storage-hub": {
-    "outputFolder": "typegen",
-    "wsUrl": "ws://127.0.0.1:42933",
-    "metadata": "storage-hub.scale"
-  },
   "relaychain": {
-    "outputFolder": "typegen",
     "wsUrl": "ws://127.0.0.1:39459",
     "metadata": "relaychain.scale"
   }
