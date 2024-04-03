@@ -36,11 +36,9 @@ describe("Simple zombieTest", async () => {
     console.log(blob);
   });
 
-
   test("Test Spec Version", async () => {
-    const {spec_name, spec_version} = api.constants.System.Version(runtime);
+    const { spec_name, spec_version } = api.constants.System.Version(runtime);
     console.log(spec_name);
     console.log(spec_version);
-
-  })
+  });
 });
