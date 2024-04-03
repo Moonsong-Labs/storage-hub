@@ -13,6 +13,9 @@ publish = false
 [lints]
 workspace = true
 
+[build-dependencies]
+substrate-build-script-utils = { workspace = true }
+
 [dependencies]
 clap = { workspace = true }
 log = { workspace = true }
@@ -73,9 +76,6 @@ cumulus-primitives-core = { workspace = true }
 cumulus-primitives-parachain-inherent = { workspace = true }
 cumulus-relay-chain-interface = { workspace = true }
 color-print = "0.3.4"
-
-[build-dependencies]
-substrate-build-script-utils = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.7.0" }
 
 [features]
 default = []
