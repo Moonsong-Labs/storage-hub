@@ -186,7 +186,7 @@ jobs:
           docker rm temp_storage_hub
       - name: Run Zombienet Test!
         run: |
-          chmod +x target/releasei/storage-hub-node
+          chmod +x target/release/storage-hub-node
           cd test
           bun install
           bun run scripts/downloadPolkadot.ts 1.5.0
