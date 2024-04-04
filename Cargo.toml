@@ -24,6 +24,7 @@ scale-info = { version = "2.11.0", default-features = false, features = [
 ] }
 serde = { version = "1.0.197" }
 tokio = "1.36.0"
+anyhow = { version = "1.0.81" }
 
 # Local
 shc-mapping-sync = { path = "client/mapping-sync", default-features = false }

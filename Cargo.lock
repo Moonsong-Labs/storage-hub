@@ -13052,6 +13052,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "storage-hub-infra"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
 name = "storage-hub-node"
 version = "0.1.0"
 dependencies = [
