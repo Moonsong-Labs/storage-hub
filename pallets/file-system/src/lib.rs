@@ -57,6 +57,9 @@ pub mod pallet {
     };
     use sp_runtime::BoundedVec;
 
+    // TODO: add conditional to check that block number does not exceed u64 type. It it does, the fixed point number that we convert to from a block
+    // number might be too loarge to fit into the threshold type.
+
     #[pallet::config]
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
@@ -87,7 +90,7 @@ pub mod pallet {
             + CheckedAdd
             + CheckedSub
             + PartialOrd
-            + From<BlockNumberFor<Self>>;
+            + From<u128>;
 
         /// The multiplier increases the threshold over time (blocks) which increases the
         /// likelihood of a BSP successfully volunteering to store a file.
@@ -234,22 +237,18 @@ pub mod pallet {
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
             let total_bsps =
-                <T::Providers as storage_hub_traits::ReadProvidersInterface>::get_number_of_bsps();
-
-            let asymptotic_decay_factor = T::AssignmentThresholdDecayFactor::get().saturating_pow(
-                total_bsps
+                <T::Providers as storage_hub_traits::ReadProvidersInterface>::get_number_of_bsps()
                     .try_into()
-                    .unwrap_or_else(|_| panic!("Threshold overflow")),
-            );
-            let bsp_assignment_threshold = match asymptotic_decay_factor
-                .checked_add(&T::AssignmentThresholdAsymptote::get())
-            {
-                Some(threshold) => threshold,
-                None => panic!("Threshold overflow"),
-            };
+                    .map_err(|_| Error::<T>::FailedTypeConversion)
+                    .unwrap();
+
+            let bsp_assignment_threshold =
+                Pallet::<T>::compute_asymptotic_threshold_point(total_bsps).unwrap();
+
+            BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
 
             Self {
-                bsp_assignment_threshold,
+                bsp_assignment_threshold: Default::default(),
             }
         }
     }
@@ -316,6 +315,8 @@ pub mod pallet {
         NotABsp,
         /// BSP has not volunteered to store the given file.
         BspNotVolunteered,
+        /// BSP has not confirmed storing the given file.
+        BspNotConfirmed,
         /// BSP has already confirmed storing the given file.
         BspAlreadyConfirmed,
         /// Number of BSPs required for storage request has been reached.
@@ -345,6 +346,8 @@ pub mod pallet {
         ThresholdArithmeticError,
         /// Failed to convert to primitive type.
         FailedTypeConversion,
+        /// Divided by 0
+        DividedByZero,
     }
 
     #[pallet::call]

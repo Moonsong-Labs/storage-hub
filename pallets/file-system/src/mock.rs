@@ -7,8 +7,8 @@ use frame_system as system;
 use pallet_proofs_dealer::{CompactProof, TrieVerifier};
 use sp_core::{ConstU128, ConstU32, Get, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, IdentityLookup},
-    AccountId32, BuildStorage,
+    traits::{BlakeTwo256, Bounded, IdentityLookup},
+    AccountId32, BuildStorage, FixedU128,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -154,13 +154,12 @@ impl TrieVerifier for MockVerifier {
     }
 }
 
-type ThresholdType = u128;
+type ThresholdType = FixedU128;
 
-pub struct ThresholdDecayFactor;
-impl Get<ThresholdType> for ThresholdDecayFactor {
-    fn get() -> ThresholdType {
-        0
-    }
+parameter_types! {
+    pub const ThresholdAsymptoticDecayFactor: FixedU128 =FixedU128::from_rational(2, 1); // 2.0
+    pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
+    pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
 }
 
 impl crate::Config for Test {
@@ -168,9 +167,9 @@ impl crate::Config for Test {
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type ThresholdType = ThresholdType;
-    type AssignmentThresholdDecayFactor = ThresholdDecayFactor;
-    type AssignmentThresholdAsymptote = ConstU128<{ u128::MAX }>;
-    type AssignmentThresholdMultiplier = ConstU128<100>;
+    type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
+    type AssignmentThresholdAsymptote = ThresholdAsymptote;
+    type AssignmentThresholdMultiplier = ThresholdMultiplier;
     type Fingerprint = H256;
     type StorageRequestBspsRequiredType = u32;
     type TargetBspsRequired = ConstU32<3>;
@@ -189,7 +188,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         .unwrap();
 
     crate::GenesisConfig::<Test> {
-        bsp_assignment_threshold: u128::MAX,
+        bsp_assignment_threshold: FixedU128::max_value(),
     }
     .assimilate_storage(&mut t)
     .unwrap();

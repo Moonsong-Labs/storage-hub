@@ -4,7 +4,7 @@ use codec::{Decode, Encode};
 use frame_support::{ensure, pallet_prelude::DispatchResult, traits::Get};
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_runtime::{
-    traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
+    traits::{CheckedAdd, CheckedDiv, CheckedMul, One, Saturating, Zero},
     ArithmeticError, BoundedVec,
 };
 use sp_std::{vec, vec::Vec};
@@ -141,8 +141,17 @@ where
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
     ) -> DispatchResult {
+        let bsp =
+            <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(who.clone())
+                .ok_or(Error::<T>::NotAProvider)?;
+
+        // Check that the provider is indeed a BSP.
+        ensure!(
+            <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_bsp(&bsp),
+            Error::<T>::NotABsp
+        );
+
         // TODO: Verify BSP has enough storage capacity to store the file
-        // TODO: Check that sender is a registered storage provider
 
         // Check that the storage request exists.
         let mut file_metadata =
@@ -173,8 +182,12 @@ where
         )?;
 
         // Get number of blocks since the storage request was issued.
-        let blocks_since_requested: T::ThresholdType = <frame_system::Pallet<T>>::block_number()
+        let blocks_since_requested: u128 = <frame_system::Pallet<T>>::block_number()
             .saturating_sub(file_metadata.requested_at)
+            .try_into()
+            .map_err(|_| Error::<T>::FailedToConvertBlockNumber)?;
+
+        let blocks_since_requested: T::ThresholdType = blocks_since_requested
             .try_into()
             .map_err(|_| Error::<T>::FailedToConvertBlockNumber)?;
 
@@ -292,10 +305,22 @@ where
             // Remove storage request metadata.
             <StorageRequests<T>>::remove(&location);
 
-            const REMOVE_LIMIT: u32 = u32::MAX;
+            // There should only be the number of bsps volunteered under the storage request prefix.
+            let remove_limit: u32 = file_metadata
+                .bsps_volunteered
+                .try_into()
+                .map_err(|_| Error::<T>::FailedTypeConversion)?;
 
             // Remove storage request bsps
-            let _ = <StorageRequestBsps<T>>::clear_prefix(&location, REMOVE_LIMIT, None);
+            let removed = <StorageRequestBsps<T>>::clear_prefix(&location, remove_limit, None);
+
+            // Make sure that the expected number of bsps were removed.
+            expect_or_err!(
+                removed.backend == remove_limit,
+                "Number of volunteered bsps for storage request should have been removed",
+                Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
+                bool
+            );
         } else {
             // Update storage request metadata.
             <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
@@ -377,11 +402,32 @@ where
 
     /// BSP stops storing a file.
     ///
-    /// `can_serve` is a flag that indicates if the BSP can serve the file. This is useful for
-    /// the case where the BSP lost the file somehow and cannot send it to other BSPs. When it is `true`,
-    /// the multiaddresses of the BSP are fetched from the `pallet-storage-providers` and added to the storage request.
-    /// When it is `false`, the storage request will be created without any multiaddresses and `do_request_storage`
-    /// will handle triggering the appropriate event and pending storage request.
+    /// This function covers a few scenarios in which a BSP invokes this function to stop storing a file:
+    ///
+    /// 1. The BSP has volunteered and confirmed storing the file and wants to stop storing it.
+    ///
+    ///     In this case, the BSP has volunteered and confirmed storing the file for an existing storage request.
+    ///     Therefore, we decrement the `bsps_confirmed` by 1.
+    ///
+    /// 2. The BSP stops storing a file that no longer has an opened storage request.
+    ///
+    ///     In this case, there is no storage request opened for the file they no longer are storing. Therefore, we
+    ///     create a storage request with `bsps_required` set to 1.
+    ///
+    /// 3. The BSP stops storing a file that has an opened storage request but is not a volunteer.
+    ///
+    ///     In this case, the storage request was probably created by another BSP for some reason (e.g. that BSP lost the file)
+    ///     and the current BSP is not a volunteer for this since it is already storing it. But since they to have stopped storing it,
+    ///     we increment the `bsps_requred` by 1.
+    ///
+    /// *This function does not give BSPs the possibility to remove themselves from being a volunteer of a storage request.*
+    ///
+    /// A proof of storing the file is required to record the new root of the BSPs merkle patricia trie. First we validate the proof
+    /// and ensure the `file_key` is indeed part of the merkle patricia trie. Then finally we re-compute the new merkle patricia trie root
+    /// without the `file_key` and update the root of the BSP.
+    ///
+    /// `can_serve`: A flag that indicates if the BSP can serve the file to other BSPs. If the BSP can serve the file, then
+    /// they are added to the storage request as a data server.
     pub(crate) fn do_bsp_stop_storing(
         who: T::AccountId,
         _file_key: FileKey<T>,
@@ -392,36 +438,42 @@ where
         can_serve: bool,
     ) -> DispatchResult {
         // TODO: charge SP for this action.
-        // TODO: Require & verify proof that the file key is indeed stored by the BSP and a proof of removal with the new root to update in pallet providers.
+        // TODO: Require & verify proof that the file key is indeed stored by the BSP.
         // TODO: Check that the hash of all the metadata is equal to the `file_key` hash.
-
-        // If the storage request exists, then we should reduce the number of bsps confirmed and
         match <StorageRequests<T>>::get(&location) {
             Some(mut metadata) => {
                 match <StorageRequestBsps<T>>::get(&location, &who) {
-                    // Remove BSP from storage request.
+                    // We hit scenario 1. The BSP is a volunteer and has confirmed storing the file.
+                    // We need to decrement the number of bsps confirmed and volunteered and remove the BSP from the storage request.
                     Some(bsp) => {
-                        if bsp.confirmed {
-                            // TODO verify proof and update the storage root in pallet providers.
-                            metadata.bsps_confirmed =
-                                metadata.bsps_confirmed.saturating_sub(1u32.into());
-                        }
+                        expect_or_err!(
+                            bsp.confirmed,
+                            "BSP should have confirmed storing the file since we verify the proof and their root matches the one in storage",
+                            Error::<T>::BspNotConfirmed,
+                            bool
+                        );
+
+                        metadata.bsps_confirmed =
+                            metadata.bsps_confirmed.saturating_sub(1u32.into());
 
                         metadata.bsps_volunteered =
                             metadata.bsps_volunteered.saturating_sub(1u32.into());
 
-                        <StorageRequests<T>>::set(&location, Some(metadata));
                         <StorageRequestBsps<T>>::remove(&location, &who);
                     }
-                    // The BSP did not volunteer for this storage request.
+                    // We hit scenario 2. There is an open storage request but the BSP is not a volunteer.
+                    // We need to increment the number of bsps required.
                     None => {
-                        return Err(Error::<T>::BspNotVolunteered.into());
+                        metadata.bsps_required = metadata.bsps_required.saturating_add(1u32.into())
                     }
                 }
-            }
-            None => {
-                // TODO verify proof and update the storage root in pallet providers.
 
+                // Update storage request metadata.
+                <StorageRequests<T>>::set(&location, Some(metadata));
+            }
+            // We hit scenario 3. There is no storage request opened for the file.
+            // We need to create a new storage request with a single bsp required.
+            None => {
                 Self::do_request_storage(
                     owner,
                     location.clone(),
@@ -437,6 +489,8 @@ where
                 )?;
             }
         };
+
+        // TODO: compute new root from proof and update the storage root of bsp.
 
         Ok(())
     }
@@ -477,6 +531,25 @@ where
         T::ThresholdType::decode(&mut &xor_result[..])
             .map_err(|_| Error::<T>::FailedToDecodeThreshold)
     }
+
+    /// Compute the asymptotic threshold point for the given number of total BSPs.
+    ///
+    /// This function calculates the threshold at which the decay factor stabilizes,
+    /// representing an horizontal asymptote.
+    pub(crate) fn compute_asymptotic_threshold_point(
+        total_bsps: u32,
+    ) -> Result<T::ThresholdType, Error<T>> {
+        let asymptotic_decay_factor = (T::ThresholdType::from(1u128)
+            .checked_div(&T::AssignmentThresholdDecayFactor::get())
+            .ok_or(Error::<T>::DividedByZero)?)
+        .saturating_pow(
+            total_bsps
+                .try_into()
+                .map_err(|_| Error::<T>::FailedToConvertBlockNumber)?,
+        );
+
+        Ok(T::AssignmentThresholdAsymptote::get().saturating_add(asymptotic_decay_factor))
+    }
 }
 
 impl<T: crate::Config> storage_hub_traits::SubscribeProvidersInterface for Pallet<T> {
@@ -485,15 +558,13 @@ impl<T: crate::Config> storage_hub_traits::SubscribeProvidersInterface for Palle
     fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
         // Adjust bsp assignment threshold by applying the decay function after removing the asymptote
         let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
-        let base_threshold = bsp_assignment_threshold
-            .checked_sub(&T::AssignmentThresholdAsymptote::get())
-            .ok_or(Error::<T>::ThresholdArithmeticError)?;
+        let base_threshold =
+            bsp_assignment_threshold.saturating_sub(T::AssignmentThresholdAsymptote::get());
 
         bsp_assignment_threshold = base_threshold
-            .checked_mul(&T::AssignmentThresholdDecayFactor::get())
+            .checked_div(&T::AssignmentThresholdDecayFactor::get())
             .ok_or(Error::<T>::ThresholdArithmeticError)?
-            .checked_add(&T::AssignmentThresholdAsymptote::get())
-            .ok_or(Error::<T>::ThresholdArithmeticError)?;
+            .saturating_add(T::AssignmentThresholdAsymptote::get());
 
         BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
 
@@ -503,15 +574,13 @@ impl<T: crate::Config> storage_hub_traits::SubscribeProvidersInterface for Palle
     fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
         // Adjust bsp assignment threshold by applying the inverse of the decay function after removing the asymptote
         let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
-        let base_threshold = bsp_assignment_threshold
-            .checked_sub(&T::AssignmentThresholdAsymptote::get())
-            .ok_or(Error::<T>::ThresholdArithmeticError)?;
+        let base_threshold =
+            bsp_assignment_threshold.saturating_sub(T::AssignmentThresholdAsymptote::get());
 
         bsp_assignment_threshold = base_threshold
-            .checked_div(&T::AssignmentThresholdDecayFactor::get())
+            .checked_mul(&T::AssignmentThresholdDecayFactor::get())
             .ok_or(Error::<T>::ThresholdArithmeticError)?
-            .checked_add(&T::AssignmentThresholdAsymptote::get())
-            .ok_or(Error::<T>::ThresholdArithmeticError)?;
+            .saturating_add(T::AssignmentThresholdAsymptote::get());
 
         BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
 

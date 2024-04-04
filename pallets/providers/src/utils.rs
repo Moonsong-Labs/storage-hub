@@ -467,8 +467,6 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
 }
 
 impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
-    type Balance = T::NativeBalance;
-    type MerkleHash = MerklePatriciaRoot<T>;
     type SpCount = T::SpCount;
 
     fn is_bsp(who: &Self::Provider) -> bool {
@@ -477,6 +475,34 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
 
     fn is_msp(who: &Self::Provider) -> bool {
         MainStorageProviders::<T>::contains_key(&who)
+    }
+
+    fn get_number_of_bsps() -> Self::SpCount {
+        Self::get_bsp_count()
+    }
+}
+
+impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
+    type Balance = T::NativeBalance;
+    type AccountId = T::AccountId;
+    type Provider = HashId<T>;
+    type MerkleHash = MerklePatriciaRoot<T>;
+
+    // TODO: Refine, add checks and tests for all the logic in this implementation
+    fn is_provider(who: Self::Provider) -> bool {
+        BackupStorageProviders::<T>::contains_key(&who)
+            || MainStorageProviders::<T>::contains_key(&who)
+            || Buckets::<T>::contains_key(&who)
+    }
+
+    fn get_provider(who: Self::AccountId) -> Option<Self::Provider> {
+        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(&who) {
+            Some(bsp_id)
+        } else if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(&who) {
+            Some(msp_id)
+        } else {
+            None
+        }
     }
 
     fn get_root(who: Self::Provider) -> Option<Self::MerkleHash> {
@@ -496,32 +522,6 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
             Some(T::SpMinDeposit::get())
         } else if let Some(_bsp) = BackupStorageProviders::<T>::get(&who) {
             Some(T::SpMinDeposit::get())
-        } else {
-            None
-        }
-    }
-
-    fn get_number_of_bsps() -> Self::SpCount {
-        Self::get_bsp_count()
-    }
-}
-
-impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
-    type AccountId = T::AccountId;
-    type Provider = HashId<T>;
-
-    // TODO: Refine, add checks and tests for all the logic in this implementation
-    fn is_provider(who: Self::Provider) -> bool {
-        BackupStorageProviders::<T>::contains_key(&who)
-            || MainStorageProviders::<T>::contains_key(&who)
-            || Buckets::<T>::contains_key(&who)
-    }
-
-    fn get_provider(who: Self::AccountId) -> Option<Self::Provider> {
-        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(&who) {
-            Some(bsp_id)
-        } else if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(&who) {
-            Some(msp_id)
         } else {
             None
         }

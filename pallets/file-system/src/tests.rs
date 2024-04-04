@@ -10,8 +10,9 @@ use frame_support::{assert_ok, traits::Hooks, weights::Weight};
 use sp_core::H256;
 use sp_runtime::{
     traits::{BlakeTwo256, Get, Hash},
-    AccountId32, BoundedVec,
+    AccountId32, BoundedVec, FixedU128,
 };
+use storage_hub_traits::SubscribeProvidersInterface;
 
 #[test]
 fn request_storage_success() {
@@ -204,6 +205,7 @@ fn request_storage_clear_old_expirations_success() {
 
         // Append storage request expiration to the list at `StorageRequestTtl`
         let max_storage_request_expiry: u32 = <Test as Config>::MaxExpiredStorageRequests::get();
+
         for _ in 0..(max_storage_request_expiry - 1) {
             assert_ok!(StorageRequestExpirations::<Test>::try_append(
                 expected_expiration_block_number,
@@ -469,6 +471,7 @@ fn bsp_stop_storing_success() {
             MultiAddress<Test>,
             <Test as Config>::MaxDataServerMultiAddresses,
         > = BoundedVec::try_from(vec![multiaddr]).unwrap();
+        let storage_amount: StorageData<Test> = 100;
 
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
@@ -476,6 +479,13 @@ fn bsp_stop_storing_success() {
             location.clone(),
             fingerprint,
             size,
+            multiaddresses.clone(),
+        ));
+
+        // Sign up account as a Backup Storage Provider
+        assert_ok!(Providers::bsp_sign_up(
+            bsp_signed.clone(),
+            storage_amount,
             multiaddresses.clone(),
         ));
 
@@ -487,12 +497,22 @@ fn bsp_stop_storing_success() {
             multiaddresses.clone()
         ));
 
+        // Dispatch BSP confirm storing.
+        assert_ok!(FileSystem::bsp_confirm_storing(
+            bsp_signed.clone(),
+            location.clone(),
+            H256::zero(), // TODO construct a real proof
+            pallet_proofs_dealer::CompactProof {
+                encoded_nodes: vec![],
+            }
+        ));
+
         // Assert that the RequestStorageBsps now contains the BSP under the location
         assert_eq!(
             FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone())
                 .expect("BSP should exist in storage"),
             StorageRequestBspsMetadata::<Test> {
-                confirmed: false,
+                confirmed: true,
                 _phantom: Default::default()
             }
         );
@@ -508,7 +528,7 @@ fn bsp_stop_storing_success() {
                 user_multiaddresses: multiaddresses.clone(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
-                bsps_confirmed: 0,
+                bsps_confirmed: 1,
                 bsps_volunteered: 1,
             })
         );
@@ -555,5 +575,52 @@ fn bsp_stop_storing_success() {
             }
             .into(),
         );
+    });
+}
+
+#[test]
+fn asymptotic_threshold_increase_decrease_success() {
+    new_test_ext().execute_with(|| {
+        let bsp_account_id = AccountId32::new([2; 32]);
+
+        // Initialize the threshold to simulate starting conditions
+        let initial_threshold = FileSystem::compute_asymptotic_threshold_point(1)
+            .expect("Threshold should be computable");
+        crate::BspsAssignmentThreshold::<Test>::put(initial_threshold);
+        assert_eq!(FileSystem::bsps_assignment_threshold(), initial_threshold);
+
+        println!(
+            "FileSystem::bsps_assignment_threshold() = {:?}",
+            FileSystem::bsps_assignment_threshold()
+        );
+
+        // Simulate the threshold decrease due to a new bsp sign up
+        assert_ok!(
+            <FileSystem as SubscribeProvidersInterface>::subscribe_bsp_sign_up(&bsp_account_id)
+        );
+
+        println!(
+            "FileSystem::bsps_assignment_threshold() = {:?}",
+            FileSystem::bsps_assignment_threshold()
+        );
+
+        // Verify that the threshold decreased
+        assert!(FileSystem::bsps_assignment_threshold() < initial_threshold);
+
+        // Simulate the threshold decrease due to a new bsp sign off
+        assert_ok!(
+            <FileSystem as SubscribeProvidersInterface>::subscribe_bsp_sign_off(&bsp_account_id)
+        );
+
+        // Verify that the threshold increased and should be equal to the initial threshold
+        assert_eq!(FileSystem::bsps_assignment_threshold(), initial_threshold);
+
+        // Simulate the threshold decrease due to a new bsp sign off
+        assert_ok!(
+            <FileSystem as SubscribeProvidersInterface>::subscribe_bsp_sign_off(&bsp_account_id)
+        );
+
+        // Verify that the threshold increased and should be greater than the initial threshold
+        assert!(FileSystem::bsps_assignment_threshold() > initial_threshold);
     });
 }

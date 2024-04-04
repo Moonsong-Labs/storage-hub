@@ -19,7 +19,7 @@ use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
     traits::{BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
     transaction_validity::{TransactionSource, TransactionValidity},
-    ApplyExtrinsicResult, MultiSignature,
+    ApplyExtrinsicResult, FixedU128, MultiSignature,
 };
 
 use sp_std::prelude::*;
@@ -545,12 +545,12 @@ impl TrieVerifier for ProofTrieVerifier {
     }
 }
 
-type ThresholdType = u128;
-pub struct ThresholdDecayFactor;
-impl Get<ThresholdType> for ThresholdDecayFactor {
-    fn get() -> ThresholdType {
-        2
-    }
+type ThresholdType = FixedU128;
+
+parameter_types! {
+    pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(105, 100); // 1.05
+    pub const ThresholdAsymtpote: FixedU128 = FixedU128::from_rational(100, 1); // 100
+    pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100
 }
 
 /// Configure the pallet template in pallets/template.
@@ -559,9 +559,9 @@ impl pallet_file_system::Config for Runtime {
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type ThresholdType = ThresholdType;
-    type AssignmentThresholdDecayFactor = ThresholdDecayFactor;
-    type AssignmentThresholdAsymptote = ConstU128<100>;
-    type AssignmentThresholdMultiplier = ConstU128<100>;
+    type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
+    type AssignmentThresholdAsymptote = ThresholdAsymtpote;
+    type AssignmentThresholdMultiplier = ThresholdMultiplier;
     type Fingerprint = Hash;
     type StorageRequestBspsRequiredType = u32;
     type TargetBspsRequired = ConstU32<1>;
