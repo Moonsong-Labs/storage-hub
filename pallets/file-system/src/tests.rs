@@ -10,7 +10,7 @@ use frame_support::{assert_ok, traits::Hooks, weights::Weight};
 use sp_core::H256;
 use sp_runtime::{
     traits::{BlakeTwo256, Get, Hash},
-    AccountId32, BoundedVec, FixedU128,
+    AccountId32, BoundedVec,
 };
 use storage_hub_traits::SubscribeProvidersInterface;
 
