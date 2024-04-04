@@ -1,5 +1,9 @@
 use crate as pallet_storage_providers;
-use frame_support::{construct_runtime, derive_impl, parameter_types, traits::Everything};
+
+use frame_support::{
+    construct_runtime, derive_impl, parameter_types, traits::Everything,
+    weights::constants::RocksDbWeight,
+};
 use frame_system as system;
 // TODO: use pallet_babe::{RandomnessFromOneEpochAgo, SameAuthoritiesForever};
 use sp_core::{ConstU128, ConstU32, H256};
@@ -35,7 +39,7 @@ impl system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
     type BlockLength = ();
-    type DbWeight = ();
+    type DbWeight = RocksDbWeight;
     type RuntimeOrigin = RuntimeOrigin;
     type RuntimeCall = RuntimeCall;
     type Nonce = u64;

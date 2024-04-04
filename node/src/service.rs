@@ -12,13 +12,17 @@ use storage_hub_runtime::{
 
 // Cumulus Imports
 use cumulus_client_collator::service::CollatorService;
+use cumulus_client_consensus_aura::collators::lookahead::{self as aura, Params as AuraParams};
 use cumulus_client_consensus_common::ParachainBlockImport as TParachainBlockImport;
 use cumulus_client_consensus_proposer::Proposer;
 use cumulus_client_service::{
     build_network, build_relay_chain_interface, prepare_node_config, start_relay_chain_tasks,
     BuildNetworkParams, CollatorSybilResistance, DARecoveryProfile, StartRelayChainTasksParams,
 };
-use cumulus_primitives_core::{relay_chain::CollatorPair, ParaId};
+use cumulus_primitives_core::{
+    relay_chain::{CollatorPair, ValidationCode},
+    ParaId,
+};
 use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 
 // Substrate Imports
@@ -228,11 +232,11 @@ async fn start_node_impl(
         );
     }
 
-    let rpc_builder = {
+    let rpc_extensions_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
 
-        Box::new(move |deny_unsafe, _| {
+        move |deny_unsafe, _| {
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
@@ -240,17 +244,17 @@ async fn start_node_impl(
             };
 
             crate::rpc::create_full(deps).map_err(Into::into)
-        })
+        }
     };
 
     sc_service::spawn_tasks(sc_service::SpawnTasksParams {
-        rpc_builder,
+        rpc_builder: Box::new(rpc_extensions_builder),
         client: client.clone(),
         transaction_pool: transaction_pool.clone(),
         task_manager: &mut task_manager,
         config: parachain_config,
         keystore: params.keystore_container.keystore(),
-        backend,
+        backend: backend.clone(),
         network: network.clone(),
         sync_service: sync_service.clone(),
         system_rpc_tx,
@@ -314,6 +318,7 @@ async fn start_node_impl(
     if validator {
         start_consensus(
             client.clone(),
+            backend.clone(),
             block_import,
             prometheus_registry.as_ref(),
             telemetry.as_ref().map(|t| t.handle()),
@@ -369,6 +374,7 @@ fn build_import_queue(
 
 fn start_consensus(
     client: Arc<ParachainClient>,
+    backend: Arc<ParachainBackend>,
     block_import: ParachainBlockImport,
     prometheus_registry: Option<&Registry>,
     telemetry: Option<TelemetryHandle>,
@@ -383,10 +389,6 @@ fn start_consensus(
     overseer_handle: OverseerHandle,
     announce_block: Arc<dyn Fn(Hash, Option<Vec<u8>>) + Send + Sync>,
 ) -> Result<(), sc_service::Error> {
-    use cumulus_client_consensus_aura::collators::basic::{
-        self as basic_aura, Params as BasicAuraParams,
-    };
-
     // NOTE: because we use Aura here explicitly, we can use `CollatorSybilResistance::Resistant`
     // when starting the network.
 
@@ -409,27 +411,33 @@ fn start_consensus(
         client.clone(),
     );
 
-    let params = BasicAuraParams {
+    let params = AuraParams {
         create_inherent_data_providers: move |_, ()| async move { Ok(()) },
         block_import,
-        para_client: client,
+        para_client: client.clone(),
+        para_backend: backend.clone(),
         relay_client: relay_chain_interface,
+        code_hash_provider: move |block_hash| {
+            client
+                .code_at(block_hash)
+                .ok()
+                .map(|c| ValidationCode::from(c).hash())
+        },
         sync_oracle,
         keystore,
         collator_key,
         para_id,
         overseer_handle,
-        slot_duration,
         relay_chain_slot_duration,
         proposer,
         collator_service,
-        // Very limited proposal time.
-        authoring_duration: Duration::from_millis(500),
-        collation_request_receiver: None,
+        authoring_duration: Duration::from_millis(1500),
+        slot_duration,
+        reinitialize: false,
     };
 
     let fut =
-        basic_aura::run::<Block, sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _, _>(
+        aura::run::<Block, sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _, _, _, _>(
             params,
         );
     task_manager

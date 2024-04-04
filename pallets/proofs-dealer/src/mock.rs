@@ -1,6 +1,8 @@
 #![allow(non_camel_case_types)]
 
-use frame_support::{derive_impl, parameter_types, traits::Everything};
+use frame_support::{
+    derive_impl, parameter_types, traits::Everything, weights::constants::RocksDbWeight,
+};
 use frame_system as system;
 use sp_core::{ConstU128, ConstU32, ConstU64, H256};
 use sp_runtime::{
@@ -12,6 +14,7 @@ use storage_hub_traits::SubscribeProvidersInterface;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
+type AccountId = u64;
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -34,13 +37,13 @@ impl system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
     type BlockLength = ();
-    type DbWeight = ();
+    type DbWeight = RocksDbWeight;
     type RuntimeOrigin = RuntimeOrigin;
     type RuntimeCall = RuntimeCall;
     type Nonce = u64;
     type Hash = H256;
     type Hashing = BlakeTwo256;
-    type AccountId = u64;
+    type AccountId = AccountId;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Block = Block;
     type RuntimeEvent = RuntimeEvent;
@@ -92,7 +95,6 @@ impl pallet_storage_providers::Config for Test {
     type DepositPerData = ConstU128<2>;
     type Subscribers = MockedProvidersSubscriber;
 }
-
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
