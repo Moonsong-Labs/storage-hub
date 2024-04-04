@@ -1,7 +1,6 @@
 [relaychain]
 chain = "rococo-local"
-default_image = "docker.io/parity/polkadot:v1.5.0"
-default_command = "polkadot"
+default_command = "tmp/polkadot"
 default_args = [
     "--no-hardware-benchmarks",
     "-lparachain=debug",
@@ -16,8 +15,7 @@ name = "relay"
 id = 2000
 
 [parachains.collator]
-image = "{{SH_IMAGE}}"
-command = "storage-hub-node"
+command = "../target/release/storage-hub-node"
 name = "sh"
 args = ["--no-hardware-benchmarks", "-lparachain=debug"]
 
@@ -28,4 +26,4 @@ parent_hash = "Hash"
 post_state = "Hash"
 
 [settings]
-provider = "kubernetes"
+provider = "native"
