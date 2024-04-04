@@ -9,15 +9,7 @@ homepage = "https://moonsonglabs.com/"
 panic = "unwind"
 
 [workspace]
-members = [
-    "runtime",
-    "pallets/*",
-    "node",
-    "bsp",
-    "msp",
-    "storage-kit",
-    "support/*",
-]
+members = ["runtime", "pallets/*", "node", "storage-kit", "support/*"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -34,7 +26,7 @@ serde = { version = "1.0.197" }
 tokio = "1.36.0"
 
 # Local
-shc-mapping-sync ={ path = "client/mapping-sync", default-features = false }
+shc-mapping-sync = { path = "client/mapping-sync", default-features = false }
 
 # Substrate Client
 sc-client-api = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.5.0" }
@@ -54,13 +46,14 @@ sp-trie = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polka
 frame-benchmarking = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
 frame-support = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
 frame-system = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
-pallet-balances = { version = "4.0.0-dev", git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false}
+pallet-balances = { version = "4.0.0-dev", git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0", default-features = false }
 
 # Local Pallets
 pallet-storage-providers = { path = "pallets/providers", default-features = false }
 pallet-file-system = { path = "pallets/file-system", default-features = false }
 pallet-proofs-dealer = { path = "pallets/proofs-dealer", default-features = false }
 storage-hub-traits = { path = "support/traits", default-features = false }
+storage-hub-infra = { path = "support/infra", default-features = false }
 
 [workspace.lints.rust]
 suspicious_double_ref_op = { level = "allow", priority = 2 }
