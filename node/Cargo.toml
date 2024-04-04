@@ -29,7 +29,7 @@ serde_json = { workspace = true }
 storage-hub-runtime = { workspace = true }
 
 # Substrate
-frame-benchmarking = { workspace = true }
+frame-benchmarking = { workspace = true, default-features = true }
 frame-benchmarking-cli = { workspace = true }
 pallet-transaction-payment-rpc = { workspace = true }
 sc-basic-authorship = { workspace = true }
