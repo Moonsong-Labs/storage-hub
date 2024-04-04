@@ -8,7 +8,7 @@ use sc_cli::{
     NetworkParams, Result, SharedParams, SubstrateCli,
 };
 use sc_service::config::{BasePath, PrometheusConfig};
-use sp_runtime::traits::AccountIdConversion;
+use sp_runtime::traits::{AccountIdConversion, HashingFor};
 use storage_hub_runtime::Block;
 
 use crate::{
@@ -185,7 +185,7 @@ pub fn run() -> Result<()> {
 			match cmd {
 				BenchmarkCmd::Pallet(cmd) =>
 					if cfg!(feature = "runtime-benchmarks") {
-						runner.sync_run(|config| cmd.run::<Block, ()>(config))
+						runner.sync_run(|config| cmd.run::<HashingFor<Block>, ()>(config))
 					} else {
 						Err("Benchmarking wasn't enabled when building the node. \
 					You can enable it with `--features runtime-benchmarks`."
