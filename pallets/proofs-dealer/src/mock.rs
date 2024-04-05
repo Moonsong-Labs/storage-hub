@@ -7,9 +7,10 @@ use frame_system as system;
 use sp_core::{ConstU128, ConstU32, ConstU64, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage,
+    BuildStorage, DispatchResult,
 };
 use sp_trie::CompactProof;
+use storage_hub_traits::SubscribeProvidersInterface;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -91,6 +92,7 @@ impl pallet_storage_providers::Config for Test {
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
+    type Subscribers = MockedProvidersSubscriber;
 }
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
@@ -105,6 +107,18 @@ impl crate::Config for Test {
     type CheckpointChallengePeriod = ConstU32<2>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = ConstU64<181222>;
+}
+
+pub struct MockedProvidersSubscriber;
+impl SubscribeProvidersInterface for MockedProvidersSubscriber {
+    type Provider = u64;
+
+    fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
+        Ok(())
+    }
+    fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
+        Ok(())
+    }
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty

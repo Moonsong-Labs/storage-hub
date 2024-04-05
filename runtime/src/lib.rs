@@ -19,7 +19,7 @@ use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
     traits::{BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
     transaction_validity::{TransactionSource, TransactionValidity},
-    ApplyExtrinsicResult, MultiSignature,
+    ApplyExtrinsicResult, FixedU128, MultiSignature,
 };
 
 use sp_std::prelude::*;
@@ -509,6 +509,7 @@ impl pallet_storage_providers::Config for Runtime {
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
     type RuntimeHoldReason = RuntimeHoldReason;
+    type Subscribers = FileSystem;
     // TODO: type ProvidersRandomness = RandomnessFromOneEpochAgo<Runtime>;
 }
 
@@ -546,16 +547,29 @@ impl TrieVerifier for ProofTrieVerifier {
     }
 }
 
+type ThresholdType = FixedU128;
+
+parameter_types! {
+    pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
+    pub const ThresholdAsymtpote: FixedU128 = FixedU128::from_rational(100, 1); // 100
+    pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100
+}
+
 /// Configure the pallet template in pallets/template.
 impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type Providers = Providers;
+    type ProofDealer = ProofsDealer;
+    type ThresholdType = ThresholdType;
+    type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
+    type AssignmentThresholdAsymptote = ThresholdAsymtpote;
+    type AssignmentThresholdMultiplier = ThresholdMultiplier;
     type Fingerprint = Hash;
-    type StorageUnit = u128;
     type StorageRequestBspsRequiredType = u32;
     type TargetBspsRequired = ConstU32<1>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxFilePathSize = ConstU32<512u32>;
-    type MaxMultiAddresses = ConstU32<10>;
+    type MaxDataServerMultiAddresses = ConstU32<10>;
     type MaxMultiAddressSize = ConstU32<512>;
     type StorageRequestTtl = ConstU32<40>;
     type MaxExpiredStorageRequests = ConstU32<100>;

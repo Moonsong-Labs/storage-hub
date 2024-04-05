@@ -9,8 +9,9 @@ use frame_system as system;
 use sp_core::{ConstU128, ConstU32, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage,
+    BuildStorage, DispatchResult,
 };
+use storage_hub_traits::SubscribeProvidersInterface;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
@@ -113,6 +114,7 @@ impl crate::Config for Test {
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
+    type Subscribers = MockedProvidersSubscriber;
     // TODO: type ProvidersRandomness = RandomnessFromOneEpochAgo<Test>;
 }
 
@@ -148,5 +150,17 @@ impl ExtBuilder {
         let mut ext = sp_io::TestExternalities::new(t);
         ext.execute_with(|| System::set_block_number(1));
         ext
+    }
+}
+
+pub struct MockedProvidersSubscriber;
+impl SubscribeProvidersInterface for MockedProvidersSubscriber {
+    type Provider = u64;
+
+    fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
+        Ok(())
+    }
+    fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
+        Ok(())
     }
 }

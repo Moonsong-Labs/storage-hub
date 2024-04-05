@@ -10,7 +10,6 @@ use frame_support::traits::{
 };
 use frame_support::BoundedVec;
 use frame_support::{assert_noop, assert_ok};
-use storage_hub_traits::ProvidersInterface;
 
 use crate::types::{BalanceOf, MaxMultiAddressAmount, MultiAddress};
 
@@ -26,6 +25,8 @@ type MaxBsps = <Test as crate::Config>::MaxBsps;
 
 /// This module holds the test cases for the signup of Main Storage Providers and Backup Storage Providers
 mod sign_up {
+    use storage_hub_traits::ProvidersInterface;
+
     use super::*;
 
     #[test]
@@ -818,9 +819,9 @@ mod sign_up {
 
 /// This module holds the test cases for the sign-off of Main Storage Providers and Backup Storage Providers
 mod sign_off {
-    use crate::StorageProvidersInterface;
-
     use super::*;
+    use storage_hub_traits::MutateProvidersInterface;
+    use storage_hub_traits::ProvidersInterface;
 
     #[test]
     fn msp_sign_off_works() {
@@ -972,7 +973,7 @@ mod sign_off {
 
             // Add used storage to Alice (simulating that she has accepted to store a file)
             assert_ok!(
-                <StorageProviders as StorageProvidersInterface<Test>>::change_data_used(&alice, 10)
+                <StorageProviders as MutateProvidersInterface>::increase_data_used(&alice, 10)
             );
 
             // Try to sign off Alice as a Main Storage Provider
@@ -1024,7 +1025,7 @@ mod sign_off {
 
             // Add used storage to Alice (simulating that she has accepted to store a file)
             assert_ok!(
-                <StorageProviders as StorageProvidersInterface<Test>>::change_data_used(&alice, 10)
+                <StorageProviders as MutateProvidersInterface>::increase_data_used(&alice, 10)
             );
 
             // Try to sign off Alice as a Backup Storage Provider
