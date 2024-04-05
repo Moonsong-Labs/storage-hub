@@ -15,12 +15,12 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-array-bytes = "6.1"
-async-channel = "1.8.0"
-color-print = "0.3.4"
-libp2p-identity = { version = "0.1.3", features = ["peerid"] }
-prost = "0.12"
-thiserror = { version = "1.0.48" }
+array-bytes = { workspace = true }
+async-channel = { workspace = true }
+color-print = { workspace = true }
+libp2p-identity = { workspace = true, features = ["peerid"] }
+prost = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 
 # Local
@@ -86,7 +86,7 @@ cumulus-primitives-parachain-inherent = { workspace = true }
 cumulus-relay-chain-interface = { workspace = true }
 
 [build-dependencies]
-prost-build = "0.12.3"
+prost-build = { workspace = true }
 substrate-build-script-utils = { workspace = true }
 
 [features]
