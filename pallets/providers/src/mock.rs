@@ -5,7 +5,7 @@ use frame_support::{
     weights::constants::RocksDbWeight,
 };
 use frame_system as system;
-use sp_core::{ConstU128, ConstU32, ConstU64, H256};
+use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
     BuildStorage, DispatchResult,
@@ -31,12 +31,10 @@ impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
         ]
         .concat();
 
-        // Pad it to 32 bytes (for H256)
-        let mut padded = [0u8; 32];
-        padded[..subject_concat_block.len()].copy_from_slice(&subject_concat_block);
+        let hashed_subject = blake2_256(&subject_concat_block);
 
         (
-            H256::from_slice(&padded),
+            H256::from_slice(&hashed_subject),
             frame_system::Pallet::<Test>::block_number()
                 .saturating_sub(BLOCKS_BEFORE_RANDOMNESS_VALID),
         )
