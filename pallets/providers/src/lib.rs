@@ -112,6 +112,9 @@ pub mod pallet {
             + MaxEncodedLen
             + FullCodec;
 
+        /// Subscribers to important updates
+        type Subscribers: SubscribeProvidersInterface;
+
         /// The minimum amount that an account has to deposit to become a storage provider.
         #[pallet::constant]
         type SpMinDeposit: Get<BalanceOf<Self>>;
@@ -149,9 +152,6 @@ pub mod pallet {
         /// The maximum amount of Buckets that a MSP can have.
         #[pallet::constant]
         type MaxBuckets: Get<u32>;
-
-        /// Subscribers to important updates
-        type Subscribers: SubscribeProvidersInterface;
 
         /// The maximum amount of blocks after which a sign up request expires so the randomness cannot be chosen
         #[pallet::constant]
