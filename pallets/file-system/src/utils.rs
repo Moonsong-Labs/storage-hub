@@ -4,7 +4,7 @@ use codec::{Decode, Encode};
 use frame_support::{ensure, pallet_prelude::DispatchResult, traits::Get};
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_runtime::{
-    traits::{CheckedAdd, CheckedDiv, CheckedMul, One, Saturating, Zero},
+    traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
     ArithmeticError, BoundedVec,
 };
 use sp_std::{vec, vec::Vec};
@@ -187,9 +187,10 @@ where
             .try_into()
             .map_err(|_| Error::<T>::FailedToConvertBlockNumber)?;
 
-        let blocks_since_requested: T::ThresholdType = blocks_since_requested
-            .try_into()
-            .map_err(|_| Error::<T>::FailedToConvertBlockNumber)?;
+        // Note. This should never fail since the storage request expiration would never reach such a high number.
+        // Storage requests are cleared after reaching `StorageRequestTtl` blocks which is defined in the pallet Config.
+        let blocks_since_requested: T::ThresholdType =
+            T::ThresholdType::ensure_from(blocks_since_requested)?;
 
         // Compute the threshold increasing rate.
         let rate_increase =
@@ -539,10 +540,7 @@ where
     pub(crate) fn compute_asymptotic_threshold_point(
         total_bsps: u32,
     ) -> Result<T::ThresholdType, Error<T>> {
-        let asymptotic_decay_factor = (T::ThresholdType::from(1u128)
-            .checked_div(&T::AssignmentThresholdDecayFactor::get())
-            .ok_or(Error::<T>::DividedByZero)?)
-        .saturating_pow(
+        let asymptotic_decay_factor = T::AssignmentThresholdDecayFactor::get().saturating_pow(
             total_bsps
                 .try_into()
                 .map_err(|_| Error::<T>::FailedToConvertBlockNumber)?,
@@ -562,7 +560,7 @@ impl<T: crate::Config> storage_hub_traits::SubscribeProvidersInterface for Palle
             bsp_assignment_threshold.saturating_sub(T::AssignmentThresholdAsymptote::get());
 
         bsp_assignment_threshold = base_threshold
-            .checked_div(&T::AssignmentThresholdDecayFactor::get())
+            .checked_mul(&T::AssignmentThresholdDecayFactor::get())
             .ok_or(Error::<T>::ThresholdArithmeticError)?
             .saturating_add(T::AssignmentThresholdAsymptote::get());
 
@@ -578,7 +576,7 @@ impl<T: crate::Config> storage_hub_traits::SubscribeProvidersInterface for Palle
             bsp_assignment_threshold.saturating_sub(T::AssignmentThresholdAsymptote::get());
 
         bsp_assignment_threshold = base_threshold
-            .checked_mul(&T::AssignmentThresholdDecayFactor::get())
+            .checked_div(&T::AssignmentThresholdDecayFactor::get())
             .ok_or(Error::<T>::ThresholdArithmeticError)?
             .saturating_add(T::AssignmentThresholdAsymptote::get());
 

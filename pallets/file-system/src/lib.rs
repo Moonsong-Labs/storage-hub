@@ -52,10 +52,11 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use sp_runtime::traits::{
-        CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero,
+    use sp_runtime::{traits::EnsureFrom, BoundedVec};
+    use sp_runtime::{
+        traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
+        FixedPointNumber,
     };
-    use sp_runtime::BoundedVec;
 
     // TODO: add conditional to check that block number does not exceed u64 type. It it does, the fixed point number that we convert to from a block
     // number might be too loarge to fit into the threshold type.
@@ -73,34 +74,6 @@ pub mod pallet {
         type ProofDealer: storage_hub_traits::ProofsDealerInterface<
             Provider = <Self::Providers as storage_hub_traits::ProvidersInterface>::Provider,
         >;
-
-        /// Type representing the threshold a BSP must meet to be eligible to volunteer to store a file.
-        type ThresholdType: Parameter
-            + Member
-            + MaybeSerializeDeserialize
-            + Debug
-            + Default
-            + MaybeDisplay
-            + Copy
-            + MaxEncodedLen
-            + Decode
-            + Saturating
-            + CheckedMul
-            + CheckedDiv
-            + CheckedAdd
-            + CheckedSub
-            + PartialOrd
-            + From<u128>;
-
-        /// The multiplier increases the threshold over time (blocks) which increases the
-        /// likelihood of a BSP successfully volunteering to store a file.
-        type AssignmentThresholdMultiplier: Get<Self::ThresholdType>;
-
-        /// Horizontal asymptote which the volunteering threshold approaches as more BSPs are registered in the system.
-        type AssignmentThresholdAsymptote: Get<Self::ThresholdType>;
-
-        /// Asymptotic decay function for the assignment threshold.
-        type AssignmentThresholdDecayFactor: Get<Self::ThresholdType>;
 
         /// Type for identifying a file, generally a hash.
         type Fingerprint: Parameter
@@ -132,6 +105,38 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + One
             + Zero;
+
+        /// Type representing the threshold a BSP must meet to be eligible to volunteer to store a file.
+        type ThresholdType: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + Default
+            + MaybeDisplay
+            + Copy
+            + MaxEncodedLen
+            + Decode
+            + Saturating
+            + CheckedMul
+            + CheckedDiv
+            + CheckedAdd
+            + CheckedSub
+            + PartialOrd
+            + FixedPointNumber
+            + EnsureFrom<u128>;
+
+        /// The multiplier increases the threshold over time (blocks) which increases the
+        /// likelihood of a BSP successfully volunteering to store a file.
+        #[pallet::constant]
+        type AssignmentThresholdMultiplier: Get<Self::ThresholdType>;
+
+        /// Horizontal asymptote which the volunteering threshold approaches as more BSPs are registered in the system.
+        #[pallet::constant]
+        type AssignmentThresholdAsymptote: Get<Self::ThresholdType>;
+
+        /// Asymptotic decay function for the assignment threshold.
+        #[pallet::constant]
+        type AssignmentThresholdDecayFactor: Get<Self::ThresholdType>;
 
         /// Minimum number of BSPs required to store a file.
         ///

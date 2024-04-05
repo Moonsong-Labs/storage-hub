@@ -156,7 +156,7 @@ impl TrieVerifier for MockVerifier {
 type ThresholdType = FixedU128;
 
 parameter_types! {
-    pub const ThresholdAsymptoticDecayFactor: FixedU128 =FixedU128::from_rational(2, 1); // 2.0
+    pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
     pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
     pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
 }
@@ -165,12 +165,12 @@ impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
+    type Fingerprint = H256;
+    type StorageRequestBspsRequiredType = u32;
     type ThresholdType = ThresholdType;
     type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
     type AssignmentThresholdAsymptote = ThresholdAsymptote;
     type AssignmentThresholdMultiplier = ThresholdMultiplier;
-    type Fingerprint = H256;
-    type StorageRequestBspsRequiredType = u32;
     type TargetBspsRequired = ConstU32<3>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxDataServerMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider

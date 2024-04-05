@@ -550,7 +550,7 @@ impl TrieVerifier for ProofTrieVerifier {
 type ThresholdType = FixedU128;
 
 parameter_types! {
-    pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(105, 100); // 1.05
+    pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
     pub const ThresholdAsymtpote: FixedU128 = FixedU128::from_rational(100, 1); // 100
     pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100
 }
