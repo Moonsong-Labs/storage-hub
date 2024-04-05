@@ -4,8 +4,9 @@ use crate::{
         BackupStorageProvider, BalanceOf, MainStorageProvider, MaxMultiAddressAmount, MultiAddress,
         StorageData, StorageProvider, ValuePropId, ValueProposition,
     },
-    Error, Event, StorageProvidersInterface,
+    Error, Event,
 };
+
 use frame_support::pallet_prelude::Weight;
 use frame_support::traits::{
     fungible::{InspectHold, Mutate},
@@ -13,6 +14,7 @@ use frame_support::traits::{
 };
 use frame_support::{assert_noop, assert_ok, dispatch::Pays, BoundedVec};
 use frame_system::pallet_prelude::BlockNumberFor;
+use storage_hub_traits::MutateProvidersInterface;
 use storage_hub_traits::ProvidersInterface;
 
 type NativeBalance = <Test as crate::Config>::NativeBalance;
@@ -2418,7 +2420,7 @@ mod sign_off {
 
                     // Add used storage to Alice (simulating that she has accepted to store a file)
                     assert_ok!(
-                        <StorageProviders as StorageProvidersInterface<Test>>::change_data_used(
+                        <StorageProviders as MutateProvidersInterface>::increase_data_used(
                             &alice, 10
                         )
                     );
@@ -2492,7 +2494,7 @@ mod sign_off {
 
                     // Add used storage to Alice (simulating that she has accepted to store a file)
                     assert_ok!(
-                        <StorageProviders as StorageProvidersInterface<Test>>::change_data_used(
+                        <StorageProviders as MutateProvidersInterface>::increase_data_used(
                             &alice, 10
                         )
                     );
