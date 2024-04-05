@@ -23,7 +23,7 @@ use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 
 // Substrate Imports
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
-use sc_client_api::Backend;
+use sc_client_api::{Backend, BlockBackend};
 use sc_consensus::ImportQueue;
 use sc_executor::{
     HeapAllocStrategy, NativeElseWasmExecutor, WasmExecutor, DEFAULT_HEAP_ALLOC_STRATEGY,
@@ -179,19 +179,15 @@ async fn start_node_impl(
     let backend = params.backend.clone();
     let mut task_manager = params.task_manager;
 
-    // Sinks for pubsub notifications.
-    // Everytime a new subscription is created, a new mpsc channel is added to the sink pool.
-    // The MappingSyncWorker sends through the channel on block import and the subscription emits a notification to the subscriber on receiving a message through this channel.
-    // This way we avoid race conditions when using native substrate block import notification stream.
-    let pubsub_notification_sinks: shc_mapping_sync::StorageHubBlockNotificationSinks<
-        shc_mapping_sync::StorageHubBlockNotification<Block>,
-    > = Default::default();
-    let pubsub_notification_sinks = Arc::new(pubsub_notification_sinks);
+    let genesis_hash = client
+        .block_hash(0u32.into())
+        .ok()
+        .flatten()
+        .expect("Genesis block exists; qed");
 
     spawn_file_transfer_service(
-        &task_manager,
-        client.clone(),
-        pubsub_notification_sinks.clone(),
+        task_manager.spawn_handle(),
+        genesis_hash,
         &parachain_config,
         &mut net_config,
     )

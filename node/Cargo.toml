@@ -14,6 +14,9 @@ publish = false
 workspace = true
 
 [dependencies]
+tokio = { workspace = true }
+anyhow = { workspace = true }
+
 array-bytes = "6.1"
 async-channel = "1.8.0"
 clap = { version = "4.4.11", features = ["derive"] }
@@ -30,7 +33,8 @@ thiserror = { version = "1.0.48" }
 
 # Local
 storage-hub-runtime = { path = "../runtime" }
-shc-mapping-sync ={ workspace = true, default-features = true}
+storage-hub-infra = { workspace = true }
+shc-mapping-sync = { workspace = true, default-features = true }
 
 # Substrate
 frame-benchmarking = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0" }
@@ -46,7 +50,8 @@ sc-executor = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "p
 sc-network = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0" }
 sc-network-sync = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0" }
 sc-rpc = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0" }
-sc-service = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0" }
+sc-service = { workspace = true }
+sc-utils = { workspace = true }
 sc-sysinfo = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0" }
 sc-telemetry = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0" }
 sc-tracing = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0" }

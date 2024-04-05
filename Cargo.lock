@@ -13056,12 +13056,17 @@ name = "storage-hub-infra"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "futures",
+ "sc-service",
+ "sc-utils 4.0.0-dev (git+https://github.com/paritytech/polkadot-sdk?branch=release-polkadot-v1.5.0)",
+ "tokio",
 ]
 
 [[package]]
 name = "storage-hub-node"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "array-bytes 6.2.2",
  "async-channel 1.9.0",
  "clap",
@@ -13103,6 +13108,7 @@ dependencies = [
  "sc-tracing",
  "sc-transaction-pool",
  "sc-transaction-pool-api 4.0.0-dev (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.5.0)",
+ "sc-utils 4.0.0-dev (git+https://github.com/paritytech/polkadot-sdk?branch=release-polkadot-v1.5.0)",
  "serde",
  "serde_json",
  "shc-mapping-sync",
@@ -13116,11 +13122,13 @@ dependencies = [
  "sp-runtime 24.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.5.0)",
  "sp-timestamp",
  "staging-xcm",
+ "storage-hub-infra",
  "storage-hub-runtime",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
  "substrate-prometheus-endpoint 0.10.0-dev (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.5.0)",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -13197,10 +13205,6 @@ dependencies = [
  "sp-io 23.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.5.0)",
  "sp-runtime 24.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.5.0)",
 ]
-
-[[package]]
-name = "storage-kit"
-version = "0.1.0"
 
 [[package]]
 name = "strobe-rs"

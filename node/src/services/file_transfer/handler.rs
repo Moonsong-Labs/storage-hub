@@ -22,124 +22,155 @@
 //! `crate::request_responses::RequestResponsesBehaviour` with
 //! [`LightClientRequestHandler`](handler::LightClientRequestHandler).
 
+use anyhow::Result;
 use futures::prelude::*;
 use libp2p_identity::PeerId;
-use log::{debug, trace};
+use log::{debug, info, trace, warn};
 use prost::Message;
-use sc_client_api::{BlockBackend, ProofProvider};
 use sc_network::{
     request_responses::{IncomingRequest, OutgoingResponse, ProtocolConfig},
     ReputationChange,
 };
 use sp_core::hexdisplay::HexDisplay;
-use sp_runtime::traits::Block;
-use std::{marker::PhantomData, sync::Arc};
+use storage_hub_infra::actor::{Actor, ActorEventLoop};
+use tokio::select;
 
 use super::schema;
 
-const LOG_TARGET: &str = "provider-requests-handler";
+const LOG_TARGET: &str = "file-transfer-service";
 
 /// Max number of queued requests.
-const MAX_PROVIDER_REQUESTS_QUEUE: usize = 500;
+const MAX_FILE_TRANSFER_REQUESTS_QUEUE: usize = 500;
 
-/// Handler for incoming provider requests from a remote peer.
-pub struct ProviderRequestsHandler<B, Client> {
+pub enum FileTransferServiceCommand {}
+
+pub struct FileTransferService {
     request_receiver: async_channel::Receiver<IncomingRequest>,
-    /// Blockchain client.
-    _client: Arc<Client>,
-    _block: PhantomData<B>,
 }
 
-impl<B, Client> ProviderRequestsHandler<B, Client>
-where
-    B: Block,
-    Client: BlockBackend<B> + ProofProvider<B> + Send + Sync + 'static,
-{
-    /// Create a new [`ProviderRequestHandler`].
-    pub fn new(fork_id: Option<&str>, client: Arc<Client>) -> (Self, ProtocolConfig) {
-        let (tx, request_receiver) = async_channel::bounded(MAX_PROVIDER_REQUESTS_QUEUE);
+impl Actor for FileTransferService {
+    type Message = FileTransferServiceCommand;
+    type EventLoop = FileTransferServiceEventLoop;
+    type EventBusProvider = ();
 
-        let mut protocol_config = super::generate_protocol_config(
-            client
-                .block_hash(0u32.into())
-                .ok()
-                .flatten()
-                .expect("Genesis block exists; qed"),
-            fork_id,
-        );
-        protocol_config.inbound_queue = Some(tx);
-
-        (
-            Self {
-                _client: client,
-                request_receiver,
-                _block: PhantomData::default(),
-            },
-            protocol_config,
-        )
+    fn handle_message(
+        &mut self,
+        _message: Self::Message,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        async {}
     }
 
-    /// Run [`ProviderRequestsHandler`].
-    pub async fn run(mut self) {
-        while let Some(request) = self.request_receiver.next().await {
-            let IncomingRequest {
-                peer,
-                payload,
-                pending_response,
-            } = request;
+    fn get_event_bus_provider(&self) -> &Self::EventBusProvider {
+        &()
+    }
+}
 
-            match self.handle_request(peer, payload) {
-                Ok(response_data) => {
-                    let response = OutgoingResponse {
-                        result: Ok(response_data),
-                        reputation_changes: Vec::new(),
-                        sent_feedback: None,
+/// Event loop for the FileTransferService actor.
+pub struct FileTransferServiceEventLoop {
+    receiver: sc_utils::mpsc::TracingUnboundedReceiver<FileTransferServiceCommand>,
+    actor: FileTransferService,
+}
+
+/// Since this actor is a network service, it needs to handle both incoming network events and
+/// messages from other actors, hence the need for a custom `ActorEventLoop`.
+impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
+    fn new(
+        actor: FileTransferService,
+        receiver: sc_utils::mpsc::TracingUnboundedReceiver<FileTransferServiceCommand>,
+    ) -> Self {
+        Self { actor, receiver }
+    }
+
+    async fn run(&mut self) {
+        info!("FileTransferService starting up!");
+        loop {
+            select! {
+                request = self.actor.request_receiver.recv() => {
+                    let IncomingRequest {
+                        peer,
+                        payload,
+                        pending_response,
+                    } = match request {
+                        Err(_) => {
+                            warn!(target: LOG_TARGET, "P2p request channel closed. Shutting down.");
+                            break;
+                        },
+                        Ok(request) => request,
                     };
 
-                    match pending_response.send(response) {
-                        Ok(()) => trace!(
-                            target: LOG_TARGET,
-                            "Handled provider client request from {}.",
-                            peer,
-                        ),
-                        Err(_) => debug!(
-                            target: LOG_TARGET,
-                            "Failed to handle provider request from {}: {}",
-                            peer,
-                            HandleRequestError::SendResponse,
-                        ),
-                    };
-                }
-                Err(e) => {
-                    debug!(
-                        target: LOG_TARGET,
-                        "Failed to handle provider client request from {}: {}", peer, e,
-                    );
+                    match self.actor.handle_request(peer, payload) {
+                        Ok(response_data) => {
+                            let response = OutgoingResponse {
+                                result: Ok(response_data),
+                                reputation_changes: Vec::new(),
+                                sent_feedback: None,
+                            };
 
-                    let reputation_changes = match e {
-                        HandleRequestError::BadRequest(_) => {
-                            vec![ReputationChange::new(-(1 << 12), "bad request")]
+                            match pending_response.send(response) {
+                                Ok(()) => trace!(
+                                    target: LOG_TARGET,
+                                    "Handled provider client request from {}.",
+                                    peer,
+                                ),
+                                Err(_) => debug!(
+                                    target: LOG_TARGET,
+                                    "Failed to handle provider request from {}: {}",
+                                    peer,
+                                    HandleRequestError::SendResponse,
+                                ),
+                            };
                         }
-                        _ => Vec::new(),
-                    };
+                        Err(e) => {
+                            debug!(
+                                target: LOG_TARGET,
+                                "Failed to handle provider client request from {}: {}", peer, e,
+                            );
 
-                    let response = OutgoingResponse {
-                        result: Err(()),
-                        reputation_changes,
-                        sent_feedback: None,
-                    };
+                            let reputation_changes = match e {
+                                HandleRequestError::BadRequest(_) => {
+                                    vec![ReputationChange::new(-(1 << 12), "bad request")]
+                                }
+                                _ => Vec::new(),
+                            };
 
-                    if pending_response.send(response).is_err() {
-                        debug!(
-                            target: LOG_TARGET,
-                            "Failed to handle provider client request from {}: {}",
-                            peer,
-                            HandleRequestError::SendResponse,
-                        );
-                    };
-                }
+                            let response = OutgoingResponse {
+                                result: Err(()),
+                                reputation_changes,
+                                sent_feedback: None,
+                            };
+
+                            if pending_response.send(response).is_err() {
+                                debug!(
+                                    target: LOG_TARGET,
+                                    "Failed to handle provider client request from {}: {}",
+                                    peer,
+                                    HandleRequestError::SendResponse,
+                                );
+                            };
+                        }
+                    }
+                },
+                message = self.receiver.next() => {
+                    let message = message.expect("All senders dropped.");
+                    self.actor.handle_message(message).await;
+                },
             }
         }
+    }
+}
+
+impl FileTransferService {
+    /// Create a new [`FileTransferServiceEventLoop`].
+    pub fn new<Hash: AsRef<[u8]>>(
+        genesis_hash: Hash,
+        fork_id: Option<&str>,
+    ) -> (Self, ProtocolConfig) {
+        let (tx, request_receiver) = async_channel::bounded(MAX_FILE_TRANSFER_REQUESTS_QUEUE);
+
+        let mut protocol_config = super::generate_protocol_config(genesis_hash, fork_id);
+        protocol_config.inbound_queue = Some(tx);
+
+        (Self { request_receiver }, protocol_config)
     }
 
     fn handle_request(

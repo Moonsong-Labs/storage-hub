@@ -1,13 +1,10 @@
-use std::sync::Arc;
 use std::time::Duration;
 
 use sc_network::{config::FullNetworkConfiguration, request_responses::ProtocolConfig};
-use sc_service::{Configuration, TaskManager};
-use storage_hub_runtime::opaque::Block;
+use sc_service::{Configuration, SpawnTaskHandle};
+use storage_hub_infra::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 
-use crate::service::ParachainClient;
-
-use self::handler::ProviderRequestsHandler;
+use self::handler::FileTransferService;
 
 /// For incoming provider requests.
 mod handler;
@@ -22,30 +19,23 @@ const MAX_REQUEST_PACKET_SIZE_BYTES: u64 = 1 * 1024 * 1024 * 1024;
 /// Max size of response packet. (1GB)
 const MAX_RESPONSE_PACKET_SIZE_BYTES: u64 = 1 * 1024 * 1024 * 1024;
 
-pub async fn spawn_file_transfer_service(
-    task_manager: &TaskManager,
-    client: Arc<ParachainClient>,
-    pubsub_notification_sinks: Arc<
-        shc_mapping_sync::StorageHubBlockNotificationSinks<
-            shc_mapping_sync::StorageHubBlockNotification<Block>,
-        >,
-    >,
+pub async fn spawn_file_transfer_service<Hash: AsRef<[u8]>>(
+    task_spawner: SpawnTaskHandle,
+    genesis_hash: Hash,
     parachain_config: &Configuration,
     net_config: &mut FullNetworkConfiguration,
-) {
-    let provider_requests_protocol_config = {
-        // Allow both outgoing and incoming requests.
-        let (handler, protocol_config) =
-            ProviderRequestsHandler::new(parachain_config.chain_spec.fork_id(), client.clone());
-        task_manager.spawn_handle().spawn(
-            "provider-requests-handler",
-            Some("networking"),
-            handler.run(),
-        );
-        protocol_config
-    };
+) -> ActorHandle<FileTransferService> {
+    let task_spawner =
+        TaskSpawner::new(task_spawner, "file-transfer-service").with_group("network");
 
-    net_config.add_request_response_protocol(provider_requests_protocol_config);
+    let (file_transfer_service, protocol_config) =
+        FileTransferService::new(genesis_hash, parachain_config.chain_spec.fork_id());
+
+    let file_transfer_service_handle = task_spawner.spawn_actor(file_transfer_service);
+
+    net_config.add_request_response_protocol(protocol_config);
+
+    file_transfer_service_handle
 }
 
 /// Generate the provider requests protocol name from the genesis hash and fork id.

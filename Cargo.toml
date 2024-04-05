@@ -9,7 +9,7 @@ homepage = "https://moonsonglabs.com/"
 panic = "unwind"
 
 [workspace]
-members = ["runtime", "pallets/*", "node", "storage-kit", "support/*"]
+members = ["runtime", "pallets/*", "node", "support/*"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -28,6 +28,9 @@ anyhow = { version = "1.0.81" }
 
 # Local
 shc-mapping-sync = { path = "client/mapping-sync", default-features = false }
+
+# Substrate
+sc-service = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.5.0" }
 
 # Substrate Client
 sc-client-api = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.5.0" }
