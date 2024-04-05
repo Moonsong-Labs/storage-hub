@@ -13,20 +13,15 @@ publish = false
 [lints]
 workspace = true
 
-[build-dependencies]
-prost-build = "0.12.3"
-substrate-build-script-utils = { workspace = true }
-
 [dependencies]
-tokio = { workspace = true }
 anyhow = { workspace = true }
-
 array-bytes = "6.1"
 async-channel = "1.8.0"
+color-print = "0.3.4"
 libp2p-identity = { version = "0.1.3", features = ["peerid"] }
-
 prost = "0.12"
 thiserror = { version = "1.0.48" }
+tokio = { workspace = true }
 
 # Local
 storage-hub-runtime = { workspace = true }
@@ -89,22 +84,25 @@ cumulus-client-service = { workspace = true }
 cumulus-primitives-core = { workspace = true }
 cumulus-primitives-parachain-inherent = { workspace = true }
 cumulus-relay-chain-interface = { workspace = true }
-color-print = "0.3.4"
+
+[build-dependencies]
+prost-build = "0.12.3"
+substrate-build-script-utils = { workspace = true }
 
 [features]
 default = []
 runtime-benchmarks = [
-    "cumulus-primitives-core/runtime-benchmarks",
-    "frame-benchmarking-cli/runtime-benchmarks",
-    "frame-benchmarking/runtime-benchmarks",
-    "storage-hub-runtime/runtime-benchmarks",
-    "polkadot-cli/runtime-benchmarks",
-    "polkadot-primitives/runtime-benchmarks",
-    "sc-service/runtime-benchmarks",
-    "sp-runtime/runtime-benchmarks",
+	"cumulus-primitives-core/runtime-benchmarks",
+	"frame-benchmarking-cli/runtime-benchmarks",
+	"frame-benchmarking/runtime-benchmarks",
+	"polkadot-cli/runtime-benchmarks",
+	"polkadot-primitives/runtime-benchmarks",
+	"sc-service/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
+	"storage-hub-runtime/runtime-benchmarks",
 ]
 try-runtime = [
-    "storage-hub-runtime/try-runtime",
-    "polkadot-cli/try-runtime",
-    "sp-runtime/try-runtime",
+	"polkadot-cli/try-runtime",
+	"sp-runtime/try-runtime",
+	"storage-hub-runtime/try-runtime",
 ]
