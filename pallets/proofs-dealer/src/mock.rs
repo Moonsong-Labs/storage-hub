@@ -1,16 +1,20 @@
 #![allow(non_camel_case_types)]
 
-use frame_support::{derive_impl, parameter_types, traits::Everything};
+use frame_support::{
+    derive_impl, parameter_types, traits::Everything, weights::constants::RocksDbWeight,
+};
 use frame_system as system;
 use sp_core::{ConstU128, ConstU32, ConstU64, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage,
+    BuildStorage, DispatchResult,
 };
 use sp_trie::CompactProof;
+use storage_hub_traits::SubscribeProvidersInterface;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
+type AccountId = u64;
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -18,7 +22,7 @@ frame_support::construct_runtime!(
     {
         System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-        Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>},
+        Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>, HoldReason},
         ProofsDealer: crate::{Pallet, Call, Storage, Event<T>},
     }
 );
@@ -33,13 +37,13 @@ impl system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
     type BlockLength = ();
-    type DbWeight = ();
+    type DbWeight = RocksDbWeight;
     type RuntimeOrigin = RuntimeOrigin;
     type RuntimeCall = RuntimeCall;
     type Nonce = u64;
     type Hash = H256;
     type Hashing = BlakeTwo256;
-    type AccountId = u64;
+    type AccountId = AccountId;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Block = Block;
     type RuntimeEvent = RuntimeEvent;
@@ -65,19 +69,18 @@ impl pallet_balances::Config for Test {
     type MaxLocks = ConstU32<10>;
     type MaxReserves = ();
     type ReserveIdentifier = [u8; 8];
-    type RuntimeHoldReason = ();
-    type RuntimeFreezeReason = ();
+    type RuntimeHoldReason = RuntimeHoldReason;
+    type RuntimeFreezeReason = RuntimeFreezeReason;
     type FreezeIdentifier = ();
-    type MaxHolds = ConstU32<10>;
     type MaxFreezes = ConstU32<10>;
 }
 
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
+    type RuntimeHoldReason = RuntimeHoldReason;
     type StorageData = u32;
     type SpCount = u32;
-    type HashId = H256;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
     type MaxMultiAddressSize = ConstU32<100>;
@@ -87,10 +90,10 @@ impl pallet_storage_providers::Config for Test {
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type SpMinDeposit = ConstU128<10>;
-    type SpMinCapacity = ConstU32<1>;
+    type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
+    type Subscribers = MockedProvidersSubscriber;
 }
-
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
@@ -104,6 +107,18 @@ impl crate::Config for Test {
     type CheckpointChallengePeriod = ConstU32<2>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = ConstU64<181222>;
+}
+
+pub struct MockedProvidersSubscriber;
+impl SubscribeProvidersInterface for MockedProvidersSubscriber {
+    type Provider = u64;
+
+    fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
+        Ok(())
+    }
+    fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
+        Ok(())
+    }
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty

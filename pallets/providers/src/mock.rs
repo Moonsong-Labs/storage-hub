@@ -2,13 +2,15 @@ use crate as pallet_storage_providers;
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
     traits::{Everything, Randomness},
+    weights::constants::RocksDbWeight,
 };
 use frame_system as system;
 use sp_core::{ConstU128, ConstU32, ConstU64, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage,
+    BuildStorage, DispatchResult,
 };
+use storage_hub_traits::SubscribeProvidersInterface;
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -62,7 +64,7 @@ impl system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
     type BlockLength = ();
-    type DbWeight = ();
+    type DbWeight = RocksDbWeight;
     type RuntimeOrigin = RuntimeOrigin;
     type RuntimeCall = RuntimeCall;
     type Nonce = u64;
@@ -97,7 +99,6 @@ impl pallet_balances::Config for Test {
     type RuntimeHoldReason = RuntimeHoldReason;
     type RuntimeFreezeReason = ();
     type FreezeIdentifier = ();
-    type MaxHolds = ConstU32<10>;
     type MaxFreezes = ConstU32<10>;
 }
 
@@ -119,6 +120,7 @@ impl crate::Config for Test {
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
+    type Subscribers = MockedProvidersSubscriber;
     type ProvidersRandomness = MockRandomness;
 }
 
@@ -154,5 +156,17 @@ impl ExtBuilder {
         let mut ext = sp_io::TestExternalities::new(t);
         ext.execute_with(|| System::set_block_number(1));
         ext
+    }
+}
+
+pub struct MockedProvidersSubscriber;
+impl SubscribeProvidersInterface for MockedProvidersSubscriber {
+    type Provider = u64;
+
+    fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
+        Ok(())
+    }
+    fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
+        Ok(())
     }
 }

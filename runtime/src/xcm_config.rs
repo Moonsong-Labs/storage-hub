@@ -2,6 +2,7 @@ use super::{
     AccountId, AllPalletsWithSystem, Balances, ParachainInfo, ParachainSystem, PolkadotXcm,
     Runtime, RuntimeCall, RuntimeEvent, RuntimeOrigin, WeightToFee, XcmpQueue,
 };
+use cumulus_primitives_core::Location;
 use frame_support::{
     match_types, parameter_types,
     traits::{ConstU32, Everything, Nothing},
@@ -16,16 +17,21 @@ use xcm::latest::prelude::*;
 use xcm_builder::CurrencyAdapter;
 use xcm_builder::{
     AccountId32Aliases, AllowExplicitUnpaidExecutionFrom, AllowTopLevelPaidExecutionFrom,
-    DenyReserveTransferToRelayChain, DenyThenTry, EnsureXcmOrigin, FixedWeightBounds, IsConcrete,
-    NativeAsset, ParentIsPreset, RelayChainAsNative, SiblingParachainAsNative,
-    SiblingParachainConvertsVia, SignedAccountId32AsNative, SignedToAccountId32,
-    SovereignSignedViaLocation, TakeWeightCredit, TrailingSetTopicAsId, UsingComponents,
-    WithComputedOrigin, WithUniqueTopic,
+    DenyReserveTransferToRelayChain, DenyThenTry, EnsureXcmOrigin, FixedWeightBounds,
+    FrameTransactionalProcessor, IsConcrete, NativeAsset, ParentIsPreset, RelayChainAsNative,
+    SiblingParachainAsNative, SiblingParachainConvertsVia, SignedAccountId32AsNative,
+    SignedToAccountId32, SovereignSignedViaLocation, TakeWeightCredit, TrailingSetTopicAsId,
+    UsingComponents, WithComputedOrigin, WithUniqueTopic,
 };
 use xcm_executor::XcmExecutor;
 
+/// A relative location which is constrained to be an interior location of the context.
+///
+/// See also `MultiLocation`.
+pub type InteriorMultiLocation = Junctions;
+
 parameter_types! {
-    pub const RelayLocation: MultiLocation = MultiLocation::parent();
+    pub const RelayLocation: Location = Location::parent();
     pub const RelayNetwork: Option<NetworkId> = None;
     pub RelayChainOrigin: RuntimeOrigin = cumulus_pallet_xcm::Origin::Relay.into();
     pub UniversalLocation: InteriorMultiLocation = Parachain(ParachainInfo::parachain_id().into()).into();
@@ -87,9 +93,9 @@ parameter_types! {
 }
 
 match_types! {
-    pub type ParentOrParentsExecutivePlurality: impl Contains<MultiLocation> = {
-        MultiLocation { parents: 1, interior: Here } |
-        MultiLocation { parents: 1, interior: X1(Plurality { id: BodyId::Executive, .. }) }
+    pub type ParentOrParentsExecutivePlurality: impl Contains<Location> = {
+        Location { parents: 1, interior: Here } |
+        Location { parents: 1, interior: InteriorMultiLocation::X1(_) } // TODO - validate this, before it was `X1(Plurality { id: BodyId::Executive, .. })`
     };
 }
 
@@ -139,6 +145,7 @@ impl xcm_executor::Config for XcmConfig {
     type CallDispatcher = RuntimeCall;
     type SafeCallFilter = Everything;
     type Aliasers = Nothing;
+    type TransactionalProcessor = FrameTransactionalProcessor;
 }
 
 /// No local origins on this chain are allowed to dispatch XCM sends/executions.

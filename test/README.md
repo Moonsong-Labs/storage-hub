@@ -20,6 +20,9 @@ The quickest way is via their script: `curl -fsSL https://bun.sh/install | bash`
 
 #### Kubernetes
 
+> [!INFORMATION]
+> Currently storage-hub on k8 is having issues due to how we are generating chain specs, you can skip directly to [Spawning ZombieNet Native](#spawning-zombienet-native)
+
 For simplicity, we can use minikube to be a local [kubernetes](https://kubernetes.io/) cluster.
 
 Visit their [docs](https://minikube.sigs.k8s.io/docs/) for a guide on GettingStarted, but once installed can be started with:
@@ -54,6 +57,9 @@ docker compose -f docker/latest-node-compose.yml up -d
 
 #### Zombienet
 
+> [!NOTE]  
+> Please ensure the rust project is built first e.g. `cargo build --release`
+
 In `/test` run: `bun install` to install zombienet
 
 ### Running Standard Tests
@@ -65,23 +71,22 @@ bun test
 ### Running ZombieNet Tests
 
 ```sh
-bun zombie:test:latest
+bun zombie:test:native
 ```
 
-### Spawning ZombieNet
+### Spawning ZombieNet Native
 
-> [!WARNING]
-> Currently ZombieNet doesn't work with SH due to how we make our chainspecs. WIP
+> [!TIP]  
+> Polkadot binaries are required to run a zombienet network.
+> For Linux you can run the script: `bun scripts/downloadPolkadot.ts <version>`
+> For macOS you will have to [compile from source](https://github.com/paritytech/polkadot-sdk/tree/master/polkadot#build-from-source).
 
-To launch a non-ephemeral ZombieNetwork, use:
+To launch a non-ephemeral ZombieNetwork by executing the following in: `/test` directory:
 
 ```sh
 bun install
-bun zombienet spawn <config_path>
+bun zombie:run:native
 ```
-
-> [!INFO]  
-> For example: `bun zombienet spawn
 
 From here you should see in the terminal, the different nodes being spun up. When the network is fully launched, you should see something like this:
 
