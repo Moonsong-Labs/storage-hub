@@ -6,7 +6,12 @@ use crate::{
     },
     Config, Event, StorageRequestExpirations,
 };
-use frame_support::{assert_ok, traits::Hooks, weights::Weight};
+use frame_support::{
+    assert_ok,
+    dispatch::DispatchResultWithPostInfo,
+    traits::{CallerTrait, Hooks, OriginTrait},
+    weights::Weight,
+};
 use sp_core::H256;
 use sp_runtime::{
     traits::{BlakeTwo256, Get, Hash},
@@ -329,7 +334,7 @@ fn bsp_volunteer_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -393,7 +398,7 @@ fn bsp_confirm_storing_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -483,7 +488,7 @@ fn bsp_stop_storing_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -623,4 +628,29 @@ fn asymptotic_threshold_increase_decrease_success() {
         // Verify that the threshold increased and should be greater than the initial threshold
         assert!(FileSystem::bsps_assignment_threshold() > initial_threshold);
     });
+}
+
+/// Helper function that registers an account as a Backup Storage Provider
+fn bsp_sign_up(
+    bsp_signed: RuntimeOrigin,
+    storage_amount: StorageData<Test>,
+    multiaddresses: BoundedVec<MultiAddress<Test>, <Test as Config>::MaxDataServerMultiAddresses>,
+) -> DispatchResultWithPostInfo {
+    // Request to sign up the account as a Backup Storage Provider
+    assert_ok!(Providers::request_bsp_sign_up(
+        bsp_signed.clone(),
+        storage_amount,
+        multiaddresses.clone(),
+    ));
+
+    // Advance enough blocks for randomness to be valid
+    roll_to(frame_system::Pallet::<Test>::block_number() + 4);
+
+    // Confirm the sign up of the account as a Backup Storage Provider
+    assert_ok!(Providers::confirm_sign_up(
+        bsp_signed.clone(),
+        bsp_signed.into_caller().as_signed().unwrap().clone()
+    ));
+
+    Ok(().into())
 }
