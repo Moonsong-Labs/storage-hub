@@ -51,13 +51,29 @@ pub mod pallet {
         sp_runtime::traits::{AtLeast32Bit, CheckEqual, MaybeDisplay, SimpleBitOps},
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
-    use sp_runtime::traits::{CheckedAdd, Zero};
-    use sp_runtime::BoundedVec;
+    use scale_info::prelude::fmt::Debug;
+    use sp_runtime::{traits::EnsureFrom, BoundedVec};
+    use sp_runtime::{
+        traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
+        FixedPointNumber,
+    };
+
+    // TODO: add conditional to check that block number does not exceed u64 type. It it does, the fixed point number that we convert to from a block
+    // number might be too loarge to fit into the threshold type.
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + pallet_proofs_dealer::Config {
+    pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
+        /// The trait for reading and mutating storage provider data.
+        type Providers: storage_hub_traits::ReadProvidersInterface<AccountId = Self::AccountId, Provider = <Self::Providers as storage_hub_traits::MutateProvidersInterface>::Provider>
+            + storage_hub_traits::MutateProvidersInterface<AccountId = Self::AccountId, MerklePatriciaRoot = <Self::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash>;
+
+        /// The trait for issuing challenges and verifying proofs.
+        type ProofDealer: storage_hub_traits::ProofsDealerInterface<
+            Provider = <Self::Providers as storage_hub_traits::ProvidersInterface>::Provider,
+        >;
 
         /// Type for identifying a file, generally a hash.
         type Fingerprint: Parameter
@@ -73,17 +89,6 @@ pub mod pallet {
             + AsMut<[u8]>
             + MaxEncodedLen;
 
-        /// Unit representing the size of a file.
-        type StorageUnit: Parameter
-            + Member
-            + MaybeSerializeDeserialize
-            + Default
-            + MaybeDisplay
-            + AtLeast32Bit
-            + Copy
-            + MaxEncodedLen
-            + HasCompact;
-
         /// Type representing the storage request bsps size type.
         type StorageRequestBspsRequiredType: Parameter
             + Member
@@ -98,7 +103,40 @@ pub mod pallet {
             + Default
             + scale_info::TypeInfo
             + MaybeSerializeDeserialize
+            + One
             + Zero;
+
+        /// Type representing the threshold a BSP must meet to be eligible to volunteer to store a file.
+        type ThresholdType: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Debug
+            + Default
+            + MaybeDisplay
+            + Copy
+            + MaxEncodedLen
+            + Decode
+            + Saturating
+            + CheckedMul
+            + CheckedDiv
+            + CheckedAdd
+            + CheckedSub
+            + PartialOrd
+            + FixedPointNumber
+            + EnsureFrom<u128>;
+
+        /// The multiplier increases the threshold over time (blocks) which increases the
+        /// likelihood of a BSP successfully volunteering to store a file.
+        #[pallet::constant]
+        type AssignmentThresholdMultiplier: Get<Self::ThresholdType>;
+
+        /// Horizontal asymptote which the volunteering threshold approaches as more BSPs are registered in the system.
+        #[pallet::constant]
+        type AssignmentThresholdAsymptote: Get<Self::ThresholdType>;
+
+        /// Asymptotic decay function for the assignment threshold.
+        #[pallet::constant]
+        type AssignmentThresholdDecayFactor: Get<Self::ThresholdType>;
 
         /// Minimum number of BSPs required to store a file.
         ///
@@ -123,7 +161,7 @@ pub mod pallet {
 
         /// Maximum number of multiaddresses for a storage request.
         #[pallet::constant]
-        type MaxMultiAddresses: Get<u32>;
+        type MaxDataServerMultiAddresses: Get<u32>;
 
         /// Time-to-live for a storage request.
         #[pallet::constant]
@@ -142,12 +180,12 @@ pub mod pallet {
     pub type StorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, FileLocation<T>, StorageRequestMetadata<T>>;
 
-    /// A double map of [`storage request`](FileLocation) to [`BSPs`](StorageProviderId) that volunteered to store data.
+    /// A double map of [`storage request`](FileLocation) to BSP `AccountId`s that volunteered to store data.
     ///
-    /// Any BSP under a storage request is considered to be a volunteer and can be removed at any time.
-    /// Once a BSP submits a valid proof to the `pallet-proofs-dealer`, the `confirmed` field in [`StorageRequestBsps`] should be set to `true`.
+    /// Any BSP under a storage request prefix is considered to be a volunteer and can be removed at any time.
+    /// Once a BSP submits a valid proof to the via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
     ///
-    /// When a storage request is expired or removed, the corresponding storage request key in this map should be removed.
+    /// When a storage request is expired or removed, the corresponding storage request prefix in this map is removed.
     #[pallet::storage]
     #[pallet::getter(fn storage_request_bsps)]
     pub type StorageRequestBsps<T: Config> = StorageDoubleMap<
@@ -155,7 +193,7 @@ pub mod pallet {
         Blake2_128Concat,
         FileLocation<T>,
         Blake2_128Concat,
-        StorageProviderId<T>,
+        T::AccountId,
         StorageRequestBspsMetadata<T>,
         OptionQuery,
     >;
@@ -188,6 +226,45 @@ pub mod pallet {
     #[pallet::getter(fn next_starting_block_to_clean_up)]
     pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
+    /// Minimum BSP assignment threshold.
+    ///
+    /// This is the minimum threshold that a BSP must have to be assigned to store a file.
+    /// It is reduced or increased when BSPs sign off or sign up respectively.
+    #[pallet::storage]
+    #[pallet::getter(fn bsps_assignment_threshold)]
+    pub type BspsAssignmentThreshold<T: Config> = StorageValue<_, T::ThresholdType, ValueQuery>;
+
+    #[pallet::genesis_config]
+    pub struct GenesisConfig<T: Config> {
+        pub bsp_assignment_threshold: T::ThresholdType,
+    }
+
+    impl<T: Config> Default for GenesisConfig<T> {
+        fn default() -> Self {
+            let total_bsps =
+                <T::Providers as storage_hub_traits::ReadProvidersInterface>::get_number_of_bsps()
+                    .try_into()
+                    .map_err(|_| Error::<T>::FailedTypeConversion)
+                    .unwrap();
+
+            let bsp_assignment_threshold =
+                Pallet::<T>::compute_asymptotic_threshold_point(total_bsps).unwrap();
+
+            BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
+
+            Self {
+                bsp_assignment_threshold: Default::default(),
+            }
+        }
+    }
+
+    #[pallet::genesis_build]
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+        fn build(&self) {
+            BspsAssignmentThreshold::<T>::put(self.bsp_assignment_threshold);
+        }
+    }
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -196,10 +273,9 @@ pub mod pallet {
             who: T::AccountId,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            size: StorageUnit<T>,
-            multiaddresses: BoundedVec<MultiAddress<T>, T::MaxMultiAddresses>,
+            size: StorageData<T>,
+            multiaddresses: BoundedVec<MultiAddress<T>, T::MaxDataServerMultiAddresses>,
         },
-
         /// Notifies that a BSP has been accepted to store a given file.
         AcceptedBspVolunteer {
             who: T::AccountId,
@@ -207,13 +283,15 @@ pub mod pallet {
             fingerprint: Fingerprint<T>,
             multiaddresses: MultiAddresses<T>,
         },
-
+        /// Notifies that a BSP confirmed storing a file.
+        BspConfirmedStoring {
+            who: T::AccountId,
+            location: FileLocation<T>,
+        },
         /// Notifies the expiration of a storage request.
         StorageRequestExpired { location: FileLocation<T> },
-
         /// Notifies that a storage request has been revoked by the user who initiated it.
         StorageRequestRevoked { location: FileLocation<T> },
-
         /// Notifies that a BSP has stopped storing a file.
         BspStoppedStoring {
             bsp: T::AccountId,
@@ -236,10 +314,22 @@ pub mod pallet {
         BspsRequiredExceedsMax,
         /// BSP already volunteered to store the given file.
         BspVolunteerFailed,
+        /// Account is not a Storage Provider.
+        NotAProvider,
+        /// Account is not a BSP.
+        NotABsp,
+        /// BSP has not volunteered to store the given file.
+        BspNotVolunteered,
+        /// BSP has not confirmed storing the given file.
+        BspNotConfirmed,
+        /// BSP has already confirmed storing the given file.
+        BspAlreadyConfirmed,
         /// Number of BSPs required for storage request has been reached.
         StorageRequestBspsRequiredFulfilled,
         /// BSP already volunteered to store the given file.
         BspAlreadyVolunteered,
+        /// Number of removed BSPs volunteered from storage request prefix did not match the expected number.
+        UnexpectedNumberOfRemovedVolunteeredBsps,
         /// No slot available found in blocks to insert storage request expiration time.
         StorageRequestExpiredNoSlotAvailable,
         /// Not authorized to delete the storage request.
@@ -247,6 +337,22 @@ pub mod pallet {
         /// Error created in 2024. If you see this, you are well beyond the singularity and should
         /// probably stop using this pallet.
         MaxBlockNumberReached,
+        /// Failed to encode BSP id as slice.
+        FailedToEncodeBsp,
+        /// Failed to encode fingerprint as slice.
+        FailedToEncodeFingerprint,
+        /// Failed to decode threshold.
+        FailedToDecodeThreshold,
+        /// BSP did not succeed threshold check.
+        ThresholdTooHigh,
+        /// Failed to convert block number to threshold.
+        FailedToConvertBlockNumber,
+        /// Arithmetic error in threshold calculation.
+        ThresholdArithmeticError,
+        /// Failed to convert to primitive type.
+        FailedTypeConversion,
+        /// Divided by 0
+        DividedByZero,
     }
 
     #[pallet::call]
@@ -264,7 +370,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            size: StorageUnit<T>,
+            size: StorageData<T>,
             multiaddresses: MultiAddresses<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
@@ -299,12 +405,13 @@ pub mod pallet {
         pub fn revoke_storage_request(
             origin: OriginFor<T>,
             location: FileLocation<T>,
+            file_key: FileKey<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
 
             // Perform validations and revoke storage request
-            Self::do_revoke_storage_request(who, location.clone())?;
+            Self::do_revoke_storage_request(who, location.clone(), file_key)?;
 
             // Emit event.
             Self::deposit_event(Event::StorageRequestRevoked { location });
@@ -343,6 +450,27 @@ pub mod pallet {
             Ok(())
         }
 
+        /// Used by a BSP to confirm they are storing data of a storage request.
+        #[pallet::call_index(5)]
+        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        pub fn bsp_confirm_storing(
+            origin: OriginFor<T>,
+            location: FileLocation<T>,
+            root: FileKey<T>,
+            proof: Proof<T>,
+        ) -> DispatchResult {
+            // Check that the extrinsic was signed and get the signer.
+            let who = ensure_signed(origin)?;
+
+            // Perform validations and confirm storage.
+            Self::do_bsp_confirm_storing(who.clone(), location.clone(), root, proof.clone())?;
+
+            // Emit event.
+            Self::deposit_event(Event::BspConfirmedStoring { who, location });
+
+            Ok(())
+        }
+
         /// Executed by a BSP to stop storing a file.
         ///
         /// In the event when a storage request no longer exists for the data the BSP no longer stores,
@@ -351,7 +479,7 @@ pub mod pallet {
         /// the BSP gets the data it needs is up to it, but one example could be the assigned MSP.
         /// This metadata is necessary since it is needed to reconstruct the leaf node key in the storage
         /// provider's Merkle Forest.
-        #[pallet::call_index(5)]
+        #[pallet::call_index(6)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_stop_storing(
             origin: OriginFor<T>,
@@ -359,7 +487,7 @@ pub mod pallet {
             location: FileLocation<T>,
             owner: T::AccountId,
             fingerprint: Fingerprint<T>,
-            size: StorageUnit<T>,
+            size: StorageData<T>,
             can_serve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;

@@ -23,12 +23,15 @@ pub mod pallet {
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
-        sp_runtime::traits::{AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, SimpleBitOps},
+        sp_runtime::traits::{
+            AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps,
+        },
         traits::fungible::*,
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
+    use storage_hub_traits::SubscribeProvidersInterface;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -58,6 +61,7 @@ pub mod pallet {
             + Default
             + MaybeDisplay
             + AtLeast32BitUnsigned
+            + Saturating
             + Copy
             + MaxEncodedLen
             + HasCompact
@@ -145,6 +149,9 @@ pub mod pallet {
         /// The maximum amount of Buckets that a MSP can have.
         #[pallet::constant]
         type MaxBuckets: Get<u32>;
+
+        /// Subscribers to important updates
+        type Subscribers: SubscribeProvidersInterface;
     }
 
     #[pallet::pallet]
@@ -543,41 +550,4 @@ impl<T: Config> Pallet<T> {
     pub fn get_msp_count() -> T::SpCount {
         MspCount::<T>::get()
     }
-}
-
-// Trait definitions:
-
-use frame_support::pallet_prelude::DispatchResult;
-
-/// Interface to allow the File System pallet to modify the data used by the Storage Providers pallet.
-pub trait StorageProvidersInterface<T: Config> {
-    /// Change the used data of a Storage Provider (generic, MSP or BSP).
-    fn change_data_used(who: &T::AccountId, data_change: T::StorageData) -> DispatchResult;
-
-    /// Add a new Bucket as a Provider
-    fn add_bucket(
-        msp_id: MainStorageProviderId<T>,
-        user_id: T::AccountId,
-        bucket_id: BucketId<T>,
-        bucket_root: MerklePatriciaRoot<T>,
-    ) -> DispatchResult;
-
-    /// Change the root of a bucket
-    fn change_root_bucket(
-        bucket_id: BucketId<T>,
-        new_root: MerklePatriciaRoot<T>,
-    ) -> DispatchResult;
-
-    /// Change the root of a BSP
-    fn change_root_bsp(
-        bsp_id: BackupStorageProviderId<T>,
-        new_root: MerklePatriciaRoot<T>,
-    ) -> DispatchResult;
-
-    /// Remove a root from a bucket of a MSP, removing the whole bucket from storage
-    fn remove_root_bucket(bucket_id: BucketId<T>) -> DispatchResult;
-
-    /// Remove a root from a BSP. It will remove the whole BSP from storage, so it should only be called when the BSP is being removed.
-    /// todo!("If the only way to remove a BSP is by this pallet (bsp_sign_off), then is this function actually needed?")
-    fn remove_root_bsp(who: &T::AccountId) -> DispatchResult;
 }
