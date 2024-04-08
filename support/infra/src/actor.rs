@@ -55,7 +55,7 @@ pub trait ActorEventLoop<T: Actor> {
     /// The event loop to be implemented. This function should run continuously, receiving and
     /// handling messages for the actor.
     /// To be spawned as a separate thread.
-    fn run(&mut self) -> impl std::future::Future<Output = ()> + Send;
+    fn run(self) -> impl std::future::Future<Output = ()> + Send;
 }
 
 /// A simple and generic event loop that handles messages for an actor.
@@ -74,7 +74,7 @@ impl<T: Actor + Send> ActorEventLoop<T> for EventLoop<T> {
 
     /// Simple event loop that runs continuously, receiving and handling messages for the actor.
     /// Stops after all senders are dropped.
-    async fn run(&mut self) {
+    async fn run(mut self) {
         while let Some(message) = self.receiver.next().await {
             self.actor.handle_message(message).await;
         }
@@ -164,7 +164,7 @@ impl<T: Actor + Send + 'static> ActorSpawner<T> for TaskSpawner {
         let (sender, receiver) =
             sc_utils::mpsc::tracing_unbounded(self.name, self.queue_size_warning);
         let event_bus_provider = actor.get_event_bus_provider().clone();
-        let mut event_loop = T::EventLoop::new(actor, receiver);
+        let event_loop = T::EventLoop::new(actor, receiver);
 
         self.spawn(async move { event_loop.run().await });
 

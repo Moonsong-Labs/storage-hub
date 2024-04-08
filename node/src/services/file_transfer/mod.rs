@@ -43,12 +43,15 @@ fn generate_protocol_name<Hash: AsRef<[u8]>>(genesis_hash: Hash, fork_id: Option
     let genesis_hash = genesis_hash.as_ref();
     if let Some(fork_id) = fork_id {
         format!(
-            "/{}/{}/provider/1",
+            "/{}/{}/storage-hub/provider/1",
             array_bytes::bytes2hex("", genesis_hash),
             fork_id
         )
     } else {
-        format!("/{}/provider/1", array_bytes::bytes2hex("", genesis_hash))
+        format!(
+            "/{}/storage-hub/provider/1",
+            array_bytes::bytes2hex("", genesis_hash)
+        )
     }
 }
 

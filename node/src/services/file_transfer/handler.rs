@@ -24,8 +24,10 @@
 
 use anyhow::Result;
 use futures::prelude::*;
+use futures::stream::select;
+use jsonrpsee::tracing::warn;
 use libp2p_identity::PeerId;
-use log::{debug, info, trace, warn};
+use log::{debug, info, trace};
 use prost::Message;
 use sc_network::{
     request_responses::{IncomingRequest, OutgoingResponse, ProtocolConfig},
@@ -33,7 +35,6 @@ use sc_network::{
 };
 use sp_core::hexdisplay::HexDisplay;
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
-use tokio::select;
 
 use super::schema;
 
@@ -71,6 +72,11 @@ pub struct FileTransferServiceEventLoop {
     actor: FileTransferService,
 }
 
+enum MergedEventLoopMessage {
+    Command(FileTransferServiceCommand),
+    Request(IncomingRequest),
+}
+
 /// Since this actor is a network service, it needs to handle both incoming network events and
 /// messages from other actors, hence the need for a custom `ActorEventLoop`.
 impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
@@ -78,25 +84,32 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
         actor: FileTransferService,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<FileTransferServiceCommand>,
     ) -> Self {
-        Self { actor, receiver }
+        Self {
+            actor,
+            receiver: receiver,
+        }
     }
 
-    async fn run(&mut self) {
+    async fn run(mut self) {
         info!("FileTransferService starting up!");
+        let mut merged_stream = select(
+            self.receiver.map(MergedEventLoopMessage::Command),
+            self.actor
+                .request_receiver
+                .clone()
+                .map(MergedEventLoopMessage::Request),
+        );
         loop {
-            select! {
-                request = self.actor.request_receiver.recv() => {
+            match merged_stream.next().await {
+                Some(MergedEventLoopMessage::Command(command)) => {
+                    self.actor.handle_message(command).await;
+                }
+                Some(MergedEventLoopMessage::Request(request)) => {
                     let IncomingRequest {
                         peer,
                         payload,
                         pending_response,
-                    } = match request {
-                        Err(_) => {
-                            warn!(target: LOG_TARGET, "P2p request channel closed. Shutting down.");
-                            break;
-                        },
-                        Ok(request) => request,
-                    };
+                    } = request;
 
                     match self.actor.handle_request(peer, payload) {
                         Ok(response_data) => {
@@ -149,11 +162,11 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
                             };
                         }
                     }
-                },
-                message = self.receiver.next() => {
-                    let message = message.expect("All senders dropped.");
-                    self.actor.handle_message(message).await;
-                },
+                }
+                None => {
+                    warn!(target: LOG_TARGET, "FileTransferService event loop terminated.");
+                    break;
+                }
             }
         }
     }
