@@ -28,11 +28,11 @@ sp-std = { workspace = true }
 
 # Local
 storage-hub-traits = { workspace = true }
-pallet-storage-providers = { workspace = true }
-pallet-proofs-dealer = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
+pallet-storage-providers = { workspace = true }
+pallet-proofs-dealer = { workspace = true }
 
 # Substrate
 sp-core = { workspace = true }
