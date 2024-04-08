@@ -23,9 +23,9 @@ message Response {
 // Remote data upload request.
 message RemoteUploadDataRequest {
 	// Location to store data.
-	string location = 1;
+	string location = 2;
 	// Data to store.
-	bytes data = 2;
+	bytes data = 3;
 }
 
 // Remote data upload response.
@@ -37,7 +37,7 @@ message RemoteUploadDataResponse {
 // Remote storage read request.
 message RemoteReadRequest {
 	// Data locations to read from.
-	repeated string locations = 1;
+	repeated bytes locations = 3;
 }
 
 // Remote read response.
