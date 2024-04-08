@@ -136,6 +136,16 @@ where
         Ok(())
     }
 
+    /// Volunteer to store a file.
+    ///
+    /// *Callable only by BSP accounts*
+    ///
+    /// A BSP can only volunteer for a storage request if it is eligible absed on the XOR of the `fingerprint` and the BSP's account ID and if it evaluates to a value
+    /// less than the [globally computed threshold](BspsAssignmentThreshold). As the number of BSPs signed up increases, the threshold decreases, meaning there is a
+    /// lower chance of a BSP being eligible to volunteer for a storage request.
+    ///
+    /// Though, as the storage request remains open, the threshold increases over time based on the number of blocks since the storage request was issued. This is to
+    /// ensure that the storage request is fulfilled by opening up the opportunity for more BSPs to volunteer.
     pub(crate) fn do_bsp_volunteer(
         who: T::AccountId,
         location: FileLocation<T>,
@@ -143,7 +153,7 @@ where
     ) -> DispatchResult {
         let bsp =
             <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(who.clone())
-                .ok_or(Error::<T>::NotAProvider)?;
+                .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
@@ -230,6 +240,16 @@ where
         Ok(())
     }
 
+    /// Confirm storing a file.
+    ///
+    /// *Callable only by BSP accounts*
+    ///
+    /// This function can only be called after a BSP has volunteered for the storage request. The BSP must provide a merkle proof of the file
+    /// and a proof of inclusion of the `file_key` in their merkle patricia trie.
+    ///
+    /// If the proof is valid, the root of the BSP is updated to reflect the new root of the merkle patricia trie and the number of `bsps_confirmed` is
+    /// incremented. If the number of `bsps_confirmed` reaches the number of `bsps_required`, the storage request is deleted. Finally the BSP's data
+    /// used is incremented by the size of the file.
     pub(crate) fn do_bsp_confirm_storing(
         who: T::AccountId,
         location: FileLocation<T>,
@@ -238,7 +258,7 @@ where
     ) -> DispatchResult {
         let bsp =
             <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(who.clone())
-                .ok_or(Error::<T>::NotAProvider)?;
+                .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
@@ -247,7 +267,7 @@ where
         );
 
         // Check that the storage request exists.
-        let file_metadata =
+        let mut file_metadata =
             <StorageRequests<T>>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         expect_or_err!(
@@ -270,9 +290,6 @@ where
                 .confirmed,
             Error::<T>::BspAlreadyConfirmed
         );
-
-        let mut file_metadata =
-            <StorageRequests<T>>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         // Check that the number of confirmed bsps is less than the required bsps and increment it.
         expect_or_err!(
@@ -301,7 +318,6 @@ where
         )?;
 
         // Remove storage request if we reached the required number of bsps.
-        // TODO this should be modified to also take into account if the MSP confirmed storing the file once we add MSP functionality.
         if file_metadata.bsps_confirmed == file_metadata.bsps_required {
             // Remove storage request metadata.
             <StorageRequests<T>>::remove(&location);
@@ -347,6 +363,13 @@ where
     }
 
     /// Revoke a storage request.
+    ///
+    /// *Callable by the owner of the storage request. Users, BSPs and MSPs can be the owners.*
+    ///
+    /// When the owner revokes a storage request which has already been confirmed by some BSPs, a challenge (with priority) is
+    /// issued to force the BSPs to update their storage root to uninclude the file from their storage.
+    ///
+    /// All BSPs that have volunteered to store the file are removed from the storage request and the storage request is deleted.
     pub(crate) fn do_revoke_storage_request(
         who: T::AccountId,
         location: FileLocation<T>,
@@ -371,8 +394,9 @@ where
             Error::<T>::StorageRequestNotAuthorized
         );
 
+        // Check if there are already BSPs who have confirmed to store the file.
         if file_metadata.bsps_confirmed >= T::StorageRequestBspsRequiredType::zero() {
-            // Challenge BSPs who confirmed this storage request, to force update its storage root to uninclude the file.
+            // Issue a challenge to force the BSPs to update their storage root.
             <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
                 &file_key,
             )?;
@@ -403,25 +427,27 @@ where
 
     /// BSP stops storing a file.
     ///
+    /// *Callable only by BSP accounts*
+    ///
     /// This function covers a few scenarios in which a BSP invokes this function to stop storing a file:
     ///
-    /// 1. The BSP has volunteered and confirmed storing the file and wants to stop storing it.
+    /// 1. The BSP has volunteered and confirmed storing the file and wants to stop storing it while the storage request is still open.
     ///
-    ///     In this case, the BSP has volunteered and confirmed storing the file for an existing storage request.
-    ///     Therefore, we decrement the `bsps_confirmed` by 1.
+    /// > In this case, the BSP has volunteered and confirmed storing the file for an existing storage request.
+    ///     Therefore, we decrement the `bsps_confirmed` by 1.  
     ///
-    /// 2. The BSP stops storing a file that no longer has an opened storage request.
+    /// 2. The BSP stops storing a file that has an opened storage request but is not a volunteer.
     ///
-    ///     In this case, there is no storage request opened for the file they no longer are storing. Therefore, we
-    ///     create a storage request with `bsps_required` set to 1.
-    ///
-    /// 3. The BSP stops storing a file that has an opened storage request but is not a volunteer.
-    ///
-    ///     In this case, the storage request was probably created by another BSP for some reason (e.g. that BSP lost the file)
+    /// > In this case, the storage request was probably created by another BSP for some reason (e.g. that BSP lost the file)
     ///     and the current BSP is not a volunteer for this since it is already storing it. But since they to have stopped storing it,
     ///     we increment the `bsps_requred` by 1.
     ///
-    /// *This function does not give BSPs the possibility to remove themselves from being a volunteer of a storage request.*
+    /// 3. The BSP stops storing a file that no longer has an opened storage request.
+    ///
+    /// > In this case, there is no storage request opened for the file they no longer are storing. Therefore, we
+    ///     create a storage request with `bsps_required` set to 1.
+    ///
+    /// *This function does not give BSPs the possibility to remove themselves from being a __volunteer__ of a storage request.*
     ///
     /// A proof of storing the file is required to record the new root of the BSPs merkle patricia trie. First we validate the proof
     /// and ensure the `file_key` is indeed part of the merkle patricia trie. Then finally we re-compute the new merkle patricia trie root
@@ -518,21 +544,6 @@ where
         block_to_insert_expiration
     }
 
-    /// Calculate the XOR of the fingerprint and the BSP.
-    fn compute_bsp_xor(
-        fingerprint: &[u8; 32],
-        bsp: &[u8; 32],
-    ) -> Result<T::ThresholdType, Error<T>> {
-        let xor_result = fingerprint
-            .iter()
-            .zip(bsp.iter())
-            .map(|(&x1, &x2)| x1 ^ x2)
-            .collect::<Vec<_>>();
-
-        T::ThresholdType::decode(&mut &xor_result[..])
-            .map_err(|_| Error::<T>::FailedToDecodeThreshold)
-    }
-
     /// Compute the asymptotic threshold point for the given number of total BSPs.
     ///
     /// This function calculates the threshold at which the decay factor stabilizes,
@@ -547,6 +558,21 @@ where
         );
 
         Ok(T::AssignmentThresholdAsymptote::get().saturating_add(asymptotic_decay_factor))
+    }
+
+    /// Calculate the XOR of the fingerprint and the BSP.
+    fn compute_bsp_xor(
+        fingerprint: &[u8; 32],
+        bsp: &[u8; 32],
+    ) -> Result<T::ThresholdType, Error<T>> {
+        let xor_result = fingerprint
+            .iter()
+            .zip(bsp.iter())
+            .map(|(&x1, &x2)| x1 ^ x2)
+            .collect::<Vec<_>>();
+
+        T::ThresholdType::decode(&mut &xor_result[..])
+            .map_err(|_| Error::<T>::FailedToDecodeThreshold)
     }
 }
 

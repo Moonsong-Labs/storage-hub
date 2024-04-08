@@ -551,7 +551,7 @@ type ThresholdType = FixedU128;
 
 parameter_types! {
     pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
-    pub const ThresholdAsymtpote: FixedU128 = FixedU128::from_rational(100, 1); // 100
+    pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100
     pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100
 }
 
@@ -562,7 +562,7 @@ impl pallet_file_system::Config for Runtime {
     type ProofDealer = ProofsDealer;
     type ThresholdType = ThresholdType;
     type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
-    type AssignmentThresholdAsymptote = ThresholdAsymtpote;
+    type AssignmentThresholdAsymptote = ThresholdAsymptote;
     type AssignmentThresholdMultiplier = ThresholdMultiplier;
     type Fingerprint = Hash;
     type StorageRequestBspsRequiredType = u32;

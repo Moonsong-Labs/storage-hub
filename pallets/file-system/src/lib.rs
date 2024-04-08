@@ -103,6 +103,7 @@ pub mod pallet {
             + Default
             + scale_info::TypeInfo
             + MaybeSerializeDeserialize
+            + CheckedAdd
             + One
             + Zero;
 
@@ -314,8 +315,6 @@ pub mod pallet {
         BspsRequiredExceedsMax,
         /// BSP already volunteered to store the given file.
         BspVolunteerFailed,
-        /// Account is not a Storage Provider.
-        NotAProvider,
         /// Account is not a BSP.
         NotABsp,
         /// BSP has not volunteered to store the given file.
