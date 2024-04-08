@@ -4,6 +4,7 @@
 use std::{sync::Arc, time::Duration};
 
 use cumulus_client_cli::CollatorOptions;
+use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
 use storage_hub_runtime::{
     opaque::{Block, Hash},
@@ -40,7 +41,7 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::KeystorePtr;
 use substrate_prometheus_endpoint::Registry;
 
-use crate::services::file_transfer::spawn_file_transfer_service;
+use crate::services::{file_transfer::spawn_file_transfer_service, StorageHubHandler};
 
 /// Native executor type.
 pub struct ParachainNativeExecutor;
@@ -189,13 +190,19 @@ async fn start_node_impl(
         .flatten()
         .expect("Genesis block exists; qed");
 
-    spawn_file_transfer_service(
-        task_manager.spawn_handle(),
+    let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+
+    let file_transfer_service = spawn_file_transfer_service(
+        &task_spawner,
         genesis_hash,
         &parachain_config,
         &mut net_config,
     )
     .await;
+
+    let sh_handler = StorageHubHandler::new(task_spawner, file_transfer_service);
+
+    sh_handler.start_bsp_tasks();
 
     let (relay_chain_interface, collator_key) = build_relay_chain_interface(
         polkadot_config,

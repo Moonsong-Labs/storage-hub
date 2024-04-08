@@ -12456,6 +12456,7 @@ dependencies = [
  "anyhow",
  "futures",
  "sc-service",
+ "sc-tracing",
  "sc-utils",
  "tokio",
 ]

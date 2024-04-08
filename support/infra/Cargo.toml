@@ -15,5 +15,7 @@ workspace = true
 anyhow = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }
+
+sc-tracing = { workspace = true }
 sc-service = { workspace = true }
 sc-utils = { workspace = true }

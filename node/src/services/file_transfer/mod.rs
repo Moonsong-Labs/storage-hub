@@ -1,11 +1,13 @@
 use std::time::Duration;
 
 use sc_network::{config::FullNetworkConfiguration, request_responses::ProtocolConfig};
-use sc_service::{Configuration, SpawnTaskHandle};
+use sc_service::Configuration;
 use storage_hub_infra::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 
-use self::handler::FileTransferService;
+pub use self::handler::FileTransferService;
 
+/// For defining the events emitted by the file transfer service.
+pub mod events;
 /// For incoming provider requests.
 mod handler;
 /// For defining the provider requests protocol schema.
@@ -20,13 +22,14 @@ const MAX_REQUEST_PACKET_SIZE_BYTES: u64 = 1 * 1024 * 1024 * 1024;
 const MAX_RESPONSE_PACKET_SIZE_BYTES: u64 = 1 * 1024 * 1024 * 1024;
 
 pub async fn spawn_file_transfer_service<Hash: AsRef<[u8]>>(
-    task_spawner: SpawnTaskHandle,
+    task_spawner: &TaskSpawner,
     genesis_hash: Hash,
     parachain_config: &Configuration,
     net_config: &mut FullNetworkConfiguration,
 ) -> ActorHandle<FileTransferService> {
-    let task_spawner =
-        TaskSpawner::new(task_spawner, "file-transfer-service").with_group("network");
+    let task_spawner = task_spawner
+        .with_name("file-transfer-service")
+        .with_group("network");
 
     let (file_transfer_service, protocol_config) =
         FileTransferService::new(genesis_hash, parachain_config.chain_spec.fork_id());

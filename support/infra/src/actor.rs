@@ -1,4 +1,4 @@
-use anyhow::Result;
+use core::fmt::{self, Debug, Formatter};
 use futures::prelude::*;
 
 use crate::{
@@ -35,7 +35,7 @@ pub trait Actor: Sized {
     /// Returns the event bus provider for the actor.
     fn get_event_bus_provider(&self) -> &Self::EventBusProvider;
 
-    fn emit<E: EventBusMessage>(&self, event: E) -> Result<()>
+    fn emit<E: EventBusMessage>(&self, event: E)
     where
         Self::EventBusProvider: ProvidesEventBus<E>,
     {
@@ -120,6 +120,16 @@ pub struct TaskSpawner {
     name: &'static str,
     group: Option<&'static str>,
     queue_size_warning: usize,
+}
+
+impl Debug for TaskSpawner {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TaskSpawner")
+            .field("name", &self.name)
+            .field("group", &self.group)
+            .field("queue_size_warning", &self.queue_size_warning)
+            .finish()
+    }
 }
 
 impl TaskSpawner {

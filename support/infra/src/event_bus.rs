@@ -1,4 +1,5 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
+use sc_tracing::tracing::warn;
 use std::fmt::Debug;
 use tokio::sync::broadcast;
 
@@ -20,18 +21,20 @@ impl<T: EventBusMessage> Default for EventBus<T> {
     }
 }
 
-impl<T: EventBusMessage> EventBus<T> {
+impl<T: EventBusMessage + Clone> EventBus<T> {
     pub fn new() -> Self {
         let (sender, _) = broadcast::channel(MAX_PENDING_EVENTS);
         Self { sender }
     }
 
-    pub fn emit(&self, event: T) -> Result<()> {
-        // TODO: Handle errors properly
-        self.sender
-            .send(event)
-            .map_err(|_| anyhow!("Failed to emit event"))
-            .map(|_| ())
+    pub fn emit(&self, event: T) {
+        // We log that there is no listener.
+        match self.sender.send(event) {
+            Ok(_) => {}
+            Err(error) => {
+                warn!("No listener for event: {:?}", error.0);
+            }
+        }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<T> {

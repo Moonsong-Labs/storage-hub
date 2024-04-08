@@ -25,34 +25,38 @@
 use anyhow::Result;
 use futures::prelude::*;
 use futures::stream::select;
-use jsonrpsee::tracing::warn;
 use libp2p_identity::PeerId;
-use log::{debug, info, trace};
 use prost::Message;
 use sc_network::{
     request_responses::{IncomingRequest, OutgoingResponse, ProtocolConfig},
     ReputationChange,
 };
+use sc_tracing::tracing::{debug, info, trace, warn};
 use sp_core::hexdisplay::HexDisplay;
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
 
-use super::schema;
+use crate::services::file_transfer::events::RemoteUploadRequest;
+
+use super::{events::FileTransferServiceEventBusProvider, schema};
 
 const LOG_TARGET: &str = "file-transfer-service";
 
 /// Max number of queued requests.
 const MAX_FILE_TRANSFER_REQUESTS_QUEUE: usize = 500;
 
+#[derive(Debug)]
 pub enum FileTransferServiceCommand {}
 
+#[derive(Debug)]
 pub struct FileTransferService {
     request_receiver: async_channel::Receiver<IncomingRequest>,
+    event_bus_provider: FileTransferServiceEventBusProvider,
 }
 
 impl Actor for FileTransferService {
     type Message = FileTransferServiceCommand;
     type EventLoop = FileTransferServiceEventLoop;
-    type EventBusProvider = ();
+    type EventBusProvider = FileTransferServiceEventBusProvider;
 
     fn handle_message(
         &mut self,
@@ -62,7 +66,7 @@ impl Actor for FileTransferService {
     }
 
     fn get_event_bus_provider(&self) -> &Self::EventBusProvider {
-        &()
+        &self.event_bus_provider
     }
 }
 
@@ -84,14 +88,12 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
         actor: FileTransferService,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<FileTransferServiceCommand>,
     ) -> Self {
-        Self {
-            actor,
-            receiver: receiver,
-        }
+        Self { actor, receiver }
     }
 
     async fn run(mut self) {
         info!("FileTransferService starting up!");
+
         let mut merged_stream = select(
             self.receiver.map(MergedEventLoopMessage::Command),
             self.actor
@@ -99,6 +101,7 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
                 .clone()
                 .map(MergedEventLoopMessage::Request),
         );
+
         loop {
             match merged_stream.next().await {
                 Some(MergedEventLoopMessage::Command(command)) => {
@@ -173,7 +176,7 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
 }
 
 impl FileTransferService {
-    /// Create a new [`FileTransferServiceEventLoop`].
+    /// Create a new [`FileTransferService`].
     pub fn new<Hash: AsRef<[u8]>>(
         genesis_hash: Hash,
         fork_id: Option<&str>,
@@ -183,7 +186,13 @@ impl FileTransferService {
         let mut protocol_config = super::generate_protocol_config(genesis_hash, fork_id);
         protocol_config.inbound_queue = Some(tx);
 
-        (Self { request_receiver }, protocol_config)
+        (
+            Self {
+                request_receiver,
+                event_bus_provider: FileTransferServiceEventBusProvider::new(),
+            },
+            protocol_config,
+        )
     }
 
     fn handle_request(
@@ -219,6 +228,10 @@ impl FileTransferService {
         request: &schema::v1::provider::RemoteUploadDataRequest,
     ) -> Result<schema::v1::provider::Response, HandleRequestError> {
         trace!("Remote call request from {}.", peer,);
+
+        self.emit(RemoteUploadRequest {
+            location: request.location.clone(),
+        });
 
         // TODO actually save data.
         let response = schema::v1::provider::RemoteUploadDataResponse {
