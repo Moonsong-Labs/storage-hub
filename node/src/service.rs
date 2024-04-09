@@ -4,6 +4,7 @@
 use std::{sync::Arc, time::Duration};
 
 use cumulus_client_cli::CollatorOptions;
+use polkadot_primitives::ValidationCode;
 use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
 use storage_hub_runtime::{
@@ -13,26 +14,20 @@ use storage_hub_runtime::{
 
 // Cumulus Imports
 use cumulus_client_collator::service::CollatorService;
-use cumulus_client_consensus_aura::collators::lookahead::{self as aura, Params as AuraParams};
 use cumulus_client_consensus_common::ParachainBlockImport as TParachainBlockImport;
 use cumulus_client_consensus_proposer::Proposer;
 use cumulus_client_service::{
     build_network, build_relay_chain_interface, prepare_node_config, start_relay_chain_tasks,
     BuildNetworkParams, CollatorSybilResistance, DARecoveryProfile, StartRelayChainTasksParams,
 };
-use cumulus_primitives_core::{
-    relay_chain::{CollatorPair, ValidationCode},
-    ParaId,
-};
+use cumulus_primitives_core::{relay_chain::CollatorPair, ParaId};
 use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 
 // Substrate Imports
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
 use sc_client_api::{Backend, BlockBackend};
 use sc_consensus::ImportQueue;
-use sc_executor::{
-    HeapAllocStrategy, NativeElseWasmExecutor, WasmExecutor, DEFAULT_HEAP_ALLOC_STRATEGY,
-};
+use sc_executor::{HeapAllocStrategy, WasmExecutor, DEFAULT_HEAP_ALLOC_STRATEGY};
 use sc_network::NetworkBlock;
 use sc_network_sync::SyncingService;
 use sc_service::{Configuration, PartialComponents, TFullBackend, TFullClient, TaskManager};
@@ -46,22 +41,22 @@ use crate::services::{
     StorageHubHandler,
 };
 
-/// Native executor type.
-pub struct ParachainNativeExecutor;
+#[cfg(not(feature = "runtime-benchmarks"))]
+type HostFunctions = (
+    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
+    sp_io::SubstrateHostFunctions,
+    cumulus_client_service::storage_proof_size::HostFunctions,
+);
 
-impl sc_executor::NativeExecutionDispatch for ParachainNativeExecutor {
-    type ExtendHostFunctions = frame_benchmarking::benchmarking::HostFunctions;
+#[cfg(feature = "runtime-benchmarks")]
+type HostFunctions = (
+    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
+    sp_io::SubstrateHostFunctions,
+    cumulus_client_service::storage_proof_size::HostFunctions,
+    frame_benchmarking::benchmarking::HostFunctions,
+);
 
-    fn dispatch(method: &str, data: &[u8]) -> Option<Vec<u8>> {
-        storage_hub_runtime::api::dispatch(method, data)
-    }
-
-    fn native_version() -> sc_executor::NativeVersion {
-        storage_hub_runtime::native_version()
-    }
-}
-
-pub(crate) type ParachainExecutor = NativeElseWasmExecutor<ParachainNativeExecutor>;
+type ParachainExecutor = WasmExecutor<HostFunctions>;
 
 pub(crate) type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
 
@@ -70,27 +65,25 @@ pub(crate) type ParachainBackend = TFullBackend<Block>;
 pub(crate) type ParachainBlockImport =
     TParachainBlockImport<Block, Arc<ParachainClient>, ParachainBackend>;
 
+/// Assembly of PartialComponents (enough to run chain ops subcommands)
+pub type Service = PartialComponents<
+    ParachainClient,
+    ParachainBackend,
+    (),
+    sc_consensus::DefaultImportQueue<Block>,
+    sc_transaction_pool::FullPool<Block, ParachainClient>,
+    (
+        ParachainBlockImport,
+        Option<Telemetry>,
+        Option<TelemetryWorkerHandle>,
+    ),
+>;
+
 /// Starts a `ServiceBuilder` for a full service.
 ///
 /// Use this macro if you don't actually need the full service, but just the builder in order to
 /// be able to perform chain operations.
-pub fn new_partial(
-    config: &Configuration,
-) -> Result<
-    PartialComponents<
-        ParachainClient,
-        ParachainBackend,
-        (),
-        sc_consensus::DefaultImportQueue<Block>,
-        sc_transaction_pool::FullPool<Block, ParachainClient>,
-        (
-            ParachainBlockImport,
-            Option<Telemetry>,
-            Option<TelemetryWorkerHandle>,
-        ),
-    >,
-    sc_service::Error,
-> {
+pub fn new_partial(config: &Configuration) -> Result<Service, sc_service::Error> {
     let telemetry = config
         .telemetry_endpoints
         .clone()
@@ -108,7 +101,7 @@ pub fn new_partial(
             extra_pages: h as _,
         });
 
-    let wasm = WasmExecutor::builder()
+    let executor = ParachainExecutor::builder()
         .with_execution_method(config.wasm_method)
         .with_onchain_heap_alloc_strategy(heap_pages)
         .with_offchain_heap_alloc_strategy(heap_pages)
@@ -116,13 +109,12 @@ pub fn new_partial(
         .with_runtime_cache_size(config.runtime_cache_size)
         .build();
 
-    let executor = ParachainExecutor::new_with_wasm_executor(wasm);
-
     let (client, backend, keystore_container, task_manager) =
-        sc_service::new_full_parts::<Block, RuntimeApi, _>(
+        sc_service::new_full_parts_record_import::<Block, RuntimeApi, _>(
             config,
             telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
             executor,
+            true,
         )?;
     let client = Arc::new(client);
 
@@ -266,11 +258,11 @@ async fn start_node_impl(
         );
     }
 
-    let rpc_extensions_builder = {
+    let rpc_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
 
-        move |deny_unsafe, _| {
+        Box::new(move |deny_unsafe, _| {
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
@@ -278,11 +270,11 @@ async fn start_node_impl(
             };
 
             crate::rpc::create_full(deps).map_err(Into::into)
-        }
+        })
     };
 
     sc_service::spawn_tasks(sc_service::SpawnTasksParams {
-        rpc_builder: Box::new(rpc_extensions_builder),
+        rpc_builder,
         client: client.clone(),
         transaction_pool: transaction_pool.clone(),
         task_manager: &mut task_manager,
@@ -423,10 +415,10 @@ fn start_consensus(
     overseer_handle: OverseerHandle,
     announce_block: Arc<dyn Fn(Hash, Option<Vec<u8>>) + Send + Sync>,
 ) -> Result<(), sc_service::Error> {
+    use cumulus_client_consensus_aura::collators::lookahead::{self as aura, Params as AuraParams};
+
     // NOTE: because we use Aura here explicitly, we can use `CollatorSybilResistance::Resistant`
     // when starting the network.
-
-    let slot_duration = cumulus_client_consensus_aura::slot_duration(&*client)?;
 
     let proposer_factory = sc_basic_authorship::ProposerFactory::with_proof_recording(
         task_manager.spawn_handle(),
@@ -466,7 +458,6 @@ fn start_consensus(
         proposer,
         collator_service,
         authoring_duration: Duration::from_millis(1500),
-        slot_duration,
         reinitialize: false,
     };
 
