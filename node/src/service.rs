@@ -40,9 +40,9 @@ use crate::{
     cli::ProviderType,
     command::ProviderOptions,
     services::{
-    blockchain::spawn_blockchain_service, file_transfer::spawn_file_transfer_service,
-    StorageHubHandler},
-,
+        blockchain::spawn_blockchain_service, file_transfer::spawn_file_transfer_service,
+        StorageHubHandler,
+    },
 };
 
 #[cfg(not(feature = "runtime-benchmarks"))]
@@ -193,21 +193,21 @@ async fn start_node_impl(
     if let Some(provider_options) = provider_options {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
-    let file_transfer_service_handle = spawn_file_transfer_service(
-        &task_spawner,
-        genesis_hash,
-        &parachain_config,
-        &mut net_config,
-    )
-    .await;
+        let file_transfer_service_handle = spawn_file_transfer_service(
+            &task_spawner,
+            genesis_hash,
+            &parachain_config,
+            &mut net_config,
+        )
+        .await;
 
-    let blockchain_service_handle = spawn_blockchain_service(&task_spawner).await;
+        let blockchain_service_handle = spawn_blockchain_service(&task_spawner).await;
 
-    let sh_handler = StorageHubHandler::new(
-        task_spawner,
-        file_transfer_service_handle,
-        blockchain_service_handle,
-    );
+        let sh_handler = StorageHubHandler::new(
+            task_spawner,
+            file_transfer_service_handle,
+            blockchain_service_handle,
+        );
 
         match provider_options.provider_type {
             ProviderType::Bsp => sh_handler.start_bsp_tasks(),
