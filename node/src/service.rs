@@ -164,7 +164,7 @@ pub fn new_partial(config: &Configuration) -> Result<Service, sc_service::Error>
 /// Start a node with the given parachain `Configuration` and relay chain `Configuration`.
 ///
 /// This is the actual implementation that is abstract over the executor and the runtime api.
-#[sc_tracing::logging::prefix_logs_with("Parachain")]
+#[sc_tracing::logging::prefix_logs_with("StorageHub 💾")]
 async fn start_node_impl(
     parachain_config: Configuration,
     polkadot_config: Configuration,

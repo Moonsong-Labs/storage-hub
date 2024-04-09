@@ -33,6 +33,7 @@ impl StorageHubHandler {
     }
 
     pub fn start_bsp_tasks(&self) {
+        log::info!("Starting BSP tasks");
         ResolveRemoteUploadRequest::new(self.clone())
             .subscribe_to(&self.task_spawner, &self.file_transfer)
             .start();
