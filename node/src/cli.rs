@@ -1,5 +1,9 @@
 use std::path::PathBuf;
 
+use clap::{Parser, ValueEnum};
+
+use crate::command::ProviderOptions;
+
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
 pub enum Subcommand {
@@ -44,6 +48,47 @@ pub enum Subcommand {
     TryRuntime,
 }
 
+#[derive(ValueEnum, Clone, Debug)]
+pub enum ProviderType {
+    /// Main Storage Provider
+    Msp,
+    /// Backup Storage Provider
+    Bsp,
+}
+
+#[derive(Debug, Parser)]
+#[group(skip)]
+pub struct ProviderConfigurations {
+    /// Run node as a storage hub provider.
+    #[arg(long)]
+    pub provider: bool,
+
+    /// Type of storage hub provider.
+    #[clap(
+        long,
+        value_enum,
+        value_name = "PROVIDER_TYPE",
+        required_if_eq("provider", "true")
+    )]
+    pub provider_type: Option<ProviderType>,
+
+    /// Fixed value to generate deterministic peer id.
+    #[clap(long, value_name = "SEED_FILE", required_if_eq("provider", "true"))]
+    pub seed_file: Option<String>,
+}
+
+impl ProviderConfigurations {
+    pub fn provider_options(&self) -> ProviderOptions {
+        ProviderOptions {
+            provider_type: self
+                .provider_type
+                .clone()
+                .expect("Provider type is required"),
+            seed_file: self.seed_file.clone().expect("Seed file is required"),
+        }
+    }
+}
+
 const AFTER_HELP_EXAMPLE: &str = color_print::cstr!(
     r#"<bold><underline>Examples:</></>
    <bold>parachain-template-node build-spec --disable-default-bootnode > plain-parachain-chainspec.json</>
@@ -83,6 +128,9 @@ pub struct Cli {
     /// Relay chain arguments
     #[arg(raw = true)]
     pub relay_chain_args: Vec<String>,
+
+    #[command(flatten)]
+    pub provider_config: ProviderConfigurations,
 }
 
 #[derive(Debug)]

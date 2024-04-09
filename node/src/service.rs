@@ -36,9 +36,13 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::KeystorePtr;
 use substrate_prometheus_endpoint::Registry;
 
-use crate::services::{
-    blockchain::spawn_blockchain_service, file_transfer::spawn_file_transfer_service,
-    StorageHubHandler,
+use crate::{
+    cli::ProviderType,
+    command::ProviderOptions,
+    services::{
+        blockchain::spawn_blockchain_service, file_transfer::spawn_file_transfer_service,
+        StorageHubHandler,
+    },
 };
 
 #[cfg(not(feature = "runtime-benchmarks"))]
@@ -56,7 +60,7 @@ type HostFunctions = (
     frame_benchmarking::benchmarking::HostFunctions,
 );
 
-type ParachainExecutor = WasmExecutor<HostFunctions>;
+pub(crate) type ParachainExecutor = WasmExecutor<HostFunctions>;
 
 pub(crate) type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
 
@@ -165,6 +169,7 @@ async fn start_node_impl(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
+    provider_options: Option<ProviderOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
@@ -185,25 +190,30 @@ async fn start_node_impl(
         .flatten()
         .expect("Genesis block exists; qed");
 
-    let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+    if let Some(provider_options) = provider_options {
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
-    let file_transfer_service_handle = spawn_file_transfer_service(
-        &task_spawner,
-        genesis_hash,
-        &parachain_config,
-        &mut net_config,
-    )
-    .await;
+        let file_transfer_service_handle = spawn_file_transfer_service(
+            &task_spawner,
+            genesis_hash,
+            &parachain_config,
+            &mut net_config,
+        )
+        .await;
 
-    let blockchain_service_handle = spawn_blockchain_service(&task_spawner).await;
+        let blockchain_service_handle = spawn_blockchain_service(&task_spawner).await;
 
-    let sh_handler = StorageHubHandler::new(
-        task_spawner,
-        file_transfer_service_handle,
-        blockchain_service_handle,
-    );
+        let sh_handler = StorageHubHandler::new(
+            task_spawner,
+            file_transfer_service_handle,
+            blockchain_service_handle,
+        );
 
-    sh_handler.start_bsp_tasks();
+        match provider_options.provider_type {
+            ProviderType::Bsp => sh_handler.start_bsp_tasks(),
+            _ => {}
+        }
+    }
 
     let (relay_chain_interface, collator_key) = build_relay_chain_interface(
         polkadot_config,
@@ -477,6 +487,7 @@ pub async fn start_parachain_node(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
+    provider_options: Option<ProviderOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
@@ -484,6 +495,7 @@ pub async fn start_parachain_node(
         parachain_config,
         polkadot_config,
         collator_options,
+        provider_options,
         para_id,
         hwbench,
     )
