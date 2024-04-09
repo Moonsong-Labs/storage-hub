@@ -92,7 +92,7 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
     }
 
     async fn run(mut self) {
-        info!("FileTransferService starting up!");
+        info!(target: LOG_TARGET, "FileTransferService starting up!");
 
         let mut merged_stream = select(
             self.receiver.map(MergedEventLoopMessage::Command),
