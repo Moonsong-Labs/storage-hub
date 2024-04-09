@@ -43,7 +43,7 @@ sp-runtime = { workspace = true }
 pallet-balances = { workspace = true }
 
 [features]
-default = [ "std" ]
+default = ["std"]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"frame-support/runtime-benchmarks",
@@ -53,7 +53,7 @@ runtime-benchmarks = [
 ]
 std = [
 	"codec/std",
-	"frame-benchmarking/std",
+	"frame-benchmarking?/std",
 	"frame-support/std",
 	"frame-system/std",
 	"pallet-balances/std",
