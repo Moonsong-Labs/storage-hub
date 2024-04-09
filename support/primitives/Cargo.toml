@@ -22,18 +22,17 @@ scale-info = { workspace = true }
 storage-hub-traits = { workspace = true }
 
 # Substrate
+sp-core = { workspace = true }
 sp-trie = { workspace = true }
+
+frame-support = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
 
 # Substrate
-sp-core = { workspace = true }
 sp-io = { workspace = true }
 sp-runtime = { workspace = true }
-
-# Frame
-frame-support = { workspace = true }
 
 [features]
 default = ["std"]

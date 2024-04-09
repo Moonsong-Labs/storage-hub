@@ -12939,6 +12939,7 @@ dependencies = [
  "staging-xcm",
  "staging-xcm-builder",
  "staging-xcm-executor",
+ "storage-hub-traits",
  "substrate-wasm-builder",
 ]
 

@@ -209,18 +209,14 @@ pub trait ProofsDealerInterface {
 pub trait CommitmentVerifier {
     /// The type that represents the proof.
     type Proof: Parameter + Member + Debug;
-    /// The type corresponding to the commitment, generally some hash.
-    /// For example, in vector commitments like Merkle proofs, this would be the root hash.
-    type Commitment: Debug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
-    /// The type corresponding to a challenge, generally some hash.
-    /// For example, in vector commitments like Merkle proofs, this would be the
-    /// leaf hash being challenged.
-    type Challenge: Debug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
+    /// The type that represents the commitment (e.g. a Merkle root) and the keys representing nodes
+    /// in a Merkle tree which are also passed as challenges.
+    type Key: Debug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
 
     /// Verify a proof based on a commitment and a set of challenges.
     fn verify_proof(
-        commitment: &Self::Commitment,
-        challenges: &[Self::Challenge],
+        commitment: &Self::Key,
+        challenges: &[Self::Key],
         proof: &Self::Proof,
     ) -> DispatchResult;
 }

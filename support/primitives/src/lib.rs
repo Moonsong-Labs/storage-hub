@@ -15,16 +15,15 @@ pub struct TrieVerifier<T> {
 /// Implement the `CommitmentVerifier` trait for the `TrieVerifier` struct.
 impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
     type Proof = CompactProof;
-    type Commitment = H::Out;
-    type Challenge = H::Out;
+    type Key = H::Out;
 
     /// Verifies a proof against a commitment and a set of challenges.
     ///
     /// Assumes that the challenges are ordered in ascending numerical order, and not repeated.
     /// TODO: Optimise loops and iterations.
     fn verify_proof(
-        commitment: &Self::Commitment,
-        challenges: &[Self::Challenge],
+        commitment: &Self::Key,
+        challenges: &[Self::Key],
         proof: &Self::Proof,
     ) -> DispatchResult {
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
