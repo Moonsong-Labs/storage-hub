@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use clap::{Parser, ValueEnum};
+
 use crate::command::ProviderOptions;
 
 /// Sub-commands supported by the collator.
@@ -46,7 +48,7 @@ pub enum Subcommand {
     TryRuntime,
 }
 
-#[derive(clap::ValueEnum, Clone, Debug)]
+#[derive(ValueEnum, Clone, Debug)]
 pub enum ProviderType {
     /// Main Storage Provider
     Msp,
@@ -54,34 +56,35 @@ pub enum ProviderType {
     Bsp,
 }
 
-/// The options to run the node as a storage hub provider.
-#[derive(Debug, Clone, clap::Parser)]
-#[group(required = false)]
-pub struct ProviderRunCmd {
+#[derive(Debug, Parser)]
+#[group(skip)]
+pub struct ProviderConfigurations {
     /// Run node as a storage hub provider.
     #[arg(long)]
     pub provider: bool,
 
     /// Type of storage hub provider.
-    #[clap(long, value_enum, value_name = "PROVIDER_TYPE")]
-    pub provider_type: ProviderType,
-
-    /// P2P port.
-    #[clap(long, value_name = "PORT", default_value = "30333")]
-    pub port: u16,
+    #[clap(
+        long,
+        value_enum,
+        value_name = "PROVIDER_TYPE",
+        required_if_eq("provider", "true")
+    )]
+    pub provider_type: Option<ProviderType>,
 
     /// Fixed value to generate deterministic peer id.
-    #[clap(long, value_name = "SEED", default_value = "0", alias = "seed")]
-    pub secret_key_seed: String,
+    #[clap(long, value_name = "SEED_FILE")]
+    pub seed_file: String,
 }
 
-impl ProviderRunCmd {
-    /// Create [`ProviderOptions`] representing options only relevant to parachain collator nodes
+impl ProviderConfigurations {
     pub fn provider_options(&self) -> ProviderOptions {
         ProviderOptions {
-            provider_type: self.provider_type.clone(),
-            p2p_port: self.port,
-            secret_key_seed: self.secret_key_seed.clone(),
+            provider_type: self
+                .provider_type
+                .clone()
+                .expect("Provider type is required"),
+            seed_file: self.seed_file.clone(),
         }
     }
 }
@@ -126,8 +129,8 @@ pub struct Cli {
     #[arg(raw = true)]
     pub relay_chain_args: Vec<String>,
 
-    #[clap(flatten)]
-    pub provider_config: ProviderRunCmd,
+    #[command(flatten)]
+    pub provider_config: ProviderConfigurations,
 }
 
 #[derive(Debug)]

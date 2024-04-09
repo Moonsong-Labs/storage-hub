@@ -187,17 +187,17 @@ async fn start_node_impl(
         .flatten()
         .expect("Genesis block exists; qed");
 
-    let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
-
-    let file_transfer_service = spawn_file_transfer_service(
-        &task_spawner,
-        genesis_hash,
-        &parachain_config,
-        &mut net_config,
-    )
-    .await;
-
     if let Some(provider_options) = provider_options {
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+
+        let file_transfer_service = spawn_file_transfer_service(
+            &task_spawner,
+            genesis_hash,
+            &parachain_config,
+            &mut net_config,
+        )
+        .await;
+
         let sh_handler = StorageHubHandler::new(task_spawner, file_transfer_service);
 
         match provider_options.provider_type {
