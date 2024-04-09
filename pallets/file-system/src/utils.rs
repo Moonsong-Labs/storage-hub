@@ -140,7 +140,7 @@ where
     ///
     /// *Callable only by BSP accounts*
     ///
-    /// A BSP can only volunteer for a storage request if it is eligible absed on the XOR of the `fingerprint` and the BSP's account ID and if it evaluates to a value
+    /// A BSP can only volunteer for a storage request if it is eligible based on the XOR of the `fingerprint` and the BSP's account ID and if it evaluates to a value
     /// less than the [globally computed threshold](BspsAssignmentThreshold). As the number of BSPs signed up increases, the threshold decreases, meaning there is a
     /// lower chance of a BSP being eligible to volunteer for a storage request.
     ///
@@ -210,7 +210,7 @@ where
         let threshold = rate_increase.saturating_add(BspsAssignmentThreshold::<T>::get());
 
         // Check that the BSP's threshold is under the threshold required to qualify as BSP for the storage request.
-        ensure!(bsp_threshold <= (threshold), Error::<T>::ThresholdTooHigh);
+        ensure!(bsp_threshold <= (threshold), Error::<T>::AboveThreshold);
 
         // Add BSP to storage request metadata.
         <StorageRequestBsps<T>>::insert(

@@ -304,6 +304,20 @@ fn revoke_request_storage_success() {
 }
 
 #[test]
+fn revoke_non_existing_storage_request_fail() {
+    new_test_ext().execute_with(|| {
+        let owner = RuntimeOrigin::signed(AccountId32::new([1; 32]));
+        let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+        let file_key = H256::zero();
+
+        assert_noop!(
+            FileSystem::revoke_storage_request(owner.clone(), location.clone(), file_key),
+            Error::<Test>::StorageRequestNotFound
+        );
+    });
+}
+
+#[test]
 fn revoke_storage_request_not_owner_fail() {
     new_test_ext().execute_with(|| {
         let owner = RuntimeOrigin::signed(AccountId32::new([1; 32]));
@@ -478,7 +492,7 @@ fn bsp_already_volunteered_failed() {
 }
 
 #[test]
-fn bsp_volunteer_threshold_too_high_fail() {
+fn bsp_volunteer_above_threshold_high_fail() {
     new_test_ext().execute_with(|| {
         let owner_account_id = AccountId32::new([1; 32]);
         let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
@@ -521,7 +535,7 @@ fn bsp_volunteer_threshold_too_high_fail() {
                 fingerprint,
                 multiaddresses.clone()
             ),
-            Error::<Test>::ThresholdTooHigh
+            Error::<Test>::AboveThreshold
         );
     });
 }
@@ -785,16 +799,6 @@ fn bsp_actions_not_a_bsp_fail() {
             size,
             multiaddresses.clone(),
         ));
-
-        assert_noop!(
-            FileSystem::bsp_volunteer(
-                bsp_signed.clone(),
-                location.clone(),
-                fingerprint,
-                multiaddresses.clone()
-            ),
-            Error::<Test>::NotABsp
-        );
 
         assert_noop!(
             FileSystem::bsp_volunteer(
@@ -1177,7 +1181,8 @@ fn compute_asymptotic_threshold_point_success() {
 
         // Assert that the computed threshold is as expected
         assert!(
-            threshold > FixedU128::zero(),
+            threshold > FixedU128::zero()
+                && threshold >= <Test as Config>::AssignmentThresholdAsymptote::get(),
             "Threshold should be positive"
         );
     });
@@ -1192,9 +1197,11 @@ fn subscribe_bsp_sign_up_decreases_threshold_success() {
         FileSystem::subscribe_bsp_sign_up(&AccountId32::new([2; 32]))
             .expect("BSP sign up should be successful");
 
+        let updated_threshold = FileSystem::bsps_assignment_threshold();
         // Verify that the threshold decreased
         assert!(
-            FileSystem::bsps_assignment_threshold() < initial_threshold,
+            updated_threshold < initial_threshold
+                && updated_threshold >= <Test as Config>::AssignmentThresholdAsymptote::get(),
             "Threshold should decrease after BSP sign up"
         );
     });
@@ -1209,9 +1216,11 @@ fn subscribe_bsp_sign_off_increases_threshold_success() {
         FileSystem::subscribe_bsp_sign_off(&AccountId32::new([2; 32]))
             .expect("BSP sign off should be successful");
 
+        let updated_threshold = FileSystem::bsps_assignment_threshold();
         // Verify that the threshold increased
         assert!(
-            FileSystem::bsps_assignment_threshold() > initial_threshold,
+            updated_threshold > initial_threshold
+                && updated_threshold >= <Test as Config>::AssignmentThresholdAsymptote::get(),
             "Threshold should increase after BSP sign off"
         );
     });

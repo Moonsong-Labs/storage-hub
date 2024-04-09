@@ -343,7 +343,7 @@ pub mod pallet {
         /// Failed to decode threshold.
         FailedToDecodeThreshold,
         /// BSP did not succeed threshold check.
-        ThresholdTooHigh,
+        AboveThreshold,
         /// Failed to convert block number to threshold.
         FailedToConvertBlockNumber,
         /// Arithmetic error in threshold calculation.
