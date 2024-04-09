@@ -36,7 +36,10 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::KeystorePtr;
 use substrate_prometheus_endpoint::Registry;
 
-use crate::services::{file_transfer::spawn_file_transfer_service, StorageHubHandler};
+use crate::services::{
+    blockchain::spawn_blockchain_service, file_transfer::spawn_file_transfer_service,
+    StorageHubHandler,
+};
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = (
@@ -184,7 +187,7 @@ async fn start_node_impl(
 
     let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
-    let file_transfer_service = spawn_file_transfer_service(
+    let file_transfer_service_handle = spawn_file_transfer_service(
         &task_spawner,
         genesis_hash,
         &parachain_config,
@@ -192,7 +195,13 @@ async fn start_node_impl(
     )
     .await;
 
-    let sh_handler = StorageHubHandler::new(task_spawner, file_transfer_service);
+    let blockchain_service_handle = spawn_blockchain_service(&task_spawner).await;
+
+    let sh_handler = StorageHubHandler::new(
+        task_spawner,
+        file_transfer_service_handle,
+        blockchain_service_handle,
+    );
 
     sh_handler.start_bsp_tasks();
 
