@@ -5,6 +5,7 @@ use std::{sync::Arc, time::Duration};
 
 use cumulus_client_cli::CollatorOptions;
 use polkadot_primitives::ValidationCode;
+use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
 use storage_hub_runtime::{
     opaque::{Block, Hash},
@@ -24,7 +25,7 @@ use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 
 // Substrate Imports
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
-use sc_client_api::Backend;
+use sc_client_api::{Backend, BlockBackend};
 use sc_consensus::ImportQueue;
 use sc_executor::{HeapAllocStrategy, WasmExecutor, DEFAULT_HEAP_ALLOC_STRATEGY};
 use sc_network::NetworkBlock;
@@ -34,6 +35,8 @@ use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerH
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::KeystorePtr;
 use substrate_prometheus_endpoint::Registry;
+
+use crate::services::{file_transfer::spawn_file_transfer_service, StorageHubHandler};
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = (
@@ -52,11 +55,12 @@ type HostFunctions = (
 
 type ParachainExecutor = WasmExecutor<HostFunctions>;
 
-type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
+pub(crate) type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
 
-type ParachainBackend = TFullBackend<Block>;
+pub(crate) type ParachainBackend = TFullBackend<Block>;
 
-type ParachainBlockImport = TParachainBlockImport<Block, Arc<ParachainClient>, ParachainBackend>;
+pub(crate) type ParachainBlockImport =
+    TParachainBlockImport<Block, Arc<ParachainClient>, ParachainBackend>;
 
 /// Assembly of PartialComponents (enough to run chain ops subcommands)
 pub type Service = PartialComponents<
@@ -165,11 +169,32 @@ async fn start_node_impl(
 
     let params = new_partial(&parachain_config)?;
     let (block_import, mut telemetry, telemetry_worker_handle) = params.other;
-    let net_config = sc_network::config::FullNetworkConfiguration::new(&parachain_config.network);
+    let mut net_config =
+        sc_network::config::FullNetworkConfiguration::new(&parachain_config.network);
 
     let client = params.client.clone();
     let backend = params.backend.clone();
     let mut task_manager = params.task_manager;
+
+    let genesis_hash = client
+        .block_hash(0u32.into())
+        .ok()
+        .flatten()
+        .expect("Genesis block exists; qed");
+
+    let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+
+    let file_transfer_service = spawn_file_transfer_service(
+        &task_spawner,
+        genesis_hash,
+        &parachain_config,
+        &mut net_config,
+    )
+    .await;
+
+    let sh_handler = StorageHubHandler::new(task_spawner, file_transfer_service);
+
+    sh_handler.start_bsp_tasks();
 
     let (relay_chain_interface, collator_key) = build_relay_chain_interface(
         polkadot_config,
