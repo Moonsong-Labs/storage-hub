@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use crate::command::ProviderOptions;
+
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
 pub enum Subcommand {
@@ -41,6 +43,46 @@ pub enum Subcommand {
     TryRuntime,
 }
 
+#[derive(clap::ValueEnum, Clone, Debug)]
+pub enum ProviderType {
+    /// Main Storage Provider
+    Msp,
+    /// Backup Storage Provider
+    Bsp,
+}
+
+/// The options to run the node as a storage hub provider.
+#[derive(Debug, Clone, clap::Parser)]
+#[group(required = false)]
+pub struct ProviderRunCmd {
+    /// Run node as a storage hub provider.
+    #[arg(long)]
+    pub provider: bool,
+
+    /// Type of storage hub provider.
+    #[clap(long, value_enum, value_name = "PROVIDER_TYPE")]
+    pub provider_type: ProviderType,
+
+    /// P2P port.
+    #[clap(long, value_name = "PORT", default_value = "30333")]
+    pub port: u16,
+
+    /// Fixed value to generate deterministic peer id.
+    #[clap(long, value_name = "SEED", default_value = "0", alias = "seed")]
+    pub secret_key_seed: String,
+}
+
+impl ProviderRunCmd {
+    /// Create [`ProviderOptions`] representing options only relevant to parachain collator nodes
+    pub fn provider_options(&self) -> ProviderOptions {
+        ProviderOptions {
+            provider_type: self.provider_type.clone(),
+            p2p_port: self.port,
+            secret_key_seed: self.secret_key_seed.clone(),
+        }
+    }
+}
+
 const AFTER_HELP_EXAMPLE: &str = color_print::cstr!(
     r#"<bold><underline>Examples:</></>
    <bold>parachain-template-node build-spec --disable-default-bootnode > plain-parachain-chainspec.json</>
@@ -80,6 +122,9 @@ pub struct Cli {
     /// Relay chain arguments
     #[arg(raw = true)]
     pub relay_chain_args: Vec<String>,
+
+    #[clap(flatten)]
+    pub provider_config: ProviderRunCmd,
 }
 
 #[derive(Debug)]

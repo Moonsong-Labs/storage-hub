@@ -41,7 +41,11 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::KeystorePtr;
 use substrate_prometheus_endpoint::Registry;
 
-use crate::services::{file_transfer::spawn_file_transfer_service, StorageHubHandler};
+use crate::{
+    cli::ProviderType,
+    command::ProviderOptions,
+    services::{file_transfer::spawn_file_transfer_service, StorageHubHandler},
+};
 
 /// Native executor type.
 pub struct ParachainNativeExecutor;
@@ -170,6 +174,7 @@ async fn start_node_impl(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
+    provider_options: Option<ProviderOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
@@ -200,9 +205,14 @@ async fn start_node_impl(
     )
     .await;
 
-    let sh_handler = StorageHubHandler::new(task_spawner, file_transfer_service);
+    if let Some(provider_options) = provider_options {
+        let sh_handler = StorageHubHandler::new(task_spawner, file_transfer_service);
 
-    sh_handler.start_bsp_tasks();
+        match provider_options.provider_type {
+            ProviderType::Bsp => sh_handler.start_bsp_tasks(),
+            _ => {}
+        }
+    }
 
     let (relay_chain_interface, collator_key) = build_relay_chain_interface(
         polkadot_config,
@@ -477,6 +487,7 @@ pub async fn start_parachain_node(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
+    provider_options: Option<ProviderOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
@@ -484,6 +495,7 @@ pub async fn start_parachain_node(
         parachain_config,
         polkadot_config,
         collator_options,
+        provider_options,
         para_id,
         hwbench,
     )

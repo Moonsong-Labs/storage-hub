@@ -13,9 +13,20 @@ use storage_hub_runtime::Block;
 
 use crate::{
     chain_spec,
-    cli::{Cli, RelayChainCli, Subcommand},
+    cli::{Cli, ProviderType, RelayChainCli, Subcommand},
     service::new_partial,
 };
+
+/// Configuration for the provider.
+#[derive(Debug, Clone)]
+pub struct ProviderOptions {
+    /// Provider type.
+    pub provider_type: ProviderType,
+    /// P2P port
+    pub p2p_port: u16,
+    /// Seed to generate deterministic peer id.
+    pub secret_key_seed: String,
+}
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
     Ok(match id {
@@ -222,6 +233,7 @@ pub fn run() -> Result<()> {
 		None => {
 			let runner = cli.create_runner(&cli.run.normalize())?;
 			let collator_options = cli.run.collator_options();
+            let provider_options = if cli.provider_config.provider { Some(cli.provider_config.provider_options()) } else { None };
 
 			runner.run_node_until_exit(|config| async move {
 				let hwbench = (!cli.no_hardware_benchmarks)
@@ -259,6 +271,7 @@ pub fn run() -> Result<()> {
 					config,
 					polkadot_config,
 					collator_options,
+                    provider_options,
 					id,
 					hwbench,
 				)
