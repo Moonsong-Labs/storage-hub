@@ -37,7 +37,7 @@ futures = { workspace = true }
 serde_json = { workspace = true }
 
 # Substrate
-frame-benchmarking = { workspace = true }
+frame-benchmarking = { workspace = true, default-features = true }
 frame-benchmarking-cli = { workspace = true }
 pallet-transaction-payment-rpc = { workspace = true }
 sc-basic-authorship = { workspace = true }
