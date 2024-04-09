@@ -4,8 +4,8 @@
 use std::{sync::Arc, time::Duration};
 
 use cumulus_client_cli::CollatorOptions;
-use storage_hub_infra::actor::TaskSpawner;
 use polkadot_primitives::ValidationCode;
+use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
 use storage_hub_runtime::{
     opaque::{Block, Hash},
