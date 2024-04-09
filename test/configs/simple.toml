@@ -1,21 +1,31 @@
 [relaychain]
-default_image = "docker.io/parity/polkadot:latest"
-default_args = ["-lparachain=debug"]
 chain = "rococo-local"
+default_image = "docker.io/parity/polkadot:v1.5.0"
+default_command = "polkadot"
+default_args = [
+    "--no-hardware-benchmarks",
+    "-lparachain=debug",
+    "--database=paritydb",
+]
 
-[[relaychain.nodes]]
-name = "alice"
-validator = true
-
-[[relaychain.nodes]]
-name = "bob"
-validator = true
+[[relaychain.node_groups]]
+count = 2
+name = "relay"
 
 [[parachains]]
 id = 2000
-cumulus_based = true
 
-[[parachains.collator]]
-name = "storage-hub-collator-01"
-image = "localhost:5000/storage-hub-node:local"
-args = ["-lparachain=debug", "--unsafe-rpc-external", "--rpc-cors=all"]
+[parachains.collator]
+image = "{{SH_IMAGE}}"
+command = "storage-hub-node"
+name = "sh"
+args = ["--no-hardware-benchmarks", "-lparachain=debug"]
+
+
+[types.Header]
+number = "u64"
+parent_hash = "Hash"
+post_state = "Hash"
+
+[settings]
+provider = "kubernetes"

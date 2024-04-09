@@ -1,0 +1,8 @@
+Description: Simple Network Smoke Test
+Network: ./simpleNative.toml
+Creds: config
+
+relay-0: is up
+relay-1: is up
+relay-0: parachain 2000 is registered within 225 seconds
+relay-0: parachain 2000 block height is at least 10 within 200 seconds

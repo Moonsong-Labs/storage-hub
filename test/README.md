@@ -20,6 +20,9 @@ The quickest way is via their script: `curl -fsSL https://bun.sh/install | bash`
 
 #### Kubernetes
 
+> [!INFORMATION]
+> Currently storage-hub on k8 is having issues due to how we are generating chain specs, you can skip directly to [Spawning ZombieNet Native](#spawning-zombienet-native)
+
 For simplicity, we can use minikube to be a local [kubernetes](https://kubernetes.io/) cluster.
 
 Visit their [docs](https://minikube.sigs.k8s.io/docs/) for a guide on GettingStarted, but once installed can be started with:
@@ -28,42 +31,61 @@ Visit their [docs](https://minikube.sigs.k8s.io/docs/) for a guide on GettingSta
 minikube start
 ```
 
-#### Creating Local Docker Image (Required)
+#### Creating Local Docker Image
 
 _In `test/` directory:_
 
-1. Run `bun docker:registry:start` to start a docker registry
-2. Run `bun docker:build:sh-node` to build docker image locally
-3. Run `bun docker:registry:push` to push new docker image to local registry
+Run:
+
+```sh
+bun docker:build
+```
+
+to create a local Docker image `storage-hub:local`.
+
+#### Running Local built via Docker
+
+```sh
+docker compose -f docker/local-node-compose.yml up -d
+```
+
+#### Running Latest built via Docker
+
+```sh
+docker compose -f docker/latest-node-compose.yml up -d
+```
 
 #### Zombienet
 
-Easiest way to get the latest zombienet runner binary is via their [Releases](https://github.com/paritytech/zombienet/releases) page. For example:
+> [!NOTE]  
+> Please ensure the rust project is built first e.g. `cargo build --release`
 
-```sh
-wget https://github.com/paritytech/zombienet/releases/download/v1.3.95/zombienet-linux-x64
-chmod +x zombienet-linux-x64
-```
+In `/test` run: `bun install` to install zombienet
 
-> [!IMPORTANT]  
-> If using a Mac use the `macos` binary
-
-### Running Tests
+### Running Standard Tests
 
 ```sh
 bun test
 ```
 
-### Running Zombienet manually
-
-Now that (finally) all the pieces are together, let's start a StorageHub parachain connected to a rococco relaychain.
-
-`<zombienet-bin-name> spawn <config_path>`
-
-For example:
+### Running ZombieNet Tests
 
 ```sh
-./zombienet-linux-x64 spawn configs/simple.toml
+bun zombie:test:native
+```
+
+### Spawning ZombieNet Native
+
+> [!TIP]  
+> Polkadot binaries are required to run a zombienet network.
+> For Linux you can run the script: `bun scripts/downloadPolkadot.ts <version>`
+> For macOS you will have to [compile from source](https://github.com/paritytech/polkadot-sdk/tree/master/polkadot#build-from-source).
+
+To launch a non-ephemeral ZombieNetwork by executing the following in: `/test` directory:
+
+```sh
+bun install
+bun zombie:run:native
 ```
 
 From here you should see in the terminal, the different nodes being spun up. When the network is fully launched, you should see something like this:

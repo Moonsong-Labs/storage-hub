@@ -1,5 +1,5 @@
 use frame_support::{
-    derive_impl, parameter_types,
+    construct_runtime, derive_impl, parameter_types,
     traits::{Everything, Hooks},
     weights::{constants::RocksDbWeight, Weight},
 };
@@ -7,14 +7,14 @@ use frame_system as system;
 use pallet_proofs_dealer::{CompactProof, TrieVerifier};
 use sp_core::{ConstU128, ConstU32, Get, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage,
+    traits::{BlakeTwo256, Bounded, IdentityLookup},
+    AccountId32, BuildStorage, FixedU128,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
 type Balance = u128;
-type AccountId = u64;
+type AccountId = AccountId32;
 
 /// Rolls to the desired block. Returns the number of blocks played.
 pub(crate) fn roll_to(n: BlockNumber) -> BlockNumber {
@@ -35,13 +35,13 @@ fn roll_one_block() -> BlockNumber {
 }
 
 // Configure a mock runtime to test the pallet.
-frame_support::construct_runtime!(
+construct_runtime!(
     pub enum Test
     {
         System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
         FileSystem: crate::{Pallet, Call, Storage, Event<T>},
-        Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>},
+        Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>, HoldReason},
         ProofsDealer: pallet_proofs_dealer::{Pallet, Call, Storage, Event<T>},
     }
 );
@@ -49,9 +49,10 @@ frame_support::construct_runtime!(
 parameter_types! {
     pub const BlockHashCount: u64 = 250;
     pub const SS58Prefix: u8 = 42;
+    pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::Providers(pallet_storage_providers::HoldReason::StorageProviderDeposit);
 }
 
-#[derive_impl(frame_system::config_preludes::TestDefaultConfig as frame_system::DefaultConfig)]
+#[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
 impl system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
@@ -88,37 +89,41 @@ impl pallet_balances::Config for Test {
     type MaxLocks = ConstU32<10>;
     type MaxReserves = ();
     type ReserveIdentifier = [u8; 8];
-    type RuntimeHoldReason = ();
-    type RuntimeFreezeReason = ();
+    type RuntimeHoldReason = RuntimeHoldReason;
+    type RuntimeFreezeReason = RuntimeFreezeReason;
     type FreezeIdentifier = ();
-    type MaxHolds = ConstU32<10>;
     type MaxFreezes = ConstU32<10>;
+}
+
+parameter_types! {
+    pub const MaxMultiAddressSize: u32 = 100;
 }
 
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
+    type RuntimeHoldReason = RuntimeHoldReason;
     type StorageData = u32;
     type SpCount = u32;
-    type HashId = H256;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
-    type MaxMultiAddressSize = ConstU32<100>;
+    type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type SpMinDeposit = ConstU128<10>;
-    type SpMinCapacity = ConstU32<1>;
+    type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
+    type Subscribers = FileSystem;
 }
 
 // TODO: remove this and replace with pallet treasury
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
-        1
+        AccountId::new([0; 32])
     }
 }
 
@@ -148,24 +153,60 @@ impl TrieVerifier for MockVerifier {
     }
 }
 
+type ThresholdType = FixedU128;
+
+parameter_types! {
+    pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
+    pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
+    pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
+}
+
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type Providers = Providers;
+    type ProofDealer = ProofsDealer;
     type Fingerprint = H256;
-    type StorageUnit = u128;
     type StorageRequestBspsRequiredType = u32;
-    type TargetBspsRequired = ConstU32<1>;
+    type ThresholdType = ThresholdType;
+    type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
+    type AssignmentThresholdAsymptote = ThresholdAsymptote;
+    type AssignmentThresholdMultiplier = ThresholdMultiplier;
+    type TargetBspsRequired = ConstU32<3>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
-    type MaxMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
+    type MaxDataServerMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
+    type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxFilePathSize = ConstU32<512u32>;
-    type MaxMultiAddressSize = ConstU32<512u32>;
     type StorageRequestTtl = ConstU32<40u32>;
     type MaxExpiredStorageRequests = ConstU32<100u32>;
 }
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-    system::GenesisConfig::<Test>::default()
+    let mut t = system::GenesisConfig::<Test>::default()
         .build_storage()
-        .unwrap()
-        .into()
+        .unwrap();
+
+    crate::GenesisConfig::<Test> {
+        bsp_assignment_threshold: FixedU128::max_value(),
+    }
+    .assimilate_storage(&mut t)
+    .unwrap();
+
+    pallet_balances::GenesisConfig::<Test> {
+        balances: vec![
+            (AccountId32::new([1; 32]), 1_000_000_000_000_000),
+            (AccountId32::new([2; 32]), 1_000_000_000_000_000),
+            (AccountId32::new([3; 32]), 1_000_000_000_000_000),
+            (AccountId32::new([4; 32]), 1_000_000_000_000_000),
+            (AccountId32::new([5; 32]), 1_000_000_000_000_000),
+            (AccountId32::new([6; 32]), 1_000_000_000_000_000),
+            (AccountId32::new([7; 32]), 1_000_000_000_000_000),
+        ],
+    }
+    .assimilate_storage(&mut t)
+    .unwrap();
+
+    let mut ext = sp_io::TestExternalities::new(t);
+    ext.execute_with(|| System::set_block_number(1));
+    ext
 }

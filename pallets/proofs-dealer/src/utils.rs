@@ -127,7 +127,7 @@ where
         proof: &CompactProof,
     ) -> DispatchResult {
         // TODO
-        unimplemented!()
+        Ok(())
     }
 }
 

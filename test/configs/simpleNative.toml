@@ -1,0 +1,29 @@
+[relaychain]
+chain = "rococo-local"
+default_command = "tmp/polkadot"
+default_args = [
+    "--no-hardware-benchmarks",
+    "-lparachain=debug",
+    "--database=paritydb",
+]
+
+[[relaychain.node_groups]]
+count = 2
+name = "relay"
+
+[[parachains]]
+id = 2000
+
+[parachains.collator]
+command = "../target/release/storage-hub-node"
+name = "sh"
+args = ["--no-hardware-benchmarks", "-lparachain=debug"]
+
+
+[types.Header]
+number = "u64"
+parent_hash = "Hash"
+post_state = "Hash"
+
+[settings]
+provider = "native"

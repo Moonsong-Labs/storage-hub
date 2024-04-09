@@ -18,12 +18,8 @@ mod tests;
 pub mod types;
 pub mod utils;
 
-use frame_support::{inherent::IsFatalError, pallet_prelude::*, sp_runtime::RuntimeString};
 use scale_info::prelude::fmt::Debug;
 pub use sp_trie::CompactProof;
-
-// TODO: Define this.
-const INHERENT_IDENTIFIER: InherentIdentifier = *b"todo____";
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -352,60 +348,6 @@ pub mod pallet {
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
-        }
-    }
-
-    // This pallet provides an inherent, as such it implements ProvideInherent trait
-    // https://paritytech.github.io/substrate/master/frame_support/inherent/trait.ProvideInherent.html
-    #[pallet::inherent]
-    impl<T: Config> ProvideInherent for Pallet<T> {
-        type Call = Call<T>;
-        // TODO: Specify this type.
-        type Error = InherentError;
-        // TODO: Specify this type.
-        const INHERENT_IDENTIFIER: InherentIdentifier = INHERENT_IDENTIFIER;
-
-        // This method is used to decide whether this inherent is requiered for the block to be accepted
-        fn is_inherent_required(data: &InherentData) -> Result<Option<Self::Error>, Self::Error> {
-            // TODO: Implement this method
-            unimplemented!()
-        }
-
-        fn create_inherent(data: &InherentData) -> Option<Self::Call> {
-            // create and return the extrinsic call if the data could be read and decoded
-            // TODO: Implement this method
-            unimplemented!()
-        }
-        // Determine if a call is an inherent extrinsic
-        fn is_inherent(call: &Self::Call) -> bool {
-            // TODO: Implement this method
-            unimplemented!()
-        }
-    }
-}
-
-#[derive(Encode)]
-#[cfg_attr(feature = "std", derive(Debug, Decode))]
-pub enum InherentError {
-    Other(RuntimeString),
-}
-
-impl IsFatalError for InherentError {
-    fn is_fatal_error(&self) -> bool {
-        match *self {
-            InherentError::Other(_) => true,
-        }
-    }
-}
-
-impl InherentError {
-    /// Try to create an instance ouf of the given identifier and data.
-    #[cfg(feature = "std")]
-    pub fn try_from(id: &InherentIdentifier, data: &[u8]) -> Option<Self> {
-        if id == &INHERENT_IDENTIFIER {
-            <InherentError as codec::Decode>::decode(&mut &data[..]).ok()
-        } else {
-            None
         }
     }
 }

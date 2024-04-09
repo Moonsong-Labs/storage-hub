@@ -6,20 +6,15 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+mod configs;
 mod weights;
-pub mod xcm_config;
 
-use cumulus_pallet_parachain_system::RelayNumberStrictlyIncreases;
-use pallet_proofs_dealer::{CompactProof, TrieVerifier};
-use polkadot_runtime_common::xcm_sender::NoPriceForMessageDelivery;
 use smallvec::smallvec;
 use sp_api::impl_runtime_apis;
-use sp_core::{crypto::KeyTypeId, Get, OpaqueMetadata};
 use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
-    traits::{BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
-    transaction_validity::{TransactionSource, TransactionValidity},
-    ApplyExtrinsicResult, MultiSignature,
+    traits::{BlakeTwo256, IdentifyAccount, Verify},
+    MultiSignature,
 };
 
 use sp_std::prelude::*;
@@ -27,42 +22,28 @@ use sp_std::prelude::*;
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
-use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
+use frame_support::genesis_builder_helper::{build_config, create_default_config};
 use frame_support::{
-    construct_runtime, derive_impl,
-    dispatch::DispatchClass,
-    genesis_builder_helper::{build_config, create_default_config},
-    parameter_types,
-    traits::{ConstBool, ConstU128, ConstU32, ConstU64, ConstU8, EitherOfDiverse, TransformOrigin},
+    construct_runtime,
     weights::{
-        constants::WEIGHT_REF_TIME_PER_SECOND, ConstantMultiplier, Weight, WeightToFeeCoefficient,
+        constants::WEIGHT_REF_TIME_PER_SECOND, Weight, WeightToFeeCoefficient,
         WeightToFeeCoefficients, WeightToFeePolynomial,
     },
-    PalletId,
 };
-use frame_system::{
-    limits::{BlockLength, BlockWeights},
-    EnsureRoot,
-};
-use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
-use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_runtime::AccountId32;
+use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
+use sp_runtime::{
+    traits::Block as BlockT,
+    transaction_validity::{TransactionSource, TransactionValidity},
+    ApplyExtrinsicResult, ExtrinsicInclusionMode,
+};
 pub use sp_runtime::{MultiAddress, Perbill, Permill};
-use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
+use sp_std::prelude::Vec;
 
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 
-// Polkadot imports
-use polkadot_runtime_common::{BlockHashCount, SlowAdjustingFeeUpdate};
-
-use weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight};
-
-// XCM Imports
-use xcm::latest::prelude::BodyId;
-
-pub use pallet_file_system;
+use weights::ExtrinsicBaseWeight;
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
@@ -108,6 +89,7 @@ pub type SignedExtra = (
     frame_system::CheckNonce<Runtime>,
     frame_system::CheckWeight<Runtime>,
     pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
+    cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim<Runtime>,
 );
 
 /// Unchecked extrinsic type as expected by this runtime.
@@ -180,8 +162,8 @@ impl_opaque_keys! {
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-    spec_name: create_runtime_str!("template-parachain"),
-    impl_name: create_runtime_str!("template-parachain"),
+    spec_name: create_runtime_str!("storage-hub-runtime"),
+    impl_name: create_runtime_str!("storage-hub-runtime"),
     authoring_version: 1,
     spec_version: 1,
     impl_version: 0,
@@ -190,16 +172,12 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     state_version: 1,
 };
 
-/// This determines the average expected block time that we are targeting.
 /// Blocks will be produced at a minimum duration defined by `SLOT_DURATION`.
 /// `SLOT_DURATION` is picked up by `pallet_timestamp` which is in turn picked
 /// up by `pallet_aura` to implement `fn slot_duration()`.
 ///
 /// Change this to adjust the block time.
-pub const MILLISECS_PER_BLOCK: u64 = 12000;
-
-// NOTE: Currently it is not possible to change the slot duration after the chain has started.
-//       Attempting to do so will brick block production.
+pub const MILLISECS_PER_BLOCK: u64 = 6000;
 pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
 
 // Time is measured by number of blocks.
@@ -223,17 +201,17 @@ const AVERAGE_ON_INITIALIZE_RATIO: Perbill = Perbill::from_percent(5);
 /// `Operational` extrinsics.
 const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 
-/// We allow for 0.5 of a second of compute with a 12 second average block time.
-const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_parts(
-    WEIGHT_REF_TIME_PER_SECOND.saturating_div(2),
+/// We allow for 2 seconds of compute with a 6 second average block.
+pub const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_parts(
+    WEIGHT_REF_TIME_PER_SECOND.saturating_mul(2),
     cumulus_primitives_core::relay_chain::MAX_POV_SIZE as u64,
 );
 
-/// Maximum number of blocks simultaneously accepted by the Runtime, not yet included
-/// into the relay chain.
-const UNINCLUDED_SEGMENT_CAPACITY: u32 = 1;
-/// How many parachain blocks are processed by the relay chain per parent. Limits the
-/// number of blocks authored per slot.
+/// Maximum number of blocks simultaneously accepted by the Runtime, not yet included into the
+/// relay chain.
+const UNINCLUDED_SEGMENT_CAPACITY: u32 = 3;
+/// How many parachain blocks are processed by the relay chain per parent. Limits the number of
+/// blocks authored per slot.
 const BLOCK_PROCESSING_VELOCITY: u32 = 1;
 /// Relay chain slot duration, in milliseconds.
 const RELAY_CHAIN_SLOT_DURATION_MILLIS: u32 = 6000;
@@ -247,320 +225,9 @@ pub fn native_version() -> NativeVersion {
     }
 }
 
-parameter_types! {
-    pub const Version: RuntimeVersion = VERSION;
-
-    // This part is copied from Substrate's `bin/node/runtime/src/lib.rs`.
-    //  The `RuntimeBlockLength` and `RuntimeBlockWeights` exist here because the
-    // `DeletionWeightLimit` and `DeletionQueueDepth` depend on those to parameterize
-    // the lazy contract deletion.
-    pub RuntimeBlockLength: BlockLength =
-        BlockLength::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
-    pub RuntimeBlockWeights: BlockWeights = BlockWeights::builder()
-        .base_block(BlockExecutionWeight::get())
-        .for_class(DispatchClass::all(), |weights| {
-            weights.base_extrinsic = ExtrinsicBaseWeight::get();
-        })
-        .for_class(DispatchClass::Normal, |weights| {
-            weights.max_total = Some(NORMAL_DISPATCH_RATIO * MAXIMUM_BLOCK_WEIGHT);
-        })
-        .for_class(DispatchClass::Operational, |weights| {
-            weights.max_total = Some(MAXIMUM_BLOCK_WEIGHT);
-            // Operational transactions have some extra reserved space, so that they
-            // are included even if block reached `MAXIMUM_BLOCK_WEIGHT`.
-            weights.reserved = Some(
-                MAXIMUM_BLOCK_WEIGHT - NORMAL_DISPATCH_RATIO * MAXIMUM_BLOCK_WEIGHT
-            );
-        })
-        .avg_block_initialization(AVERAGE_ON_INITIALIZE_RATIO)
-        .build_or_panic();
-    pub const SS58Prefix: u16 = 42;
-}
-
-/// The default types are being injected by [`derive_impl`](`frame_support::derive_impl`) from
-/// [`ParaChainDefaultConfig`](`struct@frame_system::config_preludes::ParaChainDefaultConfig`),
-/// but overridden as needed.
-#[derive_impl(frame_system::config_preludes::ParaChainDefaultConfig as frame_system::DefaultConfig)]
-impl frame_system::Config for Runtime {
-    /// The identifier used to distinguish between accounts.
-    type AccountId = AccountId;
-    /// The index type for storing how many extrinsics an account has signed.
-    type Nonce = Nonce;
-    /// The type for hashing blocks and tries.
-    type Hash = Hash;
-    /// The block type.
-    type Block = Block;
-    /// Maximum number of block number to block hash mappings to keep (oldest pruned first).
-    type BlockHashCount = BlockHashCount;
-    /// Runtime version.
-    type Version = Version;
-    /// The data to be stored in an account.
-    type AccountData = pallet_balances::AccountData<Balance>;
-    /// The weight of database operations that the runtime can invoke.
-    type DbWeight = RocksDbWeight;
-    /// Block & extrinsics weights: base values and limits.
-    type BlockWeights = RuntimeBlockWeights;
-    /// The maximum length of a block (in bytes).
-    type BlockLength = RuntimeBlockLength;
-    /// This is used as an identifier of the chain. 42 is the generic substrate prefix.
-    type SS58Prefix = SS58Prefix;
-    /// The action to take on a Runtime Upgrade
-    type OnSetCode = cumulus_pallet_parachain_system::ParachainSetCode<Self>;
-    type MaxConsumers = frame_support::traits::ConstU32<16>;
-}
-
-impl pallet_timestamp::Config for Runtime {
-    /// A timestamp: milliseconds since the unix epoch.
-    type Moment = u64;
-    type OnTimestampSet = Aura;
-    type MinimumPeriod = ConstU64<{ SLOT_DURATION / 2 }>;
-    type WeightInfo = ();
-}
-
-impl pallet_authorship::Config for Runtime {
-    type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Aura>;
-    type EventHandler = (CollatorSelection,);
-}
-
-parameter_types! {
-    pub const ExistentialDeposit: Balance = EXISTENTIAL_DEPOSIT;
-}
-
-impl pallet_balances::Config for Runtime {
-    type MaxLocks = ConstU32<50>;
-    /// The type for recording an account's balance.
-    type Balance = Balance;
-    /// The ubiquitous event type.
-    type RuntimeEvent = RuntimeEvent;
-    type DustRemoval = ();
-    type ExistentialDeposit = ExistentialDeposit;
-    type AccountStore = System;
-    type WeightInfo = pallet_balances::weights::SubstrateWeight<Runtime>;
-    type MaxReserves = ConstU32<50>;
-    type ReserveIdentifier = [u8; 8];
-    type RuntimeHoldReason = RuntimeHoldReason;
-    type RuntimeFreezeReason = RuntimeFreezeReason;
-    type FreezeIdentifier = ();
-    type MaxHolds = ConstU32<0>;
-    type MaxFreezes = ConstU32<0>;
-}
-
-parameter_types! {
-    /// Relay Chain `TransactionByteFee` / 10
-    pub const TransactionByteFee: Balance = 10 * MICROUNIT;
-}
-
-impl pallet_transaction_payment::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type OnChargeTransaction = pallet_transaction_payment::CurrencyAdapter<Balances, ()>;
-    type WeightToFee = WeightToFee;
-    type LengthToFee = ConstantMultiplier<Balance, TransactionByteFee>;
-    type FeeMultiplierUpdate = SlowAdjustingFeeUpdate<Self>;
-    type OperationalFeeMultiplier = ConstU8<5>;
-}
-
-impl pallet_sudo::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type RuntimeCall = RuntimeCall;
-    type WeightInfo = ();
-}
-
-parameter_types! {
-    pub const ReservedXcmpWeight: Weight = MAXIMUM_BLOCK_WEIGHT.saturating_div(4);
-    pub const ReservedDmpWeight: Weight = MAXIMUM_BLOCK_WEIGHT.saturating_div(4);
-    pub const RelayOrigin: AggregateMessageOrigin = AggregateMessageOrigin::Parent;
-}
-
-impl cumulus_pallet_parachain_system::Config for Runtime {
-    type WeightInfo = ();
-    type RuntimeEvent = RuntimeEvent;
-    type OnSystemEvent = ();
-    type SelfParaId = parachain_info::Pallet<Runtime>;
-    type OutboundXcmpMessageSource = XcmpQueue;
-    type DmpQueue = frame_support::traits::EnqueueWithOrigin<MessageQueue, RelayOrigin>;
-    type ReservedDmpWeight = ReservedDmpWeight;
-    type XcmpMessageHandler = XcmpQueue;
-    type ReservedXcmpWeight = ReservedXcmpWeight;
-    type CheckAssociatedRelayNumber = RelayNumberStrictlyIncreases;
-    type ConsensusHook = cumulus_pallet_aura_ext::FixedVelocityConsensusHook<
-        Runtime,
-        RELAY_CHAIN_SLOT_DURATION_MILLIS,
-        BLOCK_PROCESSING_VELOCITY,
-        UNINCLUDED_SEGMENT_CAPACITY,
-    >;
-}
-
-impl parachain_info::Config for Runtime {}
-
-parameter_types! {
-    pub MessageQueueServiceWeight: Weight = Perbill::from_percent(35) * RuntimeBlockWeights::get().max_block;
-}
-
-impl pallet_message_queue::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type WeightInfo = ();
-    #[cfg(feature = "runtime-benchmarks")]
-    type MessageProcessor = pallet_message_queue::mock_helpers::NoopMessageProcessor<
-        cumulus_primitives_core::AggregateMessageOrigin,
-    >;
-    #[cfg(not(feature = "runtime-benchmarks"))]
-    type MessageProcessor = xcm_builder::ProcessXcmMessage<
-        AggregateMessageOrigin,
-        xcm_executor::XcmExecutor<xcm_config::XcmConfig>,
-        RuntimeCall,
-    >;
-    type Size = u32;
-    // The XCMP queue pallet is only ever able to handle the `Sibling(ParaId)` origin:
-    type QueueChangeHandler = NarrowOriginToSibling<XcmpQueue>;
-    type QueuePausedQuery = NarrowOriginToSibling<XcmpQueue>;
-    type HeapSize = sp_core::ConstU32<{ 64 * 1024 }>;
-    type MaxStale = sp_core::ConstU32<8>;
-    type ServiceWeight = MessageQueueServiceWeight;
-}
-
-impl cumulus_pallet_aura_ext::Config for Runtime {}
-
-impl cumulus_pallet_xcmp_queue::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type ChannelInfo = ParachainSystem;
-    type VersionWrapper = ();
-    // Enqueue XCMP messages from siblings for later processing.
-    type XcmpQueue = TransformOrigin<MessageQueue, AggregateMessageOrigin, ParaId, ParaIdToSibling>;
-    type MaxInboundSuspended = sp_core::ConstU32<1_000>;
-    type ControllerOrigin = EnsureRoot<AccountId>;
-    type ControllerOriginConverter = XcmOriginToTransactDispatchOrigin;
-    type WeightInfo = ();
-    type PriceForSiblingDelivery = NoPriceForMessageDelivery<ParaId>;
-}
-
-parameter_types! {
-    pub const Period: u32 = 6 * HOURS;
-    pub const Offset: u32 = 0;
-}
-
-impl pallet_session::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type ValidatorId = <Self as frame_system::Config>::AccountId;
-    // we don't have stash and controller, thus we don't need the convert as well.
-    type ValidatorIdOf = pallet_collator_selection::IdentityCollator;
-    type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
-    type NextSessionRotation = pallet_session::PeriodicSessions<Period, Offset>;
-    type SessionManager = CollatorSelection;
-    // Essentially just Aura, but let's be pedantic.
-    type SessionHandler = <SessionKeys as sp_runtime::traits::OpaqueKeys>::KeyTypeIdProviders;
-    type Keys = SessionKeys;
-    type WeightInfo = ();
-}
-
-impl pallet_aura::Config for Runtime {
-    type AuthorityId = AuraId;
-    type DisabledValidators = ();
-    type MaxAuthorities = ConstU32<100_000>;
-    type AllowMultipleBlocksPerSlot = ConstBool<false>;
-    #[cfg(feature = "experimental")]
-    type SlotDuration = pallet_aura::MinimumPeriodTimesTwo<Self>;
-}
-
-parameter_types! {
-    pub const PotId: PalletId = PalletId(*b"PotStake");
-    pub const SessionLength: BlockNumber = 6 * HOURS;
-    // StakingAdmin pluralistic body.
-    pub const StakingAdminBodyId: BodyId = BodyId::Defense;
-}
-
-/// We allow root and the StakingAdmin to execute privileged collator selection operations.
-pub type CollatorSelectionUpdateOrigin = EitherOfDiverse<
-    EnsureRoot<AccountId>,
-    EnsureXcm<IsVoiceOfBody<RelayLocation, StakingAdminBodyId>>,
->;
-
-impl pallet_collator_selection::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type Currency = Balances;
-    type UpdateOrigin = CollatorSelectionUpdateOrigin;
-    type PotId = PotId;
-    type MaxCandidates = ConstU32<100>;
-    type MinEligibleCollators = ConstU32<4>;
-    type MaxInvulnerables = ConstU32<20>;
-    // should be a multiple of session or things will get inconsistent
-    type KickThreshold = Period;
-    type ValidatorId = <Self as frame_system::Config>::AccountId;
-    type ValidatorIdOf = pallet_collator_selection::IdentityCollator;
-    type ValidatorRegistration = Session;
-    type WeightInfo = ();
-}
-
-impl pallet_storage_providers::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type NativeBalance = Balances;
-    type StorageData = u32;
-    type SpCount = u32;
-    type HashId = Hash;
-    type MerklePatriciaRoot = Hash;
-    type ValuePropId = Hash;
-    type MaxMultiAddressSize = ConstU32<100>;
-    type MaxMultiAddressAmount = ConstU32<5>;
-    type MaxProtocols = ConstU32<100>;
-    type MaxBsps = ConstU32<100>;
-    type MaxMsps = ConstU32<100>;
-    type MaxBuckets = ConstU32<10000>;
-    type SpMinDeposit = ConstU128<10>;
-    type SpMinCapacity = ConstU32<1>;
-    type DepositPerData = ConstU128<2>;
-}
-
-// TODO: remove this and replace with pallet treasury
-pub struct TreasuryAccount;
-impl Get<AccountId32> for TreasuryAccount {
-    fn get() -> AccountId32 {
-        AccountId32::from([0; 32])
-    }
-}
-
-impl pallet_proofs_dealer::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type ProvidersPallet = Providers;
-    type NativeBalance = Balances;
-    type MerkleHash = Hash;
-    type TrieVerifier = ProofTrieVerifier;
-    type MaxChallengesPerBlock = ConstU32<10>;
-    type MaxProvidersChallengedPerBlock = ConstU32<10>;
-    type ChallengeHistoryLength = ConstU32<10>;
-    type ChallengesQueueLength = ConstU32<10>;
-    type CheckpointChallengePeriod = ConstU32<10>;
-    type ChallengesFee = ConstU128<1_000_000>;
-    type Treasury = TreasuryAccount;
-}
-
-/// Structure to mock a verifier that returns `true` when `proof` is not empty
-/// and `false` otherwise.
-pub struct ProofTrieVerifier;
-
-/// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl TrieVerifier for ProofTrieVerifier {
-    fn verify_proof(_root: &[u8; 32], _challenges: &[u8; 32], proof: &CompactProof) -> bool {
-        proof.encoded_nodes.len() > 0
-    }
-}
-
-/// Configure the pallet template in pallets/template.
-impl pallet_file_system::Config for Runtime {
-    type RuntimeEvent = RuntimeEvent;
-    type Fingerprint = Hash;
-    type StorageUnit = u128;
-    type StorageRequestBspsRequiredType = u32;
-    type TargetBspsRequired = ConstU32<1>;
-    type MaxBspsPerStorageRequest = ConstU32<5>;
-    type MaxFilePathSize = ConstU32<512u32>;
-    type MaxMultiAddresses = ConstU32<10>;
-    type MaxMultiAddressSize = ConstU32<512>;
-    type StorageRequestTtl = ConstU32<40>;
-    type MaxExpiredStorageRequests = ConstU32<100>;
-}
-
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
-    pub struct Runtime {
+    pub enum Runtime {
         // System support stuff.
         System: frame_system = 0,
         ParachainSystem: cumulus_pallet_parachain_system = 1,
@@ -587,6 +254,7 @@ construct_runtime!(
         CumulusXcm: cumulus_pallet_xcm = 32,
         MessageQueue: pallet_message_queue = 33,
 
+        // Storage Hub
         Providers: pallet_storage_providers = 40,
         FileSystem: pallet_file_system = 41,
         ProofsDealer: pallet_proofs_dealer = 42,
@@ -608,10 +276,21 @@ mod benches {
     );
 }
 
+// TODO: move this to an `apis` module.
 impl_runtime_apis! {
+    /// Allows the collator client to query its runtime to determine whether it should author a block
+    impl cumulus_primitives_aura::AuraUnincludedSegmentApi<Block> for Runtime {
+        fn can_build_upon(
+            included_hash: <Block as BlockT>::Hash,
+            slot: cumulus_primitives_aura::Slot,
+        ) -> bool {
+            configs::ConsensusHook::can_build_upon(included_hash, slot)
+        }
+    }
+
     impl sp_consensus_aura::AuraApi<Block, AuraId> for Runtime {
         fn slot_duration() -> sp_consensus_aura::SlotDuration {
-            sp_consensus_aura::SlotDuration::from_millis(Aura::slot_duration())
+            sp_consensus_aura::SlotDuration::from_millis(SLOT_DURATION)
         }
 
         fn authorities() -> Vec<AuraId> {
@@ -628,7 +307,7 @@ impl_runtime_apis! {
             Executive::execute_block(block)
         }
 
-        fn initialize_block(header: &<Block as BlockT>::Header) {
+        fn initialize_block(header: &<Block as BlockT>::Header) -> ExtrinsicInclusionMode {
             Executive::initialize_block(header)
         }
     }
@@ -756,7 +435,7 @@ impl_runtime_apis! {
     impl frame_try_runtime::TryRuntime<Block> for Runtime {
         fn on_runtime_upgrade(checks: frame_try_runtime::UpgradeCheckSelect) -> (Weight, Weight) {
             let weight = Executive::try_runtime_upgrade(checks).unwrap();
-            (weight, RuntimeBlockWeights::get().max_block)
+            (weight, configs::RuntimeBlockWeights::get().max_block)
         }
 
         fn execute_block(
