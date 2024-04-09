@@ -23,7 +23,7 @@ pub struct StorageRequestMetadata<T: Config> {
     ///
     /// SPs will use this to determine if they have enough space to store the data.
     /// This is also used to verify that the data sent by the user matches the size specified here.
-    pub size: StorageUnit<T>,
+    pub size: StorageData<T>,
     /// Multiaddress of the user who requested the storage.
     ///
     /// SPs will expect a connection request to be initiated by the user with this multiaddress.
@@ -32,7 +32,7 @@ pub struct StorageRequestMetadata<T: Config> {
     ///
     /// This is useful when a BSP stops serving data and automatically creates a new storage request with no user multiaddresses, since
     /// SPs can prove and serve the data to be replicated to other BSPs without the user having this stored on their local machine.
-    pub data_server_sps: BoundedVec<StorageProviderId<T>, MaxBspsPerStorageRequest<T>>, // TODO: Change the Maximum data servers to be the maximum SPs allowed
+    pub data_server_sps: BoundedVec<T::AccountId, MaxBspsPerStorageRequest<T>>, // TODO: Change the Maximum data servers to be the maximum SPs allowed
     /// Number of BSPs requested to store the data.
     ///
     ///
@@ -44,6 +44,10 @@ pub struct StorageRequestMetadata<T: Config> {
     /// This starts at 0 and increases up to `bsps_required`. Once this reaches `bsps_required`, the
     /// storage request is considered complete and will be deleted..
     pub bsps_confirmed: T::StorageRequestBspsRequiredType,
+    /// Number of BSPs that have volunteered to store the data.
+    ///
+    /// There can be more than `bsps_required` volunteers, but it is essentially a race for BSPs to confirm that they are storing the data.
+    pub bsps_volunteered: T::StorageRequestBspsRequiredType,
 }
 
 /// Ephemeral BSP storage request tracking metadata.
@@ -57,8 +61,13 @@ pub struct StorageRequestBspsMetadata<T: Config> {
     pub _phantom: core::marker::PhantomData<T>,
 }
 
-/// Alias for the `AccountId` type used in the FileSystem pallet.
-pub type StorageProviderId<T> = <T as frame_system::Config>::AccountId;
+/// Alias for the `MerkleHash` type used in the ProofsDealerInterface.
+pub type FileKey<T> =
+    <<T as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash;
+
+/// Alias for the `Proof` type used in the ProofsDealerInterface.
+pub type Proof<T> =
+    <<T as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::Proof;
 
 /// Alias for the `MaxBsps` type used in the FileSystem pallet.
 pub type MaxBspsPerStorageRequest<T> = <T as crate::Config>::MaxBspsPerStorageRequest;
@@ -69,8 +78,9 @@ pub type MaxFilePathSize<T> = <T as crate::Config>::MaxFilePathSize;
 /// Alias for the `Fingerprint` type used in the FileSystem pallet.
 pub type Fingerprint<T> = <T as crate::Config>::Fingerprint;
 
-/// Alias for the `StorageCount` type used in the FileSystem pallet.
-pub type StorageUnit<T> = <T as crate::Config>::StorageUnit;
+/// Alias for the `StorageData` type used in the MutateProvidersInterface.
+pub type StorageData<T> =
+    <<T as crate::Config>::Providers as storage_hub_traits::MutateProvidersInterface>::StorageData;
 
 /// Alias for the `TargetBspsRequired` type used in the FileSystem pallet.
 pub type TargetBspsRequired<T> = <T as crate::Config>::TargetBspsRequired;
@@ -85,10 +95,7 @@ pub type MaxMultiAddressSize<T> = <T as crate::Config>::MaxMultiAddressSize;
 pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
 
 /// Alias for the `MaxMultiAddresses` type used in the FileSystem pallet.
-pub type MaxMultiAddresses<T> = <T as crate::Config>::MaxMultiAddresses;
+pub type MaxMultiAddresses<T> = <T as crate::Config>::MaxDataServerMultiAddresses;
 
 /// Alias for a bounded vector of [`MultiAddress`].
 pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;
-
-/// Alias for the `FileKey` type used in the proofs-dealer pallet.
-pub type FileKey<T> = <T as pallet_proofs_dealer::Config>::MerkleHash;
