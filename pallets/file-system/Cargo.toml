@@ -47,17 +47,17 @@ runtime-benchmarks = [
     "frame-benchmarking/runtime-benchmarks",
     "frame-support/runtime-benchmarks",
     "frame-system/runtime-benchmarks",
-    "pallet-storage-providers/runtime-benchmarks",
     "pallet-proofs-dealer/runtime-benchmarks",
+    "pallet-storage-providers/runtime-benchmarks",
     "sp-runtime/runtime-benchmarks",
 ]
 std = [
     "codec/std",
-    "frame-benchmarking/std",
+    "frame-benchmarking?/std",
     "frame-support/std",
     "frame-system/std",
-    "pallet-storage-providers/std",
     "pallet-proofs-dealer/std",
+    "pallet-storage-providers/std",
     "scale-info/std",
     "sp-core/std",
     "sp-io/std",
@@ -66,7 +66,7 @@ std = [
 try-runtime = [
     "frame-support/try-runtime",
     "frame-system/try-runtime",
-    "pallet-storage-providers/try-runtime",
     "pallet-proofs-dealer/try-runtime",
+    "pallet-storage-providers/try-runtime",
     "sp-runtime/try-runtime",
 ]
