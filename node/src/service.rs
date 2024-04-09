@@ -39,7 +39,10 @@ use substrate_prometheus_endpoint::Registry;
 use crate::{
     cli::ProviderType,
     command::ProviderOptions,
-    services::{file_transfer::spawn_file_transfer_service, StorageHubHandler},
+    services::{
+    blockchain::spawn_blockchain_service, file_transfer::spawn_file_transfer_service,
+    StorageHubHandler},
+,
 };
 
 #[cfg(not(feature = "runtime-benchmarks"))]
@@ -190,15 +193,21 @@ async fn start_node_impl(
     if let Some(provider_options) = provider_options {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
-        let file_transfer_service = spawn_file_transfer_service(
-            &task_spawner,
-            genesis_hash,
-            &parachain_config,
-            &mut net_config,
-        )
-        .await;
+    let file_transfer_service_handle = spawn_file_transfer_service(
+        &task_spawner,
+        genesis_hash,
+        &parachain_config,
+        &mut net_config,
+    )
+    .await;
 
-        let sh_handler = StorageHubHandler::new(task_spawner, file_transfer_service);
+    let blockchain_service_handle = spawn_blockchain_service(&task_spawner).await;
+
+    let sh_handler = StorageHubHandler::new(
+        task_spawner,
+        file_transfer_service_handle,
+        blockchain_service_handle,
+    );
 
         match provider_options.provider_type {
             ProviderType::Bsp => sh_handler.start_bsp_tasks(),
