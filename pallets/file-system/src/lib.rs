@@ -352,6 +352,8 @@ pub mod pallet {
         FailedTypeConversion,
         /// Divided by 0
         DividedByZero,
+        /// Failed to get value when just checked it existed.
+        ImpossibleFailedToGetValue,
     }
 
     #[pallet::call]

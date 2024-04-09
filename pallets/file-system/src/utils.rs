@@ -283,13 +283,14 @@ where
             Error::<T>::BspNotVolunteered
         );
 
-        // Check that the storage provider has not already confirmed storing the file.
-        ensure!(
-            !<StorageRequestBsps<T>>::get(&location, &who)
-                .expect("BSP should exist since we checked it above")
-                .confirmed,
-            Error::<T>::BspAlreadyConfirmed
+        let requests = expect_or_err!(
+            <StorageRequestBsps<T>>::get(&location, &who),
+            "BSP should exist since we checked it above",
+            Error::<T>::ImpossibleFailedToGetValue
         );
+
+        // Check that the storage provider has not already confirmed storing the file.
+        ensure!(!requests.confirmed, Error::<T>::BspAlreadyConfirmed);
 
         // Check that the number of confirmed bsps is less than the required bsps and increment it.
         expect_or_err!(
