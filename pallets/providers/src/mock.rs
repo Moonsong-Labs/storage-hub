@@ -1,4 +1,5 @@
 use crate as pallet_storage_providers;
+use codec::Encode;
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
     traits::{Everything, Randomness},
@@ -39,6 +40,13 @@ impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
                 .saturating_sub(BLOCKS_BEFORE_RANDOMNESS_VALID),
         )
     }
+}
+
+/// This function is used to test the randomness of the providers pallet.
+pub fn test_randomness_output(
+    who: &<Test as frame_system::Config>::AccountId,
+) -> (<Test as frame_system::Config>::Hash, BlockNumberFor<Test>) {
+    <Test as pallet_storage_providers::Config>::ProvidersRandomness::random(who.encode().as_ref())
 }
 
 // Configure a mock runtime to test the pallet.

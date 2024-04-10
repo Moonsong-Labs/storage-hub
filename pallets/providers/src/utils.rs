@@ -50,11 +50,6 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
-    /// This function tests the randomness of the pallet. TODO: remove this, only for testing
-    pub fn test_randomness_output(who: &T::AccountId) -> (T::Hash, BlockNumberFor<T>) {
-        T::ProvidersRandomness::random(who.encode().as_ref())
-    }
-
     /// This function holds the logic that checks if a user can request to sign up as a Main Storage Provider
     /// and, if so, stores the request in the SignUpRequests mapping
     pub fn do_request_msp_sign_up(

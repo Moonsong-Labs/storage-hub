@@ -3015,7 +3015,7 @@ mod randomness {
     fn test_randomness() {
         ExtBuilder::build().execute_with(|| {
             let alice: AccountId = 0;
-            let (sp_id, block_number) = StorageProviders::test_randomness_output(&alice);
+            let (sp_id, block_number) = test_randomness_output(&alice);
             println!(
                 "current block_number: {:?}",
                 frame_system::Pallet::<Test>::block_number()
@@ -3029,7 +3029,7 @@ mod randomness {
             );
 
             run_to_block(10);
-            let (sp_id, block_number) = StorageProviders::test_randomness_output(&alice);
+            let (sp_id, block_number) = test_randomness_output(&alice);
             println!(
                 "current block_number: {:?}",
                 frame_system::Pallet::<Test>::block_number()
