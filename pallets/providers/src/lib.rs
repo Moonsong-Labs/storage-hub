@@ -455,14 +455,17 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn confirm_sign_up(
             origin: OriginFor<T>,
-            who: T::AccountId,
+            provider_account: Option<T::AccountId>,
         ) -> DispatchResultWithPostInfo {
-            // Check that the extrinsic was signed
-            ensure_signed(origin)?;
+            // Check that the extrinsic was signed and get the signer
+            let who = ensure_signed(origin)?;
 
             // Execute checks and logic, update storage and emit event
             // We emit the event in the interior logic to not have to check again which type of sign up it is outside of it
-            Self::do_confirm_sign_up(&who)?;
+            match provider_account {
+                Some(provider_account) => Self::do_confirm_sign_up(&provider_account)?,
+                None => Self::do_confirm_sign_up(&who)?,
+            }
 
             // Return a successful DispatchResultWithPostInfo. If the extrinsic executed correctly, it will be free for the caller
             Ok(Pays::No.into())
