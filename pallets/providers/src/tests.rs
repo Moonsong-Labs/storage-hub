@@ -1762,6 +1762,52 @@ mod sign_up {
             }
 
             #[test]
+            fn msp_request_sign_up_fails_when_another_request_pending() {
+                ExtBuilder::build().execute_with(|| {
+                    // Initialize variables:
+                    let mut multiaddresses: BoundedVec<
+                        MultiAddress<Test>,
+                        MaxMultiAddressAmount<Test>,
+                    > = BoundedVec::new();
+                    multiaddresses.force_push(
+                        "/ip4/127.0.0.1/udp/1234"
+                            .as_bytes()
+                            .to_vec()
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let value_prop: ValueProposition<Test> = ValueProposition {
+                        identifier: ValuePropId::<Test>::default(),
+                        data_limit: 10,
+                        protocols: BoundedVec::new(),
+                    };
+                    let storage_amount: StorageData<Test> = 100;
+
+                    // Get the Account Id of Alice
+                    let alice: AccountId = 0;
+
+                    // Request to sign up Alice as a Main Storage Provider
+                    assert_ok!(StorageProviders::request_msp_sign_up(
+                        RuntimeOrigin::signed(alice),
+                        storage_amount,
+                        multiaddresses.clone(),
+                        value_prop.clone()
+                    ));
+
+                    // Try to request to sign up Alice as a Main Storage Provider
+                    assert_noop!(
+                        StorageProviders::request_msp_sign_up(
+                            RuntimeOrigin::signed(alice),
+                            storage_amount,
+                            multiaddresses.clone(),
+                            value_prop.clone()
+                        ),
+                        Error::<Test>::SignUpRequestPending
+                    );
+                });
+            }
+
+            #[test]
             fn msp_request_sign_up_fails_when_max_amount_of_msps_reached() {
                 ExtBuilder::build().execute_with(|| {
                     // Initialize variables:
@@ -2012,6 +2058,45 @@ mod sign_up {
                     // Check that Alice is still not a Storage Provider
                     let alice_sp_id = StorageProviders::get_provider(alice);
                     assert!(alice_sp_id.is_none());
+                });
+            }
+
+            #[test]
+            fn bsp_request_sign_up_fails_when_another_request_pending() {
+                ExtBuilder::build().execute_with(|| {
+                    // Initialize variables:
+                    let mut multiaddresses: BoundedVec<
+                        MultiAddress<Test>,
+                        MaxMultiAddressAmount<Test>,
+                    > = BoundedVec::new();
+                    multiaddresses.force_push(
+                        "/ip4/127.0.0.1/udp/1234"
+                            .as_bytes()
+                            .to_vec()
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let storage_amount: StorageData<Test> = 100;
+
+                    // Get the Account Id of Alice
+                    let alice: AccountId = 0;
+
+                    // Request to sign up Alice as a Backup Storage Provider
+                    assert_ok!(StorageProviders::request_bsp_sign_up(
+                        RuntimeOrigin::signed(alice),
+                        storage_amount,
+                        multiaddresses.clone(),
+                    ));
+
+                    // Try to request to sign up Alice as a Backup Storage Provider
+                    assert_noop!(
+                        StorageProviders::request_bsp_sign_up(
+                            RuntimeOrigin::signed(alice),
+                            storage_amount,
+                            multiaddresses.clone(),
+                        ),
+                        Error::<Test>::SignUpRequestPending
+                    );
                 });
             }
 
