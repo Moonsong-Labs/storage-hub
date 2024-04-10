@@ -285,6 +285,15 @@ where
             Error::<T>::MaxMspsReached
         );
 
+        // Check that the current block number is not greater than the block number when the request was made plus the maximum amount of
+        // blocks that we allow the user to wait for valid randomness (should be at least more than an epoch if using BABE's RandomnessFromOneEpochAgo)
+        // We do this to ensure that a user cannot wait indefinitely for randomness that suits them
+        ensure!(
+            frame_system::Pallet::<T>::block_number()
+                < request_block + T::MaxBlocksForRandomness::get(),
+            Error::<T>::SignUpRequestExpired
+        );
+
         // Get the MainStorageProviderId by using the AccountId as the seed for a random generator
         let (msp_id, block_number_when_random) =
             T::ProvidersRandomness::random(who.encode().as_ref());
@@ -294,15 +303,6 @@ where
         ensure!(
             block_number_when_random >= request_block,
             Error::<T>::RandomnessNotValidYet
-        );
-
-        // Check that the current block number is not greater than the block number when the request was made plus the maximum amount of
-        // blocks that we allow the user to wait for valid randomness (should be at least more than an epoch if using BABE's RandomnessFromOneEpochAgo)
-        // We do this to ensure that a user cannot wait indefinitely for randomness that suits them
-        ensure!(
-            frame_system::Pallet::<T>::block_number()
-                < request_block + T::MaxBlocksForRandomness::get(),
-            Error::<T>::SignUpRequestExpired
         );
 
         // Insert the MainStorageProviderId into the mapping
@@ -346,6 +346,15 @@ where
             Error::<T>::MaxBspsReached
         );
 
+        // Check that the current block number is not greater than the block number when the request was made plus the maximum amount of
+        // blocks that we allow the user to wait for valid randomness (should be at least more than an epoch if using BABE's RandomnessFromOneEpochAgo)
+        // We do this to ensure that a user cannot wait indefinitely for randomness that suits them
+        ensure!(
+            frame_system::Pallet::<T>::block_number()
+                < request_block + T::MaxBlocksForRandomness::get(),
+            Error::<T>::SignUpRequestExpired
+        );
+
         // Get the BackupStorageProviderId by using the AccountId as the seed for a random generator
         let (bsp_id, block_number_when_random) =
             T::ProvidersRandomness::random(who.encode().as_ref());
@@ -355,15 +364,6 @@ where
         ensure!(
             block_number_when_random >= request_block,
             Error::<T>::RandomnessNotValidYet
-        );
-
-        // Check that the current block number is not greater than the block number when the request was made plus the maximum amount of
-        // blocks that we allow the user to wait for valid randomness (should be at least more than an epoch if using BABE's RandomnessFromOneEpochAgo)
-        // We do this to ensure that a user cannot wait indefinitely for randomness that suits them
-        ensure!(
-            frame_system::Pallet::<T>::block_number()
-                < request_block + T::MaxBlocksForRandomness::get(),
-            Error::<T>::SignUpRequestExpired
         );
 
         // Insert the BackupStorageProviderId into the mapping
