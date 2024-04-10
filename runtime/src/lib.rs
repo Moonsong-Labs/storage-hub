@@ -6,20 +6,16 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+mod configs;
 mod weights;
-pub mod xcm_config;
 
-use cumulus_pallet_parachain_system::RelayNumberMonotonicallyIncreases;
-use pallet_proofs_dealer::{CompactProof, TrieVerifier};
-use polkadot_runtime_common::xcm_sender::NoPriceForMessageDelivery;
 use smallvec::smallvec;
 use sp_api::impl_runtime_apis;
 use sp_core::{blake2_256, crypto::KeyTypeId, Get, OpaqueMetadata, H256};
 use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
-    traits::{BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
-    transaction_validity::{TransactionSource, TransactionValidity},
-    ApplyExtrinsicResult, FixedU128, MultiSignature,
+    traits::{BlakeTwo256, IdentifyAccount, Verify},
+    MultiSignature,
 };
 
 use sp_std::prelude::*;
@@ -27,7 +23,7 @@ use sp_std::prelude::*;
 use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
-use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
+use frame_support::genesis_builder_helper::{build_config, create_default_config};
 use frame_support::{
     construct_runtime, derive_impl,
     dispatch::DispatchClass,
@@ -38,10 +34,10 @@ use frame_support::{
         TransformOrigin,
     },
     weights::{
-        constants::WEIGHT_REF_TIME_PER_SECOND, ConstantMultiplier, Weight, WeightToFeeCoefficient,
+        constants::WEIGHT_REF_TIME_PER_SECOND, Weight, WeightToFeeCoefficient,
         WeightToFeeCoefficients, WeightToFeePolynomial,
     },
-    PalletId,
+	PalletId,
 };
 use frame_system::{
     limits::{BlockLength, BlockWeights},
@@ -50,8 +46,15 @@ use frame_system::{
 use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_runtime::AccountId32;
+use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
+use sp_runtime::{
+	AccountId32,
+    traits::Block as BlockT,
+    transaction_validity::{TransactionSource, TransactionValidity},
+    ApplyExtrinsicResult, ExtrinsicInclusionMode,
+};
 pub use sp_runtime::{MultiAddress, Perbill, Permill};
+use sp_std::prelude::Vec;
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
 #[cfg(any(feature = "std", test))]
@@ -111,6 +114,7 @@ pub type SignedExtra = (
     frame_system::CheckNonce<Runtime>,
     frame_system::CheckWeight<Runtime>,
     pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
+    cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim<Runtime>,
 );
 
 /// Unchecked extrinsic type as expected by this runtime.
@@ -183,8 +187,8 @@ impl_opaque_keys! {
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-    spec_name: create_runtime_str!("template-parachain"),
-    impl_name: create_runtime_str!("template-parachain"),
+    spec_name: create_runtime_str!("storage-hub-runtime"),
+    impl_name: create_runtime_str!("storage-hub-runtime"),
     authoring_version: 1,
     spec_version: 1,
     impl_version: 0,
@@ -193,16 +197,12 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     state_version: 1,
 };
 
-/// This determines the average expected block time that we are targeting.
 /// Blocks will be produced at a minimum duration defined by `SLOT_DURATION`.
 /// `SLOT_DURATION` is picked up by `pallet_timestamp` which is in turn picked
 /// up by `pallet_aura` to implement `fn slot_duration()`.
 ///
 /// Change this to adjust the block time.
 pub const MILLISECS_PER_BLOCK: u64 = 6000;
-
-// NOTE: Currently it is not possible to change the slot duration after the chain has started.
-//       Attempting to do so will brick block production.
 pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
 
 // Time is measured by number of blocks.
@@ -232,11 +232,11 @@ pub const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_parts(
     cumulus_primitives_core::relay_chain::MAX_POV_SIZE as u64,
 );
 
-/// Maximum number of blocks simultaneously accepted by the Runtime, not yet included
-/// into the relay chain.
+/// Maximum number of blocks simultaneously accepted by the Runtime, not yet included into the
+/// relay chain.
 const UNINCLUDED_SEGMENT_CAPACITY: u32 = 3;
-/// How many parachain blocks are processed by the relay chain per parent. Limits the
-/// number of blocks authored per slot.
+/// How many parachain blocks are processed by the relay chain per parent. Limits the number of
+/// blocks authored per slot.
 const BLOCK_PROCESSING_VELOCITY: u32 = 1;
 /// Relay chain slot duration, in milliseconds.
 const RELAY_CHAIN_SLOT_DURATION_MILLIS: u32 = 6000;
@@ -606,7 +606,7 @@ impl pallet_file_system::Config for Runtime {
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
-    pub struct Runtime {
+    pub enum Runtime {
         // System support stuff.
         System: frame_system = 0,
         ParachainSystem: cumulus_pallet_parachain_system = 1,
@@ -633,6 +633,7 @@ construct_runtime!(
         CumulusXcm: cumulus_pallet_xcm = 32,
         MessageQueue: pallet_message_queue = 33,
 
+        // Storage Hub
         Providers: pallet_storage_providers = 40,
         FileSystem: pallet_file_system = 41,
         ProofsDealer: pallet_proofs_dealer = 42,
@@ -654,6 +655,7 @@ mod benches {
     );
 }
 
+// TODO: move this to an `apis` module.
 impl_runtime_apis! {
     /// Allows the collator client to query its runtime to determine whether it should author a block
     impl cumulus_primitives_aura::AuraUnincludedSegmentApi<Block> for Runtime {
@@ -661,7 +663,7 @@ impl_runtime_apis! {
             included_hash: <Block as BlockT>::Hash,
             slot: cumulus_primitives_aura::Slot,
         ) -> bool {
-            ConsensusHook::can_build_upon(included_hash, slot)
+            configs::ConsensusHook::can_build_upon(included_hash, slot)
         }
     }
 
@@ -684,7 +686,7 @@ impl_runtime_apis! {
             Executive::execute_block(block)
         }
 
-        fn initialize_block(header: &<Block as BlockT>::Header) {
+        fn initialize_block(header: &<Block as BlockT>::Header) -> ExtrinsicInclusionMode {
             Executive::initialize_block(header)
         }
     }
@@ -812,7 +814,7 @@ impl_runtime_apis! {
     impl frame_try_runtime::TryRuntime<Block> for Runtime {
         fn on_runtime_upgrade(checks: frame_try_runtime::UpgradeCheckSelect) -> (Weight, Weight) {
             let weight = Executive::try_runtime_upgrade(checks).unwrap();
-            (weight, RuntimeBlockWeights::get().max_block)
+            (weight, configs::RuntimeBlockWeights::get().max_block)
         }
 
         fn execute_block(

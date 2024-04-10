@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use cumulus_client_service::storage_proof_size::HostFunctions as ReclaimHostFunctions;
 use cumulus_primitives_core::ParaId;
 use frame_benchmarking_cli::{BenchmarkCmd, SUBSTRATE_REFERENCE_HARDWARE};
 use log::info;
@@ -13,9 +14,18 @@ use storage_hub_runtime::Block;
 
 use crate::{
     chain_spec,
-    cli::{Cli, RelayChainCli, Subcommand},
+    cli::{Cli, ProviderType, RelayChainCli, Subcommand},
     service::new_partial,
 };
+
+/// Configuration for the provider.
+#[derive(Debug, Clone)]
+pub struct ProviderOptions {
+    /// Provider type.
+    pub provider_type: ProviderType,
+    /// Seed to generate deterministic peer id.
+    pub seed_file: String,
+}
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
     Ok(match id {
@@ -164,7 +174,7 @@ pub fn run() -> Result<()> {
 				cmd.run(config, polkadot_config)
 			})
 		},
-		Some(Subcommand::ExportGenesisState(cmd)) => {
+		Some(Subcommand::ExportGenesisHead(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
 			runner.sync_run(|config| {
 				let partials = new_partial(&config)?;
@@ -185,7 +195,7 @@ pub fn run() -> Result<()> {
 			match cmd {
 				BenchmarkCmd::Pallet(cmd) =>
 					if cfg!(feature = "runtime-benchmarks") {
-						runner.sync_run(|config| cmd.run::<Block, ()>(config))
+						runner.sync_run(|config| cmd.run::<sp_runtime::traits::HashingFor<Block>, ReclaimHostFunctions>(config))
 					} else {
 						Err("Benchmarking wasn't enabled when building the node. \
 					You can enable it with `--features runtime-benchmarks`."
@@ -222,6 +232,11 @@ pub fn run() -> Result<()> {
 		None => {
 			let runner = cli.create_runner(&cli.run.normalize())?;
 			let collator_options = cli.run.collator_options();
+            let provider_options = if cli.provider_config.provider {
+                Some(cli.provider_config.provider_options())
+            } else {
+                None
+            };
 
 			runner.run_node_until_exit(|config| async move {
 				let hwbench = (!cli.no_hardware_benchmarks)
@@ -259,6 +274,7 @@ pub fn run() -> Result<()> {
 					config,
 					polkadot_config,
 					collator_options,
+                    provider_options,
 					id,
 					hwbench,
 				)

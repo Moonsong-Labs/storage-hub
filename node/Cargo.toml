@@ -13,10 +13,21 @@ publish = false
 [lints]
 workspace = true
 
-[build-dependencies]
-substrate-build-script-utils = { workspace = true }
-
 [dependencies]
+anyhow = { workspace = true }
+array-bytes = { workspace = true }
+async-channel = { workspace = true }
+color-print = { workspace = true }
+libp2p-identity = { workspace = true, features = ["peerid"] }
+prost = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+# Local
+storage-hub-runtime = { workspace = true }
+storage-hub-infra = { workspace = true }
+
+# Substrate
 clap = { workspace = true }
 log = { workspace = true }
 codec = { workspace = true }
@@ -25,11 +36,8 @@ jsonrpsee = { workspace = true }
 futures = { workspace = true }
 serde_json = { workspace = true }
 
-# Local
-storage-hub-runtime = { workspace = true }
-
 # Substrate
-frame-benchmarking = { workspace = true }
+frame-benchmarking = { workspace = true, default-features = true }
 frame-benchmarking-cli = { workspace = true }
 pallet-transaction-payment-rpc = { workspace = true }
 sc-basic-authorship = { workspace = true }
@@ -48,6 +56,7 @@ sc-telemetry = { workspace = true }
 sc-tracing = { workspace = true }
 sc-transaction-pool = { workspace = true }
 sc-transaction-pool-api = { workspace = true }
+sc-utils = { workspace = true }
 sp-api = { workspace = true }
 sp-block-builder = { workspace = true }
 sp-blockchain = { workspace = true }
@@ -75,22 +84,25 @@ cumulus-client-service = { workspace = true }
 cumulus-primitives-core = { workspace = true }
 cumulus-primitives-parachain-inherent = { workspace = true }
 cumulus-relay-chain-interface = { workspace = true }
-color-print = "0.3.4"
+
+[build-dependencies]
+prost-build = { workspace = true }
+substrate-build-script-utils = { workspace = true }
 
 [features]
 default = []
 runtime-benchmarks = [
-    "cumulus-primitives-core/runtime-benchmarks",
-    "frame-benchmarking-cli/runtime-benchmarks",
-    "frame-benchmarking/runtime-benchmarks",
-    "storage-hub-runtime/runtime-benchmarks",
-    "polkadot-cli/runtime-benchmarks",
-    "polkadot-primitives/runtime-benchmarks",
-    "sc-service/runtime-benchmarks",
-    "sp-runtime/runtime-benchmarks",
+	"cumulus-primitives-core/runtime-benchmarks",
+	"frame-benchmarking-cli/runtime-benchmarks",
+	"frame-benchmarking/runtime-benchmarks",
+	"polkadot-cli/runtime-benchmarks",
+	"polkadot-primitives/runtime-benchmarks",
+	"sc-service/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
+	"storage-hub-runtime/runtime-benchmarks",
 ]
 try-runtime = [
-    "storage-hub-runtime/try-runtime",
-    "polkadot-cli/try-runtime",
-    "sp-runtime/try-runtime",
+	"polkadot-cli/try-runtime",
+	"sp-runtime/try-runtime",
+	"storage-hub-runtime/try-runtime",
 ]

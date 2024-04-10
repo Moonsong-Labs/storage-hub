@@ -78,7 +78,7 @@ parameter_types! {
     pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::Providers(pallet_storage_providers::HoldReason::StorageProviderDeposit);
 }
 
-#[derive_impl(frame_system::config_preludes::TestDefaultConfig as frame_system::DefaultConfig)]
+#[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
 impl system::Config for Test {
     type BaseCallFilter = Everything;
     type BlockWeights = ();
@@ -181,7 +181,7 @@ impl TrieVerifier for MockVerifier {
     }
 }
 
-type ThresholdType = FixedU128;
+pub(crate) type ThresholdType = FixedU128;
 
 parameter_types! {
     pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
@@ -237,4 +237,11 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut ext = sp_io::TestExternalities::new(t);
     ext.execute_with(|| System::set_block_number(1));
     ext
+}
+
+pub(crate) fn compute_set_get_initial_threshold() -> ThresholdType {
+    let initial_threshold = FileSystem::compute_asymptotic_threshold_point(1)
+        .expect("Initial threshold should be computable");
+    crate::BspsAssignmentThreshold::<Test>::put(initial_threshold);
+    initial_threshold
 }
