@@ -6,8 +6,8 @@ use crate::{
     },
     Config, Error, Event, StorageRequestExpirations,
 };
-use frame_support::{assert_noop,
-    assert_ok,
+use frame_support::{
+    assert_noop, assert_ok,
     dispatch::DispatchResultWithPostInfo,
     traits::{CallerTrait, Hooks, OriginTrait},
     weights::Weight,
@@ -424,11 +424,7 @@ fn bsp_volunteer_storage_request_not_found_fail() {
             <Test as Config>::MaxDataServerMultiAddresses,
         > = BoundedVec::try_from(vec![multiaddr]).unwrap();
 
-        assert_ok!(bsp_sign_up(
-            bsp_signed.clone(),
-            100,
-            multiaddresses.clone(),
-        ));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), 100, multiaddresses.clone(),));
 
         assert_noop!(
             FileSystem::bsp_volunteer(
@@ -646,11 +642,7 @@ fn bsp_confirm_storing_storage_request_not_found_fail() {
         > = BoundedVec::try_from(vec![multiaddr]).unwrap();
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(
-            bsp_signed.clone(),
-            100,
-            multiaddresses.clone(),
-        ));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), 100, multiaddresses.clone(),));
 
         assert_noop!(
             FileSystem::bsp_confirm_storing(
