@@ -442,11 +442,11 @@ pub mod pallet {
         ///
         /// This extrinsic will:
         /// 1. Check that the extrinsic was signed
-        /// 2. Check that the account received has requested to register as a MSP
+        /// 2. Check that the account received has requested to register as a SP
         /// 3. Check that by registering this SP we would not go over the MaxMsps or MaxBsps limit
         /// 4. Check that the current randomness is sufficiently fresh to be used as a salt for that request
         /// 5. Check that the request has not expired
-        /// 6. Register the signer as a MSP with the data provided in the request
+        /// 6. Register the signer as a MSP or BSP with the data provided in the request
         /// 7. Emit an event confirming that the sign up of the SP has been confirmed
         ///
         /// Notes:
