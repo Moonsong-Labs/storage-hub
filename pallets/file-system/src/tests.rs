@@ -7,10 +7,7 @@ use crate::{
     Config, Error, Event, StorageRequestExpirations,
 };
 use frame_support::{
-    assert_noop, assert_ok,
-    dispatch::DispatchResultWithPostInfo,
-    traits::{CallerTrait, Hooks, OriginTrait},
-    weights::Weight,
+    assert_noop, assert_ok, dispatch::DispatchResultWithPostInfo, traits::Hooks, weights::Weight,
 };
 use sp_core::H256;
 use sp_runtime::{
@@ -1260,10 +1257,7 @@ fn bsp_sign_up(
     roll_to(frame_system::Pallet::<Test>::block_number() + 4);
 
     // Confirm the sign up of the account as a Backup Storage Provider
-    assert_ok!(Providers::confirm_sign_up(
-        bsp_signed.clone(),
-        bsp_signed.into_caller().as_signed().unwrap().clone()
-    ));
+    assert_ok!(Providers::confirm_sign_up(bsp_signed.clone(), None));
 
     Ok(().into())
 }

@@ -142,7 +142,7 @@ mod sign_up {
             }
 
             #[test]
-            fn msp_confirm_sign_up_works() {
+            fn msp_confirm_sign_up_works_when_passing_provider_account() {
                 ExtBuilder::build().execute_with(|| {
                     // Initialize variables:
                     let mut multiaddresses: BoundedVec<
@@ -214,7 +214,101 @@ mod sign_up {
                     // Confirm the sign up of the account as a Main Storage Provider
                     assert_ok!(StorageProviders::confirm_sign_up(
                         RuntimeOrigin::signed(alice),
-                        alice
+                        Some(alice)
+                    ));
+
+                    // Check that Alice is now a Storage Provider
+                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    assert!(alice_sp_id.is_some());
+                    assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
+
+                    // Check that the confirm MSP sign up event was emitted
+                    System::assert_last_event(
+                        Event::<Test>::MspSignUpSuccess {
+                            who: alice,
+                            multiaddresses,
+                            capacity: storage_amount,
+                            value_prop,
+                        }
+                        .into(),
+                    );
+                });
+            }
+
+            #[test]
+            fn msp_confirm_sign_up_works_when_not_passing_provider_account() {
+                ExtBuilder::build().execute_with(|| {
+                    // Initialize variables:
+                    let mut multiaddresses: BoundedVec<
+                        MultiAddress<Test>,
+                        MaxMultiAddressAmount<Test>,
+                    > = BoundedVec::new();
+                    multiaddresses.force_push(
+                        "/ip4/127.0.0.1/udp/1234"
+                            .as_bytes()
+                            .to_vec()
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    let value_prop: ValueProposition<Test> = ValueProposition {
+                        identifier: ValuePropId::<Test>::default(),
+                        data_limit: 10,
+                        protocols: BoundedVec::new(),
+                    };
+                    let storage_amount: StorageData<Test> = 100;
+
+                    // Get the Account Id of Alice and check its balance
+                    let alice: AccountId = 0;
+                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        0
+                    );
+
+                    // Alice is going to sign up as a Main Storage Provider with 100 StorageData units
+                    // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
+                    // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
+                    let deposit_for_storage_amount: BalanceOf<Test> =
+                        <SpMinDeposit as Get<u128>>::get().saturating_add(
+                            <DepositPerData as Get<u128>>::get().saturating_mul(
+                                (storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                            ),
+                        );
+
+                    // Request sign up of Alice as a Main Storage Provider
+                    assert_ok!(StorageProviders::request_msp_sign_up(
+                        RuntimeOrigin::signed(alice),
+                        storage_amount,
+                        multiaddresses.clone(),
+                        value_prop.clone()
+                    ));
+
+                    // Check the new free balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        5_000_000 - deposit_for_storage_amount
+                    );
+                    // Check the new held balance of Alice
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        deposit_for_storage_amount
+                    );
+
+                    // Check that Alice is still NOT a Storage Provider
+                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    assert!(alice_sp_id.is_none());
+
+                    // Advance enough blocks for randomness to be valid
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number()
+                            + BLOCKS_BEFORE_RANDOMNESS_VALID,
+                    );
+
+                    // Confirm the sign up of the account as a Main Storage Provider
+                    assert_ok!(StorageProviders::confirm_sign_up(
+                        RuntimeOrigin::signed(alice),
+                        None
                     ));
 
                     // Check that Alice is now a Storage Provider
@@ -519,7 +613,7 @@ mod sign_up {
             }
 
             #[test]
-            fn bsp_confirm_sign_up_works() {
+            fn bsp_confirm_sign_up_works_when_passing_provider_account() {
                 ExtBuilder::build().execute_with(|| {
                     // Initialize variables:
                     let mut multiaddresses: BoundedVec<
@@ -597,7 +691,109 @@ mod sign_up {
                     // Confirm the sign up of Alice as a Backup Storage Provider
                     assert_ok!(StorageProviders::confirm_sign_up(
                         RuntimeOrigin::signed(alice),
-                        alice
+                        Some(alice)
+                    ));
+
+                    // Check that Alice is now a Storage Provider
+                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    assert!(alice_sp_id.is_some());
+                    assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
+
+                    // Check that the total capacity of the Backup Storage Providers has now increased
+                    assert_eq!(StorageProviders::get_total_bsp_capacity(), storage_amount);
+
+                    // Check that the confirm BSP sign up event was emitted
+                    System::assert_last_event(
+                        Event::<Test>::BspSignUpSuccess {
+                            who: alice,
+                            multiaddresses,
+                            capacity: storage_amount,
+                        }
+                        .into(),
+                    );
+                });
+            }
+
+            #[test]
+            fn bsp_confirm_sign_up_works_when_not_passing_provider_account() {
+                ExtBuilder::build().execute_with(|| {
+                    // Initialize variables:
+                    let mut multiaddresses: BoundedVec<
+                        MultiAddress<Test>,
+                        MaxMultiAddressAmount<Test>,
+                    > = BoundedVec::new();
+                    multiaddresses.force_push(
+                        "/ip4/127.0.0.1/udp/1234"
+                            .as_bytes()
+                            .to_vec()
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let storage_amount: StorageData<Test> = 100;
+
+                    // Get the Account Id of Alice and check its balance
+                    let alice: AccountId = 0;
+                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        0
+                    );
+
+                    // Alice is going to sign up as a Backup Storage Provider with 100 StorageData units
+                    // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
+                    // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
+                    let deposit_for_storage_amount: BalanceOf<Test> =
+                        <SpMinDeposit as Get<u128>>::get().saturating_add(
+                            <DepositPerData as Get<u128>>::get().saturating_mul(
+                                (storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                            ),
+                        );
+
+                    // Request sign up of Alice as a Backup Storage Provider
+                    assert_ok!(StorageProviders::request_bsp_sign_up(
+                        RuntimeOrigin::signed(alice),
+                        storage_amount,
+                        multiaddresses.clone(),
+                    ));
+
+                    // Check the new free balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        5_000_000 - deposit_for_storage_amount
+                    );
+                    // Check the new held balance of Alice
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        deposit_for_storage_amount
+                    );
+
+                    // Check that Alice is still NOT a Storage Provider
+                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    assert!(alice_sp_id.is_none());
+
+                    // Check that the total capacity of the Backup Storage Providers has NOT yet increased
+                    assert_eq!(StorageProviders::get_total_bsp_capacity(), 0);
+
+                    // Check the event was emitted
+                    System::assert_has_event(
+                        Event::<Test>::BspRequestSignUpSuccess {
+                            who: alice,
+                            multiaddresses: multiaddresses.clone(),
+                            capacity: storage_amount,
+                        }
+                        .into(),
+                    );
+
+                    // Advance enough blocks for randomness to be valid
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number()
+                            + BLOCKS_BEFORE_RANDOMNESS_VALID,
+                    );
+
+                    // Confirm the sign up of Alice as a Backup Storage Provider
+                    assert_ok!(StorageProviders::confirm_sign_up(
+                        RuntimeOrigin::signed(alice),
+                        None
                     ));
 
                     // Check that Alice is now a Storage Provider
@@ -980,7 +1176,7 @@ mod sign_up {
                     // Confirm the sign up of the account as a Main Storage Provider
                     assert_ok!(StorageProviders::confirm_sign_up(
                         RuntimeOrigin::signed(alice),
-                        alice
+                        Some(alice)
                     ));
 
                     // Check that Alice is now a Storage Provider
@@ -1069,7 +1265,7 @@ mod sign_up {
                     // Confirm the sign up of the account as a Main Storage Provider
                     assert_ok!(StorageProviders::confirm_sign_up(
                         RuntimeOrigin::signed(alice),
-                        alice
+                        Some(alice)
                     ));
 
                     // Check that Alice is now a Storage Provider
@@ -1091,7 +1287,7 @@ mod sign_up {
                     // Confirm the sign up of the account as a Backup Storage Provider
                     assert_ok!(StorageProviders::confirm_sign_up(
                         RuntimeOrigin::signed(bob),
-                        bob
+                        Some(bob)
                     ));
 
                     // Check that Bob is now a Storage Provider
@@ -1175,7 +1371,7 @@ mod sign_up {
                     // Confirm the sign up of the account as a Main Storage Provider
                     assert_ok!(StorageProviders::confirm_sign_up(
                         RuntimeOrigin::signed(alice),
-                        alice
+                        Some(alice)
                     ));
 
                     // Check that Alice is now a Storage Provider
@@ -1252,8 +1448,10 @@ mod sign_up {
                     );
 
                     // Confirm the sign up of the account as a Main Storage Provider
-                    let confirm_result =
-                        StorageProviders::confirm_sign_up(RuntimeOrigin::signed(alice), alice);
+                    let confirm_result = StorageProviders::confirm_sign_up(
+                        RuntimeOrigin::signed(alice),
+                        Some(alice),
+                    );
                     assert_eq!(confirm_result, Ok(Pays::No.into()));
 
                     // Check that Alice is now a Storage Provider
@@ -1378,13 +1576,16 @@ mod sign_up {
 
                     // Try to confirm the sign up of Alice as a Main Storage Provider
                     assert_noop!(
-                        StorageProviders::confirm_sign_up(RuntimeOrigin::signed(alice), alice),
+                        StorageProviders::confirm_sign_up(
+                            RuntimeOrigin::signed(alice),
+                            Some(alice)
+                        ),
                         Error::<Test>::SignUpRequestExpired
                     );
 
                     // Try to confirm the sign up of Bob as a Backup Storage Provider
                     assert_noop!(
-                        StorageProviders::confirm_sign_up(RuntimeOrigin::signed(bob), bob),
+                        StorageProviders::confirm_sign_up(RuntimeOrigin::signed(bob), Some(bob)),
                         Error::<Test>::SignUpRequestExpired
                     );
 
@@ -1489,7 +1690,10 @@ mod sign_up {
 
                     // Try to confirm the sign up of the account as a Main Storage Provider
                     assert_noop!(
-                        StorageProviders::confirm_sign_up(RuntimeOrigin::signed(alice), alice),
+                        StorageProviders::confirm_sign_up(
+                            RuntimeOrigin::signed(alice),
+                            Some(alice)
+                        ),
                         Error::<Test>::RandomnessNotValidYet
                     );
 
@@ -1544,7 +1748,10 @@ mod sign_up {
 
                     // Try to confirm the sign up of the account as a Main Storage Provider
                     assert_noop!(
-                        StorageProviders::confirm_sign_up(RuntimeOrigin::signed(alice), alice),
+                        StorageProviders::confirm_sign_up(
+                            RuntimeOrigin::signed(alice),
+                            Some(alice)
+                        ),
                         Error::<Test>::SignUpRequestExpired
                     );
 
@@ -1606,7 +1813,7 @@ mod sign_up {
                         let account_id = i as AccountId;
                         assert_ok!(StorageProviders::confirm_sign_up(
                             RuntimeOrigin::signed(account_id),
-                            account_id
+                            Some(account_id)
                         ));
                     }
 
@@ -1683,13 +1890,16 @@ mod sign_up {
                         let account_id = i as AccountId;
                         assert_ok!(StorageProviders::confirm_sign_up(
                             RuntimeOrigin::signed(account_id),
-                            account_id
+                            Some(account_id)
                         ));
                     }
 
                     // Try to confirm the sign up of Alice as a Main Storage Provider
                     assert_noop!(
-                        StorageProviders::confirm_sign_up(RuntimeOrigin::signed(alice), alice),
+                        StorageProviders::confirm_sign_up(
+                            RuntimeOrigin::signed(alice),
+                            Some(alice)
+                        ),
                         Error::<Test>::MaxMspsReached
                     );
                 });
@@ -1740,7 +1950,10 @@ mod sign_up {
 
                     // Try to confirm the sign up of the account as a Backup Storage Provider
                     assert_noop!(
-                        StorageProviders::confirm_sign_up(RuntimeOrigin::signed(alice), alice),
+                        StorageProviders::confirm_sign_up(
+                            RuntimeOrigin::signed(alice),
+                            Some(alice)
+                        ),
                         Error::<Test>::RandomnessNotValidYet
                     );
 
@@ -1789,7 +2002,10 @@ mod sign_up {
 
                     // Try to confirm the sign up of Alice as a Backup Storage Provider
                     assert_noop!(
-                        StorageProviders::confirm_sign_up(RuntimeOrigin::signed(alice), alice),
+                        StorageProviders::confirm_sign_up(
+                            RuntimeOrigin::signed(alice),
+                            Some(alice)
+                        ),
                         Error::<Test>::SignUpRequestExpired
                     );
 
@@ -1845,7 +2061,7 @@ mod sign_up {
                         let account_id = i as AccountId;
                         assert_ok!(StorageProviders::confirm_sign_up(
                             RuntimeOrigin::signed(account_id),
-                            account_id
+                            Some(account_id)
                         ));
                     }
 
@@ -1914,13 +2130,16 @@ mod sign_up {
                         let account_id = i as AccountId;
                         assert_ok!(StorageProviders::confirm_sign_up(
                             RuntimeOrigin::signed(account_id),
-                            account_id
+                            Some(account_id)
                         ));
                     }
 
                     // Try to confirm to sign up Alice as a Backup Storage Provider
                     assert_noop!(
-                        StorageProviders::confirm_sign_up(RuntimeOrigin::signed(alice), alice,),
+                        StorageProviders::confirm_sign_up(
+                            RuntimeOrigin::signed(alice),
+                            Some(alice)
+                        ),
                         Error::<Test>::MaxBspsReached
                     );
                 });
@@ -1972,8 +2191,10 @@ mod sign_up {
                     );
 
                     // Try to confirm the sign up of the account as a Main Storage Provider
-                    let confirm_result =
-                        StorageProviders::confirm_sign_up(RuntimeOrigin::signed(alice), alice);
+                    let confirm_result = StorageProviders::confirm_sign_up(
+                        RuntimeOrigin::signed(alice),
+                        Some(alice),
+                    );
                     assert!(
                         confirm_result.is_err_and(|result| result.post_info.pays_fee == Pays::Yes)
                     );
@@ -1996,7 +2217,10 @@ mod sign_up {
 
                     // Try to confirm the sign up of Alice
                     assert_noop!(
-                        StorageProviders::confirm_sign_up(RuntimeOrigin::signed(alice), alice),
+                        StorageProviders::confirm_sign_up(
+                            RuntimeOrigin::signed(alice),
+                            Some(alice)
+                        ),
                         Error::<Test>::SignUpNotRequested
                     );
                 });
@@ -2582,7 +2806,7 @@ fn register_account_as_msp(
     // Confirm the sign up of the account as a Main Storage Provider
     assert_ok!(StorageProviders::confirm_sign_up(
         RuntimeOrigin::signed(account),
-        account
+        Some(account)
     ));
 
     // Check that the confirm MSP sign up event was emitted
@@ -2661,7 +2885,7 @@ fn register_account_as_bsp(
     // Confirm the sign up of the account as a Backup Storage Provider
     assert_ok!(StorageProviders::confirm_sign_up(
         RuntimeOrigin::signed(account),
-        account
+        Some(account)
     ));
 
     // Check that the confirm BSP sign up event was emitted
