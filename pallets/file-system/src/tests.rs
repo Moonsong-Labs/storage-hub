@@ -424,7 +424,7 @@ fn bsp_volunteer_storage_request_not_found_fail() {
             <Test as Config>::MaxDataServerMultiAddresses,
         > = BoundedVec::try_from(vec![multiaddr]).unwrap();
 
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             100,
             multiaddresses.clone(),
@@ -470,7 +470,7 @@ fn bsp_already_volunteered_failed() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -524,7 +524,7 @@ fn bsp_volunteer_above_threshold_high_fail() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -646,7 +646,7 @@ fn bsp_confirm_storing_storage_request_not_found_fail() {
         > = BoundedVec::try_from(vec![multiaddr]).unwrap();
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             100,
             multiaddresses.clone(),
@@ -694,7 +694,7 @@ fn bsp_confirm_storing_not_volunteered_fail() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -742,7 +742,7 @@ fn bsp_already_confirmed_fail() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -980,7 +980,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -1077,7 +1077,7 @@ fn bsp_stop_storing_not_volunteered_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
