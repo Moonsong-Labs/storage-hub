@@ -63,6 +63,12 @@ where
     ) -> DispatchResult {
         // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
 
+        // Check that the user does not have a pending sign up request
+        ensure!(
+            SignUpRequests::<T>::get(&who).is_none(),
+            Error::<T>::SignUpRequestPending
+        );
+
         // Check that, by registering this Main Storage Provider, we are not exceeding the maximum number of Main Storage Providers
         // (This wont be incremented until the sign up is confirmed, but we check it here to avoid running the rest of the logic
         // if we know that the sign up will fail)
@@ -148,6 +154,12 @@ where
         bsp_info: BackupStorageProvider<T>,
     ) -> DispatchResult {
         // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
+
+        // Check that the user does not have a pending sign up request
+        ensure!(
+            SignUpRequests::<T>::get(&who).is_none(),
+            Error::<T>::SignUpRequestPending
+        );
 
         // Check that, by registering this Backup Storage Provider, we are not exceeding the maximum number of Backup Storage Providers
         // (This wont be incremented until the sign up is confirmed, but we check it here to avoid running the rest of the logic

@@ -302,6 +302,8 @@ pub mod pallet {
         NotRegistered,
         /// Error thrown when a user tries to confirm a sign up that was not requested previously.
         SignUpNotRequested,
+        /// Error thrown when a user tries to request to sign up when it already has a sign up request pending
+        SignUpRequestPending,
         /// Error thrown when a user has a SP ID assigned to it but the SP data does not exist in storage (Inconsistency error).
         SpRegisteredButDataNotFound,
         /// Error thrown when a user tries to sign off as a SP but still has used storage.
