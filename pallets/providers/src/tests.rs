@@ -2374,6 +2374,70 @@ mod sign_up {
             }
 
             #[test]
+            fn msp_and_bsp_request_sign_up_fails_when_already_requested() {
+                ExtBuilder::build().execute_with(|| {
+                    // Initialize variables:
+                    let mut multiaddresses: BoundedVec<
+                        MultiAddress<Test>,
+                        MaxMultiAddressAmount<Test>,
+                    > = BoundedVec::new();
+                    multiaddresses.force_push(
+                        "/ip4/127.0.0.1/udp/1234"
+                            .as_bytes()
+                            .to_vec()
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let value_prop: ValueProposition<Test> = ValueProposition {
+                        identifier: ValuePropId::<Test>::default(),
+                        data_limit: 10,
+                        protocols: BoundedVec::new(),
+                    };
+                    let storage_amount: StorageData<Test> = 100;
+
+                    // Get the Account Id of Alice and Bob
+                    let alice: AccountId = 0;
+                    let bob: AccountId = 1;
+
+                    // Request to sign up Alice as a Main Storage Provider
+                    assert_ok!(StorageProviders::request_msp_sign_up(
+                        RuntimeOrigin::signed(alice),
+                        storage_amount,
+                        multiaddresses.clone(),
+                        value_prop.clone()
+                    ));
+
+                    // Request to sign up Bob as a Backup Storage Provider
+                    assert_ok!(StorageProviders::request_bsp_sign_up(
+                        RuntimeOrigin::signed(bob),
+                        storage_amount,
+                        multiaddresses.clone(),
+                    ));
+
+                    // Try to request to sign up Alice as a Backup Storage Provider
+                    assert_noop!(
+                        StorageProviders::request_bsp_sign_up(
+                            RuntimeOrigin::signed(alice),
+                            storage_amount,
+                            multiaddresses.clone(),
+                        ),
+                        Error::<Test>::SignUpRequestPending
+                    );
+
+                    // Try to request to sign up Bob as a Main Storage Provider
+                    assert_noop!(
+                        StorageProviders::request_msp_sign_up(
+                            RuntimeOrigin::signed(bob),
+                            storage_amount,
+                            multiaddresses.clone(),
+                            value_prop.clone()
+                        ),
+                        Error::<Test>::SignUpRequestPending
+                    );
+                });
+            }
+
+            #[test]
             fn msp_and_bsp_request_sign_up_fails_when_under_min_capacity() {
                 ExtBuilder::build().execute_with(|| {
                     // Initialize variables:
