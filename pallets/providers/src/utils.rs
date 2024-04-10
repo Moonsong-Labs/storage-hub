@@ -373,15 +373,12 @@ where
         BackupStorageProviders::<T>::insert(&bsp_id, bsp_info.clone());
 
         // Increment the total capacity of the network (which is the sum of all BSPs capacities)
-        TotalBspsCapacity::<T>::mutate(|n| {
-            let new_total_bsp_capacity = n.checked_add(&bsp_info.capacity);
-            match new_total_bsp_capacity {
-                Some(new_total_bsp_capacity) => {
-                    *n = new_total_bsp_capacity;
-                    Ok(())
-                }
-                None => Err(DispatchError::Arithmetic(ArithmeticError::Overflow)),
+        TotalBspsCapacity::<T>::mutate(|n| match n.checked_add(&bsp_info.capacity) {
+            Some(new_total_bsp_capacity) => {
+                *n = new_total_bsp_capacity;
+                Ok(())
             }
+            None => Err(DispatchError::Arithmetic(ArithmeticError::Overflow)),
         })?;
 
         // Increment the counter of Backup Storage Providers registered
@@ -465,15 +462,12 @@ where
         BackupStorageProviders::<T>::remove(&bsp_id);
 
         // Update the total capacity of the network (which is the sum of all BSPs capacities)
-        TotalBspsCapacity::<T>::mutate(|n| {
-            let new_total_bsp_capacity = n.checked_sub(&bsp.capacity);
-            match new_total_bsp_capacity {
-                Some(new_total_bsp_capacity) => {
-                    *n = new_total_bsp_capacity;
-                    Ok(())
-                }
-                None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+        TotalBspsCapacity::<T>::mutate(|n| match n.checked_sub(&bsp.capacity) {
+            Some(new_total_bsp_capacity) => {
+                *n = new_total_bsp_capacity;
+                Ok(())
             }
+            None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
         })?;
 
         // Return the deposit to the signer (if all funds cannot be returned, it will fail and revert with the reason)
