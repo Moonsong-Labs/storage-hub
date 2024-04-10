@@ -47,14 +47,15 @@ where
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
     use substrate_frame_rpc_system::{System, SystemApiServer};
 
-    let mut module = RpcExtension::new(());
+    let mut io = RpcExtension::new(());
     let FullDeps {
         client,
         pool,
         deny_unsafe,
     } = deps;
 
-    module.merge(System::new(client.clone(), pool, deny_unsafe).into_rpc())?;
-    module.merge(TransactionPayment::new(client).into_rpc())?;
-    Ok(module)
+    io.merge(System::new(client.clone(), pool, deny_unsafe).into_rpc())?;
+    io.merge(TransactionPayment::new(client).into_rpc())?;
+
+    Ok(io)
 }

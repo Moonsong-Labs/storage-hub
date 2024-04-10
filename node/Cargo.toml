@@ -17,7 +17,9 @@ workspace = true
 anyhow = { workspace = true }
 array-bytes = { workspace = true }
 async-channel = { workspace = true }
+async-io = { workspace = true }
 color-print = { workspace = true }
+futures-timer = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
 prost = { workspace = true }
 thiserror = { workspace = true }
@@ -46,6 +48,7 @@ sc-cli = { workspace = true }
 sc-client-api = { workspace = true }
 sc-offchain = { workspace = true }
 sc-consensus = { workspace = true }
+sc-consensus-manual-seal = { workspace = true }
 sc-executor = { workspace = true }
 sc-network = { workspace = true }
 sc-network-sync = { workspace = true }
@@ -80,6 +83,7 @@ cumulus-client-collator = { workspace = true }
 cumulus-client-consensus-aura = { workspace = true }
 cumulus-client-consensus-common = { workspace = true }
 cumulus-client-consensus-proposer = { workspace = true }
+cumulus-client-parachain-inherent = { workspace = true }
 cumulus-client-service = { workspace = true }
 cumulus-primitives-core = { workspace = true }
 cumulus-primitives-parachain-inherent = { workspace = true }
