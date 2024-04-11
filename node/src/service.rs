@@ -201,7 +201,8 @@ async fn start_node_impl(
         )
         .await;
 
-        let blockchain_service_handle = spawn_blockchain_service(&task_spawner).await;
+        let blockchain_service_handle =
+            spawn_blockchain_service(&task_spawner, client.clone()).await;
 
         let sh_handler = StorageHubHandler::new(
             task_spawner,

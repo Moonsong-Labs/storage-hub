@@ -22,20 +22,39 @@
 //! `crate::request_responses::RequestResponsesBehaviour` with
 //! [`LightClientRequestHandler`](handler::LightClientRequestHandler).
 
+use std::sync::Arc;
+
+use codec::Decode;
+use frame_support::{StorageHasher, Twox128};
+use frame_system::EventRecord;
 use futures::prelude::*;
+use sc_client_api::BlockchainEvents;
+use sc_client_api::StorageKey;
+use sc_client_api::StorageProvider;
 use sc_tracing::tracing::info;
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
+
+use crate::service::ParachainClient;
 
 use super::events::BlockchainServiceEventBusProvider;
 
 const LOG_TARGET: &str = "blockchain-service";
 
+type EventsVec = Vec<
+    Box<
+        EventRecord<
+            <storage_hub_runtime::Runtime as frame_system::Config>::RuntimeEvent,
+            <storage_hub_runtime::Runtime as frame_system::Config>::Hash,
+        >,
+    >,
+>;
+
 #[derive(Debug)]
 pub enum BlockchainServiceCommand {}
 
-#[derive(Debug)]
 pub struct BlockchainService {
     event_bus_provider: BlockchainServiceEventBusProvider,
+    client: Arc<ParachainClient>,
 }
 
 impl Actor for BlockchainService {
@@ -72,18 +91,45 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
     async fn run(mut self) {
         info!(target: LOG_TARGET, "FileTransferService starting up!");
 
-        // TODO: listen to produced blocks and process them into defined events
+        // Import notification stream to be notified of new blocks.
+        let mut notification_stream = self.actor.client.import_notification_stream();
+        while let Some(notification) = notification_stream.next().await {
+            info!(target: LOG_TARGET, "Import notification: {}", notification.hash);
 
-        while let Some(message) = self.receiver.next().await {
-            self.actor.handle_message(message).await;
+            // Would be cool to be able to do this...
+            // let events_storage_key = frame_system::Events::<storage_hub_runtime::Runtime>::hashed_key();
+
+            // Get the storage key for the events storage.
+            let events_storage_key = [
+                Twox128::hash(b"System").to_vec(),
+                Twox128::hash(b"Events").to_vec(),
+            ]
+            .concat();
+
+            // Get the events storage.
+            let raw_storage_opt = self
+                .actor
+                .client
+                .storage(notification.hash, &StorageKey(events_storage_key))
+                .expect("Failed to get Events storage element");
+
+            if let Some(raw_storage) = raw_storage_opt {
+                let block_events = EventsVec::decode(&mut raw_storage.0.as_slice())
+                    .expect("Failed to decode Events storage element");
+
+                for event in block_events.iter() {
+                    info!(target: LOG_TARGET, "Event: {:?}", event);
+                }
+            }
         }
     }
 }
 
 impl BlockchainService {
     /// Create a new [`BlockchainService`].
-    pub fn new() -> Self {
+    pub fn new(client: Arc<ParachainClient>) -> Self {
         Self {
+            client,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
         }
     }

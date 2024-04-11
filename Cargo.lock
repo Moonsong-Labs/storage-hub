@@ -12817,6 +12817,8 @@ dependencies = [
  "cumulus-relay-chain-interface",
  "frame-benchmarking",
  "frame-benchmarking-cli",
+ "frame-support",
+ "frame-system",
  "futures",
  "jsonrpsee",
  "libp2p-identity",

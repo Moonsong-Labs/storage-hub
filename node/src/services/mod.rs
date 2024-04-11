@@ -12,7 +12,7 @@ use crate::tasks::{
 
 use self::{blockchain::handler::BlockchainService, file_transfer::FileTransferService};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct StorageHubHandler {
     pub task_spawner: TaskSpawner,
     pub file_transfer: ActorHandle<FileTransferService>,
