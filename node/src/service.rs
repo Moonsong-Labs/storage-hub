@@ -284,7 +284,7 @@ async fn start_node_impl(
         })
     };
 
-    sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+    let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
         rpc_builder,
         client: client.clone(),
         transaction_pool: transaction_pool.clone(),

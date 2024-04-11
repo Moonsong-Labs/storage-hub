@@ -113,12 +113,19 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
                 .storage(notification.hash, &StorageKey(events_storage_key))
                 .expect("Failed to get Events storage element");
 
+            // Decode the events storage.
             if let Some(raw_storage) = raw_storage_opt {
+                // TODO: Handle case where the storage cannot be decoded.
+                // TODO: This would happen if we're parsing a block authored with an older version of the runtime, using
+                // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
+                // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
                 let block_events = EventsVec::decode(&mut raw_storage.0.as_slice())
                     .expect("Failed to decode Events storage element");
 
                 for event in block_events.iter() {
                     info!(target: LOG_TARGET, "Event: {:?}", event);
+
+                    // TODO: Filter events of interest and send internal events to tasks listening.
                 }
             }
         }
