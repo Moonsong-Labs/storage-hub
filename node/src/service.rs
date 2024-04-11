@@ -4,7 +4,7 @@
 use std::{sync::Arc, time::Duration};
 
 use cumulus_client_cli::CollatorOptions;
-use cumulus_client_parachain_inherent::MockValidationDataInherentDataProvider;
+use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
 use polkadot_primitives::ValidationCode;
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use storage_hub_infra::actor::TaskSpawner;
@@ -27,8 +27,8 @@ use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 
 // Substrate Imports
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
-use sc_client_api::{Backend, BlockBackend};
-use sc_consensus::ImportQueue;
+use sc_client_api::{Backend, BlockBackend, HeaderBackend};
+use sc_consensus::{ImportQueue, LongestChain};
 use sc_executor::{HeapAllocStrategy, WasmExecutor, DEFAULT_HEAP_ALLOC_STRATEGY};
 use sc_network::NetworkBlock;
 use sc_network_sync::SyncingService;
@@ -71,13 +71,13 @@ pub(crate) type ParachainBackend = TFullBackend<Block>;
 pub(crate) type ParachainBlockImport =
     TParachainBlockImport<Block, Arc<ParachainClient>, ParachainBackend>;
 
-type SelectChain = sc_consensus::LongestChain<ParachainBackend, Block>;
+type MaybeSelectChain = Option<sc_consensus::LongestChain<ParachainBackend, Block>>;
 
 /// Assembly of PartialComponents (enough to run chain ops subcommands)
 pub type Service = PartialComponents<
     ParachainClient,
     ParachainBackend,
-    SelectChain,
+    MaybeSelectChain,
     sc_consensus::DefaultImportQueue<Block>,
     sc_transaction_pool::FullPool<Block, ParachainClient>,
     (
@@ -148,37 +148,27 @@ pub fn new_partial(
 
     let block_import = ParachainBlockImport::new(client.clone(), backend.clone());
 
-    // let import_queue = match dev_service {
-    //     true => sc_consensus_manual_seal::import_queue(
-    //         Box::new(client.clone()),
-    //         &task_manager.spawn_essential_handle(),
-    //         config.prometheus_registry(),
-    //     ),
-    //     false => build_import_queue(
-    //         client.clone(),
-    //         block_import.clone(),
-    //         config,
-    //         telemetry.as_ref().map(|telemetry| telemetry.handle()),
-    //         &task_manager,
-    //     )?,
-    // };
+    let import_queue = match dev_service {
+        true => sc_consensus_manual_seal::import_queue(
+            Box::new(client.clone()),
+            &task_manager.spawn_essential_handle(),
+            config.prometheus_registry(),
+        ),
+        false => build_import_queue(
+            client.clone(),
+            block_import.clone(),
+            config,
+            telemetry.as_ref().map(|telemetry| telemetry.handle()),
+            &task_manager,
+        )?,
+    };
 
-    let import_queue = sc_consensus_manual_seal::import_queue(
-        Box::new(client.clone()),
-        &task_manager.spawn_essential_handle(),
-        config.prometheus_registry(),
-    );
-
-    // let import_queue = build_import_queue(
-    //     client.clone(),
-    //     block_import.clone(),
-    //     config,
-    //     telemetry.as_ref().map(|telemetry| telemetry.handle()),
-    //     &task_manager,
-    // )?;
-
-    let select_chain = sc_consensus::LongestChain::new(backend.clone());
-
+    let select_chain = if dev_service {
+		Some(LongestChain::new(backend.clone()))
+	} else {
+		None
+	};
+    
     Ok(PartialComponents {
         backend,
         client,
@@ -201,18 +191,21 @@ async fn start_dev_impl(
     use async_io::Timer;
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
 
-    let params = new_partial(&config, true)?;
+    let sc_service::PartialComponents {
+		client,
+		backend,
+		mut task_manager,
+		import_queue,
+		keystore_container,
+		select_chain: maybe_select_chain,
+		transaction_pool,
+		other: (_, mut telemetry, _),
+	} = new_partial(&config, true)?;
 
-    let mut task_manager = params.task_manager;
-
-    let (_, mut telemetry, _) = params.other;
     let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
-    let client = params.client.clone();
-    let backend = params.backend.clone();
     let collator = config.role.is_authority();
     let prometheus_registry = config.prometheus_registry().cloned();
-    let transaction_pool = params.transaction_pool.clone();
-    let select_chain = params.select_chain;
+    let select_chain = maybe_select_chain.expect("In `dev` mode, `new_partial` will return some `select_chain`; qed");
 
     let genesis_hash = client
         .block_hash(0u32.into())
@@ -248,7 +241,7 @@ async fn start_dev_impl(
             client: client.clone(),
             transaction_pool: transaction_pool.clone(),
             spawn_handle: task_manager.spawn_handle(),
-            import_queue: params.import_queue,
+            import_queue,
             block_announce_validator_builder: None,
             warp_sync_params: None,
             block_relay: None,
@@ -262,7 +255,7 @@ async fn start_dev_impl(
             "offchain-work",
             sc_offchain::OffchainWorkers::new(sc_offchain::OffchainWorkerOptions {
                 runtime_api_provider: client.clone(),
-                keystore: Some(params.keystore_container.keystore()),
+                keystore: Some(keystore_container.keystore()),
                 offchain_db: backend.offchain_storage(),
                 transaction_pool: Some(OffchainTransactionPoolFactory::new(
                     transaction_pool.clone(),
@@ -298,7 +291,7 @@ async fn start_dev_impl(
         transaction_pool: transaction_pool.clone(),
         task_manager: &mut task_manager,
         config,
-        keystore: params.keystore_container.keystore(),
+        keystore: keystore_container.keystore(),
         backend: backend.clone(),
         network: network.clone(),
         sync_service: sync_service.clone(),
@@ -332,8 +325,6 @@ async fn start_dev_impl(
         }
     }
 
-    let client_for_cidp = client.clone();
-
     if collator {
         let proposer = sc_basic_authorship::ProposerFactory::with_proof_recording(
             task_manager.spawn_handle(),
@@ -353,6 +344,10 @@ async fn start_dev_impl(
             },
         ));
 
+        // aura import queue
+        let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
+        let client_for_cidp = client.clone();
+
         task_manager.spawn_essential_handle().spawn_blocking(
             "authorship_task",
             Some("block-authoring"),
@@ -366,43 +361,40 @@ async fn start_dev_impl(
                 consensus_data_provider: Some(Box::new(AuraConsensusDataProvider::new(
                     client.clone(),
                 ))),
-                create_inherent_data_providers: move |parent_hash, _| {
-                    use cumulus_primitives_core::BlockT;
-                    use sp_runtime::traits::Header;
-                    let maybe_parent_block = client_for_cidp.clone().block(parent_hash);
+                create_inherent_data_providers: move |block: Hash, ()| {
+                    let current_para_block = client_for_cidp
+                    .number(block)
+                    .expect("Header lookup should succeed")
+                    .expect("Header passed in as parent should be present in backend.");
+                    
+                    let client_for_xcm = client_for_cidp.clone();
 
-                    let cidp_client = client_for_cidp.clone();
                     async move {
-                        let slot_duration = cumulus_client_consensus_aura::slot_duration_at(
-                            &*cidp_client,
-                            parent_hash,
-                        )?;
                         let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-    
-                        let slot =
-                            sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
-                                *timestamp,
-                                slot_duration,
-                            );
 
-                        let parent_block = maybe_parent_block?
-                        .ok_or(sp_blockchain::Error::UnknownBlock(parent_hash.to_string()))?
-                        .block;
+						let slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+							*timestamp,
+							slot_duration,
+						);
 
                         let mocked_parachain = {
                             MockValidationDataInherentDataProvider {
-                                current_para_block: parent_block.header().number() + 1,
+                                current_para_block,
                                 relay_offset: 1000,
                                 relay_blocks_per_para_block: 2,
-                                para_blocks_per_relay_epoch: 10,
+                                para_blocks_per_relay_epoch: 0,
                                 relay_randomness_config: (),
-                                xcm_config: Default::default(),
-                                raw_downward_messages: Default::default(),
-                                raw_horizontal_messages: Default::default(),
+                                xcm_config: MockXcmConfig::new(
+                                    &*client_for_xcm,
+                                    block,
+                                    Default::default(),
+                                    Default::default(),
+                                ),
+                                raw_downward_messages: vec![],
+                                raw_horizontal_messages: vec![],
                                 additional_key_values: None,
                             }
                         };
-                        let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
 
                         Ok((slot, mocked_parachain, timestamp))
                     }
@@ -654,7 +646,13 @@ fn build_import_queue(
             block_import,
             move |_, _| async move {
                 let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-                Ok(timestamp)
+                
+                let slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+                    *timestamp,
+                    slot_duration,
+                );
+
+                Ok((slot, timestamp))
             },
             slot_duration,
             &task_manager.spawn_essential_handle(),
