@@ -26,15 +26,13 @@
 mod xcm_config;
 
 // Substrate and Polkadot dependencies
-use cumulus_pallet_parachain_system::RelayNumberMonotonicallyIncreases;
-use cumulus_primitives_core::{AggregateMessageOrigin, ParaId};
+use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
+use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
 use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
     parameter_types,
-    traits::{
-        ConstBool, ConstU32, ConstU64, ConstU8, EitherOfDiverse, Randomness, TransformOrigin,
-    },
+    traits::{ConstBool, ConstU32, ConstU64, ConstU8, EitherOfDiverse, TransformOrigin},
     weights::{ConstantMultiplier, Weight},
     PalletId,
 };
@@ -49,10 +47,13 @@ use polkadot_runtime_common::{
     xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{blake2_256, ConstU128, Get, H256};
+use sp_core::{ConstU128, Get};
 use sp_runtime::{AccountId32, FixedU128, Perbill};
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
+
+use crate::ParachainInfo;
+use crate::Randomness;
 
 // Local module imports
 use super::{
@@ -312,31 +313,54 @@ impl pallet_collator_selection::Config for Runtime {
     type WeightInfo = ();
 }
 
-impl pallet_randomness::Config for Runtime {}
+/// Only callable after `set_validation_data` is called which forms this proof the same way
+fn relay_chain_state_proof() -> RelayChainStateProof {
+    let relay_storage_root = ParachainSystem::validation_data()
+        .expect("set in `set_validation_data`")
+        .relay_parent_storage_root;
+    let relay_chain_state =
+        ParachainSystem::relay_state_proof().expect("set in `set_validation_data`");
+    RelayChainStateProof::new(ParachainInfo::get(), relay_storage_root, relay_chain_state)
+        .expect("Invalid relay chain state proof, already constructed in `set_validation_data`")
+}
 
-// We mock the Randomness trait to use a simple randomness function when testing the pallet
-const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10;
-const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;
-pub struct MockRandomness;
-impl Randomness<H256, BlockNumber> for MockRandomness {
-    fn random(subject: &[u8]) -> (H256, BlockNumber) {
-        // Simple randomness mock that changes each block but its randomness is only valid after 3 blocks
-
-        // Concatenate the subject with the block number to get a unique hash for each block
-        let subject_concat_block = [
-            subject,
-            &frame_system::Pallet::<Runtime>::block_number().to_le_bytes(),
-        ]
-        .concat();
-
-        let hashed_subject = blake2_256(&subject_concat_block);
-
-        (
-            H256::from_slice(&hashed_subject),
-            frame_system::Pallet::<Runtime>::block_number()
-                .saturating_sub(BLOCKS_BEFORE_RANDOMNESS_VALID),
-        )
+pub struct BabeDataGetter;
+impl pallet_randomness::GetBabeData<u64, Option<Hash>> for BabeDataGetter {
+    // Tolerate panic here because this is only ever called in an inherent (so can be omitted)
+    fn get_epoch_index() -> u64 {
+        if cfg!(feature = "runtime-benchmarks") {
+            // storage reads as per actual reads
+            let _relay_storage_root = ParachainSystem::validation_data();
+            let _relay_chain_state = ParachainSystem::relay_state_proof();
+            const BENCHMARKING_NEW_EPOCH: u64 = 10u64;
+            return BENCHMARKING_NEW_EPOCH;
+        }
+        relay_chain_state_proof()
+            .read_optional_entry(well_known_keys::EPOCH_INDEX)
+            .ok()
+            .flatten()
+            .expect("expected to be able to read epoch index from relay chain state proof")
     }
+    fn get_epoch_randomness() -> Option<Hash> {
+        if cfg!(feature = "runtime-benchmarks") {
+            // storage reads as per actual reads
+            let _relay_storage_root = ParachainSystem::validation_data();
+            let _relay_chain_state = ParachainSystem::relay_state_proof();
+            let benchmarking_babe_output = Hash::default();
+            return Some(benchmarking_babe_output);
+        }
+        relay_chain_state_proof()
+            .read_optional_entry(well_known_keys::ONE_EPOCH_AGO_RANDOMNESS)
+            .ok()
+            .flatten()
+    }
+}
+const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 100;
+/// Configure the randomness pallet
+impl pallet_randomness::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type BabeDataGetter = BabeDataGetter;
+    type WeightInfo = ();
 }
 
 impl pallet_storage_providers::Config for Runtime {
@@ -357,7 +381,7 @@ impl pallet_storage_providers::Config for Runtime {
     type DepositPerData = ConstU128<2>;
     type RuntimeHoldReason = RuntimeHoldReason;
     type Subscribers = FileSystem;
-    type ProvidersRandomness = MockRandomness;
+    type ProvidersRandomness = Randomness;
     type MaxBlocksForRandomness = ConstU32<{ 2 * EPOCH_DURATION_IN_BLOCKS }>;
 }
 
