@@ -12932,6 +12932,7 @@ dependencies = [
  "pallet-file-system",
  "pallet-message-queue",
  "pallet-proofs-dealer",
+ "pallet-randomness",
  "pallet-session",
  "pallet-storage-providers",
  "pallet-sudo",

@@ -312,6 +312,8 @@ impl pallet_collator_selection::Config for Runtime {
     type WeightInfo = ();
 }
 
+impl pallet_randomness::Config for Runtime {}
+
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10;
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;
