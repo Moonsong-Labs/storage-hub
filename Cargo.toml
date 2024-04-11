@@ -16,9 +16,10 @@ resolver = "2"
 anyhow = "1.0.81"
 array-bytes = "6.1"
 async-channel = "1.8.0"
+async-trait = "0.1.42"
 clap = { version = "4.5.3", features = ["derive"] }
 codec = { package = "parity-scale-codec", version = "3.0.0", features = [
-    "derive",
+	"derive",
 ], default-features = false }
 hex-literal = { version = "0.4.1" }
 jsonrpsee = { version = "0.22", features = ["server"] }
@@ -30,7 +31,7 @@ parking_lot = "0.12.1"
 prost = "0.12"
 prost-build = "0.12.3"
 scale-info = { version = "2.11.0", default-features = false, features = [
-    "derive",
+	"derive",
 ] }
 thiserror = "1.0.48"
 tokio = "1.36.0"
@@ -47,6 +48,7 @@ sp-trie = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polka
 sp-api = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
 sp-block-builder = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
 sp-consensus-aura = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
+sp-consensus-babe = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
 sp-genesis-builder = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
 sp-inherents = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
 sp-offchain = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
@@ -98,7 +100,7 @@ pallet-balances = { git = "https://github.com/paritytech/polkadot-sdk.git", tag 
 
 # Polkadot
 polkadot-cli = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", features = [
-    "rococo-native",
+	"rococo-native",
 ] }
 polkadot-primitives = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0" }
 pallet-xcm = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
@@ -120,7 +122,7 @@ cumulus-relay-chain-interface = { git = "https://github.com/paritytech/polkadot-
 cumulus-pallet-aura-ext = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
 cumulus-pallet-dmp-queue = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
 cumulus-pallet-parachain-system = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false, features = [
-    "parameterized-consensus-hook",
+	"parameterized-consensus-hook",
 ] }
 cumulus-pallet-session-benchmarking = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
 cumulus-pallet-xcm = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
@@ -140,6 +142,7 @@ pallet-proofs-dealer = { path = "pallets/proofs-dealer", default-features = fals
 
 storage-hub-traits = { path = "support/traits", default-features = false }
 storage-hub-infra = { path = "support/infra", default-features = false }
+session-keys-primitives = { path = "primitives/session-keys", default-features = false }
 storage-hub-runtime = { path = "runtime", default-features = false }
 
 [workspace.lints.rust]
