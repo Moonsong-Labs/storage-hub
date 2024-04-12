@@ -40,7 +40,8 @@ use crate::{
     cli::ProviderType,
     command::ProviderOptions,
     services::{
-        blockchain::spawn_blockchain_service, file_transfer::spawn_file_transfer_service,
+        blockchain::spawn_blockchain_service,
+        file_transfer::{self, spawn_file_transfer_service},
         StorageHubHandler,
     },
 };
@@ -190,30 +191,21 @@ async fn start_node_impl(
         .flatten()
         .expect("Genesis block exists; qed");
 
-    if let Some(provider_options) = provider_options {
+    // Spawning File Transfer Service if node is running as a Storage Provider.
+    // This is done here because the File Transfer Service modifies the network configuration.
+    let mut file_transfer_service_handle = None;
+    if provider_options.is_some() {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
-        let file_transfer_service_handle = spawn_file_transfer_service(
-            &task_spawner,
-            genesis_hash,
-            &parachain_config,
-            &mut net_config,
-        )
-        .await;
-
-        let blockchain_service_handle =
-            spawn_blockchain_service(&task_spawner, client.clone()).await;
-
-        let sh_handler = StorageHubHandler::new(
-            task_spawner,
-            file_transfer_service_handle,
-            blockchain_service_handle,
+        file_transfer_service_handle = Some(
+            spawn_file_transfer_service(
+                &task_spawner,
+                genesis_hash,
+                &parachain_config,
+                &mut net_config,
+            )
+            .await,
         );
-
-        match provider_options.provider_type {
-            ProviderType::Bsp => sh_handler.start_bsp_tasks(),
-            _ => {}
-        }
     }
 
     let (relay_chain_interface, collator_key) = build_relay_chain_interface(
@@ -298,6 +290,30 @@ async fn start_node_impl(
         tx_handler_controller,
         telemetry: telemetry.as_mut(),
     })?;
+
+    // Spawning the Blockchain Service if node is running as a Storage Provider.
+    if let Some(provider_options) = provider_options {
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+
+        let blockchain_service_handle =
+            spawn_blockchain_service(&task_spawner, client.clone(), Arc::new(rpc_handlers)).await;
+
+        let file_transfer_service_handle = file_transfer_service_handle.expect(
+            "File Transfer Service handle is expected to be present when the node is running as a Storage Provider. qed",
+        );
+
+        let sh_handler = StorageHubHandler::new(
+            task_spawner,
+            file_transfer_service_handle,
+            blockchain_service_handle,
+        );
+
+        // Starting the tasks according to the provider type.
+        match provider_options.provider_type {
+            ProviderType::Bsp => sh_handler.start_bsp_tasks(),
+            _ => {}
+        }
+    }
 
     if let Some(hwbench) = hwbench {
         sc_sysinfo::print_hwbench(&hwbench);
