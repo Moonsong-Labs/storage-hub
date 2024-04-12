@@ -33,6 +33,7 @@ use sc_client_api::{BlockchainEvents, HeaderBackend, StorageKey, StorageProvider
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::info;
 use serde::Deserialize;
+use sp_core::{Blake2Hasher, Hasher};
 use sp_keyring::Sr25519Keyring;
 use sp_runtime::{
     generic::{self, SignedPayload},
@@ -192,10 +193,13 @@ impl BlockchainService {
         caller: Sr25519Keyring,
         nonce: u32,
     ) -> Result<RpcTransactionOutput, RpcTransactionError> {
+        info!(target: LOG_TARGET, "Sending extrinsic to the runtime");
         let extrinsic = construct_extrinsic(self.client.clone(), call, caller, nonce);
 
-        // TODO: Consider using a unique ID for each RPC call and keeping track of them.
-        let id = 0;
+        // Generate a unique ID for this query.
+        let id_hash = Blake2Hasher::hash(&extrinsic.encode());
+        // TODO: Consider storing the ID in a hashmap if later retrieval is needed.
+
         let (result, rx) = self
             .rpc_handlers
             .rpc_query(&format!(
@@ -206,17 +210,16 @@ impl BlockchainService {
                     "id": {}
                 }}"#,
                 array_bytes::bytes2hex("", &extrinsic.encode()),
-                id
+                id_hash
             ))
             .await
-            .expect("Sending query faild even when it is correctly formatted as JSON-RPC; qed");
+            .expect("Sending query failed even when it is correctly formatted as JSON-RPC; qed");
 
         parse_rpc_result(result, rx)
     }
 }
 
 /// Construct an extrinsic that can be applied to the runtime.
-// TODO: Review thoroughly this function.
 pub fn construct_extrinsic(
     client: Arc<ParachainClient>,
     function: impl Into<storage_hub_runtime::RuntimeCall>,
@@ -226,11 +229,15 @@ pub fn construct_extrinsic(
     let function = function.into();
     let current_block_hash = client.info().best_hash;
     let current_block = client.info().best_number.saturated_into();
-    let genesis_block = client.hash(0).unwrap().unwrap();
+    let genesis_block = client
+        .hash(0)
+        .expect("Failed to get genesis block hash, always present; qed")
+        .expect("Genesis block hash should never not be on-chain; qed");
     let period = BlockHashCount::get()
         .checked_next_power_of_two()
         .map(|c| c / 2)
         .unwrap_or(2) as u64;
+    // TODO: Consider tipping the transaction.
     let tip = 0;
     let extra: SignedExtra = (
         frame_system::CheckNonZeroSender::<storage_hub_runtime::Runtime>::new(),
@@ -275,7 +282,6 @@ pub fn construct_extrinsic(
 }
 
 /// Parse the result of an RPC call.
-// TODO: Review thoroughly this function.
 pub(crate) fn parse_rpc_result(
     result: String,
     receiver: tokio::sync::mpsc::Receiver<String>,
