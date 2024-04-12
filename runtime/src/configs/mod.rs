@@ -201,7 +201,7 @@ impl cumulus_pallet_parachain_system::Config for Runtime {
     type XcmpMessageHandler = XcmpQueue;
     type ReservedXcmpWeight = ReservedXcmpWeight;
     type CheckAssociatedRelayNumber = RelayNumberMonotonicallyIncreases;
-    // TODO: figure out how to use ConsensusHook instead or add test feature
+    // TODO: figure out how to use ConsensusHook FixedVelocityConsensusHook
     // type ConsensusHook = ConsensusHook;
     type ConsensusHook = cumulus_pallet_parachain_system::ExpectParentIncluded;
 }
