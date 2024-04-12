@@ -164,10 +164,10 @@ pub fn new_partial(
     };
 
     let select_chain = if dev_service {
-		Some(LongestChain::new(backend.clone()))
-	} else {
-		None
-	};
+        Some(LongestChain::new(backend.clone()))
+    } else {
+        None
+    };
     
     Ok(PartialComponents {
         backend,
@@ -192,20 +192,21 @@ async fn start_dev_impl(
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
 
     let sc_service::PartialComponents {
-		client,
-		backend,
-		mut task_manager,
-		import_queue,
-		keystore_container,
-		select_chain: maybe_select_chain,
-		transaction_pool,
-		other: (_, mut telemetry, _),
-	} = new_partial(&config, true)?;
+        client,
+        backend,
+        mut task_manager,
+        import_queue,
+        keystore_container,
+        select_chain: maybe_select_chain,
+        transaction_pool,
+        other: (_, mut telemetry, _),
+    } = new_partial(&config, true)?;
 
     let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
     let collator = config.role.is_authority();
     let prometheus_registry = config.prometheus_registry().cloned();
-    let select_chain = maybe_select_chain.expect("In `dev` mode, `new_partial` will return some `select_chain`; qed");
+    let select_chain = maybe_select_chain
+        .expect("In `dev` mode, `new_partial` will return some `select_chain`; qed");
 
     let genesis_hash = client
         .block_hash(0u32.into())
