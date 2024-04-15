@@ -1,11 +1,11 @@
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
-    traits::{Everything, Hooks},
+    traits::{Everything, Hooks, Randomness},
     weights::{constants::RocksDbWeight, Weight},
 };
 use frame_system as system;
 use pallet_proofs_dealer::CompactProof;
-use sp_core::{ConstU128, ConstU32, Get, H256};
+use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Bounded, IdentityLookup},
     AccountId32, BuildStorage, DispatchResult, FixedU128,
@@ -16,6 +16,32 @@ type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
 type Balance = u128;
 type AccountId = AccountId32;
+
+const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10;
+
+// We mock the Randomness trait to use a simple randomness function when testing the pallet
+const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;
+pub struct MockRandomness;
+impl Randomness<H256, BlockNumber> for MockRandomness {
+    fn random(subject: &[u8]) -> (H256, BlockNumber) {
+        // Simple randomness mock that changes each block but its randomness is only valid after 3 blocks
+
+        // Concatenate the subject with the block number to get a unique hash for each block
+        let subject_concat_block = [
+            subject,
+            &frame_system::Pallet::<Test>::block_number().to_le_bytes(),
+        ]
+        .concat();
+
+        let hashed_subject = blake2_256(&subject_concat_block);
+
+        (
+            H256::from_slice(&hashed_subject),
+            frame_system::Pallet::<Test>::block_number()
+                .saturating_sub(BLOCKS_BEFORE_RANDOMNESS_VALID),
+        )
+    }
+}
 
 /// Rolls to the desired block. Returns the number of blocks played.
 pub(crate) fn roll_to(n: BlockNumber) -> BlockNumber {
@@ -118,6 +144,8 @@ impl pallet_storage_providers::Config for Test {
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
     type Subscribers = FileSystem;
+    type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
+    type ProvidersRandomness = MockRandomness;
 }
 
 // TODO: remove this and replace with pallet treasury
