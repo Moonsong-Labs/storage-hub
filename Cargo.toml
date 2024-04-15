@@ -35,7 +35,6 @@ scale-info = { version = "2.11.0", default-features = false, features = [
 ] }
 thiserror = "1.0.48"
 tokio = "1.36.0"
-
 smallvec = "1.11.0"
 reference-trie = "0.29.1"
 serde = { version = "1.0.197", features = ["derive"], default-features = false }
@@ -81,8 +80,6 @@ substrate-frame-rpc-system = { git = "https://github.com/paritytech/polkadot-sdk
 substrate-prometheus-endpoint = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0" }
 substrate-wasm-builder = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0" }
 substrate-build-script-utils = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0" }
-
-# FRAME
 frame-benchmarking = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
 frame-benchmarking-cli = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0" }
 frame-support = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
@@ -140,12 +137,13 @@ parachains-common = { git = "https://github.com/paritytech/polkadot-sdk.git", ta
 parachain-info = { package = "staging-parachain-info", git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
 
 # Local Pallets
-storage-hub-runtime = { path = "runtime", default-features = false }
 pallet-storage-providers = { path = "pallets/providers", default-features = false }
 pallet-file-system = { path = "pallets/file-system", default-features = false }
 pallet-proofs-dealer = { path = "pallets/proofs-dealer", default-features = false }
+
 storage-hub-traits = { path = "support/traits", default-features = false }
 storage-hub-infra = { path = "support/infra", default-features = false }
+storage-hub-runtime = { path = "runtime", default-features = false }
 
 [workspace.lints.rust]
 suspicious_double_ref_op = { level = "allow", priority = 2 }
