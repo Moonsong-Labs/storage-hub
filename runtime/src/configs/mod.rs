@@ -49,7 +49,7 @@ use polkadot_runtime_common::{
     xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{blake2_256, ConstU128, Get, H256, H256};
+use sp_core::{blake2_256, ConstU128, Get, H256};
 use sp_runtime::{AccountId32, DispatchResult, FixedU128, Perbill};
 use sp_version::RuntimeVersion;
 use storage_hub_traits::CommitmentVerifier;
