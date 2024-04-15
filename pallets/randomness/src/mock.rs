@@ -140,37 +140,13 @@ macro_rules! assert_event_emitted {
 }
 
 /// Externality builder for pallet randomness mock runtime
-pub(crate) struct ExtBuilder {
-    /// Balance amounts per AccountId
-    balances: Vec<(AccountId, Balance)>,
-}
-
-impl Default for ExtBuilder {
-    fn default() -> ExtBuilder {
-        ExtBuilder {
-            balances: Vec::new(),
-        }
-    }
-}
-
+pub struct ExtBuilder;
 impl ExtBuilder {
     #[allow(dead_code)]
-    pub(crate) fn with_balances(mut self, balances: Vec<(AccountId, Balance)>) -> Self {
-        self.balances = balances;
-        self
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn build(self) -> sp_io::TestExternalities {
-        let mut t = frame_system::GenesisConfig::<Test>::default()
+    pub fn build() -> sp_io::TestExternalities {
+        let t = frame_system::GenesisConfig::<Test>::default()
             .build_storage()
             .expect("Frame system builds valid default genesis config");
-
-        pallet_balances::GenesisConfig::<Test> {
-            balances: self.balances,
-        }
-        .assimilate_storage(&mut t)
-        .expect("Pallet balances storage can be assimilated");
 
         let mut ext = sp_io::TestExternalities::new(t);
         ext.execute_with(|| System::set_block_number(1));
