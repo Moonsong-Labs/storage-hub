@@ -50,9 +50,9 @@ describe("Simple zombieTest", async () => {
       "Send bal transfer on relaychain",
       async () => {
         await relayApi.tx.Balances.transfer_allow_death({
-          dest: MultiAddress.Id(bob.sr25519.id),
+          dest: MultiAddress.Id(accounts.bob.sr25519.id),
           value: 1337n,
-        }).signAndSubmit(alice.sr25519.signer);
+        }).signAndSubmit(accounts.alice.sr25519.signer);
       },
       { timeout: 30_000 }
     );
