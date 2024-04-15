@@ -6,7 +6,9 @@ use crate::{
     },
     Config, Error, Event, StorageRequestExpirations,
 };
-use frame_support::{assert_noop, assert_ok, traits::Hooks, weights::Weight};
+use frame_support::{
+    assert_noop, assert_ok, dispatch::DispatchResultWithPostInfo, traits::Hooks, weights::Weight,
+};
 use sp_core::H256;
 use sp_runtime::{
     traits::{BlakeTwo256, Get, Hash, Zero},
@@ -369,7 +371,7 @@ fn bsp_volunteer_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -419,11 +421,7 @@ fn bsp_volunteer_storage_request_not_found_fail() {
             <Test as Config>::MaxDataServerMultiAddresses,
         > = BoundedVec::try_from(vec![multiaddr]).unwrap();
 
-        assert_ok!(Providers::bsp_sign_up(
-            bsp_signed.clone(),
-            100,
-            multiaddresses.clone(),
-        ));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), 100, multiaddresses.clone(),));
 
         assert_noop!(
             FileSystem::bsp_volunteer(
@@ -465,7 +463,7 @@ fn bsp_already_volunteered_failed() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -519,7 +517,7 @@ fn bsp_volunteer_above_threshold_high_fail() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -567,7 +565,7 @@ fn bsp_confirm_storing_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -641,11 +639,7 @@ fn bsp_confirm_storing_storage_request_not_found_fail() {
         > = BoundedVec::try_from(vec![multiaddr]).unwrap();
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
-            bsp_signed.clone(),
-            100,
-            multiaddresses.clone(),
-        ));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), 100, multiaddresses.clone(),));
 
         assert_noop!(
             FileSystem::bsp_confirm_storing(
@@ -689,7 +683,7 @@ fn bsp_confirm_storing_not_volunteered_fail() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -737,7 +731,7 @@ fn bsp_already_confirmed_fail() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -853,7 +847,7 @@ fn bsp_stop_storing_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -975,7 +969,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -1072,7 +1066,7 @@ fn bsp_stop_storing_not_volunteered_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(Providers::bsp_sign_up(
+        assert_ok!(bsp_sign_up(
             bsp_signed.clone(),
             storage_amount,
             multiaddresses.clone(),
@@ -1244,4 +1238,26 @@ fn threshold_does_not_exceed_asymptote_success() {
             "Threshold should not go below the asymptote"
         );
     });
+}
+
+/// Helper function that registers an account as a Backup Storage Provider
+fn bsp_sign_up(
+    bsp_signed: RuntimeOrigin,
+    storage_amount: StorageData<Test>,
+    multiaddresses: BoundedVec<MultiAddress<Test>, <Test as Config>::MaxDataServerMultiAddresses>,
+) -> DispatchResultWithPostInfo {
+    // Request to sign up the account as a Backup Storage Provider
+    assert_ok!(Providers::request_bsp_sign_up(
+        bsp_signed.clone(),
+        storage_amount,
+        multiaddresses.clone(),
+    ));
+
+    // Advance enough blocks for randomness to be valid
+    roll_to(frame_system::Pallet::<Test>::block_number() + 4);
+
+    // Confirm the sign up of the account as a Backup Storage Provider
+    assert_ok!(Providers::confirm_sign_up(bsp_signed.clone(), None));
+
+    Ok(().into())
 }

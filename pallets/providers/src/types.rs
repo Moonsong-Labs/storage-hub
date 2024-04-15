@@ -33,7 +33,7 @@ pub struct ValueProposition<T: Config> {
 
 /// Structure that represents a Main Storage Provider. It holds the buckets that the MSP has, the total data that the MSP is able to store,
 /// the amount of data that it is storing, and its libp2p multiaddresses.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, Clone)]
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct MainStorageProvider<T: Config> {
     pub buckets: Buckets<T>,
@@ -62,6 +62,15 @@ pub struct Bucket<T: Config> {
     pub root: MerklePatriciaRoot<T>,
     pub user_id: T::AccountId,
     pub msp_id: MainStorageProviderId<T>,
+}
+
+/// Enum that represents a Storage Provider. It holds either a BackupStorageProvider or a MainStorageProvider,
+/// allowing to operate generically with both types.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub enum StorageProvider<T: Config> {
+    BackupStorageProvider(BackupStorageProvider<T>),
+    MainStorageProvider(MainStorageProvider<T>),
 }
 
 // Type aliases:
