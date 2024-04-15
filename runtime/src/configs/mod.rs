@@ -32,7 +32,9 @@ use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
     parameter_types,
-    traits::{ConstBool, ConstU32, ConstU64, ConstU8, EitherOfDiverse, TransformOrigin},
+    traits::{
+        ConstBool, ConstU32, ConstU64, ConstU8, EitherOfDiverse, Randomness, TransformOrigin,
+    },
     weights::{ConstantMultiplier, Weight},
     PalletId,
 };
@@ -47,7 +49,7 @@ use polkadot_runtime_common::{
     xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{ConstU128, Get};
+use sp_core::{blake2_256, ConstU128, Get, H256};
 use sp_runtime::{AccountId32, FixedU128, Perbill};
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
@@ -312,6 +314,7 @@ impl pallet_collator_selection::Config for Runtime {
     type ValidatorRegistration = Session;
     type WeightInfo = ();
 }
+
 
 /// Only callable after `set_validation_data` is called which forms this proof the same way
 fn relay_chain_state_proof() -> RelayChainStateProof {
