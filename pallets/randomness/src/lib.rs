@@ -49,8 +49,10 @@ pub mod pallet {
     pub trait Config: frame_system::Config {
         /// Overarching event type
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
         /// Get the BABE data from the runtime
         type BabeDataGetter: GetBabeData<u64, Option<Self::Hash>>;
+
         /// Weight info
         type WeightInfo: WeightInfo;
     }
@@ -59,8 +61,9 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(crate) fn deposit_event)]
     pub enum Event<T: Config> {
         NewRandomnessAvailable {
-            valid_until_block: BlockNumberFor<T>,
+            randomness_seed: T::Hash,
             from_epoch: u64,
+            valid_until_block: BlockNumberFor<T>,
         },
     }
 
@@ -68,7 +71,7 @@ pub mod pallet {
     #[pallet::storage]
     pub type LatestBabeRandomness<T: Config> = StorageValue<_, (T::Hash, BlockNumberFor<T>)>;
 
-    /// Relay epoch
+    /// Current relay epoch
     #[pallet::storage]
     pub(crate) type RelayEpoch<T: Config> = StorageValue<_, u64, ValueQuery>;
 
@@ -106,9 +109,18 @@ pub mod pallet {
                     // TODO: add logic to check parent relay block (ideally, we make it valid for `curr_relay_block - 2`)
                     let latest_valid_block = frame_system::Pallet::<T>::block_number()
                         .saturating_sub(sp_runtime::traits::One::one());
+
                     // Save it to be readily available for use
                     LatestBabeRandomness::<T>::put((randomness, latest_valid_block));
+
+                    // Emit an event detailing that a new randomness is available
+                    Self::deposit_event(Event::NewRandomnessAvailable {
+                        randomness_seed: randomness,
+                        from_epoch: relay_epoch_index,
+                        valid_until_block: latest_valid_block,
+                    });
                 } else {
+                    // TODO: Failsafe when randomness is not available from the relay chain (for example when using --dev)
                     log::warn!(
                         "Failed to fill BABE epoch randomness \
 							REQUIRE HOTFIX TO FILL EPOCH RANDOMNESS FOR EPOCH {:?}",
@@ -122,12 +134,6 @@ pub mod pallet {
 
             // Update storage to reflect that this inherent was included in the block (so the block is valid)
             <InherentIncluded<T>>::put(());
-
-            // Emit an event detailing that a new randomness is available
-            Self::deposit_event(Event::NewRandomnessAvailable {
-                valid_until_block: frame_system::Pallet::<T>::block_number(),
-                from_epoch: relay_epoch_index,
-            });
 
             // Inherents do not pay for execution
             Ok(Pays::No.into())
@@ -179,13 +185,17 @@ pub mod pallet {
         /// Uses the BABE randomness of this epoch to generate a random seed that can be used
         /// for commitments from the last epoch. The provided `subject` MUST have been commited
         /// AT LEAST during the last epoch for the result of this function to not be predictable
+        ///
+        /// The subject is a byte array that is hashed (to make it a fixed size) and then concatenated with
+        /// the latest BABE randomness. The result is then hashed again to provide the final randomness.
         fn random(subject: &[u8]) -> (T::Hash, BlockNumberFor<T>) {
             // If there's randomness available
             if let Some((babe_randomness, latest_valid_block)) = LatestBabeRandomness::<T>::get() {
+                let hashed_subject = T::Hashing::hash(subject);
                 let mut digest = Vec::new();
-                // Concatenate the latest randomness with the subject
+                // Concatenate the latest randomness with the hashed subject
                 digest.extend_from_slice(babe_randomness.as_ref());
-                digest.extend_from_slice(subject);
+                digest.extend_from_slice(hashed_subject.as_ref());
                 // Hash it
                 let randomness = T::Hashing::hash(digest.as_slice());
                 // Return the randomness for this subject and the latest block for which this randomness is useful
@@ -193,7 +203,7 @@ pub mod pallet {
                 (randomness, latest_valid_block)
             } else {
                 // If there's no randomness available, return an empty randomness that's invalid for every block
-                // TODO: Check edge case (randomness requested on the first block of the runtime)
+                // TODO: Check edge case (randomness requested on the first block of the runtime for example)
                 let randomness = T::Hash::default();
                 let latest_valid_block: BlockNumberFor<T> = sp_runtime::traits::Zero::zero();
                 (randomness, latest_valid_block)
