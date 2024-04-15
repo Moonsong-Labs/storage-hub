@@ -16,7 +16,15 @@ pub struct ChallengeRequest {
 
 impl EventBusMessage for ChallengeRequest {}
 
-// TODO: use proper types
+/// New storage request event.
+///
+/// This event is emitted when a new storage request is created on-chain.
+/// It contains the following information:
+/// - `who`: the account ID of the requester.
+/// - `location`: the location of the file (as a file path).
+/// - `fingerprint`: the fingerprint of the file (root hash of the merklised file).
+/// - `size`: the size of the file.
+/// - `multiaddresses`: the multiaddresses from where the user would send the file.
 #[derive(Debug, Clone)]
 pub struct NewStorageRequest {
     pub who: AccountId32,
