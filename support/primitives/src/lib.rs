@@ -21,16 +21,16 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
     type Proof = CompactProof;
     type Key = H::Out;
 
-    /// Verifies a proof against a commitment and a set of challenges.
+    /// Verifies a proof against a root (i.e. commitment) and a set of challenges.
     ///
     /// Assumes that the challenges are ordered in ascending numerical order, and not repeated.
     fn verify_proof(
-        commitment: &Self::Key,
+        root: &Self::Key,
         challenges: &[Self::Key],
         proof: &Self::Proof,
     ) -> DispatchResult {
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
-        let (memdb, root) = proof.to_memory_db(Some(commitment.into())).map_err(|_| {
+        let (memdb, root) = proof.to_memory_db(Some(root.into())).map_err(|_| {
             "Failed to convert proof to memory DB, root doesn't match with expected."
         })?;
 
@@ -60,49 +60,40 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
             let next_leaf = trie_de_iter.next();
 
             // Check if `Some(leaf)` yielded an internal error. Ignore `None`.
-            if let Some(Err(e)) = next_leaf {
-                println!("Error: {:?}", e);
+            if let Some(Err(_)) = next_leaf {
                 return Err("Failed to get next leaf.".into());
             }
 
-            // Executing `next_back()` after a `seek()` should yield the same leaf as `next()`.
             let mut prev_leaf = trie_de_iter.next_back();
 
-            println!("challenge: {:?}", challenge);
-            println!("next_leaf: {:?}", next_leaf);
-            println!("prev_leaf: {:?}", prev_leaf);
-
-            // Ensure that the initial `next()` and `next_back()` are equal after a `seek()`.
-            // if next_leaf != prev_leaf {
-            //     return Err("Unexpected trie double ended iterator behaviour.".into());
-            // }
-
-            // Actually iterate back to the leaf before the challenge (which could be `None`).
-            prev_leaf = trie_de_iter.next_back();
-
-            println!("prev_leaf: {:?}", prev_leaf);
-
-            // Check if `Some(leaf)` yielded an internal error. Ignore `None`.
-            if let Some(Err(e)) = prev_leaf {
-                println!("Error: {:?}", e);
-                return Err("Failed to get prev leaf.".into());
+            // If the `prev_leaf` and `next_leaf` are the same and `next_leaf` yields a leaf, then it means we have to exectue
+            // `next_back()` again to get the previous leaf. This is due to the behaviour of the Double Ended Iterator implemented in trie-db.
+            //
+            // When `next_leaf` is None, then `prev_leaf` will yield the last leaf automatically without having to call `next_back()` again.
+            if prev_leaf == next_leaf && next_leaf.as_ref().is_some_and(|x| x.is_ok()) {
+                // If the leaf is the same as the next leaf, then it means we
+                prev_leaf = trie_de_iter.next_back();
             }
 
             // Check if there is a valid combination of leaves which validate the proof given the challenged key.
             match (prev_leaf, next_leaf) {
-                // Valid: `next_leaf` is the challenged leaf which is included in the proof.
+                // Scenario 1 (valid): `next_leaf` is the challenged leaf which is included in the proof.
+                // The challenge is the leaf itself (i.e. the challenge exists in the trie).
                 (_, Some(Ok(next_leaf))) if next_leaf == challenge.as_ref().to_vec() => continue,
-                // Valid: `prev_leaf` and `next_leaf` are consecutive leaves and the challenge is between them.
+                // Scenario 2 (valid): `prev_leaf` and `next_leaf` are consecutive leaves.
+                // The challenge is between the two leaves (i.e. the challenge exists in the trie).
                 (Some(Ok(prev_leaf)), Some(Ok(next_leaf)))
                     if prev_leaf < challenge.as_ref().to_vec()
                         && challenge.as_ref().to_vec() < next_leaf =>
                 {
                     continue
                 }
-                // Valid: `prev_leaf` is the last leaf since `next_leaf` is `None`.
-                // Since `seek()` is already placing the cursor at the nearest leaf (which is `None` initially in this scenario),
-                // executing `next_back()` yields the last leaf.
+                // Scenario 3 (valid): `prev_leaf` is the last leaf since `next_leaf` is `None`.
+                // The challenge is after the last leaf (i.e. the challenge does not exist in the trie).
                 (Some(Ok(_prev_leaf)), None) => continue,
+                // Scenario 4 (valid): `next_leaf` is the first leaf since `prev_leaf` is `None`.
+                // The challenge is before the first leaf (i.e. the challenge does not exist in the trie).
+                (None, Some(Ok(_next_leaf))) => continue,
                 // Invalid
                 (None, None) => {
                     #[cfg(test)]
@@ -115,15 +106,8 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
                         return Err("No leaves provided in proof.".into());
                     }
                 }
-                // Invalid
                 _ => {
-                    #[cfg(test)]
-                    unreachable!("This should not happen. Impossible combination of prev_leaf and next_leaf.");
-
-                    #[allow(unreachable_code)]
-                    {
-                        return Err("Impossible combination of prev_leaf and next_leaf.".into());
-                    }
+                    return Err("Proof is invalid.".into());
                 }
             }
         }
