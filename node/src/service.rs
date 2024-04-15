@@ -3,10 +3,12 @@
 // std
 use std::{sync::Arc, time::Duration};
 
+use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
-use polkadot_primitives::ValidationCode;
+use polkadot_primitives::{HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
+use sp_consensus_aura::Slot;
 use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
 use storage_hub_runtime::{
@@ -22,7 +24,7 @@ use cumulus_client_service::{
     build_network, build_relay_chain_interface, prepare_node_config, start_relay_chain_tasks,
     BuildNetworkParams, CollatorSybilResistance, DARecoveryProfile, StartRelayChainTasksParams,
 };
-use cumulus_primitives_core::{relay_chain::CollatorPair, ParaId};
+use cumulus_primitives_core::{relay_chain::{well_known_keys as RelayChainWellKnownKeys, CollatorPair}, ParaId};
 use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 
 // Substrate Imports
@@ -187,6 +189,7 @@ async fn start_dev_impl(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
+    para_id: ParaId,
 ) -> sc_service::error::Result<TaskManager> {
     use async_io::Timer;
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
@@ -367,16 +370,33 @@ async fn start_dev_impl(
                     .number(block)
                     .expect("Header lookup should succeed")
                     .expect("Header passed in as parent should be present in backend.");
+
+                    let hash = client
+                        .hash(current_para_block.saturating_sub(1))
+                        .expect("Hash of the desired block must be present")
+                        .expect("Hash of the desired block should exist");
+
+                    let para_header = client
+                        .expect_header(hash)
+                        .expect("Expected parachain header should exist")
+                        .encode();
+
+                    let para_head_data = HeadData(para_header).encode();
                     
                     let client_for_xcm = client_for_cidp.clone();
+
+                    let para_head_key = RelayChainWellKnownKeys::para_head(para_id);
+                    let relay_slot_key = RelayChainWellKnownKeys::CURRENT_SLOT.to_vec();
 
                     async move {
                         let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
 
-						let slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+						let relay_slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
 							*timestamp,
 							slot_duration,
 						);
+
+                        let additional_keys = vec![(para_head_key, para_head_data), (relay_slot_key, Slot::from(u64::from(*relay_slot)).encode())];
 
                         let mocked_parachain = {
                             MockValidationDataInherentDataProvider {
@@ -393,11 +413,11 @@ async fn start_dev_impl(
                                 ),
                                 raw_downward_messages: vec![],
                                 raw_horizontal_messages: vec![],
-                                additional_key_values: None,
+                                additional_key_values: Some(additional_keys),
                             }
                         };
 
-                        Ok((slot, mocked_parachain, timestamp))
+                        Ok((relay_slot, mocked_parachain, timestamp))
                     }
                 },
             }),
@@ -742,8 +762,9 @@ pub async fn start_dev_node(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
+    para_id: ParaId,
 ) -> sc_service::error::Result<TaskManager> {
-    start_dev_impl(config, provider_options, hwbench).await
+    start_dev_impl(config, provider_options, hwbench, para_id).await
 }
 
 /// Start a parachain node.

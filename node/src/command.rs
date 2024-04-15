@@ -247,6 +247,13 @@ pub fn run() -> Result<()> {
 					}))
 					.flatten();
 
+
+                let para_id = chain_spec::Extensions::try_get(&*config.chain_spec)
+                    .map(|e| e.para_id)
+                    .ok_or("Could not find parachain ID in chain-spec.")?;
+
+                let id = ParaId::from(para_id);
+
                 if cli.run.base.shared_params.is_dev() {
                     info!("Is collating: {}", if config.role.is_authority() { "yes" } else { "no" });
 
@@ -254,6 +261,7 @@ pub fn run() -> Result<()> {
                         config,
                         provider_options,
                         hwbench,
+                        id,
                     )
                     .await
                     .map_err(Into::into) 
@@ -264,11 +272,6 @@ pub fn run() -> Result<()> {
                         [RelayChainCli::executable_name()].iter().chain(cli.relay_chain_args.iter()),
                     );
     
-                    let para_id = chain_spec::Extensions::try_get(&*config.chain_spec)
-					.map(|e| e.para_id)
-					.ok_or("Could not find parachain ID in chain-spec.")?;
-
-                    let id = ParaId::from(para_id);
     
                     let parachain_account =
                         AccountIdConversion::<polkadot_primitives::AccountId>::into_account_truncating(
