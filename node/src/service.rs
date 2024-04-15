@@ -24,7 +24,10 @@ use cumulus_client_service::{
     build_network, build_relay_chain_interface, prepare_node_config, start_relay_chain_tasks,
     BuildNetworkParams, CollatorSybilResistance, DARecoveryProfile, StartRelayChainTasksParams,
 };
-use cumulus_primitives_core::{relay_chain::{well_known_keys as RelayChainWellKnownKeys, CollatorPair}, ParaId};
+use cumulus_primitives_core::{
+    relay_chain::{well_known_keys as RelayChainWellKnownKeys, CollatorPair},
+    ParaId,
+};
 use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 
 // Substrate Imports
