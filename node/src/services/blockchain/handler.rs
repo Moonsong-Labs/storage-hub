@@ -24,6 +24,7 @@
 
 use std::sync::Arc;
 
+use anyhow::Result;
 use codec::{Decode, Encode};
 use frame_support::{StorageHasher, Twox128};
 use frame_system::EventRecord;
@@ -32,7 +33,6 @@ use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockchainEvents, HeaderBackend, StorageKey, StorageProvider};
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::info;
-use serde::Deserialize;
 use sp_core::{Blake2Hasher, Hasher};
 use sp_keyring::Sr25519Keyring;
 use sp_runtime::{
@@ -40,9 +40,9 @@ use sp_runtime::{
     SaturatedConversion,
 };
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
-use storage_hub_runtime::{SignedExtra, UncheckedExtrinsic};
+use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 
-use crate::service::ParachainClient;
+use crate::{service::ParachainClient, services::blockchain::events::NewStorageRequest};
 
 use super::events::BlockchainServiceEventBusProvider;
 
@@ -58,12 +58,18 @@ type EventsVec = Vec<
 >;
 
 #[derive(Debug)]
-pub enum BlockchainServiceCommand {}
+pub enum BlockchainServiceCommand {
+    SendExtrinsic {
+        call: storage_hub_runtime::RuntimeCall,
+        caller: Sr25519Keyring,
+    },
+}
 
 pub struct BlockchainService {
     event_bus_provider: BlockchainServiceEventBusProvider,
     client: Arc<ParachainClient>,
     rpc_handlers: Arc<RpcHandlers>,
+    nonce_counter: u32,
 }
 
 impl Actor for BlockchainService {
@@ -73,9 +79,15 @@ impl Actor for BlockchainService {
 
     fn handle_message(
         &mut self,
-        _message: Self::Message,
+        message: Self::Message,
     ) -> impl std::future::Future<Output = ()> + Send {
-        async {}
+        async {
+            match message {
+                BlockchainServiceCommand::SendExtrinsic { call, caller } => {
+                    let result = self.send_extrinsic(call, caller).await;
+                }
+            }
+        }
     }
 
     fn get_event_bus_provider(&self) -> &Self::EventBusProvider {
@@ -132,9 +144,29 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
                     .expect("Failed to decode Events storage element");
 
                 for event in block_events.iter() {
-                    info!(target: LOG_TARGET, "Event: {:?}", event);
-
-                    // TODO: Filter events of interest and send internal events to tasks listening.
+                    // Filter events of interest and send internal events to tasks listening.
+                    match event.event.clone() {
+                        // New storage request event coming from pallet-file-system.
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::NewStorageRequest {
+                                who,
+                                location,
+                                fingerprint,
+                                size,
+                                multiaddresses,
+                            },
+                        ) => {
+                            self.actor.emit(NewStorageRequest {
+                                who,
+                                location,
+                                fingerprint,
+                                size,
+                                multiaddresses,
+                            });
+                        }
+                        // Ignore all other events.
+                        _ => {}
+                    }
                 }
             }
         }
@@ -159,23 +191,6 @@ impl std::fmt::Debug for RpcTransactionOutput {
     }
 }
 
-/// An error for when the RPC call fails.
-#[derive(Deserialize, Debug)]
-pub struct RpcTransactionError {
-    /// A Number that indicates the error type that occurred.
-    pub code: i64,
-    /// A String providing a short description of the error.
-    pub message: String,
-    /// A Primitive or Structured value that contains additional information about the error.
-    pub data: Option<serde_json::Value>,
-}
-
-impl std::fmt::Display for RpcTransactionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        std::fmt::Debug::fmt(self, f)
-    }
-}
-
 impl BlockchainService {
     /// Create a new [`BlockchainService`].
     pub fn new(client: Arc<ParachainClient>, rpc_handlers: Arc<RpcHandlers>) -> Self {
@@ -183,17 +198,23 @@ impl BlockchainService {
             client,
             rpc_handlers,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
+            nonce_counter: 0,
         }
     }
 
     /// Send an extrinsic to this node using an RPC call.
-    pub async fn send_extrinsic(
-        &self,
+    async fn send_extrinsic(
+        &mut self,
         call: impl Into<storage_hub_runtime::RuntimeCall>,
         caller: Sr25519Keyring,
-        nonce: u32,
-    ) -> Result<RpcTransactionOutput, RpcTransactionError> {
+    ) -> Result<RpcTransactionOutput> {
         info!(target: LOG_TARGET, "Sending extrinsic to the runtime");
+
+        // Get the nonce for the caller and increment it for the next transaction.
+        let nonce = self.nonce_counter;
+        self.nonce_counter += 1;
+
+        // Construct the extrinsic.
         let extrinsic = construct_extrinsic(self.client.clone(), call, caller, nonce);
 
         // Generate a unique ID for this query.
@@ -285,7 +306,7 @@ pub fn construct_extrinsic(
 pub(crate) fn parse_rpc_result(
     result: String,
     receiver: tokio::sync::mpsc::Receiver<String>,
-) -> Result<RpcTransactionOutput, RpcTransactionError> {
+) -> Result<RpcTransactionOutput> {
     let json: serde_json::Value =
         serde_json::from_str(&result).expect("the result can only be a JSONRPC string; qed");
     let error = json
@@ -294,8 +315,7 @@ pub(crate) fn parse_rpc_result(
         .get("error");
 
     if let Some(error) = error {
-        return Err(serde_json::from_value(error.clone())
-            .expect("the JSONRPC result's error is always valid; qed"));
+        return Err(anyhow::anyhow!("Error in RPC call: {}", error.to_string()));
     }
 
     Ok(RpcTransactionOutput { result, receiver })

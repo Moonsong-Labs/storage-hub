@@ -12824,6 +12824,7 @@ dependencies = [
  "jsonrpsee",
  "libp2p-identity",
  "log",
+ "pallet-file-system",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
  "parity-scale-codec",

@@ -1,4 +1,12 @@
+use sp_core::H256;
+use sp_runtime::{AccountId32, BoundedVec};
 use storage_hub_infra::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
+
+type StorageData = pallet_file_system::types::StorageData<storage_hub_runtime::Runtime>;
+type FileLocation = pallet_file_system::types::FileLocation<storage_hub_runtime::Runtime>;
+type MultiAddress = pallet_file_system::types::MultiAddress<storage_hub_runtime::Runtime>;
+type MaxDataServerMultiAddresses =
+    <storage_hub_runtime::Runtime as pallet_file_system::Config>::MaxDataServerMultiAddresses;
 
 // TODO: use proper types
 #[derive(Debug, Clone)]
@@ -11,11 +19,11 @@ impl EventBusMessage for ChallengeRequest {}
 // TODO: use proper types
 #[derive(Debug, Clone)]
 pub struct NewStorageRequest {
-    pub who: String,
-    pub location: String,
-    pub fingerprint: String,
-    pub size: u64,
-    pub multiaddresses: Vec<String>,
+    pub who: AccountId32,
+    pub location: FileLocation,
+    pub fingerprint: H256,
+    pub size: StorageData,
+    pub multiaddresses: BoundedVec<MultiAddress, MaxDataServerMultiAddresses>,
 }
 
 impl EventBusMessage for NewStorageRequest {}
