@@ -26,20 +26,20 @@ impl EventHandler<NewStorageRequest> for BspVolunteerMockTask {
     async fn handle_event(&self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "Received event: {:?}", event);
 
-        // TODO: Here we would send the actual multiaddresses of this BSP.
-        let multiaddresses = BoundedVec::default();
+        // // TODO: Here we would send the actual multiaddresses of this BSP.
+        // let multiaddresses = BoundedVec::default();
 
-        // Build extrinsic.
-        let call =
-            storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
-                location: event.location,
-                fingerprint: event.fingerprint,
-                multiaddresses,
-            });
+        // // Build extrinsic.
         // let call =
-        //     storage_hub_runtime::RuntimeCall::System(frame_system::Call::remark_with_event {
-        //         remark: b"hello there".to_vec(),
+        //     storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
+        //         location: event.location,
+        //         fingerprint: event.fingerprint,
+        //         multiaddresses,
         //     });
+        let call =
+            storage_hub_runtime::RuntimeCall::System(frame_system::Call::remark_with_event {
+                remark: b"hello there".to_vec(),
+            });
 
         // Build command to send to blockchain service.
         let message = BlockchainServiceCommand::SendExtrinsic { call };
