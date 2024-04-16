@@ -264,15 +264,14 @@ pub fn run() -> Result<()> {
                         id,
                     )
                     .await
-                    .map_err(Into::into) 
+                    .map_err(Into::into)
                 } else {
 			        let collator_options = cli.run.collator_options();
                     let polkadot_cli = RelayChainCli::new(
                         &config,
                         [RelayChainCli::executable_name()].iter().chain(cli.relay_chain_args.iter()),
                     );
-    
-    
+
                     let parachain_account =
                         AccountIdConversion::<polkadot_primitives::AccountId>::into_account_truncating(
                             &id,
