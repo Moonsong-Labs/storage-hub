@@ -60,6 +60,7 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(crate) fn deposit_event)]
     pub enum Event<T: Config> {
+        /// Event emitted when a new random seed is available from the relay chain
         NewRandomnessAvailable {
             randomness_seed: T::Hash,
             from_epoch: u64,
@@ -120,7 +121,6 @@ pub mod pallet {
                         valid_until_block: latest_valid_block,
                     });
                 } else {
-                    // TODO: Failsafe when randomness is not available from the relay chain (for example when using --dev)
                     log::warn!(
                         "Failed to fill BABE epoch randomness \
 							REQUIRE HOTFIX TO FILL EPOCH RANDOMNESS FOR EPOCH {:?}",
