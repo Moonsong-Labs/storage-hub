@@ -197,6 +197,7 @@ jobs:
       - name: Run Tests
         run: |
           cd test
+          bun typegen
           bun test
 
 
