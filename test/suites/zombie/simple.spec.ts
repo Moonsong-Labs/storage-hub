@@ -1,6 +1,6 @@
 import { test, describe, expect } from "bun:test";
-import { createClient } from "@polkadot-api/client";
-import { WebSocketProvider } from "@polkadot-api/ws-provider/node";
+import { createClient } from "polkadot-api";
+import { WebSocketProvider } from "polkadot-api/ws-provider/node";
 import { relaychain, storagehub, MultiAddress } from "@polkadot-api/descriptors";
 import { accounts } from "../../util";
 
@@ -61,7 +61,7 @@ describe("Simple zombieTest", async () => {
   describe("StorageHub", async () => {
     test("Check StorageHub RT Version", async () => {
       const { spec_name, spec_version } = storageApi.constants.System.Version(storageRT);
-      expect(spec_name).toBe("template-parachain");
+      expect(spec_name).toBe("storage-hub-runtime");
       expect(spec_version).toBeGreaterThanOrEqual(1);
     });
 

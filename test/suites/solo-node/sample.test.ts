@@ -1,8 +1,6 @@
 import { expect, test, describe } from "bun:test";
 
-
 // TODO: When storage-hub can be run as a solo node with --dev, we can add tests here
-
 
 describe("Sample test suite", () => {
   test("2 + 2", () => {

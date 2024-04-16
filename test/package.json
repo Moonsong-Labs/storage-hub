@@ -20,12 +20,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@polkadot-api/cli": "link:@polkadot-api/cli",
-    "@polkadot-api/client": "link:@polkadot-api/client",
-    "@polkadot-api/json-rpc-provider": "link:@polkadot-api/json-rpc-provider",
-    "@polkadot-api/polkadot-signer": "link:@polkadot-api/polkadot-signer",
-    "@polkadot-api/sm-provider": "link:@polkadot-api/sm-provider",
-    "@polkadot-api/ws-provider": "link:@polkadot-api/ws-provider",
+    "polkadot-api": "0.2.3",
     "@polkadot/api": "^10.12.6",
     "@polkadot/wasm-crypto": "^7.3.2",
     "@types/bun": "1.0.12",
