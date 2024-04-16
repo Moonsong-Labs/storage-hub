@@ -271,10 +271,10 @@ impl BlockchainService {
                     "jsonrpc": "2.0",
                     "method": "author_submitExtrinsic",
                     "params": ["0x{}"],
-                    "id": {}
+                    "id": {:?}
                 }}"#,
                 array_bytes::bytes2hex("", &extrinsic.encode()),
-                id_hash
+                array_bytes::bytes2hex("", &id_hash.as_bytes())
             ))
             .await
             .expect("Sending query failed even when it is correctly formatted as JSON-RPC; qed");
