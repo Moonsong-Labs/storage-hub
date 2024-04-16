@@ -6,9 +6,7 @@ use storage_hub_infra::{
     event_bus::EventHandler,
 };
 
-use crate::tasks::{
-    AcceptedBspVolunteerHandler, NewStorageRequestHandler, ResolveRemoteUploadRequest,
-};
+use crate::tasks::bsp_volunteer_mock::BspVolunteerMockTask;
 
 use self::{blockchain::handler::BlockchainService, file_transfer::FileTransferService};
 
@@ -34,13 +32,7 @@ impl StorageHubHandler {
 
     pub fn start_bsp_tasks(&self) {
         log::info!("Starting BSP tasks");
-        ResolveRemoteUploadRequest::new(self.clone())
-            .subscribe_to(&self.task_spawner, &self.file_transfer)
-            .start();
-        NewStorageRequestHandler::new(self.clone())
-            .subscribe_to(&self.task_spawner, &self.blockchain)
-            .start();
-        AcceptedBspVolunteerHandler::new(self.clone())
+        BspVolunteerMockTask::new(self.clone())
             .subscribe_to(&self.task_spawner, &self.blockchain)
             .start();
     }

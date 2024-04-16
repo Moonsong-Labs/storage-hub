@@ -28,13 +28,15 @@ use anyhow::Result;
 use codec::{Decode, Encode};
 use frame_support::{StorageHasher, Twox128};
 use frame_system::EventRecord;
-use futures::prelude::*;
+use futures::{prelude::*, stream::select};
 use polkadot_runtime_common::BlockHashCount;
-use sc_client_api::{BlockchainEvents, HeaderBackend, StorageKey, StorageProvider};
+use sc_client_api::{
+    BlockImportNotification, BlockchainEvents, HeaderBackend, StorageKey, StorageProvider,
+};
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::info;
-use sp_core::{Blake2Hasher, Hasher};
-use sp_keyring::Sr25519Keyring;
+use sp_core::{Blake2Hasher, Hasher, H256};
+use sp_keystore::Keystore;
 use sp_runtime::{
     generic::{self, SignedPayload},
     SaturatedConversion,
@@ -44,7 +46,7 @@ use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 
 use crate::{service::ParachainClient, services::blockchain::events::NewStorageRequest};
 
-use super::events::BlockchainServiceEventBusProvider;
+use super::{events::BlockchainServiceEventBusProvider, KEY_TYPE};
 
 const LOG_TARGET: &str = "blockchain-service";
 
@@ -61,13 +63,13 @@ type EventsVec = Vec<
 pub enum BlockchainServiceCommand {
     SendExtrinsic {
         call: storage_hub_runtime::RuntimeCall,
-        caller: Sr25519Keyring,
     },
 }
 
 pub struct BlockchainService {
     event_bus_provider: BlockchainServiceEventBusProvider,
     client: Arc<ParachainClient>,
+    keystore: Arc<dyn Keystore>,
     rpc_handlers: Arc<RpcHandlers>,
     nonce_counter: u32,
 }
@@ -83,8 +85,15 @@ impl Actor for BlockchainService {
     ) -> impl std::future::Future<Output = ()> + Send {
         async {
             match message {
-                BlockchainServiceCommand::SendExtrinsic { call, caller } => {
-                    let result = self.send_extrinsic(call, caller).await;
+                BlockchainServiceCommand::SendExtrinsic { call } => {
+                    match self.send_extrinsic(call).await {
+                        Ok(output) => {
+                            info!(target: LOG_TARGET, "Extrinsic sent successfully: {:?}", output);
+                        }
+                        Err(e) => {
+                            info!(target: LOG_TARGET, "Failed to send extrinsic: {:?}", e);
+                        }
+                    }
                 }
             }
         }
@@ -101,6 +110,14 @@ pub struct BlockchainServiceEventLoop {
     actor: BlockchainService,
 }
 
+enum MergedEventLoopMessage<Block>
+where
+    Block: cumulus_primitives_core::BlockT,
+{
+    Command(BlockchainServiceCommand),
+    BlockNotification(BlockImportNotification<Block>),
+}
+
 impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
     fn new(
         actor: BlockchainService,
@@ -113,62 +130,24 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
         info!(target: LOG_TARGET, "FileTransferService starting up!");
 
         // Import notification stream to be notified of new blocks.
-        let mut notification_stream = self.actor.client.import_notification_stream();
-        while let Some(notification) = notification_stream.next().await {
-            info!(target: LOG_TARGET, "Import notification: {}", notification.hash);
+        let notification_stream = self.actor.client.import_notification_stream();
 
-            // Would be cool to be able to do this...
-            // let events_storage_key = frame_system::Events::<storage_hub_runtime::Runtime>::hashed_key();
+        // Merging notification stream with command stream.
+        let mut merged_stream = select(
+            self.receiver.map(MergedEventLoopMessage::Command),
+            notification_stream.map(MergedEventLoopMessage::BlockNotification),
+        );
 
-            // Get the storage key for the events storage.
-            let events_storage_key = [
-                Twox128::hash(b"System").to_vec(),
-                Twox128::hash(b"Events").to_vec(),
-            ]
-            .concat();
-
-            // Get the events storage.
-            let raw_storage_opt = self
-                .actor
-                .client
-                .storage(notification.hash, &StorageKey(events_storage_key))
-                .expect("Failed to get Events storage element");
-
-            // Decode the events storage.
-            if let Some(raw_storage) = raw_storage_opt {
-                // TODO: Handle case where the storage cannot be decoded.
-                // TODO: This would happen if we're parsing a block authored with an older version of the runtime, using
-                // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
-                // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
-                let block_events = EventsVec::decode(&mut raw_storage.0.as_slice())
-                    .expect("Failed to decode Events storage element");
-
-                for event in block_events.iter() {
-                    // Filter events of interest and send internal events to tasks listening.
-                    match event.event.clone() {
-                        // New storage request event coming from pallet-file-system.
-                        RuntimeEvent::FileSystem(
-                            pallet_file_system::Event::NewStorageRequest {
-                                who,
-                                location,
-                                fingerprint,
-                                size,
-                                multiaddresses,
-                            },
-                        ) => {
-                            self.actor.emit(NewStorageRequest {
-                                who,
-                                location,
-                                fingerprint,
-                                size,
-                                multiaddresses,
-                            });
-                        }
-                        // Ignore all other events.
-                        _ => {}
-                    }
+        // Process incoming messages.
+        while let Some(notification) = merged_stream.next().await {
+            match notification {
+                MergedEventLoopMessage::Command(command) => {
+                    self.actor.handle_message(command).await;
                 }
-            }
+                MergedEventLoopMessage::BlockNotification(notification) => {
+                    self.actor.handle_block_notification(notification).await;
+                }
+            };
         }
     }
 }
@@ -193,12 +172,77 @@ impl std::fmt::Debug for RpcTransactionOutput {
 
 impl BlockchainService {
     /// Create a new [`BlockchainService`].
-    pub fn new(client: Arc<ParachainClient>, rpc_handlers: Arc<RpcHandlers>) -> Self {
+    pub fn new(
+        client: Arc<ParachainClient>,
+        rpc_handlers: Arc<RpcHandlers>,
+        keystore: Arc<dyn Keystore>,
+    ) -> Self {
         Self {
             client,
             rpc_handlers,
+            keystore,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
             nonce_counter: 0,
+        }
+    }
+
+    /// Handle a block import notification.
+    async fn handle_block_notification<Block>(
+        &mut self,
+        notification: BlockImportNotification<Block>,
+    ) where
+        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+    {
+        info!(target: LOG_TARGET, "Import notification: {}", notification.hash);
+
+        // Would be cool to be able to do this...
+        // let events_storage_key = frame_system::Events::<storage_hub_runtime::Runtime>::hashed_key();
+
+        // Get the storage key for the events storage.
+        let events_storage_key = [
+            Twox128::hash(b"System").to_vec(),
+            Twox128::hash(b"Events").to_vec(),
+        ]
+        .concat();
+
+        // Get the events storage.
+        let raw_storage_opt = self
+            .client
+            .storage(notification.hash, &StorageKey(events_storage_key))
+            .expect("Failed to get Events storage element");
+
+        // Decode the events storage.
+        if let Some(raw_storage) = raw_storage_opt {
+            // TODO: Handle case where the storage cannot be decoded.
+            // TODO: This would happen if we're parsing a block authored with an older version of the runtime, using
+            // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
+            // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
+            let block_events = EventsVec::decode(&mut raw_storage.0.as_slice())
+                .expect("Failed to decode Events storage element");
+
+            for event in block_events.iter() {
+                // Filter events of interest and send internal events to tasks listening.
+                match event.event.clone() {
+                    // New storage request event coming from pallet-file-system.
+                    RuntimeEvent::FileSystem(pallet_file_system::Event::NewStorageRequest {
+                        who,
+                        location,
+                        fingerprint,
+                        size,
+                        multiaddresses,
+                    }) => {
+                        self.emit(NewStorageRequest {
+                            who,
+                            location,
+                            fingerprint,
+                            size,
+                            multiaddresses,
+                        });
+                    }
+                    // Ignore all other events.
+                    _ => {}
+                }
+            }
         }
     }
 
@@ -206,7 +250,6 @@ impl BlockchainService {
     async fn send_extrinsic(
         &mut self,
         call: impl Into<storage_hub_runtime::RuntimeCall>,
-        caller: Sr25519Keyring,
     ) -> Result<RpcTransactionOutput> {
         info!(target: LOG_TARGET, "Sending extrinsic to the runtime");
 
@@ -215,7 +258,7 @@ impl BlockchainService {
         self.nonce_counter += 1;
 
         // Construct the extrinsic.
-        let extrinsic = construct_extrinsic(self.client.clone(), call, caller, nonce);
+        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce);
 
         // Generate a unique ID for this query.
         let id_hash = Blake2Hasher::hash(&extrinsic.encode());
@@ -238,29 +281,28 @@ impl BlockchainService {
 
         parse_rpc_result(result, rx)
     }
-}
 
-/// Construct an extrinsic that can be applied to the runtime.
-pub fn construct_extrinsic(
-    client: Arc<ParachainClient>,
-    function: impl Into<storage_hub_runtime::RuntimeCall>,
-    caller: Sr25519Keyring,
-    nonce: u32,
-) -> UncheckedExtrinsic {
-    let function = function.into();
-    let current_block_hash = client.info().best_hash;
-    let current_block = client.info().best_number.saturated_into();
-    let genesis_block = client
-        .hash(0)
-        .expect("Failed to get genesis block hash, always present; qed")
-        .expect("Genesis block hash should never not be on-chain; qed");
-    let period = BlockHashCount::get()
-        .checked_next_power_of_two()
-        .map(|c| c / 2)
-        .unwrap_or(2) as u64;
-    // TODO: Consider tipping the transaction.
-    let tip = 0;
-    let extra: SignedExtra = (
+    /// Construct an extrinsic that can be applied to the runtime.
+    pub fn construct_extrinsic(
+        &self,
+        client: Arc<ParachainClient>,
+        function: impl Into<storage_hub_runtime::RuntimeCall>,
+        nonce: u32,
+    ) -> UncheckedExtrinsic {
+        let function = function.into();
+        let current_block_hash = client.info().best_hash;
+        let current_block = client.info().best_number.saturated_into();
+        let genesis_block = client
+            .hash(0)
+            .expect("Failed to get genesis block hash, always present; qed")
+            .expect("Genesis block hash should never not be on-chain; qed");
+        let period = BlockHashCount::get()
+            .checked_next_power_of_two()
+            .map(|c| c / 2)
+            .unwrap_or(2) as u64;
+        // TODO: Consider tipping the transaction.
+        let tip = 0;
+        let extra: SignedExtra = (
         frame_system::CheckNonZeroSender::<storage_hub_runtime::Runtime>::new(),
         frame_system::CheckSpecVersion::<storage_hub_runtime::Runtime>::new(),
         frame_system::CheckTxVersion::<storage_hub_runtime::Runtime>::new(),
@@ -278,28 +320,48 @@ pub fn construct_extrinsic(
             storage_hub_runtime::Runtime,
         >::new(),
     );
-    let raw_payload = SignedPayload::from_raw(
-        function.clone(),
-        extra.clone(),
-        (
-            (),
-            storage_hub_runtime::VERSION.spec_version,
-            storage_hub_runtime::VERSION.transaction_version,
-            genesis_block,
-            current_block_hash,
-            (),
-            (),
-            (),
-            (),
-        ),
-    );
-    let signature = raw_payload.using_encoded(|e| caller.sign(e));
-    UncheckedExtrinsic::new_signed(
-        function.clone(),
-        storage_hub_runtime::Address::Id(caller.public().into()),
-        polkadot_primitives::Signature::Sr25519(signature.clone()),
-        extra.clone(),
-    )
+
+        let raw_payload = SignedPayload::from_raw(
+            function.clone(),
+            extra.clone(),
+            (
+                (),
+                storage_hub_runtime::VERSION.spec_version,
+                storage_hub_runtime::VERSION.transaction_version,
+                genesis_block,
+                current_block_hash,
+                (),
+                (),
+                (),
+                (),
+            ),
+        );
+
+        // Getting signer public key.
+        let caller_pub_key = self.keystore.sr25519_public_keys(KEY_TYPE).pop().expect(
+            format!(
+                "There should be at least one sr25519 key in the keystore with key type '{:?}' ; qed",
+                KEY_TYPE
+            )
+            .as_str(),
+        );
+
+        // Sign the payload.
+        let signature = raw_payload
+            .using_encoded(|e| self.keystore.sr25519_sign(KEY_TYPE, &caller_pub_key, e))
+            .expect("The payload is always valid and should be possible to sign; qed")
+            .expect("They key type and public key are valid because we just extracted them from the keystore; qed");
+
+        // Construct the extrinsic.
+        UncheckedExtrinsic::new_signed(
+            function.clone(),
+            storage_hub_runtime::Address::Id(<sp_core::sr25519::Public as Into<
+                storage_hub_runtime::AccountId,
+            >>::into(caller_pub_key)),
+            polkadot_primitives::Signature::Sr25519(signature.clone()),
+            extra.clone(),
+        )
+    }
 }
 
 /// Parse the result of an RPC call.

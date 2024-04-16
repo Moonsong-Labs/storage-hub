@@ -40,8 +40,8 @@ use crate::{
     cli::ProviderType,
     command::ProviderOptions,
     services::{
-        blockchain::spawn_blockchain_service,
-        file_transfer::{self, spawn_file_transfer_service},
+        blockchain::{spawn_blockchain_service, KEY_TYPE},
+        file_transfer::spawn_file_transfer_service,
         StorageHubHandler,
     },
 };
@@ -184,6 +184,7 @@ async fn start_node_impl(
     let client = params.client.clone();
     let backend = params.backend.clone();
     let mut task_manager = params.task_manager;
+    let keystore = params.keystore_container.keystore();
 
     let genesis_hash = client
         .block_hash(0u32.into())
@@ -295,8 +296,20 @@ async fn start_node_impl(
     if let Some(provider_options) = provider_options {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
-        let blockchain_service_handle =
-            spawn_blockchain_service(&task_spawner, client.clone(), Arc::new(rpc_handlers)).await;
+        // Initialise seed for signing transactions using blockchain service.
+        // TODO: Modify this to use a key in the keystore of the node.
+        // TODO: Typically these keys should be inserted with RPC calls to `author_insertKey`.
+        keystore
+            .sr25519_generate_new(KEY_TYPE, Some("//Alice"))
+            .expect("Creating key with account Alice should succeed.");
+
+        let blockchain_service_handle = spawn_blockchain_service(
+            &task_spawner,
+            client.clone(),
+            Arc::new(rpc_handlers),
+            keystore.clone(),
+        )
+        .await;
 
         let file_transfer_service_handle = file_transfer_service_handle.expect(
             "File Transfer Service handle is expected to be present when the node is running as a Storage Provider. qed",

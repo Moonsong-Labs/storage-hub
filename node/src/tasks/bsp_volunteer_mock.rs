@@ -38,7 +38,7 @@ impl EventHandler<NewStorageRequest> for BspVolunteerMockTask {
             });
 
         // Build command to send to blockchain service.
-        let message = BlockchainServiceCommand::SendExtrinsic { call, caller };
+        let message = BlockchainServiceCommand::SendExtrinsic { call };
 
         let blockchain_service = self.storage_hub_handler.blockchain.clone();
         blockchain_service.send(message).await;
