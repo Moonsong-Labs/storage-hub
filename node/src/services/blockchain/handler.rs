@@ -36,7 +36,7 @@ use sc_client_api::{
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::info;
 use sp_core::{Blake2Hasher, Hasher, H256};
-use sp_keystore::Keystore;
+use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{
     generic::{self, SignedPayload},
     SaturatedConversion,
@@ -69,7 +69,7 @@ pub enum BlockchainServiceCommand {
 pub struct BlockchainService {
     event_bus_provider: BlockchainServiceEventBusProvider,
     client: Arc<ParachainClient>,
-    keystore: Arc<dyn Keystore>,
+    keystore: KeystorePtr,
     rpc_handlers: Arc<RpcHandlers>,
     nonce_counter: u32,
 }
@@ -175,7 +175,7 @@ impl BlockchainService {
     pub fn new(
         client: Arc<ParachainClient>,
         rpc_handlers: Arc<RpcHandlers>,
-        keystore: Arc<dyn Keystore>,
+        keystore: KeystorePtr,
     ) -> Self {
         Self {
             client,

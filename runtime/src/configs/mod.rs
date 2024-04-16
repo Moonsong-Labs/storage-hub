@@ -32,7 +32,9 @@ use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
     parameter_types,
-    traits::{ConstBool, ConstU32, ConstU64, ConstU8, EitherOfDiverse, TransformOrigin},
+    traits::{
+        ConstBool, ConstU32, ConstU64, ConstU8, EitherOfDiverse, Randomness, TransformOrigin,
+    },
     weights::{ConstantMultiplier, Weight},
     PalletId,
 };
@@ -47,7 +49,7 @@ use polkadot_runtime_common::{
     xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{ConstU128, Get};
+use sp_core::{blake2_256, ConstU128, Get, H256};
 use sp_runtime::{AccountId32, FixedU128, Perbill};
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
@@ -310,6 +312,31 @@ impl pallet_collator_selection::Config for Runtime {
     type WeightInfo = ();
 }
 
+// We mock the Randomness trait to use a simple randomness function when testing the pallet
+const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10;
+const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;
+pub struct MockRandomness;
+impl Randomness<H256, BlockNumber> for MockRandomness {
+    fn random(subject: &[u8]) -> (H256, BlockNumber) {
+        // Simple randomness mock that changes each block but its randomness is only valid after 3 blocks
+
+        // Concatenate the subject with the block number to get a unique hash for each block
+        let subject_concat_block = [
+            subject,
+            &frame_system::Pallet::<Runtime>::block_number().to_le_bytes(),
+        ]
+        .concat();
+
+        let hashed_subject = blake2_256(&subject_concat_block);
+
+        (
+            H256::from_slice(&hashed_subject),
+            frame_system::Pallet::<Runtime>::block_number()
+                .saturating_sub(BLOCKS_BEFORE_RANDOMNESS_VALID),
+        )
+    }
+}
+
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -328,7 +355,8 @@ impl pallet_storage_providers::Config for Runtime {
     type DepositPerData = ConstU128<2>;
     type RuntimeHoldReason = RuntimeHoldReason;
     type Subscribers = FileSystem;
-    // TODO: type ProvidersRandomness = RandomnessFromOneEpochAgo<Runtime>;
+    type ProvidersRandomness = MockRandomness;
+    type MaxBlocksForRandomness = ConstU32<{ 2 * EPOCH_DURATION_IN_BLOCKS }>;
 }
 
 // TODO: remove this and replace with pallet treasury

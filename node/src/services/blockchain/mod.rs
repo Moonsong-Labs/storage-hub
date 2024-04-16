@@ -4,7 +4,7 @@ pub mod handler;
 use std::sync::Arc;
 
 use sc_service::RpcHandlers;
-use sp_keystore::Keystore;
+use sp_keystore::KeystorePtr;
 use sp_runtime::KeyTypeId;
 use storage_hub_infra::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 
@@ -18,7 +18,7 @@ pub async fn spawn_blockchain_service(
     task_spawner: &TaskSpawner,
     client: Arc<ParachainClient>,
     rpc_handlers: Arc<RpcHandlers>,
-    keystore: Arc<dyn Keystore>,
+    keystore: KeystorePtr,
 ) -> ActorHandle<BlockchainService> {
     let task_spawner = task_spawner
         .with_name("blockchain-service")

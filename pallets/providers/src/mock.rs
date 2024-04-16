@@ -1,20 +1,53 @@
 use crate as pallet_storage_providers;
-
+use codec::Encode;
 use frame_support::{
-    construct_runtime, derive_impl, parameter_types, traits::Everything,
+    construct_runtime, derive_impl, parameter_types,
+    traits::{Everything, Randomness},
     weights::constants::RocksDbWeight,
 };
 use frame_system as system;
-// TODO: use pallet_babe::{RandomnessFromOneEpochAgo, SameAuthoritiesForever};
-use sp_core::{ConstU128, ConstU32, H256};
+use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
     BuildStorage, DispatchResult,
 };
 use storage_hub_traits::SubscribeProvidersInterface;
+use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
+const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
+
+// We mock the Randomness trait to use a simple randomness function when testing the pallet
+const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumberFor<Test> = 3;
+pub struct MockRandomness;
+impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
+    fn random(subject: &[u8]) -> (H256, BlockNumberFor<Test>) {
+        // Simple randomness mock that changes each block but its randomness is only valid after 3 blocks
+
+        // Concatenate the subject with the block number to get a unique hash for each block
+        let subject_concat_block = [
+            subject,
+            &frame_system::Pallet::<Test>::block_number().to_le_bytes(),
+        ]
+        .concat();
+
+        let hashed_subject = blake2_256(&subject_concat_block);
+
+        (
+            H256::from_slice(&hashed_subject),
+            frame_system::Pallet::<Test>::block_number()
+                .saturating_sub(BLOCKS_BEFORE_RANDOMNESS_VALID),
+        )
+    }
+}
+
+/// This function is used to test the randomness of the providers pallet.
+pub fn test_randomness_output(
+    who: &<Test as frame_system::Config>::AccountId,
+) -> (<Test as frame_system::Config>::Hash, BlockNumberFor<Test>) {
+    <Test as pallet_storage_providers::Config>::ProvidersRandomness::random(who.encode().as_ref())
+}
 
 // Configure a mock runtime to test the pallet.
 construct_runtime!(
@@ -22,8 +55,6 @@ construct_runtime!(
     {
         System: frame_system,
         Balances: pallet_balances,
-        //BabeRandomness: pallet_babe,
-        //Timestamp: pallet_timestamp,
         StorageProviders: pallet_storage_providers,
     }
 );
@@ -77,26 +108,6 @@ impl pallet_balances::Config for Test {
     type MaxFreezes = ConstU32<10>;
 }
 
-// TODO:
-/* impl pallet_babe::Config for Test {
-    type EpochDuration = ();
-    type ExpectedBlockTime = ();
-    type EpochChangeTrigger = SameAuthoritiesForever;
-    type KeyOwnerProof = Void;
-    type WeightInfo = ();
-    type DisabledValidators = ();
-    type MaxAuthorities = ConstU32<100>;
-    type MaxNominators = ConstU32<100>;
-    type EquivocationReportSystem = ();
-}
-
-impl pallet_timestamp::Config for Test {
-    type MinimumPeriod = ();
-    type WeightInfo = ();
-    type Moment = u64;
-    type OnTimestampSet = ();
-} */
-
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -108,6 +119,7 @@ impl crate::Config for Test {
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
+    type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
@@ -115,7 +127,7 @@ impl crate::Config for Test {
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
     type Subscribers = MockedProvidersSubscriber;
-    // TODO: type ProvidersRandomness = RandomnessFromOneEpochAgo<Test>;
+    type ProvidersRandomness = MockRandomness;
 }
 
 // Build genesis storage according to the mock runtime.
