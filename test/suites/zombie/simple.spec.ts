@@ -82,7 +82,7 @@ describe("Simple zombieTest", async () => {
       expect(failures).toHaveLength(0);
     });
 
-    test.skip(
+    test(
       "Send bal transfer on storagehub",
       async () => {
         await storageApi.tx.Balances.transfer_allow_death({
@@ -90,7 +90,7 @@ describe("Simple zombieTest", async () => {
           value: 1337n,
         }).signAndSubmit(accounts.alice.sr25519.signer);
       },
-      { timeout: 30_000 }
+      { timeout: 60_000 }
     );
   });
 });
