@@ -36,6 +36,10 @@ impl EventHandler<NewStorageRequest> for BspVolunteerMockTask {
                 fingerprint: event.fingerprint,
                 multiaddresses,
             });
+        // let call =
+        //     storage_hub_runtime::RuntimeCall::System(frame_system::Call::remark_with_event {
+        //         remark: b"hello there".to_vec(),
+        //     });
 
         // Build command to send to blockchain service.
         let message = BlockchainServiceCommand::SendExtrinsic { call };
