@@ -9,6 +9,7 @@ use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, 
 use polkadot_primitives::{HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use sp_consensus_aura::Slot;
+use sp_core::H256;
 use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
 use storage_hub_runtime::{
@@ -153,19 +154,20 @@ pub fn new_partial(
 
     let block_import = ParachainBlockImport::new(client.clone(), backend.clone());
 
-    let import_queue = match dev_service {
-        true => sc_consensus_manual_seal::import_queue(
+    let import_queue = if dev_service {
+        sc_consensus_manual_seal::import_queue(
             Box::new(client.clone()),
             &task_manager.spawn_essential_handle(),
             config.prometheus_registry(),
-        ),
-        false => build_import_queue(
+        )
+    } else {
+        build_import_queue(
             client.clone(),
             block_import.clone(),
             config,
             telemetry.as_ref().map(|telemetry| telemetry.handle()),
             &task_manager,
-        )?,
+        )?
     };
 
     let select_chain = if dev_service {
@@ -187,7 +189,7 @@ pub fn new_partial(
 }
 
 /// Start a development node with the given solo chain `Configuration`.
-#[sc_tracing::logging::prefix_logs_with("Solo chain")]
+#[sc_tracing::logging::prefix_logs_with("Solo chain 💾")]
 async fn start_dev_impl(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
@@ -221,24 +223,14 @@ async fn start_dev_impl(
         .expect("Genesis block exists; qed");
 
     if let Some(provider_options) = provider_options {
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
-
-        let file_transfer_service_handle =
-            spawn_file_transfer_service(&task_spawner, genesis_hash, &config, &mut net_config)
-                .await;
-
-        let blockchain_service_handle = spawn_blockchain_service(&task_spawner).await;
-
-        let sh_handler = StorageHubHandler::new(
-            task_spawner,
-            file_transfer_service_handle,
-            blockchain_service_handle,
-        );
-
-        match provider_options.provider_type {
-            ProviderType::Bsp => sh_handler.start_bsp_tasks(),
-            _ => {}
-        }
+        start_sh_services(
+            provider_options,
+            &task_manager,
+            genesis_hash,
+            &config,
+            &mut net_config,
+        )
+        .await;
     }
 
     let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
@@ -463,28 +455,14 @@ async fn start_node_impl(
         .expect("Genesis block exists; qed");
 
     if let Some(provider_options) = provider_options {
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
-
-        let file_transfer_service_handle = spawn_file_transfer_service(
-            &task_spawner,
+        start_sh_services(
+            provider_options,
+            &task_manager,
             genesis_hash,
             &parachain_config,
             &mut net_config,
         )
         .await;
-
-        let blockchain_service_handle = spawn_blockchain_service(&task_spawner).await;
-
-        let sh_handler = StorageHubHandler::new(
-            task_spawner,
-            file_transfer_service_handle,
-            blockchain_service_handle,
-        );
-
-        match provider_options.provider_type {
-            ProviderType::Bsp => sh_handler.start_bsp_tasks(),
-            _ => {}
-        }
     }
 
     let (relay_chain_interface, collator_key) = build_relay_chain_interface(
@@ -646,6 +624,33 @@ async fn start_node_impl(
     network_starter.start_network();
 
     Ok((task_manager, client))
+}
+
+/// Start all storage hub related services.
+async fn start_sh_services(
+    provider_options: ProviderOptions,
+    task_manager: &TaskManager,
+    genesis_hash: H256,
+    config: &Configuration,
+    net_config: &mut sc_network::config::FullNetworkConfiguration,
+) {
+    let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+
+    let file_transfer_service_handle =
+        spawn_file_transfer_service(&task_spawner, genesis_hash, config, net_config).await;
+
+    let blockchain_service_handle = spawn_blockchain_service(&task_spawner).await;
+
+    let sh_handler = StorageHubHandler::new(
+        task_spawner,
+        file_transfer_service_handle,
+        blockchain_service_handle,
+    );
+
+    match provider_options.provider_type {
+        ProviderType::Bsp => sh_handler.start_bsp_tasks(),
+        _ => {}
+    }
 }
 
 /// Build the import queue for the parachain runtime.

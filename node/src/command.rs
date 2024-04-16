@@ -254,9 +254,9 @@ pub fn run() -> Result<()> {
 
                 let id = ParaId::from(para_id);
 
-                if cli.run.base.shared_params.is_dev() {
-                    info!("Is collating: {}", if config.role.is_authority() { "yes" } else { "no" });
+                info!("Is collating: {}", if config.role.is_authority() { "yes" } else { "no" });
 
+                if cli.run.base.shared_params.is_dev() {
                     crate::service::start_dev_node(
                         config,
                         provider_options,
@@ -284,7 +284,6 @@ pub fn run() -> Result<()> {
                             .map_err(|err| format!("Relay chain argument error: {}", err))?;
 
                     info!("Parachain Account: {parachain_account}");
-                    info!("Is collating: {}", if config.role.is_authority() { "yes" } else { "no" });
 
                     crate::service::start_parachain_node(
                         config,
