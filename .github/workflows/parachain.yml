@@ -191,7 +191,7 @@ jobs:
           cd test
           bun install
           bun run scripts/downloadPolkadot.ts 1.5.0
-          bun zombie:run:native:network &
+          bun zombie:run:native &
           
           sleep 30
       - name: Run Tests
