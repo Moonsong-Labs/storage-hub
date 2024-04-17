@@ -27,13 +27,15 @@ frame-support = { workspace = true }
 frame-system = { workspace = true }
 
 [dev-dependencies]
-pallet-balances = { workspace = true, features = ["std"] }
-
 serde = { workspace = true }
+
 # Substrate
 sp-core = { workspace = true }
 sp-io = { workspace = true }
 sp-runtime = { workspace = true }
+
+# Frame
+pallet-balances = { workspace = true, features = ["std"] }
 
 [features]
 default = ["std"]
@@ -45,7 +47,7 @@ runtime-benchmarks = [
 ]
 std = [
 	"codec/std",
-	"frame-benchmarking/std",
+	"frame-benchmarking?/std",
 	"frame-support/std",
 	"frame-system/std",
 	"scale-info/std",

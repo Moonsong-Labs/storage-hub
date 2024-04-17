@@ -27,44 +27,46 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 
 # Local
-pallet-storage-providers = { workspace = true }
-pallet-proofs-dealer = { workspace = true }
+storage-hub-traits = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
+pallet-storage-providers = { workspace = true }
+pallet-proofs-dealer = { workspace = true }
 
 # Substrate
 sp-core = { workspace = true }
 sp-io = { workspace = true }
 
-pallet-balances = { workspace = true }
+# Frame
+pallet-balances = { workspace = true, features = ["std"] }
 
 [features]
 default = ["std"]
 runtime-benchmarks = [
-    "frame-benchmarking/runtime-benchmarks",
-    "frame-support/runtime-benchmarks",
-    "frame-system/runtime-benchmarks",
-    "pallet-storage-providers/runtime-benchmarks",
-    "pallet-proofs-dealer/runtime-benchmarks",
-    "sp-runtime/runtime-benchmarks",
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"pallet-proofs-dealer/runtime-benchmarks",
+	"pallet-storage-providers/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
 ]
 std = [
-    "codec/std",
-    "frame-benchmarking/std",
-    "frame-support/std",
-    "frame-system/std",
-    "pallet-storage-providers/std",
-    "pallet-proofs-dealer/std",
-    "scale-info/std",
-    "sp-core/std",
-    "sp-io/std",
-    "sp-runtime/std",
+	"codec/std",
+	"frame-benchmarking?/std",
+	"frame-support/std",
+	"frame-system/std",
+	"pallet-proofs-dealer/std",
+	"pallet-storage-providers/std",
+	"scale-info/std",
+	"sp-core/std",
+	"sp-io/std",
+	"sp-runtime/std",
 ]
 try-runtime = [
-    "frame-support/try-runtime",
-    "frame-system/try-runtime",
-    "pallet-storage-providers/try-runtime",
-    "pallet-proofs-dealer/try-runtime",
-    "sp-runtime/try-runtime",
+	"frame-support/try-runtime",
+	"frame-system/try-runtime",
+	"pallet-proofs-dealer/try-runtime",
+	"pallet-storage-providers/try-runtime",
+	"sp-runtime/try-runtime",
 ]

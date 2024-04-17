@@ -1,5 +1,9 @@
 use std::path::PathBuf;
 
+use clap::{Parser, ValueEnum};
+
+use crate::command::ProviderOptions;
+
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
 pub enum Subcommand {
@@ -24,8 +28,11 @@ pub enum Subcommand {
     /// Remove the whole chain.
     PurgeChain(cumulus_client_cli::PurgeChainCmd),
 
-    /// Export the genesis state of the parachain.
-    ExportGenesisState(cumulus_client_cli::ExportGenesisStateCommand),
+    /// Export the genesis head data of the parachain.
+    ///
+    /// Head data is the encoded block header.
+    #[command(alias = "export-genesis-state")]
+    ExportGenesisHead(cumulus_client_cli::ExportGenesisHeadCommand),
 
     /// Export the genesis wasm of the parachain.
     ExportGenesisWasm(cumulus_client_cli::ExportGenesisWasmCommand),
@@ -37,8 +44,49 @@ pub enum Subcommand {
 
     /// Try-runtime has migrated to a standalone
     /// [CLI](<https://github.com/paritytech/try-runtime-cli>). The subcommand exists as a stub and
-    /// deprecation notice. It will be removed entirely some time after Janurary 2024.
+    /// deprecation notice. It will be removed entirely some time after January 2024.
     TryRuntime,
+}
+
+#[derive(ValueEnum, Clone, Debug)]
+pub enum ProviderType {
+    /// Main Storage Provider
+    Msp,
+    /// Backup Storage Provider
+    Bsp,
+}
+
+#[derive(Debug, Parser)]
+#[group(skip)]
+pub struct ProviderConfigurations {
+    /// Run node as a storage hub provider.
+    #[arg(long)]
+    pub provider: bool,
+
+    /// Type of storage hub provider.
+    #[clap(
+        long,
+        value_enum,
+        value_name = "PROVIDER_TYPE",
+        required_if_eq("provider", "true")
+    )]
+    pub provider_type: Option<ProviderType>,
+
+    /// Fixed value to generate deterministic peer id.
+    #[clap(long, value_name = "SEED_FILE", required_if_eq("provider", "true"))]
+    pub seed_file: Option<String>,
+}
+
+impl ProviderConfigurations {
+    pub fn provider_options(&self) -> ProviderOptions {
+        ProviderOptions {
+            provider_type: self
+                .provider_type
+                .clone()
+                .expect("Provider type is required"),
+            seed_file: self.seed_file.clone().expect("Seed file is required"),
+        }
+    }
 }
 
 const AFTER_HELP_EXAMPLE: &str = color_print::cstr!(
@@ -80,6 +128,9 @@ pub struct Cli {
     /// Relay chain arguments
     #[arg(raw = true)]
     pub relay_chain_args: Vec<String>,
+
+    #[command(flatten)]
+    pub provider_config: ProviderConfigurations,
 }
 
 #[derive(Debug)]

@@ -19,16 +19,19 @@ mod benchmarking;
 pub mod pallet {
     use super::types::*;
     use codec::{FullCodec, HasCompact};
-    // TODO: use frame_support::traits::Randomness;
+    use frame_support::traits::Randomness;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
-        sp_runtime::traits::{AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, SimpleBitOps},
+        sp_runtime::traits::{
+            AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps,
+        },
         traits::fungible::*,
         Blake2_128Concat,
     };
-    use frame_system::pallet_prelude::*;
+    use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
+    use storage_hub_traits::SubscribeProvidersInterface;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -36,8 +39,8 @@ pub mod pallet {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// TODO: Type to access randomness to salt AccountIds and get the corresponding HashId
-        //type ProvidersRandomness: Randomness<Self::HashId, BlockNumberFor<Self>>;
+        /// Type to access randomness to salt AccountIds and get the corresponding HashId
+        type ProvidersRandomness: Randomness<HashId<Self>, BlockNumberFor<Self>>;
 
         /// Type to access the Balances pallet (using the fungible trait from frame_support)
         type NativeBalance: Inspect<Self::AccountId>
@@ -58,6 +61,7 @@ pub mod pallet {
             + Default
             + MaybeDisplay
             + AtLeast32BitUnsigned
+            + Saturating
             + Copy
             + MaxEncodedLen
             + HasCompact
@@ -108,6 +112,9 @@ pub mod pallet {
             + MaxEncodedLen
             + FullCodec;
 
+        /// Subscribers to important updates
+        type Subscribers: SubscribeProvidersInterface;
+
         /// The minimum amount that an account has to deposit to become a storage provider.
         #[pallet::constant]
         type SpMinDeposit: Get<BalanceOf<Self>>;
@@ -145,12 +152,26 @@ pub mod pallet {
         /// The maximum amount of Buckets that a MSP can have.
         #[pallet::constant]
         type MaxBuckets: Get<u32>;
+
+        /// The maximum amount of blocks after which a sign up request expires so the randomness cannot be chosen
+        #[pallet::constant]
+        type MaxBlocksForRandomness: Get<BlockNumberFor<Self>>;
     }
 
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
     // Storage:
+
+    /// The mapping from an AccountId that requested to sign up to a tuple of the metadata with type of the request, and the block
+    /// number when the request was made.
+    ///
+    /// This is used for the two-step process of registering: when a user requests to register as a SP (either MSP or BSP),
+    /// that request with the metadata and the deposit held is stored here. When the user confirms the sign up, the
+    /// request is removed from this storage and the user is registered as a SP.
+    #[pallet::storage]
+    pub type SignUpRequests<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, (StorageProvider<T>, BlockNumberFor<T>)>;
 
     /// The mapping from an AccountId to a MainStorageProviderId
     ///
@@ -199,7 +220,6 @@ pub mod pallet {
 
     /// The total amount of storage capacity all BSPs have. Remember redundancy!
     #[pallet::storage]
-    #[pallet::getter(fn total_bsps_capacity)] // TODO: remove this and add an explicit getter
     pub type TotalBspsCapacity<T: Config> = StorageValue<_, StorageData<T>, ValueQuery>;
 
     // Events & Errors:
@@ -208,7 +228,16 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// Event emitted when a Main Storage Provider has signed up successfully. Provides information about
+        /// Event emitted when a Main Storage Provider has requested to sign up successfully. Provides information about
+        /// that MSP's account id, its multiaddresses, the total data it can store according to its stake, and its value proposition.
+        MspRequestSignUpSuccess {
+            who: T::AccountId,
+            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            capacity: StorageData<T>,
+            value_prop: ValueProposition<T>,
+        },
+
+        /// Event emitted when a Main Storage Provider has confirmed its sign up successfully. Provides information about
         /// that MSP's account id, the total data it can store according to its stake, its multiaddress, and its value proposition.
         MspSignUpSuccess {
             who: T::AccountId,
@@ -217,13 +246,25 @@ pub mod pallet {
             value_prop: ValueProposition<T>,
         },
 
-        /// Event emitted when a Backup Storage Provider has signed up successfully. Provides information about
+        /// Event emitted when a Backup Storage Provider has requested to sign up successfully. Provides information about
+        /// that BSP's account id, its multiaddresses, and the total data it can store according to its stake.
+        BspRequestSignUpSuccess {
+            who: T::AccountId,
+            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            capacity: StorageData<T>,
+        },
+
+        /// Event emitted when a Backup Storage Provider has confirmed its sign up successfully. Provides information about
         /// that BSP's account id, the total data it can store according to its stake, and its multiaddress.
         BspSignUpSuccess {
             who: T::AccountId,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             capacity: StorageData<T>,
         },
+
+        /// Event emitted when a sign up request has been canceled successfully. Provides information about
+        /// the account id of the user that canceled the request.
+        SignUpRequestCanceled { who: T::AccountId },
 
         /// Event emitted when a Main Storage Provider has signed off successfully. Provides information about
         /// that MSP's account id.
@@ -259,6 +300,10 @@ pub mod pallet {
         MaxMspsReached,
         /// Error thrown when a user tries to sign off as a SP but is not registered as a MSP or BSP.
         NotRegistered,
+        /// Error thrown when a user tries to confirm a sign up that was not requested previously.
+        SignUpNotRequested,
+        /// Error thrown when a user tries to request to sign up when it already has a sign up request pending
+        SignUpRequestPending,
         /// Error thrown when a user has a SP ID assigned to it but the SP data does not exist in storage (Inconsistency error).
         SpRegisteredButDataNotFound,
         /// Error thrown when a user tries to sign off as a SP but still has used storage.
@@ -273,6 +318,10 @@ pub mod pallet {
         NoMultiAddress,
         /// Error thrown when a user tries to sign up as a SP but any of the provided multiaddresses is invalid
         InvalidMultiAddress,
+        /// Error thrown when a user tries to confirm a sign up but the randomness is not fresh enough
+        RandomnessNotValidYet,
+        /// Error thrown when a user tries to confirm a sign up but too much time has passed since the request
+        SignUpRequestExpired,
         /// Error thrown when overflowing after doing math operations
         Overflow,
     }
@@ -296,23 +345,22 @@ pub mod pallet {
     /// Dispatchables (extrinsics) exposed by this pallet
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// A dispatchable function that allows users to sign up as a Main Storage Provider.
+        /// A dispatchable function that allows users to request to sign up as a Main Storage Provider.
         ///
         /// This extrinsic will:
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that, by registering this new MSP, we would not go over the MaxMsps limit
         /// 3. Check that the signer is not already registered as either a MSP or BSP
         /// 4. Check that the multiaddress is valid
-        /// 5. Check that the data to be stored is greater than the minimum required by the runtime. todo!("Ask if this applies to MSPs")
+        /// 5. Check that the data to be stored is greater than the minimum required by the runtime.
         /// 6. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
         /// 7. Check that the signer has enough funds to pay the deposit
         /// 8. Hold the deposit from the signer
-        /// 9. Update the MSP storage to add the signer as an MSP
-        /// 10. Increment the storage that holds total amount of MSPs currently in the system
-        /// 11. Emit an event confirming that the registration of the MSP has been successful
+        /// 9. Update the Sign Up Requests storage to add the signer as requesting to sign up as a MSP
+        /// 10. Emit an event confirming that the sign up request as MSP has been successful
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn msp_sign_up(
+        pub fn request_msp_sign_up(
             origin: OriginFor<T>,
             capacity: StorageData<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
@@ -331,10 +379,10 @@ pub mod pallet {
             };
 
             // Sign up the new MSP (if possible), updating storage
-            Self::do_msp_sign_up(&who, &msp_info)?;
+            Self::do_request_msp_sign_up(&who, &msp_info)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::MspSignUpSuccess {
+            Self::deposit_event(Event::<T>::MspRequestSignUpSuccess {
                 who,
                 multiaddresses,
                 capacity,
@@ -356,14 +404,11 @@ pub mod pallet {
         /// 6. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
         /// 7. Check that the signer has enough funds to pay the deposit
         /// 8. Hold the deposit from the signer
-        /// 9. Update the BSP storage to add the signer as an BSP
-        /// 10. Update the total capacity of all BSPs, adding the new capacity (redundancy is factored in the capacity used)
-        /// 11. Add this BSP to the vector of BSPs to draw from for proofs
-        /// 12. Increment the storage that holds total amount of BSPs currently in the system
-        /// 13. Emit an event confirming that the registration of the BSP has been successful
+        /// 9. Update the Sign Up Requests storage to add the signer as requesting to sign up as a BSP
+        /// 10. Emit an event confirming that the sign up of the BSP has been successful
         #[pallet::call_index(1)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn bsp_sign_up(
+        pub fn request_bsp_sign_up(
             origin: OriginFor<T>,
             capacity: StorageData<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
@@ -380,16 +425,74 @@ pub mod pallet {
             };
 
             // Sign up the new BSP (if possible), updating storage
-            Self::do_bsp_sign_up(&who, bsp_info)?;
+            Self::do_request_bsp_sign_up(&who, bsp_info)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::BspSignUpSuccess {
+            Self::deposit_event(Event::<T>::BspRequestSignUpSuccess {
                 who,
                 multiaddresses,
                 capacity,
             });
 
             // Return a successful DispatchResultWithPostInfo
+            Ok(().into())
+        }
+
+        /// A dispatchable function that allows users to confirm their sign up as a Storage Provider, either MSP or BSP.
+        ///
+        /// This extrinsic will:
+        /// 1. Check that the extrinsic was signed
+        /// 2. Check that the account received has requested to register as a SP
+        /// 3. Check that by registering this SP we would not go over the MaxMsps or MaxBsps limit
+        /// 4. Check that the current randomness is sufficiently fresh to be used as a salt for that request
+        /// 5. Check that the request has not expired
+        /// 6. Register the signer as a MSP or BSP with the data provided in the request
+        /// 7. Emit an event confirming that the sign up of the SP has been confirmed
+        ///
+        /// Notes:
+        /// - This extrinsic could be called by the user itself or by a third party
+        /// - The deposit that the user has to pay to register as a SP is held when the user requests to register as a SP
+        /// - If this extrinsic is successful, it will be free for the caller, to incentive state debloating
+        #[pallet::call_index(2)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn confirm_sign_up(
+            origin: OriginFor<T>,
+            provider_account: Option<T::AccountId>,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was signed and get the signer
+            let who = ensure_signed(origin)?;
+
+            // Execute checks and logic, update storage and emit event
+            // We emit the event in the interior logic to not have to check again which type of sign up it is outside of it
+            match provider_account {
+                Some(provider_account) => Self::do_confirm_sign_up(&provider_account)?,
+                None => Self::do_confirm_sign_up(&who)?,
+            }
+
+            // Return a successful DispatchResultWithPostInfo. If the extrinsic executed correctly, it will be free for the caller
+            Ok(Pays::No.into())
+        }
+
+        /// A dispatchable function that allows a user with a pending Sign Up Request to cancel it, getting the deposit back.
+        ///
+        /// This extrinsic will:
+        /// 1. Check that the extrinsic was signed and get the signer.
+        /// 2. Check that the signer has requested to sign up as a SP
+        /// 3. Delete the request from the Sign Up Requests storage
+        /// 4. Return the deposit to the signer
+        /// 5. Emit an event confirming that the cancellation of the sign up request has been successful
+        #[pallet::call_index(3)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn cancel_sign_up(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was signed and get the signer.
+            let who = ensure_signed(origin)?;
+
+            // Execute checks and logic, update storage
+            Self::do_cancel_sign_up(&who)?;
+
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::SignUpRequestCanceled { who });
+
             Ok(().into())
         }
 
@@ -403,7 +506,7 @@ pub mod pallet {
         /// 5. Return the deposit to the signer
         /// 6. Decrement the storage that holds total amount of MSPs currently in the system
         /// 7. Emit an event confirming that the sign off of the MSP has been successful
-        #[pallet::call_index(2)]
+        #[pallet::call_index(4)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn msp_sign_off(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
@@ -430,7 +533,7 @@ pub mod pallet {
         /// 6. Return the deposit to the signer
         /// 7. Decrement the storage that holds total amount of BSPs currently in the system
         /// 8. Emit an event confirming that the sign off of the BSP has been successful
-        #[pallet::call_index(3)]
+        #[pallet::call_index(5)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn bsp_sign_off(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
@@ -462,7 +565,7 @@ pub mod pallet {
         /// 	b. If the new total data is less than the current total data, return the extra deposit to the signer
         /// 7. Update the SPs storage to change the total data
         /// 8. Emit an event confirming that the change of the total data has been successful
-        #[pallet::call_index(4)]
+        #[pallet::call_index(6)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn change_capacity(
             _origin: OriginFor<T>,
@@ -482,7 +585,7 @@ pub mod pallet {
         /// 4. Check that the value proposition is valid (size and any other relevant checks)
         /// 5. Update the MSPs storage to add the value proposition (with its identifier)
         /// 6. Emit an event confirming that the addition of the value proposition has been successful
-        #[pallet::call_index(5)]
+        #[pallet::call_index(7)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn add_value_prop(
             _origin: OriginFor<T>,
@@ -497,9 +600,18 @@ pub mod pallet {
 
 use crate::types::{
     BackupStorageProvider, BalanceOf, BucketId, HashId, MerklePatriciaRoot, StorageData,
+    StorageProvider,
 };
+use frame_system::pallet_prelude::BlockNumberFor;
 /// Helper functions (getters, setters, etc.) for this pallet
 impl<T: Config> Pallet<T> {
+    /// A helper function to get the information of a sign up request
+    pub fn get_sign_up_request(
+        who: &T::AccountId,
+    ) -> Result<(StorageProvider<T>, BlockNumberFor<T>), Error<T>> {
+        SignUpRequests::<T>::get(who).ok_or(Error::<T>::SignUpNotRequested)
+    }
+
     /// A helper function to get the total capacity of a storage provider.
     pub fn get_total_capacity_of_sp(who: &T::AccountId) -> Result<StorageData<T>, Error<T>> {
         if let Some(m_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
@@ -543,41 +655,4 @@ impl<T: Config> Pallet<T> {
     pub fn get_msp_count() -> T::SpCount {
         MspCount::<T>::get()
     }
-}
-
-// Trait definitions:
-
-use frame_support::pallet_prelude::DispatchResult;
-
-/// Interface to allow the File System pallet to modify the data used by the Storage Providers pallet.
-pub trait StorageProvidersInterface<T: Config> {
-    /// Change the used data of a Storage Provider (generic, MSP or BSP).
-    fn change_data_used(who: &T::AccountId, data_change: T::StorageData) -> DispatchResult;
-
-    /// Add a new Bucket as a Provider
-    fn add_bucket(
-        msp_id: MainStorageProviderId<T>,
-        user_id: T::AccountId,
-        bucket_id: BucketId<T>,
-        bucket_root: MerklePatriciaRoot<T>,
-    ) -> DispatchResult;
-
-    /// Change the root of a bucket
-    fn change_root_bucket(
-        bucket_id: BucketId<T>,
-        new_root: MerklePatriciaRoot<T>,
-    ) -> DispatchResult;
-
-    /// Change the root of a BSP
-    fn change_root_bsp(
-        bsp_id: BackupStorageProviderId<T>,
-        new_root: MerklePatriciaRoot<T>,
-    ) -> DispatchResult;
-
-    /// Remove a root from a bucket of a MSP, removing the whole bucket from storage
-    fn remove_root_bucket(bucket_id: BucketId<T>) -> DispatchResult;
-
-    /// Remove a root from a BSP. It will remove the whole BSP from storage, so it should only be called when the BSP is being removed.
-    /// todo!("If the only way to remove a BSP is by this pallet (bsp_sign_off), then is this function actually needed?")
-    fn remove_root_bsp(who: &T::AccountId) -> DispatchResult;
 }

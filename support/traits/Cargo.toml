@@ -23,13 +23,14 @@ frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 
+sp-runtime = { workspace = true }
+
 [dev-dependencies]
 serde = { workspace = true }
 
 # Substrate
 sp-core = { workspace = true }
 sp-io = { workspace = true }
-sp-runtime = { workspace = true }
 
 [features]
 default = ["std"]
@@ -41,7 +42,7 @@ runtime-benchmarks = [
 ]
 std = [
     "codec/std",
-    "frame-benchmarking/std",
+    "frame-benchmarking?/std",
     "frame-support/std",
     "frame-system/std",
     "scale-info/std",
