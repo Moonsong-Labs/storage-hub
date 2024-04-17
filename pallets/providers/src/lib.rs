@@ -291,44 +291,59 @@ pub mod pallet {
     /// The errors that can be thrown by this pallet to inform users about what went wrong
     #[pallet::error]
     pub enum Error<T> {
+        // Sign up errors:
         /// Error thrown when a user tries to sign up as a SP but is already registered as a MSP or BSP.
         AlreadyRegistered,
-        /// Error thrown when a user tries to sign up or change its stake to store less storage than the minimum required by the runtime.
-        StorageTooLow,
-        /// Error thrown when a user does not have enough balance to pay the deposit that it would incur by signing up as a SP or changing its total data (stake).
-        NotEnoughBalance,
-        /// Error thrown when the runtime cannot hold the required deposit from the account to register it as a SP
-        CannotHoldDeposit,
         /// Error thrown when a user tries to sign up as a BSP but the maximum amount of BSPs has been reached.
         MaxBspsReached,
         /// Error thrown when a user tries to sign up as a MSP but the maximum amount of MSPs has been reached.
         MaxMspsReached,
-        /// Error thrown when a user tries to sign off as a SP but is not registered as a MSP or BSP.
-        NotRegistered,
         /// Error thrown when a user tries to confirm a sign up that was not requested previously.
         SignUpNotRequested,
-        /// Error thrown when a user tries to request to sign up when it already has a sign up request pending
+        /// Error thrown when a user tries to request to sign up when it already has a sign up request pending.
         SignUpRequestPending,
-        /// Error thrown when a user has a SP ID assigned to it but the SP data does not exist in storage (Inconsistency error).
-        SpRegisteredButDataNotFound,
+        /// Error thrown when a user tries to sign up without any multiaddress.
+        NoMultiAddress,
+        /// Error thrown when a user tries to sign up as a SP but any of the provided multiaddresses is invalid.
+        InvalidMultiAddress,
+        /// Error thrown when a user tries to sign up or change its capacity to store less storage than the minimum required by the runtime.
+        StorageTooLow,
+
+        // Deposit errors:
+        /// Error thrown when a user does not have enough balance to pay the deposit that it would incur by signing up as a SP or changing its capacity.
+        NotEnoughBalance,
+        /// Error thrown when the runtime cannot hold the required deposit from the account to register it as a SP or change its capacity.
+        CannotHoldDeposit,
+
+        // Sign off errors:
         /// Error thrown when a user tries to sign off as a SP but still has used storage.
         StorageStillInUse,
-        /// Error thrown when a SP tries to change its total data (stake) but it has not been enough time since the last time it changed it.
-        NotEnoughTimePassed,
-        /// Error thrown when trying to get a root from a MSP without passing a User ID
-        NoUserId,
-        /// Error thrown when trying to get a root from a MSP without passing a Bucket ID
-        NoBucketId,
-        /// Error thrown when a user tries to sign up without any multiaddress
-        NoMultiAddress,
-        /// Error thrown when a user tries to sign up as a SP but any of the provided multiaddresses is invalid
-        InvalidMultiAddress,
-        /// Error thrown when a user tries to confirm a sign up but the randomness is not fresh enough
+
+        // Randomness errors:
+        /// Error thrown when a user tries to confirm a sign up but the randomness is too fresh to be used yet.
         RandomnessNotValidYet,
-        /// Error thrown when a user tries to confirm a sign up but too much time has passed since the request
+        /// Error thrown when a user tries to confirm a sign up but too much time has passed since the request.
         SignUpRequestExpired,
-        /// Error thrown when overflowing after doing math operations
-        Overflow,
+
+        // Capacity change errors:
+        /// Error thrown when a user tries to change its capacity to less than its used storage.
+        NewCapacityLessThanUsedStorage,
+        /// Error thrown when a user tries to change its capacity to the same value it already has.
+        NewCapacityEqualsCurrentCapacity,
+        /// Error thrown when a user tries to change its capacity to zero (there are specific extrinsics to sign off as a SP).
+        NewCapacityCantBeZero,
+        /// Error thrown when a SP tries to change its capacity but it has not been enough time since the last time it changed it.
+        NotEnoughTimePassed,
+
+        // General errors:
+        /// Error thrown when a user tries to interact as a SP but is not registered as a MSP or BSP.
+        NotRegistered,
+        /// Error thrown when trying to get a root from a MSP without passing a User ID.
+        NoUserId,
+        /// Error thrown when trying to get a root from a MSP without passing a Bucket ID.
+        NoBucketId,
+        /// Error thrown when a user has a SP ID assigned to it but the SP data does not exist in storage (Inconsistency error).
+        SpRegisteredButDataNotFound,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -561,17 +576,18 @@ pub mod pallet {
         /// This extrinsic will:
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that the signer is registered as a SP
-        /// 3. Check that enough time has passed since the last time the SP changed its stake
-        /// 4. Check that the new total data is greater than the minimum required by the runtime
-        /// 5. Check that the new total data is greater than the data used by this SP
-        /// 6. Check to see if the new total data is greater or less than the current total data
-        /// 	a. If the new total data is greater than the current total data:
-        ///		i. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
-        /// 		ii. Check that the signer has enough funds to pay this extra deposit
-        /// 		iii. Hold the extra deposit from the signer
-        /// 	b. If the new total data is less than the current total data, return the extra deposit to the signer
+        /// 3. Check that enough time has passed since the last time the SP changed its capacity
+        /// 4. Check that the new capacity is greater than the minimum required by the runtime
+        /// 5. Check that the new capacity is greater than the data used by this SP
+        /// 6. Calculate the new deposit needed for this new capacity
+        /// 7. Check to see if the new deposit needed is greater or less than the current deposit
+        /// 	a. If the new deposit is greater than the current deposit:
+        /// 		i. Check that the signer has enough funds to pay this extra deposit
+        /// 		ii. Hold the extra deposit from the signer
+        /// 	b. If the new deposit is less than the current deposit, return the held difference to the signer
         /// 7. Update the SPs storage to change the total data
-        /// 8. Emit an event confirming that the change of the total data has been successful
+        /// 8. If user is a BSP, update the total capacity of the network (sum of all capacities of BSPs)
+        /// 8. Emit an event confirming that the change of the capacity has been successful
         #[pallet::call_index(6)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn change_capacity(
