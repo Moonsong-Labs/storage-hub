@@ -1,5 +1,6 @@
 pub mod blockchain;
 pub mod file_transfer;
+pub mod forest;
 
 use storage_hub_infra::{
     actor::{ActorHandle, TaskSpawner},
