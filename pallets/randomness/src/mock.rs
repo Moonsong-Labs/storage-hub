@@ -4,7 +4,7 @@ use crate as pallet_randomness;
 use frame_support::{
     construct_runtime, derive_impl, parameter_types, traits::Everything, weights::Weight,
 };
-use sp_core::{H160, H256};
+use sp_core::{blake2_256, H160, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
     BuildStorage, Perbill,
@@ -80,26 +80,18 @@ impl pallet_balances::Config for Test {
     type RuntimeFreezeReason = ();
 }
 
-parameter_types! {
-    pub const DepositAmount: Balance = 100;
-}
-
 pub struct BabeDataGetter;
 impl crate::GetBabeData<u64, Option<H256>> for BabeDataGetter {
     fn get_epoch_index() -> u64 {
-        1u64
+        frame_system::Pallet::<Test>::block_number()
     }
     fn get_epoch_randomness() -> Option<H256> {
-        Some(H256::default())
+        Some(H256::from_slice(&blake2_256(
+            &Self::get_epoch_index().to_le_bytes(),
+        )))
     }
 }
 
-parameter_types! {
-    pub const Deposit: u128 = 10;
-    pub const MaxRandomWords: u8 = 1;
-    pub const MinBlockDelay: u32 = 2;
-    pub const MaxBlockDelay: u32 = 20;
-}
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type BabeDataGetter = BabeDataGetter;
