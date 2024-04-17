@@ -192,7 +192,7 @@ jobs:
           bun install
           bun zombie:run:native &
           
-          sleep 30
+          sleep 60
       - name: Run Tests
         run: |
           cd test
