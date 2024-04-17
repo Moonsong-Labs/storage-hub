@@ -190,7 +190,6 @@ jobs:
           chmod +x target/release/storage-hub-node
           cd test
           bun install
-          bun run scripts/downloadPolkadot.ts 1.8.0
           bun zombie:run:native &
           
           sleep 30
