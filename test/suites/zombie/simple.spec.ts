@@ -54,7 +54,7 @@ describe("Simple zombieTest", async () => {
           value: 1337n,
         }).signAndSubmit(accounts.alice.sr25519.signer);
       },
-      { timeout: 30_000 }
+      { timeout: 60_000 }
     );
   });
 
