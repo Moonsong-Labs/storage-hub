@@ -156,6 +156,10 @@ pub mod pallet {
         /// The maximum amount of blocks after which a sign up request expires so the randomness cannot be chosen
         #[pallet::constant]
         type MaxBlocksForRandomness: Get<BlockNumberFor<Self>>;
+
+        /// The minimum amount of blocks between capacity changes for a SP
+        #[pallet::constant]
+        type MinBlocksBetweenCapacityChanges: Get<BlockNumberFor<Self>>;
     }
 
     #[pallet::pallet]
@@ -280,6 +284,7 @@ pub mod pallet {
             who: T::AccountId,
             old_capacity: StorageData<T>,
             new_capacity: StorageData<T>,
+            next_block_when_change_allowed: BlockNumberFor<T>,
         },
     }
 
@@ -376,6 +381,7 @@ pub mod pallet {
                 data_used: StorageData::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
                 value_prop: value_prop.clone(),
+                last_capacity_change: frame_system::Pallet::<T>::block_number(),
             };
 
             // Sign up the new MSP (if possible), updating storage
@@ -422,6 +428,7 @@ pub mod pallet {
                 data_used: StorageData::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
                 root: MerklePatriciaRoot::<T>::default(),
+                last_capacity_change: frame_system::Pallet::<T>::block_number(),
             };
 
             // Sign up the new BSP (if possible), updating storage
@@ -582,6 +589,8 @@ pub mod pallet {
                 who,
                 old_capacity,
                 new_capacity,
+                next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
+                    + T::MinBlocksBetweenCapacityChanges::get(),
             });
 
             // Return a successful DispatchResultWithPostInfo

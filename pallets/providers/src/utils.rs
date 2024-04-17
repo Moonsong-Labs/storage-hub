@@ -563,6 +563,7 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
             data_used: msp.data_used,
             multiaddresses: msp.multiaddresses,
             root: MerklePatriciaRoot::<T>::default(),
+            last_capacity_change: msp.last_capacity_change,
         }
     }
 }

@@ -123,6 +123,7 @@ mod sign_up {
                     );
 
                     // Check that Alice's request is in the requests list and matches the info provided
+                    let current_block = frame_system::Pallet::<Test>::block_number();
                     let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice);
                     assert!(alice_sign_up_request.is_ok());
                     assert_eq!(
@@ -134,8 +135,9 @@ mod sign_up {
                                 data_used: 0,
                                 multiaddresses,
                                 value_prop,
+                                last_capacity_change: current_block,
                             }),
-                            frame_system::Pallet::<Test>::block_number()
+                            current_block
                         )
                     );
                 });
@@ -486,6 +488,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice's request to sign up as a Main Storage Provider exists and is the one we just created
+                    let current_block = frame_system::Pallet::<Test>::block_number();
                     let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice);
                     assert!(alice_sign_up_request.as_ref().is_ok_and(|request| request.0
                         == StorageProvider::MainStorageProvider(MainStorageProvider {
@@ -494,10 +497,9 @@ mod sign_up {
                             data_used: 0,
                             multiaddresses: multiaddresses.clone(),
                             value_prop: value_prop.clone(),
+                            last_capacity_change: current_block
                         })));
-                    assert!(alice_sign_up_request.is_ok_and(
-                        |request| request.1 == frame_system::Pallet::<Test>::block_number()
-                    ));
+                    assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
 
                     // Cancel the sign up of Alice as a Main Storage Provider
                     assert_ok!(StorageProviders::cancel_sign_up(RuntimeOrigin::signed(
@@ -595,6 +597,7 @@ mod sign_up {
                     );
 
                     // Check that Alice's request is in the requests list and matches the info provided
+                    let current_block = frame_system::Pallet::<Test>::block_number();
                     let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice);
                     assert!(alice_sign_up_request.is_ok());
                     assert_eq!(
@@ -605,8 +608,9 @@ mod sign_up {
                                 capacity: storage_amount,
                                 data_used: 0,
                                 multiaddresses,
+                                last_capacity_change: current_block,
                             }),
-                            frame_system::Pallet::<Test>::block_number()
+                            current_block
                         )
                     );
                 });
@@ -956,6 +960,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice's request to sign up as a Backup Storage Provider exists and is the one we just created
+                    let current_block = frame_system::Pallet::<Test>::block_number();
                     let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice);
                     assert!(alice_sign_up_request.as_ref().is_ok_and(|request| request.0
                         == StorageProvider::BackupStorageProvider(BackupStorageProvider {
@@ -963,10 +968,9 @@ mod sign_up {
                             data_used: 0,
                             multiaddresses: multiaddresses.clone(),
                             root: Default::default(),
+                            last_capacity_change: current_block
                         })));
-                    assert!(alice_sign_up_request.is_ok_and(
-                        |request| request.1 == frame_system::Pallet::<Test>::block_number()
-                    ));
+                    assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
 
                     // Cancel the sign up of Alice as a Backup Storage Provider
                     assert_ok!(StorageProviders::cancel_sign_up(RuntimeOrigin::signed(
@@ -2978,6 +2982,7 @@ fn register_account_as_msp(
             data_used: 0,
             multiaddresses,
             value_prop,
+            last_capacity_change: frame_system::Pallet::<Test>::block_number(),
         },
     )
 }
@@ -3055,6 +3060,7 @@ fn register_account_as_bsp(
             data_used: 0,
             multiaddresses,
             root: Default::default(),
+            last_capacity_change: frame_system::Pallet::<Test>::block_number(),
         },
     )
 }
