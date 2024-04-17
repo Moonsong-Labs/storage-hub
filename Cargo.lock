@@ -3167,6 +3167,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c007b1ae3abe1cb6f85a16305acd418b7ca6343b953633fee2b76d8f108b830f"
 
 [[package]]
+name = "file-manager"
+version = "0.1.0"
+dependencies = [
+ "storage-hub-infra",
+]
+
+[[package]]
 name = "file-per-thread-logger"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3247,6 +3254,13 @@ name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
+
+[[package]]
+name = "forest-manager"
+version = "0.1.0"
+dependencies = [
+ "storage-hub-infra",
+]
 
 [[package]]
 name = "fork-tree"
@@ -12829,6 +12843,8 @@ dependencies = [
  "sc-service",
  "sc-tracing",
  "sc-utils",
+ "sp-core",
+ "sp-trie",
  "tokio",
 ]
 
@@ -12852,6 +12868,8 @@ dependencies = [
  "cumulus-primitives-core",
  "cumulus-primitives-parachain-inherent",
  "cumulus-relay-chain-interface",
+ "file-manager",
+ "forest-manager",
  "frame-benchmarking",
  "frame-benchmarking-cli",
  "futures",
