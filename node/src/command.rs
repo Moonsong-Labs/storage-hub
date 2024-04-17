@@ -111,10 +111,10 @@ impl SubstrateCli for RelayChainCli {
 }
 
 macro_rules! construct_async_run {
-	(|$components:ident, $cli:ident, $cmd:ident, $config:ident| $( $code:tt )* ) => {{
+	(|$components:ident, $cli:ident, $cmd:ident, $config:ident, $dev_service:ident| $( $code:tt )* ) => {{
 		let runner = $cli.create_runner($cmd)?;
 		runner.async_run(|$config| {
-			let $components = new_partial(&$config)?;
+			let $components = new_partial(&$config, $dev_service)?;
 			let task_manager = $components.task_manager;
 			{ $( $code )* }.map(|v| (v, task_manager))
 		})
@@ -125,33 +125,35 @@ macro_rules! construct_async_run {
 pub fn run() -> Result<()> {
     let cli = Cli::from_args();
 
+    let dev_service = cli.run.base.shared_params.is_dev();
+
     match &cli.subcommand {
 		Some(Subcommand::BuildSpec(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
 			runner.sync_run(|config| cmd.run(config.chain_spec, config.network))
 		},
 		Some(Subcommand::CheckBlock(cmd)) => {
-			construct_async_run!(|components, cli, cmd, config| {
+			construct_async_run!(|components, cli, cmd, config, dev_service| {
 				Ok(cmd.run(components.client, components.import_queue))
 			})
 		},
 		Some(Subcommand::ExportBlocks(cmd)) => {
-			construct_async_run!(|components, cli, cmd, config| {
+			construct_async_run!(|components, cli, cmd, config, dev_service| {
 				Ok(cmd.run(components.client, config.database))
 			})
 		},
 		Some(Subcommand::ExportState(cmd)) => {
-			construct_async_run!(|components, cli, cmd, config| {
+			construct_async_run!(|components, cli, cmd, config, dev_service| {
 				Ok(cmd.run(components.client, config.chain_spec))
 			})
 		},
 		Some(Subcommand::ImportBlocks(cmd)) => {
-			construct_async_run!(|components, cli, cmd, config| {
+			construct_async_run!(|components, cli, cmd, config, dev_service| {
 				Ok(cmd.run(components.client, components.import_queue))
 			})
 		},
 		Some(Subcommand::Revert(cmd)) => {
-			construct_async_run!(|components, cli, cmd, config| {
+			construct_async_run!(|components, cli, cmd, config, dev_service| {
 				Ok(cmd.run(components.client, components.backend, None))
 			})
 		},
@@ -177,7 +179,7 @@ pub fn run() -> Result<()> {
 		Some(Subcommand::ExportGenesisHead(cmd)) => {
 			let runner = cli.create_runner(cmd)?;
 			runner.sync_run(|config| {
-				let partials = new_partial(&config)?;
+				let partials = new_partial(&config, dev_service)?;
 
 				cmd.run(partials.client)
 			})
@@ -202,7 +204,7 @@ pub fn run() -> Result<()> {
 							.into())
 					},
 				BenchmarkCmd::Block(cmd) => runner.sync_run(|config| {
-					let partials = new_partial(&config)?;
+					let partials = new_partial(&config, dev_service)?;
 					cmd.run(partials.client)
 				}),
 				#[cfg(not(feature = "runtime-benchmarks"))]
@@ -215,7 +217,7 @@ pub fn run() -> Result<()> {
 					.into()),
 				#[cfg(feature = "runtime-benchmarks")]
 				BenchmarkCmd::Storage(cmd) => runner.sync_run(|config| {
-					let partials = new_partial(&config)?;
+					let partials = new_partial(&config, dev_service)?;
 					let db = partials.backend.expose_db();
 					let storage = partials.backend.expose_storage();
 					cmd.run(config, partials.client.clone(), db, storage)
@@ -231,7 +233,6 @@ pub fn run() -> Result<()> {
 		Some(Subcommand::TryRuntime) => Err("The `try-runtime` subcommand has been migrated to a standalone CLI (https://github.com/paritytech/try-runtime-cli). It is no longer being maintained here and will be removed entirely some time after January 2024. Please remove this subcommand from your runtime and use the standalone CLI.".into()),
 		None => {
 			let runner = cli.create_runner(&cli.run.normalize())?;
-			let collator_options = cli.run.collator_options();
             let provider_options = if cli.provider_config.provider {
                 Some(cli.provider_config.provider_options())
             } else {
@@ -246,41 +247,56 @@ pub fn run() -> Result<()> {
 					}))
 					.flatten();
 
-				let para_id = chain_spec::Extensions::try_get(&*config.chain_spec)
-					.map(|e| e.para_id)
-					.ok_or("Could not find parachain ID in chain-spec.")?;
 
-				let polkadot_cli = RelayChainCli::new(
-					&config,
-					[RelayChainCli::executable_name()].iter().chain(cli.relay_chain_args.iter()),
-				);
+                let para_id = chain_spec::Extensions::try_get(&*config.chain_spec)
+                    .map(|e| e.para_id)
+                    .ok_or("Could not find parachain ID in chain-spec.")?;
 
-				let id = ParaId::from(para_id);
+                let id = ParaId::from(para_id);
 
-				let parachain_account =
-					AccountIdConversion::<polkadot_primitives::AccountId>::into_account_truncating(
-						&id,
-					);
+                info!("Is collating: {}", if config.role.is_authority() { "yes" } else { "no" });
 
-				let tokio_handle = config.tokio_handle.clone();
-				let polkadot_config =
-					SubstrateCli::create_configuration(&polkadot_cli, &polkadot_cli, tokio_handle)
-						.map_err(|err| format!("Relay chain argument error: {}", err))?;
+                if cli.run.base.shared_params.is_dev() {
+                    crate::service::start_dev_node(
+                        config,
+                        provider_options,
+                        hwbench,
+                        id,
+                    )
+                    .await
+                    .map_err(Into::into)
+                } else {
+			        let collator_options = cli.run.collator_options();
+                    let polkadot_cli = RelayChainCli::new(
+                        &config,
+                        [RelayChainCli::executable_name()].iter().chain(cli.relay_chain_args.iter()),
+                    );
 
-				info!("Parachain Account: {parachain_account}");
-				info!("Is collating: {}", if config.role.is_authority() { "yes" } else { "no" });
+                    let parachain_account =
+                        AccountIdConversion::<polkadot_primitives::AccountId>::into_account_truncating(
+                            &id,
+                        );
 
-				crate::service::start_parachain_node(
-					config,
-					polkadot_config,
-					collator_options,
-                    provider_options,
-					id,
-					hwbench,
-				)
-				.await
-				.map(|r| r.0)
-				.map_err(Into::into)
+				    let tokio_handle = config.tokio_handle.clone();
+
+                    let polkadot_config =
+                        SubstrateCli::create_configuration(&polkadot_cli, &polkadot_cli, tokio_handle)
+                            .map_err(|err| format!("Relay chain argument error: {}", err))?;
+
+                    info!("Parachain Account: {parachain_account}");
+
+                    crate::service::start_parachain_node(
+                        config,
+                        polkadot_config,
+                        collator_options,
+                        provider_options,
+                        id,
+                        hwbench,
+                    )
+                    .await
+                    .map(|r| r.0)
+                    .map_err(Into::into)
+                }
 			})
 		},
 	}
