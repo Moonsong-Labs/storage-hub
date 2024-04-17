@@ -498,6 +498,47 @@ where
 
         Ok(())
     }
+
+    // TODO: design a way (with timelock probably) to allow a SP to change its stake
+    pub fn do_change_capacity(
+        who: &T::AccountId,
+        new_capacity: StorageData<T>,
+    ) -> Result<StorageData<T>, DispatchError> {
+        // Check that the signer is registered as a SP and dispatch the corresponding function, getting its old capacity
+        let old_capacity = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            Self::do_change_capacity_msp(msp_id, new_capacity)?
+        } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            Self::do_change_capacity_bsp(bsp_id, new_capacity)?
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        };
+
+        Ok(old_capacity)
+    }
+
+    pub fn do_change_capacity_msp(
+        who: MainStorageProviderId<T>,
+        new_capacity: StorageData<T>,
+    ) -> Result<StorageData<T>, DispatchError> {
+        // TODO: Actual logic
+        let mut msp = MainStorageProviders::<T>::get(&who).ok_or(Error::<T>::NotRegistered)?;
+        let old_capacity = msp.capacity;
+        msp.capacity = new_capacity;
+        MainStorageProviders::<T>::insert(&who, msp);
+        Ok(old_capacity)
+    }
+
+    pub fn do_change_capacity_bsp(
+        who: BackupStorageProviderId<T>,
+        new_capacity: StorageData<T>,
+    ) -> Result<StorageData<T>, DispatchError> {
+        // TODO: Actual logic
+        let mut bsp = BackupStorageProviders::<T>::get(&who).ok_or(Error::<T>::NotRegistered)?;
+        let old_capacity = bsp.capacity;
+        bsp.capacity = new_capacity;
+        BackupStorageProviders::<T>::insert(&who, bsp);
+        Ok(old_capacity)
+    }
 }
 
 impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {

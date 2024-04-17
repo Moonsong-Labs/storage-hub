@@ -276,7 +276,7 @@ pub mod pallet {
 
         /// Event emitted when a SP has changed is total data (stake) successfully. Provides information about
         /// that SP's account id, its old total data that could store, and the new total data.
-        TotalDataChanged {
+        CapacityChanged {
             who: T::AccountId,
             old_capacity: StorageData<T>,
             new_capacity: StorageData<T>,
@@ -568,11 +568,23 @@ pub mod pallet {
         #[pallet::call_index(6)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn change_capacity(
-            _origin: OriginFor<T>,
-            _new_capacity: StorageData<T>,
+            origin: OriginFor<T>,
+            new_capacity: StorageData<T>,
         ) -> DispatchResultWithPostInfo {
-            // TODO: design a way (with timelock probably) to allow a SP to change its stake
+            // Check that the extrinsic was signed and get the signer.
+            let who = ensure_signed(origin)?;
 
+            // Execute checks and logic, update storage
+            let old_capacity = Self::do_change_capacity(&who, new_capacity)?;
+
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::CapacityChanged {
+                who,
+                old_capacity,
+                new_capacity,
+            });
+
+            // Return a successful DispatchResultWithPostInfo
             Ok(().into())
         }
 
