@@ -190,7 +190,7 @@ jobs:
           chmod +x target/release/storage-hub-node
           cd test
           bun install
-          bun run scripts/downloadPolkadot.ts 1.5.0
+          bun run scripts/downloadPolkadot.ts 1.8.0
           bun zombie:run:native &
           
           sleep 30
@@ -228,5 +228,5 @@ jobs:
           chmod +x target/release/storage-hub-node
           cd test
           bun install
-          bun run scripts/downloadPolkadot.ts 1.5.0
+          bun run scripts/downloadPolkadot.ts 1.8.0
           bun zombienet test --provider native configs/simpleNative.zndsl
