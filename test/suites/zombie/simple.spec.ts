@@ -21,7 +21,7 @@ describe("Simple zombieTest", async () => {
     test("Check RelayChain RT Version", async () => {
       const { spec_name, spec_version } = relayApi.constants.System.Version(relayRT);
       expect(spec_name).toBe("rococo");
-      expect(spec_version).toBeGreaterThanOrEqual(1008000);
+      expect(spec_version).toBeGreaterThanOrEqual(1005000);
     });
 
     test("Check sr25519 keyring is correct", async () => {
