@@ -1,5 +1,7 @@
+pub mod commands;
 pub mod events;
 pub mod handler;
+pub mod types;
 
 use std::sync::Arc;
 

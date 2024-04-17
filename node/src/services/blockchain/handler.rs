@@ -16,25 +16,22 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-//! Helper for incoming provider client requests.
-//!
-//! Handle (i.e. answer) incoming provider client requests from a remote peer received via
-//! `crate::request_responses::RequestResponsesBehaviour` with
-//! [`LightClientRequestHandler`](handler::LightClientRequestHandler).
-
 use std::sync::Arc;
 
 use anyhow::Result;
 use codec::{Decode, Encode};
+use cumulus_primitives_core::BlockT;
 use frame_support::{StorageHasher, Twox128};
-use frame_system::EventRecord;
 use futures::{prelude::*, stream::select};
+use log::{debug, trace};
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{
-    BlockImportNotification, BlockchainEvents, HeaderBackend, StorageKey, StorageProvider,
+    BlockBackend, BlockImportNotification, BlockchainEvents, HeaderBackend, StorageKey,
+    StorageProvider,
 };
 use sc_service::RpcHandlers;
-use sc_tracing::tracing::info;
+use sc_tracing::tracing::{error, info};
+use serde_json::Number;
 use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{
@@ -44,28 +41,23 @@ use sp_runtime::{
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 
-use crate::{service::ParachainClient, services::blockchain::events::NewStorageRequest};
+use crate::{
+    service::ParachainClient,
+    services::blockchain::{events::NewStorageRequest, types::EventsVec},
+};
 
-use super::{events::BlockchainServiceEventBusProvider, KEY_TYPE};
+use super::{
+    commands::BlockchainServiceCommand, events::BlockchainServiceEventBusProvider,
+    types::Extrinsic, KEY_TYPE,
+};
 
 const LOG_TARGET: &str = "blockchain-service";
 
-type EventsVec = Vec<
-    Box<
-        EventRecord<
-            <storage_hub_runtime::Runtime as frame_system::Config>::RuntimeEvent,
-            <storage_hub_runtime::Runtime as frame_system::Config>::Hash,
-        >,
-    >,
->;
-
-#[derive(Debug)]
-pub enum BlockchainServiceCommand {
-    SendExtrinsic {
-        call: storage_hub_runtime::RuntimeCall,
-    },
-}
-
+/// The BlockchainService actor.
+///
+/// This actor is responsible for sending extrinsics to the runtime and handling block import notifications.
+/// For such purposes, it uses the [`ParachainClient`] to interact with the runtime, the [`RpcHandlers`] to send
+/// extrinsics, and the [`Keystore`] to sign the extrinsics.
 pub struct BlockchainService {
     event_bus_provider: BlockchainServiceEventBusProvider,
     client: Arc<ParachainClient>,
@@ -74,6 +66,7 @@ pub struct BlockchainService {
     nonce_counter: u32,
 }
 
+/// Implement the Actor trait for the BlockchainService actor.
 impl Actor for BlockchainService {
     type Message = BlockchainServiceCommand;
     type EventLoop = BlockchainServiceEventLoop;
@@ -85,16 +78,99 @@ impl Actor for BlockchainService {
     ) -> impl std::future::Future<Output = ()> + Send {
         async {
             match message {
-                BlockchainServiceCommand::SendExtrinsic { call } => {
+                BlockchainServiceCommand::SendExtrinsic { call, callback } => {
                     match self.send_extrinsic(call).await {
                         Ok(output) => {
                             info!(target: LOG_TARGET, "Extrinsic sent successfully: {:?}", output);
+                            match callback.send(output.receiver) {
+                                Ok(_) => {
+                                    trace!(target: LOG_TARGET, "Receiver sent successfully");
+                                }
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                                }
+                            }
                         }
                         Err(e) => {
                             info!(target: LOG_TARGET, "Failed to send extrinsic: {:?}", e);
+
+                            // Send the error to the callback.
+                            let (tx, rx) = tokio::sync::mpsc::channel(1);
+                            if tx.send(e.to_string()).await.is_err() {
+                                error!(target: LOG_TARGET, "Failed to send error message through channel");
+                            }
+
+                            match callback.send(rx) {
+                                Ok(_) => {
+                                    trace!(target: LOG_TARGET, "Receiver sent successfully");
+                                }
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send error message through channel: {:?}", e);
+                                }
+                            }
                         }
                     }
                 }
+                BlockchainServiceCommand::GetExtrinsicFromBlock {
+                    block_hash,
+                    extrinsic_hash,
+                    callback,
+                } => {
+                    match self
+                        .get_extrinsic_from_block(block_hash, extrinsic_hash)
+                        .await
+                    {
+                        Ok(extrinsic) => {
+                            info!(target: LOG_TARGET, "Extrinsic retrieved successfully: {:?}", extrinsic);
+                            match callback.send(Ok(extrinsic)) {
+                                Ok(_) => {
+                                    trace!(target: LOG_TARGET, "Receiver sent successfully");
+                                }
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            info!(target: LOG_TARGET, "Failed to retrieve extrinsic: {:?}", e);
+                            match callback.send(Err(e)) {
+                                Ok(_) => {
+                                    trace!(target: LOG_TARGET, "Receiver sent successfully");
+                                }
+                                Err(e) => {
+                                    error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                                }
+                            }
+                        }
+                    }
+                }
+                BlockchainServiceCommand::UnwatchExtrinsic {
+                    subscription_id,
+                    callback,
+                } => match self.unwatch_extrinsic(subscription_id).await {
+                    Ok(output) => {
+                        info!(target: LOG_TARGET, "Extrinsic unwatched successfully: {:?}", output);
+                        match callback.send(Ok(())) {
+                            Ok(_) => {
+                                trace!(target: LOG_TARGET, "Receiver sent successfully");
+                            }
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        info!(target: LOG_TARGET, "Failed to unwatch extrinsic: {:?}", e);
+                        match callback.send(Err(e)) {
+                            Ok(_) => {
+                                trace!(target: LOG_TARGET, "Receiver sent successfully");
+                            }
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    }
+                },
             }
         }
     }
@@ -110,6 +186,7 @@ pub struct BlockchainServiceEventLoop {
     actor: BlockchainService,
 }
 
+/// Merged event loop message for the BlockchainService actor.
 enum MergedEventLoopMessage<Block>
 where
     Block: cumulus_primitives_core::BlockT,
@@ -118,6 +195,7 @@ where
     BlockNotification(BlockImportNotification<Block>),
 }
 
+/// Implement the ActorEventLoop trait for the BlockchainServiceEventLoop.
 impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
     fn new(
         actor: BlockchainService,
@@ -193,33 +271,17 @@ impl BlockchainService {
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
-        info!(target: LOG_TARGET, "Import notification: {}", notification.hash);
+        debug!(target: LOG_TARGET, "Import notification: {}", notification.hash);
 
-        // Would be cool to be able to do this...
-        // let events_storage_key = frame_system::Events::<storage_hub_runtime::Runtime>::hashed_key();
+        // Get events from storage.
+        // TODO: Handle case where the storage cannot be decoded.
+        // TODO: This would happen if we're parsing a block authored with an older version of the runtime, using
+        // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
+        // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
+        let events = self.get_events_storage_element(notification.hash);
 
-        // Get the storage key for the events storage.
-        let events_storage_key = [
-            Twox128::hash(b"System").to_vec(),
-            Twox128::hash(b"Events").to_vec(),
-        ]
-        .concat();
-
-        // Get the events storage.
-        let raw_storage_opt = self
-            .client
-            .storage(notification.hash, &StorageKey(events_storage_key))
-            .expect("Failed to get Events storage element");
-
-        // Decode the events storage.
-        if let Some(raw_storage) = raw_storage_opt {
-            // TODO: Handle case where the storage cannot be decoded.
-            // TODO: This would happen if we're parsing a block authored with an older version of the runtime, using
-            // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
-            // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
-            let block_events = EventsVec::decode(&mut raw_storage.0.as_slice())
-                .expect("Failed to decode Events storage element");
-
+        // Process the events.
+        if let Some(block_events) = events.ok() {
             for event in block_events.iter() {
                 // Filter events of interest and send internal events to tasks listening.
                 match event.event.clone() {
@@ -251,7 +313,7 @@ impl BlockchainService {
         &mut self,
         call: impl Into<storage_hub_runtime::RuntimeCall>,
     ) -> Result<RpcTransactionOutput> {
-        info!(target: LOG_TARGET, "Sending extrinsic to the runtime");
+        debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
 
         // Get the nonce for the caller and increment it for the next transaction.
         let nonce = self.nonce_counter;
@@ -269,7 +331,7 @@ impl BlockchainService {
             .rpc_query(&format!(
                 r#"{{
                     "jsonrpc": "2.0",
-                    "method": "author_submitExtrinsic",
+                    "method": "author_submitAndWatchExtrinsic",
                     "params": ["0x{}"],
                     "id": {:?}
                 }}"#,
@@ -361,6 +423,117 @@ impl BlockchainService {
             polkadot_primitives::Signature::Sr25519(signature.clone()),
             extra.clone(),
         )
+    }
+
+    /// Get an extrinsic from a block.
+    async fn get_extrinsic_from_block(
+        &self,
+        block_hash: H256,
+        extrinsic_hash: H256,
+    ) -> Result<Extrinsic> {
+        info!(target: LOG_TARGET, "Getting extrinsic from block");
+
+        // Get the block.
+        let block = self
+            .client
+            .block(block_hash)
+            .expect("Failed to get block. This shouldn't be possible for known existing block hash; qed")
+            .expect("Block returned None for known existing block hash. This shouldn't be the case for a block known to have at least one transaction; qed");
+
+        // Get the extrinsics.
+        let extrinsics = block.block.extrinsics();
+
+        // Find the extrinsic index in the block.
+        let extrinsic_index = extrinsics
+            .iter()
+            .position(|e| {
+                let hash = Blake2Hasher::hash(&e.encode());
+                hash == extrinsic_hash
+            })
+            .expect("Extrinsic not found in block. This shouldn't be possible if we're looking into a block for which we got confirmation that the extrinsic was included; qed");
+
+        // Get the events from storage.
+        let events = self.get_events_storage_element(block_hash)?;
+
+        info!(target: LOG_TARGET, "Extrinsic found in block: {:?}", extrinsic_index);
+
+        // Construct the extrinsic.
+        Ok(Extrinsic {
+            hash: extrinsic_hash,
+            block_hash,
+            events,
+        })
+    }
+
+    /// Get the events storage element in a block.
+    fn get_events_storage_element(&self, block_hash: H256) -> Result<EventsVec> {
+        // Would be cool to be able to do this...
+        // let events_storage_key = frame_system::Events::<storage_hub_runtime::Runtime>::hashed_key();
+
+        // Get the events storage key.
+        let events_storage_key = [
+            Twox128::hash(b"System").to_vec(),
+            Twox128::hash(b"Events").to_vec(),
+        ]
+        .concat();
+
+        // Get the events storage.
+        let raw_storage_opt = self
+            .client
+            .storage(block_hash, &StorageKey(events_storage_key))
+            .expect("Failed to get Events storage element");
+
+        // Decode the events storage.
+        if let Some(raw_storage) = raw_storage_opt {
+            let block_events = EventsVec::decode(&mut raw_storage.0.as_slice())
+                .expect("Failed to decode Events storage element");
+
+            return Ok(block_events);
+        } else {
+            return Err(anyhow::anyhow!("Failed to get Events storage element"));
+        }
+    }
+
+    /// Unwatch an extrinsic.
+    async fn unwatch_extrinsic(&self, subscription_id: Number) -> Result<RpcTransactionOutput> {
+        let (result, rx) = self
+            .rpc_handlers
+            .rpc_query(&format!(
+                r#"{{
+                    "jsonrpc": "2.0",
+                    "method": "author_unwatchExtrinsic",
+                    "params": [{}],
+                    "id": {}
+                }}"#,
+                subscription_id, subscription_id
+            ))
+            .await
+            .expect("Sending query failed even when it is correctly formatted as JSON-RPC; qed");
+
+        let json: serde_json::Value =
+            serde_json::from_str(&result).expect("the result can only be a JSONRPC string; qed");
+        let unwatch_result = json
+            .as_object()
+            .expect("JSON result is always an object; qed")
+            .get("result");
+
+        if let Some(unwatch_result) = unwatch_result {
+            if unwatch_result
+                .as_bool()
+                .expect("Result is always a boolean; qed")
+            {
+                debug!(target: LOG_TARGET, "Extrinsic unwatched successfully");
+            } else {
+                return Err(anyhow::anyhow!("Failed to unwatch extrinsic"));
+            }
+        } else {
+            return Err(anyhow::anyhow!("Failed to unwatch extrinsic"));
+        }
+
+        Ok(RpcTransactionOutput {
+            result,
+            receiver: rx,
+        })
     }
 }
 
