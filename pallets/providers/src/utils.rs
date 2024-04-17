@@ -404,6 +404,9 @@ where
         Ok(())
     }
 
+    /// This function holds the logic that checks if a user can sign off as a Main Storage Provider
+    /// and, if so, updates the storage to remove the user as a Main Storage Provider, decrements the counter of Main Storage Providers,
+    /// and returns the deposit to the user
     pub fn do_msp_sign_off(who: &T::AccountId) -> DispatchResult {
         // Check that the signer is registered as a MSP and get its info
         let msp_id =
@@ -447,6 +450,9 @@ where
         Ok(())
     }
 
+    /// This function holds the logic that checks if a user can sign off as a Backup Storage Provider
+    /// and, if so, updates the storage to remove the user as a Backup Storage Provider, decrements the counter of Backup Storage Providers,
+    /// decrements the total capacity of the network (which is the sum of all BSPs capacities), and returns the deposit to the user
     pub fn do_bsp_sign_off(who: &T::AccountId) -> DispatchResult {
         // Check that the signer is registered as a BSP and get its info
         let bsp_id =
@@ -499,11 +505,14 @@ where
         Ok(())
     }
 
-    // TODO: design a way (with timelock probably) to allow a SP to change its stake
+    /// This function is in charge of dispatching the logic to change the capacity of a Storage Provider
+    /// It checks if the signer is registered as a SP and dispatches the corresponding function
+    /// that checks if the user can change its capacity and, if so, updates the storage to reflect the new capacity
     pub fn do_change_capacity(
         who: &T::AccountId,
         new_capacity: StorageData<T>,
     ) -> Result<StorageData<T>, DispatchError> {
+        // TODO: design a way (with timelock probably) to allow a SP to change its stake
         // Check that the signer is registered as a SP and dispatch the corresponding function, getting its old capacity
         let old_capacity = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             Self::do_change_capacity_msp(msp_id, new_capacity)?
@@ -516,6 +525,9 @@ where
         Ok(old_capacity)
     }
 
+    /// This function holds the logic that checks if a user can change its capacity as a Main Storage Provider
+    /// and, if so, updates the storage to reflect the new capacity, modifying the user's deposit accordingly
+    /// and returning the old capacity if successful
     pub fn do_change_capacity_msp(
         who: MainStorageProviderId<T>,
         new_capacity: StorageData<T>,
@@ -528,6 +540,9 @@ where
         Ok(old_capacity)
     }
 
+    /// This function holds the logic that checks if a user can change its capacity as a Backup Storage Provider
+    /// and, if so, updates the storage to reflect the new capacity, modifying the user's deposit accordingly
+    /// and returning the old capacity if successful
     pub fn do_change_capacity_bsp(
         who: BackupStorageProviderId<T>,
         new_capacity: StorageData<T>,
