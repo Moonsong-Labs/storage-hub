@@ -14,7 +14,7 @@ pub type EventsVec = Vec<
     >,
 >;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Extrinsic {
     pub hash: H256,
     pub block_hash: H256,

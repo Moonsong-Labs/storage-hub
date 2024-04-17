@@ -1,9 +1,14 @@
+use std::str::FromStr;
+
 use log::{debug, error, info};
+use sp_core::H256;
 use sp_runtime::BoundedVec;
-use storage_hub_infra::event_bus::EventHandler;
+use storage_hub_infra::{actor::ActorHandle, event_bus::EventHandler};
 
 use crate::services::{
-    blockchain::{commands::BlockchainServiceInterface, events::NewStorageRequest},
+    blockchain::{
+        commands::BlockchainServiceInterface, events::NewStorageRequest, handler::BlockchainService,
+    },
     StorageHubHandler,
 };
 
@@ -24,6 +29,13 @@ impl BspVolunteerMockTask {
 
 impl EventHandler<NewStorageRequest> for BspVolunteerMockTask {
     async fn handle_event(&self, event: NewStorageRequest) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET,
+            "Initiating BSP volunteer mock for location: {:?}, fingerprint: {:?}",
+            event.location,
+            event.fingerprint
+        );
+
         // TODO: Here we would send the actual multiaddresses of this BSP.
         let multiaddresses = BoundedVec::default();
 
@@ -35,14 +47,13 @@ impl EventHandler<NewStorageRequest> for BspVolunteerMockTask {
                 multiaddresses,
             });
 
-        let mut tx_watcher = self
+        let (mut tx_watcher, tx_hash) = self
             .storage_hub_handler
             .blockchain
             .send_extrinsic(call)
             .await;
 
         // Wait for the transaction to be included in a block.
-        // TODO: unwatch transaction to release tx_watcher.
         let mut block_hash = None;
         // TODO: Consider adding a timeout.
         while let Some(tx_result) = tx_watcher.recv().await {
@@ -61,7 +72,7 @@ impl EventHandler<NewStorageRequest> for BspVolunteerMockTask {
             // Checking if the transaction is included in a block.
             // TODO: Consider if we might want to wait for "finalized".
             if let Some(in_block) = json["params"]["result"]["inBlock"].as_str() {
-                block_hash = Some(in_block.to_owned());
+                block_hash = Some(H256::from_str(in_block)?);
                 let subscription_id = json["params"]["subscription"]
                     .as_number()
                     .expect("Subscription should exist and be a number; qed");
@@ -80,7 +91,27 @@ impl EventHandler<NewStorageRequest> for BspVolunteerMockTask {
             }
         }
 
-        info!(target: LOG_TARGET, "No more transaction information");
+        // Get the extrinsic from the block, with its events.
+        let block_hash = block_hash.expect(
+            "Block hash should exist after waiting for extrinsic to be included in a block; qed",
+        );
+        let extrinsic_in_block = self
+            .storage_hub_handler
+            .blockchain
+            .get_extrinsic_from_block(block_hash, tx_hash)
+            .await?;
+
+        // Check if the extrinsic was successful. In this mocked task we know this should fail if Alice is
+        // not a registered BSP.
+        let extrinsic_successful = ActorHandle::<BlockchainService>::extrinsic_successful(extrinsic_in_block.clone())
+            .expect("Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed");
+        if !extrinsic_successful {
+            error!(target: LOG_TARGET, "BSP failed to volunteer mock due to extrinsic failure");
+            return Err(anyhow::anyhow!("Extrinsic failed"));
+        }
+
+        info!(target: LOG_TARGET, "Extrinsic successful");
+        info!(target: LOG_TARGET, "Events in extrinsic: {:?}", &extrinsic_in_block.events);
 
         Ok(())
     }
