@@ -15,4 +15,7 @@ publish = false
 workspace = true
 
 [dependencies]
+sp-core = { workspace = true }
+sp-trie = { workspace = true }
+
 storage-hub-infra = { workspace = true }

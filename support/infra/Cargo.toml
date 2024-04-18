@@ -21,4 +21,3 @@ sc-service = { workspace = true }
 sc-utils = { workspace = true }
 
 sp-core = { workspace = true }
-sp-trie = { workspace = true }

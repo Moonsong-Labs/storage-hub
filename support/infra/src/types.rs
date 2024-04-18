@@ -18,3 +18,15 @@ pub struct Metadata {
 // TODO: this is currently a placeholder in order to define Storage interface.
 /// Typed chunk of a file. This is what is stored in the leaf of the stored Merkle tree.
 pub type Chunk = [u8; FILE_CHUNK_SIZE];
+
+/// Leaf in the Forest or File trie.
+pub struct Leaf<D> {
+    pub key: Key,
+    pub data: D,
+}
+
+/// Proving either the exact key or the neighbour keys of the challenged key.
+pub enum Proven<D> {
+    ExactKey(Leaf<D>),
+    NeighbourKeys((Leaf<D>, Leaf<D>)),
+}

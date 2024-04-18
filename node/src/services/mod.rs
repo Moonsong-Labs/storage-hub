@@ -2,13 +2,14 @@ pub mod blockchain;
 pub mod file_transfer;
 
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
+use file_manager::traits::FileStorage;
+use forest_manager::traits::ForestStorage;
 use storage_hub_infra::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::EventHandler,
-    storage::{FileStorage, ForestStorage},
 };
-use tokio::sync::RwLock;
 
 use crate::tasks::{
     AcceptedBspVolunteerHandler, NewStorageRequestHandler, ResolveRemoteUploadRequest,

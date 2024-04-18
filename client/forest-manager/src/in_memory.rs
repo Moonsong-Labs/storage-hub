@@ -1,3 +1,6 @@
+use storage_hub_infra::types::Key;
+
+use crate::traits::{ForestProof, ForestStorage};
 pub struct InMemoryForestStorage {}
 
 impl InMemoryForestStorage {
@@ -6,25 +9,16 @@ impl InMemoryForestStorage {
     }
 }
 
-impl storage_hub_infra::storage::ForestStorage for InMemoryForestStorage {
-    fn generate_proof(
-        &self,
-        _challenged_file_key: &storage_hub_infra::types::Key,
-    ) -> storage_hub_infra::storage::ForestProof {
+impl ForestStorage for InMemoryForestStorage {
+    fn generate_proof(&self, _challenged_file_key: &Key) -> ForestProof {
         unimplemented!()
     }
 
-    fn delete_file_key(
-        &self,
-        _file_key: &storage_hub_infra::types::Key,
-    ) -> storage_hub_infra::storage::ForestProof {
+    fn delete_file_key(&self, _file_key: &Key) -> ForestProof {
         unimplemented!()
     }
 
-    fn insert_file_key(
-        &self,
-        _file_key: &storage_hub_infra::types::Key,
-    ) -> storage_hub_infra::storage::ForestProof {
+    fn insert_file_key(&self, _file_key: &Key) -> ForestProof {
         unimplemented!()
     }
 }
