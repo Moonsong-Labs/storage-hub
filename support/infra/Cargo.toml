@@ -19,3 +19,5 @@ tokio = { workspace = true }
 sc-tracing = { workspace = true }
 sc-service = { workspace = true }
 sc-utils = { workspace = true }
+
+sp-core = { workspace = true }
