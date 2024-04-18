@@ -1,9 +1,12 @@
 [package]
 name = "pallet-randomness"
-authors = { workspace = true }
-description = "Provides randomness"
-edition = "2021"
+description = "This pallet provides verifiable randomness to the runtime"
 version = "0.1.0"
+homepage = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
 
 [dependencies]
 frame-support = { workspace = true }

@@ -114,7 +114,6 @@ polkadot-runtime-common = { git = "https://github.com/paritytech/polkadot-sdk.gi
 xcm = { package = "staging-xcm", git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
 xcm-builder = { package = "staging-xcm-builder", git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
 xcm-executor = { package = "staging-xcm-executor", git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.9.0", default-features = false }
-#kusama-runtime-constants = { git = "https://github.com/polkadot-fellows/runtimes.git", tag = "v1.2.1", default-features = false }
 runtime-constants = { package = "polkadot-runtime-constants", git = "https://github.com/polkadot-fellows/runtimes.git", tag = "v1.2.1", default-features = false }
 
 # Cumulus

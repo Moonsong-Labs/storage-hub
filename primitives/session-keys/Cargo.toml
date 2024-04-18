@@ -1,9 +1,12 @@
 [package]
 name = "session-keys-primitives"
-authors = { workspace = true }
 description = "Primitives for session keys"
-edition = "2021"
 version = "0.1.0"
+homepage = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
 
 [dependencies]
 frame-support = { workspace = true }

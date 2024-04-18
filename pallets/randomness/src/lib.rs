@@ -114,6 +114,9 @@ pub mod pallet {
                     // Save it to be readily available for use
                     LatestBabeRandomness::<T>::put((randomness, latest_valid_block));
 
+                    // Update storage with the latest epoch for which randomness was processed for
+                    <RelayEpoch<T>>::put(relay_epoch_index);
+
                     // Emit an event detailing that a new randomness is available
                     Self::deposit_event(Event::NewRandomnessAvailable {
                         randomness_seed: randomness,
@@ -128,9 +131,6 @@ pub mod pallet {
                     );
                 }
             }
-
-            // Update storage with the latest epoch for which randomness was processed for
-            <RelayEpoch<T>>::put(relay_epoch_index);
 
             // Update storage to reflect that this inherent was included in the block (so the block is valid)
             <InherentIncluded<T>>::put(());
@@ -168,8 +168,14 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        /// This hook is called on block initialization and returns the Weight of the `on_finalize` hook to
+        /// let block builders know how much weight to reserve for it
+        /// TODO: Benchmark on_finalize to get its weight and replace the placeholder weight for that
+        fn on_initialize(_now: BlockNumberFor<T>) -> Weight {
+            Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1)
+        }
         /// This hook checks, on block finalization, that the required inherent was included and clears
-        /// storage to make it necesary to include it in future blocks as well
+        /// storage to make it necessary to include it in future blocks as well
         fn on_finalize(_now: BlockNumberFor<T>) {
             // Ensure the mandatory inherent was included in the block or the block is invalid
             // We use take() to make sure this is storage is not set for the next block
@@ -183,7 +189,7 @@ pub mod pallet {
     // Randomness trait
     impl<T: Config> frame_support::traits::Randomness<T::Hash, BlockNumberFor<T>> for Pallet<T> {
         /// Uses the BABE randomness of this epoch to generate a random seed that can be used
-        /// for commitments from the last epoch. The provided `subject` MUST have been commited
+        /// for commitments from the last epoch. The provided `subject` MUST have been committed
         /// AT LEAST during the last epoch for the result of this function to not be predictable
         ///
         /// The subject is a byte array that is hashed (to make it a fixed size) and then concatenated with
@@ -203,7 +209,6 @@ pub mod pallet {
                 (randomness, latest_valid_block)
             } else {
                 // If there's no randomness available, return an empty randomness that's invalid for every block
-                // TODO: Check edge case (randomness requested on the first block of the runtime for example)
                 let randomness = T::Hash::default();
                 let latest_valid_block: BlockNumberFor<T> = sp_runtime::traits::Zero::zero();
                 (randomness, latest_valid_block)
