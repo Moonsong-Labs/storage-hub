@@ -24,7 +24,6 @@ frame-benchmarking = { workspace = true, optional = true }
 
 
 [dev-dependencies]
-#derive_more = { workspace = true }
 pallet-balances = { workspace = true, features = ["std", "insecure_zero_ed"] }
 
 [features]

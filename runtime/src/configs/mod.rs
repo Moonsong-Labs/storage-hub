@@ -44,7 +44,7 @@ use pallet_proofs_dealer::{CompactProof, TrieVerifier};
 use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
-    xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
+    prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get};
@@ -63,7 +63,7 @@ use super::{
     RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
     Session, SessionKeys, System, WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO,
     BLOCK_PROCESSING_VELOCITY, EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT,
-    NORMAL_DISPATCH_RATIO, RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION,
+    MINUTES, NORMAL_DISPATCH_RATIO, RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION,
     UNINCLUDED_SEGMENT_CAPACITY, VERSION,
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
@@ -355,7 +355,16 @@ impl pallet_randomness::GetBabeData<u64, Option<Hash>> for BabeDataGetter {
             .flatten()
     }
 }
-const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 100;
+
+parameter_types! {
+    pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * HOURS, 2 * MINUTES);
+}
+
+// TODO: If the next line is uncommented (which should be eventually), compilation breaks (most likely because of mismatched dependency issues)
+/* parameter_types! {
+    pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * runtime_constants::time::EPOCH_DURATION_IN_SLOTS, 2 * MINUTES);
+} */
+
 /// Configure the randomness pallet
 impl pallet_randomness::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
@@ -382,7 +391,7 @@ impl pallet_storage_providers::Config for Runtime {
     type RuntimeHoldReason = RuntimeHoldReason;
     type Subscribers = FileSystem;
     type ProvidersRandomness = Randomness;
-    type MaxBlocksForRandomness = ConstU32<{ 2 * EPOCH_DURATION_IN_BLOCKS }>;
+    type MaxBlocksForRandomness = MaxBlocksForRandomness;
 }
 
 // TODO: remove this and replace with pallet treasury

@@ -67,6 +67,8 @@ polkadot-runtime-common = { workspace = true }
 xcm = { workspace = true }
 xcm-builder = { workspace = true }
 xcm-executor = { workspace = true }
+runtime-constants = { workspace = true }
+#kusama-runtime-constants = { workspace = true }
 
 # Cumulus
 cumulus-pallet-aura-ext = { workspace = true }
@@ -138,6 +140,7 @@ std = [
 	"sp-transaction-pool/std",
 	"sp-version/std",
 	"substrate-wasm-builder",
+	"runtime-constants/std",
 	"xcm-builder/std",
 	"xcm-executor/std",
 	"xcm/std",
