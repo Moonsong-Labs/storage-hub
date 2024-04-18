@@ -278,7 +278,7 @@ pub mod pallet {
         /// that BSP's account id.
         BspSignOffSuccess { who: T::AccountId },
 
-        /// Event emitted when a SP has changed is total data (stake) successfully. Provides information about
+        /// Event emitted when a SP has changed its capacity successfully. Provides information about
         /// that SP's account id, its old total data that could store, and the new total data.
         CapacityChanged {
             who: T::AccountId,
