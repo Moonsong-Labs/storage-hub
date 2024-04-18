@@ -587,7 +587,7 @@ pub mod pallet {
         /// 	b. If the new deposit is less than the current deposit, return the held difference to the signer
         /// 7. Update the SPs storage to change the total data
         /// 8. If user is a BSP, update the total capacity of the network (sum of all capacities of BSPs)
-        /// 8. Emit an event confirming that the change of the capacity has been successful
+        /// 9. Emit an event confirming that the change of the capacity has been successful
         #[pallet::call_index(6)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn change_capacity(

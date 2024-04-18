@@ -541,7 +541,7 @@ where
         // Check that the MSP is registered and get its info
         let mut msp = MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
 
-        // Check that the new capacity is diferent from the current capacity
+        // Check that the new capacity is different from the current capacity
         ensure!(
             new_capacity != msp.capacity,
             Error::<T>::NewCapacityEqualsCurrentCapacity
@@ -577,7 +577,7 @@ where
             .checked_add(&deposit_for_capacity_over_minimum)
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
-        // Check how much has the used already deposited for the current capacity
+        // Check how much has the MSP already deposited for the current capacity
         let current_deposit = T::NativeBalance::balance_on_hold(
             &HoldReason::StorageProviderDeposit.into(),
             account_id,
@@ -617,7 +617,7 @@ where
         // Check that the BSP is registered and get its info
         let mut bsp = BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
 
-        // Check that the new capacity is diferent from the current capacity
+        // Check that the new capacity is different from the current capacity
         ensure!(
             new_capacity != bsp.capacity,
             Error::<T>::NewCapacityEqualsCurrentCapacity
