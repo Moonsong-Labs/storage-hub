@@ -587,54 +587,11 @@ where
         // Note: we do not check directly capacities as, for example, a bigger new_capacity could entail a smaller deposit
         // because of changes in storage pricing, so we check the difference in deposits instead
         if new_deposit > current_deposit {
-            // If the new deposit is bigger than the current deposit, more balance has to be held from the user:
-
-            // Get the user's reducible balance
-            let user_balance = T::NativeBalance::reducible_balance(
-                account_id,
-                Preservation::Preserve,
-                Fortitude::Polite,
-            );
-
-            // Get the difference between the new deposit and the current deposit
-            let difference = new_deposit
-                .checked_sub(&current_deposit)
-                .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
-
-            // Check if the user has enough balance to pay the difference
-            ensure!(user_balance >= difference, Error::<T>::NotEnoughBalance);
-
-            // Check if we can hold the difference from the user
-            ensure!(
-                T::NativeBalance::can_hold(
-                    &HoldReason::StorageProviderDeposit.into(),
-                    account_id,
-                    difference,
-                ),
-                Error::<T>::CannotHoldDeposit
-            );
-
-            // Hold the difference from the user
-            T::NativeBalance::hold(
-                &HoldReason::StorageProviderDeposit.into(),
-                account_id,
-                difference,
-            )?;
+            // If the new deposit is bigger than the current deposit, more balance has to be held from the user
+            Self::hold_balance(account_id, current_deposit, new_deposit)?;
         } else if new_deposit < current_deposit {
-            // If the new deposit is smaller than the current deposit, some balance has to be released to the user:
-
-            // Get the difference between the current deposit and the new deposit
-            let difference = current_deposit
-                .checked_sub(&new_deposit)
-                .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
-
-            // Release the difference from the user
-            T::NativeBalance::release(
-                &HoldReason::StorageProviderDeposit.into(),
-                account_id,
-                difference,
-                Precision::Exact,
-            )?;
+            // If the new deposit is smaller than the current deposit, some balance has to be released to the user
+            Self::release_balance(account_id, current_deposit, new_deposit)?;
         }
 
         // Get the MSP's old capacity
@@ -706,54 +663,11 @@ where
         // Note: we do not check directly capacities as, for example, a bigger new_capacity could entail a smaller deposit
         // because of changes in storage pricing, so we check the difference in deposits instead
         if new_deposit > current_deposit {
-            // If the new deposit is bigger than the current deposit, more balance has to be held from the user:
-
-            // Get the user's reducible balance
-            let user_balance = T::NativeBalance::reducible_balance(
-                account_id,
-                Preservation::Preserve,
-                Fortitude::Polite,
-            );
-
-            // Get the difference between the new deposit and the current deposit
-            let difference = new_deposit
-                .checked_sub(&current_deposit)
-                .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
-
-            // Check if the user has enough balance to pay the difference
-            ensure!(user_balance >= difference, Error::<T>::NotEnoughBalance);
-
-            // Check if we can hold the difference from the user
-            ensure!(
-                T::NativeBalance::can_hold(
-                    &HoldReason::StorageProviderDeposit.into(),
-                    account_id,
-                    difference,
-                ),
-                Error::<T>::CannotHoldDeposit
-            );
-
-            // Hold the difference from the user
-            T::NativeBalance::hold(
-                &HoldReason::StorageProviderDeposit.into(),
-                account_id,
-                difference,
-            )?;
+            // If the new deposit is bigger than the current deposit, more balance has to be held from the user
+            Self::hold_balance(account_id, current_deposit, new_deposit)?;
         } else if new_deposit < current_deposit {
-            // If the new deposit is smaller than the current deposit, some balance has to be released to the user:
-
-            // Get the difference between the current deposit and the new deposit
-            let difference = current_deposit
-                .checked_sub(&new_deposit)
-                .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
-
-            // Release the difference from the user
-            T::NativeBalance::release(
-                &HoldReason::StorageProviderDeposit.into(),
-                account_id,
-                difference,
-                Precision::Exact,
-            )?;
+            // If the new deposit is smaller than the current deposit, some balance has to be released to the user
+            Self::release_balance(account_id, current_deposit, new_deposit)?;
         }
 
         // Get the BSP's old capacity
@@ -795,6 +709,67 @@ where
 
         // Return the old capacity
         Ok(old_capacity)
+    }
+
+    fn hold_balance(
+        account_id: &T::AccountId,
+        previous_deposit: BalanceOf<T>,
+        new_deposit: BalanceOf<T>,
+    ) -> DispatchResult {
+        // Get the user's reducible balance
+        let user_balance = T::NativeBalance::reducible_balance(
+            account_id,
+            Preservation::Preserve,
+            Fortitude::Polite,
+        );
+
+        // Get the difference between the new deposit and the current deposit
+        let difference = new_deposit
+            .checked_sub(&previous_deposit)
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+
+        // Check if the user has enough balance to pay the difference
+        ensure!(user_balance >= difference, Error::<T>::NotEnoughBalance);
+
+        // Check if we can hold the difference from the user
+        ensure!(
+            T::NativeBalance::can_hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                account_id,
+                difference,
+            ),
+            Error::<T>::CannotHoldDeposit
+        );
+
+        // Hold the difference from the user
+        T::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            account_id,
+            difference,
+        )?;
+
+        Ok(())
+    }
+
+    fn release_balance(
+        account_id: &T::AccountId,
+        previous_deposit: BalanceOf<T>,
+        new_deposit: BalanceOf<T>,
+    ) -> DispatchResult {
+        // Get the difference between the current deposit and the new deposit
+        let difference = previous_deposit
+            .checked_sub(&new_deposit)
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+
+        // Release the difference from the user
+        T::NativeBalance::release(
+            &HoldReason::StorageProviderDeposit.into(),
+            account_id,
+            difference,
+            Precision::Exact,
+        )?;
+
+        Ok(())
     }
 }
 
