@@ -75,10 +75,15 @@ lazy_static! {
 /// For such purposes, it uses the [`ParachainClient`] to interact with the runtime, the [`RpcHandlers`] to send
 /// extrinsics, and the [`Keystore`] to sign the extrinsics.
 pub struct BlockchainService {
+    /// The event bus provider.
     event_bus_provider: BlockchainServiceEventBusProvider,
+    /// The parachain client. Used to interact with the runtime.
     client: Arc<ParachainClient>,
+    /// The keystore. Used to sign extrinsics.
     keystore: KeystorePtr,
+    /// The RPC handlers. Used to send extrinsics.
     rpc_handlers: Arc<RpcHandlers>,
+    /// Nonce counter for the extrinsics.
     nonce_counter: u32,
 }
 
