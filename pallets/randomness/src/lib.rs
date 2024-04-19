@@ -172,7 +172,7 @@ pub mod pallet {
         /// let block builders know how much weight to reserve for it
         /// TODO: Benchmark on_finalize to get its weight and replace the placeholder weight for that
         fn on_initialize(_now: BlockNumberFor<T>) -> Weight {
-            Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1)
+            Weight::from_parts(10_000, 0) + T::DbWeight::get().reads_writes(1, 1)
         }
         /// This hook checks, on block finalization, that the required inherent was included and clears
         /// storage to make it necessary to include it in future blocks as well
