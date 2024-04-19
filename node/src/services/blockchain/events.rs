@@ -27,10 +27,15 @@ impl EventBusMessage for ChallengeRequest {}
 /// - `multiaddresses`: the multiaddresses from where the user would send the file.
 #[derive(Debug, Clone)]
 pub struct NewStorageRequest {
+    /// Account ID of the requester.
     pub who: AccountId32,
+    /// Location of the file (as a file path).
     pub location: FileLocation,
+    /// Fingerprint of the file (root hash of the merklised file).
     pub fingerprint: H256,
+    /// Size of the file.
     pub size: StorageData,
+    /// Multiaddresses from where the user would send the file.
     pub multiaddresses: BoundedVec<MultiAddress, MaxDataServerMultiAddresses>,
 }
 
