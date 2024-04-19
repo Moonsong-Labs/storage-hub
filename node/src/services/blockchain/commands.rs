@@ -1,10 +1,12 @@
 use anyhow::Result;
-use jsonrpsee::tracing::event;
 use serde_json::Number;
 use sp_core::H256;
 use storage_hub_infra::actor::ActorHandle;
 
-use super::{handler::BlockchainService, types::Extrinsic};
+use super::{
+    handler::BlockchainService,
+    types::{Extrinsic, ExtrinsicResult},
+};
 
 /// Commands that can be sent to the BlockchainService actor.
 #[derive(Debug)]
@@ -43,7 +45,7 @@ pub trait BlockchainServiceInterface {
     async fn unwatch_extrinsic(&self, subscription_id: Number) -> Result<()>;
 
     /// Helper function to check if an extrinsic failed or succeeded in a block.
-    fn extrinsic_successful(extrinsic: Extrinsic) -> Result<bool>;
+    fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -89,21 +91,24 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 
-    fn extrinsic_successful(extrinsic: Extrinsic) -> Result<bool> {
+    fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult> {
         for ev in extrinsic.events {
             match ev.event {
                 storage_hub_runtime::RuntimeEvent::System(
                     frame_system::Event::ExtrinsicFailed {
-                        dispatch_error: _,
-                        dispatch_info: _,
+                        dispatch_error,
+                        dispatch_info,
                     },
                 ) => {
-                    return Ok(false);
+                    return Ok(ExtrinsicResult::Failure {
+                        dispatch_info,
+                        dispatch_error,
+                    });
                 }
                 storage_hub_runtime::RuntimeEvent::System(
-                    frame_system::Event::ExtrinsicSuccess { dispatch_info: _ },
+                    frame_system::Event::ExtrinsicSuccess { dispatch_info },
                 ) => {
-                    return Ok(true);
+                    return Ok(ExtrinsicResult::Success { dispatch_info });
                 }
                 _ => {}
             }

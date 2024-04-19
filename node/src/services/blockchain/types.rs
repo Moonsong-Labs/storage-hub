@@ -1,5 +1,7 @@
+use frame_support::dispatch::DispatchInfo;
 use frame_system::EventRecord;
 use sp_core::H256;
+use sp_runtime::DispatchError;
 
 /// Type alias for the events vector.
 ///
@@ -14,9 +16,32 @@ pub type EventsVec = Vec<
     >,
 >;
 
+/// Extrinsic struct.
+///
+/// This struct represents an extrinsic in the blockchain. It contains the following fields:
+/// - `hash`: the hash of the extrinsic.
+/// - `block_hash`: the hash of the block in which the extrinsic was included.
+/// - `events`: the events that occurred during the execution of the extrinsic.
 #[derive(Debug, Clone)]
 pub struct Extrinsic {
     pub hash: H256,
     pub block_hash: H256,
     pub events: EventsVec,
+}
+
+/// ExtrinsicResult enum.
+///
+/// This enum represents the result of an extrinsic execution. It can be either a success or a failure. It contains the
+/// following variants:
+/// - `Success`: the extrinsic was executed successfully.
+/// - `Failure`: the extrinsic execution failed.
+
+pub enum ExtrinsicResult {
+    Success {
+        dispatch_info: DispatchInfo,
+    },
+    Failure {
+        dispatch_error: DispatchError,
+        dispatch_info: DispatchInfo,
+    },
 }

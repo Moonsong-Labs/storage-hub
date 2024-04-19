@@ -7,7 +7,8 @@ use storage_hub_infra::{actor::ActorHandle, event_bus::EventHandler};
 
 use crate::services::{
     blockchain::{
-        commands::BlockchainServiceInterface, events::NewStorageRequest, handler::BlockchainService,
+        commands::BlockchainServiceInterface, events::NewStorageRequest,
+        handler::BlockchainService, types::ExtrinsicResult,
     },
     StorageHubHandler,
 };
@@ -103,14 +104,21 @@ impl EventHandler<NewStorageRequest> for BspVolunteerMockTask {
 
         // Check if the extrinsic was successful. In this mocked task we know this should fail if Alice is
         // not a registered BSP.
-        let extrinsic_successful = ActorHandle::<BlockchainService>::extrinsic_successful(extrinsic_in_block.clone())
+        let extrinsic_successful = ActorHandle::<BlockchainService>::extrinsic_result(extrinsic_in_block.clone())
             .expect("Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed");
-        if !extrinsic_successful {
-            error!(target: LOG_TARGET, "BSP failed to volunteer mock due to extrinsic failure");
-            return Err(anyhow::anyhow!("Extrinsic failed"));
+        match extrinsic_successful {
+            ExtrinsicResult::Success { dispatch_info } => {
+                info!(target: LOG_TARGET, "Extrinsic successful with dispatch info: {:?}", dispatch_info);
+            }
+            ExtrinsicResult::Failure {
+                dispatch_error,
+                dispatch_info,
+            } => {
+                error!(target: LOG_TARGET, "Extrinsic failed with dispatch error: {:?}, dispatch info: {:?}", dispatch_error, dispatch_info);
+                return Err(anyhow::anyhow!("Extrinsic failed"));
+            }
         }
 
-        info!(target: LOG_TARGET, "Extrinsic successful");
         info!(target: LOG_TARGET, "Events in extrinsic: {:?}", &extrinsic_in_block.events);
 
         Ok(())
