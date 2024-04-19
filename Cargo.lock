@@ -3184,8 +3184,8 @@ checksum = "c007b1ae3abe1cb6f85a16305acd418b7ca6343b953633fee2b76d8f108b830f"
 name = "file-manager"
 version = "0.1.0"
 dependencies = [
- "sp-core",
- "sp-trie",
+ "sp-core 28.0.0",
+ "sp-trie 29.0.0",
  "storage-hub-infra",
 ]
 
@@ -3275,8 +3275,8 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 name = "forest-manager"
 version = "0.1.0"
 dependencies = [
- "sp-core",
- "sp-trie",
+ "sp-core 28.0.0",
+ "sp-trie 29.0.0",
  "storage-hub-infra",
 ]
 
@@ -14257,7 +14257,7 @@ dependencies = [
  "sc-service",
  "sc-tracing",
  "sc-utils",
- "sp-core",
+ "sp-core 28.0.0",
  "tokio",
 ]
 
@@ -14281,10 +14281,9 @@ dependencies = [
  "cumulus-primitives-core",
  "cumulus-primitives-parachain-inherent",
  "cumulus-relay-chain-interface",
- "frame-benchmarking 28.0.0",
  "file-manager",
  "forest-manager",
- "frame-benchmarking",
+ "frame-benchmarking 28.0.0",
  "frame-benchmarking-cli",
  "futures",
  "futures-timer",
