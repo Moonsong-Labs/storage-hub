@@ -28,6 +28,8 @@ tokio = { workspace = true }
 # Local
 storage-hub-runtime = { workspace = true }
 storage-hub-infra = { workspace = true }
+file-manager = { workspace = true }
+forest-manager = { workspace = true }
 
 # Substrate
 clap = { workspace = true }
