@@ -9,7 +9,7 @@ homepage = "https://moonsonglabs.com/"
 panic = "unwind"
 
 [workspace]
-members = ["runtime", "pallets/*", "node", "support/*"]
+members = ["runtime", "pallets/*", "node", "client/*", "support/*"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -144,6 +144,9 @@ parachain-info = { package = "staging-parachain-info", git = "https://github.com
 pallet-storage-providers = { path = "pallets/providers", default-features = false }
 pallet-file-system = { path = "pallets/file-system", default-features = false }
 pallet-proofs-dealer = { path = "pallets/proofs-dealer", default-features = false }
+
+file-manager = { path = "client/file-manager", default-features = false }
+forest-manager = { path = "client/forest-manager", default-features = false }
 
 storage-hub-traits = { path = "support/traits", default-features = false }
 storage-hub-infra = { path = "support/infra", default-features = false }

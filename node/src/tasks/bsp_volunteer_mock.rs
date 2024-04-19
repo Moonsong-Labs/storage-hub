@@ -10,25 +10,32 @@ use crate::services::{
         commands::BlockchainServiceInterface, events::NewStorageRequest,
         handler::BlockchainService, types::ExtrinsicResult,
     },
-    StorageHubHandler,
+    StorageHubHandler, StorageHubHandlerConfig,
 };
 
 const LOG_TARGET: &str = "bsp-volunteer-mock-task";
 
-#[derive(Clone)]
-pub struct BspVolunteerMockTask {
-    storage_hub_handler: StorageHubHandler,
+pub struct BspVolunteerMockTask<SHC: StorageHubHandlerConfig> {
+    storage_hub_handler: StorageHubHandler<SHC>,
 }
 
-impl BspVolunteerMockTask {
-    pub fn new(storage_hub_handler: StorageHubHandler) -> Self {
+impl<SHC: StorageHubHandlerConfig> Clone for BspVolunteerMockTask<SHC> {
+    fn clone(&self) -> BspVolunteerMockTask<SHC> {
         Self {
-            storage_hub_handler: storage_hub_handler,
+            storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl EventHandler<NewStorageRequest> for BspVolunteerMockTask {
+impl<SHC: StorageHubHandlerConfig> BspVolunteerMockTask<SHC> {
+    pub fn new(storage_hub_handler: StorageHubHandler<SHC>) -> Self {
+        Self {
+            storage_hub_handler,
+        }
+    }
+}
+
+impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunteerMockTask<SHC> {
     async fn handle_event(&self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,

@@ -357,6 +357,7 @@ impl pallet_storage_providers::Config for Runtime {
     type Subscribers = FileSystem;
     type ProvidersRandomness = MockRandomness;
     type MaxBlocksForRandomness = ConstU32<{ 2 * EPOCH_DURATION_IN_BLOCKS }>;
+    type MinBlocksBetweenCapacityChanges = ConstU32<10>;
 }
 
 // TODO: remove this and replace with pallet treasury
