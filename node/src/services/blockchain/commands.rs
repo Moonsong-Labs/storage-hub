@@ -13,7 +13,7 @@ use super::{
 pub enum BlockchainServiceCommand {
     SendExtrinsic {
         call: storage_hub_runtime::RuntimeCall,
-        callback: tokio::sync::oneshot::Sender<(tokio::sync::mpsc::Receiver<String>, H256)>,
+        callback: tokio::sync::oneshot::Sender<Result<(tokio::sync::mpsc::Receiver<String>, H256)>>,
     },
     GetExtrinsicFromBlock {
         block_hash: H256,
@@ -32,7 +32,7 @@ pub trait BlockchainServiceInterface {
     async fn send_extrinsic(
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall>,
-    ) -> (tokio::sync::mpsc::Receiver<String>, H256);
+    ) -> Result<(tokio::sync::mpsc::Receiver<String>, H256)>;
 
     /// Get an extrinsic from a block.
     async fn get_extrinsic_from_block(
@@ -53,7 +53,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn send_extrinsic(
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall>,
-    ) -> (tokio::sync::mpsc::Receiver<String>, H256) {
+    ) -> Result<(tokio::sync::mpsc::Receiver<String>, H256)> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         // Build command to send to blockchain service.
         let message = BlockchainServiceCommand::SendExtrinsic {

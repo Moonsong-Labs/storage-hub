@@ -12860,6 +12860,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "jsonrpsee",
+ "lazy_static",
  "libp2p-identity",
  "log",
  "pallet-file-system",

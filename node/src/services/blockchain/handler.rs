@@ -23,6 +23,7 @@ use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
 use frame_support::{StorageHasher, Twox128};
 use futures::{prelude::*, stream::select};
+use lazy_static::lazy_static;
 use log::{debug, trace, warn};
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{
@@ -53,6 +54,21 @@ use super::{
 
 const LOG_TARGET: &str = "blockchain-service";
 
+lazy_static! {
+    // Would be cool to be able to do this...
+    // let events_storage_key = frame_system::Events::<storage_hub_runtime::Runtime>::hashed_key();
+
+    // Static and lazily initialized `events_storage_key`
+    static ref EVENTS_STORAGE_KEY: Vec<u8> = {
+        let key = [
+            Twox128::hash(b"System").to_vec(),
+            Twox128::hash(b"Events").to_vec(),
+        ]
+        .concat();
+        key
+    };
+}
+
 /// The BlockchainService actor.
 ///
 /// This actor is responsible for sending extrinsics to the runtime and handling block import notifications.
@@ -82,7 +98,7 @@ impl Actor for BlockchainService {
                     match self.send_extrinsic(call).await {
                         Ok(output) => {
                             debug!(target: LOG_TARGET, "Extrinsic sent successfully: {:?}", output);
-                            match callback.send((output.receiver, output.hash)) {
+                            match callback.send(Ok((output.receiver, output.hash))) {
                                 Ok(_) => {
                                     trace!(target: LOG_TARGET, "Receiver sent successfully");
                                 }
@@ -94,13 +110,7 @@ impl Actor for BlockchainService {
                         Err(e) => {
                             warn!(target: LOG_TARGET, "Failed to send extrinsic: {:?}", e);
 
-                            // Send the error to the callback.
-                            let (tx, rx) = tokio::sync::mpsc::channel(1);
-                            if tx.send(e.to_string()).await.is_err() {
-                                error!(target: LOG_TARGET, "Failed to send error message through channel");
-                            }
-
-                            match callback.send((rx, H256::zero())) {
+                            match callback.send(Err(e)) {
                                 Ok(_) => {
                                     trace!(target: LOG_TARGET, "Receiver sent successfully");
                                 }
@@ -318,6 +328,7 @@ impl BlockchainService {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
 
         // Get the nonce for the caller and increment it for the next transaction.
+        // TODO: Handle initialisation of nonce when node is restarted.
         let nonce = self.nonce_counter;
         self.nonce_counter += 1;
 
@@ -528,20 +539,10 @@ impl BlockchainService {
 
     /// Get the events storage element in a block.
     fn get_events_storage_element(&self, block_hash: H256) -> Result<EventsVec> {
-        // Would be cool to be able to do this...
-        // let events_storage_key = frame_system::Events::<storage_hub_runtime::Runtime>::hashed_key();
-
-        // Get the events storage key.
-        let events_storage_key = [
-            Twox128::hash(b"System").to_vec(),
-            Twox128::hash(b"Events").to_vec(),
-        ]
-        .concat();
-
         // Get the events storage.
         let raw_storage_opt = self
             .client
-            .storage(block_hash, &StorageKey(events_storage_key))
+            .storage(block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))
             .expect("Failed to get Events storage element");
 
         // Decode the events storage.

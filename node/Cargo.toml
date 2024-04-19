@@ -20,6 +20,7 @@ async-channel = { workspace = true }
 async-io = { workspace = true }
 color-print = { workspace = true }
 futures-timer = { workspace = true }
+lazy-static = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
 prost = { workspace = true }
 thiserror = { workspace = true }

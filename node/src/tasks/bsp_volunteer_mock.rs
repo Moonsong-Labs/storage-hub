@@ -52,18 +52,12 @@ impl EventHandler<NewStorageRequest> for BspVolunteerMockTask {
             .storage_hub_handler
             .blockchain
             .send_extrinsic(call)
-            .await;
+            .await?;
 
         // Wait for the transaction to be included in a block.
         let mut block_hash = None;
         // TODO: Consider adding a timeout.
         while let Some(tx_result) = tx_watcher.recv().await {
-            // Checking if there is an update with an error in our transaction.
-            if tx_result.starts_with("Error") {
-                error!(target: LOG_TARGET, "Error in transaction: {:?}", tx_result);
-                return Err(anyhow::anyhow!("Error in transaction: {:?}", tx_result));
-            }
-
             // Parse the JSONRPC string, now that we know it is not an error.
             let json: serde_json::Value = serde_json::from_str(&tx_result)
                 .expect("The result, if not an error, can only be a JSONRPC string; qed");
