@@ -31,13 +31,13 @@ storage-hub-infra = { workspace = true }
 file-manager = { workspace = true }
 forest-manager = { workspace = true }
 
-# Substrate
 clap = { workspace = true }
 log = { workspace = true }
 codec = { workspace = true }
 serde = { workspace = true }
 jsonrpsee = { workspace = true }
 futures = { workspace = true }
+reference-trie = { workspace = true }
 serde_json = { workspace = true }
 
 # Substrate
@@ -72,6 +72,7 @@ sp-keystore = { workspace = true }
 sp-io = { workspace = true, default-features = true }
 sp-runtime = { workspace = true, default-features = true }
 sp-timestamp = { workspace = true }
+sp-trie = { workspace = true }
 substrate-frame-rpc-system = { workspace = true }
 substrate-prometheus-endpoint = { workspace = true }
 
@@ -99,17 +100,17 @@ substrate-build-script-utils = { workspace = true }
 [features]
 default = []
 runtime-benchmarks = [
-	"cumulus-primitives-core/runtime-benchmarks",
-	"frame-benchmarking-cli/runtime-benchmarks",
-	"frame-benchmarking/runtime-benchmarks",
-	"polkadot-cli/runtime-benchmarks",
-	"polkadot-primitives/runtime-benchmarks",
-	"sc-service/runtime-benchmarks",
-	"sp-runtime/runtime-benchmarks",
-	"storage-hub-runtime/runtime-benchmarks",
+    "cumulus-primitives-core/runtime-benchmarks",
+    "frame-benchmarking-cli/runtime-benchmarks",
+    "frame-benchmarking/runtime-benchmarks",
+    "polkadot-cli/runtime-benchmarks",
+    "polkadot-primitives/runtime-benchmarks",
+    "sc-service/runtime-benchmarks",
+    "sp-runtime/runtime-benchmarks",
+    "storage-hub-runtime/runtime-benchmarks",
 ]
 try-runtime = [
-	"polkadot-cli/try-runtime",
-	"sp-runtime/try-runtime",
-	"storage-hub-runtime/try-runtime",
+    "polkadot-cli/try-runtime",
+    "sp-runtime/try-runtime",
+    "storage-hub-runtime/try-runtime",
 ]

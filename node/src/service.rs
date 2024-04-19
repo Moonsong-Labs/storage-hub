@@ -9,9 +9,11 @@ use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, 
 use file_manager::in_memory::InMemoryFileStorage;
 use forest_manager::in_memory::InMemoryForestStorage;
 use polkadot_primitives::{HeadData, ValidationCode};
+use reference_trie::RefHasher;
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
+use sp_trie::LayoutV1;
 use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
 use storage_hub_runtime::{
@@ -645,13 +647,15 @@ async fn start_sh_services(
     let blockchain_service_handle = spawn_blockchain_service(&task_spawner).await;
 
     let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
-    let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
+    let forest_storage = Arc::new(RwLock::new(
+        InMemoryForestStorage::<LayoutV1<RefHasher>>::new(),
+    ));
 
     struct InMemoryStorageHubConfig {}
 
     impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
         type FileStorage = InMemoryFileStorage;
-        type ForestStorage = InMemoryForestStorage;
+        type ForestStorage = InMemoryForestStorage<LayoutV1<RefHasher>>;
     }
 
     let sh_handler = StorageHubHandler::<InMemoryStorageHubConfig>::new(
