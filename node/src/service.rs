@@ -210,6 +210,10 @@ async fn start_dev_impl(
         other: (_, mut telemetry, _),
     } = new_partial(&config, true)?;
 
+    let signing_dev_key = config
+        .dev_key_seed
+        .clone()
+        .expect("Dev key seed must be present in dev mode.");
     let keystore = keystore_container.keystore();
 
     let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
@@ -304,14 +308,20 @@ async fn start_dev_impl(
 
     // Spawning the Blockchain Service if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
+        // File Transfer Service handle is expected to be present when the node is running as a Storage Provider.
+        let file_transfer_service_handle = file_transfer_service_handle.expect(
+            "File Transfer Service handle is expected to be present when the node is running as a Storage Provider. qed",
+        );
+
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
         // Initialise seed for signing transactions using blockchain service.
         // In dev mode we use a well known dev account.
         keystore
-            .sr25519_generate_new(KEY_TYPE, Some("//Alice"))
+            .sr25519_generate_new(KEY_TYPE, Some(signing_dev_key.as_ref()))
             .expect("Creating key with account Alice should succeed.");
 
+        // Spawn the Blockchain Service.
         let blockchain_service_handle = spawn_blockchain_service(
             &task_spawner,
             client.clone(),
@@ -320,10 +330,7 @@ async fn start_dev_impl(
         )
         .await;
 
-        let file_transfer_service_handle = file_transfer_service_handle.expect(
-            "File Transfer Service handle is expected to be present when the node is running as a Storage Provider. qed",
-        );
-
+        // Initialise the StorageHubHandler, for tasks to have access to the services.
         let sh_handler = StorageHubHandler::new(
             task_spawner,
             file_transfer_service_handle,
@@ -595,6 +602,11 @@ async fn start_node_impl(
 
     // Spawning the Blockchain Service if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
+        // File Transfer Service handle is expected to be present when the node is running as a Storage Provider.
+        let file_transfer_service_handle = file_transfer_service_handle.expect(
+            "File Transfer Service handle is expected to be present when the node is running as a Storage Provider. qed",
+        );
+
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
         // Initialise seed for signing transactions using blockchain service.
@@ -604,6 +616,7 @@ async fn start_node_impl(
             .sr25519_generate_new(KEY_TYPE, Some("//Alice"))
             .expect("Creating key with account Alice should succeed.");
 
+        // Spawn the blockchain service.
         let blockchain_service_handle = spawn_blockchain_service(
             &task_spawner,
             client.clone(),
@@ -612,10 +625,7 @@ async fn start_node_impl(
         )
         .await;
 
-        let file_transfer_service_handle = file_transfer_service_handle.expect(
-            "File Transfer Service handle is expected to be present when the node is running as a Storage Provider. qed",
-        );
-
+        // Initialise the StorageHubHandler, for tasks to have access to the services.
         let sh_handler = StorageHubHandler::new(
             task_spawner,
             file_transfer_service_handle,
