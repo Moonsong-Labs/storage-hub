@@ -286,36 +286,38 @@ impl BlockchainService {
         debug!(target: LOG_TARGET, "Import notification: {}", notification.hash);
 
         // Get events from storage.
-        // TODO: Handle case where the storage cannot be decoded.
-        // TODO: This would happen if we're parsing a block authored with an older version of the runtime, using
-        // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
-        // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
-        let events = self.get_events_storage_element(notification.hash);
-
-        // Process the events.
-        if let Some(block_events) = events.ok() {
-            for event in block_events.iter() {
-                // Filter events of interest and send internal events to tasks listening.
-                match event.event.clone() {
-                    // New storage request event coming from pallet-file-system.
-                    RuntimeEvent::FileSystem(pallet_file_system::Event::NewStorageRequest {
-                        who,
-                        location,
-                        fingerprint,
-                        size,
-                        multiaddresses,
-                    }) => {
-                        self.emit(NewStorageRequest {
+        match self.get_events_storage_element(notification.hash) {
+            Ok(block_events) => {
+                // Process the events.
+                for ev in block_events {
+                    match ev.event.clone() {
+                        // New storage request event coming from pallet-file-system.
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::NewStorageRequest {
+                                who,
+                                location,
+                                fingerprint,
+                                size,
+                                multiaddresses,
+                            },
+                        ) => self.emit(NewStorageRequest {
                             who,
                             location,
                             fingerprint,
                             size,
                             multiaddresses,
-                        });
+                        }),
+                        // Ignore all other events.
+                        _ => {}
                     }
-                    // Ignore all other events.
-                    _ => {}
                 }
+            }
+            Err(e) => {
+                // TODO: Handle case where the storage cannot be decoded.
+                // TODO: This would happen if we're parsing a block authored with an older version of the runtime, using
+                // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
+                // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
+                error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
             }
         }
     }
