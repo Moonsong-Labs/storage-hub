@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use sp_core::serde::de::DeserializeOwned;
 use storage_hub_infra::types::ForestProof;
 
-use crate::types::Errors;
+use crate::types::ForestStorageErrors;
 
 /// Forest storage interface to be implemented by the storage providers.
 pub trait ForestStorage: 'static {
@@ -15,24 +15,24 @@ pub trait ForestStorage: 'static {
     type Value: DeserializeOwned + Clone + Debug;
 
     /// Get value for a file.
-    fn get_value(&self, key: &Self::LookupKey) -> Option<Self::Value>;
+    fn get_value(&self, key: &Self::LookupKey) -> Result<Option<Self::Value>, ForestStorageErrors>;
 
     /// Generate proof for file key(s).
     fn generate_proof(
         &self,
         challenged_key: &Self::LookupKey,
-    ) -> Result<ForestProof<Self::RawKey>, Errors>;
+    ) -> Result<ForestProof<Self::RawKey>, ForestStorageErrors>;
 
     /// Insert a file key and generate a proof for it.
     fn insert_file_key(
         &mut self,
         file_key: &Self::LookupKey,
         value: &Self::Value,
-    ) -> Result<ForestProof<Self::RawKey>, Errors>;
+    ) -> Result<ForestProof<Self::RawKey>, ForestStorageErrors>;
 
     /// Delete a file key and generate a proof for it.
     fn delete_file_key(
         &mut self,
         file_key: &Self::LookupKey,
-    ) -> Result<ForestProof<Self::RawKey>, Errors>;
+    ) -> Result<ForestProof<Self::RawKey>, ForestStorageErrors>;
 }

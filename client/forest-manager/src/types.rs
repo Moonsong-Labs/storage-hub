@@ -5,7 +5,7 @@ pub(crate) type HashT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 
 /// Error type for the in-memory forest storage.
 #[derive(Debug)]
-pub enum Errors {
+pub enum ForestStorageErrors {
     /// Failed to create trie iterator.
     FailedToCreateTrieIterator,
     /// Failed to seek to the challenged file key.
@@ -24,4 +24,6 @@ pub enum Errors {
     FailedToRemoveFileKey,
     /// Invalid proving scenario.
     InvalidProvingScenario,
+    /// Failed to get file key.
+    FailedToGetFileKey,
 }

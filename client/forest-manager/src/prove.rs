@@ -1,7 +1,7 @@
 use storage_hub_infra::types::{Leaf, Proven};
 use trie_db::{TrieIterator, TrieLayout};
 
-use crate::{traits::ForestStorage, types::Errors, utils::deserialize_value};
+use crate::{traits::ForestStorage, types::ForestStorageErrors, utils::deserialize_value};
 
 /// Determines the presence and relationship of a challenged file key within a trie structure,
 /// by attempting to find leaves that are exact matches or close neighbors to the challenged key.
@@ -26,27 +26,27 @@ use crate::{traits::ForestStorage, types::Errors, utils::deserialize_value};
 pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
     trie: trie_db::TrieDB<'_, '_, T>,
     challenged_file_key: &F::LookupKey,
-) -> Result<Option<Proven<F::RawKey, F::Value>>, Errors> {
+) -> Result<Option<Proven<F::RawKey, F::Value>>, ForestStorageErrors> {
     // Create an iterator over the leaf nodes.
     let mut iter = trie
         .into_double_ended_iter()
-        .map_err(|_| Errors::FailedToCreateTrieIterator)?;
+        .map_err(|_| ForestStorageErrors::FailedToCreateTrieIterator)?;
 
     // Position the iterator close to or on the challenged key.
     iter.seek(challenged_file_key.as_ref())
-        .map_err(|_| Errors::FailedToSeek)?;
+        .map_err(|_| ForestStorageErrors::FailedToSeek)?;
 
     let next = iter
         .next()
         .transpose()
-        .map_err(|_| Errors::FailedToReadLeaf)?;
+        .map_err(|_| ForestStorageErrors::FailedToReadLeaf)?;
     let prev = iter
         .next_back()
         .transpose()
-        .map_err(|_| Errors::FailedToReadLeaf)?;
+        .map_err(|_| ForestStorageErrors::FailedToReadLeaf)?;
 
     let proven = match (prev, next) {
-        (_, Some((key, value))) if *challenged_file_key.as_ref() == *key => {
+        (_, Some((key, value))) if challenged_file_key.as_ref() == key => {
             // Scenario 1: Exact match
             Some(Proven::new_exact_key(
                 key.into(),
@@ -81,7 +81,7 @@ pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
             };
             Some(Proven::new_neighbour_keys(None, Some(leaf)))
         }
-        _ => return Err(Errors::InvalidProvingScenario),
+        _ => return Err(ForestStorageErrors::InvalidProvingScenario),
     };
 
     Ok(proven)
@@ -97,8 +97,6 @@ mod tests {
     use sp_trie::{LayoutV1, MemoryDB};
     use storage_hub_infra::types::Metadata;
     use trie_db::{Hasher, TrieDBBuilder, TrieDBMutBuilder, TrieMut};
-
-    const FILES_BASE_PATH: &str = "./tmp/";
 
     /// Build a Merkle Patricia Forest Trie.
     ///
@@ -127,17 +125,11 @@ mod tests {
                 String::from_utf8(file_name.to_vec()).unwrap()
             );
 
-            std::fs::create_dir_all(FILES_BASE_PATH).unwrap();
-            std::fs::File::create(FILES_BASE_PATH.to_owned() + &file_path).unwrap();
-
-            let file = std::fs::File::open(FILES_BASE_PATH.to_owned() + &file_path).unwrap();
-            let file_size = std::fs::File::metadata(&file).unwrap().len();
-
             let fingerprint = H256::from_slice(&[0; 32]);
 
             let metadata = Metadata {
                 location: file_path,
-                size: file_size,
+                size: 0,
                 fingerprint,
             };
 
