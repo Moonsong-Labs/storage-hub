@@ -18,30 +18,35 @@ pub type EventsVec = Vec<
 
 /// Extrinsic struct.
 ///
-/// This struct represents an extrinsic in the blockchain. It contains the following fields:
-/// - `hash`: the hash of the extrinsic.
-/// - `block_hash`: the hash of the block in which the extrinsic was included.
-/// - `events`: the events that occurred during the execution of the extrinsic.
+/// This struct represents an extrinsic in the blockchain.
 #[derive(Debug, Clone)]
 pub struct Extrinsic {
+    /// Extrinsic hash.
     pub hash: H256,
+    /// Block hash.
     pub block_hash: H256,
+    /// Events vector.
     pub events: EventsVec,
 }
 
 /// ExtrinsicResult enum.
 ///
-/// This enum represents the result of an extrinsic execution. It can be either a success or a failure. It contains the
-/// following variants:
-/// - `Success`: the extrinsic was executed successfully.
-/// - `Failure`: the extrinsic execution failed.
-
+/// This enum represents the result of an extrinsic execution. It can be either a success or a failure.
 pub enum ExtrinsicResult {
+    /// Success variant.
+    ///
+    /// This variant represents a successful extrinsic execution.
     Success {
+        /// Dispatch info.
         dispatch_info: DispatchInfo,
     },
+    /// Failure variant.
+    ///
+    /// This variant represents a failed extrinsic execution.
     Failure {
+        /// Dispatch error.
         dispatch_error: DispatchError,
+        /// Dispatch info.
         dispatch_info: DispatchInfo,
     },
 }
