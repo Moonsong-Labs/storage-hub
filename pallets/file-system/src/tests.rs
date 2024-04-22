@@ -1,8 +1,8 @@
 use crate::{
     mock::*,
     types::{
-        FileLocation, MultiAddress, PeerIds, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, TargetBspsRequired,
+        FileLocation, PeerIds, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        TargetBspsRequired,
     },
     Config, Error, Event, StorageRequestExpirations,
 };
@@ -1126,10 +1126,8 @@ fn bsp_sign_up(
     bsp_signed: RuntimeOrigin,
     storage_amount: StorageData<Test>,
 ) -> DispatchResultWithPostInfo {
-    let mut multiaddresses: BoundedVec<
-        MultiAddress<Test>,
-        <Test as Config>::MaxDataServerMultiAddresses,
-    > = BoundedVec::new();
+    let mut multiaddresses: BoundedVec<BoundedVec<u8, MaxMultiAddressSize>, MaxMultiAddressAmount> =
+        BoundedVec::new();
     multiaddresses.force_push(
         "/ip4/127.0.0.1/udp/1234"
             .as_bytes()

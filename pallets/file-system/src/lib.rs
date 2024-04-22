@@ -160,14 +160,6 @@ pub mod pallet {
         #[pallet::constant]
         type MaxPeerIdSize: Get<u32>;
 
-        /// Maximum byte size of a libp2p multiaddress.
-        #[pallet::constant]
-        type MaxMultiAddressSize: Get<u32>;
-
-        /// Maximum number of multiaddresses for a storage request.
-        #[pallet::constant]
-        type MaxDataServerMultiAddresses: Get<u32>;
-
         /// Time-to-live for a storage request.
         #[pallet::constant]
         type StorageRequestTtl: Get<u32>;

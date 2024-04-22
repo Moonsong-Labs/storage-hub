@@ -96,10 +96,3 @@ pub type PeerId<T> = BoundedVec<u8, MaxPeerIdSize<T>>;
 
 /// Alias for a bounded vector of [`PeerId`].
 pub type PeerIds<T> = BoundedVec<PeerId<T>, MaxPeerIdSize<T>>;
-
-/// Alias for the `MaxMultiAddressSize` type used in the FileSystem pallet.
-pub type MaxMultiAddressSize<T> = <T as crate::Config>::MaxMultiAddressSize;
-
-/// Byte array representing the libp2p multiaddress.
-#[allow(unused)]
-pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
