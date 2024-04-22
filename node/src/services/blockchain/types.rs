@@ -45,3 +45,9 @@ pub enum ExtrinsicResult {
         dispatch_info: DispatchInfo,
     },
 }
+
+/// Type alias for the RPC JSON response as Strings.
+pub type RpcJsonResponse = String;
+
+/// Type alias for the extrinsic hash.
+pub type ExtrinsicHash = H256;

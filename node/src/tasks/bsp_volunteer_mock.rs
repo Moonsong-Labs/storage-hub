@@ -73,6 +73,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
 
             // Checking if the transaction is included in a block.
             // TODO: Consider if we might want to wait for "finalized".
+            // TODO: Handle other lifetime extrinsic edge cases. See https://github.com/paritytech/polkadot-sdk/blob/master/substrate/client/transaction-pool/api/src/lib.rs#L131
             if let Some(in_block) = json["params"]["result"]["inBlock"].as_str() {
                 block_hash = Some(H256::from_str(in_block)?);
                 let subscription_id = json["params"]["subscription"]

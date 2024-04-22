@@ -59,6 +59,8 @@ impl<S: StorageHubHandlerConfig> StorageHubHandler<S> {
 
     pub fn start_bsp_tasks(&self) {
         log::info!("Starting BSP tasks");
+
+        // TODO: Start the actual BSP tasks here and remove mock task.
         BspVolunteerMockTask::new(self.clone())
             .subscribe_to(&self.task_spawner, &self.blockchain)
             .start();

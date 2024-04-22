@@ -336,6 +336,7 @@ impl BlockchainService {
 
         // Get the nonce for the caller and increment it for the next transaction.
         // TODO: Handle initialisation of nonce when node is restarted.
+        // TODO: Handle nonce overflow.
         let nonce = self.nonce_counter;
         self.nonce_counter += 1;
 

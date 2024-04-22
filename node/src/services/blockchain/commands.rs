@@ -5,7 +5,7 @@ use storage_hub_infra::actor::ActorHandle;
 
 use super::{
     handler::BlockchainService,
-    types::{Extrinsic, ExtrinsicResult},
+    types::{Extrinsic, ExtrinsicHash, ExtrinsicResult, RpcJsonResponse},
 };
 
 /// Commands that can be sent to the BlockchainService actor.
@@ -13,7 +13,9 @@ use super::{
 pub enum BlockchainServiceCommand {
     SendExtrinsic {
         call: storage_hub_runtime::RuntimeCall,
-        callback: tokio::sync::oneshot::Sender<Result<(tokio::sync::mpsc::Receiver<String>, H256)>>,
+        callback: tokio::sync::oneshot::Sender<
+            Result<(tokio::sync::mpsc::Receiver<RpcJsonResponse>, ExtrinsicHash)>,
+        >,
     },
     GetExtrinsicFromBlock {
         block_hash: H256,
@@ -32,7 +34,7 @@ pub trait BlockchainServiceInterface {
     async fn send_extrinsic(
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall>,
-    ) -> Result<(tokio::sync::mpsc::Receiver<String>, H256)>;
+    ) -> Result<(tokio::sync::mpsc::Receiver<RpcJsonResponse>, ExtrinsicHash)>;
 
     /// Get an extrinsic from a block.
     async fn get_extrinsic_from_block(
@@ -53,7 +55,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn send_extrinsic(
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall>,
-    ) -> Result<(tokio::sync::mpsc::Receiver<String>, H256)> {
+    ) -> Result<(tokio::sync::mpsc::Receiver<RpcJsonResponse>, ExtrinsicHash)> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         // Build command to send to blockchain service.
         let message = BlockchainServiceCommand::SendExtrinsic {
