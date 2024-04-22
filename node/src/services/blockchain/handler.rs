@@ -117,7 +117,7 @@ impl Actor for BlockchainService {
 
                             match callback.send(Err(e)) {
                                 Ok(_) => {
-                                    trace!(target: LOG_TARGET, "Receiver sent successfully");
+                                    trace!(target: LOG_TARGET, "RPC error sent successfully");
                                 }
                                 Err(e) => {
                                     error!(target: LOG_TARGET, "Failed to send error message through channel: {:?}", e);
