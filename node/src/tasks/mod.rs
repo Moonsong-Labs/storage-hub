@@ -1,3 +1,7 @@
+// TODO: Remove this once we don't need the examples in this file
+#![allow(dead_code)]
+pub mod bsp_volunteer_mock;
+
 use sc_tracing::tracing::info;
 use storage_hub_infra::event_bus::EventHandler;
 
@@ -5,6 +9,7 @@ use crate::services::blockchain::events::{AcceptedBspVolunteer, NewStorageReques
 use crate::services::file_transfer::events::RemoteUploadRequest;
 use crate::services::{StorageHubHandler, StorageHubHandlerConfig};
 
+// ! The following are examples of task definitions.
 pub struct ResolveRemoteUploadRequest<SHC: StorageHubHandlerConfig> {
     _storage_hub_handler: StorageHubHandler<SHC>,
 }
