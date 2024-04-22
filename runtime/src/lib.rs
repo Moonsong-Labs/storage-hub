@@ -258,6 +258,7 @@ construct_runtime!(
         Providers: pallet_storage_providers = 40,
         FileSystem: pallet_file_system = 41,
         ProofsDealer: pallet_proofs_dealer = 42,
+        Randomness: pallet_randomness = 43,
     }
 );
 

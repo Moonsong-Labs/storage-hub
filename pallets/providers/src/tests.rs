@@ -26,6 +26,7 @@ type SpMinCapacity = <Test as crate::Config>::SpMinCapacity;
 type DepositPerData = <Test as crate::Config>::DepositPerData;
 type MaxMsps = <Test as crate::Config>::MaxMsps;
 type MaxBsps = <Test as crate::Config>::MaxBsps;
+type MinBlocksBetweenCapacityChanges = <Test as crate::Config>::MinBlocksBetweenCapacityChanges;
 
 // Runtime constants:
 // This is the duration of an epoch in blocks, a constant from the runtime configuration that we mock here
@@ -123,6 +124,7 @@ mod sign_up {
                     );
 
                     // Check that Alice's request is in the requests list and matches the info provided
+                    let current_block = frame_system::Pallet::<Test>::block_number();
                     let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice);
                     assert!(alice_sign_up_request.is_ok());
                     assert_eq!(
@@ -134,8 +136,9 @@ mod sign_up {
                                 data_used: 0,
                                 multiaddresses,
                                 value_prop,
+                                last_capacity_change: current_block,
                             }),
-                            frame_system::Pallet::<Test>::block_number()
+                            current_block
                         )
                     );
                 });
@@ -486,6 +489,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice's request to sign up as a Main Storage Provider exists and is the one we just created
+                    let current_block = frame_system::Pallet::<Test>::block_number();
                     let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice);
                     assert!(alice_sign_up_request.as_ref().is_ok_and(|request| request.0
                         == StorageProvider::MainStorageProvider(MainStorageProvider {
@@ -494,10 +498,9 @@ mod sign_up {
                             data_used: 0,
                             multiaddresses: multiaddresses.clone(),
                             value_prop: value_prop.clone(),
+                            last_capacity_change: current_block
                         })));
-                    assert!(alice_sign_up_request.is_ok_and(
-                        |request| request.1 == frame_system::Pallet::<Test>::block_number()
-                    ));
+                    assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
 
                     // Cancel the sign up of Alice as a Main Storage Provider
                     assert_ok!(StorageProviders::cancel_sign_up(RuntimeOrigin::signed(
@@ -595,6 +598,7 @@ mod sign_up {
                     );
 
                     // Check that Alice's request is in the requests list and matches the info provided
+                    let current_block = frame_system::Pallet::<Test>::block_number();
                     let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice);
                     assert!(alice_sign_up_request.is_ok());
                     assert_eq!(
@@ -605,8 +609,9 @@ mod sign_up {
                                 capacity: storage_amount,
                                 data_used: 0,
                                 multiaddresses,
+                                last_capacity_change: current_block,
                             }),
-                            frame_system::Pallet::<Test>::block_number()
+                            current_block
                         )
                     );
                 });
@@ -956,6 +961,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice's request to sign up as a Backup Storage Provider exists and is the one we just created
+                    let current_block = frame_system::Pallet::<Test>::block_number();
                     let alice_sign_up_request = StorageProviders::get_sign_up_request(&alice);
                     assert!(alice_sign_up_request.as_ref().is_ok_and(|request| request.0
                         == StorageProvider::BackupStorageProvider(BackupStorageProvider {
@@ -963,10 +969,9 @@ mod sign_up {
                             data_used: 0,
                             multiaddresses: multiaddresses.clone(),
                             root: Default::default(),
+                            last_capacity_change: current_block
                         })));
-                    assert!(alice_sign_up_request.is_ok_and(
-                        |request| request.1 == frame_system::Pallet::<Test>::block_number()
-                    ));
+                    assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
 
                     // Cancel the sign up of Alice as a Backup Storage Provider
                     assert_ok!(StorageProviders::cancel_sign_up(RuntimeOrigin::signed(
@@ -2894,6 +2899,956 @@ mod sign_off {
     }
 }
 
+mod change_capacity {
+
+    use super::*;
+
+    /// This module holds the success cases for changing the capacity of Main Storage Providers and Backup Storage Providers
+    mod success {
+        use super::*;
+
+        /// This module holds the success cases for changing the capacity of Main Storage Providers
+        mod msp {
+            use super::*;
+
+            #[test]
+            fn msp_increase_change_capacity_works() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as MSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let increased_storage_amount: StorageData<Test> = 200;
+                    let (old_deposit_amount, _alice_msp) =
+                        register_account_as_msp(alice, old_storage_amount);
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        5_000_000 - old_deposit_amount
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        old_deposit_amount
+                    );
+
+                    // Advance enough blocks to allow Alice to change her capacity
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number()
+                            + <MinBlocksBetweenCapacityChanges as Get<BlockNumberFor<Test>>>::get(),
+                    );
+
+                    // Change the capacity of Alice
+                    assert_ok!(StorageProviders::change_capacity(
+                        RuntimeOrigin::signed(alice),
+                        increased_storage_amount
+                    ));
+
+                    // Get the deposit amount for the new storage
+                    let deposit_for_increased_storage: BalanceOf<Test> = <SpMinDeposit as Get<
+                        u128,
+                    >>::get(
+                    )
+                    .saturating_add(<DepositPerData as Get<u128>>::get().saturating_mul(
+                        (increased_storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                    ));
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        5_000_000 - deposit_for_increased_storage
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        deposit_for_increased_storage
+                    );
+
+                    // Check that the capacity changed event was emitted
+                    System::assert_has_event(
+                        Event::<Test>::CapacityChanged {
+                            who: alice,
+                            old_capacity: old_storage_amount,
+                            new_capacity: increased_storage_amount,
+                            next_block_when_change_allowed:
+                                frame_system::Pallet::<Test>::block_number()
+                                    + <MinBlocksBetweenCapacityChanges as Get<
+                                        BlockNumberFor<Test>,
+                                    >>::get(),
+                        }
+                        .into(),
+                    );
+                });
+            }
+
+            #[test]
+            fn msp_decrease_change_capacity_works() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as MSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let decreased_storage_amount: StorageData<Test> = 50;
+                    let (old_deposit_amount, _alice_msp) =
+                        register_account_as_msp(alice, old_storage_amount);
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        5_000_000 - old_deposit_amount
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        old_deposit_amount
+                    );
+
+                    // Advance enough blocks to allow Alice to change her capacity
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number()
+                            + <MinBlocksBetweenCapacityChanges as Get<BlockNumberFor<Test>>>::get(),
+                    );
+
+                    // Change the capacity of Alice
+                    assert_ok!(StorageProviders::change_capacity(
+                        RuntimeOrigin::signed(alice),
+                        decreased_storage_amount
+                    ));
+
+                    // Get the deposit amount for the new storage
+                    let deposit_for_decreased_storage: BalanceOf<Test> = <SpMinDeposit as Get<
+                        u128,
+                    >>::get(
+                    )
+                    .saturating_add(<DepositPerData as Get<u128>>::get().saturating_mul(
+                        (decreased_storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                    ));
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        5_000_000 - deposit_for_decreased_storage
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        deposit_for_decreased_storage
+                    );
+
+                    // Check that the capacity changed event was emitted
+                    System::assert_has_event(
+                        Event::<Test>::CapacityChanged {
+                            who: alice,
+                            old_capacity: old_storage_amount,
+                            new_capacity: decreased_storage_amount,
+                            next_block_when_change_allowed:
+                                frame_system::Pallet::<Test>::block_number()
+                                    + <MinBlocksBetweenCapacityChanges as Get<
+                                        BlockNumberFor<Test>,
+                                    >>::get(),
+                        }
+                        .into(),
+                    );
+                });
+            }
+
+            #[test]
+            fn msp_decrease_change_capacity_to_exactly_minimum_works() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as MSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 500;
+                    let minimum_storage_amount: StorageData<Test> =
+                        <SpMinCapacity as Get<u32>>::get();
+                    let (old_deposit_amount, _alice_msp) =
+                        register_account_as_msp(alice, old_storage_amount);
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        5_000_000 - old_deposit_amount
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        old_deposit_amount
+                    );
+
+                    // Advance enough blocks to allow Alice to change her capacity
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number()
+                            + <MinBlocksBetweenCapacityChanges as Get<BlockNumberFor<Test>>>::get(),
+                    );
+
+                    // Change the capacity of Alice
+                    assert_ok!(StorageProviders::change_capacity(
+                        RuntimeOrigin::signed(alice),
+                        minimum_storage_amount
+                    ));
+
+                    // Get the deposit amount for the minimum storage
+                    let deposit_for_minimum_storage: BalanceOf<Test> =
+                        <SpMinDeposit as Get<u128>>::get();
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        5_000_000 - deposit_for_minimum_storage
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        deposit_for_minimum_storage
+                    );
+
+                    // Check that the capacity changed event was emitted
+                    System::assert_has_event(
+                        Event::<Test>::CapacityChanged {
+                            who: alice,
+                            old_capacity: old_storage_amount,
+                            new_capacity: minimum_storage_amount,
+                            next_block_when_change_allowed:
+                                frame_system::Pallet::<Test>::block_number()
+                                    + <MinBlocksBetweenCapacityChanges as Get<
+                                        BlockNumberFor<Test>,
+                                    >>::get(),
+                        }
+                        .into(),
+                    );
+                });
+            }
+        }
+        /// This module holds the success cases for changing the capacity of Backup Storage Providers
+        mod bsp {
+            use super::*;
+
+            #[test]
+            fn bsp_increase_change_capacity_works() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as BSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let increased_storage_amount: StorageData<Test> = 200;
+                    let (old_deposit_amount, _alice_bsp) =
+                        register_account_as_bsp(alice, old_storage_amount);
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        5_000_000 - old_deposit_amount
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        old_deposit_amount
+                    );
+
+                    // Check the total capacity of the network (BSPs)
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+
+                    // Advance enough blocks to allow Alice to change her capacity
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number()
+                            + <MinBlocksBetweenCapacityChanges as Get<BlockNumberFor<Test>>>::get(),
+                    );
+
+                    // Change the capacity of Alice
+                    assert_ok!(StorageProviders::change_capacity(
+                        RuntimeOrigin::signed(alice),
+                        increased_storage_amount
+                    ));
+
+                    // Get the deposit amount for the new storage
+                    let deposit_for_increased_storage: BalanceOf<Test> = <SpMinDeposit as Get<
+                        u128,
+                    >>::get(
+                    )
+                    .saturating_add(<DepositPerData as Get<u128>>::get().saturating_mul(
+                        (increased_storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                    ));
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        5_000_000 - deposit_for_increased_storage
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        deposit_for_increased_storage
+                    );
+
+                    // Check the new total capacity of the network (all BSPs)
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        increased_storage_amount
+                    );
+
+                    // Check that the capacity changed event was emitted
+                    System::assert_has_event(
+                        Event::<Test>::CapacityChanged {
+                            who: alice,
+                            old_capacity: old_storage_amount,
+                            new_capacity: increased_storage_amount,
+                            next_block_when_change_allowed:
+                                frame_system::Pallet::<Test>::block_number()
+                                    + <MinBlocksBetweenCapacityChanges as Get<
+                                        BlockNumberFor<Test>,
+                                    >>::get(),
+                        }
+                        .into(),
+                    );
+                });
+            }
+
+            #[test]
+            fn bsp_decrease_change_capacity_works() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as BSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let decreased_storage_amount: StorageData<Test> = 50;
+                    let (old_deposit_amount, _alice_bsp) =
+                        register_account_as_bsp(alice, old_storage_amount);
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        5_000_000 - old_deposit_amount
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        old_deposit_amount
+                    );
+
+                    // Check the total capacity of the network (BSPs)
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+
+                    // Advance enough blocks to allow Alice to change her capacity
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number()
+                            + <MinBlocksBetweenCapacityChanges as Get<BlockNumberFor<Test>>>::get(),
+                    );
+
+                    // Change the capacity of Alice
+                    assert_ok!(StorageProviders::change_capacity(
+                        RuntimeOrigin::signed(alice),
+                        decreased_storage_amount
+                    ));
+
+                    // Get the deposit amount for the new storage
+                    let deposit_for_decreased_storage: BalanceOf<Test> = <SpMinDeposit as Get<
+                        u128,
+                    >>::get(
+                    )
+                    .saturating_add(<DepositPerData as Get<u128>>::get().saturating_mul(
+                        (decreased_storage_amount - <SpMinCapacity as Get<u32>>::get()).into(),
+                    ));
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        5_000_000 - deposit_for_decreased_storage
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        deposit_for_decreased_storage
+                    );
+
+                    // Check the new total capacity of the network (all BSPs)
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        decreased_storage_amount
+                    );
+
+                    // Check that the capacity changed event was emitted
+                    System::assert_has_event(
+                        Event::<Test>::CapacityChanged {
+                            who: alice,
+                            old_capacity: old_storage_amount,
+                            new_capacity: decreased_storage_amount,
+                            next_block_when_change_allowed:
+                                frame_system::Pallet::<Test>::block_number()
+                                    + <MinBlocksBetweenCapacityChanges as Get<
+                                        BlockNumberFor<Test>,
+                                    >>::get(),
+                        }
+                        .into(),
+                    );
+                });
+            }
+
+            #[test]
+            fn bsp_decrease_change_capacity_to_exactly_minimum_works() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as BSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 500;
+                    let minimum_storage_amount: StorageData<Test> =
+                        <SpMinCapacity as Get<u32>>::get();
+                    let (old_deposit_amount, _alice_bsp) =
+                        register_account_as_bsp(alice, old_storage_amount);
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        5_000_000 - old_deposit_amount
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        old_deposit_amount
+                    );
+
+                    // Check the total capacity of the network (BSPs)
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+
+                    // Advance enough blocks to allow Alice to change her capacity
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number()
+                            + <MinBlocksBetweenCapacityChanges as Get<BlockNumberFor<Test>>>::get(),
+                    );
+
+                    // Change the capacity of Alice to the minimum
+                    assert_ok!(StorageProviders::change_capacity(
+                        RuntimeOrigin::signed(alice),
+                        minimum_storage_amount
+                    ));
+
+                    // Get the deposit amount for the new storage
+                    let deposit_for_minimum_storage: BalanceOf<Test> =
+                        <SpMinDeposit as Get<u128>>::get();
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        5_000_000 - deposit_for_minimum_storage
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        deposit_for_minimum_storage
+                    );
+
+                    // Check the new total capacity of the network (all BSPs)
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        minimum_storage_amount
+                    );
+
+                    // Check that the capacity changed event was emitted
+                    System::assert_has_event(
+                        Event::<Test>::CapacityChanged {
+                            who: alice,
+                            old_capacity: old_storage_amount,
+                            new_capacity: minimum_storage_amount,
+                            next_block_when_change_allowed:
+                                frame_system::Pallet::<Test>::block_number()
+                                    + <MinBlocksBetweenCapacityChanges as Get<
+                                        BlockNumberFor<Test>,
+                                    >>::get(),
+                        }
+                        .into(),
+                    );
+                });
+            }
+        }
+    }
+
+    /// This module holds the failure cases for changing the capacity of Main Storage Providers and Backup Storage Providers
+    mod failure {
+        use super::*;
+
+        /// This module holds the failure cases for changing the capacity of Main Storage Providers
+        mod msp {
+            use super::*;
+
+            #[test]
+            fn msp_change_capacity_fails_when_not_registered_as_msp() {
+                ExtBuilder::build().execute_with(|| {
+                    // Get the Account Id of Alice
+                    let alice: AccountId = 0;
+
+                    // Try to change the capacity of Alice as a Main Storage Provider
+                    assert_noop!(
+                        StorageProviders::change_capacity(RuntimeOrigin::signed(alice), 100),
+                        Error::<Test>::NotRegistered
+                    );
+                });
+            }
+
+            #[test]
+            fn msp_change_capacity_fails_if_not_enough_time_passed() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as MSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let new_storage_amount: StorageData<Test> = 200;
+                    let (_old_deposit_amount, _alice_msp) =
+                        register_account_as_msp(alice, old_storage_amount);
+
+                    // Try to change the capacity of Alice before enough time has passed
+                    assert_noop!(
+                        StorageProviders::change_capacity(
+                            RuntimeOrigin::signed(alice),
+                            new_storage_amount
+                        ),
+                        Error::<Test>::NotEnoughTimePassed
+                    );
+
+                    // Make sure that the capacity of Alice has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_capacity_of_sp(&alice).unwrap(),
+                        old_storage_amount
+                    );
+                });
+            }
+
+            #[test]
+            fn msp_change_capacity_fails_when_changing_to_zero() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as MSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let zero_storage_amount: StorageData<Test> = 0;
+                    let (_old_deposit_amount, _alice_msp) =
+                        register_account_as_msp(alice, old_storage_amount);
+
+                    // Try to change the capacity of Alice to zero
+                    assert_noop!(
+                        StorageProviders::change_capacity(
+                            RuntimeOrigin::signed(alice),
+                            zero_storage_amount
+                        ),
+                        Error::<Test>::NewCapacityCantBeZero
+                    );
+
+                    // Make sure that the capacity of Alice has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_capacity_of_sp(&alice).unwrap(),
+                        old_storage_amount
+                    );
+                });
+            }
+
+            #[test]
+            fn msp_change_capacity_fails_when_using_same_capacity() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as MSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let new_storage_amount: StorageData<Test> = old_storage_amount;
+                    let (_old_deposit_amount, _alice_msp) =
+                        register_account_as_msp(alice, old_storage_amount);
+
+                    // Try to change the capacity of Alice to the same as before
+                    assert_noop!(
+                        StorageProviders::change_capacity(
+                            RuntimeOrigin::signed(alice),
+                            new_storage_amount
+                        ),
+                        Error::<Test>::NewCapacityEqualsCurrentCapacity
+                    );
+
+                    // Make sure that the capacity of Alice has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_capacity_of_sp(&alice).unwrap(),
+                        old_storage_amount
+                    );
+                });
+            }
+
+            #[test]
+            fn msp_change_capacity_fails_when_under_min_capacity() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as MSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let decreased_storage_amount: StorageData<Test> = 1;
+                    let (_old_deposit_amount, _alice_msp) =
+                        register_account_as_msp(alice, old_storage_amount);
+
+                    // Advance enough blocks to allow Alice to change her capacity
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number()
+                            + <MinBlocksBetweenCapacityChanges as Get<BlockNumberFor<Test>>>::get(),
+                    );
+
+                    // Try to change the capacity of Alice to a value under the minimum capacity
+                    assert_noop!(
+                        StorageProviders::change_capacity(
+                            RuntimeOrigin::signed(alice),
+                            decreased_storage_amount
+                        ),
+                        Error::<Test>::StorageTooLow
+                    );
+
+                    // Make sure that the capacity of Alice has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_capacity_of_sp(&alice).unwrap(),
+                        old_storage_amount
+                    );
+                });
+            }
+
+            #[test]
+            fn msp_change_capacity_fails_when_under_used_capacity() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as MSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let decreased_storage_amount: StorageData<Test> = 50;
+                    let (_old_deposit_amount, _alice_msp) =
+                        register_account_as_msp(alice, old_storage_amount);
+
+                    // Change used storage to be more than the new capacity
+                    assert_ok!(
+                        <StorageProviders as MutateProvidersInterface>::increase_data_used(
+                            &alice, 60
+                        )
+                    );
+
+                    // Advance enough blocks to allow Alice to change her capacity
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number()
+                            + <MinBlocksBetweenCapacityChanges as Get<BlockNumberFor<Test>>>::get(),
+                    );
+
+                    // Try to change the capacity of Alice to a value under the used storage
+                    assert_noop!(
+                        StorageProviders::change_capacity(
+                            RuntimeOrigin::signed(alice),
+                            decreased_storage_amount
+                        ),
+                        Error::<Test>::NewCapacityLessThanUsedStorage
+                    );
+
+                    // Make sure that the capacity of Alice has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_capacity_of_sp(&alice).unwrap(),
+                        old_storage_amount
+                    );
+                });
+            }
+
+            #[test]
+            fn msp_change_capacity_fails_when_not_enough_funds() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as MSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let new_storage_amount: StorageData<Test> =
+                        (5_000_000 / <DepositPerData as Get<u128>>::get() + 1)
+                            .try_into()
+                            .unwrap();
+                    let (_old_deposit_amount, _alice_msp) =
+                        register_account_as_msp(alice, old_storage_amount);
+
+                    // Advance enough blocks to allow Alice to change her capacity
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number()
+                            + <MinBlocksBetweenCapacityChanges as Get<BlockNumberFor<Test>>>::get(),
+                    );
+
+                    // Try to change the capacity of Alice to a value under the used storage
+                    assert_noop!(
+                        StorageProviders::change_capacity(
+                            RuntimeOrigin::signed(alice),
+                            new_storage_amount
+                        ),
+                        Error::<Test>::NotEnoughBalance
+                    );
+
+                    // Make sure that the capacity of Alice has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_capacity_of_sp(&alice).unwrap(),
+                        old_storage_amount
+                    );
+                });
+            }
+        }
+
+        /// This module holds the failure cases for changing the capacity of Backup Storage Providers
+        mod bsp {
+            use super::*;
+
+            #[test]
+            fn bsp_change_capacity_fails_when_not_registered_as_bsp() {
+                ExtBuilder::build().execute_with(|| {
+                    // Get the Account Id of Alice
+                    let alice: AccountId = 0;
+
+                    // Try to change the capacity of Alice as a Backup Storage Provider
+                    assert_noop!(
+                        StorageProviders::change_capacity(RuntimeOrigin::signed(alice), 100),
+                        Error::<Test>::NotRegistered
+                    );
+                });
+            }
+
+            #[test]
+            fn bsp_change_capacity_fails_if_not_enough_time_passed() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as BSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let new_storage_amount: StorageData<Test> = 200;
+                    let (_old_deposit_amount, _alice_bsp) =
+                        register_account_as_bsp(alice, old_storage_amount);
+
+                    // Check the total capacity of the network (BSPs)
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+
+                    // Try to change the capacity of Alice before enough time has passed
+                    assert_noop!(
+                        StorageProviders::change_capacity(
+                            RuntimeOrigin::signed(alice),
+                            new_storage_amount
+                        ),
+                        Error::<Test>::NotEnoughTimePassed
+                    );
+
+                    // Make sure that the capacity of Alice has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_capacity_of_sp(&alice).unwrap(),
+                        old_storage_amount
+                    );
+
+                    // Make sure that the total capacity of the network has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+                });
+            }
+
+            #[test]
+            fn bsp_change_capacity_fails_when_changing_to_zero() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as BSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let zero_storage_amount: StorageData<Test> = 0;
+                    let (_old_deposit_amount, _alice_bsp) =
+                        register_account_as_bsp(alice, old_storage_amount);
+
+                    // Check the total capacity of the network (BSPs)
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+
+                    // Try to change the capacity of Alice to zero
+                    assert_noop!(
+                        StorageProviders::change_capacity(
+                            RuntimeOrigin::signed(alice),
+                            zero_storage_amount
+                        ),
+                        Error::<Test>::NewCapacityCantBeZero
+                    );
+
+                    // Make sure that the capacity of Alice has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_capacity_of_sp(&alice).unwrap(),
+                        old_storage_amount
+                    );
+
+                    // Make sure that the total capacity of the network has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+                });
+            }
+
+            #[test]
+            fn bsp_change_capacity_fails_when_using_same_capacity() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as BSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let new_storage_amount: StorageData<Test> = old_storage_amount;
+                    let (_old_deposit_amount, _alice_bsp) =
+                        register_account_as_bsp(alice, old_storage_amount);
+
+                    // Check the total capacity of the network (BSPs)
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+
+                    // Try to change the capacity of Alice to the same as before
+                    assert_noop!(
+                        StorageProviders::change_capacity(
+                            RuntimeOrigin::signed(alice),
+                            new_storage_amount
+                        ),
+                        Error::<Test>::NewCapacityEqualsCurrentCapacity
+                    );
+
+                    // Make sure that the capacity of Alice has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_capacity_of_sp(&alice).unwrap(),
+                        old_storage_amount
+                    );
+
+                    // Make sure that the total capacity of the network has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+                });
+            }
+
+            #[test]
+            fn bsp_change_capacity_fails_when_under_min_capacity() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as BSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let decreased_storage_amount: StorageData<Test> = 1;
+                    let (_old_deposit_amount, _alice_bsp) =
+                        register_account_as_bsp(alice, old_storage_amount);
+
+                    // Check the total capacity of the network (BSPs)
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+
+                    // Advance enough blocks to allow Alice to change her capacity
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number()
+                            + <MinBlocksBetweenCapacityChanges as Get<BlockNumberFor<Test>>>::get(),
+                    );
+
+                    // Try to change the capacity of Alice to a value under the minimum capacity
+                    assert_noop!(
+                        StorageProviders::change_capacity(
+                            RuntimeOrigin::signed(alice),
+                            decreased_storage_amount
+                        ),
+                        Error::<Test>::StorageTooLow
+                    );
+
+                    // Make sure that the capacity of Alice has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_capacity_of_sp(&alice).unwrap(),
+                        old_storage_amount
+                    );
+
+                    // Make sure that the total capacity of the network has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+                });
+            }
+
+            #[test]
+            fn bsp_change_capacity_fails_when_under_used_capacity() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as BSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let decreased_storage_amount: StorageData<Test> = 50;
+                    let (_old_deposit_amount, _alice_bsp) =
+                        register_account_as_bsp(alice, old_storage_amount);
+
+                    // Check the total capacity of the network (BSPs)
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+
+                    // Change used storage to be more than the new capacity
+                    assert_ok!(
+                        <StorageProviders as MutateProvidersInterface>::increase_data_used(
+                            &alice, 60
+                        )
+                    );
+
+                    // Advance enough blocks to allow Alice to change her capacity
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number()
+                            + <MinBlocksBetweenCapacityChanges as Get<BlockNumberFor<Test>>>::get(),
+                    );
+
+                    // Try to change the capacity of Alice to a value under the used storage
+                    assert_noop!(
+                        StorageProviders::change_capacity(
+                            RuntimeOrigin::signed(alice),
+                            decreased_storage_amount
+                        ),
+                        Error::<Test>::NewCapacityLessThanUsedStorage
+                    );
+
+                    // Make sure that the capacity of Alice has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_capacity_of_sp(&alice).unwrap(),
+                        old_storage_amount
+                    );
+
+                    // Make sure that the total capacity of the network has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+                });
+            }
+
+            #[test]
+            fn bsp_change_capacity_fails_when_not_enough_funds() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as MSP:
+                    let alice: AccountId = 0;
+                    let old_storage_amount: StorageData<Test> = 100;
+                    let new_storage_amount: StorageData<Test> =
+                        (5_000_000 / <DepositPerData as Get<u128>>::get() + 1)
+                            .try_into()
+                            .unwrap();
+                    let (_old_deposit_amount, _alice_bsp) =
+                        register_account_as_bsp(alice, old_storage_amount);
+
+                    // Check the total capacity of the network (BSPs)
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+
+                    // Advance enough blocks to allow Alice to change her capacity
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number()
+                            + <MinBlocksBetweenCapacityChanges as Get<BlockNumberFor<Test>>>::get(),
+                    );
+
+                    // Try to change the capacity of Alice to a value under the used storage
+                    assert_noop!(
+                        StorageProviders::change_capacity(
+                            RuntimeOrigin::signed(alice),
+                            new_storage_amount
+                        ),
+                        Error::<Test>::NotEnoughBalance
+                    );
+
+                    // Make sure that the capacity of Alice has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_capacity_of_sp(&alice).unwrap(),
+                        old_storage_amount
+                    );
+
+                    // Make sure that the total capacity of the network has not changed
+                    assert_eq!(
+                        StorageProviders::get_total_bsp_capacity(),
+                        old_storage_amount
+                    );
+                });
+            }
+        }
+    }
+}
+
 // Helper functions for testing:
 
 /// Helper function that registers an account as a Main Storage Provider, with storage_amount StorageData units
@@ -2978,6 +3933,7 @@ fn register_account_as_msp(
             data_used: 0,
             multiaddresses,
             value_prop,
+            last_capacity_change: frame_system::Pallet::<Test>::block_number(),
         },
     )
 }
@@ -3055,6 +4011,7 @@ fn register_account_as_bsp(
             data_used: 0,
             multiaddresses,
             root: Default::default(),
+            last_capacity_change: frame_system::Pallet::<Test>::block_number(),
         },
     )
 }

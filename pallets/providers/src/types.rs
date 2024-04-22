@@ -2,6 +2,7 @@ use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::*;
 use frame_support::traits::fungible::Inspect;
 use frame_support::BoundedVec;
+use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
 
 use crate::Config;
@@ -41,6 +42,7 @@ pub struct MainStorageProvider<T: Config> {
     pub data_used: StorageData<T>,
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub value_prop: ValueProposition<T>,
+    pub last_capacity_change: BlockNumberFor<T>,
 }
 
 /// Structure that represents a Backup Storage Provider. It holds the total data that the BSP is able to store, the amount of data that it is storing,
@@ -52,6 +54,7 @@ pub struct BackupStorageProvider<T: Config> {
     pub data_used: StorageData<T>,
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub root: MerklePatriciaRoot<T>,
+    pub last_capacity_change: BlockNumberFor<T>,
 }
 
 /// Structure that represents a Bucket. It holds the root of the Merkle Patricia Trie, the User ID that owns the bucket,
