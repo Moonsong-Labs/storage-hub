@@ -8,7 +8,7 @@ use frame_support::sp_runtime::{
 };
 use frame_support::traits::{
     fungible::{Inspect, InspectHold, MutateHold},
-    tokens::{Fortitude, Preservation},
+    tokens::{Fortitude, Precision, Preservation},
     Get, Randomness,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
@@ -404,6 +404,9 @@ where
         Ok(())
     }
 
+    /// This function holds the logic that checks if a user can sign off as a Main Storage Provider
+    /// and, if so, updates the storage to remove the user as a Main Storage Provider, decrements the counter of Main Storage Providers,
+    /// and returns the deposit to the user
     pub fn do_msp_sign_off(who: &T::AccountId) -> DispatchResult {
         // Check that the signer is registered as a MSP and get its info
         let msp_id =
@@ -447,6 +450,9 @@ where
         Ok(())
     }
 
+    /// This function holds the logic that checks if a user can sign off as a Backup Storage Provider
+    /// and, if so, updates the storage to remove the user as a Backup Storage Provider, decrements the counter of Backup Storage Providers,
+    /// decrements the total capacity of the network (which is the sum of all BSPs capacities), and returns the deposit to the user
     pub fn do_bsp_sign_off(who: &T::AccountId) -> DispatchResult {
         // Check that the signer is registered as a BSP and get its info
         let bsp_id =
@@ -499,12 +505,270 @@ where
         Ok(())
     }
 
-    /// Remove a root from a BSP. It will remove the whole BSP from storage, so it should only be called when the BSP is being removed.
-    pub fn remove_root_bsp(who: &<T>::AccountId) -> DispatchResult {
-        let bsp_id =
-            AccountIdToBackupStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
-        BackupStorageProviders::<T>::remove(&bsp_id);
-        AccountIdToBackupStorageProviderId::<T>::remove(&who);
+    /// This function is in charge of dispatching the logic to change the capacity of a Storage Provider
+    /// It checks if the signer is registered as a SP and dispatches the corresponding function
+    /// that checks if the user can change its capacity and, if so, updates the storage to reflect the new capacity
+    pub fn do_change_capacity(
+        who: &T::AccountId,
+        new_capacity: StorageData<T>,
+    ) -> Result<StorageData<T>, DispatchError> {
+        // Check that the new capacity is not zero (there are specific functions to sign off as a SP)
+        ensure!(
+            new_capacity != T::StorageData::zero(),
+            Error::<T>::NewCapacityCantBeZero
+        );
+
+        // Check that the signer is registered as a SP and dispatch the corresponding function, getting its old capacity
+        let old_capacity = if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            Self::do_change_capacity_msp(who, msp_id, new_capacity)?
+        } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            Self::do_change_capacity_bsp(who, bsp_id, new_capacity)?
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        };
+
+        Ok(old_capacity)
+    }
+
+    /// This function holds the logic that checks if a user can change its capacity as a Main Storage Provider
+    /// and, if so, updates the storage to reflect the new capacity, modifying the user's deposit accordingly
+    /// and returning the old capacity if successful
+    pub fn do_change_capacity_msp(
+        account_id: &T::AccountId,
+        msp_id: MainStorageProviderId<T>,
+        new_capacity: StorageData<T>,
+    ) -> Result<StorageData<T>, DispatchError> {
+        // Check that the MSP is registered and get its info
+        let mut msp = MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+
+        // Check that the new capacity is different from the current capacity
+        ensure!(
+            new_capacity != msp.capacity,
+            Error::<T>::NewCapacityEqualsCurrentCapacity
+        );
+
+        // Check that enough time has passed since the last capacity change
+        ensure!(
+            frame_system::Pallet::<T>::block_number()
+                >= msp.last_capacity_change + T::MinBlocksBetweenCapacityChanges::get(),
+            Error::<T>::NotEnoughTimePassed
+        );
+
+        // Check that the new capacity is bigger than the minimum required by the runtime
+        ensure!(
+            new_capacity >= T::SpMinCapacity::get(),
+            Error::<T>::StorageTooLow
+        );
+
+        // Check that the new capacity is bigger than the current used capacity by the MSP
+        ensure!(
+            new_capacity >= msp.data_used,
+            Error::<T>::NewCapacityLessThanUsedStorage
+        );
+
+        // Calculate how much deposit will the signer have to pay to register with this amount of data
+        let capacity_over_minimum = new_capacity
+            .checked_sub(&T::SpMinCapacity::get())
+            .ok_or(Error::<T>::StorageTooLow)?;
+        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
+            .checked_mul(&capacity_over_minimum.into())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        let new_deposit = T::SpMinDeposit::get()
+            .checked_add(&deposit_for_capacity_over_minimum)
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Check how much has the MSP already deposited for the current capacity
+        let current_deposit = T::NativeBalance::balance_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            account_id,
+        );
+
+        // Check if the new deposit is bigger or smaller than the current deposit
+        // Note: we do not check directly capacities as, for example, a bigger new_capacity could entail a smaller deposit
+        // because of changes in storage pricing, so we check the difference in deposits instead
+        if new_deposit > current_deposit {
+            // If the new deposit is bigger than the current deposit, more balance has to be held from the user
+            Self::hold_balance(account_id, current_deposit, new_deposit)?;
+        } else if new_deposit < current_deposit {
+            // If the new deposit is smaller than the current deposit, some balance has to be released to the user
+            Self::release_balance(account_id, current_deposit, new_deposit)?;
+        }
+
+        // Get the MSP's old capacity
+        let old_capacity = msp.capacity;
+
+        // Update the MSP's storage, modifying the capacity and the last capacity change block number
+        msp.capacity = new_capacity;
+        msp.last_capacity_change = frame_system::Pallet::<T>::block_number();
+        MainStorageProviders::<T>::insert(&msp_id, msp);
+
+        // Return the old capacity
+        Ok(old_capacity)
+    }
+
+    /// This function holds the logic that checks if a user can change its capacity as a Backup Storage Provider
+    /// and, if so, updates the storage to reflect the new capacity, modifying the user's deposit accordingly
+    /// and returning the old capacity if successful
+    pub fn do_change_capacity_bsp(
+        account_id: &T::AccountId,
+        bsp_id: BackupStorageProviderId<T>,
+        new_capacity: StorageData<T>,
+    ) -> Result<StorageData<T>, DispatchError> {
+        // Check that the BSP is registered and get its info
+        let mut bsp = BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
+
+        // Check that the new capacity is different from the current capacity
+        ensure!(
+            new_capacity != bsp.capacity,
+            Error::<T>::NewCapacityEqualsCurrentCapacity
+        );
+
+        // Check that enough time has passed since the last capacity change
+        ensure!(
+            frame_system::Pallet::<T>::block_number()
+                >= bsp.last_capacity_change + T::MinBlocksBetweenCapacityChanges::get(),
+            Error::<T>::NotEnoughTimePassed
+        );
+
+        // Check that the new capacity is bigger than the minimum required by the runtime
+        ensure!(
+            new_capacity >= T::SpMinCapacity::get(),
+            Error::<T>::StorageTooLow
+        );
+
+        // Check that the new capacity is bigger than the current used capacity by the BSP
+        ensure!(
+            new_capacity >= bsp.data_used,
+            Error::<T>::NewCapacityLessThanUsedStorage
+        );
+
+        // Calculate how much deposit will the signer have to pay to register with this amount of data
+        let capacity_over_minimum = new_capacity
+            .checked_sub(&T::SpMinCapacity::get())
+            .ok_or(Error::<T>::StorageTooLow)?;
+        let deposit_for_capacity_over_minimum = T::DepositPerData::get()
+            .checked_mul(&capacity_over_minimum.into())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        let new_deposit = T::SpMinDeposit::get()
+            .checked_add(&deposit_for_capacity_over_minimum)
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Check how much has the used already deposited for the current capacity
+        let current_deposit = T::NativeBalance::balance_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            account_id,
+        );
+
+        // Check if the new deposit is bigger or smaller than the current deposit
+        // Note: we do not check directly capacities as, for example, a bigger new_capacity could entail a smaller deposit
+        // because of changes in storage pricing, so we check the difference in deposits instead
+        if new_deposit > current_deposit {
+            // If the new deposit is bigger than the current deposit, more balance has to be held from the user
+            Self::hold_balance(account_id, current_deposit, new_deposit)?;
+        } else if new_deposit < current_deposit {
+            // If the new deposit is smaller than the current deposit, some balance has to be released to the user
+            Self::release_balance(account_id, current_deposit, new_deposit)?;
+        }
+
+        // Get the BSP's old capacity
+        let old_capacity = bsp.capacity;
+
+        // Update the total capacity of the network (which is the sum of all BSPs capacities)
+        if new_capacity > old_capacity {
+            // If the new capacity is bigger than the old capacity, get the difference doing new_capacity - old_capacity
+            let difference = new_capacity
+                .checked_sub(&old_capacity)
+                .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+            // Increment the total capacity of the network by the difference
+            TotalBspsCapacity::<T>::mutate(|n| match n.checked_add(&difference) {
+                Some(new_total_bsp_capacity) => {
+                    *n = new_total_bsp_capacity;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Overflow)),
+            })?;
+        } else {
+            // If the new capacity is smaller than the old capacity, get the difference doing old_capacity - new_capacity
+            let difference = old_capacity
+                .checked_sub(&new_capacity)
+                .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+            // Decrement the total capacity of the network
+            TotalBspsCapacity::<T>::mutate(|n| match n.checked_sub(&difference) {
+                Some(new_total_bsp_capacity) => {
+                    *n = new_total_bsp_capacity;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+            })?;
+        }
+
+        // Update the BSP's storage, modifying the capacity and the last capacity change block number
+        bsp.capacity = new_capacity;
+        bsp.last_capacity_change = frame_system::Pallet::<T>::block_number();
+        BackupStorageProviders::<T>::insert(&bsp_id, bsp);
+
+        // Return the old capacity
+        Ok(old_capacity)
+    }
+
+    fn hold_balance(
+        account_id: &T::AccountId,
+        previous_deposit: BalanceOf<T>,
+        new_deposit: BalanceOf<T>,
+    ) -> DispatchResult {
+        // Get the user's reducible balance
+        let user_balance = T::NativeBalance::reducible_balance(
+            account_id,
+            Preservation::Preserve,
+            Fortitude::Polite,
+        );
+
+        // Get the difference between the new deposit and the current deposit
+        let difference = new_deposit
+            .checked_sub(&previous_deposit)
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+
+        // Check if the user has enough balance to pay the difference
+        ensure!(user_balance >= difference, Error::<T>::NotEnoughBalance);
+
+        // Check if we can hold the difference from the user
+        ensure!(
+            T::NativeBalance::can_hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                account_id,
+                difference,
+            ),
+            Error::<T>::CannotHoldDeposit
+        );
+
+        // Hold the difference from the user
+        T::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            account_id,
+            difference,
+        )?;
+
+        Ok(())
+    }
+
+    fn release_balance(
+        account_id: &T::AccountId,
+        previous_deposit: BalanceOf<T>,
+        new_deposit: BalanceOf<T>,
+    ) -> DispatchResult {
+        // Get the difference between the current deposit and the new deposit
+        let difference = previous_deposit
+            .checked_sub(&new_deposit)
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+
+        // Release the difference from the user
+        T::NativeBalance::release(
+            &HoldReason::StorageProviderDeposit.into(),
+            account_id,
+            difference,
+            Precision::Exact,
+        )?;
+
         Ok(())
     }
 }
@@ -516,6 +780,7 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
             data_used: msp.data_used,
             multiaddresses: msp.multiaddresses,
             root: MerklePatriciaRoot::<T>::default(),
+            last_capacity_change: msp.last_capacity_change,
         }
     }
 }

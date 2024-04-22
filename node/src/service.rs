@@ -6,6 +6,8 @@ use std::{sync::Arc, time::Duration};
 use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
+use file_manager::in_memory::InMemoryFileStorage;
+use forest_manager::in_memory::InMemoryForestStorage;
 use polkadot_primitives::{HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use sp_consensus_aura::Slot;
@@ -43,13 +45,14 @@ use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerH
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::KeystorePtr;
 use substrate_prometheus_endpoint::Registry;
+use tokio::sync::RwLock;
 
 use crate::{
     cli::ProviderType,
     command::ProviderOptions,
     services::{
         blockchain::spawn_blockchain_service, file_transfer::spawn_file_transfer_service,
-        StorageHubHandler,
+        StorageHubHandler, StorageHubHandlerConfig,
     },
 };
 
@@ -641,10 +644,22 @@ async fn start_sh_services(
 
     let blockchain_service_handle = spawn_blockchain_service(&task_spawner).await;
 
-    let sh_handler = StorageHubHandler::new(
+    let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
+    let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
+
+    struct InMemoryStorageHubConfig {}
+
+    impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
+        type FileStorage = InMemoryFileStorage;
+        type ForestStorage = InMemoryForestStorage;
+    }
+
+    let sh_handler = StorageHubHandler::<InMemoryStorageHubConfig>::new(
         task_spawner,
         file_transfer_service_handle,
         blockchain_service_handle,
+        file_storage,
+        forest_storage,
     );
 
     match provider_options.provider_type {
