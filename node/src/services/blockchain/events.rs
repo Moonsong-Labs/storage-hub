@@ -15,7 +15,7 @@ pub struct NewStorageRequest {
     pub location: String,
     pub fingerprint: String,
     pub size: u64,
-    pub multiaddresses: Vec<String>,
+    pub user_peer_ids: Vec<String>,
 }
 
 impl EventBusMessage for NewStorageRequest {}
@@ -26,7 +26,6 @@ pub struct AcceptedBspVolunteer {
     pub who: String,
     pub location: String,
     pub fingerprint: String,
-    pub multiaddresses: Vec<String>,
 }
 
 impl EventBusMessage for AcceptedBspVolunteer {}

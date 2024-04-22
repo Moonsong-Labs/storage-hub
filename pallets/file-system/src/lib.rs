@@ -156,6 +156,10 @@ pub mod pallet {
         #[pallet::constant]
         type MaxFilePathSize: Get<u32>;
 
+        /// Maximum byte size of a peer id.
+        #[pallet::constant]
+        type MaxPeerIdSize: Get<u32>;
+
         /// Maximum byte size of a libp2p multiaddress.
         #[pallet::constant]
         type MaxMultiAddressSize: Get<u32>;
@@ -275,14 +279,13 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
-            multiaddresses: BoundedVec<MultiAddress<T>, T::MaxDataServerMultiAddresses>,
+            peer_ids: PeerIds<T>,
         },
         /// Notifies that a BSP has been accepted to store a given file.
         AcceptedBspVolunteer {
             who: T::AccountId,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            multiaddresses: MultiAddresses<T>,
         },
         /// Notifies that a BSP confirmed storing a file.
         BspConfirmedStoring {
@@ -372,7 +375,7 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
-            multiaddresses: MultiAddresses<T>,
+            peer_ids: PeerIds<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
@@ -384,7 +387,7 @@ pub mod pallet {
                 fingerprint,
                 size,
                 None,
-                Some(multiaddresses.clone()),
+                Some(peer_ids.clone()),
                 Default::default(),
             )?;
 
@@ -394,7 +397,7 @@ pub mod pallet {
                 location,
                 fingerprint,
                 size,
-                multiaddresses,
+                peer_ids,
             });
 
             Ok(())
@@ -432,7 +435,6 @@ pub mod pallet {
             origin: OriginFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            multiaddresses: MultiAddresses<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -445,7 +447,6 @@ pub mod pallet {
                 who,
                 location,
                 fingerprint,
-                multiaddresses,
             });
 
             Ok(())

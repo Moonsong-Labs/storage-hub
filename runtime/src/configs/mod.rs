@@ -452,6 +452,7 @@ impl pallet_file_system::Config for Runtime {
     type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxDataServerMultiAddresses = ConstU32<10>;
+    type MaxPeerIdSize = ConstU32<100>;
     type MaxMultiAddressSize = ConstU32<512>;
     type StorageRequestTtl = ConstU32<40>;
     type MaxExpiredStorageRequests = ConstU32<100>;

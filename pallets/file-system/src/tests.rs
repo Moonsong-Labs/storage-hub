@@ -1,7 +1,7 @@
 use crate::{
     mock::*,
     types::{
-        FileLocation, MultiAddress, StorageData, StorageRequestBspsMetadata,
+        FileLocation, MultiAddress, PeerIds, StorageData, StorageRequestBspsMetadata,
         StorageRequestMetadata, TargetBspsRequired,
     },
     Config, Error, Event, StorageRequestExpirations,
@@ -25,11 +25,8 @@ fn request_storage_success() {
         let size = 4;
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
         // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::issue_storage_request(
@@ -37,7 +34,7 @@ fn request_storage_success() {
             location.clone(),
             fingerprint,
             size,
-            multiaddresses.clone(),
+            peer_ids.clone(),
         ));
 
         // Assert that the storage was updated
@@ -48,7 +45,7 @@ fn request_storage_success() {
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
-                user_multiaddresses: multiaddresses.clone(),
+                user_peer_ids: peer_ids.clone(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
                 bsps_confirmed: 0,
@@ -63,7 +60,7 @@ fn request_storage_success() {
                 location: location.clone(),
                 fingerprint,
                 size: 4,
-                multiaddresses,
+                peer_ids,
             }
             .into(),
         );
@@ -78,11 +75,8 @@ fn request_storage_expiration_clear_success() {
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let size = 4;
 
         // Dispatch a signed extrinsic.
@@ -91,7 +85,7 @@ fn request_storage_expiration_clear_success() {
             location.clone(),
             fingerprint,
             size,
-            multiaddresses.clone(),
+            peer_ids.clone(),
         ));
 
         // Assert that the storage was updated
@@ -102,7 +96,7 @@ fn request_storage_expiration_clear_success() {
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
-                user_multiaddresses: multiaddresses.clone(),
+                user_peer_ids: peer_ids.clone(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
                 bsps_confirmed: 0,
@@ -136,11 +130,8 @@ fn request_storage_expiration_current_block_increment_success() {
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
         let mut expected_expiration_block_number: BlockNumber =
             FileSystem::next_expiration_insertion_block_number().into();
@@ -160,7 +151,7 @@ fn request_storage_expiration_current_block_increment_success() {
             location.clone(),
             fingerprint,
             4,
-            multiaddresses,
+            peer_ids,
         ));
 
         // Assert that the storage request expirations storage is at max capacity
@@ -196,11 +187,8 @@ fn request_storage_clear_old_expirations_success() {
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
         let expected_expiration_block_number: BlockNumber =
             FileSystem::next_expiration_insertion_block_number().into();
@@ -221,7 +209,7 @@ fn request_storage_clear_old_expirations_success() {
             location.clone(),
             fingerprint,
             4,
-            multiaddresses,
+            peer_ids,
         ));
 
         System::set_block_number(expected_expiration_block_number);
@@ -354,11 +342,8 @@ fn bsp_volunteer_success() {
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         // TODO: right now we are bypassing the volunteer assignment threshold
         let fingerprint = H256::zero();
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
         // Dispatch storage request.
@@ -367,22 +352,17 @@ fn bsp_volunteer_success() {
             location.clone(),
             fingerprint,
             4,
-            multiaddresses.clone(),
+            peer_ids.clone(),
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(
-            bsp_signed.clone(),
-            storage_amount,
-            multiaddresses.clone(),
-        ));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
             bsp_signed.clone(),
             location.clone(),
             fingerprint,
-            multiaddresses.clone()
         ));
 
         // Assert that the RequestStorageBsps has the correct value
@@ -401,7 +381,6 @@ fn bsp_volunteer_success() {
                 who: bsp_account_id,
                 location,
                 fingerprint,
-                multiaddresses,
             }
             .into(),
         );
@@ -415,21 +394,11 @@ fn bsp_volunteer_storage_request_not_found_fail() {
         let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let fingerprint = H256::zero();
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
 
-        assert_ok!(bsp_sign_up(bsp_signed.clone(), 100, multiaddresses.clone(),));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), 100,));
 
         assert_noop!(
-            FileSystem::bsp_volunteer(
-                bsp_signed.clone(),
-                location.clone(),
-                fingerprint,
-                multiaddresses.clone()
-            ),
+            FileSystem::bsp_volunteer(bsp_signed.clone(), location.clone(), fingerprint,),
             Error::<Test>::StorageRequestNotFound
         );
     });
@@ -446,11 +415,8 @@ fn bsp_already_volunteered_failed() {
         let size = 4;
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
         // Dispatch storage request.
@@ -459,31 +425,21 @@ fn bsp_already_volunteered_failed() {
             location.clone(),
             fingerprint,
             size,
-            multiaddresses.clone(),
+            peer_ids.clone(),
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(
-            bsp_signed.clone(),
-            storage_amount,
-            multiaddresses.clone(),
-        ));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
             bsp_signed.clone(),
             location.clone(),
             fingerprint,
-            multiaddresses.clone()
         ));
 
         assert_noop!(
-            FileSystem::bsp_volunteer(
-                bsp_signed.clone(),
-                location.clone(),
-                fingerprint,
-                multiaddresses.clone()
-            ),
+            FileSystem::bsp_volunteer(bsp_signed.clone(), location.clone(), fingerprint,),
             Error::<Test>::BspAlreadyVolunteered
         );
     });
@@ -500,11 +456,8 @@ fn bsp_volunteer_above_threshold_high_fail() {
         let size = 4;
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
         // Dispatch storage request.
@@ -513,26 +466,17 @@ fn bsp_volunteer_above_threshold_high_fail() {
             location.clone(),
             fingerprint,
             size,
-            multiaddresses.clone(),
+            peer_ids.clone(),
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(
-            bsp_signed.clone(),
-            storage_amount,
-            multiaddresses.clone(),
-        ));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
         crate::BspsAssignmentThreshold::<Test>::put(FixedU128::zero());
 
         // Dispatch BSP volunteer.
         assert_noop!(
-            FileSystem::bsp_volunteer(
-                bsp_signed.clone(),
-                location.clone(),
-                fingerprint,
-                multiaddresses.clone()
-            ),
+            FileSystem::bsp_volunteer(bsp_signed.clone(), location.clone(), fingerprint,),
             Error::<Test>::AboveThreshold
         );
     });
@@ -548,11 +492,8 @@ fn bsp_confirm_storing_success() {
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let size = 4;
         let fingerprint = H256::zero();
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
         // Dispatch storage request.
@@ -561,22 +502,17 @@ fn bsp_confirm_storing_success() {
             location.clone(),
             fingerprint,
             size,
-            multiaddresses.clone(),
+            peer_ids.clone(),
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(
-            bsp_signed.clone(),
-            storage_amount,
-            multiaddresses.clone(),
-        ));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
             bsp_signed.clone(),
             location.clone(),
             fingerprint,
-            Default::default()
         ));
 
         // Dispatch BSP confirm storing.
@@ -597,7 +533,7 @@ fn bsp_confirm_storing_success() {
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
-                user_multiaddresses: multiaddresses.clone(),
+                user_peer_ids: peer_ids.clone(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
                 bsps_confirmed: 1,
@@ -632,14 +568,9 @@ fn bsp_confirm_storing_storage_request_not_found_fail() {
         let bsp_account_id = AccountId32::new([2; 32]);
         let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(bsp_signed.clone(), 100, multiaddresses.clone(),));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), 100,));
 
         assert_noop!(
             FileSystem::bsp_confirm_storing(
@@ -666,11 +597,8 @@ fn bsp_confirm_storing_not_volunteered_fail() {
         let size = 4;
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
         // Dispatch storage request.
@@ -679,15 +607,11 @@ fn bsp_confirm_storing_not_volunteered_fail() {
             location.clone(),
             fingerprint,
             size,
-            multiaddresses.clone(),
+            peer_ids.clone(),
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(
-            bsp_signed.clone(),
-            storage_amount,
-            multiaddresses.clone(),
-        ));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
         assert_noop!(
             FileSystem::bsp_confirm_storing(
@@ -714,11 +638,8 @@ fn bsp_already_confirmed_fail() {
         let size = 4;
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
         // Dispatch storage request.
@@ -727,22 +648,17 @@ fn bsp_already_confirmed_fail() {
             location.clone(),
             fingerprint,
             size,
-            multiaddresses.clone(),
+            peer_ids.clone(),
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(
-            bsp_signed.clone(),
-            storage_amount,
-            multiaddresses.clone(),
-        ));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
             bsp_signed.clone(),
             location.clone(),
             fingerprint,
-            multiaddresses.clone()
         ));
 
         // Dispatch BSP confirm storing.
@@ -779,11 +695,8 @@ fn bsp_actions_not_a_bsp_fail() {
         let size = 4;
         let file_content = b"test".to_vec();
         let fingerprint = BlakeTwo256::hash(&file_content);
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
@@ -791,16 +704,11 @@ fn bsp_actions_not_a_bsp_fail() {
             location.clone(),
             fingerprint,
             size,
-            multiaddresses.clone(),
+            peer_ids.clone(),
         ));
 
         assert_noop!(
-            FileSystem::bsp_volunteer(
-                bsp_signed.clone(),
-                location.clone(),
-                fingerprint,
-                multiaddresses.clone()
-            ),
+            FileSystem::bsp_volunteer(bsp_signed.clone(), location.clone(), fingerprint,),
             Error::<Test>::NotABsp
         );
 
@@ -830,11 +738,8 @@ fn bsp_stop_storing_success() {
         let size = 4;
         // TODO: right now we are bypassing the volunteer assignment threshold
         let fingerprint = H256::zero();
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
         // Dispatch storage request.
@@ -843,22 +748,17 @@ fn bsp_stop_storing_success() {
             location.clone(),
             fingerprint,
             size,
-            multiaddresses.clone(),
+            peer_ids.clone(),
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(
-            bsp_signed.clone(),
-            storage_amount,
-            multiaddresses.clone(),
-        ));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
             bsp_signed.clone(),
             location.clone(),
             fingerprint,
-            multiaddresses.clone()
         ));
 
         // Dispatch BSP confirm storing.
@@ -889,7 +789,7 @@ fn bsp_stop_storing_success() {
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
-                user_multiaddresses: multiaddresses.clone(),
+                user_peer_ids: peer_ids.clone(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
                 bsps_confirmed: 1,
@@ -921,7 +821,7 @@ fn bsp_stop_storing_success() {
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
-                user_multiaddresses: multiaddresses.clone(),
+                user_peer_ids: peer_ids.clone(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
                 bsps_confirmed: 0,
@@ -952,11 +852,6 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         let file_key = H256::from_slice(&[1; 32]);
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let size = 4;
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
         // Dispatch storage request.
@@ -969,18 +864,13 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(
-            bsp_signed.clone(),
-            storage_amount,
-            multiaddresses.clone(),
-        ));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
             bsp_signed.clone(),
             location.clone(),
             H256::zero(),
-            Default::default()
         ));
 
         // Dispatch BSP confirm storing.
@@ -1017,7 +907,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
                 owner: owner_account_id.clone(),
                 fingerprint: H256::zero(),
                 size,
-                user_multiaddresses: Default::default(),
+                user_peer_ids: Default::default(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
                 bsps_confirmed: 0,
@@ -1049,11 +939,6 @@ fn bsp_stop_storing_not_volunteered_success() {
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let size = 4;
         let fingerprint = H256::zero();
-        let multiaddr = BoundedVec::try_from(vec![1]).unwrap();
-        let multiaddresses: BoundedVec<
-            MultiAddress<Test>,
-            <Test as Config>::MaxDataServerMultiAddresses,
-        > = BoundedVec::try_from(vec![multiaddr]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
         // Dispatch storage request.
@@ -1066,11 +951,7 @@ fn bsp_stop_storing_not_volunteered_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(
-            bsp_signed.clone(),
-            storage_amount,
-            multiaddresses.clone(),
-        ));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
@@ -1094,7 +975,7 @@ fn bsp_stop_storing_not_volunteered_success() {
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
-                user_multiaddresses: Default::default(),
+                user_peer_ids: Default::default(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: current_bsps_required.checked_add(1).unwrap(),
                 bsps_confirmed: 0,
@@ -1145,7 +1026,7 @@ fn bsp_stop_storing_no_storage_request_success() {
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
-                user_multiaddresses: Default::default(),
+                user_peer_ids: Default::default(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: 1,
                 bsps_confirmed: 0,
@@ -1244,13 +1125,24 @@ fn threshold_does_not_exceed_asymptote_success() {
 fn bsp_sign_up(
     bsp_signed: RuntimeOrigin,
     storage_amount: StorageData<Test>,
-    multiaddresses: BoundedVec<MultiAddress<Test>, <Test as Config>::MaxDataServerMultiAddresses>,
 ) -> DispatchResultWithPostInfo {
+    let mut multiaddresses: BoundedVec<
+        MultiAddress<Test>,
+        <Test as Config>::MaxDataServerMultiAddresses,
+    > = BoundedVec::new();
+    multiaddresses.force_push(
+        "/ip4/127.0.0.1/udp/1234"
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .unwrap(),
+    );
+
     // Request to sign up the account as a Backup Storage Provider
     assert_ok!(Providers::request_bsp_sign_up(
         bsp_signed.clone(),
         storage_amount,
-        multiaddresses.clone(),
+        multiaddresses,
     ));
 
     // Advance enough blocks for randomness to be valid

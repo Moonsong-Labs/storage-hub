@@ -12,7 +12,7 @@ use sp_std::{vec, vec::Vec};
 use crate::{
     pallet,
     types::{
-        FileLocation, Fingerprint, MaxBspsPerStorageRequest, MultiAddresses, Proof, StorageData,
+        FileLocation, Fingerprint, MaxBspsPerStorageRequest, PeerIds, Proof, StorageData,
         StorageRequestBspsMetadata, StorageRequestMetadata,
     },
     Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
@@ -68,7 +68,7 @@ where
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         bsps_required: Option<T::StorageRequestBspsRequiredType>,
-        user_multiaddresses: Option<MultiAddresses<T>>,
+        user_peer_ids: Option<PeerIds<T>>,
         data_server_sps: BoundedVec<T::AccountId, MaxBspsPerStorageRequest<T>>,
     ) -> DispatchResult {
         // TODO: Check user funds and lock them for the storage request.
@@ -90,7 +90,7 @@ where
             owner,
             fingerprint,
             size,
-            user_multiaddresses: user_multiaddresses.unwrap_or_default(),
+            user_peer_ids: user_peer_ids.unwrap_or_default(),
             data_server_sps,
             bsps_required,
             bsps_confirmed: T::StorageRequestBspsRequiredType::zero(),
