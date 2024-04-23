@@ -100,7 +100,7 @@ From here you can interact via the websockets exposed in the direct links, in th
 
 ### Generating new Type Interfaces
 
-This repo uses Parity's [polkadot-api](https://github.com/polkadot-api/polkadot-api) AKA PAPI. 
+This repo uses Parity's [polkadot-api](https://github.com/polkadot-api/polkadot-api) AKA PAPI.
 To generate new type interfaces run the following in `/test`:
 
 ```sh
@@ -110,7 +110,9 @@ bun zombie:run:native
 In another terminal window in `/test`:
 
 ```sh
+bun scalegen
 bun typegen
 ```
 
-This will create type interface files in `/typegen` directory, which is used throughout the tests to interact with the chain.
+This will update the scale files, and create type interfaces from them into the `/typegen` directory.
+These generated descriptors are used throughout the tests to interact with relay and storagehub chain.
