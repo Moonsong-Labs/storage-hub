@@ -303,14 +303,14 @@ impl BlockchainService {
                                 location,
                                 fingerprint,
                                 size,
-                                multiaddresses,
+                                peer_ids,
                             },
                         ) => self.emit(NewStorageRequest {
                             who,
                             location,
                             fingerprint,
                             size,
-                            multiaddresses,
+                            user_peer_ids: peer_ids,
                         }),
                         // Ignore all other events.
                         _ => {}
