@@ -63,7 +63,8 @@ pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
                 key: next_key.into(),
                 data: deserialize_value(&next_value)?,
             };
-            Ok(Proven::new_neighbour_keys(Some(prev_leaf), Some(next_leaf)))
+            Ok(Proven::new_neighbour_keys(Some(prev_leaf), Some(next_leaf))
+                .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
         }
         (Some((key, value)), None) if *challenged_file_key.as_ref() > *key => {
             // Scenario 3: After the last leaf
@@ -71,7 +72,8 @@ pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
                 key: key.into(),
                 data: deserialize_value(&value)?,
             };
-            Ok(Proven::new_neighbour_keys(Some(leaf), None))
+            Ok(Proven::new_neighbour_keys(Some(leaf), None)
+                .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
         }
         (None, Some((key, value))) if *challenged_file_key.as_ref() < *key => {
             // Scenario 4: Before the first leaf
@@ -79,7 +81,8 @@ pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
                 key: key.into(),
                 data: deserialize_value(&value)?,
             };
-            Ok(Proven::new_neighbour_keys(None, Some(leaf)))
+            Ok(Proven::new_neighbour_keys(None, Some(leaf))
+                .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
         }
         _ => Err(ForestStorageErrors::InvalidProvingScenario),
     }

@@ -32,4 +32,8 @@ pub enum ForestStorageErrors {
     InvalidProvingScenario,
     /// Failed to get file key.
     FailedToGetFileKey,
+    /// Failed to construct proven leaves.
+    ///
+    /// This will normally happen if both left and right leaves are `None`.
+    FailedToConstructProvenLeaves,
 }

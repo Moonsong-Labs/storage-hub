@@ -43,8 +43,14 @@ impl<K: AsRef<[u8]>, D: Debug> Proven<K, D> {
         Proven::ExactKey(Leaf { key, data })
     }
 
-    pub fn new_neighbour_keys(left: Option<Leaf<K, D>>, right: Option<Leaf<K, D>>) -> Self {
-        Proven::NeighbourKeys((left, right))
+    pub fn new_neighbour_keys(
+        left: Option<Leaf<K, D>>,
+        right: Option<Leaf<K, D>>,
+    ) -> Result<Self, &'static str> {
+        match (left, right) {
+            (None, None) => Err("Both left and right leaves cannot be None"),
+            (left, right) => Ok(Proven::NeighbourKeys((left, right))),
+        }
     }
 }
 
