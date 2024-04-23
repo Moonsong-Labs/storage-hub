@@ -29,7 +29,7 @@
 
 pub use pallet::*;
 
-mod types;
+pub mod types;
 mod utils;
 
 #[cfg(test)]
@@ -156,9 +156,13 @@ pub mod pallet {
         #[pallet::constant]
         type MaxFilePathSize: Get<u32>;
 
-        /// Maximum byte size of a libp2p multiaddress.
+        /// Maximum byte size of a peer id.
         #[pallet::constant]
-        type MaxMultiAddressSize: Get<u32>;
+        type MaxPeerIdSize: Get<u32>;
+
+        /// Maximum number of peer ids for a storage request.
+        #[pallet::constant]
+        type MaxNumberOfPeerIds: Get<u32>;
 
         /// Maximum number of multiaddresses for a storage request.
         #[pallet::constant]
@@ -275,7 +279,7 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
-            multiaddresses: BoundedVec<MultiAddress<T>, T::MaxDataServerMultiAddresses>,
+            peer_ids: PeerIds<T>,
         },
         /// Notifies that a BSP has been accepted to store a given file.
         AcceptedBspVolunteer {
@@ -372,7 +376,7 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
-            multiaddresses: MultiAddresses<T>,
+            peer_ids: PeerIds<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
@@ -384,7 +388,7 @@ pub mod pallet {
                 fingerprint,
                 size,
                 None,
-                Some(multiaddresses.clone()),
+                Some(peer_ids.clone()),
                 Default::default(),
             )?;
 
@@ -394,7 +398,7 @@ pub mod pallet {
                 location,
                 fingerprint,
                 size,
-                multiaddresses,
+                peer_ids,
             });
 
             Ok(())
@@ -432,13 +436,13 @@ pub mod pallet {
             origin: OriginFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            multiaddresses: MultiAddresses<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
             // Perform validations and register Storage Provider as BSP for file.
-            Self::do_bsp_volunteer(who.clone(), location.clone(), fingerprint)?;
+            let multiaddresses =
+                Self::do_bsp_volunteer(who.clone(), location.clone(), fingerprint)?;
 
             // Emit new BSP volunteer event.
             Self::deposit_event(Event::AcceptedBspVolunteer {

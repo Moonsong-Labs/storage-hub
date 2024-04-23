@@ -24,10 +24,10 @@ pub struct StorageRequestMetadata<T: Config> {
     /// SPs will use this to determine if they have enough space to store the data.
     /// This is also used to verify that the data sent by the user matches the size specified here.
     pub size: StorageData<T>,
-    /// Multiaddress of the user who requested the storage.
+    /// Peer Ids of the user who requested the storage.
     ///
-    /// SPs will expect a connection request to be initiated by the user with this multiaddress.
-    pub user_multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>,
+    /// SPs will expect a connection request to be initiated by the user with this Peer Id.
+    pub user_peer_ids: PeerIds<T>,
     /// List of storage providers that can serve the data that is requested to be stored.
     ///
     /// This is useful when a BSP stops serving data and automatically creates a new storage request with no user multiaddresses, since
@@ -88,14 +88,25 @@ pub type TargetBspsRequired<T> = <T as crate::Config>::TargetBspsRequired;
 /// Byte array representing the file path.
 pub type FileLocation<T> = BoundedVec<u8, MaxFilePathSize<T>>;
 
-/// Alias for the `MaxMultiAddressSize` type used in the FileSystem pallet.
-pub type MaxMultiAddressSize<T> = <T as crate::Config>::MaxMultiAddressSize;
+/// Alias for the `MaxPeerIdSize` type used in the FileSystem pallet.
+pub type MaxPeerIdSize<T> = <T as crate::Config>::MaxPeerIdSize;
 
-/// Byte array representing the libp2p multiaddress.
-pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
+/// Byte array representing the libp2p peer Id.
+pub type PeerId<T> = BoundedVec<u8, MaxPeerIdSize<T>>;
 
-/// Alias for the `MaxMultiAddresses` type used in the FileSystem pallet.
-pub type MaxMultiAddresses<T> = <T as crate::Config>::MaxDataServerMultiAddresses;
+/// Alias for the `MaxNumberOfPeerIds` type used in the FileSystem pallet.
+pub type MaxNumberOfPeerIds<T> = <T as crate::Config>::MaxNumberOfPeerIds;
+
+/// Alias for a bounded vector of [`PeerId`].
+pub type PeerIds<T> = BoundedVec<PeerId<T>, MaxNumberOfPeerIds<T>>;
+
+/// Alias for the `MultiAddress` type used in the ReadProvidersInterface.
+pub type MultiAddress<T> =
+    <<T as crate::Config>::Providers as storage_hub_traits::ReadProvidersInterface>::MultiAddress;
+
+/// Alias for the `MaxMultiAddresses` type used in the ReadProvidersInterface.
+pub type MaxMultiAddresses<T> =
+    <<T as crate::Config>::Providers as storage_hub_traits::ReadProvidersInterface>::MaxNumberOfMultiAddresses;
 
 /// Alias for a bounded vector of [`MultiAddress`].
 pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;

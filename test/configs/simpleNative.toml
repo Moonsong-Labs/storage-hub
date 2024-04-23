@@ -17,7 +17,7 @@ id = 2000
 [parachains.collator]
 command = "../target/release/storage-hub-node"
 name = "sh"
-args = ["--no-hardware-benchmarks", "-lparachain=debug"]
+args = ["--no-hardware-benchmarks", "-lparachain=debug", "--provider", "--provider-type", "bsp", "--seed-file", "./Cargo.toml"]
 
 
 [types.Header]
