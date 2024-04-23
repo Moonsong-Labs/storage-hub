@@ -93,10 +93,12 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
         while let Ok(event) = self.receiver.recv().await {
             let cloned_event_handler = self.event_handler.clone();
             self.spawner.spawn(async move {
-                cloned_event_handler
-                    .handle_event(event)
-                    .await
-                    .expect("Task exited with error")
+                match cloned_event_handler.handle_event(event).await {
+                    Ok(_) => {}
+                    Err(error) => {
+                        warn!("Task ended with error: {:?}", error);
+                    }
+                }
             });
         }
     }

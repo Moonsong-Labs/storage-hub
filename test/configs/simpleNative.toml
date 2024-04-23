@@ -29,8 +29,6 @@ name = "sh"
 args = ["--no-hardware-benchmarks", "-lparachain=debug"]
 ws_port = 42933
 
-
-
 [types.Header]
 number = "u64"
 parent_hash = "Hash"
