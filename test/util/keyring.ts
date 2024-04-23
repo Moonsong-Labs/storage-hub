@@ -1,12 +1,13 @@
-import type { PolkadotSigner, SS58String } from "@polkadot-api/client";
+import type { PolkadotSigner, SS58String } from "polkadot-api";
 import { fromHex } from "@polkadot-api/utils";
 import { ed25519 } from "@noble/curves/ed25519";
 import { Keyring } from "@polkadot/api";
 import { waitReady } from "@polkadot/wasm-crypto";
-import { Blake2256 } from "@polkadot-api/substrate-bindings";
+import {blake2b}from "@noble/hashes/blake2b"
+// import { Blake2256 } from "polkadot-api";
 import { secp256k1 } from "@noble/curves/secp256k1";
-import { getPolkadotSigner } from "@polkadot-api/signer";
-import { AccountId } from "@polkadot-api/client";
+import { getPolkadotSigner } from "polkadot-api/signer";
+import { AccountId } from "polkadot-api";
 
 // These Keys have been generated via subkey util from polkadot-sdk
 // e.g.:
@@ -68,7 +69,7 @@ const keyring = new Keyring({ type: "sr25519" });
 await waitReady();
 
 const signEcdsa = (value: Uint8Array, priv: Uint8Array) => {
-  const signature = secp256k1.sign(Blake2256(value), priv);
+  const signature = secp256k1.sign(blake2b(value), priv);
   const signedBytes = signature.toCompactRawBytes();
 
   const result = new Uint8Array(signedBytes.length + 1);
@@ -92,7 +93,7 @@ const accountEntries = people.map((person) => {
   // Define the signer for ecdsa
   const ecdsaPrivateKey = fromHex(person.ecdsaKey);
   const ecdsaSigner = getPolkadotSigner(
-    Blake2256(secp256k1.getPublicKey(ecdsaPrivateKey)),
+    blake2b(secp256k1.getPublicKey(ecdsaPrivateKey)),
     "Ecdsa",
     async (input) => signEcdsa(input, ecdsaPrivateKey)
   );

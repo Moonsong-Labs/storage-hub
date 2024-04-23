@@ -1,21 +1,31 @@
 import { test, describe, expect } from "bun:test";
-import { createClient } from "polkadot-api";
+import { Binary, createClient } from "polkadot-api";
 import { WebSocketProvider } from "polkadot-api/ws-provider/node";
-import { relaychain, storagehub, MultiAddress } from "@polkadot-api/descriptors";
+import {
+  relaychain,
+  storagehub,
+  MultiAddress,
+  TransactionValidityTransactionSource,
+} from "@polkadot-api/descriptors";
 import { accounts } from "../../util";
+import { fromHex } from "polkadot-api/utils";
 
 type TypesBundle = typeof relaychain | typeof storagehub;
 
 const getClient = async (endpoint: string, typesBundle: TypesBundle) => {
-  const relayClient = createClient(WebSocketProvider(endpoint));
-  const api = relayClient.getTypedApi(typesBundle);
+  const client = createClient(WebSocketProvider(endpoint));
+  const api = client.getTypedApi(typesBundle);
   const rt = await api.runtime.latest();
-  return { api, rt };
+  return { api, rt, client };
 };
 
 describe("Simple zombieTest", async () => {
   const { api: relayApi, rt: relayRT } = await getClient("ws://127.0.0.1:39459", relaychain);
-  const { api: storageApi, rt: storageRT } = await getClient("ws://127.0.0.1:42933", storagehub);
+  const {
+    api: storageApi,
+    rt: storageRT,
+    client: shClient,
+  } = await getClient("ws://127.0.0.1:42933", storagehub);
 
   describe("Relay", async () => {
     test("Check RelayChain RT Version", async () => {
@@ -85,10 +95,20 @@ describe("Simple zombieTest", async () => {
     test(
       "Send bal transfer on storagehub",
       async () => {
-        await storageApi.tx.Balances.transfer_allow_death({
+        const ext = await storageApi.tx.Balances.transfer_allow_death({
           dest: MultiAddress.Id(accounts.bob.sr25519.id),
           value: 1337n,
-        }).signAndSubmit(accounts.alice.sr25519.signer);
+        }).sign(accounts.alice.sr25519.signer);
+
+        const blockHash = (await shClient.getFinalizedBlock()).hash;
+
+        const resp = await storageApi.apis.TaggedTransactionQueue.validate_transaction(
+          TransactionValidityTransactionSource.External(),
+          Binary.fromBytes(fromHex(ext)),
+          Binary.fromBytes(fromHex(blockHash))
+        );
+        console.log(resp);
+        await shClient.submit(ext);
       },
       { timeout: 60_000 }
     );
