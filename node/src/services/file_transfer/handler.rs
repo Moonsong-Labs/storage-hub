@@ -35,17 +35,13 @@ use sc_tracing::tracing::{debug, info, trace, warn};
 use sp_core::hexdisplay::HexDisplay;
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
 
-use crate::services::file_transfer::events::RemoteUploadRequest;
-
-use super::{events::FileTransferServiceEventBusProvider, schema};
+use crate::services::file_transfer::{events::{FileTransferServiceEventBusProvider, RemoteUploadRequest}, schema};
+use crate::services::file_transfer::commands::FileTransferServiceCommand;
 
 const LOG_TARGET: &str = "file-transfer-service";
 
 /// Max number of queued requests.
 const MAX_FILE_TRANSFER_REQUESTS_QUEUE: usize = 500;
-
-#[derive(Debug)]
-pub enum FileTransferServiceCommand {}
 
 #[derive(Debug)]
 pub struct FileTransferService {

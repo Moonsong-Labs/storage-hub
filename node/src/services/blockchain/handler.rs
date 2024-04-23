@@ -42,14 +42,11 @@ use sp_runtime::{
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 
-use crate::{
-    service::ParachainClient,
-    services::blockchain::{events::NewStorageRequest, types::EventsVec},
-};
+use crate::service::ParachainClient;
 
-use super::{
+use crate::services::blockchain::{
     commands::BlockchainServiceCommand, events::BlockchainServiceEventBusProvider,
-    types::Extrinsic, KEY_TYPE,
+    types::Extrinsic, KEY_TYPE, {events::NewStorageRequest, types::EventsVec}
 };
 
 const LOG_TARGET: &str = "blockchain-service";

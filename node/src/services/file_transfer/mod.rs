@@ -8,6 +8,8 @@ pub use self::handler::FileTransferService;
 
 /// For defining the events emitted by the file transfer service.
 pub mod events;
+// For sending instructions to the file transfer service.
+mod commands;
 /// For incoming provider requests.
 mod handler;
 /// For defining the provider requests protocol schema.
