@@ -128,6 +128,7 @@ mod tests {
             let fingerprint = H256::from_slice(&[0; 32]);
 
             let metadata = Metadata {
+                owner: String::from("owner"),
                 location: file_path,
                 size: 0,
                 fingerprint,

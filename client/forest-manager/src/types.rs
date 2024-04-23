@@ -12,8 +12,14 @@ pub enum ForestStorageErrors {
     FailedToSeek,
     /// Failed to read leaf.
     FailedToReadLeaf,
+    /// Failed to insert file key.
+    FailedToInsertFileKey,
+    /// Failed to parse root.
+    FailedToParseRoot,
     /// Failed to deserialize value.
     FailedToDeserializeValue,
+    /// Failed to serialize value.
+    FailedToSerializeValue,
     /// Failed to generate compact proof.
     FailedToGenerateCompactProof,
     /// Failed to insert file key.

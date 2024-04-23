@@ -6,6 +6,7 @@ use crate::{
     prove::prove,
     traits::ForestStorage,
     types::{ForestStorageErrors, HashT},
+    utils::serialize_value,
 };
 
 pub struct InMemoryForestStorage<T: TrieLayout + 'static> {
@@ -81,6 +82,7 @@ impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
     ) -> Result<ForestProof<Self::RawKey>, ForestStorageErrors> {
         let recorder: Recorder<T::Hash> = Recorder::default();
 
+        // A `TrieRecorder` is needed to create a proof of the "visited" leafs, by the end of this process.
         let mut trie_recorder = recorder.as_trie_recorder(self.root);
 
         let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root)
@@ -108,7 +110,7 @@ impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
                 .root
                 .as_ref()
                 .try_into()
-                .expect("Failed to convert root hash"),
+                .map_err(|_| ForestStorageErrors::FailedToParseRoot)?,
         })
     }
 
@@ -124,11 +126,11 @@ impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
         let mut trie = TrieDBMutBuilder::<T>::new(&mut self.memdb, &mut self.root).build();
 
         // Serialize the metadata.
-        let raw_metadata = bincode::serialize(metadata).expect("Failed to serialize metadata");
+        let raw_metadata = serialize_value(metadata)?;
 
         // Insert the file key and metadata into the trie.
         trie.insert(file_key.as_ref(), &raw_metadata)
-            .expect("Failed to write storage");
+            .map_err(|_| ForestStorageErrors::FailedToInsertFileKey)?;
 
         // Drop the `trie` to release the self
         drop(trie);

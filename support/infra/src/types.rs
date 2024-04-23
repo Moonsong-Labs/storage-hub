@@ -16,6 +16,7 @@ pub type Key = H256;
 /// Most importantly, the fingerprint which is the root Merkle hash of the file.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Metadata {
+    pub owner: String,
     pub location: String,
     pub size: u64,
     pub fingerprint: Key,
