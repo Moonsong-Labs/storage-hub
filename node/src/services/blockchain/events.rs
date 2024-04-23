@@ -1,12 +1,4 @@
-use sp_core::H256;
-use sp_runtime::{AccountId32, BoundedVec};
 use storage_hub_infra::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
-
-type StorageData = pallet_file_system::types::StorageData<storage_hub_runtime::Runtime>;
-type FileLocation = pallet_file_system::types::FileLocation<storage_hub_runtime::Runtime>;
-type PeerId = pallet_file_system::types::PeerId<storage_hub_runtime::Runtime>;
-type MaxNumberOfPeerIds =
-    <storage_hub_runtime::Runtime as pallet_file_system::Config>::MaxPeerIdSize;
 
 // TODO: use proper types
 #[derive(Debug, Clone)]
@@ -16,21 +8,14 @@ pub struct ChallengeRequest {
 
 impl EventBusMessage for ChallengeRequest {}
 
-/// New storage request event.
-///
-/// This event is emitted when a new storage request is created on-chain.
+// TODO: use proper types
 #[derive(Debug, Clone)]
 pub struct NewStorageRequest {
-    /// Account ID of the requester.
-    pub who: AccountId32,
-    /// Location of the file (as a file path).
-    pub location: FileLocation,
-    /// Fingerprint of the file (root hash of the merklised file).
-    pub fingerprint: H256,
-    /// Size of the file.
-    pub size: StorageData,
-    /// libp2p peer IDs from where the user would send the file.
-    pub user_peer_ids: BoundedVec<PeerId, MaxNumberOfPeerIds>,
+    pub who: String,
+    pub location: String,
+    pub fingerprint: String,
+    pub size: u64,
+    pub user_peer_ids: Vec<String>,
 }
 
 impl EventBusMessage for NewStorageRequest {}

@@ -29,7 +29,7 @@
 
 pub use pallet::*;
 
-pub mod types;
+mod types;
 mod utils;
 
 #[cfg(test)]

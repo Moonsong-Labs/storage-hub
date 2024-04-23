@@ -11,6 +11,7 @@ use forest_manager::in_memory::InMemoryForestStorage;
 use polkadot_primitives::{HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use sp_consensus_aura::Slot;
+use sp_core::H256;
 use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
 use storage_hub_runtime::{
@@ -50,8 +51,7 @@ use crate::{
     cli::ProviderType,
     command::ProviderOptions,
     services::{
-        blockchain::{spawn_blockchain_service, KEY_TYPE},
-        file_transfer::spawn_file_transfer_service,
+        blockchain::spawn_blockchain_service, file_transfer::spawn_file_transfer_service,
         StorageHubHandler, StorageHubHandlerConfig,
     },
 };
@@ -213,12 +213,6 @@ async fn start_dev_impl(
         other: (_, mut telemetry, _),
     } = new_partial(&config, true)?;
 
-    let signing_dev_key = config
-        .dev_key_seed
-        .clone()
-        .expect("Dev key seed must be present in dev mode.");
-    let keystore = keystore_container.keystore();
-
     let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
     let collator = config.role.is_authority();
     let prometheus_registry = config.prometheus_registry().cloned();
@@ -231,16 +225,15 @@ async fn start_dev_impl(
         .flatten()
         .expect("Genesis block exists; qed");
 
-    // Spawning File Transfer Service if node is running as a Storage Provider.
-    // This is done here because the File Transfer Service modifies the network configuration.
-    let mut file_transfer_service_handle = None;
-    if provider_options.is_some() {
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
-
-        file_transfer_service_handle = Some(
-            spawn_file_transfer_service(&task_spawner, genesis_hash, &config, &mut net_config)
-                .await,
-        );
+    if let Some(provider_options) = provider_options {
+        start_sh_services(
+            provider_options,
+            &task_manager,
+            genesis_hash,
+            &config,
+            &mut net_config,
+        )
+        .await;
     }
 
     let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
@@ -294,7 +287,7 @@ async fn start_dev_impl(
         })
     };
 
-    let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+    sc_service::spawn_tasks(sc_service::SpawnTasksParams {
         rpc_builder,
         client: client.clone(),
         transaction_pool: transaction_pool.clone(),
@@ -308,56 +301,6 @@ async fn start_dev_impl(
         tx_handler_controller,
         telemetry: telemetry.as_mut(),
     })?;
-
-    // Spawning the Blockchain Service if node is running as a Storage Provider.
-    if let Some(provider_options) = provider_options {
-        // File Transfer Service handle is expected to be present when the node is running as a Storage Provider.
-        let file_transfer_service_handle = file_transfer_service_handle.expect(
-            "File Transfer Service handle is expected to be present when the node is running as a Storage Provider. qed",
-        );
-
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
-
-        // Initialise seed for signing transactions using blockchain service.
-        // In dev mode we use a well known dev account.
-        keystore
-            .sr25519_generate_new(KEY_TYPE, Some(signing_dev_key.as_ref()))
-            .expect("Creating key with account Alice should succeed.");
-
-        // Spawn the Blockchain Service.
-        let blockchain_service_handle = spawn_blockchain_service(
-            &task_spawner,
-            client.clone(),
-            Arc::new(rpc_handlers),
-            keystore.clone(),
-        )
-        .await;
-
-        let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
-        let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
-
-        struct InMemoryStorageHubConfig {}
-
-        impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
-            type FileStorage = InMemoryFileStorage;
-            type ForestStorage = InMemoryForestStorage;
-        }
-
-        // Initialise the StorageHubHandler, for tasks to have access to the services.
-        let sh_handler = StorageHubHandler::<InMemoryStorageHubConfig>::new(
-            task_spawner,
-            file_transfer_service_handle,
-            blockchain_service_handle,
-            file_storage,
-            forest_storage,
-        );
-
-        // Starting the tasks according to the provider type.
-        match provider_options.provider_type {
-            ProviderType::Bsp => sh_handler.start_bsp_tasks(),
-            _ => {}
-        }
-    }
 
     if let Some(hwbench) = hwbench {
         sc_sysinfo::print_hwbench(&hwbench);
@@ -488,7 +431,7 @@ async fn start_dev_impl(
 /// Start a node with the given parachain `Configuration` and relay chain `Configuration`.
 ///
 /// This is the actual implementation that is abstract over the executor and the runtime api.
-#[sc_tracing::logging::prefix_logs_with("StorageHub 💾")]
+#[sc_tracing::logging::prefix_logs_with("Parachain")]
 async fn start_node_impl(
     parachain_config: Configuration,
     polkadot_config: Configuration,
@@ -507,7 +450,6 @@ async fn start_node_impl(
     let client = params.client.clone();
     let backend = params.backend.clone();
     let mut task_manager = params.task_manager;
-    let keystore = params.keystore_container.keystore();
 
     let genesis_hash = client
         .block_hash(0u32.into())
@@ -515,21 +457,15 @@ async fn start_node_impl(
         .flatten()
         .expect("Genesis block exists; qed");
 
-    // Spawning File Transfer Service if node is running as a Storage Provider.
-    // This is done here because the File Transfer Service modifies the network configuration.
-    let mut file_transfer_service_handle = None;
-    if provider_options.is_some() {
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
-
-        file_transfer_service_handle = Some(
-            spawn_file_transfer_service(
-                &task_spawner,
-                genesis_hash,
-                &parachain_config,
-                &mut net_config,
-            )
-            .await,
-        );
+    if let Some(provider_options) = provider_options {
+        start_sh_services(
+            provider_options,
+            &task_manager,
+            genesis_hash,
+            &parachain_config,
+            &mut net_config,
+        )
+        .await;
     }
 
     let (relay_chain_interface, collator_key) = build_relay_chain_interface(
@@ -600,7 +536,7 @@ async fn start_node_impl(
         })
     };
 
-    let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+    sc_service::spawn_tasks(sc_service::SpawnTasksParams {
         rpc_builder,
         client: client.clone(),
         transaction_pool: transaction_pool.clone(),
@@ -614,57 +550,6 @@ async fn start_node_impl(
         tx_handler_controller,
         telemetry: telemetry.as_mut(),
     })?;
-
-    // Spawning the Blockchain Service if node is running as a Storage Provider.
-    if let Some(provider_options) = provider_options {
-        // File Transfer Service handle is expected to be present when the node is running as a Storage Provider.
-        let file_transfer_service_handle = file_transfer_service_handle.expect(
-            "File Transfer Service handle is expected to be present when the node is running as a Storage Provider. qed",
-        );
-
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
-
-        // Initialise seed for signing transactions using blockchain service.
-        // TODO: Modify this to use a key in the keystore of the node.
-        // TODO: Typically these keys should be inserted with RPC calls to `author_insertKey`.
-        keystore
-            .sr25519_generate_new(KEY_TYPE, Some("//Alice"))
-            .expect("Creating key with account Alice should succeed.");
-
-        // Spawn the blockchain service.
-        let blockchain_service_handle = spawn_blockchain_service(
-            &task_spawner,
-            client.clone(),
-            Arc::new(rpc_handlers),
-            keystore.clone(),
-        )
-        .await;
-
-        let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
-        let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
-
-        struct InMemoryStorageHubConfig {}
-
-        impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
-            type FileStorage = InMemoryFileStorage;
-            type ForestStorage = InMemoryForestStorage;
-        }
-
-        // Initialise the StorageHubHandler, for tasks to have access to the services.
-        let sh_handler = StorageHubHandler::<InMemoryStorageHubConfig>::new(
-            task_spawner,
-            file_transfer_service_handle,
-            blockchain_service_handle,
-            file_storage,
-            forest_storage,
-        );
-
-        // Starting the tasks according to the provider type.
-        match provider_options.provider_type {
-            ProviderType::Bsp => sh_handler.start_bsp_tasks(),
-            _ => {}
-        }
-    }
 
     if let Some(hwbench) = hwbench {
         sc_sysinfo::print_hwbench(&hwbench);
@@ -742,6 +627,45 @@ async fn start_node_impl(
     network_starter.start_network();
 
     Ok((task_manager, client))
+}
+
+/// Start all storage hub related services.
+async fn start_sh_services(
+    provider_options: ProviderOptions,
+    task_manager: &TaskManager,
+    genesis_hash: H256,
+    config: &Configuration,
+    net_config: &mut sc_network::config::FullNetworkConfiguration,
+) {
+    let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+
+    let file_transfer_service_handle =
+        spawn_file_transfer_service(&task_spawner, genesis_hash, config, net_config).await;
+
+    let blockchain_service_handle = spawn_blockchain_service(&task_spawner).await;
+
+    let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
+    let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
+
+    struct InMemoryStorageHubConfig {}
+
+    impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
+        type FileStorage = InMemoryFileStorage;
+        type ForestStorage = InMemoryForestStorage;
+    }
+
+    let sh_handler = StorageHubHandler::<InMemoryStorageHubConfig>::new(
+        task_spawner,
+        file_transfer_service_handle,
+        blockchain_service_handle,
+        file_storage,
+        forest_storage,
+    );
+
+    match provider_options.provider_type {
+        ProviderType::Bsp => sh_handler.start_bsp_tasks(),
+        _ => {}
+    }
 }
 
 /// Build the import queue for the parachain runtime.
