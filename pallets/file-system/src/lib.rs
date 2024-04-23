@@ -29,7 +29,7 @@
 
 pub use pallet::*;
 
-mod types;
+pub mod types;
 mod utils;
 
 #[cfg(test)]
@@ -164,10 +164,6 @@ pub mod pallet {
         #[pallet::constant]
         type MaxNumberOfPeerIds: Get<u32>;
 
-        /// Maximum byte size of a libp2p multiaddress.
-        #[pallet::constant]
-        type MaxMultiAddressSize: Get<u32>;
-
         /// Maximum number of multiaddresses for a storage request.
         #[pallet::constant]
         type MaxDataServerMultiAddresses: Get<u32>;
@@ -290,6 +286,7 @@ pub mod pallet {
             who: T::AccountId,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
+            multiaddresses: MultiAddresses<T>,
         },
         /// Notifies that a BSP confirmed storing a file.
         BspConfirmedStoring {
@@ -444,13 +441,15 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and register Storage Provider as BSP for file.
-            Self::do_bsp_volunteer(who.clone(), location.clone(), fingerprint)?;
+            let multiaddresses =
+                Self::do_bsp_volunteer(who.clone(), location.clone(), fingerprint)?;
 
             // Emit new BSP volunteer event.
             Self::deposit_event(Event::AcceptedBspVolunteer {
                 who,
                 location,
                 fingerprint,
+                multiaddresses,
             });
 
             Ok(())

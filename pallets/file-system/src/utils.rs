@@ -5,15 +5,16 @@ use frame_support::{ensure, pallet_prelude::DispatchResult, traits::Get};
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
-    ArithmeticError, BoundedVec,
+    ArithmeticError, BoundedVec, DispatchError,
 };
 use sp_std::{vec, vec::Vec};
+use storage_hub_traits::ReadProvidersInterface;
 
 use crate::{
     pallet,
     types::{
-        FileLocation, Fingerprint, MaxBspsPerStorageRequest, PeerIds, Proof, StorageData,
-        StorageRequestBspsMetadata, StorageRequestMetadata,
+        FileLocation, Fingerprint, MaxBspsPerStorageRequest, MultiAddresses, PeerIds, Proof,
+        StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
     },
     Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
     StorageRequestExpirations, StorageRequests,
@@ -150,7 +151,7 @@ where
         who: T::AccountId,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
-    ) -> DispatchResult {
+    ) -> Result<MultiAddresses<T>, DispatchError> {
         let bsp =
             <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(who.clone())
                 .ok_or(Error::<T>::NotABsp)?;
@@ -237,7 +238,9 @@ where
 
         <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
 
-        Ok(())
+        let multiaddresses = T::Providers::get_bsp_multiaddresses(&bsp)?;
+
+        Ok(multiaddresses)
     }
 
     /// Confirm storing a file.

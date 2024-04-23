@@ -122,7 +122,7 @@ impl pallet_balances::Config for Test {
 }
 
 parameter_types! {
-    pub const MaxPeerIdSize: u32 = 100;
+    pub const MaxNumberOfPeerIds: u32 = 100;
     pub const MaxMultiAddressSize: u32 = 100;
     pub const MaxMultiAddressAmount: u32 = 5;
 }
@@ -204,7 +204,9 @@ impl crate::Config for Test {
     type AssignmentThresholdMultiplier = ThresholdMultiplier;
     type TargetBspsRequired = ConstU32<3>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
-    type MaxPeerIdSize = MaxPeerIdSize;
+    type MaxPeerIdSize = ConstU32<100>;
+    type MaxNumberOfPeerIds = MaxNumberOfPeerIds;
+    type MaxDataServerMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
     type MaxFilePathSize = ConstU32<512u32>;
     type StorageRequestTtl = ConstU32<40u32>;
     type MaxExpiredStorageRequests = ConstU32<100u32>;

@@ -381,6 +381,7 @@ fn bsp_volunteer_success() {
                 who: bsp_account_id,
                 location,
                 fingerprint,
+                multiaddresses: create_sp_multiaddresses(),
             }
             .into(),
         );
@@ -1126,15 +1127,7 @@ fn bsp_sign_up(
     bsp_signed: RuntimeOrigin,
     storage_amount: StorageData<Test>,
 ) -> DispatchResultWithPostInfo {
-    let mut multiaddresses: BoundedVec<BoundedVec<u8, MaxMultiAddressSize>, MaxMultiAddressAmount> =
-        BoundedVec::new();
-    multiaddresses.force_push(
-        "/ip4/127.0.0.1/udp/1234"
-            .as_bytes()
-            .to_vec()
-            .try_into()
-            .unwrap(),
-    );
+    let multiaddresses = create_sp_multiaddresses();
 
     // Request to sign up the account as a Backup Storage Provider
     assert_ok!(Providers::request_bsp_sign_up(
@@ -1150,4 +1143,18 @@ fn bsp_sign_up(
     assert_ok!(Providers::confirm_sign_up(bsp_signed.clone(), None));
 
     Ok(().into())
+}
+
+fn create_sp_multiaddresses(
+) -> BoundedVec<BoundedVec<u8, MaxMultiAddressSize>, MaxMultiAddressAmount> {
+    let mut multiaddresses: BoundedVec<BoundedVec<u8, MaxMultiAddressSize>, MaxMultiAddressAmount> =
+        BoundedVec::new();
+    multiaddresses.force_push(
+        "/ip4/127.0.0.1/udp/1234"
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .unwrap(),
+    );
+    multiaddresses
 }

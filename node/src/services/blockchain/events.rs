@@ -1,5 +1,5 @@
 use sp_core::H256;
-use sp_runtime::{AccountId32, BoundedVec};
+use sp_runtime::AccountId32;
 use storage_hub_infra::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 
 type StorageData = pallet_file_system::types::StorageData<storage_hub_runtime::Runtime>;
@@ -39,6 +39,7 @@ pub struct AcceptedBspVolunteer {
     pub who: String,
     pub location: String,
     pub fingerprint: String,
+    pub multiaddresses: Vec<String>,
 }
 
 impl EventBusMessage for AcceptedBspVolunteer {}
