@@ -1,6 +1,6 @@
 import { createClient, type PolkadotClient } from "polkadot-api";
 import { WebSocketProvider } from "polkadot-api/ws-provider/node";
-import type { relaychain, storagehub } from "@polkadot-api/descriptors";
+import { relaychain, storagehub } from "@polkadot-api/descriptors";
 
 export type TypesBundle = typeof relaychain | typeof storagehub;
 
@@ -30,4 +30,19 @@ export const waitForChain = async (client: PolkadotClient, timeout = 120000) => 
       throw new Error("Timeout waiting for chain to be ready");
     }
   }
+};
+
+export const getZombieClients = async () => {
+  const {
+    api: relayApi,
+    rt: relayRT,
+    client: relayClient,
+  } = await getClient("ws://127.0.0.1:39459", relaychain);
+  const {
+    api: storageApi,
+    rt: storageRT,
+    client: shClient,
+  } = await getClient("ws://127.0.0.1:42933", storagehub);
+
+  return { relayApi, relayRT, relayClient, storageApi, storageRT, shClient };
 };

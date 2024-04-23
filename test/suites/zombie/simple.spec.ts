@@ -1,18 +1,10 @@
 import { test, describe, expect, beforeAll } from "bun:test";
-import { relaychain, storagehub, MultiAddress } from "@polkadot-api/descriptors";
-import { accounts, getClient, waitForChain } from "../../util";
+import { MultiAddress } from "@polkadot-api/descriptors";
+import { accounts, getZombieClients, waitForChain } from "../../util";
 
 describe("Simple zombieTest", async () => {
-  const {
-    api: relayApi,
-    rt: relayRT,
-    client: relayClient,
-  } = await getClient("ws://127.0.0.1:39459", relaychain);
-  const {
-    api: storageApi,
-    rt: storageRT,
-    client: shClient,
-  } = await getClient("ws://127.0.0.1:42933", storagehub);
+  const { relayApi, relayClient, relayRT, shClient, storageApi, storageRT } =
+    await getZombieClients();
 
   beforeAll(async () => {
     await Promise.all([waitForChain(shClient), waitForChain(relayClient)]);
