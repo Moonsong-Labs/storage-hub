@@ -1227,9 +1227,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.95"
+version = "1.0.94"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d32a725bc159af97c3e629873bb9f88fb8cf8a4867175f76dc987815ea07c83b"
+checksum = "17f6e324229dc011159fcc089755d1e2e216a90d43a7dea6853ca740b84f35e7"
 dependencies = [
  "jobserver",
  "libc",
@@ -4628,9 +4628,9 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
 name = "jobserver"
-version = "0.1.31"
+version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2b099aaa34a9751c5bf0878add70444e1ed2dd73f347be99003d4577277de6e"
+checksum = "685a7d121ee3f65ae4fddd72b25a04bb36b6af81bc0828f7d5434c0fe60fa3a2"
 dependencies = [
  "libc",
 ]
@@ -12991,7 +12991,7 @@ dependencies = [
 [[package]]
 name = "sp-crypto-ec-utils"
 version = "0.10.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#3380e21cd92690c2066f686164a954ba7cd17244"
+source = "git+https://github.com/paritytech/polkadot-sdk#4eabe5e0dddc4cd31ad9dab5645350360d4d36a5"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-377-ext",
@@ -13089,7 +13089,7 @@ dependencies = [
 [[package]]
 name = "sp-debug-derive"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#3380e21cd92690c2066f686164a954ba7cd17244"
+source = "git+https://github.com/paritytech/polkadot-sdk#4eabe5e0dddc4cd31ad9dab5645350360d4d36a5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -13110,7 +13110,7 @@ dependencies = [
 [[package]]
 name = "sp-externalities"
 version = "0.25.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#3380e21cd92690c2066f686164a954ba7cd17244"
+source = "git+https://github.com/paritytech/polkadot-sdk#4eabe5e0dddc4cd31ad9dab5645350360d4d36a5"
 dependencies = [
  "environmental",
  "parity-scale-codec",
@@ -13470,7 +13470,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface"
 version = "24.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#3380e21cd92690c2066f686164a954ba7cd17244"
+source = "git+https://github.com/paritytech/polkadot-sdk#4eabe5e0dddc4cd31ad9dab5645350360d4d36a5"
 dependencies = [
  "bytes",
  "impl-trait-for-tuples",
@@ -13535,7 +13535,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface-proc-macro"
 version = "17.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#3380e21cd92690c2066f686164a954ba7cd17244"
+source = "git+https://github.com/paritytech/polkadot-sdk#4eabe5e0dddc4cd31ad9dab5645350360d4d36a5"
 dependencies = [
  "Inflector",
  "expander 2.1.0",
@@ -13687,7 +13687,7 @@ source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0
 [[package]]
 name = "sp-std"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#3380e21cd92690c2066f686164a954ba7cd17244"
+source = "git+https://github.com/paritytech/polkadot-sdk#4eabe5e0dddc4cd31ad9dab5645350360d4d36a5"
 
 [[package]]
 name = "sp-storage"
@@ -13705,7 +13705,7 @@ dependencies = [
 [[package]]
 name = "sp-storage"
 version = "19.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#3380e21cd92690c2066f686164a954ba7cd17244"
+source = "git+https://github.com/paritytech/polkadot-sdk#4eabe5e0dddc4cd31ad9dab5645350360d4d36a5"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
@@ -13783,7 +13783,7 @@ dependencies = [
 [[package]]
 name = "sp-tracing"
 version = "16.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#3380e21cd92690c2066f686164a954ba7cd17244"
+source = "git+https://github.com/paritytech/polkadot-sdk#4eabe5e0dddc4cd31ad9dab5645350360d4d36a5"
 dependencies = [
  "parity-scale-codec",
  "tracing",
@@ -13952,7 +13952,7 @@ dependencies = [
 [[package]]
 name = "sp-wasm-interface"
 version = "20.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk#3380e21cd92690c2066f686164a954ba7cd17244"
+source = "git+https://github.com/paritytech/polkadot-sdk#4eabe5e0dddc4cd31ad9dab5645350360d4d36a5"
 dependencies = [
  "impl-trait-for-tuples",
  "log",
@@ -14258,20 +14258,27 @@ dependencies = [
  "cumulus-client-service",
  "cumulus-primitives-core",
  "cumulus-primitives-parachain-inherent",
+ "cumulus-primitives-storage-weight-reclaim",
  "cumulus-relay-chain-interface",
  "file-manager",
  "forest-manager",
  "frame-benchmarking 28.0.0",
  "frame-benchmarking-cli",
+ "frame-support 28.0.0",
+ "frame-system 28.0.0",
  "futures",
  "futures-timer",
  "jsonrpsee",
+ "lazy_static",
  "libp2p-identity",
  "log",
+ "pallet-file-system",
+ "pallet-transaction-payment 28.0.0",
  "pallet-transaction-payment-rpc",
  "parity-scale-codec",
  "polkadot-cli",
  "polkadot-primitives 7.0.0",
+ "polkadot-runtime-common 7.0.0",
  "prost 0.12.4",
  "prost-build 0.12.4",
  "sc-basic-authorship",
@@ -14301,6 +14308,7 @@ dependencies = [
  "sp-consensus-aura",
  "sp-core 28.0.0",
  "sp-io 30.0.0",
+ "sp-keyring",
  "sp-keystore 0.34.0",
  "sp-runtime 31.0.1",
  "sp-timestamp 26.0.0",
