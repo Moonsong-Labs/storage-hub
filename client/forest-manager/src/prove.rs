@@ -24,9 +24,9 @@ use crate::{traits::ForestStorage, types::ForestStorageErrors, utils::deserializ
 /// This function can return an error in cases where it fails to read or seek within the trie,
 /// or when deserialization of a leaf's value fails.
 pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
-    trie: trie_db::TrieDB<'_, '_, T>,
+    trie: &trie_db::TrieDB<'_, '_, T>,
     challenged_file_key: &F::LookupKey,
-) -> Result<Option<Proven<F::RawKey, F::Value>>, ForestStorageErrors> {
+) -> Result<Proven<F::RawKey, F::Value>, ForestStorageErrors> {
     // Create an iterator over the leaf nodes.
     let mut iter = trie
         .into_double_ended_iter()
@@ -45,10 +45,10 @@ pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
         .transpose()
         .map_err(|_| ForestStorageErrors::FailedToReadLeaf)?;
 
-    let proven = match (prev, next) {
+    match (prev, next) {
         (_, Some((key, value))) if challenged_file_key.as_ref() == key => {
             // Scenario 1: Exact match
-            Some(Proven::new_exact_key(
+            Ok(Proven::new_exact_key(
                 key.into(),
                 deserialize_value(&value)?,
             ))
@@ -63,7 +63,7 @@ pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
                 key: next_key.into(),
                 data: deserialize_value(&next_value)?,
             };
-            Some(Proven::new_neighbour_keys(Some(prev_leaf), Some(next_leaf)))
+            Ok(Proven::new_neighbour_keys(Some(prev_leaf), Some(next_leaf)))
         }
         (Some((key, value)), None) if *challenged_file_key.as_ref() > *key => {
             // Scenario 3: After the last leaf
@@ -71,7 +71,7 @@ pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
                 key: key.into(),
                 data: deserialize_value(&value)?,
             };
-            Some(Proven::new_neighbour_keys(Some(leaf), None))
+            Ok(Proven::new_neighbour_keys(Some(leaf), None))
         }
         (None, Some((key, value))) if *challenged_file_key.as_ref() < *key => {
             // Scenario 4: Before the first leaf
@@ -79,12 +79,10 @@ pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
                 key: key.into(),
                 data: deserialize_value(&value)?,
             };
-            Some(Proven::new_neighbour_keys(None, Some(leaf)))
+            Ok(Proven::new_neighbour_keys(None, Some(leaf)))
         }
-        _ => return Err(ForestStorageErrors::InvalidProvingScenario),
-    };
-
-    Ok(proven)
+        _ => Err(ForestStorageErrors::InvalidProvingScenario),
+    }
 }
 
 #[cfg(test)]
@@ -169,12 +167,10 @@ mod tests {
         let challenge_key = keys[2];
 
         let result = prove::<LayoutV1<RefHasher>, InMemoryForestStorage<LayoutV1<RefHasher>>>(
-            trie,
+            &trie,
             &challenge_key,
         );
-        assert!(
-            matches!(result, Ok(Some(Proven::ExactKey(leaf))) if leaf.key.as_ref() == challenge_key)
-        );
+        assert!(matches!(result, Ok(Proven::ExactKey(leaf)) if leaf.key.as_ref() == challenge_key));
     }
 
     #[test]
@@ -195,12 +191,12 @@ mod tests {
             .expect("slice with incorrect length");
 
         let result = prove::<LayoutV1<RefHasher>, InMemoryForestStorage<LayoutV1<RefHasher>>>(
-            trie,
+            &trie,
             &challenge_key,
         );
 
         assert!(
-            matches!(result, Ok(Some(Proven::NeighbourKeys((Some(leaf1), Some(leaf2))))) if leaf1.key.as_ref() < challenge_key.as_slice() && leaf2.key.as_ref() > challenge_key.as_slice())
+            matches!(result, Ok(Proven::NeighbourKeys((Some(leaf1), Some(leaf2)))) if leaf1.key.as_ref() < challenge_key.as_slice() && leaf2.key.as_ref() > challenge_key.as_slice())
         );
     }
 
@@ -219,12 +215,12 @@ mod tests {
             .expect("slice with incorrect length");
 
         let result = prove::<LayoutV1<RefHasher>, InMemoryForestStorage<LayoutV1<RefHasher>>>(
-            trie,
+            &trie,
             &challenge_key,
         );
 
         assert!(
-            matches!(result, Ok(Some(Proven::NeighbourKeys((Some(leaf), None)))) if leaf.key.as_ref() == largest_key)
+            matches!(result, Ok(Proven::NeighbourKeys((Some(leaf), None))) if leaf.key.as_ref() == largest_key)
         );
     }
 
@@ -243,12 +239,12 @@ mod tests {
             .expect("slice with incorrect length");
 
         let result = prove::<LayoutV1<RefHasher>, InMemoryForestStorage<LayoutV1<RefHasher>>>(
-            trie,
+            &trie,
             &challenge_key,
         );
 
         assert!(
-            matches!(result, Ok(Some(Proven::NeighbourKeys((None, Some(leaf))))) if leaf.key.as_ref() == smallest_key)
+            matches!(result, Ok(Proven::NeighbourKeys((None, Some(leaf)))) if leaf.key.as_ref() == smallest_key)
         );
     }
 }

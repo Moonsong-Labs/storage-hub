@@ -78,7 +78,7 @@ impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
 
     fn generate_proof(
         &self,
-        challenged_file_key: &Self::LookupKey,
+        challenged_file_keys: &Vec<Self::LookupKey>,
     ) -> Result<ForestProof<Self::RawKey>, ForestStorageErrors> {
         let recorder: Recorder<T::Hash> = Recorder::default();
 
@@ -90,7 +90,10 @@ impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
             .build();
 
         // Get the proven leaves or leaf
-        let proven = prove::<T, Self>(trie, challenged_file_key)?;
+        let proven = challenged_file_keys
+            .iter()
+            .map(|file_key| prove::<T, Self>(&trie, file_key))
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Drop the `trie_recorder` to release the `recorder`
         drop(trie_recorder);
@@ -100,8 +103,6 @@ impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
             .drain_storage_proof()
             .to_compact_proof::<T::Hash>(self.root)
             .map_err(|_| ForestStorageErrors::FailedToGenerateCompactProof)?;
-
-        let proven = proven.ok_or_else(|| ForestStorageErrors::FailedToGetLeafOrLeavesToProve)?;
 
         Ok(ForestProof {
             proven,
@@ -118,7 +119,7 @@ impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
         &mut self,
         file_key: &Self::LookupKey,
         metadata: &Self::Value,
-    ) -> Result<ForestProof<Self::RawKey>, ForestStorageErrors> {
+    ) -> Result<(), ForestStorageErrors> {
         if self.get_value(file_key)?.is_some() {
             return Err(ForestStorageErrors::FileKeyAlreadyExists);
         }
@@ -132,17 +133,10 @@ impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
         trie.insert(file_key.as_ref(), &raw_metadata)
             .map_err(|_| ForestStorageErrors::FailedToInsertFileKey)?;
 
-        // Drop the `trie` to release the self
-        drop(trie);
-
-        // Generate a proof that the file key is in the forest.
-        self.generate_proof(file_key)
+        Ok(())
     }
 
-    fn delete_file_key(
-        &mut self,
-        file_key: &Self::LookupKey,
-    ) -> Result<ForestProof<Self::RawKey>, ForestStorageErrors> {
+    fn delete_file_key(&mut self, file_key: &Self::LookupKey) -> Result<(), ForestStorageErrors> {
         let mut trie = TrieDBMutBuilder::<T>::new(&mut self.memdb, &mut self.root).build();
 
         // Remove the file key from the trie.
@@ -150,10 +144,6 @@ impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
             .remove(file_key.as_ref())
             .map_err(|_| ForestStorageErrors::FailedToRemoveFileKey)?;
 
-        // Drop the `trie` to release the self
-        drop(trie);
-
-        // Generate a proof that the file key is no longer in the forest.
-        self.generate_proof(file_key)
+        Ok(())
     }
 }

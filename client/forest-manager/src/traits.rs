@@ -20,7 +20,7 @@ pub trait ForestStorage: 'static {
     /// Generate proof for file key(s).
     fn generate_proof(
         &self,
-        challenged_key: &Self::LookupKey,
+        challenged_key: &Vec<Self::LookupKey>,
     ) -> Result<ForestProof<Self::RawKey>, ForestStorageErrors>;
 
     /// Insert a file key and generate a proof for it.
@@ -28,11 +28,8 @@ pub trait ForestStorage: 'static {
         &mut self,
         file_key: &Self::LookupKey,
         value: &Self::Value,
-    ) -> Result<ForestProof<Self::RawKey>, ForestStorageErrors>;
+    ) -> Result<(), ForestStorageErrors>;
 
     /// Delete a file key and generate a proof for it.
-    fn delete_file_key(
-        &mut self,
-        file_key: &Self::LookupKey,
-    ) -> Result<ForestProof<Self::RawKey>, ForestStorageErrors>;
+    fn delete_file_key(&mut self, file_key: &Self::LookupKey) -> Result<(), ForestStorageErrors>;
 }

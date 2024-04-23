@@ -51,7 +51,7 @@ impl<K: AsRef<[u8]>, D: Debug> Proven<K, D> {
 /// Proof of file key(s) in the forest trie.
 pub struct ForestProof<K: AsRef<[u8]>> {
     /// The file key that was proven.
-    pub proven: Proven<K, Metadata>,
+    pub proven: Vec<Proven<K, Metadata>>,
     /// The compact proof.
     pub proof: CompactProof,
     /// The root hash of the trie.
