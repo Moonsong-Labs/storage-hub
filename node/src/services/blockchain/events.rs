@@ -4,9 +4,9 @@ use storage_hub_infra::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 
 type StorageData = pallet_file_system::types::StorageData<storage_hub_runtime::Runtime>;
 type FileLocation = pallet_file_system::types::FileLocation<storage_hub_runtime::Runtime>;
-type MultiAddress = pallet_file_system::types::MultiAddress<storage_hub_runtime::Runtime>;
-type MaxDataServerMultiAddresses =
-    <storage_hub_runtime::Runtime as pallet_file_system::Config>::MaxDataServerMultiAddresses;
+type PeerId = pallet_file_system::types::PeerId<storage_hub_runtime::Runtime>;
+type MaxNumberOfPeerIds =
+    <storage_hub_runtime::Runtime as pallet_file_system::Config>::MaxPeerIdSize;
 
 // TODO: use proper types
 #[derive(Debug, Clone)]
@@ -30,7 +30,7 @@ pub struct NewStorageRequest {
     /// Size of the file.
     pub size: StorageData,
     /// Multiaddresses from where the user would send the file.
-    pub user_peer_ids: BoundedVec<MultiAddress, MaxDataServerMultiAddresses>,
+    pub user_peer_ids: BoundedVec<PeerId, MaxNumberOfPeerIds>,
 }
 
 impl EventBusMessage for NewStorageRequest {}

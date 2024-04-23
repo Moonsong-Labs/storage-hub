@@ -2,7 +2,6 @@ use std::str::FromStr;
 
 use log::{debug, error, info};
 use sp_core::H256;
-use sp_runtime::BoundedVec;
 use storage_hub_infra::{actor::ActorHandle, event_bus::EventHandler};
 
 use crate::services::{
@@ -44,15 +43,11 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
             event.fingerprint
         );
 
-        // TODO: Here we would send the actual multiaddresses of this BSP.
-        let multiaddresses = BoundedVec::default();
-
         // Build extrinsic.
         let call =
             storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
                 location: event.location,
                 fingerprint: event.fingerprint,
-                multiaddresses,
             });
 
         let (mut tx_watcher, tx_hash) = self
