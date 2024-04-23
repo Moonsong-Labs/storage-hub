@@ -4,10 +4,8 @@ use crate::services::FileTransferService;
 
 #[derive(Debug)]
 pub enum FileTransferServiceCommand {
-    EstablishConnection {
-        multiaddresses: Vec<String>,
-    },
-    SendFile { file: Vec<u8> }
+    EstablishConnection { multiaddresses: Vec<String> },
+    SendFile { file: Vec<u8> },
 }
 
 pub trait FileTransferServiceInterface {

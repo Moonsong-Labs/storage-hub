@@ -45,8 +45,11 @@ use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use crate::service::ParachainClient;
 
 use crate::services::blockchain::{
-    commands::BlockchainServiceCommand, events::BlockchainServiceEventBusProvider,
-    types::Extrinsic, KEY_TYPE, {events::NewStorageRequest, types::EventsVec}
+    commands::BlockchainServiceCommand,
+    events::BlockchainServiceEventBusProvider,
+    types::Extrinsic,
+    KEY_TYPE,
+    {events::NewStorageRequest, types::EventsVec},
 };
 
 const LOG_TARGET: &str = "blockchain-service";

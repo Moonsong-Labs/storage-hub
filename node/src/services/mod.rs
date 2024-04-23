@@ -65,6 +65,8 @@ impl<S: StorageHubHandlerConfig> StorageHubHandler<S> {
         BspVolunteerMockTask::new(self.clone())
             .subscribe_to(&self.task_spawner, &self.blockchain)
             .start();
-        UserSubmittedFileTask::new(self.clone()).subscribe_to(&self.task_spawner, &self.blockchain).start();
+        UserSubmittedFileTask::new(self.clone())
+            .subscribe_to(&self.task_spawner, &self.blockchain)
+            .start();
     }
 }

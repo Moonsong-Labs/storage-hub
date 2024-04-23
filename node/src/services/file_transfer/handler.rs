@@ -35,8 +35,11 @@ use sc_tracing::tracing::{debug, info, trace, warn};
 use sp_core::hexdisplay::HexDisplay;
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
 
-use crate::services::file_transfer::{events::{FileTransferServiceEventBusProvider, RemoteUploadRequest}, schema};
 use crate::services::file_transfer::commands::FileTransferServiceCommand;
+use crate::services::file_transfer::{
+    events::{FileTransferServiceEventBusProvider, RemoteUploadRequest},
+    schema,
+};
 
 const LOG_TARGET: &str = "file-transfer-service";
 
@@ -62,10 +65,10 @@ impl Actor for FileTransferService {
             match message {
                 FileTransferServiceCommand::EstablishConnection { multiaddresses: _ } => {
                     todo!()
-                },
+                }
                 FileTransferServiceCommand::SendFile { file: _ } => {
                     todo!()
-                },
+                }
             }
         }
     }
