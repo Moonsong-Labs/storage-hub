@@ -1,13 +1,14 @@
 import type { PolkadotSigner, SS58String } from "polkadot-api";
 import { fromHex } from "@polkadot-api/utils";
 import { ed25519 } from "@noble/curves/ed25519";
+import { sha256 } from "@noble/hashes/sha256";
 import { Keyring } from "@polkadot/api";
 import { waitReady } from "@polkadot/wasm-crypto";
 import { blake2b } from "@noble/hashes/blake2b";
-// import { Blake2256 } from "polkadot-api";
 import { secp256k1 } from "@noble/curves/secp256k1";
 import { getPolkadotSigner } from "polkadot-api/signer";
 import { AccountId } from "polkadot-api";
+import { toHex } from "polkadot-api/utils";
 
 // These Keys have been generated via subkey util from polkadot-sdk
 // e.g.:
@@ -122,3 +123,15 @@ const accountEntries = people.map((person) => {
 const accounts: Record<PeopleNames, AccountType> = Object.fromEntries(accountEntries);
 
 export { accounts };
+
+export const getSr25519Account = async (privateKey?: string) => {
+  const stringKey = privateKey || toHex(sha256(performance.now().toString()));
+
+  const edPublicKey = ed25519.getPublicKey(fromHex(stringKey));
+  const ed25519Signer = getPolkadotSigner(edPublicKey, "Ed25519", async (input) =>
+    ed25519.sign(input, fromHex(stringKey))
+  );
+  const id = AccountId().dec(edPublicKey);
+
+  return { privateKey: stringKey, publicKey: edPublicKey, signer: ed25519Signer, id };
+};

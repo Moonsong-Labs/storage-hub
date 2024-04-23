@@ -1,6 +1,6 @@
 import { test, describe, expect, beforeAll } from "bun:test";
 import { MultiAddress } from "@polkadot-api/descriptors";
-import { accounts, getZombieClients, waitForChain } from "../../util";
+import { accounts, getSr25519Account, getZombieClients, waitForChain } from "../../util";
 
 describe("Simple zombieTest", async () => {
   const { relayApi, relayClient, relayRT, shClient, storageApi, storageRT } =
@@ -42,10 +42,21 @@ describe("Simple zombieTest", async () => {
     test(
       "Send bal transfer on relaychain",
       async () => {
+        const amount = 1_000_000_000n;
+        const { id: randomId } = await getSr25519Account();
+        console.log(`Sending balance to ${randomId}`);
+
         await relayApi.tx.Balances.transfer_allow_death({
-          dest: MultiAddress.Id(accounts.bob.sr25519.id),
-          value: 1337n,
+          dest: MultiAddress.Id(randomId),
+          value: amount,
         }).signAndSubmit(accounts.alice.sr25519.signer);
+
+        const {
+          data: { free: balAfter },
+        } = await relayApi.query.System.Account.getValue(randomId);
+
+        expect(balAfter).toBe(amount);
+        console.log(`✅ Account ${randomId} has ${balAfter} balance`);
       },
       { timeout: 60_000 }
     );
@@ -78,10 +89,21 @@ describe("Simple zombieTest", async () => {
     test(
       "Send bal transfer on storagehub",
       async () => {
+        const amount = 1_000_000_000n;
+        const { id: randomId } = await getSr25519Account();
+        console.log(`Sending balance to ${randomId}`);
+
         await storageApi.tx.Balances.transfer_allow_death({
-          dest: MultiAddress.Id(accounts.bob.sr25519.id),
-          value: 1337n,
+          dest: MultiAddress.Id(randomId),
+          value: amount,
         }).signAndSubmit(accounts.alice.sr25519.signer);
+
+        const {
+          data: { free: balAfter },
+        } = await storageApi.query.System.Account.getValue(randomId);
+
+        expect(balAfter).toBe(amount);
+        console.log(`✅ Account ${randomId} has ${balAfter} balance`);
       },
       { timeout: 120_000 }
     );
