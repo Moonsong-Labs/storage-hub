@@ -9,8 +9,10 @@ use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, 
 use file_manager::in_memory::InMemoryFileStorage;
 use forest_manager::in_memory::InMemoryForestStorage;
 use polkadot_primitives::{HeadData, ValidationCode};
+use reference_trie::RefHasher;
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use sp_consensus_aura::Slot;
+use sp_trie::LayoutV1;
 use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
 use storage_hub_runtime::{
@@ -340,7 +342,7 @@ async fn start_dev_impl(
 
         impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
             type FileStorage = InMemoryFileStorage;
-            type ForestStorage = InMemoryForestStorage;
+            type ForestStorage = InMemoryForestStorage<LayoutV1<RefHasher>>;
         }
 
         // Initialise the StorageHubHandler, for tasks to have access to the services.
@@ -647,7 +649,7 @@ async fn start_node_impl(
 
         impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
             type FileStorage = InMemoryFileStorage;
-            type ForestStorage = InMemoryForestStorage;
+            type ForestStorage = InMemoryForestStorage<LayoutV1<RefHasher>>;
         }
 
         // Initialise the StorageHubHandler, for tasks to have access to the services.
