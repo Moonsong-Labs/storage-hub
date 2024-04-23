@@ -29,7 +29,7 @@ pub struct NewStorageRequest {
     pub fingerprint: H256,
     /// Size of the file.
     pub size: StorageData,
-    /// Multiaddresses from where the user would send the file.
+    /// lib2p peer IDs from where the user would send the file.
     pub user_peer_ids: BoundedVec<PeerId, MaxNumberOfPeerIds>,
 }
 
