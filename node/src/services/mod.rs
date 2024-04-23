@@ -12,6 +12,7 @@ use storage_hub_infra::{
 };
 
 use crate::tasks::bsp_volunteer_mock::BspVolunteerMockTask;
+use crate::tasks::user_submitted_file::UserSubmittedFileTask;
 
 use self::{blockchain::handler::BlockchainService, file_transfer::FileTransferService};
 
@@ -64,5 +65,6 @@ impl<S: StorageHubHandlerConfig> StorageHubHandler<S> {
         BspVolunteerMockTask::new(self.clone())
             .subscribe_to(&self.task_spawner, &self.blockchain)
             .start();
+        UserSubmittedFileTask::new(self.clone()).subscribe_to(&self.task_spawner, &self.blockchain).start();
     }
 }

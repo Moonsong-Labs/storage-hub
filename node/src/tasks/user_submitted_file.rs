@@ -1,10 +1,17 @@
+use log::info;
+use storage_hub_infra::event_bus::EventHandler;
+use crate::services::file_transfer::commands::FileTransferServiceInterface;
+use crate::tasks::AcceptedBspVolunteer;
+use crate::tasks::StorageHubHandlerConfig;
+use crate::tasks::StorageHubHandler;
+
 const LOG_TARGET: &str = "user-submitted-file-task";
 
-pub struct UserSubmittedFile<SHC: StorageHubHandlerConfig> {
+pub struct UserSubmittedFileTask<SHC: StorageHubHandlerConfig> {
     storage_hub_handler: StorageHubHandler<SHC>,
 }
 
-impl<SHC: StorageHubHandlerConfig> Clone for UserSubmittedFile<SHC> {
+impl<SHC: StorageHubHandlerConfig> Clone for UserSubmittedFileTask<SHC> {
     fn clone(&self) -> Self {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone()
@@ -12,7 +19,7 @@ impl<SHC: StorageHubHandlerConfig> Clone for UserSubmittedFile<SHC> {
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> UserSubmittedFile<SHC> {
+impl<SHC: StorageHubHandlerConfig> UserSubmittedFileTask<SHC> {
     pub fn new(storage_hub_handler: StorageHubHandler<SHC>) -> Self {
         Self {
             storage_hub_handler,
@@ -20,7 +27,7 @@ impl<SHC: StorageHubHandlerConfig> UserSubmittedFile<SHC> {
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSubmittedFile<SHC> {
+impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSubmittedFileTask<SHC> {
     async fn handle_event(&self, event: AcceptedBspVolunteer) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
@@ -31,10 +38,12 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSu
 
         let multiaddresses = event.multiaddresses;
 
-        self._storage_hub_handler.file_transfer.establish_connection();
+        self.storage_hub_handler.file_transfer.establish_connection(multiaddresses);
 
         // Command for file transfer service
         // Open P2P
         // Send file
+
+        Ok(())
     }
 }

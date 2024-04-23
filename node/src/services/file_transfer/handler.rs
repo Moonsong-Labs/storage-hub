@@ -56,9 +56,18 @@ impl Actor for FileTransferService {
 
     fn handle_message(
         &mut self,
-        _message: Self::Message,
+        message: Self::Message,
     ) -> impl std::future::Future<Output = ()> + Send {
-        async {}
+        async move {
+            match message {
+                FileTransferServiceCommand::EstablishConnection { multiaddresses: _ } => {
+                    todo!()
+                },
+                FileTransferServiceCommand::SendFile { file: _ } => {
+                    todo!()
+                },
+            }
+        }
     }
 
     fn get_event_bus_provider(&self) -> &Self::EventBusProvider {
