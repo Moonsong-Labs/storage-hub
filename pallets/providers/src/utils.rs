@@ -1,4 +1,4 @@
-use crate::types::{Bucket, MainStorageProvider, StorageProvider};
+use crate::types::{Bucket, MainStorageProvider, MultiAddress, StorageProvider};
 use codec::Encode;
 use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
@@ -12,6 +12,7 @@ use frame_support::traits::{
     Get, Randomness,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
+use sp_runtime::BoundedVec;
 use storage_hub_traits::{MutateProvidersInterface, ProvidersInterface, ReadProvidersInterface};
 
 use crate::*;
@@ -892,6 +893,8 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
 
 impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     type SpCount = T::SpCount;
+    type MultiAddress = MultiAddress<T>;
+    type MaxNumberOfMultiAddresses = T::MaxMultiAddressAmount;
 
     fn is_bsp(who: &Self::Provider) -> bool {
         BackupStorageProviders::<T>::contains_key(&who)
@@ -903,6 +906,17 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
 
     fn get_number_of_bsps() -> Self::SpCount {
         Self::get_bsp_count()
+    }
+
+    fn get_bsp_multiaddresses(
+        who: &Self::Provider,
+    ) -> Result<BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>, DispatchError>
+    {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(who) {
+            Ok(BoundedVec::from(bsp.multiaddresses))
+        } else {
+            Err(Error::<T>::NotRegistered.into())
+        }
     }
 }
 

@@ -677,8 +677,8 @@ dependencies = [
  "futures-io",
  "futures-lite 2.3.0",
  "parking",
- "polling 3.6.0",
- "rustix 0.38.33",
+ "polling 3.7.0",
+ "rustix 0.38.34",
  "slab",
  "tracing",
  "windows-sys 0.52.0",
@@ -728,7 +728,7 @@ dependencies = [
  "cfg-if",
  "event-listener 3.1.0",
  "futures-lite 1.13.0",
- "rustix 0.38.33",
+ "rustix 0.38.34",
  "windows-sys 0.48.0",
 ]
 
@@ -744,7 +744,7 @@ dependencies = [
  "cfg-if",
  "futures-core",
  "futures-io",
- "rustix 0.38.33",
+ "rustix 0.38.34",
  "signal-hook-registry",
  "slab",
  "windows-sys 0.52.0",
@@ -3176,9 +3176,9 @@ dependencies = [
 
 [[package]]
 name = "fiat-crypto"
-version = "0.2.7"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c007b1ae3abe1cb6f85a16305acd418b7ca6343b953633fee2b76d8f108b830f"
+checksum = "38793c55593b33412e3ae40c2c9781ffaa6f438f6f8c10f24e71846fbd7ae01e"
 
 [[package]]
 name = "file-manager"
@@ -3275,9 +3275,12 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 name = "forest-manager"
 version = "0.1.0"
 dependencies = [
+ "bincode",
+ "reference-trie",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "storage-hub-infra",
+ "trie-db 0.29.0",
 ]
 
 [[package]]
@@ -3783,7 +3786,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29f9df8a11882c4e3335eb2d18a0137c505d9ca927470b0cac9c6f0ae07d28f7"
 dependencies = [
- "rustix 0.38.33",
+ "rustix 0.38.34",
  "windows-sys 0.48.0",
 ]
 
@@ -4628,9 +4631,9 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
 name = "jobserver"
-version = "0.1.30"
+version = "0.1.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "685a7d121ee3f65ae4fddd72b25a04bb36b6af81bc0828f7d5434c0fe60fa3a2"
+checksum = "d2b099aaa34a9751c5bf0878add70444e1ed2dd73f347be99003d4577277de6e"
 dependencies = [
  "libc",
 ]
@@ -5622,7 +5625,7 @@ version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2cffa4ad52c6f791f4f8b15f0c05f9824b2ced1160e88cc393d64fff9a8ac64"
 dependencies = [
- "rustix 0.38.33",
+ "rustix 0.38.34",
 ]
 
 [[package]]
@@ -9576,15 +9579,15 @@ dependencies = [
 
 [[package]]
 name = "polling"
-version = "3.6.0"
+version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0c976a60b2d7e99d6f229e414670a9b85d13ac305cc6d1e9c134de58c5aaaf6"
+checksum = "645493cf344456ef24219d02a768cf1fb92ddf8c92161679ae3d91b91a637be3"
 dependencies = [
  "cfg-if",
  "concurrent-queue",
  "hermit-abi",
  "pin-project-lite 0.2.14",
- "rustix 0.38.33",
+ "rustix 0.38.34",
  "tracing",
  "windows-sys 0.52.0",
 ]
@@ -10596,9 +10599,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.33"
+version = "0.38.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3cc72858054fcff6d7dea32df2aeaee6a7c24227366d7ea429aada2f26b16ad"
+checksum = "70dc5ec042f7a43c4a73241207cecc9873a06d45debb38b329f8541d85c2730f"
 dependencies = [
  "bitflags 2.5.0",
  "errno",
@@ -10640,7 +10643,7 @@ dependencies = [
  "log",
  "ring 0.17.8",
  "rustls-pki-types",
- "rustls-webpki 0.102.2",
+ "rustls-webpki 0.102.3",
  "subtle 2.5.0",
  "zeroize",
 ]
@@ -10707,9 +10710,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.102.2"
+version = "0.102.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faaa0a62740bedb9b2ef5afa303da42764c012f743917351dc9a237ea1663610"
+checksum = "f3bce581c0dd41bce533ce695a1437fa16a7ab5ac3ccfa99fe1a620a7885eabf"
 dependencies = [
  "ring 0.17.8",
  "rustls-pki-types",
@@ -12971,7 +12974,7 @@ dependencies = [
 [[package]]
 name = "sp-core"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#921265ca7889b9c9bc615af0eced9c6918c8af9f"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#eda5e5c31f9bffafd6afd6d14fb95001a10dba9a"
 dependencies = [
  "array-bytes 6.2.2",
  "bandersnatch_vrfs",
@@ -13064,7 +13067,7 @@ dependencies = [
 [[package]]
 name = "sp-crypto-ec-utils"
 version = "0.10.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#921265ca7889b9c9bc615af0eced9c6918c8af9f"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#eda5e5c31f9bffafd6afd6d14fb95001a10dba9a"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-377-ext",
@@ -13111,7 +13114,7 @@ dependencies = [
 [[package]]
 name = "sp-crypto-hashing"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#921265ca7889b9c9bc615af0eced9c6918c8af9f"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#eda5e5c31f9bffafd6afd6d14fb95001a10dba9a"
 dependencies = [
  "blake2b_simd",
  "byteorder",
@@ -13175,7 +13178,7 @@ dependencies = [
 [[package]]
 name = "sp-debug-derive"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#921265ca7889b9c9bc615af0eced9c6918c8af9f"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#eda5e5c31f9bffafd6afd6d14fb95001a10dba9a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -13196,7 +13199,7 @@ dependencies = [
 [[package]]
 name = "sp-externalities"
 version = "0.25.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#921265ca7889b9c9bc615af0eced9c6918c8af9f"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#eda5e5c31f9bffafd6afd6d14fb95001a10dba9a"
 dependencies = [
  "environmental",
  "parity-scale-codec",
@@ -13556,7 +13559,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface"
 version = "24.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#921265ca7889b9c9bc615af0eced9c6918c8af9f"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#eda5e5c31f9bffafd6afd6d14fb95001a10dba9a"
 dependencies = [
  "bytes",
  "impl-trait-for-tuples",
@@ -13621,7 +13624,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface-proc-macro"
 version = "17.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#921265ca7889b9c9bc615af0eced9c6918c8af9f"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#eda5e5c31f9bffafd6afd6d14fb95001a10dba9a"
 dependencies = [
  "Inflector",
  "expander 2.1.0",
@@ -13773,7 +13776,7 @@ source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0
 [[package]]
 name = "sp-std"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#921265ca7889b9c9bc615af0eced9c6918c8af9f"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#eda5e5c31f9bffafd6afd6d14fb95001a10dba9a"
 
 [[package]]
 name = "sp-storage"
@@ -13791,7 +13794,7 @@ dependencies = [
 [[package]]
 name = "sp-storage"
 version = "19.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#921265ca7889b9c9bc615af0eced9c6918c8af9f"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#eda5e5c31f9bffafd6afd6d14fb95001a10dba9a"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
@@ -13869,7 +13872,7 @@ dependencies = [
 [[package]]
 name = "sp-tracing"
 version = "16.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#921265ca7889b9c9bc615af0eced9c6918c8af9f"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#eda5e5c31f9bffafd6afd6d14fb95001a10dba9a"
 dependencies = [
  "parity-scale-codec",
  "tracing",
@@ -13928,7 +13931,7 @@ dependencies = [
 [[package]]
 name = "sp-trie"
 version = "29.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#921265ca7889b9c9bc615af0eced9c6918c8af9f"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#eda5e5c31f9bffafd6afd6d14fb95001a10dba9a"
 dependencies = [
  "ahash 0.8.11",
  "hash-db",
@@ -14061,7 +14064,7 @@ dependencies = [
 [[package]]
 name = "sp-wasm-interface"
 version = "20.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#921265ca7889b9c9bc615af0eced9c6918c8af9f"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#eda5e5c31f9bffafd6afd6d14fb95001a10dba9a"
 dependencies = [
  "impl-trait-for-tuples",
  "log",
@@ -14344,7 +14347,9 @@ dependencies = [
  "sc-service",
  "sc-tracing",
  "sc-utils",
+ "serde",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "tokio",
 ]
 
@@ -14367,22 +14372,30 @@ dependencies = [
  "cumulus-client-service",
  "cumulus-primitives-core",
  "cumulus-primitives-parachain-inherent",
+ "cumulus-primitives-storage-weight-reclaim",
  "cumulus-relay-chain-interface",
  "file-manager",
  "forest-manager",
  "frame-benchmarking 28.0.0",
  "frame-benchmarking-cli",
+ "frame-support 28.0.0",
+ "frame-system 28.0.0",
  "futures",
  "futures-timer",
  "jsonrpsee",
+ "lazy_static",
  "libp2p-identity",
  "log",
+ "pallet-file-system",
+ "pallet-transaction-payment 28.0.0",
  "pallet-transaction-payment-rpc",
  "parity-scale-codec",
  "polkadot-cli",
  "polkadot-primitives 7.0.0",
+ "polkadot-runtime-common 7.0.0",
  "prost 0.12.4",
  "prost-build 0.12.4",
+ "reference-trie",
  "sc-basic-authorship",
  "sc-chain-spec",
  "sc-cli",
@@ -14410,9 +14423,11 @@ dependencies = [
  "sp-consensus-aura",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io 30.0.0",
+ "sp-keyring",
  "sp-keystore 0.34.0",
  "sp-runtime 31.0.1",
  "sp-timestamp 26.0.0",
+ "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "staging-xcm 7.0.0",
  "storage-hub-infra",
  "storage-hub-runtime",
@@ -14608,7 +14623,7 @@ dependencies = [
 [[package]]
 name = "substrate-bip39"
 version = "0.4.7"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#921265ca7889b9c9bc615af0eced9c6918c8af9f"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#eda5e5c31f9bffafd6afd6d14fb95001a10dba9a"
 dependencies = [
  "hmac 0.12.1",
  "pbkdf2 0.12.2",
@@ -14795,7 +14810,7 @@ checksum = "85b77fafb263dd9d05cbeac119526425676db3784113aa9295c88498cbf8bff1"
 dependencies = [
  "cfg-if",
  "fastrand 2.0.2",
- "rustix 0.38.33",
+ "rustix 0.38.34",
  "windows-sys 0.52.0",
 ]
 
@@ -14814,7 +14829,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "21bebf2b7c9e0a515f6e0f8c51dc0f8e4696391e6f1ff30379559f8365fb0df7"
 dependencies = [
- "rustix 0.38.33",
+ "rustix 0.38.34",
  "windows-sys 0.48.0",
 ]
 
@@ -16217,7 +16232,7 @@ dependencies = [
  "either",
  "home",
  "once_cell",
- "rustix 0.38.33",
+ "rustix 0.38.34",
 ]
 
 [[package]]

@@ -59,11 +59,11 @@ pub enum ProviderType {
 #[derive(Debug, Parser)]
 #[group(skip)]
 pub struct ProviderConfigurations {
-    /// Run node as a storage hub provider.
+    /// Run node as a StorageHub provider.
     #[arg(long)]
     pub provider: bool,
 
-    /// Type of storage hub provider.
+    /// Type of StorageHub provider.
     #[clap(
         long,
         value_enum,
