@@ -3,7 +3,7 @@ import { fromHex } from "@polkadot-api/utils";
 import { ed25519 } from "@noble/curves/ed25519";
 import { Keyring } from "@polkadot/api";
 import { waitReady } from "@polkadot/wasm-crypto";
-import {blake2b}from "@noble/hashes/blake2b"
+import { blake2b } from "@noble/hashes/blake2b";
 // import { Blake2256 } from "polkadot-api";
 import { secp256k1 } from "@noble/curves/secp256k1";
 import { getPolkadotSigner } from "polkadot-api/signer";
