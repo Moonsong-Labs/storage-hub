@@ -109,6 +109,84 @@ pub fn build_merkle_patricia_forest<T: TrieLayout>() -> (
     (memdb, root, file_keys)
 }
 
+/// Build a Merkle Patricia Forest Trie with just one key.
+///
+/// The trie is built from the ground up, by each file into 32 byte chunks and storing them in a trie.
+/// Each trie is then inserted into a new merkle patricia trie, which comprises the merkle forest.
+pub fn build_merkle_patricia_forest_one_key<T: TrieLayout>() -> (
+    MemoryDB<T::Hash>,
+    HashT<T>,
+    Vec<<<T as TrieLayout>::Hash as Hasher>::Out>,
+) {
+    let user_ids = vec![b"01"];
+    let bucket = b"bucket";
+    let file_name = b"sample64b";
+
+    let mut file_leaves = Vec::new();
+
+    println!("Chunking file into 32 byte chunks and building Merkle Patricia Tries...");
+
+    for user_id in user_ids {
+        let file_path = format!(
+            "{}-{}-{}.txt",
+            String::from_utf8(user_id.to_vec()).unwrap(),
+            String::from_utf8(bucket.to_vec()).unwrap(),
+            String::from_utf8(file_name.to_vec()).unwrap()
+        );
+
+        std::fs::create_dir_all(FILES_BASE_PATH).unwrap();
+        std::fs::File::create(FILES_BASE_PATH.to_owned() + &file_path).unwrap();
+
+        let file = std::fs::File::open(FILES_BASE_PATH.to_owned() + &file_path).unwrap();
+        let file_size = std::fs::File::metadata(&file).unwrap().len();
+        let (_memdb, fingerprint) = merklise_file::<LayoutV1<RefHasher>>(&file_path);
+
+        let metadata = FileMetadata {
+            user_id,
+            bucket,
+            file_id: file_name,
+            size: file_size,
+            fingerprint: fingerprint
+                .as_ref()
+                .try_into()
+                .expect("slice with incorrect length"),
+        };
+
+        let metadata = bincode::serialize(&metadata).unwrap();
+        let metadata_hash = T::Hash::hash(&metadata);
+
+        file_leaves.push((metadata_hash, metadata));
+    }
+
+    // Construct the Merkle Patricia Forest
+    let mut memdb = MemoryDB::<T::Hash>::default();
+    let mut root: HashT<T> = Default::default();
+
+    let mut file_keys = Vec::new();
+    {
+        let mut merkle_forest_trie = TrieDBMutBuilder::<T>::new(&mut memdb, &mut root).build();
+
+        // Insert file leaf and metadata into the Merkle Patricia Forest.
+        for file in &file_leaves {
+            merkle_forest_trie
+                .insert(file.0.as_ref(), file.1.as_ref())
+                .unwrap();
+
+            file_keys.push(file.0.clone());
+        }
+
+        println!(
+            "Merkle Patricia Forest Trie root: {:?}",
+            merkle_forest_trie.root()
+        );
+    }
+
+    // Sorting file keys for deterministic proof generation
+    file_keys.sort();
+
+    (memdb, root, file_keys)
+}
+
 /// Chunk a file into [`CHUNK_SIZE`] byte chunks and store them in a Merkle Patricia Trie.
 ///
 /// The trie is stored in a [`MemoryDB`] and the [`Root`] is returned.
@@ -494,6 +572,157 @@ fn commitment_verifier_multiple_in_between_challenge_keys_and_one_after_last_key
     for key in &mut challenge_keys {
         key[0] += 1;
     }
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<RefHasher>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        for challenge_key in &challenge_keys {
+            // Seek to the challenge key.
+            iter.seek(challenge_key).unwrap();
+
+            // Access the next leaf node.
+            iter.next();
+
+            // Access the previous leaf node.
+            iter.next_back();
+        }
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<RefHasher>(root)
+        .expect("Failed to create compact proof from recorder");
+
+    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
+        &root,
+        &challenge_keys,
+        &proof
+    ));
+}
+
+#[test]
+fn commitment_verifier_multiple_challenges_before_single_key_trie_success() {
+    let (memdb, root, leaf_keys) = build_merkle_patricia_forest_one_key::<LayoutV1<RefHasher>>();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<RefHasher> = Recorder::default();
+
+    let mut challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
+
+    // Decrement the most significant bit of every challenge key by 1.
+    let mut i = 0;
+    for key in &mut challenge_keys {
+        i += 2;
+        key[0] -= i;
+    }
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<RefHasher>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        for challenge_key in &challenge_keys {
+            // Seek to the challenge key.
+            iter.seek(challenge_key).unwrap();
+
+            // Access the next leaf node.
+            iter.next();
+
+            // Access the previous leaf node.
+            iter.next_back();
+        }
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<RefHasher>(root)
+        .expect("Failed to create compact proof from recorder");
+
+    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
+        &root,
+        &challenge_keys,
+        &proof
+    ));
+}
+
+#[test]
+fn commitment_verifier_multiple_challenges_after_single_key_trie_success() {
+    let (memdb, root, leaf_keys) = build_merkle_patricia_forest_one_key::<LayoutV1<RefHasher>>();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<RefHasher> = Recorder::default();
+
+    let mut challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
+
+    // Decrement the most significant bit of every challenge key by 1.
+    let mut i = 0;
+    for key in &mut challenge_keys {
+        i += 2;
+        key[0] += i;
+    }
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<RefHasher>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        for challenge_key in &challenge_keys {
+            // Seek to the challenge key.
+            iter.seek(challenge_key).unwrap();
+
+            // Access the next leaf node.
+            iter.next();
+
+            // Access the previous leaf node.
+            iter.next_back();
+        }
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<RefHasher>(root)
+        .expect("Failed to create compact proof from recorder");
+
+    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
+        &root,
+        &challenge_keys,
+        &proof
+    ));
+}
+
+#[test]
+fn commitment_verifier_multiple_challenges_single_key_trie_success() {
+    let (memdb, root, leaf_keys) = build_merkle_patricia_forest_one_key::<LayoutV1<RefHasher>>();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<RefHasher> = Recorder::default();
+
+    let mut challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
+
+    // Decrement most significant byte of second challenge key by 1.
+    challenge_keys[1][0] -= 1;
+    // Increment most significant byte of third challenge key by 1.
+    challenge_keys[2][0] += 1;
 
     {
         // Creating trie inside of closure to drop it before generating proof.
