@@ -65,8 +65,6 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
         // Iterate over the challenges and check if there is a pair of consecutive
         // leaves that match the challenge, or an exact leaf that matches the challenge.
         while let Some(challenge) = challenges_iter.next() {
-            println!("challenge: {:?}", challenge);
-
             trie_de_iter
                 .seek(challenge.as_ref())
                 .map_err(|_| "Failed to seek challenged key.")?;
@@ -77,15 +75,11 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
                 .transpose()
                 .map_err(|_| "Failed to get next leaf.")?;
 
-            println!("next_leaf: {:?}", next_leaf);
-
             // Executing `next_back()` after `seek()` should always yield `Some(leaf)` based on the double ended iterator behaviour.
             let prev_leaf = trie_de_iter
                 .next_back()
                 .transpose()
                 .map_err(|_| "Failed to get previous leaf.")?;
-
-            println!("prev_leaf: {:?}", prev_leaf);
 
             // We check before the loop if the iterator has at least one leaf.
             // Therefore, if `prev_leaf` is `None` here, it means that the behaviour of the double ended iterator has changed.
