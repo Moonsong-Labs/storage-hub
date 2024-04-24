@@ -226,7 +226,7 @@ pub trait ProofsDealerInterface {
 
 /// A trait to verify proofs based on commitments and challenges.
 ///
-/// It is abstracted over the `Proof` type, `Commitment` type and `Challenge` type.
+/// It is abstracted over the `Proof` and `Key` type.
 pub trait CommitmentVerifier {
     /// The type that represents the proof.
     type Proof: Parameter + Member + Debug;
