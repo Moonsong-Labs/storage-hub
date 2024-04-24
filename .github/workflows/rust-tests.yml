@@ -28,6 +28,8 @@ jobs:
           cache: false
       - uses: rui314/setup-mold@v1
       - uses: taiki-e/install-action@nextest
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
       - name: Run Tests for All Projects!
         run: |
           cargo nextest run
