@@ -44,7 +44,15 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
 
         // Check if the iterator has at least one leaf.
         if trie_de_iter.next().is_none() {
-            return Err("No leaves provided in proof.".into());
+            #[cfg(test)]
+            unreachable!(
+                "This should not happen. A trie with no leafs wouldn't be possible to create."
+            );
+
+            #[allow(unreachable_code)]
+            {
+                return Err("No leaves provided in proof.".into());
+            }
         }
 
         // Check that `challenges` is not empty.
