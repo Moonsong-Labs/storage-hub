@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use sp_core::Hasher;
-use sp_trie::{CompactProof, LayoutV1, Trie, TrieDBBuilder};
+use sp_trie::{CompactProof, LayoutV1, TrieDBBuilder};
 use storage_hub_traits::CommitmentVerifier;
 
 use frame_support::dispatch::DispatchResult;
@@ -99,14 +99,7 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
                     if prev_key < challenge.as_ref().to_vec()
                         && challenge.as_ref().to_vec() < next_key =>
                 {
-                    // Check if the nodes `prev_leaf` and `next_leaf` are in fact leaves (i.e. they have a value).
-                    // This is to prevent the proof from being constructed based on non-leaf nodes.
-                    trie.get(&prev_key)
-                        .map_err(|_| "Bad proof: no value for prev leaf.")?;
-                    trie.get(&next_key)
-                        .map_err(|_| "Bad proof: no value for next leaf.")?;
-
-                    continue;
+                    continue
                 }
                 // Scenario 3 (valid): `next_leaf` is the first leaf since the next previous leaf is `None`.
                 // The challenge is before the first leaf (i.e. the challenge does not exist in the trie).
