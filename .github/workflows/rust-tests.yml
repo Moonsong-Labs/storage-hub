@@ -31,6 +31,8 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: Install nextest
         uses: taiki-e/install-action@nextest
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
       - name: Build and archive tests
         run: cargo nextest archive --archive-file nextest-archive.tar.zst
       - name: Upload archive to workflow
