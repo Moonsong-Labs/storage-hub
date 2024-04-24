@@ -47,9 +47,14 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
             return Err("No leaves provided in proof.".into());
         }
 
+        // Check that `challenges` is not empty.
+        if challenges.is_empty() {
+            return Err("No challenges provided.".into());
+        }
+
         let mut challenges_iter = challenges.iter();
 
-        // Iterate over the challenges and check if there is a leaf pair of consecutive
+        // Iterate over the challenges and check if there is a pair of consecutive
         // leaves that match the challenge, or an exact leaf that matches the challenge.
         while let Some(challenge) = challenges_iter.next() {
             trie_de_iter
@@ -62,16 +67,19 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
                 .transpose()
                 .map_err(|_| "Failed to get next leaf.")?;
 
-            // Executing `next_back()` after `seek()` should always yield `Some(leaf)` based on the double ended iterator behavior.
+            // Executing `next_back()` after `seek()` should always yield `Some(leaf)` based on the double ended iterator behaviour.
             let prev_leaf = trie_de_iter
                 .next_back()
                 .transpose()
                 .map_err(|_| "Failed to get previous leaf.")?;
 
             // We check before the loop if the iterator has at least one leaf.
-            // Therefore, if `prev_leaf` is `None` here, it means that the behavior of the double ended iterator has changed.
+            // Therefore, if `prev_leaf` is `None` here, it means that the behaviour of the double ended iterator has changed.
+            // This is because of an inconsistency in the behaviour of the iterator. If there is no leaf lower than the challenge,
+            // the iterator will return the same for both `next()` and `next_back()`. This is why we check if `prev_leaf` is `None`,
+            // because it shouldn't be, even in that case.
             if prev_leaf.is_none() {
-                return Err("Unexpected double ended iterator behavior: no previous leaf.".into());
+                return Err("Unexpected double ended iterator behaviour: no previous leaf.".into());
             }
 
             // Check if there is a valid combination of leaves which validate the proof given the challenged key.
