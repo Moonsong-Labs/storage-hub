@@ -1,3 +1,11 @@
+# Rust Tests: CI for Rust components (Blockchain & Storage Providers)
+#
+# Overview:
+# 1. Prepare: This job handles the setup phase where the cargo nextest archive is created
+#    and uploaded to the workflow for use in the subsequent jobs
+# 2. All Rust Tests: Executes the full suite of Rust tests across two partitions to
+#    to reduce total execution time.
+
 name: Rust Tests
 
 on:
