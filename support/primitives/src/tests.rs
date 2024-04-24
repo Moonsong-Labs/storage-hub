@@ -800,8 +800,8 @@ fn commitment_verifier_invalid_root_failure() {
         let mut iter = trie.into_double_ended_iter().unwrap();
 
         // Seek to the challenge key.
-        // This already accesses and records the the node. There is no need to call `next()`.
         iter.seek(challenge_key).unwrap();
+        iter.next().unwrap().unwrap();
     }
 
     // Generate proof
@@ -838,8 +838,8 @@ fn commitment_verifier_invalid_proof_failure() {
         let mut iter = trie.into_double_ended_iter().unwrap();
 
         // Seek to the challenge key.
-        // This already accesses and records the the node. There is no need to call `next()`.
         iter.seek(challenge_key).unwrap();
+        iter.next().unwrap().unwrap();
     }
 
     // Generate proof
@@ -887,6 +887,38 @@ fn commitment_verifier_empty_proof_failure() {
     assert_eq!(
         TrieVerifier::<RefHasher>::verify_proof(&root, &[*challenge_key], &proof),
         Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
+    );
+}
+
+#[test]
+fn commitment_verifier_no_challenges_failure() {
+    let (memdb, root, _) = build_merkle_patricia_forest::<LayoutV1<RefHasher>>();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<RefHasher> = Recorder::default();
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<RefHasher>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let _iter = trie.into_double_ended_iter().unwrap();
+
+        // Not seeking any key, so that no leaf nodes are accessed.
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<RefHasher>(root)
+        .expect("Failed to create compact proof from recorder");
+
+    assert_eq!(
+        TrieVerifier::<RefHasher>::verify_proof(&root, &[], &proof),
+        Err("No challenges provided.".into())
     );
 }
 
@@ -945,8 +977,8 @@ fn commitment_verifier_wrong_proof_answer_to_challenge_failure() {
         let mut iter = trie.into_double_ended_iter().unwrap();
 
         // Seek to the wrong challenge key so that we can generate a valid proof for the wrong key.
-        // This already accesses and records the the node. There is no need to call `next()`.
         iter.seek(wrong_challenge_key).unwrap();
+        iter.next().unwrap().unwrap();
     }
 
     // Generate proof

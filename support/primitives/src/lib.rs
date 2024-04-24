@@ -93,7 +93,17 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
             // the iterator will return the same for both `next()` and `next_back()`. This is why we check if `prev_leaf` is `None`,
             // because it shouldn't be, even in that case.
             if prev_leaf.is_none() {
-                return Err("Unexpected double ended iterator behaviour: no previous leaf.".into());
+                #[cfg(test)]
+                unreachable!(
+                    "This should not happen. We check if the iterator has at least one leaf."
+                );
+
+                #[allow(unreachable_code)]
+                {
+                    return Err(
+                        "Unexpected double ended iterator behaviour: no previous leaf.".into(),
+                    );
+                }
             }
 
             // Check if there is a valid combination of leaves which validate the proof given the challenged key.
