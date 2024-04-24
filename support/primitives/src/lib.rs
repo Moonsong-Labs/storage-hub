@@ -132,7 +132,15 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
                     }
                 }
                 _ => {
-                    return Err("Proof is invalid.".into());
+                    #[cfg(test)]
+                    unreachable!(
+                        "This should not happen. We check if the iterator has at least one leaf."
+                    );
+
+                    #[allow(unreachable_code)]
+                    {
+                        return Err("Proof is invalid.".into());
+                    }
                 }
             }
         }
