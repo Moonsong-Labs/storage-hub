@@ -14444,6 +14444,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "frame-support 28.0.0",
+ "frame-system 28.0.0",
  "parity-scale-codec",
  "reference-trie",
  "scale-info",
