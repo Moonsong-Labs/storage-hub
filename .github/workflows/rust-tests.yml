@@ -1,0 +1,33 @@
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - perm-*
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: set to pull_request number to execute on external pr
+        required: false
+
+jobs:
+  all-rust-tests:
+    name: "Run all Rust tests"
+    runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      CARGO_INCREMENTAL: "0"
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          cache: false
+      - uses: rui314/setup-mold@v1
+      - uses: taiki-e/install-action@nextest
+      - name: Run Tests for All Projects!
+        run: |
+          cargo nextest run
