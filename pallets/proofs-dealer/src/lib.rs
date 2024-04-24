@@ -317,7 +317,7 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// Inherent extrinsic to register a new round of challenges.
+        /// Extrinsic to register a new round of challenges.
         ///
         /// This function is called by the block producer to register a new round of challenges.
         /// Random challenges are automatically generated based on some external source of
@@ -338,7 +338,6 @@ pub mod pallet {
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn new_challenges_round(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-            // Inherents are not signed transactions.
             ensure_none(origin)?;
 
             // TODO: Handle result of verification.
