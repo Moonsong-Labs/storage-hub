@@ -40,7 +40,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
 
         let multiaddresses = event.multiaddresses;
 
-        self.storage_hub_handler
+        let _ = self.storage_hub_handler
             .file_transfer
             .establish_connection(multiaddresses);
 
