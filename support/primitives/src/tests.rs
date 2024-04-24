@@ -4,7 +4,8 @@ use frame_support::assert_ok;
 use reference_trie::RefHasher;
 use serde::Serialize;
 use sp_trie::{
-    recorder::Recorder, LayoutV1, MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut,
+    recorder::Recorder, CompactProof, LayoutV1, MemoryDB, TrieDBBuilder, TrieDBMutBuilder,
+    TrieLayout, TrieMut,
 };
 use storage_hub_traits::CommitmentVerifier;
 use trie_db::{Hasher, TrieIterator};
@@ -760,6 +761,26 @@ fn commitment_verifier_multiple_challenges_single_key_trie_success() {
 }
 
 #[test]
+fn commitment_verifier_empty_proof_and_root_failure() {
+    let (_, _, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<RefHasher>>();
+
+    let challenge_key = leaf_keys.first().unwrap();
+
+    // Generate empty proof
+    let empty_proof = CompactProof {
+        encoded_nodes: vec![], // Empty proof
+    };
+
+    // Generate empty root
+    let empty_root = Default::default();
+
+    assert_eq!(
+        TrieVerifier::<RefHasher>::verify_proof(&empty_root, &[*challenge_key], &empty_proof),
+        Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
+    );
+}
+
+#[test]
 fn commitment_verifier_invalid_root_failure() {
     let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<RefHasher>>();
 
@@ -791,8 +812,9 @@ fn commitment_verifier_invalid_root_failure() {
 
     let invalid_root = Default::default();
 
-    assert!(
-        TrieVerifier::<RefHasher>::verify_proof(&invalid_root, &[*challenge_key], &proof).is_err()
+    assert_eq!(
+        TrieVerifier::<RefHasher>::verify_proof(&invalid_root, &[*challenge_key], &proof),
+        Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
     );
 }
 
@@ -829,5 +851,279 @@ fn commitment_verifier_invalid_proof_failure() {
     // Modify the proof to make it invalid
     proof.encoded_nodes[0] = vec![0; 32];
 
-    assert!(TrieVerifier::<RefHasher>::verify_proof(&root, &[*challenge_key], &proof).is_err());
+    assert_eq!(
+        TrieVerifier::<RefHasher>::verify_proof(&root, &[*challenge_key], &proof),
+        Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
+    );
+}
+
+#[test]
+fn commitment_verifier_empty_proof_failure() {
+    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<RefHasher>>();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<RefHasher> = Recorder::default();
+
+    let challenge_key = leaf_keys.first().unwrap();
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<RefHasher>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let _iter = trie.into_double_ended_iter().unwrap();
+
+        // Not seeking any key, so that no leaf nodes are accessed.
+    }
+
+    // Generate proof
+    let proof = CompactProof {
+        encoded_nodes: vec![], // Empty proof
+    };
+
+    assert_eq!(
+        TrieVerifier::<RefHasher>::verify_proof(&root, &[*challenge_key], &proof),
+        Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
+    );
+}
+
+#[test]
+fn commitment_verifier_no_leaves_in_proof_failure() {
+    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<RefHasher>>();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<RefHasher> = Recorder::default();
+
+    let challenge_key = leaf_keys.first().unwrap();
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<RefHasher>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let _iter = trie.into_double_ended_iter().unwrap();
+
+        // Not seeking any key, so that no leaf nodes are accessed.
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<RefHasher>(root)
+        .expect("Failed to create compact proof from recorder");
+
+    assert_eq!(
+        TrieVerifier::<RefHasher>::verify_proof(&root, &[*challenge_key], &proof),
+        Err("Failed to seek challenged key.".into())
+    );
+}
+
+#[test]
+fn commitment_verifier_wrong_proof_answer_to_challenge_failure() {
+    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<RefHasher>>();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<RefHasher> = Recorder::default();
+
+    let challenge_key = &leaf_keys[0];
+    let wrong_challenge_key = &leaf_keys[1];
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<RefHasher>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        // Seek to the wrong challenge key so that we can generate a valid proof for the wrong key.
+        // This already accesses and records the the node. There is no need to call `next()`.
+        iter.seek(wrong_challenge_key).unwrap();
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<RefHasher>(root)
+        .expect("Failed to create compact proof from recorder");
+
+    assert_eq!(
+        TrieVerifier::<RefHasher>::verify_proof(&root, &[*challenge_key], &proof),
+        Err("Failed to seek challenged key.".into())
+    );
+}
+
+#[test]
+fn commitment_verifier_wrong_proof_next_and_prev_when_should_be_exact_failure() {
+    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<RefHasher>>();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<RefHasher> = Recorder::default();
+
+    // Existing key before the challenge.
+    let prev_challenge_key = leaf_keys[0];
+
+    // Actual challenge, which is an existing key in the trie.
+    let challenge_key = leaf_keys[1];
+
+    // Existing key after the challenge.
+    let next_challenge_key = leaf_keys[2];
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<RefHasher>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        // Seek to the existing key before the challenge.
+        iter.seek(&prev_challenge_key).unwrap();
+
+        // Seek to the key after the challenge.
+        iter.seek(&next_challenge_key).unwrap();
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<RefHasher>(root)
+        .expect("Failed to create compact proof from recorder");
+
+    assert_eq!(
+        TrieVerifier::<RefHasher>::verify_proof(&root, &[challenge_key], &proof),
+        Err("Failed to seek challenged key.".into())
+    );
+}
+
+#[test]
+fn commitment_verifier_wrong_proof_only_provide_prev_failure() {
+    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<RefHasher>>();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<RefHasher> = Recorder::default();
+
+    // Increment the most significant byte of the challenge key by 1.
+    let mut challenge_key = leaf_keys[0];
+    challenge_key[0] += 1;
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<RefHasher>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        // Seek to the challenge key, this will only look up the next leaf node.
+        iter.seek(&challenge_key).unwrap();
+        iter.next_back().unwrap().unwrap();
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<RefHasher>(root)
+        .expect("Failed to create compact proof from recorder");
+
+    assert_eq!(
+        TrieVerifier::<RefHasher>::verify_proof(&root, &[challenge_key], &proof),
+        Err("Failed to get next leaf.".into())
+    );
+}
+
+#[test]
+fn commitment_verifier_wrong_proof_only_provide_next_failure() {
+    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<RefHasher>>();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<RefHasher> = Recorder::default();
+
+    // Increment the most significant byte of the challenge key by 1.
+    let mut challenge_key = leaf_keys[0];
+    challenge_key[0] += 1;
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<RefHasher>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        // Seek to the challenge key, this will only look up the next leaf node.
+        iter.seek(&challenge_key).unwrap();
+        iter.next().unwrap().unwrap();
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<RefHasher>(root)
+        .expect("Failed to create compact proof from recorder");
+
+    assert_eq!(
+        TrieVerifier::<RefHasher>::verify_proof(&root, &[challenge_key], &proof),
+        Err("Failed to get previous leaf.".into())
+    );
+}
+
+#[test]
+fn commitment_verifier_wrong_proof_skip_actual_next_leaf_failure() {
+    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<RefHasher>>();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<RefHasher> = Recorder::default();
+
+    // Increment the most significant byte of the challenge key by 1.
+    let mut challenge_key = leaf_keys[0];
+    challenge_key[0] += 1;
+
+    // Do the same for the next leaf key.
+    let mut next_leaf_key = leaf_keys[1];
+    next_leaf_key[0] += 1;
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<RefHasher>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        // Seek to the challenge key, this will only look up the next leaf node.
+        iter.seek(&challenge_key).unwrap();
+        iter.next_back().unwrap().unwrap();
+
+        // Seek to two keys ahead of the challenge key.
+        iter.seek(&next_leaf_key).unwrap();
+        iter.next().unwrap().unwrap();
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<RefHasher>(root)
+        .expect("Failed to create compact proof from recorder");
+
+    assert_eq!(
+        TrieVerifier::<RefHasher>::verify_proof(&root, &[challenge_key], &proof),
+        Err("Failed to get next leaf.".into())
+    );
 }
