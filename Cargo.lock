@@ -14439,6 +14439,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "storage-hub-primitives"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "frame-support 28.0.0",
+ "frame-system 28.0.0",
+ "parity-scale-codec",
+ "reference-trie",
+ "scale-info",
+ "serde",
+ "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-io 30.0.0",
+ "sp-runtime 31.0.1",
+ "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
+ "storage-hub-traits",
+ "trie-db 0.29.0",
+]
+
+[[package]]
 name = "storage-hub-runtime"
 version = "0.1.0"
 dependencies = [
@@ -14499,6 +14518,7 @@ dependencies = [
  "staging-xcm 7.0.0",
  "staging-xcm-builder 7.0.0",
  "staging-xcm-executor 7.0.0",
+ "storage-hub-traits",
  "substrate-wasm-builder",
 ]
 
@@ -14506,7 +14526,6 @@ dependencies = [
 name = "storage-hub-traits"
 version = "0.1.0"
 dependencies = [
- "frame-benchmarking 28.0.0",
  "frame-support 28.0.0",
  "frame-system 28.0.0",
  "parity-scale-codec",

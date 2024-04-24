@@ -15,24 +15,27 @@ This repo contains all aspects relating to StorageHub, including clients, the ru
 
 ```sh
 .
+├── .github                <---- GitHub Actions and related files
+├── client                 <---- storage-hub substrate client side module
+├── node                   <---- storage-hub substrate client side module
+├── node                   <---- storage-hub substrate client side module
+├── pallets                <---- storage-hub pallets
+├── primitives             <---- storage-hub primitives
+├── resources
+├── runtime                <---- storage-hub runtime
+├── support                <---- traits and implementations used by storage-hub
+├── test                   <---- testing module for storage-hub, including Zombienet and TypeScript tests
+├── .gitignore
+├── biome.json
+├── bun.lockb
 ├── Cargo.lock
 ├── Cargo.toml
 ├── Containerfile
 ├── LICENSE
-├── README.md
-├── biome.json
-├── bsp                    <---- backup storage provider application
-├── bun.lockb
-├── msp                    <---- main storage provider application
-├── node                   <---- storage-hub substrate client side module
 ├── package.json
-├── pallets                <---- storage-hub pallets
-├── runtime                <---- storage-hub runtime
-├── storage-kit            <---- storage provider library kit
-├── test                   <---- TypeScript module
-├── tmp.txt
-├── tsconfig.json
-└── zombienet
+├── README.md
+├── rust-toolchain
+└── tsconfig.json
 ```
 
 ## Component Description
