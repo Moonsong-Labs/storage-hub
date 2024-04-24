@@ -61,6 +61,6 @@ jobs:
       - name: Run Tests for All Projects!
         run: |
           ~/.cargo/bin/cargo-nextest nextest run \
+            --workspace \
             --archive-file nextest-archive.tar.zst \
-            ## If partitions change remember to update v divisor here 
             --partition count:${{ matrix.partition }}/2
