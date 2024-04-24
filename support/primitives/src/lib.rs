@@ -39,7 +39,7 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
         // `TrieDBKeyDoubleEndedIterator` should always yield a `None` or `Some(leaf)` with a value.
         // `Some(leaf)` yields a `Result` and could therefore fail, so we still have to check it.
         let mut trie_de_iter = trie
-            .into_key_double_ended_iter()
+            .into_double_ended_iter()
             .map_err(|_| "Failed to create trie iterator.")?;
 
         // Check if the iterator has at least one leaf.
@@ -56,51 +56,54 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
                 .seek(challenge.as_ref())
                 .map_err(|_| "Failed to seek challenged key.")?;
 
-            // Executing `next()` after a `seek()` should yield the challenged leaf or the next leaf after it (which could be `None`).
-            let next_leaf = trie_de_iter.next();
+            // Executing `next()` after `seek()` should yield the challenged leaf or the next leaf after it (which could be `None`).
+            let next_leaf = trie_de_iter
+                .next()
+                .transpose()
+                .map_err(|_| "Failed to get next leaf.")?;
 
-            // Check if `Some(leaf)` yielded an internal error. Ignore `None`.
-            if let Some(Err(_)) = next_leaf {
-                return Err("Failed to get next leaf.".into());
-            }
+            // Executing `next_back()` after `seek()` should always yield `Some(leaf)` based on the double ended iterator behavior.
+            let prev_leaf = trie_de_iter
+                .next_back()
+                .transpose()
+                .map_err(|_| "Failed to get previous leaf.")?;
 
-            let mut prev_leaf = trie_de_iter.next_back();
-
-            // If the `prev_leaf` and `next_leaf` are the same and `next_leaf` yields a leaf, then it means we have to exectue
-            // `next_back()` again to get the previous leaf. This is due to the behaviour of the Double Ended Iterator implemented in trie-db.
-            //
-            // When `next_leaf` is None, then `prev_leaf` will yield the last leaf automatically without having to call `next_back()` again.
-            if prev_leaf == next_leaf && next_leaf.as_ref().is_some_and(|x| x.is_ok()) {
-                // If the leaf is the same as the next leaf, then it means we
-                prev_leaf = trie_de_iter.next_back();
+            // We check before the loop if the iterator has at least one leaf.
+            // Therefore, if `prev_leaf` is `None` here, it means that the behavior of the double ended iterator has changed.
+            if prev_leaf.is_none() {
+                return Err("Unexpected double ended iterator behavior: no previous leaf.".into());
             }
 
             // Check if there is a valid combination of leaves which validate the proof given the challenged key.
             match (prev_leaf, next_leaf) {
                 // Scenario 1 (valid): `next_leaf` is the challenged leaf which is included in the proof.
                 // The challenge is the leaf itself (i.e. the challenge exists in the trie).
-                (_, Some(Ok(next_leaf))) if next_leaf == challenge.as_ref().to_vec() => continue,
+                (_, Some((next_key, _))) if next_key == challenge.as_ref().to_vec() => continue,
                 // Scenario 2 (valid): `prev_leaf` and `next_leaf` are consecutive leaves.
                 // The challenge is between the two leaves (i.e. the challenge exists in the trie).
-                (Some(Ok(prev_leaf)), Some(Ok(next_leaf)))
-                    if prev_leaf < challenge.as_ref().to_vec()
-                        && challenge.as_ref().to_vec() < next_leaf =>
+                (Some((prev_key, _)), Some((next_key, _)))
+                    if prev_key < challenge.as_ref().to_vec()
+                        && challenge.as_ref().to_vec() < next_key =>
                 {
                     // Check if the nodes `prev_leaf` and `next_leaf` are in fact leaves (i.e. they have a value).
                     // This is to prevent the proof from being constructed based on non-leaf nodes.
-                    trie.get(&prev_leaf)
+                    trie.get(&prev_key)
                         .map_err(|_| "Bad proof: no value for prev leaf.")?;
-                    trie.get(&next_leaf)
+                    trie.get(&next_key)
                         .map_err(|_| "Bad proof: no value for next leaf.")?;
 
                     continue;
                 }
-                // Scenario 3 (valid): `prev_leaf` is the last leaf since `next_leaf` is `None`.
-                // The challenge is after the last leaf (i.e. the challenge does not exist in the trie).
-                (Some(Ok(_prev_leaf)), None) => continue,
-                // Scenario 4 (valid): `next_leaf` is the first leaf since `prev_leaf` is `None`.
+                // Scenario 3 (valid): `next_leaf` is the first leaf since the next previous leaf is `None`.
                 // The challenge is before the first leaf (i.e. the challenge does not exist in the trie).
-                (None, Some(Ok(_next_leaf))) => continue,
+                (Some((prev_key, _)), Some((next_key, _)))
+                    if prev_key == next_key && trie_de_iter.next_back().is_none() =>
+                {
+                    continue;
+                }
+                // Scenario 4 (valid): `prev_leaf` is the last leaf since `next_leaf` is `None`.
+                // The challenge is after the last leaf (i.e. the challenge does not exist in the trie).
+                (Some(_prev_leaf), None) => continue,
                 // Invalid
                 (None, None) => {
                     #[cfg(test)]
