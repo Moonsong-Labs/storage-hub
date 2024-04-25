@@ -19,26 +19,50 @@ pub struct Metadata {
     pub owner: String,
     pub location: String,
     pub size: u64,
-    pub fingerprint: Key,
+    pub fingerprint: H256,
+}
+
+impl Metadata {
+    pub fn chunk_count(&self) -> u64 {
+        let full_chunks = self.size / (FILE_CHUNK_SIZE as u64);
+        if self.size % (FILE_CHUNK_SIZE as u64) > 0 {
+            return full_chunks + 1;
+        }
+        full_chunks
+    }
+
+    pub fn chunk_ids(&self) -> impl Iterator<Item = ChunkId> {
+        (0..self.chunk_count()).map(|n| ChunkId(n))
+    }
+}
+
+/// Typed u64 representing the index of a file [`Chunk`]. Indexed from 0.
+#[derive(Clone)]
+pub struct ChunkId(pub u64);
+
+impl ChunkId {
+    pub fn get_be_key(&self) -> [u8; 8] {
+        self.0.to_be_bytes()
+    }
 }
 
 // TODO: this is currently a placeholder in order to define Storage interface.
 /// Typed chunk of a file. This is what is stored in the leaf of the stored Merkle tree.
-pub type Chunk = [u8; FILE_CHUNK_SIZE];
+pub type Chunk = Vec<u8>;
 
 /// Leaf in the Forest or File trie.
-pub struct Leaf<K: AsRef<[u8]>, D: Debug> {
+pub struct Leaf<K, D: Debug> {
     pub key: K,
     pub data: D,
 }
 
 /// Proving either the exact key or the neighbour keys of the challenged key.
-pub enum Proven<K: AsRef<[u8]>, D: Debug> {
+pub enum Proven<K, D: Debug> {
     ExactKey(Leaf<K, D>),
     NeighbourKeys((Option<Leaf<K, D>>, Option<Leaf<K, D>>)),
 }
 
-impl<K: AsRef<[u8]>, D: Debug> Proven<K, D> {
+impl<K, D: Debug> Proven<K, D> {
     pub fn new_exact_key(key: K, data: D) -> Self {
         Proven::ExactKey(Leaf { key, data })
     }
@@ -61,14 +85,14 @@ pub struct ForestProof<K: AsRef<[u8]>> {
     /// The compact proof.
     pub proof: CompactProof,
     /// The root hash of the trie.
-    pub root: [u8; 32],
+    pub root: H256,
 }
 
-pub struct FileProof<K: AsRef<[u8]>> {
-    /// The file key that was proven.
-    pub proven: Proven<K, Chunk>,
+pub struct FileProof {
+    /// The file chunk (and id) that was proven.
+    pub proven: Leaf<ChunkId, Chunk>,
     /// The compact proof.
     pub proof: CompactProof,
-    /// The root hash of the trie.
-    pub root_hash: H256,
+    /// The root hash of the trie, also known as the fingerprint of the file.
+    pub root: H256,
 }

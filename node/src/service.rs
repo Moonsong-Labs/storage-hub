@@ -341,7 +341,7 @@ async fn start_dev_impl(
         struct InMemoryStorageHubConfig {}
 
         impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
-            type FileStorage = InMemoryFileStorage;
+            type FileStorage = InMemoryFileStorage<LayoutV1<RefHasher>>;
             type ForestStorage = InMemoryForestStorage<LayoutV1<RefHasher>>;
         }
 
@@ -648,7 +648,7 @@ async fn start_node_impl(
         struct InMemoryStorageHubConfig {}
 
         impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
-            type FileStorage = InMemoryFileStorage;
+            type FileStorage = InMemoryFileStorage<LayoutV1<RefHasher>>;
             type ForestStorage = InMemoryForestStorage<LayoutV1<RefHasher>>;
         }
 
