@@ -1,3 +1,12 @@
+//! # Storage Providers Pallet
+//!
+//! This pallet provides the functionality to manage Main Storage Providers (MSPs)
+//! and Backup Storage Providers (BSPs) in a decentralized storage network.
+//!
+//! The functionality allows users to sign up and sign off as MSPs or BSPs and change
+//! their parameters. This is the way that users can offer their storage capacity to
+//! the network and get rewarded for it.
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
@@ -175,8 +184,8 @@ pub mod pallet {
     /// request is removed from this storage and the user is registered as a SP.
     ///
     /// This storage is updated in:
-    /// - [`pallet::request_msp_sign_up`] and [`pallet::request_bsp_sign_up`], which add a new entry to the map.
-    /// - [`pallet::confirm_sign_up`] and [`pallet::cancel_sign_up`], which remove an existing entry from the map.
+    /// - [request_msp_sign_up](crate::dispatchables::request_msp_sign_up) and [request_bsp_sign_up](crate::dispatchables::request_bsp_sign_up), which add a new entry to the map.
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up) and [cancel_sign_up](crate::dispatchables::cancel_sign_up), which remove an existing entry from the map.
     #[pallet::storage]
     pub type SignUpRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, (StorageProvider<T>, BlockNumberFor<T>)>;
@@ -186,8 +195,8 @@ pub mod pallet {
     /// This is used to get a Main Storage Provider's unique identifier needed to access its metadata.
     ///
     /// This storage is updated in:
-    /// - [`pallet::confirm_sign_up`], which adds a new entry to the map if the account to confirm is a Main Storage Provider.
-    /// - [`pallet::msp_sign_off`], which removes the corresponding entry from the map.
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Main Storage Provider.
+    /// - [msp_sign_off](crate::dispatchables::msp_sign_off), which removes the corresponding entry from the map.
     #[pallet::storage]
     pub type AccountIdToMainStorageProviderId<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, MainStorageProviderId<T>>;
@@ -198,10 +207,10 @@ pub mod pallet {
     /// It returns `None` if the Main Storage Provider ID does not correspond to any registered Main Storage Provider.
     ///
     /// This storage is updated in:
-    /// - [`pallet::confirm_sign_up`], which adds a new entry to the map if the account to confirm is a Main Storage Provider.
-    /// - [`pallet::msp_sign_off`], which removes the corresponding entry from the map.
-    /// - [`pallet::change_capacity`], which changes the entry's `capacity`.
-    /// - [`pallet::add_value_prop`], which appends a new value proposition to the entry's existing `value_prop` bounded vector.
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Main Storage Provider.
+    /// - [msp_sign_off](crate::dispatchables::msp_sign_off), which removes the corresponding entry from the map.
+    /// - [change_capacity](crate::dispatchables::change_capacity), which changes the entry's `capacity`.
+    /// - [add_value_prop](crate::dispatchables::add_value_prop), which appends a new value proposition to the entry's existing `value_prop` bounded vector.
     #[pallet::storage]
     pub type MainStorageProviders<T: Config> =
         StorageMap<_, Blake2_128Concat, MainStorageProviderId<T>, MainStorageProvider<T>>;
@@ -212,9 +221,9 @@ pub mod pallet {
     /// It returns `None` if the Bucket ID does not correspond to any registered bucket.
     ///
     /// This storage is updated in:
-    /// - [`pallet::MutateProvidersInterface::add_bucket`], which adds a new entry to the map.
-    /// - [`pallet::MutateProvidersInterface::change_root_bucket`], which changes the corresponding bucket's root.
-    /// - [`pallet::MutateProvidersInterface::remove_root_bucket`], which removes the entry of the corresponding bucket.
+    /// - [add_bucket](storage_hub_traits::MutateProvidersInterface::add_bucket), which adds a new entry to the map.
+    /// - [change_root_bucket](storage_hub_traits::MutateProvidersInterface::change_root_bucket), which changes the corresponding bucket's root.
+    /// - [remove_root_bucket](storage_hub_traits::MutateProvidersInterface::remove_root_bucket), which removes the entry of the corresponding bucket.
     #[pallet::storage]
     pub type Buckets<T: Config> = StorageMap<_, Blake2_128Concat, BucketId<T>, Bucket<T>>;
 
@@ -224,8 +233,8 @@ pub mod pallet {
     ///
     /// This storage is updated in:
     ///
-    /// - [`pallet::confirm_sign_up`], which adds a new entry to the map if the account to confirm is a Backup Storage Provider.
-    /// - [`pallet::bsp_sign_off`], which removes the corresponding entry from the map.
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Backup Storage Provider.
+    /// - [bsp_sign_off](crate::dispatchables::bsp_sign_off), which removes the corresponding entry from the map.
     #[pallet::storage]
     pub type AccountIdToBackupStorageProviderId<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, BackupStorageProviderId<T>>;
@@ -236,9 +245,9 @@ pub mod pallet {
     /// It returns `None` if the Backup Storage Provider ID does not correspond to any registered Backup Storage Provider.
     ///
     /// This storage is updated in:
-    /// - [`pallet::confirm_sign_up`], which adds a new entry to the map if the account to confirm is a Backup Storage Provider.
-    /// - [`pallet::bsp_sign_off`], which removes the corresponding entry from the map.
-    /// - [`pallet::change_capacity`], which changes the entry's `capacity`.
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Backup Storage Provider.
+    /// - [bsp_sign_off](crate::dispatchables::bsp_sign_off), which removes the corresponding entry from the map.
+    /// - [change_capacity](crate::dispatchables::change_capacity), which changes the entry's `capacity`.
     #[pallet::storage]
     pub type BackupStorageProviders<T: Config> =
         StorageMap<_, Blake2_128Concat, BackupStorageProviderId<T>, BackupStorageProvider<T>>;
@@ -248,8 +257,8 @@ pub mod pallet {
     /// This is used to keep track of the total amount of MSPs in the system.
     ///
     /// This storage is updated in:
-    /// - [`pallet::confirm_sign_up`], which adds one to this storage if the account to confirm is a Main Storage Provider.
-    /// - [`pallet::msp_sign_off`], which subtracts one from this storage.
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds one to this storage if the account to confirm is a Main Storage Provider.
+    /// - [msp_sign_off](crate::dispatchables::msp_sign_off), which subtracts one from this storage.
     #[pallet::storage]
     pub type MspCount<T: Config> = StorageValue<_, T::SpCount, ValueQuery>;
 
@@ -258,8 +267,8 @@ pub mod pallet {
     /// This is used to keep track of the total amount of BSPs in the system.
     ///
     /// This storage is updated in:
-    /// - [`pallet::confirm_sign_up`], which adds one to this storage if the account to confirm is a Backup Storage Provider.
-    /// - [`pallet::bsp_sign_off`], which subtracts one from this storage.
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds one to this storage if the account to confirm is a Backup Storage Provider.
+    /// - [bsp_sign_off](crate::dispatchables::bsp_sign_off), which subtracts one from this storage.
     #[pallet::storage]
     pub type BspCount<T: Config> = StorageValue<_, T::SpCount, ValueQuery>;
 
@@ -269,8 +278,8 @@ pub mod pallet {
     /// total amount of storage capacity that can be used by users if we factor in the replication factor.
     ///
     /// This storage is updated in:
-    /// - [`pallet::confirm_sign_up`], which adds the capacity of the registered Storage Provider to this storage if the account to confirm is a Backup Storage Provider.
-    /// - [`pallet::bsp_sign_off`], which subtracts the capacity of the Backup Storage Provider to sign off from this storage.
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds the capacity of the registered Storage Provider to this storage if the account to confirm is a Backup Storage Provider.
+    /// - [bsp_sign_off](crate::dispatchables::bsp_sign_off), which subtracts the capacity of the Backup Storage Provider to sign off from this storage.
     #[pallet::storage]
     pub type TotalBspsCapacity<T: Config> = StorageValue<_, StorageData<T>, ValueQuery>;
 
@@ -665,7 +674,7 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// Dispatchable function that allows users to change their amount of stored data
+        /// Dispatchable extrinsic that allows users to change their amount of stored data
         ///
         /// The dispatch origin for this call must be Signed.
         /// The origin must be the account that wants to change its capacity.
@@ -714,7 +723,7 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// Dispatchable function only callable by an MSP that allows it to add a value proposition to its service
+        /// Dispatchable extrinsic only callable by an MSP that allows it to add a value proposition to its service
         ///
         /// The dispatch origin for this call must be Signed.
         /// The origin must be the account that wants to add a value proposition.
