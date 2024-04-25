@@ -18,6 +18,8 @@ type Balance = u128;
 type AccountId = AccountId32;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10;
+const UNITS: Balance = 1_000_000_000_000;
+const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;
@@ -174,6 +176,7 @@ impl pallet_proofs_dealer::Config for Test {
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = MockRandomness;
+    type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty

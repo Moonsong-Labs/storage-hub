@@ -20,6 +20,8 @@ type Balance = u128;
 type AccountId = u64;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
+const UNITS: Balance = 1_000_000_000_000;
+const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumberFor<Test> = 3;
@@ -141,6 +143,7 @@ impl crate::Config for Test {
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = ConstU64<181222>;
     type RandomnessProvider = MockRandomness;
+    type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
 }
 
 pub struct MockedProvidersSubscriber;

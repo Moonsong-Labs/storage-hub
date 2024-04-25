@@ -56,6 +56,8 @@ use xcm::latest::prelude::BodyId;
 use crate::ParachainInfo;
 use crate::Randomness;
 
+use self::currency::UNITS;
+
 // Local module imports
 use super::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
@@ -68,6 +70,12 @@ use super::{
     UNINCLUDED_SEGMENT_CAPACITY, VERSION,
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
+
+pub mod currency {
+    use runtime_constants as polkadot_runtime_constants;
+
+    pub const UNITS: u128 = polkadot_runtime_constants::currency::UNITS;
+}
 
 parameter_types! {
     pub const Version: RuntimeVersion = VERSION;
@@ -404,6 +412,11 @@ impl Get<AccountId32> for TreasuryAccount {
     }
 }
 
+parameter_types! {
+    pub const StakeToChallengePeriod: Balance = 10 * UNITS;
+    pub const ChallengesFee: Balance = 1 * UNITS;
+}
+
 impl pallet_proofs_dealer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
@@ -416,9 +429,10 @@ impl pallet_proofs_dealer::Config for Runtime {
     type ChallengeHistoryLength = ConstU32<10>;
     type ChallengesQueueLength = ConstU32<10>;
     type CheckpointChallengePeriod = ConstU32<10>;
-    type ChallengesFee = ConstU128<1_000_000>;
+    type ChallengesFee = ChallengesFee;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = Randomness;
+    type StakeToChallengePeriod = StakeToChallengePeriod;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty

@@ -109,6 +109,12 @@ pub mod pallet {
         #[pallet::constant]
         type CheckpointChallengePeriod: Get<u32>;
 
+        /// The ratio to convert staked balance to block period.
+        /// This is used to determine the period in which a Provider should submit a proof, based on
+        /// their stake. The period is calculated as `stake / StakeToBlockPeriod`, saturating at 1.
+        #[pallet::constant]
+        type StakeToChallengePeriod: Get<BalanceFor<Self>>;
+
         /// The fee charged for submitting a challenge.
         /// This fee goes to the Treasury, and is used to prevent spam. Registered Providers are
         /// exempt from this fee.
@@ -288,7 +294,7 @@ pub mod pallet {
         /// is provided, the proof submitter is considered to be the Provider.
         /// Relies on a Providers pallet to check if the root is valid for the Provider.
         /// Validates that the proof corresponds to a challenge that was made in the past,
-        /// by checking the `BlockToChallenges` StorageMap. The block number that the
+        /// by checking the `BlockToChallengesSeed` StorageMap. The block number that the
         /// Provider should have submitted a proof is calculated based on the last block they
         /// submitted a proof for (`LastBlockSpSubmittedProofFor`), and the proving period for
         /// that Provider, which is a function of their stake.
