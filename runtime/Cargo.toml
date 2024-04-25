@@ -30,6 +30,8 @@ pallet-storage-providers = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-randomness = { workspace = true }
 
+storage-hub-traits = { workspace = true }
+
 # Substrate
 frame-support = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
