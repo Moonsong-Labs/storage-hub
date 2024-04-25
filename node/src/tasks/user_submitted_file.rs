@@ -4,6 +4,7 @@ use crate::tasks::StorageHubHandler;
 use crate::tasks::StorageHubHandlerConfig;
 use crate::services::file_transfer::schema;
 use log::info;
+use prost::Message;
 use storage_hub_infra::event_bus::EventHandler;
 
 const LOG_TARGET: &str = "user-submitted-file-task";
@@ -40,29 +41,17 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
 
         let multiaddresses = event.multiaddresses;
         let peer_id = event.peer_id;
+        let file_location = event.file_metadata.location;
+        // let chunk_count = event.file_metadata.chunk_count();
+        // Mocked count:
+        let chunk_count = 100u64;
 
-        let payload = "Mocked Data".to_string();
-        let request = schema::v1::provider::Request::decode(&payload[..])?;
-
-        // let _ = self.storage_hub_handler.file_transfer.send_request(peer_id, protocol_name, request);
-
-        // let _ = self.storage_hub_handler
-        //     .file_transfer
-        //     .establish_connection(multiaddresses);
-
-        // iterate through all chunks of this file in FileStorage.
-
-        // OK - I need add the Metadata struct to runtime events.
-        // - add peer_id as requirement as well and send_request
-        // - get RequestReponseBehavior? substrate has a send_request()
-        // - we need the file storage client to get proofs, send file etc
-        // By the time we are here, we are guaranteed to have the file in File Storage.
-        // FileStorage trait is not implemented yet and will be changed.
-
-        
-        // Command for file transfer service
-        // Open P2P
-        // Send file
+        for chunk_idx in 0..chunk_count {
+            // Depends on FileStorage trait implementation
+            // let chunk = self.storage_hub_handler.file_storage.get_chunk();
+            let chunk = "Mocked Data".to_string();
+            let _ = self.storage_hub_handler.file_transfer.upload_request(chunk);
+        }
 
         Ok(())
     }
