@@ -7,21 +7,6 @@ use scale_info::TypeInfo;
 
 use crate::Config;
 
-// We have to create:
-// 1) A mapping from AccountId to BackupStorageProviderId (AccountId + salt, hashed)
-// 2) A mapping from AccountId to MainStorageProviderId (AccountId + salt, hashed).
-// (Where the StorageProviderId is saved depends on how the SP registered itself)
-// 3) A mapping from BackupStorageProviderId to BackupStorageProvider (metadata such as root, total data available, total data used, multiaddresses, etc)
-// 4) A mapping from MainStorageProviderId to MainStorageProvider (metadata such as vector of bucket ids, total data available, total data used, multiaddresses, etc)
-// 5) A mapping from BucketId to Bucket (metadata such as root, User ID, MainStorageProviderId, etc)
-// (It probably makes sense to have a basic MerkleTrieHolder structure that has the root and any general metadata, and then have the BackupStorageProvider and Bucket structs that inherit from MerkleTrieHolder and have any extra metadata)
-
-// Then, we can cover the needed functionality for the Proofs pallet:
-// - The is_provider function can be implemented by checking if the ProviderId given is either a BackupStorageProvider (by using map 3) or a Bucket (by using map 5)
-// - The get_provider function can be implemented by returning the BackupStorageProviderId for a BackupStorageProvider (using map 1 + checking if BSP exists in map 3) or None otherwise (MSPs have to pass the BucketId to the proofs pallet)
-// - The get_root function can be implemented (considering the MerkleTrieHolder struct has the root) using map 3 for BackupStorageProviders and map 5 for Buckets
-// - The get_stake function can be implemented by using map 3 (for BackupStorageProviders) or map 5 into map 4 with MainStorageProviderId (for Buckets)
-
 /// Structure that has the possible value propositions that a Main Storage Provider can offer (and the runtime is aware of)
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
