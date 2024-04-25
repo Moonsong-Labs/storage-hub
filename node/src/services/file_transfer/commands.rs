@@ -1,3 +1,4 @@
+use sc_network::{PeerId, ProtocolName};
 use storage_hub_infra::actor::ActorHandle;
 
 use crate::services::FileTransferService;
@@ -5,24 +6,24 @@ use crate::services::FileTransferService;
 /// Messages understood by the FileTransfer service actor
 #[derive(Debug)]
 pub enum FileTransferServiceCommand {
-    EstablishConnection { multiaddresses: Vec<String> },
-    SendFile { file: Vec<u8> },
+    SendRequest { target: PeerId, protocol_name: ProtocolName, Request: Vec<u8> },
+    // TODO: use proper types for the proofs: FileProof.
+    UploadRequest { data: String }
 }
 
 /// Allows our ActorHandle to implement
 /// the specific methods for each kind of message.
 pub trait FileTransferServiceInterface {
-    fn establish_connection(&self, multiaddresses: Vec<String>) -> anyhow::Result<()>;
+    fn send_request(&self, target: PeerId, protocol_name: ProtocolName, request: Vec<u8>);
 
-    fn send_file(&self, file: Vec<u8>) -> anyhow::Result<()>;
+    fn upload_request(&self, data: String);
 }
 
 impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
-    fn establish_connection(&self, _multiaddresses: Vec<String>) -> anyhow::Result<()> {
-        Ok(())
+    fn send_request(&self, target: PeerId, protocol_name: ProtocolName, request: Vec<u8>) {
     }
 
-    fn send_file(&self, _file: Vec<u8>) -> anyhow::Result<()> {
-        Ok(())
+    fn upload_request(&self, data: String) {
+        
     }
 }

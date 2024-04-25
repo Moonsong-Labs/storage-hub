@@ -50,6 +50,7 @@ const MAX_FILE_TRANSFER_REQUESTS_QUEUE: usize = 500;
 pub struct FileTransferService {
     request_receiver: async_channel::Receiver<IncomingRequest>,
     event_bus_provider: FileTransferServiceEventBusProvider,
+    // add ProtocolConfig?
 }
 
 impl Actor for FileTransferService {
@@ -63,12 +64,10 @@ impl Actor for FileTransferService {
     ) -> impl std::future::Future<Output = ()> + Send {
         async move {
             match message {
-                FileTransferServiceCommand::EstablishConnection { multiaddresses: _ } => {
+                FileTransferServiceCommand::SendRequest { target, protocol_name, Request } => {
                     todo!()
-                }
-                FileTransferServiceCommand::SendFile { file: _ } => {
-                    todo!()
-                }
+                },
+                FileTransferServiceCommand::UploadRequest { data } => {},
             }
         }
     }

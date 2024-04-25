@@ -1,6 +1,7 @@
+use sc_network::PeerId;
 use sp_core::H256;
 use sp_runtime::AccountId32;
-use storage_hub_infra::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
+use storage_hub_infra::{event_bus::{EventBus, EventBusMessage, ProvidesEventBus}, types::Metadata};
 
 type StorageData = pallet_file_system::types::StorageData<storage_hub_runtime::Runtime>;
 type FileLocation = pallet_file_system::types::FileLocation<storage_hub_runtime::Runtime>;
@@ -37,9 +38,12 @@ impl EventBusMessage for NewStorageRequest {}
 #[derive(Debug, Clone)]
 pub struct AcceptedBspVolunteer {
     pub who: String,
-    pub location: String,
-    pub fingerprint: String,
+    // The multiaddrs of this BSP.
     pub multiaddresses: Vec<String>,
+    // The peer_id of this BSP.
+    pub peer_id: PeerId,
+    // Metadata of the file to be stored.
+    pub file_metadata: Metadata,
 }
 
 impl EventBusMessage for AcceptedBspVolunteer {}

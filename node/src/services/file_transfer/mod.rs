@@ -13,7 +13,7 @@ pub mod commands;
 /// For incoming provider requests.
 mod handler;
 /// For defining the provider requests protocol schema.
-mod schema;
+pub mod schema;
 
 // TODO determine ideal max request/response sizes (we could technically specify here usize::MAX)
 /// Max size of request packet. (1GB)
