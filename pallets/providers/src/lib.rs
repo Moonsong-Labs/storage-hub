@@ -9,11 +9,11 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub use pallet::*;
-use types::{BackupStorageProviderId, MainStorageProviderId};
-
 mod types;
 mod utils;
+
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
 
 #[cfg(test)]
 mod mock;
@@ -21,8 +21,13 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+use frame_system::pallet_prelude::BlockNumberFor;
+pub use pallet::*;
+pub use scale_info::Type;
+use types::{
+    BackupStorageProvider, BackupStorageProviderId, BalanceOf, BucketId, HashId,
+    MainStorageProviderId, MerklePatriciaRoot, StorageData, StorageProvider,
+};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -752,11 +757,6 @@ pub mod pallet {
     }
 }
 
-use crate::types::{
-    BackupStorageProvider, BalanceOf, BucketId, HashId, MerklePatriciaRoot, StorageData,
-    StorageProvider,
-};
-use frame_system::pallet_prelude::BlockNumberFor;
 /// Helper functions (getters, setters, etc.) for this pallet
 impl<T: Config> Pallet<T> {
     /// A helper function to get the information of a sign up request of a user.
