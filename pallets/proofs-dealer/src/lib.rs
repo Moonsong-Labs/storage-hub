@@ -28,12 +28,12 @@ pub mod pallet {
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::{ValueQuery, *},
         sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps},
-        traits::fungible,
+        traits::{fungible, Randomness},
     };
     use frame_system::pallet_prelude::*;
     use sp_trie::CompactProof;
     use storage_hub_traits::{CommitmentVerifier, ProvidersInterface};
-    use types::ProviderFor;
+    use types::{ProviderFor, RandomnessOutputFor};
 
     use crate::types::*;
     use crate::*;
@@ -53,6 +53,9 @@ pub mod pallet {
             + fungible::hold::Inspect<Self::AccountId>
             + fungible::hold::Mutate<Self::AccountId>;
 
+        /// Type to access source of randomness.
+        type RandomnessProvider: Randomness<Self::Hash, BlockNumberFor<Self>>;
+
         /// The type for the hashes of Merkle Patricia Forest nodes.
         /// Applies to file keys (leaf nodes) and root hashes (root nodes).
         /// Generally a hash (the output of a Hasher).
@@ -71,13 +74,17 @@ pub mod pallet {
             + MaxEncodedLen
             + FullCodec;
 
-        /// The type used to verify Merkle Patricia Trie proofs.
+        /// The type used to verify Merkle Patricia Forest proofs.
         /// Something that implements the `CommitmentVerifier` trait.
         type KeyVerifier: CommitmentVerifier;
 
         /// The maximum number of challenges that can be made in a single block.
         #[pallet::constant]
         type MaxChallengesPerBlock: Get<u32>;
+
+        /// The maximum number of custom challenges that can be made in a single checkpoint block.
+        #[pallet::constant]
+        type MaxCustomChallengesPerBlock: Get<u32>;
 
         /// The maximum number of Providers that can be challenged in block.
         #[pallet::constant]
@@ -126,11 +133,22 @@ pub mod pallet {
     /// This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
     #[pallet::storage]
     #[pallet::getter(fn block_to_challenges)]
-    pub type BlockToChallenges<T: Config> = StorageMap<
+    pub type BlockToChallengesSeed<T: Config> =
+        StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, RandomnessOutputFor<T>>;
+
+    /// A mapping from block number to a vector of custom challenged file keys for that block.
+    ///
+    /// This is used to keep track of the challenges that have been made in the past, specifically
+    /// in the checkpoint challenge rounds.
+    /// The vector is bounded by `MaxChallengesPerBlock`.
+    /// This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
+    #[pallet::storage]
+    #[pallet::getter(fn block_to_checkpoint_challenges)]
+    pub type BlockToCheckpointChallenges<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
-        BoundedVec<KeyFor<T>, MaxChallengesPerBlockFor<T>>,
+        BoundedVec<KeyFor<T>, MaxCustomChallengesPerBlockFor<T>>,
     >;
 
     /// A mapping from block number to a vector of challenged Providers for that block.
@@ -268,7 +286,7 @@ pub mod pallet {
         ///
         /// Checks that `provider` is a registered Provider. If none
         /// is provided, the proof submitter is considered to be the Provider.
-        /// Relies on a File System pallet to check if the root is valid for the Provider.
+        /// Relies on a Providers pallet to check if the root is valid for the Provider.
         /// Validates that the proof corresponds to a challenge that was made in the past,
         /// by checking the `BlockToChallenges` StorageMap. The block number that the
         /// Provider should have submitted a proof is calculated based on the last block they
@@ -290,8 +308,6 @@ pub mod pallet {
         pub fn submit_proof(
             origin: OriginFor<T>,
             proof: CompactProof,
-            root: ForestRootFor<T>,
-            challenge_block: BlockNumberFor<T>,
             provider: Option<ProviderFor<T>>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.

@@ -54,6 +54,8 @@ where
     #[allow(unused_variables)]
     pub fn do_submit_proof(submitter: &ProviderFor<T>, proof: &CompactProof) -> DispatchResult {
         // Check if submitter is a registered Provider.
+        // This is actually redundant as the `submit_proof` extrinsic that calls this function
+        // already checks this. However, it is left here for clarity.
         ensure!(
             ProvidersPalletFor::<T>::is_provider(submitter.clone()),
             Error::<T>::NotProvider

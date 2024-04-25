@@ -32,6 +32,9 @@ pub type ForestRootFor<T> = <T as crate::Config>::MerkleHash;
 /// Syntactic sugar for the MaxChallengesPerBlock type used in the proofs pallet.
 pub type MaxChallengesPerBlockFor<T> = <T as crate::Config>::MaxChallengesPerBlock;
 
+/// Syntactic sugar for the MaxCustomChallengesPerBlock type used in the proofs pallet.
+pub type MaxCustomChallengesPerBlockFor<T> = <T as crate::Config>::MaxCustomChallengesPerBlock;
+
 /// Syntactic sugar for the MaxSpsChallengedPerBlock type used in the proofs pallet.
 pub type MaxSpsChallengedPerBlockFor<T> = <T as crate::Config>::MaxProvidersChallengedPerBlock;
 
@@ -57,3 +60,9 @@ pub type BalancePalletFor<T> = <T as crate::Config>::NativeBalance;
 pub type BalanceFor<T> = <<T as crate::Config>::NativeBalance as fungible::Inspect<
     <T as frame_system::Config>::AccountId,
 >>::Balance;
+
+/// Syntactic sugar for the type of RandomnessProvider type used in the proofs pallet.
+pub type RandomnessProviderFor<T> = <T as crate::Config>::RandomnessProvider;
+
+/// Syntactic sugar for the Randomness Output type used in the proofs pallet.
+pub type RandomnessOutputFor<T> = <T as frame_system::Config>::Hash;

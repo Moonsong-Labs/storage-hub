@@ -133,12 +133,14 @@ impl crate::Config for Test {
     type MerkleHash = H256;
     type KeyVerifier = MockVerifier;
     type MaxChallengesPerBlock = ConstU32<10>;
+    type MaxCustomChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
     type ChallengeHistoryLength = ConstU32<10>;
     type ChallengesQueueLength = ConstU32<10>;
     type CheckpointChallengePeriod = ConstU32<2>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = ConstU64<181222>;
+    type RandomnessProvider = MockRandomness;
 }
 
 pub struct MockedProvidersSubscriber;
