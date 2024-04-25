@@ -7,7 +7,7 @@ use crate::Pallet as FileSystem;
 use frame_benchmarking::{benchmarks, impl_benchmark_test_suite, whitelisted_caller};
 use frame_system::RawOrigin;
 
-use crate::types::{FileLocation, Fingerprint, MultiAddresses, StorageData};
+use crate::types::{FileLocation, Fingerprint, PeerIds, StorageData};
 
 benchmarks! {
     issue_storage_request {
@@ -16,8 +16,8 @@ benchmarks! {
         let location: FileLocation<T> = Default::default();
         let fingerprint: Fingerprint<T> = Default::default();
         let size: StorageData<T> = Default::default();
-        let multiaddresses: MultiAddresses<T> = Default::default();
-    }: _(RawOrigin::Signed(caller), location.clone(), fingerprint, size, multiaddresses)
+        let peer_ids: PeerIds<T> = Default::default();
+    }: _(RawOrigin::Signed(caller), location.clone(), fingerprint, size, peer_ids)
     verify {
         assert!(FileSystem::<T>::storage_requests(location).is_some());
     }

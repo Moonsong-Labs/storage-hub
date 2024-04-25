@@ -32,7 +32,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use sp_trie::CompactProof;
-    use storage_hub_traits::ProvidersInterface;
+    use storage_hub_traits::{CommitmentVerifier, ProvidersInterface};
     use types::ProviderFor;
 
     use crate::types::*;
@@ -72,8 +72,8 @@ pub mod pallet {
             + FullCodec;
 
         /// The type used to verify Merkle Patricia Trie proofs.
-        /// Something that implements the `TrieVerifier` trait.
-        type TrieVerifier: crate::TrieVerifier;
+        /// Something that implements the `CommitmentVerifier` trait.
+        type KeyVerifier: CommitmentVerifier;
 
         /// The maximum number of challenges that can be made in a single block.
         #[pallet::constant]
@@ -350,11 +350,4 @@ pub mod pallet {
             Ok(().into())
         }
     }
-}
-
-// TODO: Move this to a primitives crate.
-// TODO: Abstract better the types of arguments
-/// A trait to verify Merkle Patricia Trie proofs.
-pub trait TrieVerifier {
-    fn verify_proof(root: &[u8; 32], challenges: &[u8; 32], proof: &CompactProof) -> bool;
 }

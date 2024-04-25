@@ -7,7 +7,9 @@ use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
 use frame_support::traits::fungible;
 use frame_support::Parameter;
 use scale_info::prelude::fmt::Debug;
+use sp_core::Get;
 use sp_runtime::traits::AtLeast32BitUnsigned;
+use sp_runtime::{BoundedVec, DispatchError};
 
 /// A trait to lookup registered Providers.
 ///
@@ -64,6 +66,20 @@ pub trait ReadProvidersInterface: ProvidersInterface {
         + scale_info::TypeInfo
         + MaxEncodedLen;
 
+    /// Type that represents the multiaddress of a Storage Provider.
+    type MultiAddress: Parameter
+        + MaybeSerializeDeserialize
+        + Debug
+        + Ord
+        + Default
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+
+    /// Maximum number of multiaddresses a provider can have.
+    type MaxNumberOfMultiAddresses: Get<u32>;
+
     /// Check if provider is a BSP.
     fn is_bsp(who: &Self::Provider) -> bool;
 
@@ -72,6 +88,11 @@ pub trait ReadProvidersInterface: ProvidersInterface {
 
     /// Get number of registered BSPs.
     fn get_number_of_bsps() -> Self::SpCount;
+
+    /// Get multiaddresses of a BSP.
+    fn get_bsp_multiaddresses(
+        who: &Self::Provider,
+    ) -> Result<BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>, DispatchError>;
 }
 
 /// Interface to allow the File System pallet to modify the data used by the Storage Providers pallet.
@@ -201,4 +222,22 @@ pub trait ProofsDealerInterface {
 
     /// Submit a new challenge with priority.
     fn challenge_with_priority(key_challenged: &Self::MerkleHash) -> DispatchResult;
+}
+
+/// A trait to verify proofs based on commitments and challenges.
+///
+/// It is abstracted over the `Proof` and `Key` type.
+pub trait CommitmentVerifier {
+    /// The type that represents the proof.
+    type Proof: Parameter + Member + Debug;
+    /// The type that represents the commitment (e.g. a Merkle root) and the keys representing nodes
+    /// in a Merkle tree which are also passed as challenges.
+    type Key: Debug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
+
+    /// Verify a proof based on a commitment and a set of challenges.
+    fn verify_proof(
+        commitment: &Self::Key,
+        challenges: &[Self::Key],
+        proof: &Self::Proof,
+    ) -> DispatchResult;
 }

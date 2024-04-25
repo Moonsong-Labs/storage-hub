@@ -1,6 +1,6 @@
-use storage_hub_infra::types::{Chunk, Key, Metadata};
+use storage_hub_infra::types::{Chunk, FileProof, Key, Metadata};
 
-use crate::traits::{FileProof, FileStorage};
+use crate::traits::FileStorage;
 
 pub struct InMemoryFileStorage {}
 
@@ -11,27 +11,30 @@ impl InMemoryFileStorage {
 }
 
 impl FileStorage for InMemoryFileStorage {
-    fn generate_proof(&self, _challenged_key: &Key) -> FileProof {
+    type Key = Key;
+    type Value = Chunk;
+
+    fn generate_proof(&self, _challenged_key: &Self::Key) -> FileProof<Self::Key> {
         unimplemented!()
     }
 
-    fn delete_file(&self, _key: &Key) {
+    fn delete_file(&self, _key: &Self::Key) {
         unimplemented!()
     }
 
-    fn get_metadata(&self, _key: &Key) -> Option<Metadata> {
+    fn get_metadata(&self, _key: &Self::Key) -> Option<Metadata> {
         unimplemented!()
     }
 
-    fn set_metadata(&self, _key: &Key, _metadata: &Metadata) {
+    fn set_metadata(&self, _key: &Self::Key, _metadata: &Metadata) {
         unimplemented!()
     }
 
-    fn get_chunk(&self, _key: &Key, _chunk: u64) -> Option<Chunk> {
+    fn get_chunk(&self, _key: &Self::Key) -> Option<Self::Value> {
         unimplemented!()
     }
 
-    fn write_chunk(&self, _key: &str, _chunk: u64, _data: &Chunk) {
+    fn write_chunk(&self, _key: &str, _data: &Self::Value) {
         unimplemented!()
     }
 }

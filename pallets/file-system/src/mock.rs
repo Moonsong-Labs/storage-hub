@@ -4,12 +4,13 @@ use frame_support::{
     weights::{constants::RocksDbWeight, Weight},
 };
 use frame_system as system;
-use pallet_proofs_dealer::{CompactProof, TrieVerifier};
+use pallet_proofs_dealer::CompactProof;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Bounded, IdentityLookup},
-    AccountId32, BuildStorage, FixedU128,
+    AccountId32, BuildStorage, DispatchResult, FixedU128,
 };
+use storage_hub_traits::CommitmentVerifier;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
@@ -122,7 +123,9 @@ impl pallet_balances::Config for Test {
 }
 
 parameter_types! {
+    pub const MaxNumberOfPeerIds: u32 = 100;
     pub const MaxMultiAddressSize: u32 = 100;
+    pub const MaxMultiAddressAmount: u32 = 5;
 }
 
 impl pallet_storage_providers::Config for Test {
@@ -134,7 +137,7 @@ impl pallet_storage_providers::Config for Test {
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
     type MaxMultiAddressSize = MaxMultiAddressSize;
-    type MaxMultiAddressAmount = ConstU32<5>;
+    type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = ConstU32<100>;
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
@@ -161,7 +164,7 @@ impl pallet_proofs_dealer::Config for Test {
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
     type MerkleHash = H256;
-    type TrieVerifier = MockVerifier;
+    type KeyVerifier = MockVerifier;
     type MaxChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
     type ChallengeHistoryLength = ConstU32<10>;
@@ -176,9 +179,20 @@ impl pallet_proofs_dealer::Config for Test {
 pub struct MockVerifier;
 
 /// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl TrieVerifier for MockVerifier {
-    fn verify_proof(_root: &[u8; 32], _challenges: &[u8; 32], proof: &CompactProof) -> bool {
-        proof.encoded_nodes.len() > 0
+impl CommitmentVerifier for MockVerifier {
+    type Proof = CompactProof;
+    type Key = H256;
+
+    fn verify_proof(
+        _root: &Self::Key,
+        _challenges: &[Self::Key],
+        proof: &CompactProof,
+    ) -> DispatchResult {
+        if proof.encoded_nodes.len() > 0 {
+            Ok(())
+        } else {
+            Err("Proof is empty".into())
+        }
     }
 }
 
@@ -202,8 +216,9 @@ impl crate::Config for Test {
     type AssignmentThresholdMultiplier = ThresholdMultiplier;
     type TargetBspsRequired = ConstU32<3>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
+    type MaxPeerIdSize = ConstU32<100>;
+    type MaxNumberOfPeerIds = MaxNumberOfPeerIds;
     type MaxDataServerMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
-    type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxFilePathSize = ConstU32<512u32>;
     type StorageRequestTtl = ConstU32<40u32>;
     type MaxExpiredStorageRequests = ConstU32<100u32>;

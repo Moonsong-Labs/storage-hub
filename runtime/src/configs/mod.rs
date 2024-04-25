@@ -40,16 +40,17 @@ use frame_system::{
     limits::{BlockLength, BlockWeights},
     EnsureRoot,
 };
-use pallet_proofs_dealer::{CompactProof, TrieVerifier};
+use pallet_proofs_dealer::CompactProof;
 use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{ConstU128, Get};
-use sp_runtime::{AccountId32, FixedU128, Perbill};
+use sp_core::{ConstU128, Get, H256};
+use sp_runtime::{AccountId32, DispatchResult, FixedU128, Perbill};
 use sp_version::RuntimeVersion;
+use storage_hub_traits::CommitmentVerifier;
 use xcm::latest::prelude::BodyId;
 
 use crate::ParachainInfo;
@@ -408,7 +409,7 @@ impl pallet_proofs_dealer::Config for Runtime {
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
     type MerkleHash = Hash;
-    type TrieVerifier = ProofTrieVerifier;
+    type KeyVerifier = ProofTrieVerifier;
     type MaxChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
     type ChallengeHistoryLength = ConstU32<10>;
@@ -423,9 +424,20 @@ impl pallet_proofs_dealer::Config for Runtime {
 pub struct ProofTrieVerifier;
 
 /// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl TrieVerifier for ProofTrieVerifier {
-    fn verify_proof(_root: &[u8; 32], _challenges: &[u8; 32], proof: &CompactProof) -> bool {
-        proof.encoded_nodes.len() > 0
+impl CommitmentVerifier for ProofTrieVerifier {
+    type Proof = CompactProof;
+    type Key = H256;
+
+    fn verify_proof(
+        _root: &Self::Key,
+        _challenges: &[Self::Key],
+        proof: &CompactProof,
+    ) -> DispatchResult {
+        if proof.encoded_nodes.len() > 0 {
+            Ok(())
+        } else {
+            Err("Proof is empty".into())
+        }
     }
 }
 
@@ -451,8 +463,9 @@ impl pallet_file_system::Config for Runtime {
     type TargetBspsRequired = ConstU32<1>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxFilePathSize = ConstU32<512u32>;
+    type MaxPeerIdSize = ConstU32<100>;
+    type MaxNumberOfPeerIds = ConstU32<5>;
     type MaxDataServerMultiAddresses = ConstU32<10>;
-    type MaxMultiAddressSize = ConstU32<512>;
     type StorageRequestTtl = ConstU32<40>;
     type MaxExpiredStorageRequests = ConstU32<100>;
 }

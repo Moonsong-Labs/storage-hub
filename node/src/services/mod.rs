@@ -11,9 +11,7 @@ use storage_hub_infra::{
     event_bus::EventHandler,
 };
 
-use crate::tasks::{
-    AcceptedBspVolunteerHandler, NewStorageRequestHandler, ResolveRemoteUploadRequest,
-};
+use crate::tasks::bsp_volunteer_mock::BspVolunteerMockTask;
 
 use self::{blockchain::handler::BlockchainService, file_transfer::FileTransferService};
 
@@ -22,7 +20,6 @@ pub trait StorageHubHandlerConfig: Send + 'static {
     type ForestStorage: ForestStorage + Send + Sync;
 }
 
-#[derive(Debug)]
 pub struct StorageHubHandler<S: StorageHubHandlerConfig> {
     pub task_spawner: TaskSpawner,
     pub file_transfer: ActorHandle<FileTransferService>,
@@ -61,13 +58,10 @@ impl<S: StorageHubHandlerConfig> StorageHubHandler<S> {
     }
 
     pub fn start_bsp_tasks(&self) {
-        ResolveRemoteUploadRequest::new(self.clone())
-            .subscribe_to(&self.task_spawner, &self.file_transfer)
-            .start();
-        NewStorageRequestHandler::new(self.clone())
-            .subscribe_to(&self.task_spawner, &self.blockchain)
-            .start();
-        AcceptedBspVolunteerHandler::new(self.clone())
+        log::info!("Starting BSP tasks");
+
+        // TODO: Start the actual BSP tasks here and remove mock task.
+        BspVolunteerMockTask::new(self.clone())
             .subscribe_to(&self.task_spawner, &self.blockchain)
             .start();
     }
