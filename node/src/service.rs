@@ -8,10 +8,12 @@ use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
 use file_manager::in_memory::InMemoryFileStorage;
 use forest_manager::in_memory::InMemoryForestStorage;
+use futures::{Stream, StreamExt};
 use polkadot_primitives::{HeadData, ValidationCode};
 use reference_trie::RefHasher;
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use sp_consensus_aura::Slot;
+use sp_core::H256;
 use sp_trie::LayoutV1;
 use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
@@ -49,7 +51,7 @@ use substrate_prometheus_endpoint::Registry;
 use tokio::sync::RwLock;
 
 use crate::{
-    cli::ProviderType,
+    cli::{self, ProviderType},
     command::ProviderOptions,
     services::{
         blockchain::{spawn_blockchain_service, KEY_TYPE},
@@ -200,6 +202,7 @@ async fn start_dev_impl(
     provider_options: Option<ProviderOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
     para_id: ParaId,
+    sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager> {
     use async_io::Timer;
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
@@ -281,6 +284,48 @@ async fn start_dev_impl(
         );
     }
 
+    let mut command_sink = None;
+
+    let commands_stream: Box<dyn Stream<Item = EngineCommand<H256>> + Send + Sync + Unpin> =
+        match sealing {
+            cli::Sealing::Instant => {
+                Box::new(
+                    // This bit cribbed from the implementation of instant seal.
+                    transaction_pool
+                        .pool()
+                        .validated_pool()
+                        .import_notification_stream()
+                        .map(|_| EngineCommand::SealNewBlock {
+                            create_empty: false,
+                            finalize: false,
+                            parent_hash: None,
+                            sender: None,
+                        }),
+                )
+            }
+            cli::Sealing::Manual => {
+                let (sink, stream) = futures::channel::mpsc::channel(1000);
+                // Keep a reference to the other end of the channel. It goes to the RPC.
+                command_sink = Some(sink);
+                Box::new(stream)
+            }
+            cli::Sealing::Interval(millis) => {
+                if millis < 3000 {
+                    log::info!("⚠️ Sealing interval is very short. Normally setting this to 6000 ms is recommended.");
+                }
+
+                Box::new(StreamExt::map(
+                    Timer::interval(Duration::from_millis(millis)),
+                    |_| EngineCommand::SealNewBlock {
+                        create_empty: true,
+                        finalize: false,
+                        parent_hash: None,
+                        sender: None,
+                    },
+                ))
+            }
+        };
+
     let rpc_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
@@ -289,6 +334,7 @@ async fn start_dev_impl(
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
+                command_sink: command_sink.clone(),
                 deny_unsafe,
             };
 
@@ -394,16 +440,6 @@ async fn start_dev_impl(
             prometheus_registry.as_ref(),
             telemetry.as_ref().map(|x| x.handle()),
         );
-
-        let commands_stream = Box::new(futures::StreamExt::map(
-            Timer::interval(Duration::from_millis(6_000)),
-            |_| EngineCommand::SealNewBlock::<Hash> {
-                create_empty: true,
-                finalize: false,
-                parent_hash: None,
-                sender: None,
-            },
-        ));
 
         // aura import queue
         let slot_duration = sc_consensus_aura::slot_duration(&*client)?;
@@ -595,6 +631,7 @@ async fn start_node_impl(
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
+                command_sink: None,
                 deny_unsafe,
             };
 
@@ -864,8 +901,9 @@ pub async fn start_dev_node(
     provider_options: Option<ProviderOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
     para_id: ParaId,
+    sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager> {
-    start_dev_impl(config, provider_options, hwbench, para_id).await
+    start_dev_impl(config, provider_options, hwbench, para_id, sealing).await
 }
 
 /// Start a parachain node.
