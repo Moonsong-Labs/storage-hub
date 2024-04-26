@@ -72,9 +72,9 @@ use super::{
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
 pub mod currency {
-    use runtime_constants as polkadot_runtime_constants;
+    use crate::Balance;
 
-    pub const UNITS: u128 = polkadot_runtime_constants::currency::UNITS;
+    pub const UNITS: Balance = 1_000_000_000_000;
 }
 
 parameter_types! {
