@@ -40,6 +40,8 @@ use crate::services::file_transfer::{
     events::{FileTransferServiceEventBusProvider, RemoteUploadRequest},
     schema,
 };
+use crate::services::file_transfer::commands::FileTransferServiceInterface;
+
 
 const LOG_TARGET: &str = "file-transfer-service";
 
@@ -64,8 +66,8 @@ impl Actor for FileTransferService {
     ) -> impl std::future::Future<Output = ()> + Send {
         async move {
             match message {
-                FileTransferServiceCommand::UploadRequest { data: _ } => {
-                    todo!()
+                FileTransferServiceCommand::UploadRequest { data } => {
+                    let _ = self.upload_request(data);
                 }
             }
         }

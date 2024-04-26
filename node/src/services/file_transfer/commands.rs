@@ -16,5 +16,7 @@ pub trait FileTransferServiceInterface {
 }
 
 impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
-    fn upload_request(&self, _data: String) {}
+    fn upload_request(&self, _data: String) {
+        todo!()
+    }
 }

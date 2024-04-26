@@ -37,12 +37,11 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
         info!(
             target: LOG_TARGET,
             "Handling file submitted by user to BSP with location {:?}",
-            event.file_metadata.location,
+            event.location,
         );
 
         let _multiaddresses = event.multiaddresses;
-        let _peer_id = event.peer_id;
-        let _file_location = event.file_metadata.location;
+        let _file_location = event.location;
         // let chunk_count = event.file_metadata.chunk_count();
         // Mocked count:
         let chunk_count = 100u64;

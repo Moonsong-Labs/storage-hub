@@ -41,12 +41,10 @@ impl EventBusMessage for NewStorageRequest {}
 #[derive(Debug, Clone)]
 pub struct AcceptedBspVolunteer {
     pub who: String,
-    // The multiaddrs of this BSP.
     pub multiaddresses: Vec<String>,
-    // The peer_id of this BSP.
-    pub peer_id: PeerId,
-    // Metadata of the file to be stored.
-    pub file_metadata: Metadata,
+    pub location: String,
+    pub fingerprint: String,
+
 }
 
 impl EventBusMessage for AcceptedBspVolunteer {}
