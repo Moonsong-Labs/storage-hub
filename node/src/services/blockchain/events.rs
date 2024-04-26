@@ -1,7 +1,10 @@
 use sc_network::PeerId;
 use sp_core::H256;
 use sp_runtime::AccountId32;
-use storage_hub_infra::{event_bus::{EventBus, EventBusMessage, ProvidesEventBus}, types::Metadata};
+use storage_hub_infra::{
+    event_bus::{EventBus, EventBusMessage, ProvidesEventBus},
+    types::Metadata,
+};
 
 type StorageData = pallet_file_system::types::StorageData<storage_hub_runtime::Runtime>;
 type FileLocation = pallet_file_system::types::FileLocation<storage_hub_runtime::Runtime>;

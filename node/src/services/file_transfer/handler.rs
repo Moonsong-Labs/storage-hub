@@ -64,7 +64,9 @@ impl Actor for FileTransferService {
     ) -> impl std::future::Future<Output = ()> + Send {
         async move {
             match message {
-                FileTransferServiceCommand::UploadRequest { data } => { todo!() },
+                FileTransferServiceCommand::UploadRequest { data: _ } => {
+                    todo!()
+                }
             }
         }
     }

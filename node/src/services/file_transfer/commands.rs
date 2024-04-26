@@ -1,4 +1,3 @@
-use sc_network::{PeerId, ProtocolName};
 use storage_hub_infra::actor::ActorHandle;
 
 use crate::services::FileTransferService;
@@ -7,7 +6,7 @@ use crate::services::FileTransferService;
 #[derive(Debug)]
 pub enum FileTransferServiceCommand {
     // TODO: use proper types for the proofs: FileProof.
-    UploadRequest { data: String }
+    UploadRequest { data: String },
 }
 
 /// Allows our ActorHandle to implement
@@ -17,7 +16,5 @@ pub trait FileTransferServiceInterface {
 }
 
 impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
-    fn upload_request(&self, data: String) {
-        
-    }
+    fn upload_request(&self, _data: String) {}
 }
