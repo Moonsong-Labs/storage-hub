@@ -1,7 +1,7 @@
 [package]
 name = "common"
 version = "0.1.0"
-description = ""
+description = "Common types, traits and utilities shared by other client crates."
 homepage = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }

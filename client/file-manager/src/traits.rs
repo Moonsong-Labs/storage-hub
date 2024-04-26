@@ -4,16 +4,16 @@ use storage_hub_infra::types::{Chunk, ChunkId, FileProof, Key, Metadata};
 pub enum FileStorageError {
     /// File chunk already exists.
     FileChunkAlreadyExists,
-    /// File chunk does not exists.
-    FileChunkDoesNotExists,
+    /// File chunk does not exist.
+    FileChunkDoesNotExist,
     /// Failed to insert the file chunk.
     FailedToInsertFileChunk,
     /// Failed to get file chunk.
     FailedToGetFileChunk,
     /// Failed to generate proof.
     FailedToGenerateCompactProof,
-    /// The requested file does not exists.
-    FileDoesNotExists,
+    /// The requested file does not exist.
+    FileDoesNotExist,
     /// File metadata fingerprint does not match the stored file fingerprint. If all written chunks
     /// were verified before inserted, this just means we don't have the whole file yet.
     FingerprintAndStoredFileMismatch,

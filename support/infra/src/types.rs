@@ -32,19 +32,12 @@ impl Metadata {
     }
 
     pub fn chunk_ids(&self) -> impl Iterator<Item = ChunkId> {
-        (0..self.chunk_count()).map(|n| ChunkId(n))
+        0..self.chunk_count()
     }
 }
 
 /// Typed u64 representing the index of a file [`Chunk`]. Indexed from 0.
-#[derive(Clone)]
-pub struct ChunkId(pub u64);
-
-impl ChunkId {
-    pub fn get_be_key(&self) -> [u8; 8] {
-        self.0.to_be_bytes()
-    }
-}
+pub type ChunkId = u64;
 
 // TODO: this is currently a placeholder in order to define Storage interface.
 /// Typed chunk of a file. This is what is stored in the leaf of the stored Merkle tree.

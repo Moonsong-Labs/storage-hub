@@ -56,21 +56,18 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
         file_key: &Key,
         chunk_id: &ChunkId,
     ) -> Result<FileProof, FileStorageError> {
-        let metadata = self.metadata.get(file_key);
+        let metadata = self
+            .metadata
+            .get(file_key)
+            .ok_or(FileStorageError::FileDoesNotExist)?;
 
-        if metadata.is_none() {
-            return Err(FileStorageError::FileDoesNotExists);
-        }
-        let metadata = metadata.unwrap();
-
-        let file_data = self.file_data.get(file_key);
-        if file_data.is_none() {
-            panic!(
-                "Invariant broken! Metadata for file key {:?} found but no assosiated trie",
+        let file_data = match self.file_data.get(file_key) {
+            Some(file_data) => file_data,
+            None => panic!(
+                "Invariant broken! Metadata for file key {:?} found but no associated trie",
                 file_key
-            );
-        }
-        let file_data = file_data.unwrap();
+            ),
+        };
 
         if file_data.get_root() != metadata.fingerprint {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
@@ -86,10 +83,10 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
             .build();
 
         let chunk: Option<Vec<u8>> = trie
-            .get(&chunk_id.get_be_key())
+            .get(&chunk_id.to_be_bytes())
             .map_err(|_| FileStorageError::FailedToGetFileChunk)?;
 
-        let chunk = chunk.ok_or(FileStorageError::FileChunkDoesNotExists)?;
+        let chunk = chunk.ok_or(FileStorageError::FileChunkDoesNotExist)?;
 
         // Drop the `trie_recorder` to release the `recorder`
         drop(trie_recorder);
@@ -119,7 +116,7 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
         self.metadata
             .get(file_key)
             .cloned()
-            .ok_or(FileStorageError::FileDoesNotExists)
+            .ok_or(FileStorageError::FileDoesNotExist)
     }
 
     fn set_metadata(&mut self, file_key: Key, metadata: Metadata) {
@@ -129,14 +126,14 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
 
     fn get_chunk(&self, file_key: &Key, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError> {
         let file_data = self.file_data.get(file_key);
-        let file_data = file_data.ok_or(FileStorageError::FileDoesNotExists)?;
+        let file_data = file_data.ok_or(FileStorageError::FileDoesNotExist)?;
 
         let trie = TrieDBBuilder::<T>::new(&file_data.memdb, &file_data.root).build();
 
         Ok(trie
-            .get(&chunk_id.get_be_key())
+            .get(&chunk_id.to_be_bytes())
             .map_err(|_| FileStorageError::FailedToGetFileChunk)?
-            .ok_or(FileStorageError::FileChunkDoesNotExists)?)
+            .ok_or(FileStorageError::FileChunkDoesNotExist)?)
     }
 
     fn write_chunk(
@@ -148,21 +145,21 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
         let file_data = self
             .file_data
             .get_mut(file_key)
-            .ok_or(FileStorageError::FileDoesNotExists)?;
+            .ok_or(FileStorageError::FileDoesNotExist)?;
 
         let mut trie =
             TrieDBMutBuilder::<T>::new(&mut file_data.memdb, &mut file_data.root).build();
 
         // Check that we don't have a chunk already stored.
         if trie
-            .contains(&chunk_id.get_be_key())
+            .contains(&chunk_id.to_be_bytes())
             .map_err(|_| FileStorageError::FailedToGetFileChunk)?
         {
             return Err(FileStorageError::FileChunkAlreadyExists);
         }
 
         // Insert the chunk into the file trie.
-        trie.insert(&chunk_id.get_be_key(), &data)
+        trie.insert(&chunk_id.to_be_bytes(), &data)
             .map_err(|_| FileStorageError::FailedToInsertFileChunk)?;
 
         Ok(())
