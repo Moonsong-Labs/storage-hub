@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "docker:build": "docker build -t storage-hub:local -f ../docker/storage-hub-node.Dockerfile ../.",
+    "docker:build": "scripts/build_local_docker.sh",
     "docker:run:node": "docker compose -f ../docker/local-node-compose.yml up -d",
     "scalegen": "papi update --config papi.json",
     "typegen": "papi generate --config papi.json",
