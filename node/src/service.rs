@@ -309,15 +309,21 @@ async fn start_dev_impl(
                 command_sink = Some(sink);
                 Box::new(stream)
             }
-            cli::Sealing::Interval(millis) => Box::new(StreamExt::map(
-                Timer::interval(Duration::from_millis(millis)),
-                |_| EngineCommand::SealNewBlock {
-                    create_empty: true,
-                    finalize: false,
-                    parent_hash: None,
-                    sender: None,
-                },
-            )),
+            cli::Sealing::Interval(millis) => {
+                if millis < 3000 {
+                    log::info!("⚠️ Sealing interval is very short. Normally setting this to 6000 ms is recommended.");
+                }
+
+                Box::new(StreamExt::map(
+                    Timer::interval(Duration::from_millis(millis)),
+                    |_| EngineCommand::SealNewBlock {
+                        create_empty: true,
+                        finalize: false,
+                        parent_hash: None,
+                        sender: None,
+                    },
+                ))
+            }
         };
 
     let rpc_builder = {
