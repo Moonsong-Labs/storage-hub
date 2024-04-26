@@ -7,6 +7,7 @@ use frame_support::{
     traits::{fungible::Mutate, tokens::Preservation, Get},
 };
 use frame_system::pallet_prelude::BlockNumberFor;
+use sp_runtime::{traits::CheckedDiv, DispatchError, SaturatedConversion};
 use sp_trie::CompactProof;
 use storage_hub_traits::{ProofsDealerInterface, ProvidersInterface};
 
@@ -14,10 +15,40 @@ use crate::{
     pallet,
     types::{
         AccountIdFor, BalanceFor, BalancePalletFor, ChallengesFeeFor, KeyFor, ProviderFor,
-        ProvidersPalletFor, TreasuryAccountFor,
+        ProvidersPalletFor, StakeToChallengePeriodFor, TreasuryAccountFor,
     },
     ChallengesQueue, Error, Pallet, PriorityChallengesQueue,
 };
+
+macro_rules! expect_or_err {
+    // Handle Option type
+    ($optional:expr, $error_msg:expr, $error_type:path) => {{
+        match $optional {
+            Some(value) => value,
+            None => {
+                #[cfg(test)]
+                unreachable!($error_msg);
+
+                #[allow(unreachable_code)]
+                {
+                    Err($error_type)?
+                }
+            }
+        }
+    }};
+    // Handle boolean type
+    ($condition:expr, $error_msg:expr, $error_type:path, bool) => {{
+        if !$condition {
+            #[cfg(test)]
+            unreachable!($error_msg);
+
+            #[allow(unreachable_code)]
+            {
+                Err($error_type)?
+            }
+        }
+    }};
+}
 
 impl<T> Pallet<T>
 where
@@ -77,9 +108,21 @@ where
 
     // TODO: Document and add proper parameters.
     #[allow(unused_variables)]
-    fn stake_to_challenge_period(stake: BalanceFor<T>) -> BlockNumberFor<T> {
-        // TODO
-        unimplemented!()
+    fn stake_to_challenge_period(stake: BalanceFor<T>) -> Result<BlockNumberFor<T>, DispatchError> {
+        let block_period_res = stake
+            .checked_div(&StakeToChallengePeriodFor::<T>::get())
+            .unwrap_or(1u32.into())
+            .try_into();
+
+        let block_period: u128 = expect_or_err!(
+            block_period_res.ok(),
+            "A balance could not be converted to u128, which shouldn't be possible.",
+            Error::<T>::StakeCouldNotBeConverted
+        );
+
+        Ok(SaturatedConversion::saturated_into::<BlockNumberFor<T>>(
+            block_period,
+        ))
     }
 
     fn enqueue_challenge(key: &KeyFor<T>) -> DispatchResult {

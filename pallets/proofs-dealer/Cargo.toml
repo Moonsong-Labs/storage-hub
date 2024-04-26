@@ -27,6 +27,7 @@ frame-support = { workspace = true }
 frame-system = { workspace = true }
 
 sp-trie = { workspace = true }
+sp-runtime = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
@@ -37,7 +38,6 @@ pallet-storage-providers = { workspace = true }
 # Substrate
 sp-core = { workspace = true }
 sp-io = { workspace = true }
-sp-runtime = { workspace = true }
 
 # Frame
 pallet-balances = { workspace = true }

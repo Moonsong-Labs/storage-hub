@@ -245,6 +245,8 @@ pub mod pallet {
     // Errors inform users that something went wrong.
     #[pallet::error]
     pub enum Error<T> {
+        /// `challenge` extrinsic errors
+
         /// The ChallengesQueue is full. No more manual challenges can be made
         /// until some of the challenges in the queue are dispatched.
         ChallengesQueueOverflow,
@@ -258,6 +260,12 @@ pub mod pallet {
 
         /// The fee for submitting a challenge could not be charged.
         FeeChargeFailed,
+
+        /// `submit_proof` extrinsic errors
+
+        /// The staked balance of the Provider could not be converted to `u128`.
+        /// This should not be possible, as the `Balance` type should be an unsigned integer type.
+        StakeCouldNotBeConverted,
     }
 
     #[pallet::call]
