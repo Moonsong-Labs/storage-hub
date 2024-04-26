@@ -15,12 +15,24 @@ name = "relay"
 [[parachains]]
 id = 2000
 
-[parachains.collator]
-image = "docker.io/moonsonglabs/storage-hub:latest"
+[[parachains.collators]]
+image = "{{SH_IMAGE}}"
 command = "storage-hub-node"
-name = "sh"
+name = "sh-collator"
 args = ["--no-hardware-benchmarks", "-lparachain=debug"]
 
+[[parachains.collators]]
+name = "sh-BSP"
+validator = false
+image = "{{SH_IMAGE}}"
+command = "storage-hub-node"
+args = [
+    "--no-hardware-benchmarks",
+    "-lparachain=debug",
+    "--provider",
+    "--provider-type bsp",
+    "--seed-file ./Cargo.toml",
+]
 
 [types.Header]
 number = "u64"

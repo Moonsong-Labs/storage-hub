@@ -15,10 +15,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@types/bun": "1.0.12",
-    "typescript": "5.4.2"
+    "@types/bun": "1.1.0",
+    "typescript": "5.4.5"
   },
   "devDependencies": {
-    "@biomejs/biome": "1.6.1"
+    "@biomejs/biome": "1.7.1"
   }
 }
