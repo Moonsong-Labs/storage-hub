@@ -5,6 +5,7 @@ use crate::tasks::StorageHubHandlerConfig;
 
 use log::info;
 
+use sc_network::PeerId;
 use storage_hub_infra::event_bus::EventHandler;
 
 const LOG_TARGET: &str = "user-submitted-file-task";
@@ -42,6 +43,8 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
 
         let _multiaddresses = event.multiaddresses;
         let _file_location = event.location;
+        // Mocked PeerId
+        let peer_id = PeerId::random();
         // let chunk_count = event.file_metadata.chunk_count();
         // Mocked count:
         let chunk_count = 100u64;
@@ -49,8 +52,11 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
         for _chunk_idx in 0..chunk_count {
             // Depends on FileStorage trait implementation
             // let chunk = self.storage_hub_handler.file_storage.get_chunk();
-            let chunk = "Mocked Data".to_string();
-            let _ = self.storage_hub_handler.file_transfer.upload_request(chunk);
+            let chunk = "Mocked Data".as_bytes();
+            let _ = self
+                .storage_hub_handler
+                .file_transfer
+                .upload_request(peer_id, chunk.into());
         }
 
         Ok(())

@@ -108,7 +108,7 @@ macro_rules! assert_event_emitted {
                     $crate::mock::events().iter().find(|x| *x == e).is_some(),
                     "Event {:?} was not found in events: \n {:?}",
                     e,
-                    crate::mock::events()
+                    $crate::mock::events()
                 );
             }
         }

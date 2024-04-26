@@ -26,6 +26,7 @@ use anyhow::Result;
 use futures::prelude::*;
 use futures::stream::select;
 use libp2p_identity::PeerId;
+use log::error;
 use prost::Message;
 use sc_network::{
     request_responses::{IncomingRequest, OutgoingResponse, ProtocolConfig},
@@ -36,12 +37,11 @@ use sp_core::hexdisplay::HexDisplay;
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
 
 use crate::services::file_transfer::commands::FileTransferServiceCommand;
+
 use crate::services::file_transfer::{
     events::{FileTransferServiceEventBusProvider, RemoteUploadRequest},
     schema,
 };
-use crate::services::file_transfer::commands::FileTransferServiceInterface;
-
 
 const LOG_TARGET: &str = "file-transfer-service";
 
@@ -52,7 +52,6 @@ const MAX_FILE_TRANSFER_REQUESTS_QUEUE: usize = 500;
 pub struct FileTransferService {
     request_receiver: async_channel::Receiver<IncomingRequest>,
     event_bus_provider: FileTransferServiceEventBusProvider,
-    // add ProtocolConfig?
 }
 
 impl Actor for FileTransferService {
@@ -66,8 +65,16 @@ impl Actor for FileTransferService {
     ) -> impl std::future::Future<Output = ()> + Send {
         async move {
             match message {
-                FileTransferServiceCommand::UploadRequest { data } => {
-                    let _ = self.upload_request(data);
+                FileTransferServiceCommand::UploadRequest { peer_id, data } => {
+                    let result = self.send_upload_request(peer_id, data);
+                    match result {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Succeeded in sending upload request to peer with id {:?}.", peer_id)
+                        }
+                        Err(_e) => {
+                            error!(target: LOG_TARGET, "Failed to send upload request to peer with id {:?}.", peer_id)
+                        }
+                    }
                 }
             }
         }
@@ -203,6 +210,14 @@ impl FileTransferService {
         )
     }
 
+    fn send_upload_request(
+        &self,
+        _peer: PeerId,
+        _payload: Vec<u8>,
+    ) -> Result<(), SendUploadDataRequestError> {
+        Ok(())
+    }
+
     fn handle_request(
         &mut self,
         peer: PeerId,
@@ -297,6 +312,9 @@ enum HandleRequestError {
     #[error("codec error: {0}")]
     Codec(#[from] codec::Error),
 }
+
+#[derive(Debug, thiserror::Error)]
+enum SendUploadDataRequestError {}
 
 fn fmt_keys(first: Option<&Vec<u8>>, last: Option<&Vec<u8>>) -> String {
     if let (Some(first), Some(last)) = (first, last) {
