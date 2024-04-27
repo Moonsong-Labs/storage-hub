@@ -115,4 +115,4 @@ bun typegen
 ```
 
 This will update the scale files, and create type interfaces from them into the `/typegen` directory.
-These generated descriptors are used throughout the tests to interact with relay and storagehub chain.
+These generated descriptors are used throughout the tests to interact with relay and StorageHub chain.
