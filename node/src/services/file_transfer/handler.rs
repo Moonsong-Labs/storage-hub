@@ -28,11 +28,10 @@ use futures::stream::select;
 use libp2p_identity::PeerId;
 use prost::Message;
 use sc_network::{
-    request_responses::{IncomingRequest, OutgoingResponse, ProtocolConfig},
+    request_responses::{IncomingRequest, OutgoingResponse},
     ReputationChange,
 };
 use sc_tracing::tracing::{debug, info, trace, warn};
-use sp_core::hexdisplay::HexDisplay;
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
 
 use crate::services::file_transfer::events::RemoteUploadRequest;
@@ -41,8 +40,6 @@ use super::{events::FileTransferServiceEventBusProvider, schema};
 
 const LOG_TARGET: &str = "file-transfer-service";
 
-/// Max number of queued requests.
-const MAX_FILE_TRANSFER_REQUESTS_QUEUE: usize = 500;
 
 #[derive(Debug)]
 pub enum FileTransferServiceCommand {}
@@ -177,22 +174,11 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
 
 impl FileTransferService {
     /// Create a new [`FileTransferService`].
-    pub fn new<Hash: AsRef<[u8]>>(
-        genesis_hash: Hash,
-        fork_id: Option<&str>,
-    ) -> (Self, ProtocolConfig) {
-        let (tx, request_receiver) = async_channel::bounded(MAX_FILE_TRANSFER_REQUESTS_QUEUE);
-
-        let mut protocol_config = super::generate_protocol_config(genesis_hash, fork_id);
-        protocol_config.inbound_queue = Some(tx);
-
-        (
-            Self {
-                request_receiver,
-                event_bus_provider: FileTransferServiceEventBusProvider::new(),
-            },
-            protocol_config,
-        )
+    pub fn new(request_receiver: async_channel::Receiver<IncomingRequest>) -> Self {
+        Self {
+            request_receiver,
+            event_bus_provider: FileTransferServiceEventBusProvider::new(),
+        }
     }
 
     fn handle_request(
@@ -206,8 +192,8 @@ impl FileTransferService {
             Some(schema::v1::provider::request::Request::RemoteUploadDataRequest(r)) => {
                 self.on_remote_upload_data_request(&peer, r)?
             }
-            Some(schema::v1::provider::request::Request::RemoteReadRequest(r)) => {
-                self.on_remote_read_request(&peer, r)?
+            Some(schema::v1::provider::request::Request::RemoteDownloadDataRequest(r)) => {
+                self.on_remote_download_data_request(&peer, r)?
             }
             None => {
                 return Err(HandleRequestError::BadRequest(
@@ -227,16 +213,14 @@ impl FileTransferService {
         peer: &PeerId,
         request: &schema::v1::provider::RemoteUploadDataRequest,
     ) -> Result<schema::v1::provider::Response, HandleRequestError> {
-        trace!("Remote call request from {}.", peer,);
+        trace!("Remote upload data request from {} (FileKey: {:?})", peer, request.file_key);
 
         self.emit(RemoteUploadRequest {
-            location: request.location.clone(),
+            location: "".to_string(),
         });
 
         // TODO actually save data.
-        let response = schema::v1::provider::RemoteUploadDataResponse {
-            location: request.location.clone(),
-        };
+        let response = schema::v1::provider::RemoteUploadDataResponse { success: true };
 
         Ok(schema::v1::provider::Response {
             response: Some(
@@ -245,31 +229,24 @@ impl FileTransferService {
         })
     }
 
-    fn on_remote_read_request(
+    fn on_remote_download_data_request(
         &mut self,
         peer: &PeerId,
-        request: &schema::v1::provider::RemoteReadRequest,
+        request: &schema::v1::provider::RemoteDownloadDataRequest,
     ) -> Result<schema::v1::provider::Response, HandleRequestError> {
-        if request.locations.is_empty() {
-            debug!("Invalid remote read request sent by {}.", peer);
-            return Err(HandleRequestError::BadRequest(
-                "Remote read request without locations.",
-            ));
-        }
-
         trace!(
-            "Remote read request from {} ({}).",
+            "Remote download data request from {} (FileKey: {:?}, ChunkId: {}).",
             peer,
-            fmt_keys(request.locations.first(), request.locations.last()),
+            request.file_key, request.file_chunk_id,
         );
 
         // TODO actually read data.
-        let response = schema::v1::provider::RemoteReadResponse {
-            data: request.locations.clone(),
+        let response = schema::v1::provider::RemoteDownloadDataResponse {
+            file_chunk_with_proof: vec![],
         };
 
         Ok(schema::v1::provider::Response {
-            response: Some(schema::v1::provider::response::Response::RemoteReadResponse(response)),
+            response: Some(schema::v1::provider::response::Response::RemoteDownloadDataResponse(response)),
         })
     }
 }
@@ -288,16 +265,4 @@ enum HandleRequestError {
     /// Encoding or decoding of some data failed.
     #[error("codec error: {0}")]
     Codec(#[from] codec::Error),
-}
-
-fn fmt_keys(first: Option<&Vec<u8>>, last: Option<&Vec<u8>>) -> String {
-    if let (Some(first), Some(last)) = (first, last) {
-        if first == last {
-            HexDisplay::from(first).to_string()
-        } else {
-            format!("{}..{}", HexDisplay::from(first), HexDisplay::from(last))
-        }
-    } else {
-        String::from("n/a")
-    }
 }
