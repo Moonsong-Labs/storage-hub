@@ -22,3 +22,5 @@ runtimes/
 
 .DS_Store
 .vscode/settings.json
+
+.idea/
