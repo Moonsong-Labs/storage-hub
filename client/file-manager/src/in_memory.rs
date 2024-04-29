@@ -15,10 +15,6 @@ pub struct FileData<T: TrieLayout + 'static> {
 }
 
 impl<T: TrieLayout + 'static> FileData<T> {
-    pub fn get() {}
-}
-
-impl<T: TrieLayout + 'static> FileData<T> {
     fn new() -> Self {
         Self {
             root: Default::default(),
