@@ -7,7 +7,7 @@ use storage_hub_infra::types::{Chunk, ChunkId, FileProof, Key, Leaf, Metadata};
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::TrieDBMutBuilder;
 
-use crate::traits::{FileStorage, FileStorageError};
+use crate::traits::{FileStorage, FileStorageError, FileStorageWriteStatus};
 
 pub struct FileData<T: TrieLayout + 'static> {
     root: HashT<T>,
@@ -29,6 +29,12 @@ impl<T: TrieLayout + 'static> FileData<T> {
                 .try_into()
                 .expect("trie hash should be 32 bytes"),
         )
+    }
+
+    pub fn stored_chunks_count(&self) -> u64 {
+        let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
+        let stored_chunks = trie.key_iter().iter().count() as u64;
+        stored_chunks
     }
 }
 
@@ -57,13 +63,17 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
             .get(file_key)
             .ok_or(FileStorageError::FileDoesNotExist)?;
 
-        let file_data = match self.file_data.get(file_key) {
-            Some(file_data) => file_data,
-            None => panic!(
+        let file_data = self.file_data.get(file_key).expect(
+            format!(
                 "Invariant broken! Metadata for file key {:?} found but no associated trie",
                 file_key
-            ),
-        };
+            )
+            .as_str(),
+        );
+
+        if metadata.chunk_count() != file_data.stored_chunks_count() {
+            return Err(FileStorageError::IncompleteFile);
+        }
 
         if file_data.get_root() != metadata.fingerprint {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
@@ -137,7 +147,7 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
         file_key: &Key,
         chunk_id: &ChunkId,
         data: &Chunk,
-    ) -> Result<(), FileStorageError> {
+    ) -> Result<FileStorageWriteStatus, FileStorageError> {
         let file_data = self
             .file_data
             .get_mut(file_key)
@@ -158,6 +168,27 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
         trie.insert(&chunk_id.to_be_bytes(), &data)
             .map_err(|_| FileStorageError::FailedToInsertFileChunk)?;
 
-        Ok(())
+        drop(trie);
+
+        let metadata = self.metadata.get(file_key).expect(
+            format!(
+            "Invariant broken! Metadata for file key {:?} not found but associated trie is present",
+            file_key
+        )
+            .as_str(),
+        );
+
+        // Check if we have all the chunks for the file.
+        if metadata.chunk_count() != file_data.stored_chunks_count() {
+            return Ok(FileStorageWriteStatus::FileIncomplete);
+        }
+
+        // If we have all the chunks, check if the file metadata fingerprint and the file trie
+        // root matches.
+        if file_data.get_root() != metadata.fingerprint {
+            return Err(FileStorageError::FingerprintAndStoredFileMismatch);
+        }
+
+        Ok(FileStorageWriteStatus::FileComplete)
     }
 }

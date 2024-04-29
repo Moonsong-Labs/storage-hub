@@ -14,9 +14,19 @@ pub enum FileStorageError {
     FailedToGenerateCompactProof,
     /// The requested file does not exist.
     FileDoesNotExist,
-    /// File metadata fingerprint does not match the stored file fingerprint. If all written chunks
-    /// were verified before inserted, this just means we don't have the whole file yet.
+    /// File metadata fingerprint does not match the stored file fingerprint.
     FingerprintAndStoredFileMismatch,
+    /// The requested file is incomplete and a proof is impossible to generate.
+    IncompleteFile,
+}
+
+#[derive(Debug)]
+pub enum FileStorageWriteStatus {
+    /// The file storage was completed after this write.
+    /// All chunks for the file are stored and the fingerprints match too.
+    FileComplete,
+    /// The file was not completed after this chunk write.
+    FileIncomplete,
 }
 
 /// Storage interface to be implemented by the storage providers.
@@ -45,5 +55,5 @@ pub trait FileStorage: 'static {
         key: &Key,
         chunk_id: &ChunkId,
         data: &Chunk,
-    ) -> Result<(), FileStorageError>;
+    ) -> Result<FileStorageWriteStatus, FileStorageError>;
 }
