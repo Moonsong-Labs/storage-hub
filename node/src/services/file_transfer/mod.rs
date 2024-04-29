@@ -1,12 +1,12 @@
+use sc_client_api::BlockBackend;
 use std::sync::Arc;
 use std::time::Duration;
-use sc_client_api::BlockBackend;
 
-use sc_network::{config::FullNetworkConfiguration, request_responses::ProtocolConfig};
+use crate::service::{ParachainClient, ParachainNetworkService};
 use sc_network::request_responses::IncomingRequest;
+use sc_network::{config::FullNetworkConfiguration, request_responses::ProtocolConfig};
 use sc_service::Configuration;
 use storage_hub_infra::actor::{ActorHandle, ActorSpawner, TaskSpawner};
-use crate::service::ParachainClient;
 
 pub use self::handler::FileTransferService;
 
@@ -55,12 +55,13 @@ pub fn configure_file_transfer_network(
 pub async fn spawn_file_transfer_service(
     task_spawner: &TaskSpawner,
     request_receiver: async_channel::Receiver<IncomingRequest>,
+    network: Arc<ParachainNetworkService>,
 ) -> ActorHandle<FileTransferService> {
     let task_spawner = task_spawner
         .with_name("file-transfer-service")
         .with_group("network");
 
-    let file_transfer_service = FileTransferService::new(request_receiver);
+    let file_transfer_service = FileTransferService::new(request_receiver, network);
 
     let file_transfer_service_handle = task_spawner.spawn_actor(file_transfer_service);
 

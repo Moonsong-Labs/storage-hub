@@ -22,6 +22,8 @@
 //! `crate::request_responses::RequestResponsesBehaviour` with
 //! [`LightClientRequestHandler`](handler::LightClientRequestHandler).
 
+use std::sync::Arc;
+
 use anyhow::Result;
 use futures::prelude::*;
 use futures::stream::select;
@@ -34,19 +36,20 @@ use sc_network::{
 use sc_tracing::tracing::{debug, info, trace, warn};
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
 
-use crate::services::file_transfer::events::RemoteUploadRequest;
+use crate::{
+    service::ParachainNetworkService, services::file_transfer::events::RemoteUploadRequest,
+};
 
 use super::{events::FileTransferServiceEventBusProvider, schema};
 
 const LOG_TARGET: &str = "file-transfer-service";
 
-
 #[derive(Debug)]
 pub enum FileTransferServiceCommand {}
 
-#[derive(Debug)]
 pub struct FileTransferService {
     request_receiver: async_channel::Receiver<IncomingRequest>,
+    _network: Arc<ParachainNetworkService>,
     event_bus_provider: FileTransferServiceEventBusProvider,
 }
 
@@ -174,9 +177,13 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
 
 impl FileTransferService {
     /// Create a new [`FileTransferService`].
-    pub fn new(request_receiver: async_channel::Receiver<IncomingRequest>) -> Self {
+    pub fn new(
+        request_receiver: async_channel::Receiver<IncomingRequest>,
+        network: Arc<ParachainNetworkService>,
+    ) -> Self {
         Self {
             request_receiver,
+            _network: network,
             event_bus_provider: FileTransferServiceEventBusProvider::new(),
         }
     }
@@ -213,7 +220,11 @@ impl FileTransferService {
         peer: &PeerId,
         request: &schema::v1::provider::RemoteUploadDataRequest,
     ) -> Result<schema::v1::provider::Response, HandleRequestError> {
-        trace!("Remote upload data request from {} (FileKey: {:?})", peer, request.file_key);
+        trace!(
+            "Remote upload data request from {} (FileKey: {:?})",
+            peer,
+            request.file_key
+        );
 
         self.emit(RemoteUploadRequest {
             location: "".to_string(),
@@ -237,7 +248,8 @@ impl FileTransferService {
         trace!(
             "Remote download data request from {} (FileKey: {:?}, ChunkId: {}).",
             peer,
-            request.file_key, request.file_chunk_id,
+            request.file_key,
+            request.file_chunk_id,
         );
 
         // TODO actually read data.
@@ -246,7 +258,9 @@ impl FileTransferService {
         };
 
         Ok(schema::v1::provider::Response {
-            response: Some(schema::v1::provider::response::Response::RemoteDownloadDataResponse(response)),
+            response: Some(
+                schema::v1::provider::response::Response::RemoteDownloadDataResponse(response),
+            ),
         })
     }
 }

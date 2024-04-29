@@ -40,15 +40,19 @@ use sc_client_api::{Backend, HeaderBackend};
 use sc_consensus::{ImportQueue, LongestChain};
 use sc_executor::{HeapAllocStrategy, WasmExecutor, DEFAULT_HEAP_ALLOC_STRATEGY};
 use sc_network::config::IncomingRequest;
-use sc_network::NetworkBlock;
+use sc_network::{NetworkBlock, NetworkService};
 use sc_network_sync::SyncingService;
-use sc_service::{Configuration, PartialComponents, TFullBackend, TFullClient, TaskManager, RpcHandlers};
+use sc_service::{
+    Configuration, PartialComponents, RpcHandlers, TFullBackend, TFullClient, TaskManager,
+};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::{Keystore, KeystorePtr};
+use sp_runtime::traits::Block as BlockT;
 use substrate_prometheus_endpoint::Registry;
 use tokio::sync::RwLock;
 
+use crate::services::file_transfer::configure_file_transfer_network;
 use crate::{
     cli::ProviderType,
     command::ProviderOptions,
@@ -58,7 +62,6 @@ use crate::{
         StorageHubHandler, StorageHubHandlerConfig,
     },
 };
-use crate::services::file_transfer::configure_file_transfer_network;
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = (
@@ -83,6 +86,8 @@ pub(crate) type ParachainBackend = TFullBackend<Block>;
 
 pub(crate) type ParachainBlockImport =
     TParachainBlockImport<Block, Arc<ParachainClient>, ParachainBackend>;
+
+pub(crate) type ParachainNetworkService = NetworkService<Block, <Block as BlockT>::Hash>;
 
 type MaybeSelectChain = Option<sc_consensus::LongestChain<ParachainBackend, Block>>;
 
@@ -198,13 +203,16 @@ pub fn new_partial(
 async fn start_storage_provider(
     provider_options: ProviderOptions,
     task_manager: &TaskManager,
+    network: Arc<ParachainNetworkService>,
     client: Arc<ParachainClient>,
     rpc_handlers: RpcHandlers,
     keystore: KeystorePtr,
-    file_transfer_request_receiver: async_channel::Receiver<IncomingRequest>,) {
+    file_transfer_request_receiver: async_channel::Receiver<IncomingRequest>,
+) {
     let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
-    let file_transfer_service_handle = spawn_file_transfer_service(&task_spawner, file_transfer_request_receiver).await;
+    let file_transfer_service_handle =
+        spawn_file_transfer_service(&task_spawner, file_transfer_request_receiver, network).await;
 
     // Spawn the Blockchain Service.
     let blockchain_service_handle = spawn_blockchain_service(
@@ -359,8 +367,18 @@ async fn start_dev_impl(
 
     // Spawning the Blockchain Service if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
-        let file_transfer_request_receiver = file_transfer_request_receiver.expect("FileTransfer request receiver should already be initialized.");
-        start_storage_provider(provider_options, &task_manager, client.clone(), rpc_handlers, keystore.clone(), file_transfer_request_receiver).await;
+        let file_transfer_request_receiver = file_transfer_request_receiver
+            .expect("FileTransfer request receiver should already be initialized.");
+        start_storage_provider(
+            provider_options,
+            &task_manager,
+            network.clone(),
+            client.clone(),
+            rpc_handlers,
+            keystore.clone(),
+            file_transfer_request_receiver,
+        )
+        .await;
     }
 
     if let Some(hwbench) = hwbench {
@@ -514,7 +532,9 @@ async fn start_node_impl(
     let keystore = params.keystore_container.keystore();
 
     // TODO: read the SP seed from somewhere and insert it here
-    keystore.sr25519_generate_new(KEY_TYPE, Some("//Alice")).expect("Alice should have a key. qed");
+    keystore
+        .sr25519_generate_new(KEY_TYPE, Some("//Alice"))
+        .expect("Alice should have a key. qed");
 
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_receiver = None;
@@ -611,8 +631,18 @@ async fn start_node_impl(
 
     // Spawning the Blockchain Service if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
-        let file_transfer_request_receiver = file_transfer_request_receiver.expect("FileTransfer request receiver should already be initialized.");
-        start_storage_provider(provider_options, &task_manager, client.clone(), rpc_handlers, keystore.clone(), file_transfer_request_receiver).await;
+        let file_transfer_request_receiver = file_transfer_request_receiver
+            .expect("FileTransfer request receiver should already be initialized.");
+        start_storage_provider(
+            provider_options,
+            &task_manager,
+            network.clone(),
+            client.clone(),
+            rpc_handlers,
+            keystore.clone(),
+            file_transfer_request_receiver,
+        )
+        .await;
     }
 
     if let Some(hwbench) = hwbench {
