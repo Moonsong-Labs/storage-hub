@@ -20,7 +20,7 @@ The quickest way is via their script: `curl -fsSL https://bun.sh/install | bash`
 
 #### Kubernetes
 
-> [!INFORMATION]
+> [!IMPORTANT]  
 > Currently storage-hub on k8 is having issues due to how we are generating chain specs, you can skip directly to [Spawning ZombieNet Native](#spawning-zombienet-native)
 
 For simplicity, we can use minikube to be a local [kubernetes](https://kubernetes.io/) cluster.
@@ -97,3 +97,22 @@ From here you can interact via the websockets exposed in the direct links, in th
 - Alice (relay): `35005`
 - Bob (relay): `37613`
 - Collator (storage-hub): `45615`
+
+### Generating new Type Interfaces
+
+This repo uses Parity's [polkadot-api](https://github.com/polkadot-api/polkadot-api) AKA PAPI.
+To generate new type interfaces run the following in `/test`:
+
+```sh
+bun zombie:run:native
+```
+
+In another terminal window in `/test`:
+
+```sh
+bun scalegen
+bun typegen
+```
+
+This will update the scale files, and create type interfaces from them into the `/typegen` directory.
+These generated descriptors are used throughout the tests to interact with relay and StorageHub chain.
