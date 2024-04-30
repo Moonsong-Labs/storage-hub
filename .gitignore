@@ -23,4 +23,7 @@ runtimes/
 .DS_Store
 .vscode/settings.json
 
+# Chain Specs
+*.spec.json
+
 .idea/

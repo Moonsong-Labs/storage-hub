@@ -90,7 +90,9 @@ pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{in_memory::InMemoryForestStorage, types::HashT};
+    use crate::in_memory::InMemoryForestStorage;
+
+    use common::types::HashT;
 
     use super::*;
     use reference_trie::RefHasher;

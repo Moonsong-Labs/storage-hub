@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
 use clap::{Parser, ValueEnum};
 
@@ -89,6 +89,33 @@ impl ProviderConfigurations {
     }
 }
 
+/// Block authoring scheme to be used by the dev service.
+#[derive(Debug, Copy, Clone)]
+pub enum Sealing {
+    /// Author a block immediately upon receiving a transaction into the transaction pool
+    Instant,
+    /// Author a block upon receiving an RPC command
+    Manual,
+    /// Author blocks at a regular interval specified in milliseconds
+    Interval(u64),
+}
+
+impl FromStr for Sealing {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "instant" => Self::Instant,
+            "manual" => Self::Manual,
+            s => {
+                let millis =
+                    u64::from_str_radix(s, 10).map_err(|_| "couldn't decode sealing param")?;
+                Self::Interval(millis)
+            }
+        })
+    }
+}
+
 const AFTER_HELP_EXAMPLE: &str = color_print::cstr!(
     r#"<bold><underline>Examples:</></>
    <bold>parachain-template-node build-spec --disable-default-bootnode > plain-parachain-chainspec.json</>
@@ -113,7 +140,7 @@ pub struct Cli {
     pub subcommand: Option<Subcommand>,
 
     #[command(flatten)]
-    pub run: cumulus_client_cli::RunCmd,
+    pub run: RunCmd,
 
     /// Disable automatic hardware benchmarks.
     ///
@@ -131,6 +158,27 @@ pub struct Cli {
 
     #[command(flatten)]
     pub provider_config: ProviderConfigurations,
+}
+
+#[derive(Debug, Parser)]
+#[group(skip)]
+pub struct RunCmd {
+    #[clap(flatten)]
+    pub base: cumulus_client_cli::RunCmd,
+
+    /// When blocks should be sealed in the dev service.
+    ///
+    /// Options are "instant", "manual", or timer interval in milliseconds
+    #[clap(long, default_value = "instant")]
+    pub sealing: Sealing,
+}
+
+impl std::ops::Deref for RunCmd {
+    type Target = cumulus_client_cli::RunCmd;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
 }
 
 #[derive(Debug)]

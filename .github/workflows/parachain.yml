@@ -162,10 +162,48 @@ jobs:
   #         bun install
   #         bun zombienet test configs/simple.zndsl
 
+
+  network_test:
+    needs: [build_image, setup]
+    if: always()
+    name: "Run Para & Relay Network Test"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: mkdir -p target/release/
+      - name: Get Node Binary if changed
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: target/release/
+      - name: Get Latest Node Binary if not changed
+        if: needs.setup.outputs.node_changed == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub:latest
+          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          docker cp temp_storage_hub:/usr/bin/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+      - name: Run Zombienet network
+        run: |
+          chmod +x target/release/storage-hub-node
+          cd test
+          bun install
+          bun zombie:run:native &
+          
+          sleep 60
+      - name: Run Tests
+        run: |
+          cd test
+          bun typegen
+          bun test
+
+
   zombie_test:
     needs: [build_image, setup]
     if: always()
-    name: "Test Simple Native Network"
+    name: "Run Zombienet Tests"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -189,5 +227,5 @@ jobs:
           chmod +x target/release/storage-hub-node
           cd test
           bun install
-          bun run scripts/downloadPolkadot.ts 1.5.0
+          bun run scripts/downloadPolkadot.ts 1.8.0
           bun zombienet test --provider native configs/simpleNative.zndsl

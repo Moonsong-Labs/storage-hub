@@ -1468,6 +1468,18 @@ dependencies = [
 [[package]]
 name = "common"
 version = "0.1.0"
+dependencies = [
+ "bincode",
+ "reference-trie",
+ "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
+ "storage-hub-infra",
+ "trie-db 0.29.0",
+]
+
+[[package]]
+name = "common"
+version = "0.1.0"
 source = "git+https://github.com/w3f/ring-proof#b273d33f9981e2bb3375ab45faeb537f7ee35224"
 dependencies = [
  "ark-ec",
@@ -3182,9 +3194,13 @@ checksum = "38793c55593b33412e3ae40c2c9781ffaa6f438f6f8c10f24e71846fbd7ae01e"
 name = "file-manager"
 version = "0.1.0"
 dependencies = [
+ "bincode",
+ "common 0.1.0",
+ "reference-trie",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "storage-hub-infra",
+ "trie-db 0.29.0",
 ]
 
 [[package]]
@@ -3274,6 +3290,7 @@ name = "forest-manager"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "common 0.1.0",
  "reference-trie",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
@@ -10332,7 +10349,7 @@ dependencies = [
  "ark-serialize",
  "ark-std",
  "blake2 0.10.6",
- "common",
+ "common 0.1.0 (git+https://github.com/w3f/ring-proof)",
  "fflonk",
  "merlin",
 ]

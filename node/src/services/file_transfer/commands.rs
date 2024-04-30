@@ -2,7 +2,7 @@ use anyhow::Result;
 use sc_network::PeerId;
 use storage_hub_infra::{
     actor::ActorHandle,
-    types::{Chunk, FileProof, Key},
+    types::{FileProof, Key},
 };
 
 use crate::services::FileTransferService;
@@ -16,7 +16,7 @@ pub enum FileTransferServiceCommand {
     UploadRequest {
         peer_id: PeerId,
         file_key: Key,
-        chunk_with_proof: FileProof<Chunk>,
+        chunk_with_proof: FileProof,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
     },
     DownloadRequest {
@@ -30,12 +30,7 @@ pub enum FileTransferServiceCommand {
 /// Allows our ActorHandle to implement
 /// the specific methods for each kind of message.
 pub trait FileTransferServiceInterface {
-    async fn upload_request(
-        &self,
-        peer_id: PeerId,
-        file_key: Key,
-        data: FileProof<Chunk>,
-    ) -> Result<()>;
+    async fn upload_request(&self, peer_id: PeerId, file_key: Key, data: FileProof) -> Result<()>;
 
     async fn download_request(
         &self,
@@ -50,7 +45,7 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         &self,
         peer_id: PeerId,
         file_key: Key,
-        chunk_with_proof: FileProof<Chunk>,
+        chunk_with_proof: FileProof,
     ) -> Result<()> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let command = FileTransferServiceCommand::UploadRequest {
