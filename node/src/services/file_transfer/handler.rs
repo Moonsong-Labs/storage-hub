@@ -31,7 +31,7 @@ use libp2p_identity::PeerId;
 use prost::Message;
 use sc_network::{
     request_responses::{IncomingRequest, OutgoingResponse},
-    ReputationChange,
+    IfDisconnected, NetworkRequest, ProtocolName, ReputationChange,
 };
 use sc_tracing::tracing::{debug, info, trace, warn};
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
@@ -40,16 +40,18 @@ use crate::{
     service::ParachainNetworkService, services::file_transfer::events::RemoteUploadRequest,
 };
 
-use super::{events::FileTransferServiceEventBusProvider, schema};
+use super::{
+    commands::FileTransferServiceCommand,
+    events::FileTransferServiceEventBusProvider,
+    schema::{self, v1::provider::RemoteUploadDataRequest},
+};
 
 const LOG_TARGET: &str = "file-transfer-service";
 
-#[derive(Debug)]
-pub enum FileTransferServiceCommand {}
-
 pub struct FileTransferService {
+    protocol_name: ProtocolName,
     request_receiver: async_channel::Receiver<IncomingRequest>,
-    _network: Arc<ParachainNetworkService>,
+    network: Arc<ParachainNetworkService>,
     event_bus_provider: FileTransferServiceEventBusProvider,
 }
 
@@ -60,9 +62,39 @@ impl Actor for FileTransferService {
 
     fn handle_message(
         &mut self,
-        _message: Self::Message,
+        message: Self::Message,
     ) -> impl std::future::Future<Output = ()> + Send {
-        async {}
+        async {
+            match message {
+                FileTransferServiceCommand::UploadRequest {
+                    peer_id,
+                    file_key,
+                    chunk_with_proof,
+                    callback,
+                } => {
+                    let request = RemoteUploadDataRequest {
+                        file_key: bincode::serialize(&file_key)
+                            .expect("Failed to serialize file key."),
+                        file_chunk_with_proof: bincode::serialize(&chunk_with_proof)
+                            .expect("Failed to serialize file chunk proof."),
+                    };
+                    let mut request_data = Vec::new();
+                    request
+                        .encode(&mut request_data)
+                        .expect("Failed to encode request data.");
+                    self.network.request(
+                        peer_id,
+                        self.protocol_name.clone(),
+                        request_data,
+                        None,
+                        IfDisconnected::ImmediateError,
+                    )
+                }
+                FileTransferServiceCommand::DownloadRequest { .. } => {
+                    todo!()
+                }
+            };
+        }
     }
 
     fn get_event_bus_provider(&self) -> &Self::EventBusProvider {
@@ -178,12 +210,14 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
 impl FileTransferService {
     /// Create a new [`FileTransferService`].
     pub fn new(
+        protocol_name: ProtocolName,
         request_receiver: async_channel::Receiver<IncomingRequest>,
         network: Arc<ParachainNetworkService>,
     ) -> Self {
         Self {
+            protocol_name,
             request_receiver,
-            _network: network,
+            network,
             event_bus_provider: FileTransferServiceEventBusProvider::new(),
         }
     }

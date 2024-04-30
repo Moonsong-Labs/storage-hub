@@ -4,8 +4,6 @@ use serde::{Deserialize, Serialize};
 use sp_core::H256;
 use sp_trie::CompactProof;
 
-use crate::constants::FILE_CHUNK_SIZE;
-
 // TODO: this is currently a placeholder in order to define Storage interface.
 /// FileKey is the identifier for a file.
 /// Computed as the hash of the FileMetadata.
@@ -24,21 +22,26 @@ pub struct Metadata {
 
 // TODO: this is currently a placeholder in order to define Storage interface.
 /// Typed chunk of a file. This is what is stored in the leaf of the stored Merkle tree.
-pub type Chunk = [u8; FILE_CHUNK_SIZE];
+pub type Chunk = Vec<u8>;
 
 /// Leaf in the Forest or File trie.
-pub struct Leaf<K: AsRef<[u8]>, D: Debug> {
+#[derive(Serialize, Deserialize)]
+pub struct Leaf<K, D> {
     pub key: K,
     pub data: D,
 }
 
 /// Proving either the exact key or the neighbour keys of the challenged key.
-pub enum Proven<K: AsRef<[u8]>, D: Debug> {
+pub enum Proven<K, D> {
     ExactKey(Leaf<K, D>),
     NeighbourKeys((Option<Leaf<K, D>>, Option<Leaf<K, D>>)),
 }
 
-impl<K: AsRef<[u8]>, D: Debug> Proven<K, D> {
+impl<K, D> Proven<K, D>
+where
+    K: Serialize + for<'a> Deserialize<'a> + AsRef<[u8]>,
+    D: Serialize + for<'a> Deserialize<'a> + Debug,
+{
     pub fn new_exact_key(key: K, data: D) -> Self {
         Proven::ExactKey(Leaf { key, data })
     }
@@ -55,7 +58,10 @@ impl<K: AsRef<[u8]>, D: Debug> Proven<K, D> {
 }
 
 /// Proof of file key(s) in the forest trie.
-pub struct ForestProof<K: AsRef<[u8]>> {
+pub struct ForestProof<K>
+where
+    K: Serialize + for<'a> Deserialize<'a> + AsRef<[u8]>,
+{
     /// The file key that was proven.
     pub proven: Vec<Proven<K, Metadata>>,
     /// The compact proof.
@@ -64,11 +70,37 @@ pub struct ForestProof<K: AsRef<[u8]>> {
     pub root: [u8; 32],
 }
 
-pub struct FileProof<K: AsRef<[u8]>> {
+/// Storage proof in compact form.
+#[derive(Serialize, Deserialize)]
+pub struct SerializableCompactProof {
+    pub encoded_nodes: Vec<Vec<u8>>,
+}
+
+impl From<CompactProof> for SerializableCompactProof {
+    fn from(proof: CompactProof) -> Self {
+        Self {
+            encoded_nodes: proof.encoded_nodes,
+        }
+    }
+}
+
+impl Into<CompactProof> for SerializableCompactProof {
+    fn into(self) -> CompactProof {
+        CompactProof {
+            encoded_nodes: self.encoded_nodes,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct FileProof<K>
+where
+    K: Serialize + for<'a> Deserialize<'a> + AsRef<[u8]>,
+{
     /// The file key that was proven.
     pub proven: Proven<K, Chunk>,
     /// The compact proof.
-    pub proof: CompactProof,
+    pub proof: SerializableCompactProof,
     /// The root hash of the trie.
     pub root_hash: H256,
 }

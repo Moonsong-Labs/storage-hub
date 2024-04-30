@@ -1,4 +1,5 @@
 use sc_client_api::BlockBackend;
+use sc_network::ProtocolName;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -10,6 +11,8 @@ use storage_hub_infra::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 
 pub use self::handler::FileTransferService;
 
+/// For defining the commands processed by the file transfer service.
+mod commands;
 /// For defining the events emitted by the file transfer service.
 pub mod events;
 /// For incoming provider requests.
@@ -29,12 +32,12 @@ const MAX_RESPONSE_PACKET_SIZE_BYTES: u64 = 1 * 1024 * 1024 * 1024;
 const MAX_FILE_TRANSFER_REQUESTS_QUEUE: usize = 500;
 
 /// Updates the network configuration with the file transfer request response protocol.
-/// Returns the channel receiver to be used for reading requests.
+/// Returns the protocol name and the channel receiver to be used for reading requests.
 pub fn configure_file_transfer_network(
     client: Arc<ParachainClient>,
     parachain_config: &Configuration,
     net_config: &mut FullNetworkConfiguration,
-) -> async_channel::Receiver<IncomingRequest> {
+) -> (ProtocolName, async_channel::Receiver<IncomingRequest>) {
     let genesis_hash = client
         .block_hash(0u32.into())
         .ok()
@@ -47,21 +50,24 @@ pub fn configure_file_transfer_network(
         generate_protocol_config(genesis_hash, parachain_config.chain_spec.fork_id());
     protocol_config.inbound_queue = Some(tx);
 
+    let protocol_name = protocol_config.name.clone();
+
     net_config.add_request_response_protocol(protocol_config);
 
-    request_receiver
+    (protocol_name, request_receiver)
 }
 
 pub async fn spawn_file_transfer_service(
     task_spawner: &TaskSpawner,
     request_receiver: async_channel::Receiver<IncomingRequest>,
+    protocol_name: ProtocolName,
     network: Arc<ParachainNetworkService>,
 ) -> ActorHandle<FileTransferService> {
     let task_spawner = task_spawner
         .with_name("file-transfer-service")
         .with_group("network");
 
-    let file_transfer_service = FileTransferService::new(request_receiver, network);
+    let file_transfer_service = FileTransferService::new(protocol_name, request_receiver, network);
 
     let file_transfer_service_handle = task_spawner.spawn_actor(file_transfer_service);
 

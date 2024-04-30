@@ -39,7 +39,7 @@ use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
 use sc_client_api::{Backend, HeaderBackend};
 use sc_consensus::{ImportQueue, LongestChain};
 use sc_executor::{HeapAllocStrategy, WasmExecutor, DEFAULT_HEAP_ALLOC_STRATEGY};
-use sc_network::config::IncomingRequest;
+use sc_network::{config::IncomingRequest, ProtocolName};
 use sc_network::{NetworkBlock, NetworkService};
 use sc_network_sync::SyncingService;
 use sc_service::{
@@ -207,12 +207,18 @@ async fn start_storage_provider(
     client: Arc<ParachainClient>,
     rpc_handlers: RpcHandlers,
     keystore: KeystorePtr,
+    file_transfer_request_protocol_name: ProtocolName,
     file_transfer_request_receiver: async_channel::Receiver<IncomingRequest>,
 ) {
     let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
-    let file_transfer_service_handle =
-        spawn_file_transfer_service(&task_spawner, file_transfer_request_receiver, network).await;
+    let file_transfer_service_handle = spawn_file_transfer_service(
+        &task_spawner,
+        file_transfer_request_receiver,
+        file_transfer_request_protocol_name,
+        network,
+    )
+    .await;
 
     // Spawn the Blockchain Service.
     let blockchain_service_handle = spawn_blockchain_service(
@@ -290,9 +296,9 @@ async fn start_dev_impl(
         .expect("In `dev` mode, `new_partial` will return some `select_chain`; qed");
 
     // If we are a provider we update the network configuration with the file transfer protocol.
-    let mut file_transfer_request_receiver = None;
+    let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_receiver = Some(configure_file_transfer_network(
+        file_transfer_request_protocol = Some(configure_file_transfer_network(
             client.clone(),
             &config,
             &mut net_config,
@@ -367,8 +373,9 @@ async fn start_dev_impl(
 
     // Spawning the Blockchain Service if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
-        let file_transfer_request_receiver = file_transfer_request_receiver
-            .expect("FileTransfer request receiver should already be initialized.");
+        let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
+            file_transfer_request_protocol
+                .expect("FileTransfer request protocol should already be initialized.");
         start_storage_provider(
             provider_options,
             &task_manager,
@@ -376,6 +383,7 @@ async fn start_dev_impl(
             client.clone(),
             rpc_handlers,
             keystore.clone(),
+            file_transfer_request_protocol_name,
             file_transfer_request_receiver,
         )
         .await;
@@ -537,9 +545,9 @@ async fn start_node_impl(
         .expect("Alice should have a key. qed");
 
     // If we are a provider we update the network configuration with the file transfer protocol.
-    let mut file_transfer_request_receiver = None;
+    let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_receiver = Some(configure_file_transfer_network(
+        file_transfer_request_protocol = Some(configure_file_transfer_network(
             client.clone(),
             &parachain_config,
             &mut net_config,
@@ -631,8 +639,9 @@ async fn start_node_impl(
 
     // Spawning the Blockchain Service if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
-        let file_transfer_request_receiver = file_transfer_request_receiver
-            .expect("FileTransfer request receiver should already be initialized.");
+        let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
+            file_transfer_request_protocol
+                .expect("FileTransfer request protocol should already be initialized.");
         start_storage_provider(
             provider_options,
             &task_manager,
@@ -640,6 +649,7 @@ async fn start_node_impl(
             client.clone(),
             rpc_handlers,
             keystore.clone(),
+            file_transfer_request_protocol_name,
             file_transfer_request_receiver,
         )
         .await;
