@@ -1,8 +1,3 @@
-use trie_db::{Hasher, TrieLayout};
-
-/// The hash type of trie node keys
-pub(crate) type HashT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
-
 /// Error type for the in-memory forest storage.
 #[derive(Debug)]
 pub enum ForestStorageErrors {
