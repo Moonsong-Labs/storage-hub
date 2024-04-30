@@ -15,7 +15,12 @@ publish = false
 workspace = true
 
 [dependencies]
-sp-core = { workspace = true }
-sp-trie = { workspace = true }
+bincode = { workspace = true }
+reference-trie = { workspace = true }
+trie-db = { workspace = true }
 
+sp-core = { workspace = true }
+sp-trie = { workspace = true, default-features = true }
+
+common = { workspace = true }
 storage-hub-infra = { workspace = true }

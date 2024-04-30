@@ -7,27 +7,30 @@ default_args = [
     "--database=paritydb",
 ]
 
-
-[[relaychain.nodes]]
-name = "relay-0"
-validator = true
-ws_port = 39459
-add_to_bootnodes = true
-
-[[relaychain.nodes]]
-name = "relay-1"
-validator = true
-add_to_bootnodes = true
-
+[[relaychain.node_groups]]
+count = 2
+name = "relay"
 
 [[parachains]]
 id = 2000
 
-[parachains.collator]
+[[parachains.collators]]
 command = "../target/release/storage-hub-node"
-name = "sh"
+name = "sh-collator"
 args = ["--no-hardware-benchmarks", "-lparachain=debug"]
-ws_port = 42933
+
+
+[[parachains.collators]]
+name = "sh-BSP"
+validator = false
+command = "../target/release/storage-hub-node"
+args = [
+    "--no-hardware-benchmarks",
+    "-lparachain=debug",
+    "--provider",
+    "--provider-type bsp",
+    "--seed-file ./Cargo.toml",
+]
 
 [types.Header]
 number = "u64"
@@ -36,4 +39,3 @@ post_state = "Hash"
 
 [settings]
 provider = "native"
-bootnode = true
