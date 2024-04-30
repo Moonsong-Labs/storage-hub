@@ -54,7 +54,6 @@ use storage_hub_traits::CommitmentVerifier;
 use xcm::latest::prelude::BodyId;
 
 use crate::ParachainInfo;
-use crate::Randomness;
 
 // Local module imports
 use super::{
@@ -355,6 +354,21 @@ impl pallet_randomness::GetBabeData<u64, Option<Hash>> for BabeDataGetter {
             .ok()
             .flatten()
     }
+    fn get_parent_randomness() -> Option<Hash> {
+        if cfg!(feature = "runtime-benchmarks") {
+            // storage reads as per actual reads
+            let _relay_storage_root = ParachainSystem::validation_data();
+            let _relay_chain_state = ParachainSystem::relay_state_proof();
+            let benchmarking_babe_output = Hash::default();
+            return Some(benchmarking_babe_output);
+        }
+        // Note: we use the `CURRENT_BLOCK_RANDOMNESS` key here as it also represents the parent randomness, the only difference
+        // is the block since this randomness is valid, but we don't care about that because we are setting that directly in the `randomness` pallet.
+        relay_chain_state_proof()
+            .read_optional_entry(well_known_keys::CURRENT_BLOCK_RANDOMNESS)
+            .ok()
+            .flatten()
+    }
 }
 
 parameter_types! {
@@ -391,7 +405,7 @@ impl pallet_storage_providers::Config for Runtime {
     type DepositPerData = ConstU128<2>;
     type RuntimeHoldReason = RuntimeHoldReason;
     type Subscribers = FileSystem;
-    type ProvidersRandomness = Randomness;
+    type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = ConstU32<10>;
 }
