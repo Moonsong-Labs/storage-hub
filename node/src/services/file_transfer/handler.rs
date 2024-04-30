@@ -22,7 +22,7 @@
 //! `crate::request_responses::RequestResponsesBehaviour` with
 //! [`LightClientRequestHandler`](handler::LightClientRequestHandler).
 
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use anyhow::Result;
 use futures::prelude::*;
@@ -31,19 +31,20 @@ use libp2p_identity::PeerId;
 use prost::Message;
 use sc_network::{
     request_responses::{IncomingRequest, OutgoingResponse},
-    IfDisconnected, NetworkRequest, ProtocolName, ReputationChange,
+    IfDisconnected, NetworkPeers, NetworkRequest, ProtocolName, ReputationChange,
 };
-use sc_tracing::tracing::{debug, info, trace, warn};
-use storage_hub_infra::actor::{Actor, ActorEventLoop};
+use sc_tracing::tracing::{debug, error, info, trace, warn};
+use storage_hub_infra::{
+    actor::{Actor, ActorEventLoop},
+    types::Key,
+};
 
 use crate::{
     service::ParachainNetworkService, services::file_transfer::events::RemoteUploadRequest,
 };
 
 use super::{
-    commands::FileTransferServiceCommand,
-    events::FileTransferServiceEventBusProvider,
-    schema::{self, v1::provider::RemoteUploadDataRequest},
+    commands::FileTransferServiceCommand, events::FileTransferServiceEventBusProvider, schema,
 };
 
 const LOG_TARGET: &str = "file-transfer-service";
@@ -52,6 +53,7 @@ pub struct FileTransferService {
     protocol_name: ProtocolName,
     request_receiver: async_channel::Receiver<IncomingRequest>,
     network: Arc<ParachainNetworkService>,
+    peer_file_registry: HashSet<(PeerId, Key)>,
     event_bus_provider: FileTransferServiceEventBusProvider,
 }
 
@@ -72,26 +74,82 @@ impl Actor for FileTransferService {
                     chunk_with_proof,
                     callback,
                 } => {
-                    let request = RemoteUploadDataRequest {
-                        file_key: bincode::serialize(&file_key)
-                            .expect("Failed to serialize file key."),
-                        file_chunk_with_proof: bincode::serialize(&chunk_with_proof)
-                            .expect("Failed to serialize file chunk proof."),
-                    };
+                    let request = schema::v1::provider::request::Request::RemoteUploadDataRequest(
+                        schema::v1::provider::RemoteUploadDataRequest {
+                            file_key: bincode::serialize(&file_key)
+                                .expect("Failed to serialize file key."),
+                            file_chunk_with_proof: bincode::serialize(&chunk_with_proof)
+                                .expect("Failed to serialize file chunk proof."),
+                        },
+                    );
+
+                    // Serialize the request
                     let mut request_data = Vec::new();
-                    request
-                        .encode(&mut request_data)
-                        .expect("Failed to encode request data.");
-                    self.network.request(
+                    request.encode(&mut request_data);
+
+                    let (tx, rx) = futures::channel::oneshot::channel();
+                    self.network.start_request(
                         peer_id,
                         self.protocol_name.clone(),
                         request_data,
                         None,
+                        tx,
                         IfDisconnected::ImmediateError,
-                    )
+                    );
+
+                    match callback.send(rx) {
+                        Ok(()) => {}
+                        Err(_) => error!(
+                            target: LOG_TARGET,
+                            "Failed to send the response back. Looks like the requester task is gone."
+                        ),
+                    }
                 }
-                FileTransferServiceCommand::DownloadRequest { .. } => {
-                    todo!()
+                FileTransferServiceCommand::DownloadRequest {
+                    peer_id,
+                    file_key,
+                    chunk_id,
+                    callback,
+                } => {
+                    let request = schema::v1::provider::request::Request::RemoteDownloadDataRequest(
+                        schema::v1::provider::RemoteDownloadDataRequest {
+                            file_key: bincode::serialize(&file_key)
+                                .expect("Failed to serialize file key."),
+                            file_chunk_id: chunk_id,
+                        },
+                    );
+
+                    // Serialize the request
+                    let mut request_data = Vec::new();
+                    request.encode(&mut request_data);
+
+                    let (tx, rx) = futures::channel::oneshot::channel();
+                    self.network.start_request(
+                        peer_id,
+                        self.protocol_name.clone(),
+                        request_data,
+                        None,
+                        tx,
+                        IfDisconnected::ImmediateError,
+                    );
+
+                    match callback.send(rx) {
+                        Ok(()) => {}
+                        Err(_) => error!(
+                            target: LOG_TARGET,
+                            "Failed to send the response back. Looks like the requester task is gone."
+                        ),
+                    }
+                }
+                FileTransferServiceCommand::AddKnownAddress {
+                    peer_id,
+                    multiaddress,
+                } => self.network.add_known_address(peer_id, multiaddress),
+                FileTransferServiceCommand::RegisterNewFile { peer_id, file_key } => {
+                    self.peer_file_registry.insert((peer_id, file_key));
+                }
+                FileTransferServiceCommand::UnregisterFile { peer_id, file_key } => {
+                    self.peer_file_registry.remove(&(peer_id, file_key));
                 }
             };
         }
@@ -218,6 +276,7 @@ impl FileTransferService {
             protocol_name,
             request_receiver,
             network,
+            peer_file_registry: HashSet::new(),
             event_bus_provider: FileTransferServiceEventBusProvider::new(),
         }
     }
