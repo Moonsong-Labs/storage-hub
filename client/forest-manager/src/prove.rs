@@ -132,7 +132,7 @@ mod tests {
 
             let metadata = Metadata {
                 owner: String::from("owner"),
-                location: file_path,
+                location: file_path.as_bytes().to_vec(),
                 size: 0,
                 fingerprint,
             };

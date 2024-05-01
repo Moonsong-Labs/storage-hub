@@ -16,6 +16,11 @@ workspace = true
 
 [dependencies]
 bincode = { workspace = true }
+hash-db = { workspace = true }
+kvdb = { workspace = true }
+kvdb-rocksdb = { workspace = true }
+log = { workspace = true }
+sp-state-machine = { workspace = true }
 reference-trie = { workspace = true }
 trie-db = { workspace = true }
 

@@ -9,11 +9,15 @@ use forest_manager::traits::ForestStorage;
 use storage_hub_infra::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::EventHandler,
+    types::Metadata,
 };
 
 use crate::tasks::bsp_volunteer_mock::BspVolunteerMockTask;
 
-use self::{blockchain::handler::BlockchainService, file_transfer::FileTransferService};
+use self::{
+    blockchain::{events::NewStorageRequest, handler::BlockchainService},
+    file_transfer::FileTransferService,
+};
 
 pub trait StorageHubHandlerConfig: Send + 'static {
     type FileStorage: FileStorage + Send + Sync;
@@ -55,6 +59,32 @@ impl<S: StorageHubHandlerConfig> StorageHubHandler<S> {
             file_storage,
             forest_storage,
         }
+    }
+
+    /// Add file to the forest storage.
+    pub async fn _add_file_to_forest<T: StorageHubHandlerConfig>(
+        &self,
+        event: NewStorageRequest,
+    ) -> anyhow::Result<Vec<u8>> {
+        let mut forest_storage = self.forest_storage.write().await;
+
+        let metadata = Metadata::new(
+            event.who.to_string(),
+            event.location.to_vec(),
+            event.size as u64,
+            event.fingerprint,
+        );
+
+        let metadata_serialized = bincode::serialize(&metadata)?;
+
+        let file_key = forest_storage
+            .insert_file_key(
+                &metadata_serialized.clone().into(),
+                &metadata_serialized.into(),
+            )
+            .map_err(|e| anyhow::anyhow!("Failed to insert file key: {:?}", e))?;
+
+        Ok(file_key.as_ref().to_vec())
     }
 
     pub fn start_bsp_tasks(&self) {

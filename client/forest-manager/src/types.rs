@@ -1,3 +1,38 @@
+use trie_db::{Hasher, TrieLayout};
+
+/// The hash type of trie node keys
+pub type HashT<T> = <T as TrieLayout>::Hash;
+pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
+
+pub struct RawKey<T> {
+    pub key: Vec<u8>,
+    _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T> Clone for RawKey<T> {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+            _phantom: Default::default(),
+        }
+    }
+}
+
+impl<T> From<Vec<u8>> for RawKey<T> {
+    fn from(key: Vec<u8>) -> Self {
+        Self {
+            key,
+            _phantom: Default::default(),
+        }
+    }
+}
+
+impl<T> AsRef<[u8]> for RawKey<T> {
+    fn as_ref(&self) -> &[u8] {
+        &self.key
+    }
+}
+
 /// Error type for the in-memory forest storage.
 #[derive(Debug)]
 pub enum ForestStorageErrors {

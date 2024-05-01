@@ -7,7 +7,7 @@ use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
 use file_manager::in_memory::InMemoryFileStorage;
-use forest_manager::in_memory::InMemoryForestStorage;
+use forest_manager::{in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage};
 use futures::{Stream, StreamExt};
 use polkadot_primitives::{HeadData, ValidationCode};
 use reference_trie::RefHasher;
@@ -381,18 +381,27 @@ async fn start_dev_impl(
         )
         .await;
 
-        let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
-        let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
+        let file_storage = Arc::new(RwLock::new(
+            InMemoryFileStorage::<LayoutV1<RefHasher>>::new(),
+        ));
 
-        struct InMemoryStorageHubConfig {}
+        // TODO: Do the setup in a function.
+        let rocksdb_storage = RocksDBForestStorage::<LayoutV1<RefHasher>>::new();
 
-        impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
+        let forest_storage = Arc::new(RwLock::new(rocksdb_storage));
+
+        // TODO: This should be called automatically by the forest storage if there is no root at a known key
+        forest_storage.write().await.start_forest();
+
+        struct StorageHubConfig {}
+
+        impl StorageHubHandlerConfig for StorageHubConfig {
             type FileStorage = InMemoryFileStorage<LayoutV1<RefHasher>>;
-            type ForestStorage = InMemoryForestStorage<LayoutV1<RefHasher>>;
+            type ForestStorage = RocksDBForestStorage<LayoutV1<RefHasher>>;
         }
 
         // Initialise the StorageHubHandler, for tasks to have access to the services.
-        let sh_handler = StorageHubHandler::<InMemoryStorageHubConfig>::new(
+        let sh_handler = StorageHubHandler::<StorageHubConfig>::new(
             task_spawner,
             file_transfer_service_handle,
             blockchain_service_handle,

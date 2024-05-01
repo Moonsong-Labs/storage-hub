@@ -17,12 +17,27 @@ pub type Key = H256;
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Metadata {
     pub owner: String,
-    pub location: String,
+    pub location: Vec<u8>,
     pub size: u64,
-    pub fingerprint: H256,
+    pub fingerprint: Key,
+}
+
+impl From<Vec<u8>> for Metadata {
+    fn from(data: Vec<u8>) -> Self {
+        bincode::deserialize(&data).expect("Failed to deserialize Metadata")
+    }
 }
 
 impl Metadata {
+    pub fn new(owner: String, location: Vec<u8>, size: u64, fingerprint: Key) -> Self {
+        Self {
+            owner,
+            location,
+            size,
+            fingerprint,
+        }
+    }
+
     pub fn chunk_count(&self) -> u64 {
         let full_chunks = self.size / (FILE_CHUNK_SIZE as u64);
         if self.size % (FILE_CHUNK_SIZE as u64) > 0 {
@@ -78,7 +93,7 @@ pub struct ForestProof<K: AsRef<[u8]>> {
     /// The compact proof.
     pub proof: CompactProof,
     /// The root hash of the trie.
-    pub root: H256,
+    pub root: K,
 }
 
 pub struct FileProof {

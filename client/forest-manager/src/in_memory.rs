@@ -1,4 +1,4 @@
-use sp_core::H256;
+use hash_db::Hasher;
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::TrieDBMutBuilder;
 
@@ -107,21 +107,18 @@ impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
         Ok(ForestProof {
             proven,
             proof,
-            root: H256::from_slice(
-                self.root
-                    .as_ref()
-                    .try_into()
-                    .map_err(|_| ForestStorageErrors::FailedToParseRoot)?,
-            ),
+            root: self.root.as_ref().to_vec().into(),
         })
     }
 
     fn insert_file_key(
         &mut self,
-        file_key: &Self::LookupKey,
+        raw_file_key: &Self::RawKey,
         metadata: &Self::Value,
-    ) -> Result<(), ForestStorageErrors> {
-        if self.get_value(file_key)?.is_some() {
+    ) -> Result<Self::LookupKey, ForestStorageErrors> {
+        let file_key = <T::Hash as Hasher>::hash(&raw_file_key.key);
+
+        if self.get_value(&file_key)?.is_some() {
             return Err(ForestStorageErrors::FileKeyAlreadyExists);
         }
 
@@ -134,7 +131,7 @@ impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
         trie.insert(file_key.as_ref(), &raw_metadata)
             .map_err(|_| ForestStorageErrors::FailedToInsertFileKey)?;
 
-        Ok(())
+        Ok(file_key)
     }
 
     fn delete_file_key(&mut self, file_key: &Self::LookupKey) -> Result<(), ForestStorageErrors> {
