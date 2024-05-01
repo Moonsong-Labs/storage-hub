@@ -24,7 +24,6 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use anyhow::Result;
 use futures::prelude::*;
 use futures::stream::select;
 use libp2p_identity::PeerId;
@@ -33,18 +32,21 @@ use sc_network::{
     request_responses::{IncomingRequest, OutgoingResponse},
     IfDisconnected, NetworkPeers, NetworkRequest, ProtocolName, ReputationChange,
 };
-use sc_tracing::tracing::{debug, error, info, trace, warn};
+use sc_tracing::tracing::{debug, error, info, warn};
 use storage_hub_infra::{
     actor::{Actor, ActorEventLoop},
     types::Key,
 };
+use tokio::sync::Mutex;
 
 use crate::{
     service::ParachainNetworkService, services::file_transfer::events::RemoteUploadRequest,
 };
 
 use super::{
-    commands::FileTransferServiceCommand, events::FileTransferServiceEventBusProvider, schema,
+    commands::FileTransferServiceCommand,
+    events::{FileTransferServiceEventBusProvider, RemoteDownloadRequest},
+    schema,
 };
 
 const LOG_TARGET: &str = "file-transfer-service";
@@ -204,57 +206,7 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
                         pending_response,
                     } = request;
 
-                    match self.actor.handle_request(peer, payload) {
-                        Ok(response_data) => {
-                            let response = OutgoingResponse {
-                                result: Ok(response_data),
-                                reputation_changes: Vec::new(),
-                                sent_feedback: None,
-                            };
-
-                            match pending_response.send(response) {
-                                Ok(()) => trace!(
-                                    target: LOG_TARGET,
-                                    "Handled provider client request from {}.",
-                                    peer,
-                                ),
-                                Err(_) => debug!(
-                                    target: LOG_TARGET,
-                                    "Failed to handle provider request from {}: {}",
-                                    peer,
-                                    HandleRequestError::SendResponse,
-                                ),
-                            };
-                        }
-                        Err(e) => {
-                            debug!(
-                                target: LOG_TARGET,
-                                "Failed to handle provider client request from {}: {}", peer, e,
-                            );
-
-                            let reputation_changes = match e {
-                                HandleRequestError::BadRequest(_) => {
-                                    vec![ReputationChange::new(-(1 << 12), "bad request")]
-                                }
-                                _ => Vec::new(),
-                            };
-
-                            let response = OutgoingResponse {
-                                result: Err(()),
-                                reputation_changes,
-                                sent_feedback: None,
-                            };
-
-                            if pending_response.send(response).is_err() {
-                                debug!(
-                                    target: LOG_TARGET,
-                                    "Failed to handle provider client request from {}: {}",
-                                    peer,
-                                    HandleRequestError::SendResponse,
-                                );
-                            };
-                        }
-                    }
+                    self.actor.handle_request(peer, payload, pending_response);
                 }
                 None => {
                     warn!(target: LOG_TARGET, "FileTransferService event loop terminated.");
@@ -285,91 +237,110 @@ impl FileTransferService {
         &mut self,
         peer: PeerId,
         payload: Vec<u8>,
-    ) -> Result<Vec<u8>, HandleRequestError> {
-        let request = schema::v1::provider::Request::decode(&payload[..])?;
+        pending_response: futures::channel::oneshot::Sender<OutgoingResponse>,
+    ) {
+        let request = match schema::v1::provider::Request::decode(&payload[..]) {
+            Ok(request) => request,
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to decode provider client request from {}: {:?}", peer, e
+                );
 
-        let response = match &request.request {
+                self.handle_bad_request(pending_response);
+
+                return;
+            }
+        };
+
+        match &request.request {
             Some(schema::v1::provider::request::Request::RemoteUploadDataRequest(r)) => {
-                self.on_remote_upload_data_request(&peer, r)?
+                let file_key = match bincode::deserialize(&r.file_key) {
+                    Ok(file_key) => file_key,
+                    Err(e) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to deserialize file key from provider client request from {}: {:?}",
+                            peer,
+                            e
+                        );
+
+                        self.handle_bad_request(pending_response);
+
+                        return;
+                    }
+                };
+                let chunk_with_proof = match bincode::deserialize(&r.file_chunk_with_proof) {
+                    Ok(chunk_with_proof) => chunk_with_proof,
+                    Err(e) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to deserialize file chunk with proof from provider client request from {}: {:?}",
+                            peer,
+                            e
+                        );
+
+                        self.handle_bad_request(pending_response);
+
+                        return;
+                    }
+                };
+                self.emit(RemoteUploadRequest {
+                    file_key,
+                    chunk_with_proof,
+                    maybe_pending_response: Arc::new(Mutex::new(Some(pending_response))),
+                });
             }
             Some(schema::v1::provider::request::Request::RemoteDownloadDataRequest(r)) => {
-                self.on_remote_download_data_request(&peer, r)?
+                let file_key = match bincode::deserialize(&r.file_key) {
+                    Ok(file_key) => file_key,
+                    Err(e) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to deserialize file key from provider client request from {}: {:?}",
+                            peer,
+                            e
+                        );
+
+                        self.handle_bad_request(pending_response);
+
+                        return;
+                    }
+                };
+                let chunk_id = r.file_chunk_id;
+                self.emit(RemoteDownloadRequest {
+                    file_key,
+                    chunk_id,
+                    maybe_pending_response: Arc::new(Mutex::new(Some(pending_response))),
+                });
             }
             None => {
-                return Err(HandleRequestError::BadRequest(
-                    "Remote request without request data.",
-                ))
+                error!(
+                    target: LOG_TARGET,
+                    "Received provider client request from {} with no request", peer
+                );
+
+                self.handle_bad_request(pending_response);
+
+                return;
             }
         };
-
-        let mut data = Vec::new();
-        response.encode(&mut data)?;
-
-        Ok(data)
     }
 
-    fn on_remote_upload_data_request(
-        &mut self,
-        peer: &PeerId,
-        request: &schema::v1::provider::RemoteUploadDataRequest,
-    ) -> Result<schema::v1::provider::Response, HandleRequestError> {
-        trace!(
-            "Remote upload data request from {} (FileKey: {:?})",
-            peer,
-            request.file_key
-        );
+    fn handle_bad_request(
+        &self,
+        pending_response: futures::channel::oneshot::Sender<OutgoingResponse>,
+    ) {
+        let reputation_changes = vec![ReputationChange::new(-(1 << 12), "bad request")];
 
-        self.emit(RemoteUploadRequest {
-            location: "".to_string(),
-        });
-
-        // TODO actually save data.
-        let response = schema::v1::provider::RemoteUploadDataResponse { success: true };
-
-        Ok(schema::v1::provider::Response {
-            response: Some(
-                schema::v1::provider::response::Response::RemoteUploadDataResponse(response),
-            ),
-        })
-    }
-
-    fn on_remote_download_data_request(
-        &mut self,
-        peer: &PeerId,
-        request: &schema::v1::provider::RemoteDownloadDataRequest,
-    ) -> Result<schema::v1::provider::Response, HandleRequestError> {
-        trace!(
-            "Remote download data request from {} (FileKey: {:?}, ChunkId: {}).",
-            peer,
-            request.file_key,
-            request.file_chunk_id,
-        );
-
-        // TODO actually read data.
-        let response = schema::v1::provider::RemoteDownloadDataResponse {
-            file_chunk_with_proof: vec![],
+        let response = OutgoingResponse {
+            result: Err(()),
+            reputation_changes,
+            sent_feedback: None,
         };
 
-        Ok(schema::v1::provider::Response {
-            response: Some(
-                schema::v1::provider::response::Response::RemoteDownloadDataResponse(response),
-            ),
-        })
+        if pending_response.send(response).is_err() {
+            debug!(target: LOG_TARGET, "Failed to send request response back");
+        }
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-enum HandleRequestError {
-    #[error("Failed to decode request: {0}.")]
-    DecodeProto(#[from] prost::DecodeError),
-    #[error("Failed to encode response: {0}.")]
-    EncodeProto(#[from] prost::EncodeError),
-    #[error("Failed to send response.")]
-    SendResponse,
-    /// A bad request has been received.
-    #[error("bad request: {0}")]
-    BadRequest(&'static str),
-    /// Encoding or decoding of some data failed.
-    #[error("codec error: {0}")]
-    Codec(#[from] codec::Error),
 }

@@ -44,7 +44,7 @@ pub type ChunkId = u64;
 pub type Chunk = Vec<u8>;
 
 /// Leaf in the Forest or File trie.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Leaf<K, D: Debug> {
     pub key: K,
     pub data: D,
@@ -86,7 +86,7 @@ where
 }
 
 /// Storage proof in compact form.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SerializableCompactProof {
     pub encoded_nodes: Vec<Vec<u8>>,
 }
@@ -107,7 +107,7 @@ impl Into<CompactProof> for SerializableCompactProof {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct FileProof {
     /// The file chunk (and id) that was proven.
     pub proven: Leaf<ChunkId, Chunk>,
