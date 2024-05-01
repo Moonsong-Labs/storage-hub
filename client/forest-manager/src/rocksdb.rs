@@ -115,58 +115,19 @@ impl<T: TrieLayout + Send + Sync> RocksDBForestStorage<T> {
         }
     }
 
+    // TODO: automatically create a trie in RocksDB if none exists (i.e. root does not exists)
+    // TODO: create known root key to access the root hash
+    /// Create new trie and persist it to RocksDB.
     pub fn start_forest(&mut self) {
         let mut root = self.root.clone();
 
-        let mut trie = TrieDBMutBuilder::<T>::new(self.as_hash_db_mut(), &mut root).build();
-
-        //insert key
-        // let key = RawKey::<T>::from(vec![1, 2, 3]);
-
-        // trie.insert(key.as_ref(), b"12354")
-        //     .expect("Failed to insert key");
-
-        info!(target: "trie", "Is the trie empty? {:?}", trie.is_empty());
-
-        info!(target: "trie", "Root: {:?}", trie.root());
-
-        // assert!(trie.contains(key.as_ref()).unwrap());
-
-        // let _ = trie.get(key.as_ref()).unwrap();
+        let trie = TrieDBMutBuilder::<T>::new(self.as_hash_db_mut(), &mut root).build();
 
         drop(trie);
 
-        // for (key, rc) in self.overlay.keys() {
-        //     info!(target: "trie", "Overlay key: {:?}, rc: {:?}", key, rc);
-        // }
-
         self.commit();
 
-        // info!(target: "trie", "overlay: {:?}", self.overlay.drain());
-
         self.root = root;
-
-        // info!(target: "trie", "Self root: {:?}", self.root);
-
-        // // get value at key
-        // let db = self.as_hash_db();
-        // let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
-
-        // info!(target: "trie", "Is the trie empty? {:?}", trie.is_empty());
-        // info!(target: "trie", "Root: {:?}", trie.root());
-
-        // assert!(trie.contains(key.as_ref()).unwrap());
-
-        // let maybe_raw_metadata = trie.get(key.as_ref()).unwrap();
-        // match maybe_raw_metadata {
-        //     Some(raw_metadata) => {
-        //         let metadata: Metadata = bincode::deserialize(&raw_metadata).unwrap();
-        //         info!(target: "trie", "Metadata: {:?}", metadata);
-        //     }
-        //     None => {
-        //         info!(target: "trie", "No metadata found");
-        //     }
-        // }
     }
 
     /// Commit changes to the backend.
