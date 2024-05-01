@@ -317,8 +317,6 @@ pub mod pallet {
         BspsRequiredCannotBeZero,
         /// BSPs required for storage request cannot exceed the maximum allowed.
         BspsRequiredExceedsMax,
-        /// BSP already volunteered to store the given file.
-        BspVolunteerFailed,
         /// Account is not a BSP.
         NotABsp,
         /// BSP has not volunteered to store the given file.
