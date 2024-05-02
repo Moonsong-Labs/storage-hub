@@ -125,7 +125,7 @@ macro_rules! construct_async_run {
 pub fn run() -> Result<()> {
     let cli = Cli::from_args();
 
-    let dev_service = cli.run.base.shared_params.is_dev();
+    let dev_service = cli.run.base.base.shared_params.is_dev();
 
     match &cli.subcommand {
 		Some(Subcommand::BuildSpec(cmd)) => {
@@ -256,12 +256,13 @@ pub fn run() -> Result<()> {
 
                 info!("Is collating: {}", if config.role.is_authority() { "yes" } else { "no" });
 
-                if cli.run.base.shared_params.is_dev() {
+                if dev_service {
                     crate::service::start_dev_node(
                         config,
                         provider_options,
                         hwbench,
                         id,
+                        cli.run.sealing,
                     )
                     .await
                     .map_err(Into::into)

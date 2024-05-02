@@ -1,12 +1,12 @@
+use sp_core::H256;
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
-use storage_hub_infra::types::{ForestProof, Metadata};
 use trie_db::TrieDBMutBuilder;
 
+use common::types::HashT;
+use storage_hub_infra::types::{ForestProof, Metadata};
+
 use crate::{
-    prove::prove,
-    traits::ForestStorage,
-    types::{ForestStorageErrors, HashT},
-    utils::serialize_value,
+    prove::prove, traits::ForestStorage, types::ForestStorageErrors, utils::serialize_value,
 };
 
 pub struct InMemoryForestStorage<T: TrieLayout + 'static> {
@@ -107,11 +107,12 @@ impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
         Ok(ForestProof {
             proven,
             proof,
-            root: self
-                .root
-                .as_ref()
-                .try_into()
-                .map_err(|_| ForestStorageErrors::FailedToParseRoot)?,
+            root: H256::from_slice(
+                self.root
+                    .as_ref()
+                    .try_into()
+                    .map_err(|_| ForestStorageErrors::FailedToParseRoot)?,
+            ),
         })
     }
 

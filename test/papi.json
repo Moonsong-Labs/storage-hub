@@ -1,0 +1,10 @@
+{
+  "relaychain": {
+    "wsUrl": "ws://127.0.0.1:39459",
+    "metadata": "relaychain.scale"
+  },
+  "storagehub": {
+    "wsUrl": "ws://127.0.0.1:42933",
+    "metadata": "storagehub.scale"
+  }
+}

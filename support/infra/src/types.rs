@@ -19,26 +19,44 @@ pub struct Metadata {
     pub owner: String,
     pub location: String,
     pub size: u64,
-    pub fingerprint: Key,
+    pub fingerprint: H256,
 }
+
+impl Metadata {
+    pub fn chunk_count(&self) -> u64 {
+        let full_chunks = self.size / (FILE_CHUNK_SIZE as u64);
+        if self.size % (FILE_CHUNK_SIZE as u64) > 0 {
+            return full_chunks + 1;
+        }
+        full_chunks
+    }
+
+    pub fn chunk_ids(&self) -> impl Iterator<Item = ChunkId> {
+        0..self.chunk_count()
+    }
+}
+
+/// Typed u64 representing the index of a file [`Chunk`]. Indexed from 0.
+pub type ChunkId = u64;
 
 // TODO: this is currently a placeholder in order to define Storage interface.
 /// Typed chunk of a file. This is what is stored in the leaf of the stored Merkle tree.
-pub type Chunk = [u8; FILE_CHUNK_SIZE];
+pub type Chunk = Vec<u8>;
 
 /// Leaf in the Forest or File trie.
-pub struct Leaf<K: AsRef<[u8]>, D: Debug> {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Leaf<K, D: Debug> {
     pub key: K,
     pub data: D,
 }
 
 /// Proving either the exact key or the neighbour keys of the challenged key.
-pub enum Proven<K: AsRef<[u8]>, D: Debug> {
+pub enum Proven<K, D: Debug> {
     ExactKey(Leaf<K, D>),
     NeighbourKeys((Option<Leaf<K, D>>, Option<Leaf<K, D>>)),
 }
 
-impl<K: AsRef<[u8]>, D: Debug> Proven<K, D> {
+impl<K, D: Debug> Proven<K, D> {
     pub fn new_exact_key(key: K, data: D) -> Self {
         Proven::ExactKey(Leaf { key, data })
     }
@@ -55,20 +73,46 @@ impl<K: AsRef<[u8]>, D: Debug> Proven<K, D> {
 }
 
 /// Proof of file key(s) in the forest trie.
-pub struct ForestProof<K: AsRef<[u8]>> {
+pub struct ForestProof<K>
+where
+    K: AsRef<[u8]>,
+{
     /// The file key that was proven.
     pub proven: Vec<Proven<K, Metadata>>,
     /// The compact proof.
     pub proof: CompactProof,
     /// The root hash of the trie.
-    pub root: [u8; 32],
+    pub root: H256,
 }
 
-pub struct FileProof<K: AsRef<[u8]>> {
-    /// The file key that was proven.
-    pub proven: Proven<K, Chunk>,
+/// Storage proof in compact form.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SerializableCompactProof {
+    pub encoded_nodes: Vec<Vec<u8>>,
+}
+
+impl From<CompactProof> for SerializableCompactProof {
+    fn from(proof: CompactProof) -> Self {
+        Self {
+            encoded_nodes: proof.encoded_nodes,
+        }
+    }
+}
+
+impl Into<CompactProof> for SerializableCompactProof {
+    fn into(self) -> CompactProof {
+        CompactProof {
+            encoded_nodes: self.encoded_nodes,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct FileProof {
+    /// The file chunk (and id) that was proven.
+    pub proven: Leaf<ChunkId, Chunk>,
     /// The compact proof.
-    pub proof: CompactProof,
-    /// The root hash of the trie.
-    pub root_hash: H256,
+    pub proof: SerializableCompactProof,
+    /// The root hash of the trie, also known as the fingerprint of the file.
+    pub root: H256,
 }

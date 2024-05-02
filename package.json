@@ -1,24 +1,24 @@
 {
-	"name": "storagehub-mono-repo",
-	"version": "0.1.0",
-	"description": "Mono-repo for StorageHub",
-	"main": "index.js",
-	"private": true,
-	"type": "module",
-	"workspaces": ["test"],
-	"scripts": {
-		"fmt": "biome format .",
-		"fmt:fix": "biome format . --write",
-		"lint": "biome lint ."
-	},
-	"keywords": [],
-	"author": "",
-	"license": "ISC",
-	"dependencies": {
-		"@types/bun": "1.0.8",
-		"typescript": "5.4.2"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "1.6.1"
-	}
+  "name": "storagehub-mono-repo",
+  "version": "0.1.0",
+  "description": "Mono-repo for StorageHub",
+  "main": "index.js",
+  "private": true,
+  "type": "module",
+  "workspaces": ["test"],
+  "scripts": {
+    "fmt": "biome format .",
+    "fmt:fix": "biome format . --write",
+    "lint": "biome lint ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/bun": "1.1.0",
+    "typescript": "5.4.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.7.1"
+  }
 }
