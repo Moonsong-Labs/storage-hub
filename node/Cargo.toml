@@ -100,6 +100,7 @@ cumulus-primitives-core = { workspace = true }
 cumulus-primitives-parachain-inherent = { workspace = true }
 cumulus-primitives-storage-weight-reclaim = { workspace = true }
 cumulus-relay-chain-interface = { workspace = true }
+bincode.workspace = true
 
 [build-dependencies]
 prost-build = { workspace = true }
