@@ -48,7 +48,8 @@ use polkadot_runtime_common::{
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, H256};
-use sp_runtime::{traits::BlakeTwo256, AccountId32, DispatchResult, FixedU128, Perbill};
+use sp_runtime::{traits::BlakeTwo256, AccountId32, DispatchError, FixedU128, Perbill};
+use sp_std::vec::Vec;
 use sp_version::RuntimeVersion;
 use storage_hub_traits::CommitmentVerifier;
 use xcm::latest::prelude::BodyId;
@@ -426,12 +427,9 @@ impl pallet_proofs_dealer::Config for Runtime {
     type MerkleHashing = BlakeTwo256;
     type ForestVerifier = ProofTrieVerifier;
     type KeyVerifier = ProofTrieVerifier;
+    // type KeyVerifier = TrieVerifier<LayoutV1<RefHasher>>;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
-    type MaxProvidersChallengedPerBlock = ConstU32<10>;
-    type ChallengeHistoryLength = ChallengeHistoryLength;
-    type ChallengesQueueLength = ConstU32<10>;
-    type CheckpointChallengePeriod = ConstU32<10>;
     type ChallengesFee = ChallengesFee;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = Randomness;
@@ -449,11 +447,11 @@ impl CommitmentVerifier for ProofTrieVerifier {
 
     fn verify_proof(
         _root: &Self::Key,
-        _challenges: &[Self::Key],
+        challenges: &[Self::Key],
         proof: &CompactProof,
-    ) -> DispatchResult {
+    ) -> Result<Vec<Self::Key>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            Ok(())
+            Ok(challenges.to_vec())
         } else {
             Err("Proof is empty".into())
         }

@@ -8,7 +8,7 @@ use pallet_proofs_dealer::CompactProof;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Bounded, IdentityLookup},
-    AccountId32, BuildStorage, DispatchResult, FixedU128,
+    AccountId32, BuildStorage, DispatchError, FixedU128,
 };
 use storage_hub_traits::CommitmentVerifier;
 
@@ -192,11 +192,11 @@ impl CommitmentVerifier for MockVerifier {
 
     fn verify_proof(
         _root: &Self::Key,
-        _challenges: &[Self::Key],
+        challenges: &[Self::Key],
         proof: &CompactProof,
-    ) -> DispatchResult {
+    ) -> Result<Vec<Self::Key>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            Ok(())
+            Ok(challenges.to_vec())
         } else {
             Err("Proof is empty".into())
         }

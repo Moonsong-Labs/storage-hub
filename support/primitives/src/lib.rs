@@ -1,10 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use frame_support::sp_runtime::DispatchError;
 use sp_core::Hasher;
+use sp_std::collections::btree_set::BTreeSet;
+use sp_std::vec::Vec;
 use sp_trie::{CompactProof, LayoutV1, TrieDBBuilder};
 use storage_hub_traits::CommitmentVerifier;
-
-use frame_support::dispatch::DispatchResult;
 use trie_db::TrieIterator;
 
 #[cfg(test)]
@@ -12,12 +13,18 @@ mod tests;
 
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment
 /// is a Merkle Patricia Trie root hash.
-pub struct TrieVerifier<H: Hasher> {
+pub struct TrieVerifier<H: Hasher>
+where
+    <H as sp_core::Hasher>::Out: TryFrom<Vec<u8>>,
+{
     pub _phantom: core::marker::PhantomData<H>,
 }
 
 /// Implement the `CommitmentVerifier` trait for the `TrieVerifier` struct.
-impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
+impl<H: Hasher> CommitmentVerifier for TrieVerifier<H>
+where
+    <H as sp_core::Hasher>::Out: TryFrom<Vec<u8>>,
+{
     type Proof = CompactProof;
     type Key = H::Out;
 
@@ -28,7 +35,7 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
         root: &Self::Key,
         challenges: &[Self::Key],
         proof: &Self::Proof,
-    ) -> DispatchResult {
+    ) -> Result<Vec<Self::Key>, DispatchError> {
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
         let (memdb, root) = proof.to_memory_db(Some(root.into())).map_err(|_| {
             "Failed to convert proof to memory DB, root doesn't match with expected."
@@ -60,6 +67,8 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
             return Err("No challenges provided.".into());
         }
 
+        // Initialise vector of proven keys. We use a `BTreeSet` to ensure that the keys are unique.
+        let mut proven_keys = BTreeSet::new();
         let mut challenges_iter = challenges.iter();
 
         // Iterate over the challenges and check if there is a pair of consecutive
@@ -104,25 +113,59 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
             match (prev_leaf, next_leaf) {
                 // Scenario 1 (valid): `next_leaf` is the challenged leaf which is included in the proof.
                 // The challenge is the leaf itself (i.e. the challenge exists in the trie).
-                (_, Some((next_key, _))) if next_key == challenge.as_ref().to_vec() => continue,
+                (_, Some((next_key, _))) if next_key == challenge.as_ref().to_vec() => {
+                    let next_key = next_key
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
+
+                    proven_keys.insert(next_key);
+                    continue;
+                }
                 // Scenario 2 (valid): `prev_leaf` and `next_leaf` are consecutive leaves.
                 // The challenge is between the two leaves (i.e. the challenge exists in the trie).
                 (Some((prev_key, _)), Some((next_key, _)))
                     if prev_key < challenge.as_ref().to_vec()
                         && challenge.as_ref().to_vec() < next_key =>
                 {
-                    continue
+                    let prev_key = prev_key
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
+
+                    proven_keys.insert(prev_key);
+
+                    let next_key = next_key
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
+
+                    proven_keys.insert(next_key);
+
+                    continue;
                 }
                 // Scenario 3 (valid): `next_leaf` is the first leaf since the next previous leaf is `None`.
                 // The challenge is before the first leaf (i.e. the challenge does not exist in the trie).
                 (Some((prev_key, _)), Some((next_key, _)))
                     if prev_key == next_key && trie_de_iter.next_back().is_none() =>
                 {
+                    let prev_key = prev_key
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
+
+                    proven_keys.insert(prev_key);
+
                     continue;
                 }
                 // Scenario 4 (valid): `prev_leaf` is the last leaf since `next_leaf` is `None`.
                 // The challenge is after the last leaf (i.e. the challenge does not exist in the trie).
-                (Some(_prev_leaf), None) => continue,
+                (Some(prev_leaf), None) => {
+                    let prev_key = prev_leaf
+                        .0
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
+
+                    proven_keys.insert(prev_key);
+
+                    continue;
+                }
                 // Invalid
                 (None, None) => {
                     #[cfg(test)]
@@ -149,6 +192,6 @@ impl<H: Hasher> CommitmentVerifier for TrieVerifier<H> {
             }
         }
 
-        return Ok(());
+        return Ok(Vec::from_iter(proven_keys));
     }
 }
