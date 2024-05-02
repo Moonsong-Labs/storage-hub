@@ -108,7 +108,7 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
                 key: (*chunk_id).clone(),
                 data: chunk,
             },
-            proof: proof.into(),
+            proof,
             root: file_data.get_root(),
         })
     }

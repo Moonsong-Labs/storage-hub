@@ -37,7 +37,7 @@ where
     async fn handle_event(&self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         info!(
             "[ResolveRemoteUploadRequest] - file location: {}",
-            event.file_key
+            event.location
         );
 
         // self.storage_hub_handler.storage.store_chunk().await?;

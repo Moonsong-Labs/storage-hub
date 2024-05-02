@@ -7,7 +7,7 @@ type FileLocation = pallet_file_system::types::FileLocation<storage_hub_runtime:
 type PeerIds = pallet_file_system::types::PeerIds<storage_hub_runtime::Runtime>;
 
 // TODO: use proper types
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ChallengeRequest {
     pub location: String,
 }
@@ -52,7 +52,7 @@ pub struct StorageRequestRevoked {
 
 impl EventBusMessage for StorageRequestRevoked {}
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct BlockchainServiceEventBusProvider {
     challenge_request_event_bus: EventBus<ChallengeRequest>,
     new_storage_request_event_bus: EventBus<NewStorageRequest>,

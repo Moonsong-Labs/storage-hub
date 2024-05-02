@@ -25,5 +25,3 @@ runtimes/
 
 # Chain Specs
 *.spec.json
-
-.idea/

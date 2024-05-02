@@ -44,7 +44,6 @@ pub type ChunkId = u64;
 pub type Chunk = Vec<u8>;
 
 /// Leaf in the Forest or File trie.
-#[derive(Clone, Serialize, Deserialize)]
 pub struct Leaf<K, D: Debug> {
     pub key: K,
     pub data: D,
@@ -73,10 +72,7 @@ impl<K, D: Debug> Proven<K, D> {
 }
 
 /// Proof of file key(s) in the forest trie.
-pub struct ForestProof<K>
-where
-    K: AsRef<[u8]>,
-{
+pub struct ForestProof<K: AsRef<[u8]>> {
     /// The file key that was proven.
     pub proven: Vec<Proven<K, Metadata>>,
     /// The compact proof.
@@ -85,34 +81,11 @@ where
     pub root: H256,
 }
 
-/// Storage proof in compact form.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct SerializableCompactProof {
-    pub encoded_nodes: Vec<Vec<u8>>,
-}
-
-impl From<CompactProof> for SerializableCompactProof {
-    fn from(proof: CompactProof) -> Self {
-        Self {
-            encoded_nodes: proof.encoded_nodes,
-        }
-    }
-}
-
-impl Into<CompactProof> for SerializableCompactProof {
-    fn into(self) -> CompactProof {
-        CompactProof {
-            encoded_nodes: self.encoded_nodes,
-        }
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
 pub struct FileProof {
     /// The file chunk (and id) that was proven.
     pub proven: Leaf<ChunkId, Chunk>,
     /// The compact proof.
-    pub proof: SerializableCompactProof,
+    pub proof: CompactProof,
     /// The root hash of the trie, also known as the fingerprint of the file.
     pub root: H256,
 }
