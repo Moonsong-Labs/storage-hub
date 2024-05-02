@@ -1,6 +1,11 @@
 import { test, describe, expect, beforeAll } from "bun:test";
 import { MultiAddress } from "@polkadot-api/descriptors";
-import { accounts, getSr25519Account, getZombieClients, waitForChain } from "../../util";
+import {
+  accounts,
+  getSr25519Account,
+  getZombieClients,
+  waitForChain,
+} from "../../util";
 
 describe("Simple zombieTest", async () => {
   const { relayApi, relayClient, relayRT, shClient, storageApi, storageRT } =
@@ -12,26 +17,35 @@ describe("Simple zombieTest", async () => {
 
   describe("Relay", async () => {
     test("Check RelayChain RT Version", async () => {
-      const { spec_name, spec_version } = relayApi.constants.System.Version(relayRT);
+      const { spec_name, spec_version } =
+        relayApi.constants.System.Version(relayRT);
       expect(spec_name).toBe("rococo");
       expect(spec_version).toBeGreaterThanOrEqual(1008000);
     });
 
     test("Check sr25519 keyring is correct", async () => {
-      expect(accounts.alice.sr25519.id).toBe("5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY");
-      expect(accounts.bob.sr25519.id).toBe("5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty");
+      expect(accounts.alice.sr25519.id).toBe(
+        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+      );
+      expect(accounts.bob.sr25519.id).toBe(
+        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty"
+      );
     });
 
     test("Check test accounts have balance", async () => {
-      const promises = Object.entries(accounts).map(async ([account, signers]) => {
-        const {
-          data: { free },
-        } = await relayApi.query.System.Account.getValue(signers.sr25519.id);
-        console.log(`✅ Account ${account} has ${free} balance`);
-        return { account, free: free.valueOf() };
-      });
+      const promises = Object.entries(accounts).map(
+        async ([account, signers]) => {
+          const {
+            data: { free },
+          } = await relayApi.query.System.Account.getValue(signers.sr25519.id);
+          console.log(`✅ Account ${account} has ${free} balance`);
+          return { account, free: free.valueOf() };
+        }
+      );
 
-      const failures = (await Promise.all(promises)).filter(({ free }) => free < 1n);
+      const failures = (await Promise.all(promises)).filter(
+        ({ free }) => free < 1n
+      );
       for (const { account } of failures) {
         console.error(`❌ Account ${account} has no balance!`);
       }
@@ -64,21 +78,28 @@ describe("Simple zombieTest", async () => {
 
   describe("StorageHub", async () => {
     test("Check StorageHub RT Version", async () => {
-      const { spec_name, spec_version } = storageApi.constants.System.Version(storageRT);
+      const { spec_name, spec_version } =
+        storageApi.constants.System.Version(storageRT);
       expect(spec_name).toBe("storage-hub-runtime");
       expect(spec_version).toBeGreaterThanOrEqual(1);
     });
 
     test("Check test accounts have balance", async () => {
-      const promises = Object.entries(accounts).map(async ([account, signers]) => {
-        const {
-          data: { free },
-        } = await storageApi.query.System.Account.getValue(signers.sr25519.id);
-        console.log(`✅ Account ${account} has ${free} balance`);
-        return { account, free: free.valueOf() };
-      });
+      const promises = Object.entries(accounts).map(
+        async ([account, signers]) => {
+          const {
+            data: { free },
+          } = await storageApi.query.System.Account.getValue(
+            signers.sr25519.id
+          );
+          console.log(`✅ Account ${account} has ${free} balance`);
+          return { account, free: free.valueOf() };
+        }
+      );
 
-      const failures = (await Promise.all(promises)).filter(({ free }) => free < 1n);
+      const failures = (await Promise.all(promises)).filter(
+        ({ free }) => free < 1n
+      );
       for (const { account } of failures) {
         console.error(`❌ Account ${account} has no balance!`);
       }

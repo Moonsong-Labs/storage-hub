@@ -1,0 +1,2 @@
+export const SH_BSP = "5FHSHEFWHVGDnyiw66DoRUpLyh5RouWkXo9GT1Sjk8qw7MAg"
+export const SH_COLLATOR = "5C8NC6YuAivp3knYC58Taycx2scQoDcDd3MCEEgyw36Gh1R4"

@@ -2,17 +2,16 @@ import { createClient, type PolkadotClient } from "polkadot-api";
 import { WebSocketProvider } from "polkadot-api/ws-provider/node";
 import { relaychain, storagehub } from "@polkadot-api/descriptors";
 
-export type TypesBundle = typeof relaychain | typeof storagehub;
+export type TypesBundle = typeof storagehub | typeof relaychain;
 
-export const getClient = async (endpoint: string, typesBundle: TypesBundle) => {
-  const client = createClient(WebSocketProvider(endpoint));
-  const api = client.getTypedApi(typesBundle);
-  const rt = await api.runtime.latest();
-  return { api, rt, client };
-};
-
-export const waitForChain = async (client: PolkadotClient, timeout = 120000) => {
-  console.log(`Waiting a maximum of ${timeout / 1000} seconds for chain to be ready...`);
+// TODO add method for waiting for blocks instead of time
+export const waitForChain = async (
+  client: PolkadotClient,
+  timeoutMs = 120000
+) => {
+  console.log(
+    `Waiting a maximum of ${timeoutMs / 1000} seconds for chain to be ready...`
+  );
   const startTime = performance.now();
 
   for (;;) {
@@ -26,23 +25,22 @@ export const waitForChain = async (client: PolkadotClient, timeout = 120000) => 
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
-    if (performance.now() - startTime > timeout) {
+    if (performance.now() - startTime > timeoutMs) {
       throw new Error("Timeout waiting for chain to be ready");
     }
   }
 };
 
-export const getZombieClients = async () => {
-  const {
-    api: relayApi,
-    rt: relayRT,
-    client: relayClient,
-  } = await getClient("ws://127.0.0.1:39459", relaychain);
-  const {
-    api: storageApi,
-    rt: storageRT,
-    client: shClient,
-  } = await getClient("ws://127.0.0.1:42933", storagehub);
+export const getZombieClients = async (
+  params = { relayWs: "ws://127.0.0.1:39459", shWs: "ws://127.0.0.1:42933" }
+) => {
+  const relayClient = createClient(WebSocketProvider(params.relayWs));
+  const relayApi = relayClient.getTypedApi(relaychain);
+  const relayRT = await relayApi.runtime.latest();
+
+  const shClient = createClient(WebSocketProvider(params.shWs));
+  const storageApi = shClient.getTypedApi(storagehub);
+  const storageRT = await storageApi.runtime.latest();
 
   return { relayApi, relayRT, relayClient, storageApi, storageRT, shClient };
 };
