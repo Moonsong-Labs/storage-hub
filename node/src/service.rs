@@ -575,11 +575,6 @@ async fn start_node_impl(
     let mut task_manager = params.task_manager;
     let keystore = params.keystore_container.keystore();
 
-    // TODO: read the SP seed from somewhere and insert it here
-    keystore
-        .sr25519_generate_new(KEY_TYPE, Some("//Alice"))
-        .expect("Alice should have a key. qed");
-
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {

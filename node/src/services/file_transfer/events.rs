@@ -11,6 +11,7 @@ use storage_hub_infra::{
 pub struct RemoteUploadRequest {
     pub file_key: Key,
     pub chunk_with_proof: FileProof,
+    // TODO: Confirm whether this is needed and should be here in the first place.
     pub maybe_pending_response:
         Arc<Mutex<Option<futures::channel::oneshot::Sender<OutgoingResponse>>>>,
 }
@@ -21,6 +22,7 @@ impl EventBusMessage for RemoteUploadRequest {}
 pub struct RemoteDownloadRequest {
     pub file_key: Key,
     pub chunk_id: ChunkId,
+    // TODO: Confirm whether this is needed and should be here in the first place.
     pub maybe_pending_response:
         Arc<Mutex<Option<futures::channel::oneshot::Sender<OutgoingResponse>>>>,
 }
