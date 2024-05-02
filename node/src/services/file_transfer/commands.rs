@@ -31,14 +31,17 @@ pub enum FileTransferServiceCommand {
     AddKnownAddress {
         peer_id: PeerId,
         multiaddress: Multiaddr,
+        // TODO: Add callback with some return type like Result<()> to know if the operation was successful.
     },
     RegisterNewFile {
         peer_id: PeerId,
         file_key: Key,
+        // TODO: Add callback with some return type like Result<()> to know if the operation was successful.
     },
     UnregisterFile {
         peer_id: PeerId,
         file_key: Key,
+        // TODO: Add callback with some return type like Result<()> to know if the operation was successful.
     },
 }
 
@@ -77,14 +80,14 @@ pub trait FileTransferServiceInterface {
 
 impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
     /// Request an upload of a file chunk to a peer.
-    /// This returns after recei
+    /// This returns after receiving a response from the network.
     async fn upload_request(
         &self,
         peer_id: PeerId,
         file_key: Key,
         chunk_with_proof: FileProof,
     ) -> Result<schema::v1::provider::RemoteUploadDataResponse, RequestError> {
-        let (callback, rx) = tokio::sync::oneshot::channel();
+        let (callback, file_transfer_rx) = tokio::sync::oneshot::channel();
         let command = FileTransferServiceCommand::UploadRequest {
             peer_id,
             file_key,
@@ -95,10 +98,10 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
 
         // First we wait for the response from the FileTransferService.
         // The response is another oneshot channel to wait for the response from the network.
-        let rx = rx.await.expect("Failed to receive response from FileTransferService. Probably means FileTransferService has crashed.");
+        let network_rx = file_transfer_rx.await.expect("Failed to receive response from FileTransferService. Probably means FileTransferService has crashed.");
 
         // Now we wait on the actual response from the network.
-        let response = rx.await.expect(
+        let response = network_rx.await.expect(
             "Failed to receive response from the NetworkService. Probably means the NetworkService has crashed.",
         );
 
@@ -121,13 +124,15 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         }
     }
 
+    /// Request a download of a file chunk to a peer.
+    /// This returns after receiving a response from the network.
     async fn download_request(
         &self,
         peer_id: PeerId,
         file_key: Key,
         chunk_id: ChunkId,
     ) -> Result<schema::v1::provider::RemoteDownloadDataResponse, RequestError> {
-        let (callback, rx) = tokio::sync::oneshot::channel();
+        let (callback, file_transfer_rx) = tokio::sync::oneshot::channel();
         let command = FileTransferServiceCommand::DownloadRequest {
             peer_id,
             file_key,
@@ -138,10 +143,10 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
 
         // First we wait for the response from the FileTransferService.
         // The response is another oneshot channel to wait for the response from the network.
-        let rx = rx.await.expect("Failed to received response from FileTransferService. Probably means FileTransferService has crashed.");
+        let network_rx = file_transfer_rx.await.expect("Failed to received response from FileTransferService. Probably means FileTransferService has crashed.");
 
         // Now we wait on the actual response from the network.
-        let response = rx.await.expect(
+        let response = network_rx.await.expect(
             "Failed to receive response from the NetworkService. Probably means the NetworkService has crashed.",
         );
 
@@ -166,6 +171,7 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
 
     /// Tell the FileTransferService to register a multiaddress as known for a specified PeerId.
     /// This returns as soon as the message has been dispatched (not processed) to the service.
+    // TODO: Make it return after the message is processed by the service with some Result<()>.
     async fn add_known_address(&self, peer_id: PeerId, multiaddress: Multiaddr) {
         let command = FileTransferServiceCommand::AddKnownAddress {
             peer_id,
@@ -177,6 +183,7 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
     /// Tell the FileTransferService to start listening for new upload requests from peer_id
     /// on file file_key.
     /// This returns as soon as the message has been dispatched (not processed) to the service.
+    // TODO: Make it return after the message is processed by the service with some Result<()>.
     async fn register_new_file(&self, peer_id: PeerId, file_key: Key) {
         let command = FileTransferServiceCommand::RegisterNewFile { peer_id, file_key };
         self.send(command).await;
@@ -185,6 +192,7 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
     /// Tell the FileTransferService to no longer listen for upload requests from peer_id on file
     /// file_key.
     /// This returns as soon as the message has been dispatched (not processed) to the service.
+    // TODO: Make it return after the message is processed by the service with some Result<()>.
     async fn unregister_file(&self, peer_id: PeerId, file_key: Key) {
         let command = FileTransferServiceCommand::UnregisterFile { peer_id, file_key };
         self.send(command).await;
