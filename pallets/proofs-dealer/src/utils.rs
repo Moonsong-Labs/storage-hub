@@ -1,23 +1,30 @@
 // TODO: Remove this attribute once the file is implemented.
 #![allow(dead_code)]
 #![allow(unused_variables)]
+use codec::Encode;
 use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
     traits::{fungible::Mutate, tokens::Preservation, Get},
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-use sp_runtime::{traits::CheckedDiv, DispatchError, SaturatedConversion};
+use scale_info::prelude::vec::Vec;
+use sp_runtime::{
+    traits::{CheckedAdd, CheckedDiv, Hash, Zero},
+    ArithmeticError, DispatchError, SaturatedConversion, Saturating,
+};
 use sp_trie::CompactProof;
-use storage_hub_traits::{ProofsDealerInterface, ProvidersInterface};
+use storage_hub_traits::{CommitmentVerifier, ProofsDealerInterface, ProvidersInterface};
 
 use crate::{
     pallet,
     types::{
-        AccountIdFor, BalanceFor, BalancePalletFor, ChallengesFeeFor, KeyFor, ProviderFor,
-        ProvidersPalletFor, StakeToChallengePeriodFor, TreasuryAccountFor,
+        AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor, ChallengesFeeFor,
+        ForestRootFor, ForestVerifierFor, KeyFor, ProviderFor, ProvidersPalletFor,
+        RandomChallengesPerBlockFor, StakeToChallengePeriodFor, TreasuryAccountFor,
     },
-    ChallengesQueue, Error, Pallet, PriorityChallengesQueue,
+    BlockToChallengesSeed, BlockToCheckpointChallenges, ChallengesQueue, Error,
+    LastBlockProviderSubmittedProofFor, LastCheckpointBlock, Pallet, PriorityChallengesQueue,
 };
 
 macro_rules! expect_or_err {
@@ -81,8 +88,6 @@ where
     }
 
     // TODO: Document and add proper parameters.
-    // TODO: Remove unused variable allow attribute.
-    #[allow(unused_variables)]
     pub fn do_submit_proof(submitter: &ProviderFor<T>, proof: &CompactProof) -> DispatchResult {
         // Check if submitter is a registered Provider.
         // This is actually redundant as the `submit_proof` extrinsic that calls this function
@@ -92,12 +97,84 @@ where
             Error::<T>::NotProvider
         );
 
-        // TODO: Check that the proof corresponds to a correct challenge block.
+        // Check for an empty proof.
+        ensure!(!proof.encoded_nodes.is_empty(), Error::<T>::EmptyProof);
 
-        // TODO: Verify proof.
+        // Get root for submitter.
+        // If a submitter is a registered Provider, it must have a root.
+        let root = ProvidersPalletFor::<T>::get_root(submitter.clone())
+            .ok_or(Error::<T>::ProviderRootNotFound)?;
 
-        // TODO
-        unimplemented!()
+        // Check if root is non-zero.
+        // A zero root means that the Provider is not providing any service yet, so he shouldn't be
+        // submitting any proofs.
+        ensure!(root == ForestRootFor::<T>::default(), Error::<T>::ZeroRoot);
+
+        // Get last block for which the submitter submitted a proof.
+        let last_block_proven =
+            match LastBlockProviderSubmittedProofFor::<T>::get(submitter.clone()) {
+                Some(block) => block,
+                None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
+            };
+
+        // Get stake for submitter.
+        let stake = ProvidersPalletFor::<T>::get_stake(submitter.clone())
+            .ok_or(Error::<T>::ProviderStakeNotFound)?;
+
+        // Check that the stake is non-zero.
+        ensure!(stake > BalanceFor::<T>::zero(), Error::<T>::ZeroStake);
+
+        // Compute the next block for which the submitter should be submitting a proof.
+        let challenges_block = last_block_proven
+            .checked_add(&Self::stake_to_challenge_period(stake)?)
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Check that the challenges block is lower than the current block.
+        ensure!(
+            challenges_block < frame_system::Pallet::<T>::block_number(),
+            Error::<T>::ChallengesBlockNotReached
+        );
+
+        // Check that the challenges block is greater than current block minus `ChallengeHistoryLength`,
+        // i.e. that the challenges block is within the blocks this pallet keeps track of.
+        ensure!(
+            challenges_block
+                >= frame_system::Pallet::<T>::block_number()
+                    .saturating_sub(ChallengeHistoryLengthFor::<T>::get()),
+            Error::<T>::ChallengesBlockTooOld
+        );
+
+        // Get seed for challenges block.
+        let seed = expect_or_err!(
+            BlockToChallengesSeed::<T>::get(challenges_block),
+            "Seed for challenges block not found, when checked it should be within history",
+            Error::<T>::SeedNotFound
+        );
+
+        // Generate challenges from seed.
+        let mut challenges = Self::generate_challenges_from_seed(seed, submitter);
+
+        // Check if there's been a Checkpoint Challenge block in between the last block proven and
+        // the current block. If there has been, the Provider should have included proofs for the
+        // challenges in that block.
+        let last_checkpoint_block = LastCheckpointBlock::<T>::get();
+        if last_block_proven < last_checkpoint_block {
+            // Add challenges from the Checkpoint Challenge block.
+            let checkpoint_challenges =
+                expect_or_err!(
+                    BlockToCheckpointChallenges::<T>::get(last_checkpoint_block),
+                    "Checkpoint challenges not found, when dereferencing in last registered checkpoint challenge block",
+                    Error::<T>::CheckpointChallengesNotFound
+                );
+            challenges.extend(checkpoint_challenges);
+        }
+
+        let forest_keys_proven = ForestVerifierFor::<T>::verify_proof(&root, &challenges, proof)?;
+
+        // TODO: Modify CommitmentVerifier to return the keys proven.
+        // TODO: Verify each key of the keys proven using KeyVerifier.
+
+        Ok(())
     }
 
     // TODO: Document and add proper parameters.
@@ -106,8 +183,10 @@ where
         unimplemented!()
     }
 
-    // TODO: Document and add proper parameters.
-    #[allow(unused_variables)]
+    /// Convert stake to challenge period.
+    ///
+    /// Stake is divided by `StakeToChallengePeriod` to get the number of blocks in between challenges
+    /// for a Provider. The result is then converted to `BlockNumber` type.
     fn stake_to_challenge_period(stake: BalanceFor<T>) -> Result<BlockNumberFor<T>, DispatchError> {
         let block_period_res = stake
             .checked_div(&StakeToChallengePeriodFor::<T>::get())
@@ -125,6 +204,10 @@ where
         ))
     }
 
+    /// Add challenge to ChallengesQueue.
+    ///
+    /// Check if challenge is already queued. If it is, just return. Otherwise, add the challenge
+    /// to the queue.
     fn enqueue_challenge(key: &KeyFor<T>) -> DispatchResult {
         // Get challenges queue from storage.
         let mut challenges_queue = ChallengesQueue::<T>::get();
@@ -145,6 +228,10 @@ where
         Ok(())
     }
 
+    /// Add challenge to PriorityChallengesQueue.
+    ///
+    /// Check if challenge is already queued. If it is, just return. Otherwise, add the challenge
+    /// to the queue.
     fn enqueue_challenge_with_priority(key: &KeyFor<T>) -> DispatchResult {
         // Get priority challenges queue from storage.
         let mut priority_challenges_queue = PriorityChallengesQueue::<T>::get();
@@ -163,6 +250,33 @@ where
         PriorityChallengesQueue::<T>::put(priority_challenges_queue);
 
         Ok(())
+    }
+
+    /// Generate challenges from seed.
+    ///
+    /// Generate a number of challenges from a seed and a Provider's ID.
+    /// Challenges are generated by hashing the seed, the Provider's ID and an index.
+    fn generate_challenges_from_seed(
+        seed: T::MerkleHash,
+        provider_id: &ProviderFor<T>,
+    ) -> Vec<T::MerkleHash> {
+        let mut challenges = Vec::new();
+
+        for i in 0..RandomChallengesPerBlockFor::<T>::get() {
+            // Each challenge is generated by hashing the seed, the provider's ID and the index.
+            let challenge = T::MerkleHashing::hash(
+                &[
+                    seed.as_ref(),
+                    provider_id.encode().as_ref(),
+                    i.encode().as_ref(),
+                ]
+                .concat(),
+            );
+
+            challenges.push(challenge.into());
+        }
+
+        challenges
     }
 
     // TODO: Document.

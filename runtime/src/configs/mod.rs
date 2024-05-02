@@ -48,7 +48,7 @@ use polkadot_runtime_common::{
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, H256};
-use sp_runtime::{AccountId32, DispatchResult, FixedU128, Perbill};
+use sp_runtime::{traits::BlakeTwo256, AccountId32, DispatchResult, FixedU128, Perbill};
 use sp_version::RuntimeVersion;
 use storage_hub_traits::CommitmentVerifier;
 use xcm::latest::prelude::BodyId;
@@ -266,8 +266,8 @@ impl cumulus_pallet_xcmp_queue::Config for Runtime {
 }
 
 parameter_types! {
-    pub const Period: u32 = 6 * HOURS;
-    pub const Offset: u32 = 0;
+    pub const Period: BlockNumber = 6 * HOURS;
+    pub const Offset: BlockNumber = 0;
 }
 
 impl pallet_session::Config for Runtime {
@@ -413,6 +413,7 @@ impl Get<AccountId32> for TreasuryAccount {
 }
 
 parameter_types! {
+    pub const ChallengeHistoryLength: BlockNumber = 10;
     pub const StakeToChallengePeriod: Balance = 10 * UNITS;
     pub const ChallengesFee: Balance = 1 * UNITS;
 }
@@ -422,11 +423,13 @@ impl pallet_proofs_dealer::Config for Runtime {
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
     type MerkleHash = Hash;
+    type MerkleHashing = BlakeTwo256;
+    type ForestVerifier = ProofTrieVerifier;
     type KeyVerifier = ProofTrieVerifier;
-    type MaxChallengesPerBlock = ConstU32<10>;
+    type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
-    type ChallengeHistoryLength = ConstU32<10>;
+    type ChallengeHistoryLength = ChallengeHistoryLength;
     type ChallengesQueueLength = ConstU32<10>;
     type CheckpointChallengePeriod = ConstU32<10>;
     type ChallengesFee = ChallengesFee;

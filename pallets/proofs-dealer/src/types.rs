@@ -21,6 +21,9 @@ pub enum ProofRejectionReason {
 /// Syntactic sugar for the AccountId type used in the proofs pallet.
 pub type AccountIdFor<T> = <T as frame_system::Config>::AccountId;
 
+/// Syntactic sugar for the MerkleHash type used in the proofs pallet.
+pub type MerkleHashFor<T> = <T as crate::Config>::MerkleHash;
+
 /// The type for keys that identify a file within a Merkle Patricia Forest.
 /// Syntactic sugar for the MerkleHash type used in the proofs pallet.
 pub type KeyFor<T> = <T as crate::Config>::MerkleHash;
@@ -29,14 +32,15 @@ pub type KeyFor<T> = <T as crate::Config>::MerkleHash;
 /// Syntactic sugar for the MerkleHash type used in the proofs pallet.
 pub type ForestRootFor<T> = <T as crate::Config>::MerkleHash;
 
-/// Syntactic sugar for the MaxChallengesPerBlock type used in the proofs pallet.
-pub type MaxChallengesPerBlockFor<T> = <T as crate::Config>::MaxChallengesPerBlock;
+/// Syntactic sugar for the RandomChallengesPerBlock type used in the proofs pallet.
+pub type RandomChallengesPerBlockFor<T> = <T as crate::Config>::RandomChallengesPerBlock;
 
 /// Syntactic sugar for the MaxCustomChallengesPerBlock type used in the proofs pallet.
 pub type MaxCustomChallengesPerBlockFor<T> = <T as crate::Config>::MaxCustomChallengesPerBlock;
 
-/// Syntactic sugar for the MaxSpsChallengedPerBlock type used in the proofs pallet.
-pub type MaxSpsChallengedPerBlockFor<T> = <T as crate::Config>::MaxProvidersChallengedPerBlock;
+/// Syntactic sugar for the MaxProvidersChallengedPerBlock type used in the proofs pallet.
+pub type MaxProvidersChallengedPerBlockFor<T> =
+    <T as crate::Config>::MaxProvidersChallengedPerBlock;
 
 /// Syntactic sugar for the ChallengesQueueLength type used in the proofs pallet.
 pub type ChallengesQueueLengthFor<T> = <T as crate::Config>::ChallengesQueueLength;
@@ -47,6 +51,9 @@ pub type ChallengesFeeFor<T> = <T as crate::Config>::ChallengesFee;
 /// Syntactic sugar for the StakeToChallengePeriod type used in the proofs pallet.
 pub type StakeToChallengePeriodFor<T> = <T as crate::Config>::StakeToChallengePeriod;
 
+/// Syntactic sugar for the ChallengeHistoryLength type used in the proofs pallet.
+pub type ChallengeHistoryLengthFor<T> = <T as crate::Config>::ChallengeHistoryLength;
+
 /// Syntactic sugar for the Treasury type used in the proofs pallet.
 pub type TreasuryAccountFor<T> = <T as crate::Config>::Treasury;
 
@@ -55,6 +62,12 @@ pub type ProvidersPalletFor<T> = <T as crate::Config>::ProvidersPallet;
 
 /// Syntactic sugar for the Provider type used in the proofs pallet.
 pub type ProviderFor<T> = <<T as crate::Config>::ProvidersPallet as ProvidersInterface>::Provider;
+
+/// Syntactic sugar for the ForestVerifier type used in the proofs pallet.
+pub type ForestVerifierFor<T> = <T as crate::Config>::ForestVerifier;
+
+/// Syntactic sugar for the KeyVerifier type used in the proofs pallet.
+pub type KeyVerifierFor<T> = <T as crate::Config>::KeyVerifier;
 
 /// Syntactic sugar for the type of NativeBalance pallet.
 pub type BalancePalletFor<T> = <T as crate::Config>::NativeBalance;

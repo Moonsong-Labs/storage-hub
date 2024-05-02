@@ -166,11 +166,13 @@ impl pallet_proofs_dealer::Config for Test {
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
     type MerkleHash = H256;
+    type MerkleHashing = BlakeTwo256;
+    type ForestVerifier = MockVerifier;
     type KeyVerifier = MockVerifier;
-    type MaxChallengesPerBlock = ConstU32<10>;
+    type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
-    type ChallengeHistoryLength = ConstU32<10>;
+    type ChallengeHistoryLength = ConstU64<10>;
     type ChallengesQueueLength = ConstU32<10>;
     type CheckpointChallengePeriod = ConstU32<10>;
     type ChallengesFee = ConstU128<1_000_000>;

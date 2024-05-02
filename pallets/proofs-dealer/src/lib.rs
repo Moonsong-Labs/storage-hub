@@ -13,8 +13,8 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-// #[cfg(feature = "runtime-benchmarks")]
-// mod benchmarking;
+// TODO #[cfg(feature = "runtime-benchmarks")]
+// TODO mod benchmarking;
 pub mod types;
 pub mod utils;
 
@@ -27,13 +27,13 @@ pub mod pallet {
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::{ValueQuery, *},
-        sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps},
+        sp_runtime::traits::{CheckEqual, Hash, MaybeDisplay, SimpleBitOps},
         traits::{fungible, Randomness},
     };
     use frame_system::pallet_prelude::*;
     use sp_trie::CompactProof;
     use storage_hub_traits::{CommitmentVerifier, ProvidersInterface};
-    use types::{ProviderFor, RandomnessOutputFor};
+    use types::{KeyFor, ProviderFor};
 
     use crate::types::*;
     use crate::*;
@@ -45,7 +45,23 @@ pub mod pallet {
 
         /// The Providers pallet.
         /// To check if whoever submits a proof is a registered Provider.
-        type ProvidersPallet: ProvidersInterface<AccountId = Self::AccountId>;
+        type ProvidersPallet: ProvidersInterface<
+            AccountId = Self::AccountId,
+            MerkleHash = Self::MerkleHash,
+            Balance = Self::NativeBalance,
+        >;
+
+        /// The type used to verify Merkle Patricia Forest proofs.
+        /// This verifies proofs of keys belonging to the Merkle Patricia Forest.
+        /// Something that implements the `CommitmentVerifier` trait.
+        type ForestVerifier: CommitmentVerifier<Key = KeyFor<Self>, Proof = CompactProof>;
+
+        /// The type used to verify the proof of a specific key within the Merkle Patricia Forest.
+        /// While `ForestVerifier` verifies that some keys are in the Merkle Patricia Forest, this
+        /// verifies specifically a proof for that key. For example, if the keys in the forest
+        /// represent files, this would verify the proof for a specific file, and `ForestVerifier`
+        /// would verify that the file is in the forest.
+        type KeyVerifier: CommitmentVerifier;
 
         /// Type to access the Balances Pallet.
         type NativeBalance: fungible::Inspect<Self::AccountId>
@@ -74,13 +90,13 @@ pub mod pallet {
             + MaxEncodedLen
             + FullCodec;
 
-        /// The type used to verify Merkle Patricia Forest proofs.
-        /// Something that implements the `CommitmentVerifier` trait.
-        type KeyVerifier: CommitmentVerifier;
+        /// The hashing system (algorithm) being used for the Merkle Patricia Forests (e.g. Blake2).
+        type MerkleHashing: Hash<Output = Self::MerkleHash> + TypeInfo;
 
-        /// The maximum number of challenges that can be made in a single block.
+        /// The number of random challenges that are generated per block, using the random seed
+        /// generated for that block.
         #[pallet::constant]
-        type MaxChallengesPerBlock: Get<u32>;
+        type RandomChallengesPerBlock: Get<u32>;
 
         /// The maximum number of custom challenges that can be made in a single checkpoint block.
         #[pallet::constant]
@@ -91,9 +107,9 @@ pub mod pallet {
         type MaxProvidersChallengedPerBlock: Get<u32>;
 
         /// The number of blocks that challenges history is kept for.
-        /// After this many blocks, challenges are removed from `Challenges` StorageMap.
+        /// After this many blocks, challenges are removed from `BlockToChallengesSeed` StorageMap.
         #[pallet::constant]
-        type ChallengeHistoryLength: Get<u32>;
+        type ChallengeHistoryLength: Get<BlockNumberFor<Self>>;
 
         /// The length of the `ChallengesQueue` StorageValue.
         /// This is to limit the size of the queue, and therefore the number of
@@ -104,8 +120,8 @@ pub mod pallet {
         /// The number of blocks in between a checkpoint challenges round (i.e. with custom challenges).
         /// This is used to determine when to include the challenges from the `ChallengesQueue` and
         /// `PriorityChallengesQueue` in the `BlockToChallenges` StorageMap. These checkpoint challenge
-        /// rounds have to be answered by ALL Providers, and this is enforced by the
-        /// `submit_proof` extrinsic.
+        /// rounds have to be answered by ALL Providers, and this is enforced by the `submit_proof`
+        /// extrinsic.
         #[pallet::constant]
         type CheckpointChallengePeriod: Get<u32>;
 
@@ -134,19 +150,18 @@ pub mod pallet {
 
     /// A mapping from block number to a vector of challenged file keys for that block.
     ///
-    /// This is used to keep track of the challenges that have been made in the past.
-    /// The vector is bounded by `MaxChallengesPerBlock`.
+    /// This is used to keep track of the challenges' seed in the past.
     /// This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
     #[pallet::storage]
     #[pallet::getter(fn block_to_challenges)]
     pub type BlockToChallengesSeed<T: Config> =
-        StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, RandomnessOutputFor<T>>;
+        StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, MerkleHashFor<T>>;
 
     /// A mapping from block number to a vector of custom challenged file keys for that block.
     ///
     /// This is used to keep track of the challenges that have been made in the past, specifically
     /// in the checkpoint challenge rounds.
-    /// The vector is bounded by `MaxChallengesPerBlock`.
+    /// The vector is bounded by `MaxCustomChallengesPerBlockFor`.
     /// This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
     #[pallet::storage]
     #[pallet::getter(fn block_to_checkpoint_challenges)]
@@ -157,6 +172,16 @@ pub mod pallet {
         BoundedVec<KeyFor<T>, MaxCustomChallengesPerBlockFor<T>>,
     >;
 
+    /// The block number of the last checkpoint challenge round.
+    ///
+    /// This is used to determine when to include the challenges from the `ChallengesQueue` and
+    /// `PriorityChallengesQueue` in the `BlockToChallenges` StorageMap. These checkpoint challenge
+    /// rounds have to be answered by ALL Providers, and this is enforced by the
+    /// `submit_proof` extrinsic.
+    #[pallet::storage]
+    #[pallet::getter(fn last_checkpoint_block)]
+    pub type LastCheckpointBlock<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
     /// A mapping from block number to a vector of challenged Providers for that block.
     ///
     /// This is used to keep track of the Providers that have been challenged, and should
@@ -165,20 +190,20 @@ pub mod pallet {
     /// which they should submit a proof. Those who are still in the entry by the time the block
     /// is reached are considered to have failed to submit a proof and subject to slashing.
     #[pallet::storage]
-    #[pallet::getter(fn block_to_challenged_sps)]
-    pub type BlockToChallengedSps<T: Config> = StorageMap<
+    #[pallet::getter(fn block_to_challenged_providers)]
+    pub type BlockToChallengedProviders<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
-        BoundedVec<ProviderFor<T>, MaxSpsChallengedPerBlockFor<T>>,
+        BoundedVec<ProviderFor<T>, MaxProvidersChallengedPerBlockFor<T>>,
     >;
 
     /// A mapping from a Provider to the last block number they submitted a proof for.
-    /// If for a Provider `sp`, `LastBlockSpSubmittedProofFor[sp]` is `n`, then the
-    /// Provider should submit a proof for block `n + stake_to_challenge_period(sp)`.
+    /// If for a Provider `p`, `LastBlockProviderSubmittedProofFor[p]` is `n`, then the
+    /// Provider should submit a proof for block `n + stake_to_challenge_period(p)`.
     #[pallet::storage]
-    #[pallet::getter(fn last_block_sp_submitted_proof_for)]
-    pub type LastBlockSpSubmittedProofFor<T: Config> =
+    #[pallet::getter(fn last_block_provider_submitted_proof_for)]
+    pub type LastBlockProviderSubmittedProofFor<T: Config> =
         StorageMap<_, Blake2_128Concat, ProviderFor<T>, BlockNumberFor<T>>;
 
     /// A queue of file keys that have been challenged manually.
@@ -206,16 +231,6 @@ pub mod pallet {
     #[pallet::getter(fn priority_challenges_queue)]
     pub type PriorityChallengesQueue<T: Config> =
         StorageValue<_, BoundedVec<KeyFor<T>, ChallengesQueueLengthFor<T>>, ValueQuery>;
-
-    /// The block number of the last checkpoint challenge round.
-    ///
-    /// This is used to determine when to include the challenges from the `ChallengesQueue` and
-    /// `PriorityChallengesQueue` in the `BlockToChallenges` StorageMap. These checkpoint challenge
-    /// rounds have to be answered by ALL Providers, and this is enforced by the
-    /// `submit_proof` extrinsic.
-    #[pallet::storage]
-    #[pallet::getter(fn last_checkpoint_block)]
-    pub type LastCheckpointBlock<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
@@ -266,6 +281,47 @@ pub mod pallet {
         /// The staked balance of the Provider could not be converted to `u128`.
         /// This should not be possible, as the `Balance` type should be an unsigned integer type.
         StakeCouldNotBeConverted,
+
+        /// The root for the Provider could not be found.
+        ProviderRootNotFound,
+
+        /// The proof submitted is empty.
+        EmptyProof,
+
+        /// Provider is submitting a proof when they have a zero root.
+        /// Providers with zero roots are not providing any service, so they should not be
+        /// submitting proofs.
+        ZeroRoot,
+
+        /// Provider is submitting a proof but there is no record of the last block they
+        /// submitted a proof for.
+        /// Providers who are required to submit proofs should always have a record of the
+        /// last block they submitted a proof for, otherwise it means they haven't started
+        /// providing service for any user yet.
+        NoRecordOfLastSubmittedProof,
+
+        /// The provider stake could not be found.
+        ProviderStakeNotFound,
+
+        /// Provider is submitting a proof but their stake is zero.
+        ZeroStake,
+
+        /// Provider is submitting a proof for a block in the future.
+        ChallengesBlockNotReached,
+
+        /// Provider is submitting a proof for a block before the last block this pallet registers
+        /// challenges for.
+        ChallengesBlockTooOld,
+
+        /// The seed for the block could not be found.
+        /// This should not be possible for a block within the `ChallengeHistoryLength` range, as
+        /// seeds are generated for all blocks, and stored within this range.
+        SeedNotFound,
+
+        /// Checkpoint challenges not found in block.
+        /// This should only be possible if `BlockToCheckpointChallenges` is dereferenced for a block
+        /// that is not a checkpoint block.
+        CheckpointChallengesNotFound,
     }
 
     #[pallet::call]
@@ -300,11 +356,11 @@ pub mod pallet {
         ///
         /// Checks that `provider` is a registered Provider. If none
         /// is provided, the proof submitter is considered to be the Provider.
-        /// Relies on a Providers pallet to check if the root is valid for the Provider.
+        /// Relies on a Providers pallet to get the root for the Provider.
         /// Validates that the proof corresponds to a challenge that was made in the past,
         /// by checking the `BlockToChallengesSeed` StorageMap. The block number that the
         /// Provider should have submitted a proof is calculated based on the last block they
-        /// submitted a proof for (`LastBlockSpSubmittedProofFor`), and the proving period for
+        /// submitted a proof for (`LastBlockProviderSubmittedProofFor`), and the proving period for
         /// that Provider, which is a function of their stake.
         /// This extrinsic also checks that there hasn't been a checkpoint challenge round
         /// in between the last time the Provider submitted a proof for and the block
@@ -312,7 +368,7 @@ pub mod pallet {
         /// subject to slashing.
         ///
         /// If valid:
-        /// - Pushes forward the Provider in the `BlockToChallengedSps` StorageMap a number
+        /// - Pushes forward the Provider in the `BlockToChallengedProviders` StorageMap a number
         /// of blocks corresponding to the stake of the Provider.
         /// - Registers this block as the last block in which the Provider submitted a proof.
         ///
@@ -344,6 +400,7 @@ pub mod pallet {
             Self::deposit_event(Event::ProofAccepted { provider, proof });
 
             // Return a successful DispatchResultWithPostInfo
+            // TODO: Refund execution.
             Ok(().into())
         }
 
@@ -359,12 +416,12 @@ pub mod pallet {
         ///
         /// Additionally, it takes care of checking if there are Providers that have
         /// failed to submit a proof, and should have submitted one by this block. It does so
-        /// by checking the `BlockToChallengedSps` StorageMap. If a Provider is found
+        /// by checking the `BlockToChallengedProviders` StorageMap. If a Provider is found
         /// to have failed to submit a proof, it is subject to slashing.
         ///
         /// Finally, it cleans up:
         /// - The `BlockToChallenges` StorageMap, removing entries older than `ChallengeHistoryLength`.
-        /// - The `BlockToChallengedSps` StorageMap, removing entries for the current block number.
+        /// - The `BlockToChallengedProviders` StorageMap, removing entries for the current block number.
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn new_challenges_round(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
