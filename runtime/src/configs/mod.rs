@@ -411,6 +411,7 @@ impl pallet_proofs_dealer::Config for Runtime {
     type NativeBalance = Balances;
     type MerkleHash = Hash;
     type KeyVerifier = ProofTrieVerifier;
+    // type KeyVerifier = TrieVerifier<LayoutV1<RefHasher>>;
     type MaxChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
     type ChallengeHistoryLength = ConstU32<10>;

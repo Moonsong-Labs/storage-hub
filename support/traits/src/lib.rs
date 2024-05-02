@@ -11,6 +11,15 @@ use sp_core::Get;
 use sp_runtime::traits::AtLeast32BitUnsigned;
 use sp_runtime::{BoundedVec, DispatchError};
 
+#[cfg(feature = "std")]
+pub trait MaybeDebug: Debug {}
+#[cfg(feature = "std")]
+impl<T: Debug> MaybeDebug for T {}
+#[cfg(not(feature = "std"))]
+pub trait MaybeDebug {}
+#[cfg(not(feature = "std"))]
+impl<T> MaybeDebug for T {}
+
 /// A trait to lookup registered Providers.
 ///
 /// It is abstracted over the `AccountId` type, `Provider` type.
@@ -232,7 +241,7 @@ pub trait CommitmentVerifier {
     type Proof: Parameter + Member + Debug;
     /// The type that represents the commitment (e.g. a Merkle root) and the keys representing nodes
     /// in a Merkle tree which are also passed as challenges.
-    type Key: Debug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
+    type Key: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
 
     /// Verify a proof based on a commitment and a set of challenges.
     ///
