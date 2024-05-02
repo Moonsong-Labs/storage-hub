@@ -2,6 +2,7 @@
 
 use frame_support::sp_runtime::DispatchError;
 use sp_core::Hasher;
+use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec::Vec;
 use sp_trie::{CompactProof, LayoutV1, TrieDBBuilder};
 use storage_hub_traits::CommitmentVerifier;
@@ -66,8 +67,8 @@ where
             return Err("No challenges provided.".into());
         }
 
-        // Initialise vector of proven keys.
-        let mut proven_keys = Vec::new();
+        // Initialise vector of proven keys. We use a `BTreeSet` to ensure that the keys are unique.
+        let mut proven_keys = BTreeSet::new();
         let mut challenges_iter = challenges.iter();
 
         // Iterate over the challenges and check if there is a pair of consecutive
@@ -119,7 +120,7 @@ where
                             return Err("Failed to convert proven key.".into());
                         }
                     };
-                    proven_keys.push(next_key);
+                    proven_keys.insert(next_key);
                     continue;
                 }
                 // Scenario 2 (valid): `prev_leaf` and `next_leaf` are consecutive leaves.
@@ -134,7 +135,7 @@ where
                             return Err("Failed to convert proven key.".into());
                         }
                     };
-                    proven_keys.push(prev_key);
+                    proven_keys.insert(prev_key);
 
                     let next_key = match next_key.try_into() {
                         Ok(key) => key,
@@ -142,7 +143,7 @@ where
                             return Err("Failed to convert proven key.".into());
                         }
                     };
-                    proven_keys.push(next_key);
+                    proven_keys.insert(next_key);
 
                     continue;
                 }
@@ -157,7 +158,7 @@ where
                             return Err("Failed to convert proven key.".into());
                         }
                     };
-                    proven_keys.push(prev_key);
+                    proven_keys.insert(prev_key);
 
                     continue;
                 }
@@ -170,7 +171,7 @@ where
                             return Err("Failed to convert proven key.".into());
                         }
                     };
-                    proven_keys.push(prev_key);
+                    proven_keys.insert(prev_key);
 
                     continue;
                 }
@@ -200,6 +201,6 @@ where
             }
         }
 
-        return Ok(proven_keys);
+        return Ok(Vec::from_iter(proven_keys));
     }
 }
