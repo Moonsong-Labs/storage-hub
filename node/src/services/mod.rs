@@ -1,6 +1,7 @@
 pub mod blockchain;
 pub mod file_transfer;
 
+use sp_core::H256;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -14,10 +15,7 @@ use storage_hub_infra::{
 
 use crate::tasks::bsp_volunteer_mock::BspVolunteerMockTask;
 
-use self::{
-    blockchain::{events::NewStorageRequest, handler::BlockchainService},
-    file_transfer::FileTransferService,
-};
+use self::{blockchain::handler::BlockchainService, file_transfer::FileTransferService};
 
 pub trait StorageHubHandlerConfig: Send + 'static {
     type FileStorage: FileStorage + Send + Sync;
@@ -64,16 +62,14 @@ impl<S: StorageHubHandlerConfig> StorageHubHandler<S> {
     /// Add file to the forest storage.
     pub async fn _add_file_to_forest<T: StorageHubHandlerConfig>(
         &self,
-        event: NewStorageRequest,
+        who: String,
+        location: Vec<u8>,
+        size: u64,
+        fingerprint: H256,
     ) -> anyhow::Result<Vec<u8>> {
         let mut forest_storage = self.forest_storage.write().await;
 
-        let metadata = Metadata::new(
-            event.who.to_string(),
-            event.location.to_vec(),
-            event.size as u64,
-            event.fingerprint,
-        );
+        let metadata = Metadata::new(who, location, size, fingerprint);
 
         let metadata_serialized = bincode::serialize(&metadata)?;
 

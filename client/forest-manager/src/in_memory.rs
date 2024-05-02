@@ -1,4 +1,5 @@
 use hash_db::Hasher;
+use log::warn;
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::TrieDBMutBuilder;
 
@@ -6,7 +7,10 @@ use common::types::HashT;
 use storage_hub_infra::types::{ForestProof, Metadata};
 
 use crate::{
-    prove::prove, traits::ForestStorage, types::ForestStorageErrors, utils::serialize_value,
+    prove::prove,
+    traits::ForestStorage,
+    types::{ForestStorageErrors, RawKey},
+    utils::{deserialize_value, serialize_value},
 };
 
 pub struct InMemoryForestStorage<T: TrieLayout + 'static> {
@@ -23,57 +27,27 @@ impl<T: TrieLayout> InMemoryForestStorage<T> {
     }
 }
 
-pub struct RawKey<T> {
-    key: Vec<u8>,
-    _phantom: std::marker::PhantomData<T>,
-}
-
-impl<T> Clone for RawKey<T> {
-    fn clone(&self) -> Self {
-        Self {
-            key: self.key.clone(),
-            _phantom: Default::default(),
-        }
-    }
-}
-
-impl<T> From<Vec<u8>> for RawKey<T> {
-    fn from(key: Vec<u8>) -> Self {
-        Self {
-            key,
-            _phantom: Default::default(),
-        }
-    }
-}
-
-impl<T> AsRef<[u8]> for RawKey<T> {
-    fn as_ref(&self) -> &[u8] {
-        &self.key
-    }
-}
-
 impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
     type LookupKey = HashT<T>;
     type RawKey = RawKey<T>;
     type Value = Metadata;
 
-    fn get_value(
+    fn get_file_key(
         &self,
         file_key: &Self::LookupKey,
     ) -> Result<Option<Self::Value>, ForestStorageErrors> {
         let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
 
-        let maybe_raw_metadata = trie
+        let maybe_metadata = trie
             .get(file_key.as_ref())
-            .map_err(|_| ForestStorageErrors::FailedToGetFileKey)?;
-        match maybe_raw_metadata {
-            Some(raw_metadata) => {
-                let metadata: Self::Value = bincode::deserialize(&raw_metadata)
-                    .map_err(|_| ForestStorageErrors::FailedToDeserializeValue)?;
-                Ok(Some(metadata))
-            }
-            None => Ok(None),
-        }
+            .map_err(|e| {
+                warn!(target: "trie", "Failed to get file key: {:?}", e);
+                ForestStorageErrors::FailedToGetFileKey
+            })?
+            .map(|raw_metadata| deserialize_value(&raw_metadata))
+            .transpose()?;
+
+        Ok(maybe_metadata)
     }
 
     fn generate_proof(
@@ -95,7 +69,7 @@ impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
             .map(|file_key| prove::<T, Self>(&trie, file_key))
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Drop the `trie_recorder` to release the `recorder`
+        // Drop the `trie_recorder` to release the `self` and `recorder`
         drop(trie_recorder);
 
         // Generate proof
@@ -118,7 +92,7 @@ impl<T: TrieLayout> ForestStorage for InMemoryForestStorage<T> {
     ) -> Result<Self::LookupKey, ForestStorageErrors> {
         let file_key = <T::Hash as Hasher>::hash(&raw_file_key.key);
 
-        if self.get_value(&file_key)?.is_some() {
+        if self.get_file_key(&file_key)?.is_some() {
             return Err(ForestStorageErrors::FileKeyAlreadyExists);
         }
 

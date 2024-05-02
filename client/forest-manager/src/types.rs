@@ -46,6 +46,8 @@ pub enum ForestStorageErrors {
     FailedToInsertFileKey,
     /// Failed to parse root.
     FailedToParseRoot,
+    /// Failed to read storage.
+    FailedToReadStorage,
     /// Failed to deserialize value.
     FailedToDeserializeValue,
     /// Failed to serialize value.

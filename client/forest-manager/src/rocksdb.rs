@@ -3,7 +3,6 @@ use std::{io, path::PathBuf, sync::Arc};
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use kvdb_rocksdb::{Database, DatabaseConfig};
-use log::info;
 use sp_state_machine::{warn, Storage};
 use sp_trie::{
     prefixed_key, recorder::Recorder, PrefixedMemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut,
@@ -15,8 +14,12 @@ use crate::{
     prove::prove,
     traits::ForestStorage,
     types::{ForestStorageErrors, HashT, HasherOutT, RawKey},
-    utils::serialize_value,
+    utils::{deserialize_value, serialize_value},
 };
+
+mod well_known_keys {
+    pub const ROOT: &[u8] = b"forest_root";
+}
 
 pub(crate) fn other_io_error(err: String) -> io::Error {
     io::Error::new(io::ErrorKind::Other, err)
@@ -39,6 +42,7 @@ fn open_creating_rocksdb() -> io::Result<Database> {
     Ok(db)
 }
 
+/// Storage backend for RocksDB.
 struct StorageDb<Hasher> {
     pub db: Arc<dyn KeyValueDB>,
     pub _phantom: std::marker::PhantomData<Hasher>,
@@ -53,7 +57,7 @@ impl<H: Hasher> Storage<H> for StorageDb<H> {
     }
 }
 
-/// Patricia trie-based pairs storage essence.
+/// Patricia trie-based pairs storage.
 pub struct RocksDBForestStorage<T: TrieLayout> {
     storage: Arc<StorageDb<HashT<T>>>,
     // TODO: make sure this can only be accessed by a single write lock
@@ -98,43 +102,90 @@ impl<T: TrieLayout + Send + Sync> hash_db::HashDB<HashT<T>, DBValue> for RocksDB
     }
 }
 
-impl<T: TrieLayout + Send + Sync> RocksDBForestStorage<T> {
-    /// Create new trie-based backend.
-    pub fn new() -> Self {
+impl<T: TrieLayout + Send + Sync> RocksDBForestStorage<T>
+where
+    <<T as TrieLayout>::Hash as Hasher>::Out: TryFrom<Vec<u8>>,
+{
+    /// Create a new `RocksDBForestStorage` instance.
+    ///
+    /// This will open the RocksDB database and read the root hash from it.
+    /// If the root hash is not found, a new trie will be created and the root hash will be stored in the database.
+    pub fn new() -> Result<Self, ForestStorageErrors> {
         let kvdb = Arc::new(open_creating_rocksdb().expect("Failed to open RocksDB"));
         let storage: Arc<StorageDb<<T as TrieLayout>::Hash>> = Arc::new(StorageDb::<HashT<T>> {
             db: kvdb,
             _phantom: Default::default(),
         });
 
-        RocksDBForestStorage {
-            storage,
-            overlay: Default::default(),
-            root: Default::default(),
-            _phantom: Default::default(),
-        }
-    }
+        let maybe_root = storage
+            .db
+            .get(0, well_known_keys::ROOT)
+            .map_err(|e| {
+                warn!(target: "trie", "Failed to read root from DB: {}", e);
+                ForestStorageErrors::FailedToReadStorage
+            })
+            .expect("This should not fail unless something is wrong with the DB");
 
-    // TODO: automatically create a trie in RocksDB if none exists (i.e. root does not exists)
-    // TODO: create known root key to access the root hash
-    /// Create new trie and persist it to RocksDB.
-    pub fn start_forest(&mut self) {
-        let mut root = self.root.clone();
+        let rocksdb_forest_storage = match maybe_root {
+            Some(root) => {
+                let root = HasherOutT::<T>::try_from(root).map_err(|_| {
+                    warn!(target: "trie", "Failed to parse root from DB");
+                    ForestStorageErrors::FailedToParseRoot
+                })?;
 
-        let trie = TrieDBMutBuilder::<T>::new(self.as_hash_db_mut(), &mut root).build();
+                RocksDBForestStorage {
+                    storage,
+                    overlay: Default::default(),
+                    root,
+                    _phantom: Default::default(),
+                }
+            }
+            None => {
+                let mut root = HasherOutT::<T>::default();
 
-        drop(trie);
+                let mut rocksdb_forest_storage = RocksDBForestStorage {
+                    storage,
+                    overlay: Default::default(),
+                    root,
+                    _phantom: Default::default(),
+                };
 
-        self.commit();
+                // Create a new trie
+                let trie =
+                    TrieDBMutBuilder::<T>::new(rocksdb_forest_storage.as_hash_db_mut(), &mut root)
+                        .build();
 
-        self.root = root;
+                // Drop the `trie` to free `rockdb_forest_storage` and `root`.
+                drop(trie);
+
+                let mut transaction = DBTransaction::new();
+                transaction.put(0, well_known_keys::ROOT, root.as_ref());
+
+                // Add the root hash to storage at well-known key ROOT
+                rocksdb_forest_storage
+                    .storage
+                    .db
+                    .write(transaction)
+                    .expect("Failed to write to RocksDB");
+
+                rocksdb_forest_storage.root = root;
+
+                rocksdb_forest_storage
+            }
+        };
+
+        Ok(rocksdb_forest_storage)
     }
 
     /// Commit changes to the backend.
     ///
-    /// This will write the changes to RocksDB and clear the overlay.
+    /// This will write the changes including root in self to RocksDB.
+    /// The `overlay` will be cleared.
     pub fn commit(&mut self) {
-        let transaction = self.changes();
+        let mut transaction = self.changes();
+
+        // add transaction to update root
+        transaction.put(0, well_known_keys::ROOT, self.root.as_ref());
 
         self.storage
             .db
@@ -158,30 +209,31 @@ impl<T: TrieLayout + Send + Sync> RocksDBForestStorage<T> {
     }
 }
 
-impl<T: TrieLayout + Send + Sync> ForestStorage for RocksDBForestStorage<T> {
+impl<T: TrieLayout + Send + Sync> ForestStorage for RocksDBForestStorage<T>
+where
+    <<T as TrieLayout>::Hash as Hasher>::Out: TryFrom<Vec<u8>>,
+{
     type LookupKey = HasherOutT<T>;
     type RawKey = RawKey<T>;
     type Value = Metadata;
 
-    fn get_value(
+    fn get_file_key(
         &self,
         file_key: &Self::LookupKey,
     ) -> Result<Option<Self::Value>, ForestStorageErrors> {
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
 
-        let maybe_raw_metadata = trie.get(file_key.as_ref()).map_err(|e| {
-            warn!(target: "trie", "Failed to get file key: {:?}", e);
-            ForestStorageErrors::FailedToGetFileKey
-        })?;
-        match maybe_raw_metadata {
-            Some(raw_metadata) => {
-                let metadata: Self::Value = bincode::deserialize(&raw_metadata)
-                    .map_err(|_| ForestStorageErrors::FailedToDeserializeValue)?;
-                Ok(Some(metadata))
-            }
-            None => Ok(None),
-        }
+        let maybe_metadata = trie
+            .get(file_key.as_ref())
+            .map_err(|e| {
+                warn!(target: "trie", "Failed to get file key: {:?}", e);
+                ForestStorageErrors::FailedToGetFileKey
+            })?
+            .map(|raw_metadata| deserialize_value(&raw_metadata))
+            .transpose()?;
+
+        Ok(maybe_metadata)
     }
 
     fn generate_proof(
@@ -204,7 +256,7 @@ impl<T: TrieLayout + Send + Sync> ForestStorage for RocksDBForestStorage<T> {
             .map(|file_key| prove::<T, Self>(&trie, file_key))
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Drop the `trie_recorder` to release the `recorder`
+        // Drop the `trie_recorder` to release the `self` and `recorder`
         drop(trie_recorder);
 
         // Generate proof
@@ -227,7 +279,7 @@ impl<T: TrieLayout + Send + Sync> ForestStorage for RocksDBForestStorage<T> {
     ) -> Result<Self::LookupKey, ForestStorageErrors> {
         let file_key = <T::Hash as Hasher>::hash(&raw_file_key.key);
 
-        if self.get_value(&file_key)?.is_some() {
+        if self.get_file_key(&file_key)?.is_some() {
             return Err(ForestStorageErrors::FileKeyAlreadyExists);
         }
 
@@ -241,14 +293,14 @@ impl<T: TrieLayout + Send + Sync> ForestStorage for RocksDBForestStorage<T> {
         trie.insert(file_key.as_ref(), &raw_metadata)
             .map_err(|_| ForestStorageErrors::FailedToInsertFileKey)?;
 
-        // Commit the changes to disk.
-        trie.commit();
-
         // Drop trie to free `self`.
         drop(trie);
 
         // Update the root hash.
         self.root = root;
+
+        // Commit the changes to disk.
+        self.commit();
 
         Ok(file_key)
     }
@@ -262,14 +314,14 @@ impl<T: TrieLayout + Send + Sync> ForestStorage for RocksDBForestStorage<T> {
             .remove(file_key.as_ref())
             .map_err(|_| ForestStorageErrors::FailedToRemoveFileKey)?;
 
-        // Commit the changes to disk.
-        trie.commit();
-
         // Drop trie to free `self`.
         drop(trie);
 
         // Update the root hash.
         self.root = root;
+
+        // Commit the changes to disk.
+        self.commit();
 
         Ok(())
     }

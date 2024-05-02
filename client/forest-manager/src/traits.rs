@@ -26,8 +26,11 @@ pub trait ForestStorage {
     /// Value type stored in the trie leaves.
     type Value: From<Vec<u8>> + DeserializeOwned + Clone + Debug + Send;
 
-    /// Get value for a file.
-    fn get_value(&self, key: &Self::LookupKey) -> Result<Option<Self::Value>, ForestStorageErrors>;
+    /// Get file key metadata.
+    fn get_file_key(
+        &self,
+        key: &Self::LookupKey,
+    ) -> Result<Option<Self::Value>, ForestStorageErrors>;
 
     /// Generate proof for file key(s).
     fn generate_proof(

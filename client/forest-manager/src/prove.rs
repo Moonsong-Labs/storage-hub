@@ -55,32 +55,23 @@ pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
         }
         (Some((prev_key, prev_value)), Some((next_key, next_value))) => {
             // Scenario 2: Between two keys
-            let prev_leaf = Leaf {
-                key: prev_key.into(),
-                data: deserialize_value(&prev_value)?,
-            };
-            let next_leaf = Leaf {
-                key: next_key.into(),
-                data: deserialize_value(&next_value)?,
-            };
+            let prev_leaf = Leaf::new(prev_key.into(), deserialize_value(&prev_value)?);
+            let next_leaf = Leaf::new(next_key.into(), deserialize_value(&next_value)?);
+
             Ok(Proven::new_neighbour_keys(Some(prev_leaf), Some(next_leaf))
                 .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
         }
         (Some((key, value)), None) if *challenged_file_key.as_ref() > *key => {
             // Scenario 3: After the last leaf
-            let leaf = Leaf {
-                key: key.into(),
-                data: deserialize_value(&value)?,
-            };
+            let leaf = Leaf::new(key.into(), deserialize_value(&value)?);
+
             Ok(Proven::new_neighbour_keys(Some(leaf), None)
                 .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
         }
         (None, Some((key, value))) if *challenged_file_key.as_ref() < *key => {
             // Scenario 4: Before the first leaf
-            let leaf = Leaf {
-                key: key.into(),
-                data: deserialize_value(&value)?,
-            };
+            let leaf = Leaf::new(key.into(), deserialize_value(&value)?);
+
             Ok(Proven::new_neighbour_keys(None, Some(leaf))
                 .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
         }

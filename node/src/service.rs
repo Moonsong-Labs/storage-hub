@@ -385,13 +385,10 @@ async fn start_dev_impl(
             InMemoryFileStorage::<LayoutV1<RefHasher>>::new(),
         ));
 
-        // TODO: Do the setup in a function.
-        let rocksdb_storage = RocksDBForestStorage::<LayoutV1<RefHasher>>::new();
-
-        let forest_storage = Arc::new(RwLock::new(rocksdb_storage));
-
-        // TODO: This should be called automatically by the forest storage if there is no root at a known key
-        forest_storage.write().await.start_forest();
+        let forest_storage = Arc::new(RwLock::new(
+            RocksDBForestStorage::<LayoutV1<RefHasher>>::new()
+                .expect("Failed to create RocksDBForestStorage"),
+        ));
 
         struct StorageHubConfig {}
 

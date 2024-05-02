@@ -64,6 +64,12 @@ pub struct Leaf<K, D: Debug> {
     pub data: D,
 }
 
+impl<K, D: Debug> Leaf<K, D> {
+    pub fn new(key: K, data: D) -> Self {
+        Self { key, data }
+    }
+}
+
 /// Proving either the exact key or the neighbour keys of the challenged key.
 pub enum Proven<K, D: Debug> {
     ExactKey(Leaf<K, D>),
