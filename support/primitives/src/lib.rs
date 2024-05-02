@@ -1,8 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::sp_runtime::DispatchError;
-use scale_info::prelude::vec::Vec;
 use sp_core::Hasher;
+use sp_std::vec::Vec;
 use sp_trie::{CompactProof, LayoutV1, TrieDBBuilder};
 use storage_hub_traits::CommitmentVerifier;
 use trie_db::TrieIterator;

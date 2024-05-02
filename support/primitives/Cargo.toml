@@ -24,6 +24,7 @@ storage-hub-traits = { workspace = true }
 # Substrate
 sp-core = { workspace = true }
 sp-trie = { workspace = true }
+sp-std = { workspace = true }
 
 trie-db = { workspace = true }
 
@@ -55,9 +56,10 @@ std = [
     "sp-core/std",
     "sp-io/std",
     "sp-runtime/std",
-    # "sp-trie/std",
+    "sp-std/std",
+    "sp-trie/std",
     "storage-hub-traits/std",
-    # "trie-db/std",
+    "trie-db/std",
 ]
 try-runtime = [
     "frame-support/try-runtime",
