@@ -114,12 +114,10 @@ where
                 // Scenario 1 (valid): `next_leaf` is the challenged leaf which is included in the proof.
                 // The challenge is the leaf itself (i.e. the challenge exists in the trie).
                 (_, Some((next_key, _))) if next_key == challenge.as_ref().to_vec() => {
-                    let next_key = match next_key.try_into() {
-                        Ok(key) => key,
-                        Err(_) => {
-                            return Err("Failed to convert proven key.".into());
-                        }
-                    };
+                    let next_key = next_key
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
+
                     proven_keys.insert(next_key);
                     continue;
                 }
@@ -129,20 +127,16 @@ where
                     if prev_key < challenge.as_ref().to_vec()
                         && challenge.as_ref().to_vec() < next_key =>
                 {
-                    let prev_key = match prev_key.try_into() {
-                        Ok(key) => key,
-                        Err(_) => {
-                            return Err("Failed to convert proven key.".into());
-                        }
-                    };
+                    let prev_key = prev_key
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
+
                     proven_keys.insert(prev_key);
 
-                    let next_key = match next_key.try_into() {
-                        Ok(key) => key,
-                        Err(_) => {
-                            return Err("Failed to convert proven key.".into());
-                        }
-                    };
+                    let next_key = next_key
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
+
                     proven_keys.insert(next_key);
 
                     continue;
@@ -152,12 +146,10 @@ where
                 (Some((prev_key, _)), Some((next_key, _)))
                     if prev_key == next_key && trie_de_iter.next_back().is_none() =>
                 {
-                    let prev_key = match prev_key.try_into() {
-                        Ok(key) => key,
-                        Err(_) => {
-                            return Err("Failed to convert proven key.".into());
-                        }
-                    };
+                    let prev_key = prev_key
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
+
                     proven_keys.insert(prev_key);
 
                     continue;
@@ -165,12 +157,11 @@ where
                 // Scenario 4 (valid): `prev_leaf` is the last leaf since `next_leaf` is `None`.
                 // The challenge is after the last leaf (i.e. the challenge does not exist in the trie).
                 (Some(prev_leaf), None) => {
-                    let prev_key = match prev_leaf.0.try_into() {
-                        Ok(key) => key,
-                        Err(_) => {
-                            return Err("Failed to convert proven key.".into());
-                        }
-                    };
+                    let prev_key = prev_leaf
+                        .0
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
+
                     proven_keys.insert(prev_key);
 
                     continue;
