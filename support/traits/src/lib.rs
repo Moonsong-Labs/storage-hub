@@ -6,7 +6,7 @@ use frame_support::pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Me
 use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
 use frame_support::traits::fungible;
 use frame_support::Parameter;
-use scale_info::prelude::fmt::Debug;
+use scale_info::prelude::{fmt::Debug, vec::Vec};
 use sp_core::Get;
 use sp_runtime::traits::AtLeast32BitUnsigned;
 use sp_runtime::{BoundedVec, DispatchError};
@@ -235,9 +235,12 @@ pub trait CommitmentVerifier {
     type Key: Debug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
 
     /// Verify a proof based on a commitment and a set of challenges.
+    ///
+    /// The function returns a vector of keys that are verified by the proof, or an error if the proof
+    /// is invalid.
     fn verify_proof(
         commitment: &Self::Key,
         challenges: &[Self::Key],
         proof: &Self::Proof,
-    ) -> DispatchResult;
+    ) -> Result<Vec<Self::Key>, DispatchError>;
 }

@@ -46,9 +46,10 @@ use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
+use scale_info::prelude::vec::Vec;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, H256};
-use sp_runtime::{AccountId32, DispatchResult, FixedU128, Perbill};
+use sp_runtime::{AccountId32, DispatchError, FixedU128, Perbill};
 use sp_version::RuntimeVersion;
 use storage_hub_traits::CommitmentVerifier;
 use xcm::latest::prelude::BodyId;
@@ -430,11 +431,11 @@ impl CommitmentVerifier for ProofTrieVerifier {
 
     fn verify_proof(
         _root: &Self::Key,
-        _challenges: &[Self::Key],
+        challenges: &[Self::Key],
         proof: &CompactProof,
-    ) -> DispatchResult {
+    ) -> Result<Vec<Self::Key>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            Ok(())
+            Ok(challenges.to_vec())
         } else {
             Err("Proof is empty".into())
         }

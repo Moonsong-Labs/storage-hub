@@ -256,11 +256,11 @@ fn commitment_verifier_challenge_exactly_first_key_success() {
         .to_compact_proof::<RefHasher>(root)
         .expect("Failed to create compact proof from recorder");
 
-    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
-        &root,
-        &[*challenge_key],
-        &proof
-    ));
+    // Verify proof
+    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &[*challenge_key], &proof)
+        .expect("Failed to verify proof");
+
+    assert_eq!(proof_keys, vec![*challenge_key]);
 }
 
 #[test]
