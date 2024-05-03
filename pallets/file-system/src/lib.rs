@@ -287,6 +287,8 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             multiaddresses: MultiAddresses<T>,
+            owner: T::AccountId,
+            size: StorageData<T>,
         },
         /// Notifies that a BSP confirmed storing a file.
         BspConfirmedStoring {
@@ -444,12 +446,20 @@ pub mod pallet {
             let multiaddresses =
                 Self::do_bsp_volunteer(who.clone(), location.clone(), fingerprint)?;
 
+            let request =
+                StorageRequests::<T>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
+
+            let owner = request.owner;
+            let size = request.size;
+
             // Emit new BSP volunteer event.
             Self::deposit_event(Event::AcceptedBspVolunteer {
                 who,
+                multiaddresses,
                 location,
                 fingerprint,
-                multiaddresses,
+                owner,
+                size,
             });
 
             Ok(())

@@ -105,7 +105,7 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
 
         Ok(FileProof {
             proven: Leaf {
-                key: (*chunk_id).clone(),
+                key: (*chunk_id),
                 data: chunk,
             },
             proof: proof.into(),
@@ -136,10 +136,10 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
 
         let trie = TrieDBBuilder::<T>::new(&file_data.memdb, &file_data.root).build();
 
-        Ok(trie
+        trie
             .get(&chunk_id.to_be_bytes())
             .map_err(|_| FileStorageError::FailedToGetFileChunk)?
-            .ok_or(FileStorageError::FileChunkDoesNotExist)?)
+            .ok_or(FileStorageError::FileChunkDoesNotExist)
     }
 
     fn write_chunk(

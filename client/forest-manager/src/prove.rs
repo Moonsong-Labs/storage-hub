@@ -157,7 +157,7 @@ mod tests {
                     .insert(file.0.as_ref(), file.1.as_ref())
                     .unwrap();
 
-                file_keys.push(file.0.clone());
+                file_keys.push(file.0);
             }
         }
         (memdb, root, file_keys)

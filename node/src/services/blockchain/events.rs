@@ -36,10 +36,12 @@ impl EventBusMessage for NewStorageRequest {}
 // TODO: use proper types
 #[derive(Debug, Clone)]
 pub struct AcceptedBspVolunteer {
-    pub who: String,
-    pub location: String,
-    pub fingerprint: String,
+    pub who: AccountId32,
+    pub location: FileLocation,
+    pub fingerprint: H256,
     pub multiaddresses: Vec<String>,
+    pub owner: String,
+    pub size: StorageData,
 }
 
 impl EventBusMessage for AcceptedBspVolunteer {}
