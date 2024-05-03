@@ -40,7 +40,7 @@ pub struct AcceptedBspVolunteer {
     pub location: FileLocation,
     pub fingerprint: H256,
     pub multiaddresses: Vec<String>,
-    pub owner: String,
+    pub owner: AccountId32,
     pub size: StorageData,
 }
 
