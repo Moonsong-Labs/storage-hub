@@ -59,9 +59,9 @@ pub enum ProviderType {
 #[derive(ValueEnum, Clone, Debug)]
 pub enum StorageLayer {
     /// RocksDB
-    RocksDB,
+    Rocksdb,
     /// In Memory
-    InMemory,
+    Memory,
 }
 
 #[derive(Debug, Parser)]

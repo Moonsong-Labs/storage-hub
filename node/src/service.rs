@@ -235,7 +235,7 @@ async fn start_storage_provider(
 
     // Initialise the StorageHubHandler, for tasks to have access to the services.
     match provider_options.storage_layer {
-        StorageLayer::InMemory => {
+        StorageLayer::Memory => {
             let sh_handler = InMemoryStorageHubConfig::initialize(
                 task_spawner,
                 file_transfer_service_handle,
@@ -244,7 +244,7 @@ async fn start_storage_provider(
 
             start_provider_tasks(provider_options, sh_handler);
         }
-        StorageLayer::RocksDB => {
+        StorageLayer::Rocksdb => {
             let sh_handler = RocksDBStorageHubConfig::initialize(
                 task_spawner,
                 file_transfer_service_handle,
