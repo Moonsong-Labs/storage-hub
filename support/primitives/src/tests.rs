@@ -256,8 +256,9 @@ fn commitment_verifier_challenge_exactly_first_key_success() {
         .expect("Failed to create compact proof from recorder");
 
     // Verify proof
-    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &[*challenge_key], &proof)
-        .expect("Failed to verify proof");
+    let proof_keys =
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[*challenge_key], &proof)
+            .expect("Failed to verify proof");
 
     assert_eq!(proof_keys, vec![*challenge_key]);
 }
@@ -308,8 +309,9 @@ fn commitment_verifier_challenge_key_in_between_success() {
         .expect("Failed to create compact proof from recorder");
 
     // Verify proof
-    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &[challenge_key], &proof)
-        .expect("Failed to verify proof");
+    let proof_keys =
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[challenge_key], &proof)
+            .expect("Failed to verify proof");
 
     assert_eq!(proof_keys, vec![leaf_keys[0].clone(), leaf_keys[1].clone()]);
 }
@@ -360,8 +362,9 @@ fn commitment_verifier_challenge_key_before_first_key_success() {
         .expect("Failed to create compact proof from recorder");
 
     // Verify proof
-    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &[challenge_key], &proof)
-        .expect("Failed to verify proof");
+    let proof_keys =
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[challenge_key], &proof)
+            .expect("Failed to verify proof");
 
     assert_eq!(proof_keys, vec![leaf_keys[0].clone()]);
 }
@@ -409,8 +412,9 @@ fn commitment_verifier_challenge_key_after_last_key_success() {
         .expect("Failed to create compact proof from recorder");
 
     // Verify proof
-    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &[challenge_key], &proof)
-        .expect("Failed to verify proof");
+    let proof_keys =
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[challenge_key], &proof)
+            .expect("Failed to verify proof");
 
     assert_eq!(proof_keys, vec![*largest_key]);
 }
@@ -450,8 +454,9 @@ fn commitment_verifier_multiple_exact_challenge_keys_success() {
         .expect("Failed to create compact proof from recorder");
 
     // Verify proof
-    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &challenge_keys, &proof)
-        .expect("Failed to verify proof");
+    let proof_keys =
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &challenge_keys, &proof)
+            .expect("Failed to verify proof");
 
     assert_eq!(proof_keys, challenge_keys);
 }
@@ -499,8 +504,9 @@ fn commitment_verifier_multiple_in_between_challenge_keys_success() {
         .expect("Failed to create compact proof from recorder");
 
     // Verify proof
-    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &challenge_keys, &proof)
-        .expect("Failed to verify proof");
+    let proof_keys =
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &challenge_keys, &proof)
+            .expect("Failed to verify proof");
 
     assert_eq!(
         proof_keys,
@@ -551,8 +557,9 @@ fn commitment_verifier_multiple_in_between_challenge_keys_starting_before_first_
         .expect("Failed to create compact proof from recorder");
 
     // Verify proof
-    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &challenge_keys, &proof)
-        .expect("Failed to verify proof");
+    let proof_keys =
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &challenge_keys, &proof)
+            .expect("Failed to verify proof");
 
     assert_eq!(proof_keys, [leaf_keys[0], leaf_keys[1], leaf_keys[2]]);
 }
@@ -601,8 +608,9 @@ fn commitment_verifier_multiple_in_between_challenge_keys_and_one_after_last_key
         .expect("Failed to create compact proof from recorder");
 
     // Verify proof
-    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &challenge_keys, &proof)
-        .expect("Failed to verify proof");
+    let proof_keys =
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &challenge_keys, &proof)
+            .expect("Failed to verify proof");
 
     assert_eq!(
         proof_keys,
@@ -661,8 +669,9 @@ fn commitment_verifier_multiple_challenges_before_single_key_trie_success() {
         .expect("Failed to create compact proof from recorder");
 
     // Verify proof
-    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &challenge_keys, &proof)
-        .expect("Failed to verify proof");
+    let proof_keys =
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &challenge_keys, &proof)
+            .expect("Failed to verify proof");
 
     assert_eq!(proof_keys, [leaf_keys[0]]);
 }
@@ -712,8 +721,9 @@ fn commitment_verifier_multiple_challenges_after_single_key_trie_success() {
         .expect("Failed to create compact proof from recorder");
 
     // Verify proof
-    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &challenge_keys, &proof)
-        .expect("Failed to verify proof");
+    let proof_keys =
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &challenge_keys, &proof)
+            .expect("Failed to verify proof");
 
     assert_eq!(proof_keys, [leaf_keys[0]]);
 }
@@ -761,8 +771,9 @@ fn commitment_verifier_multiple_challenges_single_key_trie_success() {
         .expect("Failed to create compact proof from recorder");
 
     // Verify proof
-    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &challenge_keys, &proof)
-        .expect("Failed to verify proof");
+    let proof_keys =
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &challenge_keys, &proof)
+            .expect("Failed to verify proof");
 
     assert_eq!(proof_keys, [leaf_keys[0]]);
 }
@@ -782,7 +793,11 @@ fn commitment_verifier_empty_proof_and_root_failure() {
     let empty_root = Default::default();
 
     assert_eq!(
-        TrieVerifier::<RefHasher>::verify_proof(&empty_root, &[*challenge_key], &empty_proof),
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(
+            &empty_root,
+            &[*challenge_key],
+            &empty_proof
+        ),
         Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
     );
 }
@@ -820,7 +835,7 @@ fn commitment_verifier_invalid_root_failure() {
     let invalid_root = Default::default();
 
     assert_eq!(
-        TrieVerifier::<RefHasher>::verify_proof(&invalid_root, &[*challenge_key], &proof),
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&invalid_root, &[*challenge_key], &proof),
         Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
     );
 }
@@ -859,7 +874,7 @@ fn commitment_verifier_invalid_proof_failure() {
     proof.encoded_nodes[0] = vec![0; 32];
 
     assert_eq!(
-        TrieVerifier::<RefHasher>::verify_proof(&root, &[*challenge_key], &proof),
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[*challenge_key], &proof),
         Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
     );
 }
@@ -892,7 +907,7 @@ fn commitment_verifier_empty_proof_failure() {
     };
 
     assert_eq!(
-        TrieVerifier::<RefHasher>::verify_proof(&root, &[*challenge_key], &proof),
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[*challenge_key], &proof),
         Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
     );
 }
@@ -924,7 +939,7 @@ fn commitment_verifier_no_challenges_failure() {
         .expect("Failed to create compact proof from recorder");
 
     assert_eq!(
-        TrieVerifier::<RefHasher>::verify_proof(&root, &[], &proof),
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[], &proof),
         Err("No challenges provided.".into())
     );
 }
@@ -958,7 +973,7 @@ fn commitment_verifier_no_leaves_in_proof_failure() {
         .expect("Failed to create compact proof from recorder");
 
     assert_eq!(
-        TrieVerifier::<RefHasher>::verify_proof(&root, &[*challenge_key], &proof),
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[*challenge_key], &proof),
         Err("Failed to seek challenged key.".into())
     );
 }
@@ -995,7 +1010,7 @@ fn commitment_verifier_wrong_proof_answer_to_challenge_failure() {
         .expect("Failed to create compact proof from recorder");
 
     assert_eq!(
-        TrieVerifier::<RefHasher>::verify_proof(&root, &[*challenge_key], &proof),
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[*challenge_key], &proof),
         Err("Failed to seek challenged key.".into())
     );
 }
@@ -1040,7 +1055,7 @@ fn commitment_verifier_wrong_proof_next_and_prev_when_should_be_exact_failure() 
         .expect("Failed to create compact proof from recorder");
 
     assert_eq!(
-        TrieVerifier::<RefHasher>::verify_proof(&root, &[challenge_key], &proof),
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[challenge_key], &proof),
         Err("Failed to seek challenged key.".into())
     );
 }
@@ -1078,7 +1093,7 @@ fn commitment_verifier_wrong_proof_only_provide_prev_failure() {
         .expect("Failed to create compact proof from recorder");
 
     assert_eq!(
-        TrieVerifier::<RefHasher>::verify_proof(&root, &[challenge_key], &proof),
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[challenge_key], &proof),
         Err("Failed to get next leaf.".into())
     );
 }
@@ -1116,7 +1131,7 @@ fn commitment_verifier_wrong_proof_only_provide_next_failure() {
         .expect("Failed to create compact proof from recorder");
 
     assert_eq!(
-        TrieVerifier::<RefHasher>::verify_proof(&root, &[challenge_key], &proof),
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[challenge_key], &proof),
         Err("Failed to get previous leaf.".into())
     );
 }
@@ -1162,7 +1177,7 @@ fn commitment_verifier_wrong_proof_skip_actual_next_leaf_failure() {
         .expect("Failed to create compact proof from recorder");
 
     assert_eq!(
-        TrieVerifier::<RefHasher>::verify_proof(&root, &[challenge_key], &proof),
+        TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[challenge_key], &proof),
         Err("Failed to get next leaf.".into())
     );
 }
