@@ -1,12 +1,16 @@
 pub mod blockchain;
 pub mod file_transfer;
 
+use reference_trie::RefHasher;
 use sp_core::H256;
+use sp_trie::LayoutV1;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use file_manager::traits::FileStorage;
-use forest_manager::traits::ForestStorage;
+use file_manager::{in_memory::InMemoryFileStorage, traits::FileStorage};
+use forest_manager::{
+    in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
+};
 use storage_hub_infra::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::EventHandler,
@@ -17,9 +21,74 @@ use crate::tasks::bsp_volunteer_mock::BspVolunteerMockTask;
 
 use self::{blockchain::handler::BlockchainService, file_transfer::FileTransferService};
 
-pub trait StorageHubHandlerConfig: Send + 'static {
+pub trait StorageHubHandlerConfig: StorageHubHandlerInitializer + Send + 'static {
     type FileStorage: FileStorage + Send + Sync;
     type ForestStorage: ForestStorage + Send + Sync;
+}
+
+pub struct InMemoryStorageHubConfig {}
+
+impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
+    type FileStorage = InMemoryFileStorage<LayoutV1<RefHasher>>;
+    type ForestStorage = InMemoryForestStorage<LayoutV1<RefHasher>>;
+}
+
+impl StorageHubHandlerInitializer for InMemoryStorageHubConfig {
+    fn initialize(
+        task_spawner: TaskSpawner,
+        file_transfer: ActorHandle<FileTransferService>,
+        blockchain: ActorHandle<BlockchainService>,
+    ) -> StorageHubHandler<Self> {
+        StorageHubHandler::new(
+            task_spawner,
+            file_transfer,
+            blockchain,
+            Arc::new(RwLock::new(
+                InMemoryFileStorage::<LayoutV1<RefHasher>>::new(),
+            )),
+            Arc::new(RwLock::new(
+                InMemoryForestStorage::<LayoutV1<RefHasher>>::new(),
+            )),
+        )
+    }
+}
+
+pub struct RocksDBStorageHubConfig {}
+
+impl StorageHubHandlerConfig for RocksDBStorageHubConfig {
+    type FileStorage = InMemoryFileStorage<LayoutV1<RefHasher>>;
+    type ForestStorage = RocksDBForestStorage<LayoutV1<RefHasher>>;
+}
+
+impl StorageHubHandlerInitializer for RocksDBStorageHubConfig {
+    fn initialize(
+        task_spawner: TaskSpawner,
+        file_transfer: ActorHandle<FileTransferService>,
+        blockchain: ActorHandle<BlockchainService>,
+    ) -> StorageHubHandler<Self> {
+        StorageHubHandler::new(
+            task_spawner,
+            file_transfer,
+            blockchain,
+            Arc::new(RwLock::new(
+                InMemoryFileStorage::<LayoutV1<RefHasher>>::new(),
+            )),
+            Arc::new(RwLock::new(
+                RocksDBForestStorage::<LayoutV1<RefHasher>>::new()
+                    .expect("Failed to create RocksDB"),
+            )),
+        )
+    }
+}
+
+pub trait StorageHubHandlerInitializer {
+    fn initialize(
+        task_spawner: TaskSpawner,
+        file_transfer: ActorHandle<FileTransferService>,
+        blockchain: ActorHandle<BlockchainService>,
+    ) -> StorageHubHandler<Self>
+    where
+        Self: Sized + StorageHubHandlerConfig;
 }
 
 pub struct StorageHubHandler<S: StorageHubHandlerConfig> {

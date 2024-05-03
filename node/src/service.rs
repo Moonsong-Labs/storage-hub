@@ -6,15 +6,12 @@ use std::{sync::Arc, time::Duration};
 use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
-use file_manager::in_memory::InMemoryFileStorage;
-use forest_manager::{in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage};
+
 use futures::{Stream, StreamExt};
 use polkadot_primitives::{HeadData, ValidationCode};
-use reference_trie::RefHasher;
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
-use sp_trie::LayoutV1;
 use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
 use storage_hub_runtime::{
@@ -52,9 +49,14 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::traits::Block as BlockT;
 use substrate_prometheus_endpoint::Registry;
-use tokio::sync::RwLock;
 
-use crate::services::file_transfer::configure_file_transfer_network;
+use crate::{
+    cli::StorageLayer,
+    services::{
+        file_transfer::configure_file_transfer_network, InMemoryStorageHubConfig,
+        RocksDBStorageHubConfig, StorageHubHandlerInitializer,
+    },
+};
 use crate::{
     cli::{self, ProviderType},
     command::ProviderOptions,
@@ -231,28 +233,36 @@ async fn start_storage_provider(
     )
     .await;
 
-    let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
-    let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
-
-    struct InMemoryStorageHubConfig {}
-
-    impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
-        type FileStorage = InMemoryFileStorage<LayoutV1<RefHasher>>;
-        type ForestStorage = InMemoryForestStorage<LayoutV1<RefHasher>>;
-    }
-
     // Initialise the StorageHubHandler, for tasks to have access to the services.
-    let sh_handler = StorageHubHandler::<InMemoryStorageHubConfig>::new(
-        task_spawner,
-        file_transfer_service_handle,
-        blockchain_service_handle,
-        file_storage,
-        forest_storage,
-    );
+    match provider_options.storage_layer {
+        StorageLayer::InMemory => {
+            let sh_handler = InMemoryStorageHubConfig::initialize(
+                task_spawner,
+                file_transfer_service_handle,
+                blockchain_service_handle,
+            );
 
+            start_provider_tasks(provider_options, sh_handler);
+        }
+        StorageLayer::RocksDB => {
+            let sh_handler = RocksDBStorageHubConfig::initialize(
+                task_spawner,
+                file_transfer_service_handle,
+                blockchain_service_handle,
+            );
+
+            start_provider_tasks(provider_options, sh_handler);
+        }
+    };
+}
+
+fn start_provider_tasks<SHC: StorageHubHandlerConfig>(
+    provider_options: ProviderOptions,
+    storage_hub_handler: StorageHubHandler<SHC>,
+) {
     // Starting the tasks according to the provider type.
     match provider_options.provider_type {
-        ProviderType::Bsp => sh_handler.start_bsp_tasks(),
+        ProviderType::Bsp => storage_hub_handler.start_bsp_tasks(),
         _ => {}
     }
 }
@@ -433,37 +443,6 @@ async fn start_dev_impl(
             file_transfer_request_receiver,
         )
         .await;
-
-        let file_storage = Arc::new(RwLock::new(
-            InMemoryFileStorage::<LayoutV1<RefHasher>>::new(),
-        ));
-
-        let forest_storage = Arc::new(RwLock::new(
-            RocksDBForestStorage::<LayoutV1<RefHasher>>::new()
-                .expect("Failed to create RocksDBForestStorage"),
-        ));
-
-        struct StorageHubConfig {}
-
-        impl StorageHubHandlerConfig for StorageHubConfig {
-            type FileStorage = InMemoryFileStorage<LayoutV1<RefHasher>>;
-            type ForestStorage = RocksDBForestStorage<LayoutV1<RefHasher>>;
-        }
-
-        // Initialise the StorageHubHandler, for tasks to have access to the services.
-        let sh_handler = StorageHubHandler::<StorageHubConfig>::new(
-            task_spawner,
-            file_transfer_service_handle,
-            blockchain_service_handle,
-            file_storage,
-            forest_storage,
-        );
-
-        // Starting the tasks according to the provider type.
-        match provider_options.provider_type {
-            ProviderType::Bsp => sh_handler.start_bsp_tasks(),
-            _ => {}
-        }
     }
 
     if let Some(hwbench) = hwbench {
