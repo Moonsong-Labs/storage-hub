@@ -11,20 +11,20 @@ mod tests;
 
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment
 /// is a Merkle Patricia Trie root hash.
-pub struct TrieVerifier<L: TrieLayout>
+pub struct TrieVerifier<T: TrieLayout>
 where
-    <<L as TrieLayout>::Hash as sp_core::Hasher>::Out: TryFrom<Vec<u8>>,
+    <T::Hash as sp_core::Hasher>::Out: TryFrom<Vec<u8>>,
 {
-    pub _phantom: core::marker::PhantomData<L>,
+    pub _phantom: core::marker::PhantomData<T>,
 }
 
 /// Implement the `CommitmentVerifier` trait for the `TrieVerifier` struct.
-impl<L: TrieLayout> CommitmentVerifier for TrieVerifier<L>
+impl<T: TrieLayout> CommitmentVerifier for TrieVerifier<T>
 where
-    <<L as TrieLayout>::Hash as sp_core::Hasher>::Out: TryFrom<Vec<u8>>,
+    <T::Hash as sp_core::Hasher>::Out: TryFrom<Vec<u8>>,
 {
     type Proof = CompactProof;
-    type Key = <<L as TrieLayout>::Hash as sp_core::Hasher>::Out;
+    type Key = <T::Hash as sp_core::Hasher>::Out;
 
     /// Verifies a proof against a root (i.e. commitment) and a set of challenges.
     ///
@@ -39,7 +39,7 @@ where
             "Failed to convert proof to memory DB, root doesn't match with expected."
         })?;
 
-        let trie = TrieDBBuilder::<L>::new(&memdb, &root).build();
+        let trie = TrieDBBuilder::<T>::new(&memdb, &root).build();
 
         // `TrieDBKeyDoubleEndedIterator` should always yield a `None` or `Some(leaf)` with a value.
         // `Some(leaf)` yields a `Result` and could therefore fail, so we still have to check it.
