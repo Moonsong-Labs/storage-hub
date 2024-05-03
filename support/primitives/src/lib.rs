@@ -1,10 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::sp_runtime::DispatchError;
-use sp_core::Hasher;
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec::Vec;
-use sp_trie::{CompactProof, LayoutV1, TrieDBBuilder};
+use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
 use storage_hub_traits::CommitmentVerifier;
 use trie_db::TrieIterator;
 
@@ -13,20 +12,20 @@ mod tests;
 
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment
 /// is a Merkle Patricia Trie root hash.
-pub struct TrieVerifier<H: Hasher>
+pub struct TrieVerifier<L: TrieLayout>
 where
-    <H as sp_core::Hasher>::Out: TryFrom<Vec<u8>>,
+    <<L as TrieLayout>::Hash as sp_core::Hasher>::Out: TryFrom<Vec<u8>>,
 {
-    pub _phantom: core::marker::PhantomData<H>,
+    pub _phantom: core::marker::PhantomData<L>,
 }
 
 /// Implement the `CommitmentVerifier` trait for the `TrieVerifier` struct.
-impl<H: Hasher> CommitmentVerifier for TrieVerifier<H>
+impl<L: TrieLayout> CommitmentVerifier for TrieVerifier<L>
 where
-    <H as sp_core::Hasher>::Out: TryFrom<Vec<u8>>,
+    <<L as TrieLayout>::Hash as sp_core::Hasher>::Out: TryFrom<Vec<u8>>,
 {
     type Proof = CompactProof;
-    type Key = H::Out;
+    type Key = <<L as TrieLayout>::Hash as sp_core::Hasher>::Out;
 
     /// Verifies a proof against a root (i.e. commitment) and a set of challenges.
     ///
@@ -41,7 +40,7 @@ where
             "Failed to convert proof to memory DB, root doesn't match with expected."
         })?;
 
-        let trie = TrieDBBuilder::<LayoutV1<H>>::new(&memdb, &root).build();
+        let trie = TrieDBBuilder::<L>::new(&memdb, &root).build();
 
         // `TrieDBKeyDoubleEndedIterator` should always yield a `None` or `Some(leaf)` with a value.
         // `Some(leaf)` yields a `Result` and could therefore fail, so we still have to check it.
