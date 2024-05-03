@@ -136,8 +136,7 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
 
         let trie = TrieDBBuilder::<T>::new(&file_data.memdb, &file_data.root).build();
 
-        trie
-            .get(&chunk_id.to_be_bytes())
+        trie.get(&chunk_id.to_be_bytes())
             .map_err(|_| FileStorageError::FailedToGetFileChunk)?
             .ok_or(FileStorageError::FileChunkDoesNotExist)
     }
