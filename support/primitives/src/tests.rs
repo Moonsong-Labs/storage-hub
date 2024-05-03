@@ -1,6 +1,5 @@
 use std::io::Read;
 
-use frame_support::assert_ok;
 use reference_trie::RefHasher;
 use serde::Serialize;
 use sp_trie::{
@@ -256,11 +255,11 @@ fn commitment_verifier_challenge_exactly_first_key_success() {
         .to_compact_proof::<RefHasher>(root)
         .expect("Failed to create compact proof from recorder");
 
-    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
-        &root,
-        &[*challenge_key],
-        &proof
-    ));
+    // Verify proof
+    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &[*challenge_key], &proof)
+        .expect("Failed to verify proof");
+
+    assert_eq!(proof_keys, vec![*challenge_key]);
 }
 
 #[test]
@@ -308,11 +307,11 @@ fn commitment_verifier_challenge_key_in_between_success() {
         .to_compact_proof::<RefHasher>(root)
         .expect("Failed to create compact proof from recorder");
 
-    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
-        &root,
-        &[challenge_key],
-        &proof
-    ));
+    // Verify proof
+    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &[challenge_key], &proof)
+        .expect("Failed to verify proof");
+
+    assert_eq!(proof_keys, vec![leaf_keys[0].clone(), leaf_keys[1].clone()]);
 }
 
 #[test]
@@ -360,11 +359,11 @@ fn commitment_verifier_challenge_key_before_first_key_success() {
         .to_compact_proof::<RefHasher>(root)
         .expect("Failed to create compact proof from recorder");
 
-    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
-        &root,
-        &[challenge_key],
-        &proof
-    ));
+    // Verify proof
+    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &[challenge_key], &proof)
+        .expect("Failed to verify proof");
+
+    assert_eq!(proof_keys, vec![leaf_keys[0].clone()]);
 }
 
 #[test]
@@ -409,11 +408,11 @@ fn commitment_verifier_challenge_key_after_last_key_success() {
         .to_compact_proof::<RefHasher>(root)
         .expect("Failed to create compact proof from recorder");
 
-    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
-        &root,
-        &[challenge_key],
-        &proof
-    ));
+    // Verify proof
+    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &[challenge_key], &proof)
+        .expect("Failed to verify proof");
+
+    assert_eq!(proof_keys, vec![*largest_key]);
 }
 
 #[test]
@@ -450,11 +449,11 @@ fn commitment_verifier_multiple_exact_challenge_keys_success() {
         .to_compact_proof::<RefHasher>(root)
         .expect("Failed to create compact proof from recorder");
 
-    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
-        &root,
-        &challenge_keys,
-        &proof
-    ));
+    // Verify proof
+    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &challenge_keys, &proof)
+        .expect("Failed to verify proof");
+
+    assert_eq!(proof_keys, challenge_keys);
 }
 
 #[test]
@@ -499,11 +498,14 @@ fn commitment_verifier_multiple_in_between_challenge_keys_success() {
         .to_compact_proof::<RefHasher>(root)
         .expect("Failed to create compact proof from recorder");
 
-    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
-        &root,
-        &challenge_keys,
-        &proof
-    ));
+    // Verify proof
+    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &challenge_keys, &proof)
+        .expect("Failed to verify proof");
+
+    assert_eq!(
+        proof_keys,
+        [leaf_keys[0], leaf_keys[1], leaf_keys[2], leaf_keys[3]]
+    );
 }
 
 #[test]
@@ -548,11 +550,11 @@ fn commitment_verifier_multiple_in_between_challenge_keys_starting_before_first_
         .to_compact_proof::<RefHasher>(root)
         .expect("Failed to create compact proof from recorder");
 
-    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
-        &root,
-        &challenge_keys,
-        &proof
-    ));
+    // Verify proof
+    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &challenge_keys, &proof)
+        .expect("Failed to verify proof");
+
+    assert_eq!(proof_keys, [leaf_keys[0], leaf_keys[1], leaf_keys[2]]);
 }
 
 #[test]
@@ -562,12 +564,8 @@ fn commitment_verifier_multiple_in_between_challenge_keys_and_one_after_last_key
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
     let recorder: Recorder<RefHasher> = Recorder::default();
 
-    let mut challenge_keys = [
-        leaf_keys[0],
-        leaf_keys[1],
-        leaf_keys[2],
-        *leaf_keys.iter().max().unwrap(),
-    ];
+    let largest_key = leaf_keys.iter().max().unwrap();
+    let mut challenge_keys = [leaf_keys[0], leaf_keys[1], leaf_keys[2], *largest_key];
 
     // Increment the most significant bit of every challenge key by 1.
     for key in &mut challenge_keys {
@@ -602,11 +600,20 @@ fn commitment_verifier_multiple_in_between_challenge_keys_and_one_after_last_key
         .to_compact_proof::<RefHasher>(root)
         .expect("Failed to create compact proof from recorder");
 
-    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
-        &root,
-        &challenge_keys,
-        &proof
-    ));
+    // Verify proof
+    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &challenge_keys, &proof)
+        .expect("Failed to verify proof");
+
+    assert_eq!(
+        proof_keys,
+        [
+            leaf_keys[0],
+            leaf_keys[1],
+            leaf_keys[2],
+            leaf_keys[3],
+            *largest_key
+        ]
+    );
 }
 
 #[test]
@@ -653,11 +660,11 @@ fn commitment_verifier_multiple_challenges_before_single_key_trie_success() {
         .to_compact_proof::<RefHasher>(root)
         .expect("Failed to create compact proof from recorder");
 
-    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
-        &root,
-        &challenge_keys,
-        &proof
-    ));
+    // Verify proof
+    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &challenge_keys, &proof)
+        .expect("Failed to verify proof");
+
+    assert_eq!(proof_keys, [leaf_keys[0]]);
 }
 
 #[test]
@@ -704,11 +711,11 @@ fn commitment_verifier_multiple_challenges_after_single_key_trie_success() {
         .to_compact_proof::<RefHasher>(root)
         .expect("Failed to create compact proof from recorder");
 
-    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
-        &root,
-        &challenge_keys,
-        &proof
-    ));
+    // Verify proof
+    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &challenge_keys, &proof)
+        .expect("Failed to verify proof");
+
+    assert_eq!(proof_keys, [leaf_keys[0]]);
 }
 
 #[test]
@@ -753,11 +760,11 @@ fn commitment_verifier_multiple_challenges_single_key_trie_success() {
         .to_compact_proof::<RefHasher>(root)
         .expect("Failed to create compact proof from recorder");
 
-    assert_ok!(TrieVerifier::<RefHasher>::verify_proof(
-        &root,
-        &challenge_keys,
-        &proof
-    ));
+    // Verify proof
+    let proof_keys = TrieVerifier::<RefHasher>::verify_proof(&root, &challenge_keys, &proof)
+        .expect("Failed to verify proof");
+
+    assert_eq!(proof_keys, [leaf_keys[0]]);
 }
 
 #[test]
