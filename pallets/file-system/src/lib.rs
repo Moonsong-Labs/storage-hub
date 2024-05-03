@@ -443,14 +443,8 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and register Storage Provider as BSP for file.
-            let multiaddresses =
+            let (multiaddresses, size, owner) =
                 Self::do_bsp_volunteer(who.clone(), location.clone(), fingerprint)?;
-
-            let request =
-                StorageRequests::<T>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
-
-            let owner = request.owner;
-            let size = request.size;
 
             // Emit new BSP volunteer event.
             Self::deposit_event(Event::AcceptedBspVolunteer {
