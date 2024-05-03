@@ -414,9 +414,12 @@ impl Get<AccountId32> for TreasuryAccount {
 }
 
 parameter_types! {
-    pub const ChallengeHistoryLength: BlockNumber = 10;
-    pub const StakeToChallengePeriod: Balance = 10 * UNITS;
+    pub const MaxProvidersChallengedPerBlock: u32 = 100;
+    pub const ChallengeHistoryLength: BlockNumber = 100;
+    pub const ChallengesQueueLength: u32 = 100;
+    pub const CheckpointChallengePeriod: u32 = 10;
     pub const ChallengesFee: Balance = 1 * UNITS;
+    pub const StakeToChallengePeriod: Balance = 10 * UNITS;
 }
 
 impl pallet_proofs_dealer::Config for Runtime {
@@ -430,6 +433,10 @@ impl pallet_proofs_dealer::Config for Runtime {
     // type KeyVerifier = TrieVerifier<LayoutV1<RefHasher>>;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
+    type MaxProvidersChallengedPerBlock = MaxProvidersChallengedPerBlock;
+    type ChallengeHistoryLength = ChallengeHistoryLength;
+    type ChallengesQueueLength = ChallengesQueueLength;
+    type CheckpointChallengePeriod = CheckpointChallengePeriod;
     type ChallengesFee = ChallengesFee;
     type Treasury = TreasuryAccount;
     type RandomnessProvider = Randomness;
