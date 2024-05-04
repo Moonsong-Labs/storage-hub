@@ -94,7 +94,7 @@ pub fn build_merkle_patricia_forest<T: TrieLayout>() -> (
                 .insert(file.0.as_ref(), file.1.as_ref())
                 .unwrap();
 
-            file_keys.push(file.0.clone());
+            file_keys.push(file.0);
         }
 
         println!(
@@ -172,7 +172,7 @@ pub fn build_merkle_patricia_forest_one_key<T: TrieLayout>() -> (
                 .insert(file.0.as_ref(), file.1.as_ref())
                 .unwrap();
 
-            file_keys.push(file.0.clone());
+            file_keys.push(file.0);
         }
 
         println!(
@@ -271,7 +271,7 @@ fn commitment_verifier_challenge_key_in_between_success() {
     let recorder: Recorder<RefHasher> = Recorder::default();
 
     // Challenge key is the first key with the most significant bit incremented by 1.
-    let mut challenge_key = leaf_keys[0].clone();
+    let mut challenge_key = leaf_keys[0];
     challenge_key[0] += 1;
 
     {
@@ -313,7 +313,7 @@ fn commitment_verifier_challenge_key_in_between_success() {
         TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[challenge_key], &proof)
             .expect("Failed to verify proof");
 
-    assert_eq!(proof_keys, vec![leaf_keys[0].clone(), leaf_keys[1].clone()]);
+    assert_eq!(proof_keys, vec![leaf_keys[0], leaf_keys[1]]);
 }
 
 #[test]
@@ -324,7 +324,7 @@ fn commitment_verifier_challenge_key_before_first_key_success() {
     let recorder: Recorder<RefHasher> = Recorder::default();
 
     // Challenge key is the first key with the most significant bit decremented by 1.
-    let mut challenge_key = leaf_keys[0].clone();
+    let mut challenge_key = leaf_keys[0];
     challenge_key[0] -= 1;
 
     {
@@ -366,7 +366,7 @@ fn commitment_verifier_challenge_key_before_first_key_success() {
         TrieVerifier::<LayoutV1<RefHasher>>::verify_proof(&root, &[challenge_key], &proof)
             .expect("Failed to verify proof");
 
-    assert_eq!(proof_keys, vec![leaf_keys[0].clone()]);
+    assert_eq!(proof_keys, vec![leaf_keys[0]]);
 }
 
 #[test]
@@ -379,7 +379,7 @@ fn commitment_verifier_challenge_key_after_last_key_success() {
     let largest_key = leaf_keys.iter().max().unwrap();
 
     // Challenge key is the largest key with the most significant bit incremented by 1.
-    let mut challenge_key = largest_key.clone();
+    let mut challenge_key = *largest_key;
     challenge_key[0] += 1;
 
     {
