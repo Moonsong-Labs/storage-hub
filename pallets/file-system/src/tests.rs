@@ -341,7 +341,7 @@ fn bsp_volunteer_success() {
         let bsp_account_id = AccountId32::new([2; 32]);
         let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-        let size = StorageData::<Test>::try_from(100).unwrap();
+        let size = StorageData::<Test>::try_from(4).unwrap();
         // TODO: right now we are bypassing the volunteer assignment threshold
         let fingerprint = H256::zero();
         let peer_id = BoundedVec::try_from(vec![1]).unwrap();
