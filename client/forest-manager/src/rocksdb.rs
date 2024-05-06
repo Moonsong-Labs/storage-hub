@@ -3,6 +3,7 @@ use std::{io, path::PathBuf, sync::Arc};
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use kvdb_rocksdb::{Database, DatabaseConfig};
+use log::debug;
 use sp_state_machine::{warn, Storage};
 use sp_trie::{
     prefixed_key, recorder::Recorder, PrefixedMemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut,
@@ -16,6 +17,8 @@ use crate::{
     types::{ForestStorageErrors, HashT, HasherOutT, RawKey},
     utils::{deserialize_value, serialize_value},
 };
+
+const LOG_TARGET: &str = "forest_storage";
 
 mod well_known_keys {
     pub const ROOT: &[u8] = b":root";
@@ -82,7 +85,7 @@ impl<T: TrieLayout + Send + Sync> hash_db::HashDB<HashT<T>, DBValue> for RocksDB
     fn get(&self, key: &HasherOutT<T>, prefix: Prefix) -> Option<DBValue> {
         HashDB::get(&self.overlay, key, prefix).or_else(|| {
             self.storage.get(key, prefix).unwrap_or_else(|e| {
-                warn!(target: "trie", "Failed to read from DB: {}", e);
+                warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
                 None
             })
         })
@@ -109,10 +112,8 @@ impl<T: TrieLayout + Send + Sync> RocksDBForestStorage<T>
 where
     <<T as TrieLayout>::Hash as Hasher>::Out: TryFrom<Vec<u8>>,
 {
-    /// Create a new `RocksDBForestStorage` instance.
-    ///
-    /// This will open the RocksDB database and read the root hash from it.
-    /// If the root hash is not found, a new trie will be created and the root hash will be stored in the database.
+    /// This will open the RocksDB database and read the storage [`ROOT`](`well_known_keys::ROOT`) from it.
+    /// If the root hash is not found in storage, a new trie will be created and the root hash will be stored in storage.
     pub fn new() -> Result<Self, ForestStorageErrors> {
         let kvdb = Arc::new(open_creating_rocksdb().expect("Failed to open RocksDB"));
         let storage: Arc<StorageDb<<T as TrieLayout>::Hash>> = Arc::new(StorageDb::<HashT<T>> {
@@ -123,13 +124,19 @@ where
         let maybe_root = Self::storage_root(&storage)?;
 
         let rocksdb_forest_storage = match maybe_root {
-            Some(root) => RocksDBForestStorage {
-                storage,
-                overlay: Default::default(),
-                root,
-                _phantom: Default::default(),
-            },
+            Some(root) => {
+                debug!(target: LOG_TARGET, "Found existing root in storage: {:?}\n Reusing trie", root);
+
+                RocksDBForestStorage {
+                    storage,
+                    overlay: Default::default(),
+                    root,
+                    _phantom: Default::default(),
+                }
+            }
             None => {
+                debug!(target: LOG_TARGET, "No root found in storage, creating a new trie");
+
                 let mut root = HasherOutT::<T>::default();
 
                 let mut rocksdb_forest_storage = RocksDBForestStorage {
@@ -159,6 +166,8 @@ where
 
                 rocksdb_forest_storage.root = root;
 
+                debug!(target: LOG_TARGET, "New storage root: {:?}", rocksdb_forest_storage.root);
+
                 rocksdb_forest_storage
             }
         };
@@ -176,7 +185,7 @@ where
 
         // Skip commit if the root has not changed.
         if self.root == root {
-            warn!(target: "trie", "Root has not changed, skipping commit");
+            warn!(target: LOG_TARGET, "Root has not changed, skipping commit");
             return Ok(());
         }
 
@@ -189,6 +198,8 @@ where
             .db
             .write(transaction)
             .expect("Failed to write to RocksDB");
+
+        debug!(target: LOG_TARGET, "Committed changes to storage, new root: {:?}", self.root);
 
         Ok(())
     }
@@ -213,14 +224,14 @@ where
         storage: &Arc<StorageDb<HashT<T>>>,
     ) -> Result<Option<HasherOutT<T>>, ForestStorageErrors> {
         let maybe_root = storage.db.get(0, well_known_keys::ROOT).map_err(|e| {
-            warn!(target: "trie", "Failed to read root from DB: {}", e);
+            warn!(target: LOG_TARGET, "Failed to read root from DB: {}", e);
             ForestStorageErrors::FailedToReadStorage
         })?;
 
         let root = maybe_root
             .map(|root| {
                 HasherOutT::<T>::try_from(root).map_err(|_| {
-                    warn!(target: "trie", "Failed to parse root from DB");
+                    warn!(target: LOG_TARGET, "Failed to parse root from DB");
                     ForestStorageErrors::FailedToParseRoot
                 })
             })
@@ -248,7 +259,7 @@ where
         let maybe_metadata = trie
             .get(file_key.as_ref())
             .map_err(|e| {
-                warn!(target: "trie", "Failed to get file key: {:?}", e);
+                warn!(target: LOG_TARGET, "Failed to get file key: {:?}", e);
                 ForestStorageErrors::FailedToGetFileKey
             })?
             .map(|raw_metadata| deserialize_value(&raw_metadata))
@@ -321,7 +332,7 @@ where
         self.root = root;
 
         // Commit the changes to disk.
-        self.commit();
+        self.commit()?;
 
         Ok(file_key)
     }
@@ -342,7 +353,7 @@ where
         self.root = root;
 
         // Commit the changes to disk.
-        self.commit();
+        self.commit()?;
 
         Ok(())
     }
