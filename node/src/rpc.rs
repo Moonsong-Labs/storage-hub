@@ -7,6 +7,11 @@
 
 use std::sync::Arc;
 
+use sc_consensus_manual_seal::{
+    rpc::{ManualSeal, ManualSealApiServer},
+    EngineCommand,
+};
+use sp_core::H256;
 use storage_hub_runtime::{opaque::Block, AccountId, Balance, Nonce};
 
 pub use sc_rpc::DenyUnsafe;
@@ -24,6 +29,8 @@ pub struct FullDeps<C, P> {
     pub client: Arc<C>,
     /// Transaction pool instance.
     pub pool: Arc<P>,
+    /// Manual seal command sink
+    pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<H256>>>,
     /// Whether to deny unsafe calls
     pub deny_unsafe: DenyUnsafe,
 }
@@ -51,11 +58,20 @@ where
     let FullDeps {
         client,
         pool,
+        command_sink,
         deny_unsafe,
     } = deps;
 
     io.merge(System::new(client.clone(), pool, deny_unsafe).into_rpc())?;
     io.merge(TransactionPayment::new(client).into_rpc())?;
+
+    if let Some(command_sink) = command_sink {
+        io.merge(
+            // We provide the rpc handler with the sending end of the channel to allow the rpc
+            // send EngineCommands to the background block authorship task.
+            ManualSeal::new(command_sink).into_rpc(),
+        )?;
+    };
 
     Ok(io)
 }

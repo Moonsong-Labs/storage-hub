@@ -9,10 +9,10 @@ use frame_system as system;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage, DispatchResult,
+    BuildStorage, DispatchError, DispatchResult,
 };
 use sp_trie::CompactProof;
-use storage_hub_traits::SubscribeProvidersInterface;
+use storage_hub_traits::{CommitmentVerifier, SubscribeProvidersInterface};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -131,7 +131,7 @@ impl crate::Config for Test {
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
     type MerkleHash = H256;
-    type TrieVerifier = MockVerifier;
+    type KeyVerifier = MockVerifier;
     type MaxChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
     type ChallengeHistoryLength = ConstU32<10>;
@@ -158,9 +158,20 @@ impl SubscribeProvidersInterface for MockedProvidersSubscriber {
 pub struct MockVerifier;
 
 /// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl crate::TrieVerifier for MockVerifier {
-    fn verify_proof(root: &[u8; 32], challenges: &[u8; 32], proof: &CompactProof) -> bool {
-        proof.encoded_nodes.len() > 0
+impl CommitmentVerifier for MockVerifier {
+    type Proof = CompactProof;
+    type Key = H256;
+
+    fn verify_proof(
+        _root: &Self::Key,
+        challenges: &[Self::Key],
+        proof: &CompactProof,
+    ) -> Result<Vec<Self::Key>, DispatchError> {
+        if proof.encoded_nodes.len() > 0 {
+            Ok(challenges.to_vec())
+        } else {
+            Err("Proof is empty".into())
+        }
     }
 }
 

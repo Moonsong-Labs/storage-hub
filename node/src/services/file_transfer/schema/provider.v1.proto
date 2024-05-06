@@ -8,7 +8,7 @@ package api.v1.provider;
 message Request {
 	oneof request {
 		RemoteUploadDataRequest remote_upload_data_request = 1;
-		RemoteReadRequest remote_read_request = 2;
+		RemoteDownloadDataRequest remote_download_data_request = 2;
 	}
 }
 
@@ -16,33 +16,34 @@ message Request {
 message Response {
 	oneof response {
 		RemoteUploadDataResponse remote_upload_data_response = 1;
-		RemoteReadResponse remote_read_response = 2;
+		RemoteDownloadDataResponse remote_download_data_response = 2;
 	}
 }
 
 // Remote data upload request.
 message RemoteUploadDataRequest {
 	// Location to store data.
-	string location = 2;
+	bytes file_key = 1;
 	// Data to store.
-	bytes data = 3;
+	bytes file_chunk_with_proof = 2;
 }
 
 // Remote data upload response.
 message RemoteUploadDataResponse {
-    // Location where data was stored.
-    string location = 1;
+	// Success or failure of the upload.
+	bool success = 1;
 }
 
-// Remote storage read request.
-message RemoteReadRequest {
+// Remote data download request.
+message RemoteDownloadDataRequest {
 	// Data locations to read from.
-	repeated bytes locations = 3;
+	bytes file_key = 1;
+	uint64 file_chunk_id = 2;
 }
 
-// Remote read response.
-message RemoteReadResponse {
+// Remote data download response.
+message RemoteDownloadDataResponse {
 	// Read data stored in provider. No data means that the provider
 	// couldn't retrieve the data at the requested locations.
-	repeated bytes data = 1;
+	bytes file_chunk_with_proof = 1;
 }

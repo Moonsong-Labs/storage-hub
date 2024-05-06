@@ -18,11 +18,11 @@ targets = ["x86_64-unknown-linux-gnu"]
 codec = { workspace = true }
 scale-info = { workspace = true }
 
-# Substrate
-frame-benchmarking = { workspace = true, optional = true }
+# Frame
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 
+# Substrate
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
 
@@ -35,23 +35,15 @@ sp-io = { workspace = true }
 [features]
 default = ["std"]
 runtime-benchmarks = [
-    "frame-benchmarking/runtime-benchmarks",
     "frame-support/runtime-benchmarks",
-    "frame-system/runtime-benchmarks",
     "sp-runtime/runtime-benchmarks",
 ]
 std = [
     "codec/std",
-    "frame-benchmarking?/std",
     "frame-support/std",
-    "frame-system/std",
     "scale-info/std",
     "sp-core/std",
     "sp-io/std",
     "sp-runtime/std",
 ]
-try-runtime = [
-    "frame-support/try-runtime",
-    "frame-system/try-runtime",
-    "sp-runtime/try-runtime",
-]
+try-runtime = ["frame-support/try-runtime", "sp-runtime/try-runtime"]

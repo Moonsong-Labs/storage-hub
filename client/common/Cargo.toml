@@ -1,0 +1,25 @@
+[package]
+name = "common"
+version = "0.1.0"
+description = "Common types, traits and utilities shared by other client crates."
+homepage = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
+publish = false
+
+[lib]
+
+[lints]
+workspace = true
+
+[dependencies]
+bincode = { workspace = true }
+reference-trie = { workspace = true }
+trie-db = { workspace = true }
+
+sp-core = { workspace = true }
+sp-trie = { workspace = true, default-features = true }
+
+storage-hub-infra = { workspace = true }

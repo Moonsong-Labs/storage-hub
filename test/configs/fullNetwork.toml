@@ -1,0 +1,43 @@
+[relaychain]
+chain = "rococo-local"
+default_image = "docker.io/parity/polkadot:v1.9.0"
+default_command = "polkadot"
+default_args = [
+    "--no-hardware-benchmarks",
+    "-lparachain=debug",
+    "--database=paritydb",
+]
+
+[[relaychain.node_groups]]
+count = 2
+name = "relay"
+
+[[parachains]]
+id = 2000
+
+[[parachains.collators]]
+image = "{{SH_IMAGE}}"
+command = "storage-hub-node"
+name = "sh-collator"
+args = ["--no-hardware-benchmarks", "-lparachain=debug"]
+
+[[parachains.collators]]
+name = "sh-BSP"
+validator = false
+image = "{{SH_IMAGE}}"
+command = "storage-hub-node"
+args = [
+    "--no-hardware-benchmarks",
+    "-lparachain=debug",
+    "--provider",
+    "--provider-type bsp",
+    "--seed-file ./Cargo.toml",
+]
+
+[types.Header]
+number = "u64"
+parent_hash = "Hash"
+post_state = "Hash"
+
+[settings]
+provider = "kubernetes"

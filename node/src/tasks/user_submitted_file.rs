@@ -1,10 +1,10 @@
+use std::str::FromStr;
 use crate::services::file_transfer::commands::FileTransferServiceInterface;
 use crate::tasks::AcceptedBspVolunteer;
 use crate::tasks::StorageHubHandler;
 use crate::tasks::StorageHubHandlerConfig;
-
 use log::info;
-
+use sc_network::Multiaddr;
 use sc_network::PeerId;
 use storage_hub_infra::event_bus::EventHandler;
 
@@ -41,24 +41,24 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
             event.location,
         );
 
-        let _multiaddresses = event.multiaddresses;
+        let multiaddresses = event.multiaddresses;
         let _file_location = event.location;
-        // Mocked PeerId
-        let peer_id = PeerId::random();
-        // let chunk_count = event.file_metadata.chunk_count();
-        // Mocked count:
-        let chunk_count = 100u64;
+        let peer_ids = multiaddresses.iter().map(|multiaddr| {
+            let multiaddr_str = multiaddr.split("/").last().expect("Multiaddress of Bsp should not be empty.");
+            // TODO: this won’t be necessary once we switch from `String` to `Multiaddr`.
+            let multiaddr = Multiaddr::from_str(multiaddr_str).expect("Failed to convert into Multiaddr");
+            PeerId::try_from_multiaddr(&multiaddr).expect("Multiaddr without PeerId")
+        });
 
-        for _chunk_idx in 0..chunk_count {
-            // Depends on FileStorage trait implementation
-            // let chunk = self.storage_hub_handler.file_storage.get_chunk();
-            let chunk = "Mocked Data".as_bytes();
-            let _ = self
-                .storage_hub_handler
-                .file_transfer
-                .upload_request(peer_id, chunk.into());
-        }
-
+        // let chunk = self.storage_hub_handler.file_storage.get_chunk();
+        // get chunk and proof.
+        // just iterate over every single chunk and produce proof.
+        //  query the pallet storage to get metadata
+        // need a function to query blockchain storage (should be in the blockchain service).
+        // let _ = self
+        //     .storage_hub_handler
+        //     .file_transfer
+        //     .upload_request(peer_id, chunk.into());
         Ok(())
     }
 }
