@@ -74,13 +74,19 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
             .collect::<Vec<PeerId>>();
 
         for peer_id in peer_ids {
-            // Acquire the write lock for the total duration of the file transmission.
-            let file_storage_lock = self.storage_hub_handler.file_storage.write().await;
-
             for chunk_id in 0..chunk_count {
+                // Acquire the write lock for the file storage.
+                let file_storage_lock: tokio::sync::RwLockWriteGuard<
+                    <SHC as StorageHubHandlerConfig>::FileStorage,
+                > = self.storage_hub_handler.file_storage.write().await;
+
                 let proof = file_storage_lock
                     .generate_proof(&file_key, &chunk_id)
                     .expect("File is not in storage, or proof does not exist.");
+
+                // Drop write lock after getting proof.
+                drop(file_storage_lock);
+
                 let upload_response = self
                     .storage_hub_handler
                     .file_transfer
