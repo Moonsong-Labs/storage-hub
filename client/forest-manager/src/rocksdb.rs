@@ -18,7 +18,7 @@ use crate::{
 };
 
 mod well_known_keys {
-    pub const ROOT: &[u8] = b"forest_root";
+    pub const ROOT: &[u8] = b":root";
 }
 
 pub(crate) fn other_io_error(err: String) -> io::Error {
@@ -43,7 +43,7 @@ fn open_creating_rocksdb() -> io::Result<Database> {
 }
 
 /// Storage backend for RocksDB.
-struct StorageDb<Hasher> {
+pub struct StorageDb<Hasher> {
     pub db: Arc<dyn KeyValueDB>,
     pub _phantom: std::marker::PhantomData<Hasher>,
 }
@@ -57,10 +57,13 @@ impl<H: Hasher> Storage<H> for StorageDb<H> {
     }
 }
 
-/// Patricia trie-based pairs storage.
+/// Forest storage backend using RocksDB.
 pub struct RocksDBForestStorage<T: TrieLayout> {
+    /// RocksDB storage backend.
     storage: Arc<StorageDb<HashT<T>>>,
-    // TODO: make sure this can only be accessed by a single write lock
+    /// In-memory overlay of the trie with changes not yet committed to the backend.
+    ///
+    /// Once all operations are done, the overlay will be committed to the storage by executing [`RocksDBForestStorage::commit`].
     overlay: PrefixedMemoryDB<HashT<T>>,
     root: HasherOutT<T>,
     _phantom: std::marker::PhantomData<T>,
@@ -117,29 +120,15 @@ where
             _phantom: Default::default(),
         });
 
-        let maybe_root = storage
-            .db
-            .get(0, well_known_keys::ROOT)
-            .map_err(|e| {
-                warn!(target: "trie", "Failed to read root from DB: {}", e);
-                ForestStorageErrors::FailedToReadStorage
-            })
-            .expect("This should not fail unless something is wrong with the DB");
+        let maybe_root = Self::storage_root(&storage)?;
 
         let rocksdb_forest_storage = match maybe_root {
-            Some(root) => {
-                let root = HasherOutT::<T>::try_from(root).map_err(|_| {
-                    warn!(target: "trie", "Failed to parse root from DB");
-                    ForestStorageErrors::FailedToParseRoot
-                })?;
-
-                RocksDBForestStorage {
-                    storage,
-                    overlay: Default::default(),
-                    root,
-                    _phantom: Default::default(),
-                }
-            }
+            Some(root) => RocksDBForestStorage {
+                storage,
+                overlay: Default::default(),
+                root,
+                _phantom: Default::default(),
+            },
             None => {
                 let mut root = HasherOutT::<T>::default();
 
@@ -177,20 +166,31 @@ where
         Ok(rocksdb_forest_storage)
     }
 
-    /// Commit changes to the backend.
+    /// Commit [`overlay`](`RocksDBForestStorage::overlay`) to [`storage`](`RocksDBForestStorage::storage`)
     ///
-    /// This will write the changes including root in self to RocksDB.
+    /// This will write the changes applied to the overlay, including the [`root`](`RocksDBForestStorage::root`). If the root has not changed, the commit will be skipped.
     /// The `overlay` will be cleared.
-    pub fn commit(&mut self) {
+    pub fn commit(&mut self) -> Result<(), ForestStorageErrors> {
+        let root = Self::storage_root(&self.storage)?
+            .ok_or(ForestStorageErrors::ExpectingRootToBeInStorage)?;
+
+        // Skip commit if the root has not changed.
+        if self.root == root {
+            warn!(target: "trie", "Root has not changed, skipping commit");
+            return Ok(());
+        }
+
         let mut transaction = self.changes();
 
-        // add transaction to update root
+        // Update the root
         transaction.put(0, well_known_keys::ROOT, self.root.as_ref());
 
         self.storage
             .db
             .write(transaction)
             .expect("Failed to write to RocksDB");
+
+        Ok(())
     }
 
     /// Build [`DBTransaction`] from the overlay and clear it.
@@ -206,6 +206,27 @@ where
         }
 
         transaction
+    }
+
+    /// Get the root from the storage.
+    pub fn storage_root(
+        storage: &Arc<StorageDb<HashT<T>>>,
+    ) -> Result<Option<HasherOutT<T>>, ForestStorageErrors> {
+        let maybe_root = storage.db.get(0, well_known_keys::ROOT).map_err(|e| {
+            warn!(target: "trie", "Failed to read root from DB: {}", e);
+            ForestStorageErrors::FailedToReadStorage
+        })?;
+
+        let root = maybe_root
+            .map(|root| {
+                HasherOutT::<T>::try_from(root).map_err(|_| {
+                    warn!(target: "trie", "Failed to parse root from DB");
+                    ForestStorageErrors::FailedToParseRoot
+                })
+            })
+            .transpose()?;
+
+        Ok(root)
     }
 }
 

@@ -44,6 +44,8 @@ pub enum ForestStorageErrors {
     FailedToReadLeaf,
     /// Failed to insert file key.
     FailedToInsertFileKey,
+    /// Expecting root to be in storage.
+    ExpectingRootToBeInStorage,
     /// Failed to parse root.
     FailedToParseRoot,
     /// Failed to read storage.
