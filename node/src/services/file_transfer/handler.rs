@@ -157,11 +157,15 @@ impl Actor for FileTransferService {
                             "Failed to send the response back. Looks like the requester task is gone."
                         ),
                     }
-                },
-                FileTransferServiceCommand::RegisterNewFile { peer_id, file_key, callback } => {
+                }
+                FileTransferServiceCommand::RegisterNewFile {
+                    peer_id,
+                    file_key,
+                    callback,
+                } => {
                     let result = match self.peer_file_registry.insert((peer_id, file_key)) {
                         true => Ok(()),
-                        false => Err(RequestError::RegisterNewFileFailure)
+                        false => Err(RequestError::RegisterNewFileFailure),
                     };
 
                     match callback.send(result) {
@@ -172,10 +176,14 @@ impl Actor for FileTransferService {
                         ),
                     }
                 }
-                FileTransferServiceCommand::UnregisterFile { peer_id, file_key, callback } => {
+                FileTransferServiceCommand::UnregisterFile {
+                    peer_id,
+                    file_key,
+                    callback,
+                } => {
                     let result = match self.peer_file_registry.remove(&(peer_id, file_key)) {
                         true => Ok(()),
-                        false => Err(RequestError::UnregisterFileFailure)
+                        false => Err(RequestError::UnregisterFileFailure),
                     };
                     match callback.send(result) {
                         Ok(()) => {}

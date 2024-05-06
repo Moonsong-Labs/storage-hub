@@ -62,8 +62,8 @@ impl<S: StorageHubHandlerConfig> StorageHubHandler<S> {
         log::info!("Starting User tasks.");
 
         UserSubmittedFileTask::new(self.clone())
-        .subscribe_to(&self.task_spawner, &self.blockchain)
-        .start();
+            .subscribe_to(&self.task_spawner, &self.blockchain)
+            .start();
     }
 
     pub fn start_bsp_tasks(&self) {
