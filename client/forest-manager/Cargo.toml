@@ -29,3 +29,6 @@ sp-trie = { workspace = true, default-features = true }
 
 common = { workspace = true }
 storage-hub-infra = { workspace = true }
+
+[features]
+test_rocksdb = []

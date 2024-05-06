@@ -53,8 +53,8 @@ use substrate_prometheus_endpoint::Registry;
 use crate::{
     cli::StorageLayer,
     services::{
-        file_transfer::configure_file_transfer_network, InMemoryStorageHubConfig,
-        RocksDBStorageHubConfig, StorageHubHandlerInitializer,
+        blockchain::handler::BlockchainService, file_transfer::configure_file_transfer_network,
+        InMemoryStorageHubConfig, RocksDBStorageHubConfig, StorageHubHandlerInitializer,
     },
 };
 use crate::{
@@ -233,10 +233,13 @@ async fn start_storage_provider(
     )
     .await;
 
+    let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
+
     // Initialise the StorageHubHandler, for tasks to have access to the services.
     match provider_options.storage_layer {
         StorageLayer::Memory => {
             let sh_handler = InMemoryStorageHubConfig::initialize(
+                caller_pub_key,
                 task_spawner,
                 file_transfer_service_handle,
                 blockchain_service_handle,
@@ -246,6 +249,7 @@ async fn start_storage_provider(
         }
         StorageLayer::Rocksdb => {
             let sh_handler = RocksDBStorageHubConfig::initialize(
+                caller_pub_key,
                 task_spawner,
                 file_transfer_service_handle,
                 blockchain_service_handle,

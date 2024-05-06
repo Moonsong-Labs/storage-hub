@@ -21,6 +21,7 @@ async-io = { workspace = true }
 bincode = { workspace = true }
 color-print = { workspace = true }
 futures-timer = { workspace = true }
+hex = { workspace = true }
 lazy-static = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
 prost = { workspace = true }

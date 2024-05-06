@@ -6,7 +6,16 @@ pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 
 pub struct RawKey<T> {
     pub key: Vec<u8>,
-    _phantom: std::marker::PhantomData<T>,
+    pub _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T> RawKey<T> {
+    pub fn new(key: Vec<u8>) -> Self {
+        Self {
+            key,
+            _phantom: Default::default(),
+        }
+    }
 }
 
 impl<T> Clone for RawKey<T> {

@@ -29,9 +29,9 @@ pub(crate) fn other_io_error(err: String) -> io::Error {
 }
 
 /// Open the database on disk, creating it if it doesn't exist.
-fn open_creating_rocksdb() -> io::Result<Database> {
+fn open_creating_rocksdb(db_path: String) -> io::Result<Database> {
     let root = PathBuf::from("/tmp/");
-    let path = root.join("storagehub").join("db");
+    let path = root.join(db_path).join("db");
 
     let db_config = DatabaseConfig::with_columns(1);
 
@@ -114,9 +114,9 @@ where
 {
     /// This will open the RocksDB database and read the storage [`ROOT`](`well_known_keys::ROOT`) from it.
     /// If the root hash is not found in storage, a new trie will be created and the root hash will be stored in storage.
-    pub fn new() -> Result<Self, ForestStorageErrors> {
-        let kvdb = Arc::new(open_creating_rocksdb().expect("Failed to open RocksDB"));
-        let storage: Arc<StorageDb<<T as TrieLayout>::Hash>> = Arc::new(StorageDb::<HashT<T>> {
+    pub fn new(db_path: String) -> Result<Self, ForestStorageErrors> {
+        let kvdb = Arc::new(open_creating_rocksdb(db_path).expect("Failed to open RocksDB"));
+        let storage = Arc::new(StorageDb::<HashT<T>> {
             db: kvdb,
             _phantom: Default::default(),
         });
@@ -189,6 +189,7 @@ where
             return Ok(());
         }
 
+        // Aggregate changes from the overlay
         let mut transaction = self.changes();
 
         // Update the root
@@ -219,7 +220,7 @@ where
         transaction
     }
 
-    /// Get the root from the storage.
+    /// Get the [`ROOT`](`well_known_keys::ROOT`) from storage.
     pub fn storage_root(
         storage: &Arc<StorageDb<HashT<T>>>,
     ) -> Result<Option<HasherOutT<T>>, ForestStorageErrors> {

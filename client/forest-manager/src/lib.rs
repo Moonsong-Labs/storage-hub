@@ -4,3 +4,6 @@ pub mod rocksdb;
 pub mod traits;
 pub mod types;
 pub(crate) mod utils;
+
+#[cfg(test)]
+mod tests;

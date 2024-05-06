@@ -14,7 +14,7 @@ pub type Key = H256;
 // TODO: this is currently a placeholder in order to define Storage interface.
 /// Metadata contains information about a file.
 /// Most importantly, the fingerprint which is the root Merkle hash of the file.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Metadata {
     pub owner: String,
     pub location: Vec<u8>,

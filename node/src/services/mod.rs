@@ -35,6 +35,7 @@ impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
 
 impl StorageHubHandlerInitializer for InMemoryStorageHubConfig {
     fn initialize(
+        _provider_pub_key: [u8; 32],
         task_spawner: TaskSpawner,
         file_transfer: ActorHandle<FileTransferService>,
         blockchain: ActorHandle<BlockchainService>,
@@ -62,10 +63,13 @@ impl StorageHubHandlerConfig for RocksDBStorageHubConfig {
 
 impl StorageHubHandlerInitializer for RocksDBStorageHubConfig {
     fn initialize(
+        provider_pub_key: [u8; 32],
         task_spawner: TaskSpawner,
         file_transfer: ActorHandle<FileTransferService>,
         blockchain: ActorHandle<BlockchainService>,
     ) -> StorageHubHandler<Self> {
+        let storage_path = hex::encode(provider_pub_key);
+
         StorageHubHandler::new(
             task_spawner,
             file_transfer,
@@ -74,7 +78,7 @@ impl StorageHubHandlerInitializer for RocksDBStorageHubConfig {
                 InMemoryFileStorage::<LayoutV1<RefHasher>>::new(),
             )),
             Arc::new(RwLock::new(
-                RocksDBForestStorage::<LayoutV1<RefHasher>>::new()
+                RocksDBForestStorage::<LayoutV1<RefHasher>>::new(storage_path)
                     .expect("Failed to create RocksDB"),
             )),
         )
@@ -83,6 +87,7 @@ impl StorageHubHandlerInitializer for RocksDBStorageHubConfig {
 
 pub trait StorageHubHandlerInitializer {
     fn initialize(
+        provider_pub_key: [u8; 32],
         task_spawner: TaskSpawner,
         file_transfer: ActorHandle<FileTransferService>,
         blockchain: ActorHandle<BlockchainService>,
