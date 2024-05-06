@@ -23,7 +23,7 @@ struct FileMetadata<'a> {
     bucket: &'a [u8],
     file_id: &'a [u8],
     size: u64,
-    /// The fingerprint will always be 32 bytes since we are using Keccak256, aka BlakeTwo256.
+    /// The fingerprint will always be 32 bytes since we are using BlakeTwo256.
     fingerprint: [u8; 32],
 }
 

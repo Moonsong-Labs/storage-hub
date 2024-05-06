@@ -47,7 +47,7 @@ use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{ConstU128, Get, H256};
+use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{traits::BlakeTwo256, AccountId32, DispatchError, FixedU128, Perbill};
 use sp_std::vec::Vec;
 use sp_trie::LayoutV1;
@@ -432,7 +432,7 @@ impl pallet_proofs_dealer::Config for Runtime {
     type NativeBalance = Balances;
     type MerkleHash = Hash;
     type MerkleHashing = BlakeTwo256;
-    type ForestVerifier = TrieVerifier<LayoutV1<BlakeTwo256>>;
+    type ForestVerifier = TrieVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type KeyVerifier = ProofTrieVerifier;
     type RandomChallengesPerBlock = RandomChallengesPerBlock;
     type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
