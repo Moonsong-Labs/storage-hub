@@ -14546,6 +14546,7 @@ dependencies = [
  "sp-session 27.0.0",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-transaction-pool",
+ "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "sp-version 29.0.0",
  "staging-parachain-info",
  "staging-xcm 7.0.0",

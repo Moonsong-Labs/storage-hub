@@ -50,7 +50,9 @@ use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, H256};
 use sp_runtime::{traits::BlakeTwo256, AccountId32, DispatchError, FixedU128, Perbill};
 use sp_std::vec::Vec;
+use sp_trie::LayoutV1;
 use sp_version::RuntimeVersion;
+use storage_hub_primitives::TrieVerifier;
 use storage_hub_traits::CommitmentVerifier;
 use xcm::latest::prelude::BodyId;
 
@@ -414,6 +416,8 @@ impl Get<AccountId32> for TreasuryAccount {
 }
 
 parameter_types! {
+    pub const RandomChallengesPerBlock: u32 = 10;
+    pub const MaxCustomChallengesPerBlock: u32 = 10;
     pub const MaxProvidersChallengedPerBlock: u32 = 100;
     pub const ChallengeHistoryLength: BlockNumber = 100;
     pub const ChallengesQueueLength: u32 = 100;
@@ -429,10 +433,10 @@ impl pallet_proofs_dealer::Config for Runtime {
     type MerkleHash = Hash;
     type MerkleHashing = BlakeTwo256;
     type ForestVerifier = ProofTrieVerifier;
-    type KeyVerifier = ProofTrieVerifier;
-    // type KeyVerifier = TrieVerifier<LayoutV1<RefHasher>>;
-    type RandomChallengesPerBlock = ConstU32<10>;
-    type MaxCustomChallengesPerBlock = ConstU32<10>;
+    // type KeyVerifier = ProofTrieVerifier;
+    type KeyVerifier = TrieVerifier<LayoutV1<BlakeTwo256>>;
+    type RandomChallengesPerBlock = RandomChallengesPerBlock;
+    type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
     type MaxProvidersChallengedPerBlock = MaxProvidersChallengedPerBlock;
     type ChallengeHistoryLength = ChallengeHistoryLength;
     type ChallengesQueueLength = ChallengesQueueLength;
