@@ -1,8 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::sp_runtime::DispatchError;
-use sp_core::H256;
-use sp_runtime::traits::BlakeTwo256;
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
 use storage_hub_traits::CommitmentVerifier;
@@ -13,12 +11,18 @@ mod tests;
 
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment
 /// is a Merkle Patricia Trie root hash.
-pub struct TrieVerifier<T: TrieLayout<Hash = BlakeTwo256>> {
+pub struct TrieVerifier<T: TrieLayout, const H_LENGTH: usize>
+where
+    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
+{
     pub _phantom: core::marker::PhantomData<T>,
 }
 
 /// Implement the `CommitmentVerifier` trait for the `TrieVerifier` struct.
-impl<T: TrieLayout<Hash = BlakeTwo256>> CommitmentVerifier for TrieVerifier<T> {
+impl<T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for TrieVerifier<T, H_LENGTH>
+where
+    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
+{
     type Proof = CompactProof;
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
@@ -108,11 +112,16 @@ impl<T: TrieLayout<Hash = BlakeTwo256>> CommitmentVerifier for TrieVerifier<T> {
                 // Scenario 1 (valid): `next_leaf` is the challenged leaf which is included in the proof.
                 // The challenge is the leaf itself (i.e. the challenge exists in the trie).
                 (_, Some((next_key, _))) if next_key == challenge.as_ref().to_vec() => {
-                    let next_key = H256(
-                        next_key
-                            .try_into()
-                            .map_err(|_| "Failed to convert proven key.")?,
-                    );
+                    // Converting the key to a slice and then to a fixed size array.
+                    let next_key: &[u8; H_LENGTH] = next_key
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key to a fixed size array.")?;
+
+                    // Converting the fixed size array to the key type.
+                    let next_key = next_key
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
 
                     proven_keys.insert(next_key);
                     continue;
@@ -123,19 +132,29 @@ impl<T: TrieLayout<Hash = BlakeTwo256>> CommitmentVerifier for TrieVerifier<T> {
                     if prev_key < challenge.as_ref().to_vec()
                         && challenge.as_ref().to_vec() < next_key =>
                 {
-                    let prev_key = H256(
-                        prev_key
-                            .try_into()
-                            .map_err(|_| "Failed to convert proven key.")?,
-                    );
+                    // Converting the key to a slice and then to a fixed size array.
+                    let prev_key: &[u8; H_LENGTH] = prev_key
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key to a fixed size array.")?;
+
+                    // Converting the fixed size array to the key type.
+                    let prev_key = prev_key
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
 
                     proven_keys.insert(prev_key);
 
-                    let next_key = H256(
-                        next_key
-                            .try_into()
-                            .map_err(|_| "Failed to convert proven key.")?,
-                    );
+                    // Converting the key to a slice and then to a fixed size array.
+                    let next_key: &[u8; H_LENGTH] = next_key
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key to a fixed size array.")?;
+
+                    // Converting the fixed size array to the key type.
+                    let next_key = next_key
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
 
                     proven_keys.insert(next_key);
 
@@ -146,11 +165,16 @@ impl<T: TrieLayout<Hash = BlakeTwo256>> CommitmentVerifier for TrieVerifier<T> {
                 (Some((prev_key, _)), Some((next_key, _)))
                     if prev_key == next_key && trie_de_iter.next_back().is_none() =>
                 {
-                    let prev_key = H256(
-                        prev_key
-                            .try_into()
-                            .map_err(|_| "Failed to convert proven key.")?,
-                    );
+                    // Converting the key to a slice and then to a fixed size array.
+                    let prev_key: &[u8; H_LENGTH] = prev_key
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key to a fixed size array.")?;
+
+                    // Converting the fixed size array to the key type.
+                    let prev_key = prev_key
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
 
                     proven_keys.insert(prev_key);
 
@@ -159,12 +183,17 @@ impl<T: TrieLayout<Hash = BlakeTwo256>> CommitmentVerifier for TrieVerifier<T> {
                 // Scenario 4 (valid): `prev_leaf` is the last leaf since `next_leaf` is `None`.
                 // The challenge is after the last leaf (i.e. the challenge does not exist in the trie).
                 (Some(prev_leaf), None) => {
-                    let prev_key = H256(
-                        prev_leaf
-                            .0
-                            .try_into()
-                            .map_err(|_| "Failed to convert proven key.")?,
-                    );
+                    // Converting the key to a slice and then to a fixed size array.
+                    let prev_key: &[u8; H_LENGTH] = prev_leaf
+                        .0
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key to a fixed size array.")?;
+
+                    // Converting the fixed size array to the key type.
+                    let prev_key = prev_key
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key.")?;
 
                     proven_keys.insert(prev_key);
 
