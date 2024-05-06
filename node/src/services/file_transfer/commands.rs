@@ -45,6 +45,7 @@ pub enum FileTransferServiceCommand {
     },
 }
 
+#[derive(Debug)]
 pub enum RequestError {
     /// The request failed. More details are provided in the `RequestFailure`.
     RequestFailure(RequestFailure),
