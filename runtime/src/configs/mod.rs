@@ -432,9 +432,8 @@ impl pallet_proofs_dealer::Config for Runtime {
     type NativeBalance = Balances;
     type MerkleHash = Hash;
     type MerkleHashing = BlakeTwo256;
-    type ForestVerifier = ProofTrieVerifier;
-    // type KeyVerifier = ProofTrieVerifier;
-    type KeyVerifier = TrieVerifier<LayoutV1<BlakeTwo256>>;
+    type ForestVerifier = TrieVerifier<LayoutV1<BlakeTwo256>>;
+    type KeyVerifier = ProofTrieVerifier;
     type RandomChallengesPerBlock = RandomChallengesPerBlock;
     type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
     type MaxProvidersChallengedPerBlock = MaxProvidersChallengedPerBlock;
