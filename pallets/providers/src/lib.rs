@@ -6,7 +6,7 @@
 //! The functionality allows users to sign up and sign off as MSPs or BSPs and change
 //! their parameters. This is the way that users can offer their storage capacity to
 //! the network and get rewarded for it.
-
+#![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 mod types;
