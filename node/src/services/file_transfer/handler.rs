@@ -44,7 +44,7 @@ use crate::{
 };
 
 use super::{
-    commands::FileTransferServiceCommand,
+    commands::{FileTransferServiceCommand, RequestError},
     events::{FileTransferServiceEventBusProvider, RemoteDownloadRequest},
     schema,
 };
@@ -146,12 +146,44 @@ impl Actor for FileTransferService {
                 FileTransferServiceCommand::AddKnownAddress {
                     peer_id,
                     multiaddress,
-                } => self.network.add_known_address(peer_id, multiaddress),
-                FileTransferServiceCommand::RegisterNewFile { peer_id, file_key } => {
-                    self.peer_file_registry.insert((peer_id, file_key));
+                    callback,
+                } => {
+                    self.network.add_known_address(peer_id, multiaddress);
+                    // `add_known_address()` method doesn't return anything.
+                    match callback.send(Ok(())) {
+                        Ok(()) => {}
+                        Err(_) => error!(
+                            target: LOG_TARGET,
+                            "Failed to send the response back. Looks like the requester task is gone."
+                        ),
+                    }
+                },
+                FileTransferServiceCommand::RegisterNewFile { peer_id, file_key, callback } => {
+                    let result = match self.peer_file_registry.insert((peer_id, file_key)) {
+                        true => Ok(()),
+                        false => Err(RequestError::RegisterNewFileFailure)
+                    };
+
+                    match callback.send(result) {
+                        Ok(()) => {}
+                        Err(_) => error!(
+                            target: LOG_TARGET,
+                            "Failed to send the response back. Looks like the requester task is gone."
+                        ),
+                    }
                 }
-                FileTransferServiceCommand::UnregisterFile { peer_id, file_key } => {
-                    self.peer_file_registry.remove(&(peer_id, file_key));
+                FileTransferServiceCommand::UnregisterFile { peer_id, file_key, callback } => {
+                    let result = match self.peer_file_registry.remove(&(peer_id, file_key)) {
+                        true => Ok(()),
+                        false => Err(RequestError::UnregisterFileFailure)
+                    };
+                    match callback.send(result) {
+                        Ok(()) => {}
+                        Err(_) => error!(
+                            target: LOG_TARGET,
+                            "Failed to send the response back. Looks like the requester task is gone."
+                        ),
+                    }
                 }
             };
         }
