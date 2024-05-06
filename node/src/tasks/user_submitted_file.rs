@@ -92,8 +92,9 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
                         info!(target: LOG_TARGET, "Successfully uploaded chunk id {:?} to peer {:?}", chunk_id, peer_id)
                     }
                     Err(e) => {
-                        error!(target: LOG_TARGET, "Failed to upload chunk_id {:?} to peer {:?}", chunk_id, peer_id);
-                        return Err(anyhow::anyhow!("{:?}", e));
+                        error!(target: LOG_TARGET, "Failed to upload chunk_id {:?} to peer {:?} due to {:?}", chunk_id, peer_id, e);
+                        // In case of an error, we stop sending to this peer and go to the next one.
+                        break;
                     }
                 }
             }
