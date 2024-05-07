@@ -46,33 +46,43 @@ pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
         .map_err(|_| ForestStorageErrors::FailedToReadLeaf)?;
 
     match (prev, next) {
-        (_, Some((key, value))) if challenged_file_key.as_ref() == key => {
-            // Scenario 1: Exact match
-            Ok(Proven::new_exact_key(
-                key.into(),
-                deserialize_value(&value)?,
-            ))
-        }
-        (Some((prev_key, prev_value)), Some((next_key, next_value))) => {
-            // Scenario 2: Between two keys
+        // Scenario 1: Exact match
+        (_, Some((key, value))) if challenged_file_key.as_ref() == key => Ok(
+            Proven::new_exact_key(key.into(), deserialize_value(&value)?),
+        ),
+        // Scenario 2: Between two keys
+        (Some((prev_key, prev_value)), Some((next_key, next_value)))
+            if prev_key < challenged_file_key.as_ref().to_vec()
+                && next_key > challenged_file_key.as_ref().to_vec() =>
+        {
             let prev_leaf = Leaf::new(prev_key.into(), deserialize_value(&prev_value)?);
             let next_leaf = Leaf::new(next_key.into(), deserialize_value(&next_value)?);
 
             Ok(Proven::new_neighbour_keys(Some(prev_leaf), Some(next_leaf))
                 .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
         }
-        (Some((key, value)), None) if *challenged_file_key.as_ref() > *key => {
-            // Scenario 3: After the last leaf
-            let leaf = Leaf::new(key.into(), deserialize_value(&value)?);
+        // Scenario 3: Before the first leaf
+        (Some((prev_key, _)), Some((next_key, next_value)))
+            if prev_key == next_key && iter.next_back().is_none() =>
+        {
+            let next_leaf = Leaf::new(next_key.into(), deserialize_value(&next_value)?);
 
-            Ok(Proven::new_neighbour_keys(Some(leaf), None)
+            Ok(Proven::new_neighbour_keys(None, Some(next_leaf))
                 .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
         }
+        // Scenario 3: Before the first leaf
+        // TODO: Understand why this is different from the previous match clause when using no storage layer.
         (None, Some((key, value))) if *challenged_file_key.as_ref() < *key => {
-            // Scenario 4: Before the first leaf
             let leaf = Leaf::new(key.into(), deserialize_value(&value)?);
 
             Ok(Proven::new_neighbour_keys(None, Some(leaf))
+                .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
+        }
+        // Scenario 4: After the last leaf
+        (Some((key, value)), None) if *challenged_file_key.as_ref() > *key => {
+            let leaf = Leaf::new(key.into(), deserialize_value(&value)?);
+
+            Ok(Proven::new_neighbour_keys(Some(leaf), None)
                 .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
         }
         _ => Err(ForestStorageErrors::InvalidProvingScenario),
