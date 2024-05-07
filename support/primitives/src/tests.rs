@@ -604,13 +604,11 @@ fn commitment_verifier_multiple_in_between_challenge_keys_and_one_after_last_key
         leaf_keys[3],
         *largest_key,
     ];
-    println!("Challenge keys before: {:?}", challenge_keys);
 
     // Increment the most significant bit of every challenge key by 1.
     for key in &mut challenge_keys {
         key.0[0] += 1;
     }
-    println!("Challenge keys after: {:?}", challenge_keys);
 
     {
         // Creating trie inside of closure to drop it before generating proof.
@@ -822,6 +820,110 @@ fn commitment_verifier_multiple_challenges_single_key_trie_success() {
     .expect("Failed to verify proof");
 
     assert_eq!(proof_keys, [leaf_keys[0]]);
+}
+
+// TODO: This test is currently failing due to a bug in the trie iterator. It will be fixed in a future PR.
+#[test]
+#[ignore = "This test is currently failing due to a bug in the trie iterator. It will be fixed in a future PR."]
+fn commitment_verifier_challenge_in_between_existing_leafs_shares_prefix_with_next_leaf() {
+    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+    let mut challenge_keys = [leaf_keys[1]];
+
+    // Decrement the least significant byte of the challenge key by 1.
+    challenge_keys[0].0[31] -= 1;
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        for challenge_key in &challenge_keys {
+            // Seek to the challenge key.
+            iter.seek(&challenge_key.0).unwrap();
+
+            // Access the next leaf node.
+            iter.next();
+
+            // Access the previous leaf node.
+            iter.next_back();
+        }
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<BlakeTwo256>(root)
+        .expect("Failed to create compact proof from recorder");
+
+    // Verify proof
+    let proof_keys = TrieVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+        &root,
+        &challenge_keys,
+        &proof,
+    )
+    .expect("Failed to verify proof");
+
+    assert_eq!(proof_keys, [leaf_keys[0], leaf_keys[1],]);
+}
+
+#[test]
+fn commitment_verifier_challenge_in_between_existing_leafs_shares_prefix_with_prev_leaf() {
+    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+    let mut challenge_keys = [leaf_keys[0]];
+
+    // Increment the least significant byte of the challenge key by 1.
+    challenge_keys[0].0[31] += 1;
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        for challenge_key in &challenge_keys {
+            // Seek to the challenge key.
+            iter.seek(&challenge_key.0).unwrap();
+
+            // Access the next leaf node.
+            iter.next();
+
+            // Access the previous leaf node.
+            iter.next_back();
+        }
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<BlakeTwo256>(root)
+        .expect("Failed to create compact proof from recorder");
+
+    // Verify proof
+    let proof_keys = TrieVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+        &root,
+        &challenge_keys,
+        &proof,
+    )
+    .expect("Failed to verify proof");
+
+    assert_eq!(proof_keys, [leaf_keys[0], leaf_keys[1],]);
 }
 
 #[test]
