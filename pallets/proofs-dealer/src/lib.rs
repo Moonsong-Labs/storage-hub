@@ -241,13 +241,6 @@ pub mod pallet {
             key_challenged: KeyFor<T>,
         },
 
-        /// A proof was rejected.
-        ProofRejected {
-            provider: ProviderFor<T>,
-            proof: ForestVerifierProofFor<T>,
-            reason: ProofRejectionReason,
-        },
-
         /// A proof was accepted.
         ProofAccepted {
             provider: ProviderFor<T>,

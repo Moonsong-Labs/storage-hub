@@ -3,17 +3,6 @@ use frame_support::traits::fungible;
 use scale_info::TypeInfo;
 use storage_hub_traits::{CommitmentVerifier, ProvidersInterface};
 
-#[derive(Debug, Clone, PartialEq, Decode, Encode, TypeInfo)]
-pub enum ProofRejectionReason {
-    /// The proof was rejected because the root does not match the
-    /// Merkle Patricia Forest root.
-    RootMismatch,
-    /// The proof was rejected because the previous and next existing
-    /// leaves to a challenge were not consecutive, i.e. there is at
-    /// least one more existing leaf in between.
-    NotConsecutiveLeaves,
-}
-
 // ****************************************************************************
 // ********************* Syntactic sugar for types ****************************
 // ****************************************************************************
