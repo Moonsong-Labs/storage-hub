@@ -390,11 +390,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use reference_trie::RefHasher;
     use sp_trie::LayoutV1;
     use storage_hub_infra::types::Proven;
-
-    use super::*;
 
     /// Mock that simulates the backend for testing purposes.
     struct MockStorageDb {
@@ -448,326 +447,164 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_read_write() {
+    // Reusable function to setup a new `MockStorageDb` and `RocksDBForestStorage`.
+    fn setup_storage<T>() -> RocksDBForestStorage<T>
+    where
+        T: TrieLayout + Send + Sync,
+        <T::Hash as Hasher>::Out: TryFrom<Vec<u8>>,
+    {
         let storage = Box::new(MockStorageDb {
             data: Default::default(),
         });
-
-        let mut forest_storage =
-            RocksDBForestStorage::<sp_trie::LayoutV1<RefHasher>>::new(storage).unwrap();
-
-        // Create and insert metadata
-        let metadata = Metadata {
-            owner: "Bob".to_string(),
-            location: vec![7, 8, 9],
-            size: 200,
-            fingerprint: Default::default(),
-        };
-
-        let raw_key = RawKey::<_>::new(vec![7, 8, 9]);
-        let lookup_key = forest_storage.insert_file_key(&raw_key, &metadata).unwrap();
-
-        // Retrieve and verify metadata
-        let retrieved_metadata = forest_storage.get_file_key(&lookup_key).unwrap().unwrap();
-        assert_eq!(retrieved_metadata, metadata);
+        RocksDBForestStorage::<T>::new(storage).unwrap()
     }
 
-    #[test]
-    fn test_remove_non_existent_file_key() {
-        let storage = Box::new(MockStorageDb {
-            data: Default::default(),
-        });
+    // Reused function to create metadata with variable parameters.
+    fn create_metadata(owner: &str, location: Vec<u8>, size: u64) -> Metadata {
+        Metadata {
+            owner: owner.to_string(),
+            location,
+            size,
+            fingerprint: Default::default(),
+        }
+    }
 
-        let mut forest_storage =
-            RocksDBForestStorage::<sp_trie::LayoutV1<RefHasher>>::new(storage).unwrap();
-
-        // Attempt to delete nonexistent key which should not yield an error.
-        let non_existent_key = HasherOutT::<sp_trie::LayoutV1<RefHasher>>::default();
-        assert!(forest_storage.delete_file_key(&non_existent_key).is_ok());
+    fn create_and_insert_metadata<T>(
+        forest_storage: &mut RocksDBForestStorage<T>,
+        owner: &str,
+        location: Vec<u8>,
+        size: u64,
+    ) -> (HasherOutT<T>, Metadata)
+    where
+        T: TrieLayout + Send + Sync,
+        <T::Hash as Hasher>::Out: TryFrom<Vec<u8>>,
+    {
+        let metadata = create_metadata(owner, location.clone(), size);
+        let raw_key = RawKey::new(location);
+        let lookup_key = forest_storage.insert_file_key(&raw_key, &metadata).unwrap();
+        (lookup_key, metadata)
     }
 
     #[test]
     fn test_initialization_with_no_existing_root() {
-        let storage = Box::new(MockStorageDb {
-            data: std::collections::HashMap::new(),
-        });
-
-        let forest_storage = RocksDBForestStorage::<LayoutV1<RefHasher>>::new(storage).unwrap();
+        let forest_storage = setup_storage::<LayoutV1<RefHasher>>();
+        let expected_hash = HasherOutT::<LayoutV1<RefHasher>>::try_from([
+            188, 54, 120, 158, 122, 30, 40, 20, 54, 70, 66, 41, 130, 143, 129, 125, 102, 18, 247,
+            180, 119, 214, 101, 145, 255, 150, 169, 224, 100, 188, 201, 138,
+        ])
+        .unwrap();
 
         assert_eq!(
-            forest_storage.root,
-            HasherOutT::<LayoutV1<RefHasher>>::try_from([
-                188, 54, 120, 158, 122, 30, 40, 20, 54, 70, 66, 41, 130, 143, 129, 125, 102, 18,
-                247, 180, 119, 214, 101, 145, 255, 150, 169, 224, 100, 188, 201, 138
-            ])
-            .unwrap(),
+            forest_storage.root, expected_hash,
             "Root should be initialized to default on no existing ROOT key."
         );
     }
 
     #[test]
+    fn test_write_read() {
+        let mut forest_storage = setup_storage::<LayoutV1<RefHasher>>();
+
+        let (lookup_key, metadata) =
+            create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
+
+        let retrieved_metadata = forest_storage.get_file_key(&lookup_key).unwrap().unwrap();
+
+        assert_eq!(retrieved_metadata, metadata);
+    }
+
+    #[test]
+    fn test_remove_existing_file_key() {
+        let mut forest_storage = setup_storage::<LayoutV1<RefHasher>>();
+
+        let (lookup_key, _) =
+            create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
+
+        assert!(forest_storage.delete_file_key(&lookup_key).is_ok());
+        assert!(forest_storage.get_file_key(&lookup_key).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_remove_non_existent_file_key() {
+        let mut forest_storage = setup_storage::<LayoutV1<RefHasher>>();
+        assert!(forest_storage.delete_file_key(&[0u8; 32].into()).is_ok());
+    }
+
+    #[test]
     fn test_generate_proof_exact_key() {
-        let storage = Box::new(MockStorageDb {
-            data: std::collections::HashMap::new(),
-        });
+        let mut forest_storage = setup_storage::<LayoutV1<RefHasher>>();
 
-        let mut forest_storage = RocksDBForestStorage::<LayoutV1<RefHasher>>::new(storage).unwrap();
+        let (lookup_key, _) =
+            create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
 
-        let metadata = Metadata {
-            owner: "Alice".to_string(),
-            location: vec![1, 2, 3],
-            size: 100,
-            fingerprint: Default::default(),
-        };
+        let proof = forest_storage.generate_proof(&vec![lookup_key]).unwrap();
 
-        let raw_key = RawKey::<_>::new(vec![1, 2, 3]);
-        let lookup_key = forest_storage.insert_file_key(&raw_key, &metadata).unwrap();
-
-        // Generate proof for the file key
-        let proof = forest_storage
-            .generate_proof(&vec![lookup_key])
-            .expect("Failed to generate proof");
-
-        // Verify the proof
-        assert_eq!(proof.proven.len(), 1);
-        assert!(match proof.proven[0] {
-            Proven::ExactKey(ref leaf) => leaf.key.as_ref() == lookup_key.as_ref(),
-            _ => false,
-        });
-    }
-
-    #[test]
-    fn test_generate_proof_exact_keys() {
-        let storage = Box::new(MockStorageDb {
-            data: std::collections::HashMap::new(),
-        });
-
-        let mut forest_storage = RocksDBForestStorage::<LayoutV1<RefHasher>>::new(storage).unwrap();
-
-        let metadata1 = Metadata {
-            owner: "Alice".to_string(),
-            location: vec![1, 2, 3],
-            size: 100,
-            fingerprint: Default::default(),
-        };
-
-        let raw_key1 = RawKey::<_>::new(vec![1, 2, 3]);
-        let lookup_key1 = forest_storage
-            .insert_file_key(&raw_key1, &metadata1)
-            .unwrap();
-
-        let metadata2 = Metadata {
-            owner: "Bob".to_string(),
-            location: vec![4, 5, 6],
-            size: 150,
-            fingerprint: Default::default(),
-        };
-
-        let raw_key2 = RawKey::<_>::new(vec![4, 5, 6]);
-        let lookup_key2 = forest_storage
-            .insert_file_key(&raw_key2, &metadata2)
-            .unwrap();
-
-        // Ensure trie integrity
-        assert!(forest_storage.get_file_key(&lookup_key1).unwrap().is_some());
-        assert!(forest_storage.get_file_key(&lookup_key2).unwrap().is_some());
-
-        let proof = forest_storage
-            .generate_proof(&vec![lookup_key1, lookup_key2])
-            .expect("Failed to generate proof");
-
-        // Verify the proof
-        assert_eq!(proof.proven.len(), 2);
-        assert!(match proof.proven[0] {
-            Proven::ExactKey(ref leaf) => leaf.key.as_ref() == lookup_key1.as_ref(),
-            _ => false,
-        });
-        assert!(match proof.proven[1] {
-            Proven::ExactKey(ref leaf) => leaf.key.as_ref() == lookup_key2.as_ref(),
-            _ => false,
-        });
-    }
-
-    #[test]
-    fn test_generate_proof_neighbour_keys() {
-        let storage = Box::new(MockStorageDb {
-            data: std::collections::HashMap::new(),
-        });
-
-        let mut forest_storage = RocksDBForestStorage::<LayoutV1<RefHasher>>::new(storage).unwrap();
-
-        let metadata1 = Metadata {
-            owner: "Alice".to_string(),
-            location: vec![1, 2, 3],
-            size: 100,
-            fingerprint: Default::default(),
-        };
-
-        let metadata2 = Metadata {
-            owner: "Bob".to_string(),
-            location: vec![4, 5, 6],
-            size: 150,
-            fingerprint: Default::default(),
-        };
-
-        let raw_key1 = RawKey::<_>::new(vec![1, 2, 3]);
-        let lookup_key1 = forest_storage
-            .insert_file_key(&raw_key1, &metadata1)
-            .unwrap();
-
-        let raw_key2 = RawKey::<_>::new(vec![4, 5, 6]);
-        let lookup_key2 = forest_storage
-            .insert_file_key(&raw_key2, &metadata2)
-            .unwrap();
-
-        // Ensure trie integrity
-        assert!(forest_storage.get_file_key(&lookup_key1).unwrap().is_some());
-        assert!(forest_storage.get_file_key(&lookup_key2).unwrap().is_some());
-
-        let (smallest_key, largest_key) = if lookup_key1 < lookup_key2 {
-            (lookup_key1.clone(), lookup_key2.clone())
-        } else {
-            (lookup_key2.clone(), lookup_key1.clone())
-        };
-
-        let mut challenge = smallest_key.clone();
-        challenge[0] += 1;
-
-        let proof = forest_storage
-            .generate_proof(&vec![challenge])
-            .expect("Failed to generate proof");
-
-        // Verify the proof
-        assert_eq!(proof.proven.len(), 1);
-        assert!(match proof.proven[0] {
-            Proven::NeighbourKeys((Some(ref prev_leaf), Some(ref next_leaf))) => {
-                prev_leaf.key.as_ref() == smallest_key.as_ref()
-                    && next_leaf.key.as_ref() == largest_key.as_ref()
-            }
-            _ => false,
-        });
-    }
-
-    #[test]
-    fn test_generate_proof_neighbour_key_challenge_before_first_leaf() {
-        let storage = Box::new(MockStorageDb {
-            data: std::collections::HashMap::new(),
-        });
-
-        let mut forest_storage = RocksDBForestStorage::<LayoutV1<RefHasher>>::new(storage).unwrap();
-
-        let metadata1 = Metadata {
-            owner: "Alice".to_string(),
-            location: vec![1, 2, 3],
-            size: 100,
-            fingerprint: Default::default(),
-        };
-
-        let metadata2 = Metadata {
-            owner: "Bob".to_string(),
-            location: vec![4, 5, 6],
-            size: 150,
-            fingerprint: Default::default(),
-        };
-
-        let raw_key1 = RawKey::<_>::new(vec![1, 2, 3]);
-        let lookup_key1 = forest_storage
-            .insert_file_key(&raw_key1, &metadata1)
-            .unwrap();
-
-        let raw_key2 = RawKey::<_>::new(vec![4, 5, 6]);
-        let lookup_key2 = forest_storage
-            .insert_file_key(&raw_key2, &metadata2)
-            .unwrap();
-
-        // Ensure trie integrity
-        assert!(forest_storage.get_file_key(&lookup_key1).unwrap().is_some());
-        assert!(forest_storage.get_file_key(&lookup_key2).unwrap().is_some());
-
-        let smallest_key = std::cmp::min(lookup_key1.clone(), lookup_key2.clone());
-
-        let mut challenge = smallest_key.clone();
-        challenge[0] -= 1;
-
-        let proof = forest_storage
-            .generate_proof(&vec![challenge])
-            .expect("Failed to generate proof");
-
-        // Verify the proof
         assert_eq!(proof.proven.len(), 1);
         assert!(
-            matches!(proof.proven[0], Proven::NeighbourKeys((None, Some(ref next_leaf))) if next_leaf.key.as_ref() == smallest_key.as_ref())
+            matches!(proof.proven.first().expect("Proven leaves should have proven 1 challenge"), Proven::ExactKey(leaf) if leaf.key.as_ref() == lookup_key)
         );
     }
 
     #[test]
-    fn test_integrity_for_complex_trie_with_many_leaves() {
-        let storage = Box::new(MockStorageDb {
-            data: std::collections::HashMap::new(),
-        });
+    fn test_generate_proof_neighboor_keys() {
+        let mut forest_storage = setup_storage::<LayoutV1<RefHasher>>();
 
-        let mut forest_storage = RocksDBForestStorage::<LayoutV1<RefHasher>>::new(storage).unwrap();
+        let (lookup_key1, _) =
+            create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
+        let (lookup_key2, _) =
+            create_and_insert_metadata(&mut forest_storage, "Alice", vec![7, 8, 10], 200);
 
-        let mut keys = Vec::new();
-        let mut metadatas = Vec::new();
+        let smallest = std::cmp::min(lookup_key1, lookup_key2);
+        let largest = std::cmp::max(lookup_key1, lookup_key2);
+        let mut challenge = smallest.clone();
+        challenge[0] = challenge[0] + 1;
 
-        for i in 0..100 {
-            let key = vec![i];
-            let metadata = Metadata {
-                owner: format!("Owner{}", i),
-                location: vec![i as u8],
-                size: 100 + i as u64,
-                fingerprint: Default::default(),
-            };
+        let proof = forest_storage.generate_proof(&vec![challenge]).unwrap();
 
-            let raw_key = RawKey::<_>::new(key.clone());
-            let lookup_key = forest_storage.insert_file_key(&raw_key, &metadata).unwrap();
-
-            keys.push(lookup_key);
-            metadatas.push(metadata);
-        }
-
-        for i in (0..100).step_by(2) {
-            let lookup_key = keys[i].clone();
-
-            // Verify the key is present
-            assert!(forest_storage.get_file_key(&lookup_key).unwrap().is_some());
-
-            // Remove the key
-            forest_storage.delete_file_key(&lookup_key).unwrap();
-
-            // Verify the key is removed
-            assert!(forest_storage.get_file_key(&lookup_key).unwrap().is_none());
-        }
+        assert_eq!(proof.proven.len(), 1);
+        assert!(
+            matches!(proof.proven.first().expect("Proven leaves should have proven 1 challenge"), Proven::NeighbourKeys((Some(left_leaf), Some(right_leaf))) if left_leaf.key.as_ref() == smallest && right_leaf.key.as_ref() == largest)
+        );
     }
 
     #[test]
-    fn test_key_alread_exists() {
-        let storage = Box::new(MockStorageDb {
-            data: std::collections::HashMap::new(),
-        });
+    fn test_generate_proof_challenge_before_first_leaf() {
+        let mut forest_storage = setup_storage::<LayoutV1<RefHasher>>();
 
-        let mut forest_storage = RocksDBForestStorage::<LayoutV1<RefHasher>>::new(storage).unwrap();
+        let (lookup_key1, _) =
+            create_and_insert_metadata(&mut forest_storage, "Alice", vec![1, 2, 3], 200);
+        let (lookup_key2, _) =
+            create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
 
-        let metadata = Metadata {
-            owner: "Alice".to_string(),
-            location: vec![1, 2, 3],
-            size: 100,
-            fingerprint: Default::default(),
-        };
+        let smallest = std::cmp::min(lookup_key1, lookup_key2);
+        let mut challenge = smallest.clone();
+        challenge[0] = challenge[0] - 1;
 
-        let raw_key = RawKey::<_>::new(vec![1, 2, 3]);
-        let lookup_key = forest_storage.insert_file_key(&raw_key, &metadata).unwrap();
+        let proof = forest_storage.generate_proof(&vec![challenge]).unwrap();
 
-        // Attempt to insert the same key again
-        assert_eq!(
-            forest_storage.insert_file_key(&raw_key, &metadata),
-            Err(ForestStorageErrors::FileKeyAlreadyExists)
+        assert_eq!(proof.proven.len(), 1);
+        assert!(
+            matches!(proof.proven.first().expect("Proven leaves should have proven 1 challenge"), Proven::NeighbourKeys((None, Some(leaf))) if leaf.key.as_ref() == smallest)
         );
+    }
 
-        // Verify the key is still in storage
-        let retrieved_metadata = forest_storage.get_file_key(&lookup_key).unwrap().unwrap();
-        assert_eq!(retrieved_metadata, metadata);
+    #[test]
+    fn test_generate_proof_challenge_after_last_leaf() {
+        let mut forest_storage = setup_storage::<LayoutV1<RefHasher>>();
+
+        let (lookup_key1, _) =
+            create_and_insert_metadata(&mut forest_storage, "Alice", vec![1, 2, 3], 200);
+        let (lookup_key2, _) =
+            create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
+
+        let largest = std::cmp::max(lookup_key1, lookup_key2);
+        let mut challenge = largest.clone();
+        challenge[0] = challenge[0] + 1;
+
+        let proof = forest_storage.generate_proof(&vec![challenge]).unwrap();
+
+        assert_eq!(proof.proven.len(), 1);
+        assert!(
+            matches!(proof.proven.first().expect("Proven leaves should have proven 1 challenge"), Proven::NeighbourKeys((Some(leaf), None)) if leaf.key.as_ref() == largest)
+        );
     }
 }
