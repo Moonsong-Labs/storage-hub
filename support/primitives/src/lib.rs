@@ -214,7 +214,7 @@ where
                 _ => {
                     #[cfg(test)]
                     unreachable!(
-                        "This should not happen. We check if the iterator has at least one leaf."
+                        "This should not happen. Unexpected scenario when iterating through proofs."
                     );
 
                     #[allow(unreachable_code)]
