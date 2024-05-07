@@ -244,8 +244,7 @@ pub mod pallet {
         /// A proof was accepted.
         ProofAccepted {
             provider: ProviderFor<T>,
-            forest_proof: ForestVerifierProofFor<T>,
-            key_proofs: Vec<KeyVerifierProofFor<T>>,
+            proof: Proof<T>,
         },
     }
 
@@ -397,8 +396,7 @@ pub mod pallet {
             // TODO: Emit correct event.
             Self::deposit_event(Event::ProofAccepted {
                 provider,
-                forest_proof: proof.forest_proof,
-                key_proofs: proof.key_proofs,
+                proof
             });
 
             // Return a successful DispatchResultWithPostInfo
