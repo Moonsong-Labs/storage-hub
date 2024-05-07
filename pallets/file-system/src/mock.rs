@@ -4,12 +4,12 @@ use frame_support::{
     weights::{constants::RocksDbWeight, Weight},
 };
 use frame_system as system;
-use pallet_proofs_dealer::CompactProof;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Bounded, IdentityLookup},
     AccountId32, BuildStorage, DispatchError, FixedU128,
 };
+use sp_trie::CompactProof;
 use storage_hub_traits::CommitmentVerifier;
 
 type Block = frame_system::mocking::MockBlock<Test>;

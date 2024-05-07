@@ -1,7 +1,7 @@
 use codec::{Decode, Encode};
 use frame_support::traits::fungible;
 use scale_info::TypeInfo;
-use storage_hub_traits::ProvidersInterface;
+use storage_hub_traits::{CommitmentVerifier, ProvidersInterface};
 
 #[derive(Debug, Clone, PartialEq, Decode, Encode, TypeInfo)]
 pub enum ProofRejectionReason {
@@ -66,8 +66,15 @@ pub type ProviderFor<T> = <<T as crate::Config>::ProvidersPallet as ProvidersInt
 /// Syntactic sugar for the ForestVerifier type used in the proofs pallet.
 pub type ForestVerifierFor<T> = <T as crate::Config>::ForestVerifier;
 
+/// Syntactic sugar for the ForestVerifier::Proof type used in the proofs pallet.
+pub type ForestVerifierProofFor<T> =
+    <<T as crate::Config>::ForestVerifier as CommitmentVerifier>::Proof;
+
 /// Syntactic sugar for the KeyVerifier type used in the proofs pallet.
 pub type KeyVerifierFor<T> = <T as crate::Config>::KeyVerifier;
+
+/// Syntactic sugar for the KeyVerifier::Proof type used in the proofs pallet.
+pub type KeyVerifierProofFor<T> = <<T as crate::Config>::KeyVerifier as CommitmentVerifier>::Proof;
 
 /// Syntactic sugar for the type of NativeBalance pallet.
 pub type BalancePalletFor<T> = <T as crate::Config>::NativeBalance;

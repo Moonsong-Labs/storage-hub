@@ -18,9 +18,6 @@ mod tests;
 pub mod types;
 pub mod utils;
 
-use scale_info::prelude::fmt::Debug;
-pub use sp_trie::CompactProof;
-
 #[frame_support::pallet]
 pub mod pallet {
     use codec::FullCodec;
@@ -31,7 +28,8 @@ pub mod pallet {
         traits::{fungible, Randomness},
     };
     use frame_system::pallet_prelude::*;
-    use sp_trie::CompactProof;
+    use scale_info::prelude::fmt::Debug;
+    use sp_std::vec::Vec;
     use storage_hub_traits::{CommitmentVerifier, ProvidersInterface};
     use types::{KeyFor, ProviderFor};
 
@@ -54,7 +52,7 @@ pub mod pallet {
         /// The type used to verify Merkle Patricia Forest proofs.
         /// This verifies proofs of keys belonging to the Merkle Patricia Forest.
         /// Something that implements the `CommitmentVerifier` trait.
-        type ForestVerifier: CommitmentVerifier<Key = KeyFor<Self>, Proof = CompactProof>;
+        type ForestVerifier: CommitmentVerifier<Key = KeyFor<Self>>;
 
         /// The type used to verify the proof of a specific key within the Merkle Patricia Forest.
         /// While `ForestVerifier` verifies that some keys are in the Merkle Patricia Forest, this
@@ -246,14 +244,14 @@ pub mod pallet {
         /// A proof was rejected.
         ProofRejected {
             provider: ProviderFor<T>,
-            proof: CompactProof,
+            proof: ForestVerifierProofFor<T>,
             reason: ProofRejectionReason,
         },
 
         /// A proof was accepted.
         ProofAccepted {
             provider: ProviderFor<T>,
-            proof: CompactProof,
+            proof: ForestVerifierProofFor<T>,
         },
     }
 
@@ -285,8 +283,14 @@ pub mod pallet {
         /// The root for the Provider could not be found.
         ProviderRootNotFound,
 
-        /// The proof submitted is empty.
-        EmptyProof,
+        /// The forest proof submitted is empty.
+        EmptyForestProof,
+
+        /// There are no key proofs submitted.
+        EmptyKeyProofs,
+
+        /// A key proof submitted is empty.
+        EmptyKeyProof,
 
         /// Provider is submitting a proof when they have a zero root.
         /// Providers with zero roots are not providing any service, so they should not be
@@ -377,7 +381,8 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn submit_proof(
             origin: OriginFor<T>,
-            proof: CompactProof,
+            forest_proof: ForestVerifierProofFor<T>,
+            key_proofs: Vec<KeyVerifierProofFor<T>>,
             provider: Option<ProviderFor<T>>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
@@ -394,10 +399,13 @@ pub mod pallet {
             };
 
             // TODO: Handle result of verification.
-            Self::do_submit_proof(&provider, &proof)?;
+            Self::do_submit_proof(&provider, &forest_proof, &key_proofs)?;
 
             // TODO: Emit correct event.
-            Self::deposit_event(Event::ProofAccepted { provider, proof });
+            Self::deposit_event(Event::ProofAccepted {
+                provider,
+                proof: forest_proof,
+            });
 
             // Return a successful DispatchResultWithPostInfo
             // TODO: Refund execution.

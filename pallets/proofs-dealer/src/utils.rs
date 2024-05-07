@@ -20,8 +20,9 @@ use crate::{
     pallet,
     types::{
         AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor, ChallengesFeeFor,
-        ForestRootFor, ForestVerifierFor, KeyFor, ProviderFor, ProvidersPalletFor,
-        RandomChallengesPerBlockFor, StakeToChallengePeriodFor, TreasuryAccountFor,
+        ForestRootFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor, KeyVerifierProofFor,
+        ProviderFor, ProvidersPalletFor, RandomChallengesPerBlockFor, StakeToChallengePeriodFor,
+        TreasuryAccountFor,
     },
     BlockToChallengesSeed, BlockToCheckpointChallenges, ChallengesQueue, Error,
     LastBlockProviderSubmittedProofFor, LastCheckpointBlock, Pallet, PriorityChallengesQueue,
@@ -88,7 +89,11 @@ where
     }
 
     // TODO: Document and add proper parameters.
-    pub fn do_submit_proof(submitter: &ProviderFor<T>, proof: &CompactProof) -> DispatchResult {
+    pub fn do_submit_proof(
+        submitter: &ProviderFor<T>,
+        forest_proof: &ForestVerifierProofFor<T>,
+        key_proofs: &Vec<KeyVerifierProofFor<T>>,
+    ) -> DispatchResult {
         // Check if submitter is a registered Provider.
         // This is actually redundant as the `submit_proof` extrinsic that calls this function
         // already checks this. However, it is left here for clarity.
@@ -97,8 +102,9 @@ where
             Error::<T>::NotProvider
         );
 
-        // Check for an empty proof.
-        ensure!(!proof.encoded_nodes.is_empty(), Error::<T>::EmptyProof);
+        // The check for whether forest_proof and key_proofs are not empty is handled by the corresponding
+        // verifiers for each. We do not preemptively check for this here, since the `CommitmentVerifier::Proof`
+        // type is not required to have an `is_empty` method.
 
         // Get root for submitter.
         // If a submitter is a registered Provider, it must have a root.
@@ -169,9 +175,9 @@ where
             challenges.extend(checkpoint_challenges);
         }
 
-        let forest_keys_proven = ForestVerifierFor::<T>::verify_proof(&root, &challenges, proof)?;
+        let forest_keys_proven =
+            ForestVerifierFor::<T>::verify_proof(&root, &challenges, forest_proof)?;
 
-        // TODO: Modify CommitmentVerifier to return the keys proven.
         // TODO: Verify each key of the keys proven using KeyVerifier.
 
         Ok(())

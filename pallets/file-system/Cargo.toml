@@ -25,6 +25,7 @@ frame-system = { workspace = true }
 
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
+sp-trie = { workspace = true }
 
 # Local
 storage-hub-traits = { workspace = true }
