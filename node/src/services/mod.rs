@@ -69,6 +69,8 @@ impl StorageHubHandlerInitializer for RocksDBStorageHubConfig {
         blockchain: ActorHandle<BlockchainService>,
     ) -> StorageHubHandler<Self> {
         let storage_path = hex::encode(provider_pub_key);
+        let storage = RocksDBForestStorage::<LayoutV1<RefHasher>>::rocksdb_storage(storage_path)
+            .expect("Failed to create RocksDB");
 
         StorageHubHandler::new(
             task_spawner,
@@ -78,7 +80,7 @@ impl StorageHubHandlerInitializer for RocksDBStorageHubConfig {
                 InMemoryFileStorage::<LayoutV1<RefHasher>>::new(),
             )),
             Arc::new(RwLock::new(
-                RocksDBForestStorage::<LayoutV1<RefHasher>>::new(storage_path)
+                RocksDBForestStorage::<LayoutV1<RefHasher>>::new(Box::new(storage))
                     .expect("Failed to create RocksDB"),
             )),
         )
@@ -134,13 +136,13 @@ impl<S: StorageHubHandlerConfig> StorageHubHandler<S> {
     }
 
     /// Add file to the forest storage.
-    pub async fn _add_file_to_forest<T: StorageHubHandlerConfig>(
+    pub async fn _add_file_to_forest(
         &self,
         who: String,
         location: Vec<u8>,
         size: u64,
         fingerprint: H256,
-    ) -> anyhow::Result<Vec<u8>> {
+    ) -> anyhow::Result<<S::ForestStorage as ForestStorage>::LookupKey> {
         let mut forest_storage = self.forest_storage.write().await;
 
         let metadata = Metadata::new(who, location, size, fingerprint);
@@ -154,7 +156,7 @@ impl<S: StorageHubHandlerConfig> StorageHubHandler<S> {
             )
             .map_err(|e| anyhow::anyhow!("Failed to insert file key: {:?}", e))?;
 
-        Ok(file_key.as_ref().to_vec())
+        Ok(file_key)
     }
 
     pub fn start_bsp_tasks(&self) {

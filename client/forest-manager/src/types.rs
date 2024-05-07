@@ -43,7 +43,7 @@ impl<T> AsRef<[u8]> for RawKey<T> {
 }
 
 /// Error type for the in-memory forest storage.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ForestStorageErrors {
     /// Failed to create trie iterator.
     FailedToCreateTrieIterator,
@@ -59,6 +59,8 @@ pub enum ForestStorageErrors {
     FailedToParseRoot,
     /// Failed to read storage.
     FailedToReadStorage,
+    /// Failed to write to storage.
+    FailedToWriteToStorage,
     /// Failed to deserialize value.
     FailedToDeserializeValue,
     /// Failed to serialize value.
