@@ -165,7 +165,7 @@ impl Actor for FileTransferService {
                 } => {
                     let result = match self.peer_file_registry.insert((peer_id, file_key)) {
                         true => Ok(()),
-                        false => Err(RequestError::RegisterNewFileFailure),
+                        false => Err(RequestError::FileAlreadyRegisteredForPeer),
                     };
 
                     match callback.send(result) {
@@ -183,7 +183,7 @@ impl Actor for FileTransferService {
                 } => {
                     let result = match self.peer_file_registry.remove(&(peer_id, file_key)) {
                         true => Ok(()),
-                        false => Err(RequestError::UnregisterFileFailure),
+                        false => Err(RequestError::FileNotRegisteredForPeer),
                     };
                     match callback.send(result) {
                         Ok(()) => {}

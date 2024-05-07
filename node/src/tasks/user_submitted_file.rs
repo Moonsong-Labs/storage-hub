@@ -55,10 +55,9 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
             location: format!("{:?}", event.location.into_inner()),
             fingerprint: event.fingerprint,
         };
+        
         let chunk_count = file_metadata.chunk_count();
-
-        // TODO(Arthur): double check this, I'm assuming Blake2 as the Trie hash function.
-        let file_key = Blake2Hasher::hash(&serde_json::to_vec(&file_metadata)?.to_owned());
+        let file_key = file_metadata.key();
 
         let peer_ids = multiaddresses
             .iter()

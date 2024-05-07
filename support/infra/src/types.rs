@@ -1,7 +1,10 @@
 use std::fmt::Debug;
+use std::hash::Hash;
 
 use serde::{Deserialize, Serialize};
 use sp_core::H256;
+use sp_core::Blake2Hasher;
+use sp_core::Hasher;
 use sp_trie::CompactProof;
 
 use crate::constants::FILE_CHUNK_SIZE;
@@ -33,6 +36,11 @@ impl Metadata {
 
     pub fn chunk_ids(&self) -> impl Iterator<Item = ChunkId> {
         0..self.chunk_count()
+    }
+
+    pub fn key(&self) -> Key {
+        // TODO(Arthur): double check this, I'm assuming Blake2 as the Trie hash function.
+        Blake2Hasher::hash(&serde_json::to_vec(&self).expect("This conversion should not fail. This is a bug."))
     }
 }
 

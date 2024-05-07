@@ -53,10 +53,10 @@ pub enum RequestError {
     DecodeError(prost::DecodeError),
     /// The response was decoded successfully, but it was not the expected response.
     UnexpectedResponse,
-    /// Registering new file failed
-    RegisterNewFileFailure,
-    /// Unregistering file failed
-    UnregisterFileFailure,
+    /// File is already stored in for this Peer in the registry
+    FileAlreadyRegisteredForPeer,
+    /// File not found in for this Peer in the registry
+    FileNotRegisteredForPeer,
 }
 
 /// Allows our ActorHandle to implement
