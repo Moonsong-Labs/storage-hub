@@ -6,8 +6,6 @@ use file_manager::traits::FileStorage;
 use log::{debug, error, info};
 use sc_network::Multiaddr;
 use sc_network::PeerId;
-use sp_core::Blake2Hasher;
-use sp_core::Hasher;
 use std::str::FromStr;
 use storage_hub_infra::event_bus::EventHandler;
 use storage_hub_infra::types::Metadata;
@@ -46,8 +44,6 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
             event.location,
         );
 
-        // TODO: use `Multiaddr` instead of `String`.
-        let multiaddresses = event.multiaddresses;
         let file_metadata = Metadata {
             owner: event.owner.to_string(),
             size: event.size.into(),
@@ -55,20 +51,14 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
             location: format!("{:?}", event.location.into_inner()),
             fingerprint: event.fingerprint,
         };
-        
+
         let chunk_count = file_metadata.chunk_count();
         let file_key = file_metadata.key();
 
-        let peer_ids = multiaddresses
+        let peer_ids = event.multiaddresses
             .iter()
-            .map(|multiaddr| {
-                let multiaddr_str = multiaddr
-                    .split("/")
-                    .last()
-                    .expect("Multiaddress of Bsp should not be empty.");
-                let multiaddr =
-                    Multiaddr::from_str(multiaddr_str).expect("Failed to convert into Multiaddr");
-                PeerId::try_from_multiaddr(&multiaddr).expect("Multiaddr without PeerId")
+            .filter_map(|multiaddr| {
+                PeerId::try_from_multiaddr(&multiaddr)
             })
             .collect::<Vec<PeerId>>();
 
@@ -90,7 +80,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
 
                 match upload_response {
                     Ok(_) => {
-                        debug!(target: LOG_TARGET, "Successfully uploaded chunk id {:?} to peer {:?}", chunk_id, peer_id)
+                        debug!(target: LOG_TARGET, "Successfully uploaded chunk id {:?} of file {:?} to peer {:?}", chunk_id, file_metadata.fingerprint, peer_id)
                     }
                     Err(e) => {
                         error!(target: LOG_TARGET, "Failed to upload chunk_id {:?} to peer {:?} due to {:?}", chunk_id, peer_id, e);

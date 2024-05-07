@@ -1,3 +1,4 @@
+use sc_network::Multiaddr;
 use sp_core::H256;
 use sp_runtime::AccountId32;
 use storage_hub_infra::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
@@ -39,7 +40,7 @@ pub struct AcceptedBspVolunteer {
     pub who: AccountId32,
     pub location: FileLocation,
     pub fingerprint: H256,
-    pub multiaddresses: Vec<String>,
+    pub multiaddresses: Vec<Multiaddr>,
     pub owner: AccountId32,
     pub size: StorageData,
 }
