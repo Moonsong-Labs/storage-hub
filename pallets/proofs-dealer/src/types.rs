@@ -1,14 +1,20 @@
 use codec::{Decode, Encode};
 use frame_support::traits::fungible;
 use scale_info::TypeInfo;
-use sp_std::vec::Vec;
+use sp_std::{vec::Vec, fmt::{Debug, Formatter, Result}};
 use storage_hub_traits::{CommitmentVerifier, ProvidersInterface};
 
-#[derive(Debug, Clone, PartialEq, Eq, Decode, Encode, TypeInfo)]
+#[derive(Encode, Decode, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct Proof<T: crate::Config> {
     pub forest_proof: ForestVerifierProofFor<T>,
     pub key_proofs: Vec<KeyVerifierProofFor<T>>,
+}
+
+impl<T: crate::Config> Debug for Proof<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "Proof {{ forest_proof: {:?}, key_proofs: {:?} }}", self.forest_proof, self.key_proofs)
+    }
 }
 
 // ****************************************************************************

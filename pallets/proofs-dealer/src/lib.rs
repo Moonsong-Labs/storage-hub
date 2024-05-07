@@ -244,7 +244,8 @@ pub mod pallet {
         /// A proof was accepted.
         ProofAccepted {
             provider: ProviderFor<T>,
-            proof: ForestVerifierProofFor<T>,
+            forest_proof: ForestVerifierProofFor<T>,
+            key_proofs: Vec<KeyVerifierProofFor<T>>,
         },
     }
 
@@ -374,8 +375,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn submit_proof(
             origin: OriginFor<T>,
-            forest_proof: ForestVerifierProofFor<T>,
-            key_proofs: Vec<KeyVerifierProofFor<T>>,
+            proof: Proof<T>,
             provider: Option<ProviderFor<T>>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
@@ -392,12 +392,13 @@ pub mod pallet {
             };
 
             // TODO: Handle result of verification.
-            Self::do_submit_proof(&provider, &forest_proof, &key_proofs)?;
+            Self::do_submit_proof(&provider, &proof.forest_proof, &proof.key_proofs)?;
 
             // TODO: Emit correct event.
             Self::deposit_event(Event::ProofAccepted {
                 provider,
-                proof: forest_proof,
+                forest_proof: proof.forest_proof,
+                key_proofs: proof.key_proofs,
             });
 
             // Return a successful DispatchResultWithPostInfo

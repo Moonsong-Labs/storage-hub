@@ -1,7 +1,6 @@
 // TODO: Remove this attribute once the file is implemented.
 #![allow(dead_code)]
 #![allow(unused_variables)]
-use core::fmt::Debug;
 
 use codec::Encode;
 use frame_support::{
@@ -297,7 +296,7 @@ where
     }
 }
 
-impl<T: pallet::Config + Debug> ProofsDealerInterface for Pallet<T> {
+impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     type Provider = ProviderFor<T>;
     type Proof = Proof<T>;
     type MerkleHash = T::MerkleHash;
