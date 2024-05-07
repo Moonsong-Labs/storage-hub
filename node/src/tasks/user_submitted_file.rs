@@ -4,9 +4,9 @@ use crate::tasks::StorageHubHandler;
 use crate::tasks::StorageHubHandlerConfig;
 use file_manager::traits::FileStorage;
 use log::{debug, error, info};
-use sc_network::Multiaddr;
+
 use sc_network::PeerId;
-use std::str::FromStr;
+
 use storage_hub_infra::event_bus::EventHandler;
 use storage_hub_infra::types::Metadata;
 
@@ -55,11 +55,10 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
         let chunk_count = file_metadata.chunk_count();
         let file_key = file_metadata.key();
 
-        let peer_ids = event.multiaddresses
+        let peer_ids = event
+            .multiaddresses
             .iter()
-            .filter_map(|multiaddr| {
-                PeerId::try_from_multiaddr(&multiaddr)
-            })
+            .filter_map(|multiaddr| PeerId::try_from_multiaddr(&multiaddr))
             .collect::<Vec<PeerId>>();
 
         for peer_id in peer_ids {
