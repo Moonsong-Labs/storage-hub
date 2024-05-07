@@ -21,6 +21,9 @@ const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10;
 const UNITS: Balance = 1_000_000_000_000;
 const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
 
+pub type ProofsDealerProofs =
+    <<Test as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::Proof;
+
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;
 pub struct MockRandomness;

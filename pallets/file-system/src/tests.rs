@@ -521,8 +521,13 @@ fn bsp_confirm_storing_success() {
             bsp_signed.clone(),
             location.clone(),
             H256::zero(), // TODO construct a real proof
-            sp_trie::CompactProof {
-                encoded_nodes: vec![],
+            ProofsDealerProofs {
+                forest_proof: sp_trie::CompactProof {
+                    encoded_nodes: vec![],
+                },
+                key_proofs: vec![sp_trie::CompactProof {
+                    encoded_nodes: vec![],
+                }],
             }
         ));
 
@@ -578,8 +583,13 @@ fn bsp_confirm_storing_storage_request_not_found_fail() {
                 bsp_signed.clone(),
                 location.clone(),
                 H256::zero(), // TODO construct a real proof
-                sp_trie::CompactProof {
-                    encoded_nodes: vec![],
+                ProofsDealerProofs {
+                    forest_proof: sp_trie::CompactProof {
+                        encoded_nodes: vec![],
+                    },
+                    key_proofs: vec![sp_trie::CompactProof {
+                        encoded_nodes: vec![],
+                    }],
                 }
             ),
             Error::<Test>::StorageRequestNotFound
@@ -619,8 +629,13 @@ fn bsp_confirm_storing_not_volunteered_fail() {
                 bsp_signed.clone(),
                 location.clone(),
                 H256::zero(), // TODO construct a real proof
-                sp_trie::CompactProof {
-                    encoded_nodes: vec![],
+                ProofsDealerProofs {
+                    forest_proof: sp_trie::CompactProof {
+                        encoded_nodes: vec![],
+                    },
+                    key_proofs: vec![sp_trie::CompactProof {
+                        encoded_nodes: vec![],
+                    }],
                 }
             ),
             Error::<Test>::BspNotVolunteered
@@ -667,8 +682,13 @@ fn bsp_already_confirmed_fail() {
             bsp_signed.clone(),
             location.clone(),
             H256::zero(), // TODO construct a real proof
-            sp_trie::CompactProof {
-                encoded_nodes: vec![],
+            ProofsDealerProofs {
+                forest_proof: sp_trie::CompactProof {
+                    encoded_nodes: vec![],
+                },
+                key_proofs: vec![sp_trie::CompactProof {
+                    encoded_nodes: vec![],
+                }],
             }
         ));
 
@@ -677,8 +697,13 @@ fn bsp_already_confirmed_fail() {
                 bsp_signed.clone(),
                 location.clone(),
                 H256::zero(), // TODO construct a real proof
-                sp_trie::CompactProof {
-                    encoded_nodes: vec![],
+                ProofsDealerProofs {
+                    forest_proof: sp_trie::CompactProof {
+                        encoded_nodes: vec![],
+                    },
+                    key_proofs: vec![sp_trie::CompactProof {
+                        encoded_nodes: vec![],
+                    }],
                 }
             ),
             Error::<Test>::BspAlreadyConfirmed
@@ -718,8 +743,13 @@ fn bsp_actions_not_a_bsp_fail() {
                 bsp_signed.clone(),
                 location.clone(),
                 H256::zero(), // TODO construct a real proof
-                sp_trie::CompactProof {
-                    encoded_nodes: vec![],
+                ProofsDealerProofs {
+                    forest_proof: sp_trie::CompactProof {
+                        encoded_nodes: vec![],
+                    },
+                    key_proofs: vec![sp_trie::CompactProof {
+                        encoded_nodes: vec![],
+                    }],
                 }
             ),
             Error::<Test>::NotABsp
@@ -767,8 +797,13 @@ fn bsp_stop_storing_success() {
             bsp_signed.clone(),
             location.clone(),
             H256::zero(), // TODO construct a real proof
-            sp_trie::CompactProof {
-                encoded_nodes: vec![],
+            ProofsDealerProofs {
+                forest_proof: sp_trie::CompactProof {
+                    encoded_nodes: vec![],
+                },
+                key_proofs: vec![sp_trie::CompactProof {
+                    encoded_nodes: vec![],
+                }],
             }
         ));
 
@@ -879,8 +914,13 @@ fn bsp_stop_storing_while_storage_request_open_success() {
             bsp_signed.clone(),
             location.clone(),
             H256::zero(),
-            sp_trie::CompactProof {
-                encoded_nodes: vec![],
+            ProofsDealerProofs {
+                forest_proof: sp_trie::CompactProof {
+                    encoded_nodes: vec![],
+                },
+                key_proofs: vec![sp_trie::CompactProof {
+                    encoded_nodes: vec![],
+                }],
             }
         ));
 

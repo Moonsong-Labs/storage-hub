@@ -1,6 +1,8 @@
 // TODO: Remove this attribute once the file is implemented.
 #![allow(dead_code)]
 #![allow(unused_variables)]
+use core::fmt::Debug;
+
 use codec::Encode;
 use frame_support::{
     ensure,
@@ -13,7 +15,6 @@ use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, Hash, Zero},
     ArithmeticError, DispatchError, SaturatedConversion, Saturating,
 };
-use sp_trie::CompactProof;
 use storage_hub_traits::{CommitmentVerifier, ProofsDealerInterface, ProvidersInterface};
 
 use crate::{
@@ -21,8 +22,8 @@ use crate::{
     types::{
         AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor, ChallengesFeeFor,
         ForestRootFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor, KeyVerifierProofFor,
-        ProviderFor, ProvidersPalletFor, RandomChallengesPerBlockFor, StakeToChallengePeriodFor,
-        TreasuryAccountFor,
+        Proof, ProviderFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
+        StakeToChallengePeriodFor, TreasuryAccountFor,
     },
     BlockToChallengesSeed, BlockToCheckpointChallenges, ChallengesQueue, Error,
     LastBlockProviderSubmittedProofFor, LastCheckpointBlock, Pallet, PriorityChallengesQueue,
@@ -289,16 +290,16 @@ where
     fn verify_proof(
         who: &ProviderFor<T>,
         root: &T::MerkleHash,
-        proof: &CompactProof,
+        proof: &Proof<T>,
     ) -> DispatchResult {
         // TODO
         Ok(())
     }
 }
 
-impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
+impl<T: pallet::Config + Debug> ProofsDealerInterface for Pallet<T> {
     type Provider = ProviderFor<T>;
-    type Proof = CompactProof;
+    type Proof = Proof<T>;
     type MerkleHash = T::MerkleHash;
 
     fn verify_proof(
