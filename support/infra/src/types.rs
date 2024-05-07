@@ -14,12 +14,16 @@ use crate::constants::FILE_CHUNK_SIZE;
 pub type Key = H256;
 
 // TODO: this is currently a placeholder in order to define Storage interface.
+/// This type mirrors the `FileLocation<T>` type from the runtime, which is a BoundedVec.
+type FileLocation = Vec<u8>;
+
+// TODO: this is currently a placeholder in order to define Storage interface.
 /// Metadata contains information about a file.
 /// Most importantly, the fingerprint which is the root Merkle hash of the file.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Metadata {
     pub owner: String,
-    pub location: String,
+    pub location: FileLocation,
     pub size: u64,
     pub fingerprint: H256,
 }
@@ -39,9 +43,7 @@ impl Metadata {
 
     pub fn key(&self) -> Key {
         // TODO(Arthur): double check this, I'm assuming Blake2 as the Trie hash function.
-        Blake2Hasher::hash(
-            &serde_json::to_vec(&self).expect("This conversion should not fail. This is a bug."),
-        )
+        Blake2Hasher::hash(&serde_json::to_vec(&self).expect("Should not fail. This is a bug."))
     }
 }
 

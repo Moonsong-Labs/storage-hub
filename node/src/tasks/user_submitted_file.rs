@@ -47,8 +47,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
         let file_metadata = Metadata {
             owner: event.owner.to_string(),
             size: event.size.into(),
-            // TODO: use `FileLocation` instead of `String`.
-            location: format!("{:?}", event.location.into_inner()),
+            location: event.location.into_inner(),
             fingerprint: event.fingerprint,
         };
 
