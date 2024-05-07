@@ -3,7 +3,7 @@ use crate::tasks::AcceptedBspVolunteer;
 use crate::tasks::StorageHubHandler;
 use crate::tasks::StorageHubHandlerConfig;
 use file_manager::traits::FileStorage;
-use log::{error, info};
+use log::{debug, error, info};
 use sc_network::Multiaddr;
 use sc_network::PeerId;
 use sp_core::Blake2Hasher;
@@ -75,7 +75,11 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
 
         for peer_id in peer_ids {
             for chunk_id in 0..chunk_count {
-                let proof = self.storage_hub_handler.file_storage.read().await
+                let proof = self
+                    .storage_hub_handler
+                    .file_storage
+                    .read()
+                    .await
                     .generate_proof(&file_key, &chunk_id)
                     .expect("File is not in storage, or proof does not exist.");
 
@@ -87,7 +91,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
 
                 match upload_response {
                     Ok(_) => {
-                        info!(target: LOG_TARGET, "Successfully uploaded chunk id {:?} to peer {:?}", chunk_id, peer_id)
+                        debug!(target: LOG_TARGET, "Successfully uploaded chunk id {:?} to peer {:?}", chunk_id, peer_id)
                     }
                     Err(e) => {
                         error!(target: LOG_TARGET, "Failed to upload chunk_id {:?} to peer {:?} due to {:?}", chunk_id, peer_id, e);
@@ -96,6 +100,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
                     }
                 }
             }
+            info!(target: LOG_TARGET, "Succesfully sent file with fingerprint {:?} to peer {:?}", file_metadata.fingerprint, peer_id);
         }
 
         Ok(())
