@@ -29,7 +29,6 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
-    use sp_std::vec::Vec;
     use storage_hub_traits::{CommitmentVerifier, ProvidersInterface};
     use types::{KeyFor, ProviderFor};
 
@@ -394,10 +393,7 @@ pub mod pallet {
             Self::do_submit_proof(&provider, &proof.forest_proof, &proof.key_proofs)?;
 
             // TODO: Emit correct event.
-            Self::deposit_event(Event::ProofAccepted {
-                provider,
-                proof
-            });
+            Self::deposit_event(Event::ProofAccepted { provider, proof });
 
             // Return a successful DispatchResultWithPostInfo
             // TODO: Refund execution.
