@@ -321,7 +321,7 @@ where
 
         // TODO: Initialise challenges properly constructing the key for this particular file.
         let file_key = FileKeyHasher::<T>::hash(&location.encode());
-        let challenges = vec![file_key.clone()];
+        let challenges = vec![file_key];
 
         // Check that the forest proof is valid.
         <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::verify_forest_proof(

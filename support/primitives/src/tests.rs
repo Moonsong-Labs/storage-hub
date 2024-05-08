@@ -274,7 +274,7 @@ fn commitment_verifier_challenge_key_in_between_success() {
     let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
     // Challenge key is the first key with the most significant bit incremented by 1.
-    let mut challenge_key = leaf_keys[0].clone();
+    let mut challenge_key = leaf_keys[0];
     challenge_key.0[0] += 1;
 
     {
@@ -330,7 +330,7 @@ fn commitment_verifier_challenge_key_before_first_key_success() {
     let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
     // Challenge key is the first key with the most significant bit decremented by 1.
-    let mut challenge_key = leaf_keys[0].clone();
+    let mut challenge_key = leaf_keys[0];
     challenge_key.0[0] -= 1;
 
     {
@@ -388,7 +388,7 @@ fn commitment_verifier_challenge_key_after_last_key_success() {
     let largest_key = leaf_keys.iter().max().unwrap();
 
     // Challenge key is the largest key with the most significant bit incremented by 1.
-    let mut challenge_key = largest_key.clone();
+    let mut challenge_key = *largest_key;
     challenge_key.0[0] += 1;
 
     {
