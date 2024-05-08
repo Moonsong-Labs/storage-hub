@@ -31,6 +31,7 @@ pallet-proofs-dealer = { workspace = true }
 pallet-randomness = { workspace = true }
 
 storage-hub-traits = { workspace = true }
+storage-hub-primitives = { workspace = true }
 
 # Substrate
 frame-support = { workspace = true }
@@ -140,6 +141,8 @@ std = [
 	"sp-std/std",
 	"sp-transaction-pool/std",
 	"sp-version/std",
+	"storage-hub-traits/std",
+	"storage-hub-primitives/std",
 	"substrate-wasm-builder",
 	"runtime-constants/std",
 	"xcm-builder/std",
