@@ -399,15 +399,14 @@ pub mod pallet {
                 }
             };
 
-            // TODO: Handle result of verification.
             Self::do_submit_proof(&provider, &proof)?;
 
-            // TODO: Emit correct event.
+            // Emit event.
             Self::deposit_event(Event::ProofAccepted { provider, proof });
 
-            // Return a successful DispatchResultWithPostInfo
-            // TODO: Refund execution.
-            Ok(().into())
+            // Return a successful DispatchResultWithPostInfo.
+            // If the proof is valid, the execution of this extrinsic should be refunded.
+            Ok(Pays::No.into())
         }
 
         /// Extrinsic to register a new round of challenges.

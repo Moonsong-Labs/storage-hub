@@ -88,7 +88,17 @@ where
         Self::enqueue_challenge(key)
     }
 
-    // TODO: Document and add proper parameters.
+    /// Submit proof.
+    ///
+    /// For a given `submitter`, verify the `proof` submitted. The proof is verified by checking
+    /// the forest proof and each key proof.
+    /// Relies on the `ProvidersPallet` to get the root for the submitter, the last block for which
+    /// the submitter submitted a proof and the stake for the submitter. With that information, it
+    /// computes the next block for which the submitter should be submitting a proof. It then gets
+    /// the seed for that block and generates the challenges from the seed. It also checks if there
+    /// has been a Checkpoint Challenge block in between the last block proven and the current block.
+    /// If there has been, the Provider should have included proofs for the challenges in that block.
+    /// It then verifies the forest proof and each key proof, using the `ForestVerifier` and `KeyVerifier`.
     pub fn do_submit_proof(submitter: &ProviderFor<T>, proof: &Proof<T>) -> DispatchResult {
         let forest_proof = &proof.forest_proof;
         let key_proofs = &proof.key_proofs;
@@ -116,7 +126,7 @@ where
         // Check if root is non-zero.
         // A zero root means that the Provider is not providing any service yet, so he shouldn't be
         // submitting any proofs.
-        ensure!(root == ForestRootFor::<T>::default(), Error::<T>::ZeroRoot);
+        ensure!(root == Self::default_forest_root(), Error::<T>::ZeroRoot);
 
         // Get last block for which the submitter submitted a proof.
         let last_block_proven =
@@ -145,11 +155,13 @@ where
 
         // Check that the challenges block is greater than current block minus `ChallengeHistoryLength`,
         // i.e. that the challenges block is within the blocks this pallet keeps track of.
-        ensure!(
+        expect_or_err!(
             challenges_block
                 >= frame_system::Pallet::<T>::block_number()
                     .saturating_sub(ChallengeHistoryLengthFor::<T>::get()),
-            Error::<T>::ChallengesBlockTooOld
+            "Challenges block is too old, beyond the history this pallet keeps track of. This should not be possible.",
+            Error::<T>::ChallengesBlockTooOld,
+            bool
         );
 
         // Get seed for challenges block.
@@ -318,6 +330,12 @@ where
     ) -> DispatchResult {
         // TODO
         Ok(())
+    }
+
+    /// Returns the default forest root.
+    fn default_forest_root() -> ForestRootFor<T> {
+        // TODO: Check that this returns the root for an empty forest and change if necessary.
+        ForestRootFor::<T>::default()
     }
 }
 
