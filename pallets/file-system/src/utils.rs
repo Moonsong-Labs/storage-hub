@@ -151,7 +151,7 @@ where
         who: T::AccountId,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
-    ) -> Result<MultiAddresses<T>, DispatchError> {
+    ) -> Result<(MultiAddresses<T>, StorageData<T>, T::AccountId), DispatchError> {
         let bsp =
             <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(who.clone())
                 .ok_or(Error::<T>::NotABsp)?;
@@ -239,8 +239,10 @@ where
         <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
 
         let multiaddresses = T::Providers::get_bsp_multiaddresses(&bsp)?;
+        let size = file_metadata.size;
+        let owner = file_metadata.owner;
 
-        Ok(multiaddresses)
+        Ok((multiaddresses, size, owner))
     }
 
     /// Confirm storing a file.

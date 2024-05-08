@@ -94,7 +94,7 @@ pub fn build_merkle_patricia_forest<T: TrieLayout>() -> (
                 .insert(file.0.as_ref(), file.1.as_ref())
                 .unwrap();
 
-            file_keys.push(file.0.clone());
+            file_keys.push(file.0);
         }
 
         println!(
@@ -172,7 +172,7 @@ pub fn build_merkle_patricia_forest_one_key<T: TrieLayout>() -> (
                 .insert(file.0.as_ref(), file.1.as_ref())
                 .unwrap();
 
-            file_keys.push(file.0.clone());
+            file_keys.push(file.0);
         }
 
         println!(
@@ -319,7 +319,7 @@ fn commitment_verifier_challenge_key_in_between_success() {
     )
     .expect("Failed to verify proof");
 
-    assert_eq!(proof_keys, vec![leaf_keys[0].clone(), leaf_keys[1].clone()]);
+    assert_eq!(proof_keys, vec![leaf_keys[0], leaf_keys[1]]);
 }
 
 #[test]
@@ -375,7 +375,7 @@ fn commitment_verifier_challenge_key_before_first_key_success() {
     )
     .expect("Failed to verify proof");
 
-    assert_eq!(proof_keys, vec![leaf_keys[0].clone()]);
+    assert_eq!(proof_keys, vec![leaf_keys[0]]);
 }
 
 #[test]
