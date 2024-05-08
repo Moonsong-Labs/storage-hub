@@ -2,7 +2,9 @@
 
 use codec::{FullCodec, HasCompact};
 use frame_support::dispatch::DispatchResult;
-use frame_support::pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member};
+use frame_support::pallet_prelude::{
+    Decode, Encode, MaxEncodedLen, MaybeSerializeDeserialize, Member,
+};
 use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
 use frame_support::traits::fungible;
 use frame_support::Parameter;
@@ -239,5 +241,66 @@ pub trait CommitmentVerifier {
         commitment: &Self::Key,
         challenges: &[Self::Key],
         proof: &Self::Proof,
+    ) -> DispatchResult;
+}
+
+/// The interface of the Payment Streams pallet.
+///
+/// It is to be used by other pallets to interact with the Payment Streams pallet to create, update and delete payment streams.
+/// One example: the Proofs Dealer pallet uses this interface to update the block when a Backup Storage Provider last submitted a valid proof.
+///
+/// TODO: Update this alongisde the Payment Streams pallet to add the `payment_account` to the BSP struct, so we can handle each function with
+/// the BSP ID instead of relying on account IDs.
+pub trait PaymentStreamsInterface {
+    /// The type which represents the balance of the runtime.
+    type Balance: fungible::Inspect<Self::AccountId>
+        + fungible::Mutate<Self::AccountId>
+        + fungible::hold::Inspect<Self::AccountId>
+        + fungible::hold::Mutate<Self::AccountId>;
+    /// The type which represents an account identifier.
+    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a block number.
+    type BlockNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a payment stream.
+    type PaymentStream: Encode
+        + Decode
+        + Parameter
+        + Member
+        + Debug
+        + MaxEncodedLen
+        + PartialEq
+        + Clone;
+
+    /// Create a new payment stream from a user to a Backup Storage Provider.
+    fn create_payment_stream(
+        bsp_account: &Self::AccountId,
+        user_account: &Self::AccountId,
+        rate: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
+    ) -> DispatchResult;
+
+    /// Update the rate of an existing payment stream.
+    fn update_payment_stream(
+        bsp_account: &Self::AccountId,
+        user_account: &Self::AccountId,
+        rate: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
+    ) -> DispatchResult;
+
+    /// Delete a payment stream.
+    fn delete_payment_stream(
+        bsp_account: &Self::AccountId,
+        user_account: &Self::AccountId,
+    ) -> DispatchResult;
+
+    /// Get the payment stream information for a user and a Backup Storage Provider.
+    fn get_payment_stream_info(
+        bsp_account: &Self::AccountId,
+        user_account: &Self::AccountId,
+    ) -> Option<Self::PaymentStream>;
+
+    /// Update the last valid proof of a payment stream.
+    fn update_last_valid_proof(
+        bsp_account: &Self::AccountId,
+        user_account: &Self::AccountId,
+        last_valid_proof_block: Self::BlockNumber,
     ) -> DispatchResult;
 }
