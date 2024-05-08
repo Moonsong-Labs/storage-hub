@@ -150,7 +150,7 @@ where
         );
 
         // Get the information of the payment stream
-        let mut payment_stream = PaymentStreams::<T>::get(bsp_id, user_account)
+        let payment_stream = PaymentStreams::<T>::get(bsp_id, user_account)
             .ok_or(Error::<T>::PaymentStreamNotFound)?;
 
         // Verify that the new rate is different from the current one
@@ -163,7 +163,7 @@ where
         let amount_charged = Self::do_charge_payment_stream(&bsp_account, user_account)?;
         if amount_charged > Zero::zero() {
             // We emit a payment charged event only if the user had to pay for its storage before the payment stream was updated
-            Self::deposit_event(Event::<T>::PaymentCharged {
+            Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
                 backup_storage_provider_id: bsp_id,
                 amount: amount_charged,
@@ -177,8 +177,18 @@ where
         );
 
         // Update the payment stream in the PaymentStreams mapping
-        payment_stream.rate = new_rate;
-        PaymentStreams::<T>::insert(bsp_id, user_account, payment_stream);
+        PaymentStreams::<T>::mutate(bsp_id, user_account, |payment_stream| {
+            match payment_stream {
+                Some(payment_stream) => {
+                    payment_stream.rate = new_rate;
+                    Ok(())
+                }
+                None => {
+                    // This should never happen as we already checked that the payment stream exists
+                    return Err(Error::<T>::PaymentStreamNotFound);
+                }
+            }
+        })?;
 
         Ok(())
     }
@@ -205,7 +215,7 @@ where
         let amount_charged = Self::do_charge_payment_stream(&bsp_account, user_account)?;
         if amount_charged > Zero::zero() {
             // We emit a payment charged event only if the user had to pay for its storage before deleting the payment stream
-            Self::deposit_event(Event::<T>::PaymentCharged {
+            Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
                 backup_storage_provider_id: bsp_id,
                 amount: amount_charged,
@@ -268,7 +278,7 @@ where
         );
 
         // Get the information of the payment stream
-        let mut payment_stream = PaymentStreams::<T>::get(bsp_id, user_account)
+        let payment_stream = PaymentStreams::<T>::get(bsp_id, user_account)
             .ok_or(Error::<T>::PaymentStreamNotFound)?;
 
         // Note: No need to check if a new proof has been submitted since the last charge as the only consecuence of that is charging 0 to the user,
@@ -321,9 +331,19 @@ where
                 Preservation::Preserve,
             )?;
 
-            // Set the last charge to the current block number
-            payment_stream.last_charged_proof = payment_stream.last_valid_proof;
-            PaymentStreams::<T>::insert(bsp_id, user_account, payment_stream);
+            // Set the last charge to the block number of the last valid proof submitted
+            PaymentStreams::<T>::mutate(bsp_id, user_account, |payment_stream| {
+                match payment_stream {
+                    Some(payment_stream) => {
+                        payment_stream.last_charged_proof = payment_stream.last_valid_proof;
+                        Ok(())
+                    }
+                    None => {
+                        // This should never happen as we already checked that the payment stream exists
+                        return Err(Error::<T>::PaymentStreamNotFound);
+                    }
+                }
+            })?;
 
             // Return the amount that has been charged
             Ok(amount_to_charge)
@@ -401,7 +421,7 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         .ok_or(Error::<T>::NotABackupStorageProvider)?;
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::PaymentStreamRemoved {
+        Self::deposit_event(Event::<T>::PaymentStreamDeleted {
             user_account: user_account.clone(),
             backup_storage_provider_id: bsp_id,
         });
@@ -421,14 +441,37 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
             Error::<T>::InvalidLastValidProofBlockNumber
         );
 
+        // Get the BSP ID of the BSP account
         let bsp_id = <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(
             bsp_account.clone(),
         )
         .ok_or(Error::<T>::NotABackupStorageProvider)?;
-        let mut payment_stream = PaymentStreams::<T>::get(bsp_id, user_account)
+
+        // Get the information of the payment stream to update
+        let payment_stream = PaymentStreams::<T>::get(bsp_id, user_account)
             .ok_or(Error::<T>::PaymentStreamNotFound)?;
-        payment_stream.last_valid_proof = last_valid_proof_block;
-        PaymentStreams::<T>::insert(bsp_id, user_account, payment_stream);
+
+        // Ensure that the new last valid proof block is greater than the last valid proof block of the payment stream
+        ensure!(
+            last_valid_proof_block > payment_stream.last_valid_proof,
+            Error::<T>::InvalidLastValidProofBlockNumber
+        );
+
+        // Update the last valid proof block of the payment stream
+        PaymentStreams::<T>::mutate(bsp_id, user_account, |payment_stream| {
+            match payment_stream {
+                Some(payment_stream) => {
+                    payment_stream.last_valid_proof = last_valid_proof_block;
+                    Ok(())
+                }
+                None => {
+                    // This should never happen as we already checked that the payment stream exists
+                    return Err(Error::<T>::PaymentStreamNotFound);
+                }
+            }
+        })?;
+
+        // Return a successful DispatchResult
         Ok(())
     }
 
@@ -436,9 +479,12 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         bsp_account: &Self::AccountId,
         user_account: &Self::AccountId,
     ) -> Option<Self::PaymentStream> {
+        // Get the BSP ID of the BSP account
         let bsp_id = <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(
             bsp_account.clone(),
         )?;
+
+        // Return the payment stream information
         PaymentStreams::<T>::get(bsp_id, user_account)
     }
 }
