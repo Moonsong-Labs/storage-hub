@@ -235,6 +235,9 @@ where
                 &user_account,
                 Precision::Exact,
             )?;
+
+            // Remove the user from the UsersWithoutFunds mapping
+            UsersWithoutFunds::<T>::remove(user_account);
         }
 
         Ok(())
@@ -303,6 +306,10 @@ where
             Ok(Zero::zero())
         } else {
             // If the user does have enough funds to pay for its storage:
+
+            // Clear the user from the UsersWithoutFunds mapping
+            // TODO: Design a more robust way of handling out-of-funds users
+            UsersWithoutFunds::<T>::remove(user_account);
 
             // Charge the payment stream from the user's balance
             T::NativeBalance::transfer(

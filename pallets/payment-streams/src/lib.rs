@@ -101,7 +101,8 @@ pub mod pallet {
     /// can stop providing storage to them.
     ///
     /// This storage is updated in:
-    /// - [charge_payment](crate::dispatchables::charge_payment), which emits a `UserWithoutFunds` event if the user does not have enough funds.
+    /// - [charge_payment](crate::dispatchables::charge_payment), which emits a `UserWithoutFunds` event and sets the user's entry in this map if it does not
+    /// have enough funds, and clears the entry if it was set and the user has enough funds.
     #[pallet::storage]
     pub type UsersWithoutFunds<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, ()>;
 
