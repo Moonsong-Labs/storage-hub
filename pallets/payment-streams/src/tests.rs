@@ -65,7 +65,7 @@ mod create_stream {
             // The event should be emitted
             System::assert_last_event(
                 Event::<Test>::PaymentStreamCreated {
-                    user_id: bob,
+                    user_account: bob,
                     backup_storage_provider_id: alice_bsp_id,
                     rate,
                 }
