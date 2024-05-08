@@ -20,9 +20,9 @@ use crate::{
     pallet,
     types::{
         AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor, ChallengesFeeFor,
-        ForestRootFor, ForestVerifierFor, KeyFor, KeyVerifierFor, Proof, ProviderFor,
-        ProvidersPalletFor, RandomChallengesPerBlockFor, StakeToChallengePeriodFor,
-        TreasuryAccountFor,
+        ForestRootFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor, KeyVerifierFor,
+        KeyVerifierProofFor, Proof, ProviderFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
+        StakeToChallengePeriodFor, TreasuryAccountFor,
     },
     BlockToChallengesSeed, BlockToCheckpointChallenges, ChallengesQueue, Error,
     LastBlockProviderSubmittedProofFor, LastCheckpointBlock, Pallet, PriorityChallengesQueue,
@@ -325,7 +325,7 @@ where
     // TODO: Document.
     fn verify_proof(
         who: &ProviderFor<T>,
-        root: &T::MerkleHash,
+        challenges: &[T::MerkleHash],
         proof: &Proof<T>,
     ) -> DispatchResult {
         // TODO
@@ -341,15 +341,40 @@ where
 
 impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     type Provider = ProviderFor<T>;
-    type Proof = Proof<T>;
+    type ForestProof = ForestVerifierProofFor<T>;
+    type KeyProof = KeyVerifierProofFor<T>;
     type MerkleHash = T::MerkleHash;
+    type MerkleHashing = T::MerkleHashing;
 
-    fn verify_proof(
+    fn verify_forest_proof(
         who: &Self::Provider,
-        root: &Self::MerkleHash,
-        proof: &Self::Proof,
-    ) -> DispatchResult {
-        Self::verify_proof(who, root, proof)
+        challenges: &[Self::MerkleHash],
+        proof: &Self::ForestProof,
+    ) -> Result<Vec<Self::MerkleHash>, DispatchError> {
+        // Check if submitter is a registered Provider.
+        ensure!(
+            ProvidersPalletFor::<T>::is_provider(who.clone()),
+            Error::<T>::NotProvider
+        );
+
+        // Get root for submitter.
+        // If a submitter is a registered Provider, it must have a root.
+        let root = ProvidersPalletFor::<T>::get_root(who.clone())
+            .ok_or(Error::<T>::ProviderRootNotFound)?;
+
+        // Verify forest proof.
+        ForestVerifierFor::<T>::verify_proof(&root, challenges, proof)
+            .map_err(|_| Error::<T>::ForestProofVerificationFailed.into())
+    }
+
+    fn verify_key_proof(
+        key: &Self::MerkleHash,
+        challenges: &[Self::MerkleHash],
+        proof: &Self::KeyProof,
+    ) -> Result<Vec<Self::MerkleHash>, DispatchError> {
+        // Verify key proof.
+        KeyVerifierFor::<T>::verify_proof(key, challenges, proof)
+            .map_err(|_| Error::<T>::KeyProofVerificationFailed.into())
     }
 
     fn challenge(key_challenged: &Self::MerkleHash) -> DispatchResult {

@@ -45,7 +45,7 @@ pub struct KeyProof<T: crate::Config> {
     pub challenge_count: u32,
 }
 
-/// Implement Debug for Proof. Cannot derive Debug directly because of compiler issues
+/// Implement Debug for KeyProof. Cannot derive Debug directly because of compiler issues
 /// with the generic type.
 impl<T: crate::Config> Debug for KeyProof<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
