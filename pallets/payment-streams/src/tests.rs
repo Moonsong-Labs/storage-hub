@@ -237,6 +237,12 @@ mod create_stream {
                 rate
             ),);
 
+            // Check how many streams Bob has
+            assert_eq!(
+                PaymentStreams::get_payment_streams_count_of_user(&bob),
+                u32::MAX
+            );
+
             // Create a payment stream from Bob to Charlie of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_noop!(
