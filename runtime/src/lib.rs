@@ -259,6 +259,7 @@ construct_runtime!(
         FileSystem: pallet_file_system = 41,
         ProofsDealer: pallet_proofs_dealer = 42,
         Randomness: pallet_randomness = 43,
+        PaymentStreams: pallet_payment_streams = 44,
     }
 );
 

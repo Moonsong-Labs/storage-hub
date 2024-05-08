@@ -29,6 +29,7 @@ pallet-file-system = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-randomness = { workspace = true }
+pallet-payment-streams = { workspace = true }
 
 storage-hub-traits = { workspace = true }
 storage-hub-primitives = { workspace = true }

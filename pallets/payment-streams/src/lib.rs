@@ -22,6 +22,7 @@ mod mock;
 mod tests;
 
 pub use pallet::*;
+use scale_info::prelude::vec::Vec;
 pub use scale_info::Type;
 use types::{BackupStorageProviderId, BalanceOf, PaymentStream};
 

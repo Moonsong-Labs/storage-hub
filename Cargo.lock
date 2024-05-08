@@ -14537,6 +14537,7 @@ dependencies = [
  "pallet-collator-selection",
  "pallet-file-system",
  "pallet-message-queue 31.0.0",
+ "pallet-payment-streams",
  "pallet-proofs-dealer",
  "pallet-randomness",
  "pallet-session 28.0.0",

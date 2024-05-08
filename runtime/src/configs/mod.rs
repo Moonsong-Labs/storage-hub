@@ -48,6 +48,7 @@ use polkadot_runtime_common::{
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, H256};
+use sp_runtime::traits::Convert;
 use sp_runtime::{AccountId32, DispatchError, FixedU128, Perbill};
 use sp_std::vec::Vec;
 use sp_version::RuntimeVersion;
@@ -395,6 +396,28 @@ impl pallet_storage_providers::Config for Runtime {
     type ProvidersRandomness = Randomness;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = ConstU32<10>;
+}
+
+parameter_types! {
+    pub const PaymentStreamHoldReason: RuntimeHoldReason = RuntimeHoldReason::PaymentStreams(pallet_payment_streams::HoldReason::PaymentStreamStorageDeposit);
+}
+
+// Converter from the BlockNumber type to the Balance type for math
+pub struct BlockNumberToBalance;
+
+impl Convert<BlockNumber, Balance> for BlockNumberToBalance {
+    fn convert(block_number: BlockNumber) -> Balance {
+        block_number.into() // In this converter we assume that the block number type is smaller in size than the balance type
+    }
+}
+
+impl pallet_payment_streams::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type NativeBalance = Balances;
+    type Providers = Providers;
+    type RuntimeHoldReason = RuntimeHoldReason;
+    type NewUserDeposit = ConstU128<10>;
+    type BlockNumberToBalance = BlockNumberToBalance;
 }
 
 // TODO: remove this and replace with pallet treasury
