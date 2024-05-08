@@ -60,6 +60,13 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
             .filter_map(|multiaddr| PeerId::try_from_multiaddr(&multiaddr))
             .collect::<Vec<PeerId>>();
 
+        // TODO: Check how we can improve this.
+        // We could either make sure this scenario doesn't happen beforehand,
+        // or try to fetch new peer_ids from the runtime at this point.
+        if peer_ids.is_empty() {
+            info!(target: LOG_TARGET, "No peers were found to receive file {:?}", file_metadata.fingerprint);
+        }
+
         for peer_id in peer_ids {
             for chunk_id in 0..chunk_count {
                 let proof = self
@@ -87,7 +94,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
                     }
                 }
             }
-            info!(target: LOG_TARGET, "Succesfully sent file with fingerprint {:?} to peer {:?}", file_metadata.fingerprint, peer_id);
+            info!(target: LOG_TARGET, "Succesfully sent file {:?} to peer {:?}", file_metadata.fingerprint, peer_id);
         }
 
         Ok(())
