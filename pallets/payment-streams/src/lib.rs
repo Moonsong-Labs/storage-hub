@@ -179,6 +179,8 @@ pub mod pallet {
         UpdateRateToZero,
         /// Error thrown when the block of the last charged proof of a payment stream is greater than the block of the last valid proof
         LastChargeGreaterThanLastValidProof,
+        /// Error thrown when the last valid proof block number that is trying to be set is greater than the current block number
+        InvalidLastValidProofBlockNumber,
         /// Error thrown when charging a payment stream would result in an overflow of the balance type (TODO: maybe we should use saturating arithmetic instead)
         ChargeOverflow,
         /// Error thrown when a payment stream is being created or updated and the user has been flagged for not having enough funds.
@@ -376,7 +378,7 @@ pub mod pallet {
                 <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(bsp_account)
                     .ok_or(Error::<T>::NotABackupStorageProvider)?;
 
-            // Emit the corresponding event (we always emit it even if the charged amount was 0, to inform that the charge was successful)
+            // Emit the corresponding event (we always emit it even if the charged amount was 0)
             Self::deposit_event(Event::<T>::PaymentCharged {
                 user_account,
                 backup_storage_provider_id: bsp_id,
@@ -426,7 +428,7 @@ impl<T: Config> Pallet<T> {
     }
 
     /// A helper function that gets the amount of open payment streams of a user
-    pub fn get_amount_of_payment_streams_of_user(user_account: &T::AccountId) -> u32 {
+    pub fn get_payment_streams_count_of_user(user_account: &T::AccountId) -> u32 {
         RegisteredUsers::<T>::get(user_account)
     }
 

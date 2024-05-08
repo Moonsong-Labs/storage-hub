@@ -51,6 +51,8 @@ where
 {
     /// This function holds the logic that checks if a payment stream can be created and, if so, stores the payment stream in the PaymentStreams mapping
     /// and holds the necessary balance from the sender if it's its first payment stream
+    ///
+    /// Note: Maybe we should add a check to make sure the user has enough balance to pay for at least X amount of blocks?
     pub fn do_create_payment_stream(
         bsp_account: &T::AccountId,
         user_account: &T::AccountId,
@@ -413,6 +415,12 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         user_account: &Self::AccountId,
         last_valid_proof_block: Self::BlockNumber,
     ) -> DispatchResult {
+        // Ensure that the last valid proof block that is being submitted is not greater than the current block number
+        ensure!(
+            last_valid_proof_block <= frame_system::Pallet::<T>::block_number(),
+            Error::<T>::InvalidLastValidProofBlockNumber
+        );
+
         let bsp_id = <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(
             bsp_account.clone(),
         )
