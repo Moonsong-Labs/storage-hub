@@ -7,7 +7,7 @@ type FileLocation = pallet_file_system::types::FileLocation<storage_hub_runtime:
 type PeerIds = pallet_file_system::types::PeerIds<storage_hub_runtime::Runtime>;
 
 // TODO: use proper types
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ChallengeRequest {
     pub location: String,
 }
@@ -36,10 +36,12 @@ impl EventBusMessage for NewStorageRequest {}
 // TODO: use proper types
 #[derive(Debug, Clone)]
 pub struct AcceptedBspVolunteer {
-    pub who: String,
-    pub location: String,
-    pub fingerprint: String,
+    pub who: AccountId32,
+    pub location: FileLocation,
+    pub fingerprint: H256,
     pub multiaddresses: Vec<String>,
+    pub owner: AccountId32,
+    pub size: StorageData,
 }
 
 impl EventBusMessage for AcceptedBspVolunteer {}
@@ -52,7 +54,7 @@ pub struct StorageRequestRevoked {
 
 impl EventBusMessage for StorageRequestRevoked {}
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct BlockchainServiceEventBusProvider {
     challenge_request_event_bus: EventBus<ChallengeRequest>,
     new_storage_request_event_bus: EventBus<NewStorageRequest>,

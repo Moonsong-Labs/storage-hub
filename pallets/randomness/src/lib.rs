@@ -37,9 +37,9 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use frame_system::WeightInfo;
-    use scale_info::prelude::vec::Vec;
     use session_keys_primitives::{InherentError, INHERENT_IDENTIFIER};
     use sp_runtime::traits::{Hash, Saturating};
+    use sp_std::vec::Vec;
 
     #[pallet::pallet]
     pub struct Pallet<T>(PhantomData<T>);
