@@ -1,19 +1,59 @@
 use codec::{Decode, Encode};
 use frame_support::traits::fungible;
 use scale_info::TypeInfo;
-use sp_std::{vec::Vec, fmt::{Debug, Formatter, Result}};
+use sp_std::{
+    collections::btree_map::BTreeMap,
+    fmt::{Debug, Formatter, Result},
+};
 use storage_hub_traits::{CommitmentVerifier, ProvidersInterface};
 
+/// Type that encapsulates the proof a Provider submits.
+///
+/// The proof consists of a forest proof and a set of key proofs.
+/// A good proof would have a forest proof that proves that some keys belong to a
+/// Merkle Patricia Forest of a Provider, and the corresponding key proofs for those keys.
 #[derive(Encode, Decode, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct Proof<T: crate::Config> {
+    /// The proof that the Provider submits to prove that the keys belong to their Merkle
+    /// Patricia Forest.
     pub forest_proof: ForestVerifierProofFor<T>,
-    pub key_proofs: Vec<KeyVerifierProofFor<T>>,
+    /// A mapping from the keys to the key proofs that are included in the `forest_proof`.
+    pub key_proofs: BTreeMap<KeyFor<T>, KeyProof<T>>,
 }
 
+/// Implement Debug for Proof. Cannot derive Debug directly because of compiler issues
+/// with the generic type.
 impl<T: crate::Config> Debug for Proof<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "Proof {{ forest_proof: {:?}, key_proofs: {:?} }}", self.forest_proof, self.key_proofs)
+        write!(
+            f,
+            "Proof {{ forest_proof: {:?}, key_proofs: {:?} }}",
+            self.forest_proof, self.key_proofs
+        )
+    }
+}
+
+/// Type that encapsulates the proof a Provider submits for a single key within a Merkle Patricia
+/// Forest.
+#[derive(Encode, Decode, TypeInfo, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct KeyProof<T: crate::Config> {
+    /// The actual key proof.
+    pub proof: KeyVerifierProofFor<T>,
+    /// Determines how many challenges this key proof responds to.
+    pub challenge_count: u32,
+}
+
+/// Implement Debug for Proof. Cannot derive Debug directly because of compiler issues
+/// with the generic type.
+impl<T: crate::Config> Debug for KeyProof<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(
+            f,
+            "KeyProof {{ proof: {:?}, challenge_count: {:?} }}",
+            self.proof, self.challenge_count
+        )
     }
 }
 

@@ -14,6 +14,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Get, Hash, Zero},
     AccountId32, BoundedVec, FixedU128,
 };
+use sp_std::collections::btree_map::BTreeMap;
 use storage_hub_traits::SubscribeProvidersInterface;
 
 #[test]
@@ -525,9 +526,7 @@ fn bsp_confirm_storing_success() {
                 forest_proof: sp_trie::CompactProof {
                     encoded_nodes: vec![],
                 },
-                key_proofs: vec![sp_trie::CompactProof {
-                    encoded_nodes: vec![],
-                }],
+                key_proofs: BTreeMap::new(),
             }
         ));
 
@@ -587,9 +586,7 @@ fn bsp_confirm_storing_storage_request_not_found_fail() {
                     forest_proof: sp_trie::CompactProof {
                         encoded_nodes: vec![],
                     },
-                    key_proofs: vec![sp_trie::CompactProof {
-                        encoded_nodes: vec![],
-                    }],
+                    key_proofs: BTreeMap::new(),
                 }
             ),
             Error::<Test>::StorageRequestNotFound
@@ -633,9 +630,7 @@ fn bsp_confirm_storing_not_volunteered_fail() {
                     forest_proof: sp_trie::CompactProof {
                         encoded_nodes: vec![],
                     },
-                    key_proofs: vec![sp_trie::CompactProof {
-                        encoded_nodes: vec![],
-                    }],
+                    key_proofs: BTreeMap::new(),
                 }
             ),
             Error::<Test>::BspNotVolunteered
@@ -686,9 +681,7 @@ fn bsp_already_confirmed_fail() {
                 forest_proof: sp_trie::CompactProof {
                     encoded_nodes: vec![],
                 },
-                key_proofs: vec![sp_trie::CompactProof {
-                    encoded_nodes: vec![],
-                }],
+                key_proofs: BTreeMap::new(),
             }
         ));
 
@@ -701,9 +694,7 @@ fn bsp_already_confirmed_fail() {
                     forest_proof: sp_trie::CompactProof {
                         encoded_nodes: vec![],
                     },
-                    key_proofs: vec![sp_trie::CompactProof {
-                        encoded_nodes: vec![],
-                    }],
+                    key_proofs: BTreeMap::new(),
                 }
             ),
             Error::<Test>::BspAlreadyConfirmed
@@ -747,9 +738,7 @@ fn bsp_actions_not_a_bsp_fail() {
                     forest_proof: sp_trie::CompactProof {
                         encoded_nodes: vec![],
                     },
-                    key_proofs: vec![sp_trie::CompactProof {
-                        encoded_nodes: vec![],
-                    }],
+                    key_proofs: BTreeMap::new(),
                 }
             ),
             Error::<Test>::NotABsp
@@ -801,9 +790,7 @@ fn bsp_stop_storing_success() {
                 forest_proof: sp_trie::CompactProof {
                     encoded_nodes: vec![],
                 },
-                key_proofs: vec![sp_trie::CompactProof {
-                    encoded_nodes: vec![],
-                }],
+                key_proofs: BTreeMap::new(),
             }
         ));
 
@@ -918,9 +905,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
                 forest_proof: sp_trie::CompactProof {
                     encoded_nodes: vec![],
                 },
-                key_proofs: vec![sp_trie::CompactProof {
-                    encoded_nodes: vec![],
-                }],
+                key_proofs: BTreeMap::new(),
             }
         ));
 

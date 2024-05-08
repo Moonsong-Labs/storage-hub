@@ -58,7 +58,7 @@ pub mod pallet {
         /// verifies specifically a proof for that key. For example, if the keys in the forest
         /// represent files, this would verify the proof for a specific file, and `ForestVerifier`
         /// would verify that the file is in the forest.
-        type KeyVerifier: CommitmentVerifier;
+        type KeyVerifier: CommitmentVerifier<Key = KeyFor<Self>>;
 
         /// Type to access the Balances Pallet.
         type NativeBalance: fungible::Inspect<Self::AccountId>
@@ -250,6 +250,11 @@ pub mod pallet {
     // Errors inform users that something went wrong.
     #[pallet::error]
     pub enum Error<T> {
+        /// General errors
+
+        /// The proof submitter is not a registered Provider.
+        NotProvider,
+
         /// `challenge` extrinsic errors
 
         /// The ChallengesQueue is full. No more manual challenges can be made
@@ -260,29 +265,16 @@ pub mod pallet {
         /// until some of the challenges in the queue are dispatched.
         PriorityChallengesQueueOverflow,
 
-        /// The proof submitter is not a registered Provider.
-        NotProvider,
-
         /// The fee for submitting a challenge could not be charged.
         FeeChargeFailed,
 
         /// `submit_proof` extrinsic errors
 
-        /// The staked balance of the Provider could not be converted to `u128`.
-        /// This should not be possible, as the `Balance` type should be an unsigned integer type.
-        StakeCouldNotBeConverted,
-
-        /// The root for the Provider could not be found.
-        ProviderRootNotFound,
-
-        /// The forest proof submitted is empty.
-        EmptyForestProof,
-
         /// There are no key proofs submitted.
         EmptyKeyProofs,
 
-        /// A key proof submitted is empty.
-        EmptyKeyProof,
+        /// The root for the Provider could not be found.
+        ProviderRootNotFound,
 
         /// Provider is submitting a proof when they have a zero root.
         /// Providers with zero roots are not providing any service, so they should not be
@@ -302,6 +294,10 @@ pub mod pallet {
         /// Provider is submitting a proof but their stake is zero.
         ZeroStake,
 
+        /// The staked balance of the Provider could not be converted to `u128`.
+        /// This should not be possible, as the `Balance` type should be an unsigned integer type.
+        StakeCouldNotBeConverted,
+
         /// Provider is submitting a proof for a block in the future.
         ChallengesBlockNotReached,
 
@@ -318,6 +314,20 @@ pub mod pallet {
         /// This should only be possible if `BlockToCheckpointChallenges` is dereferenced for a block
         /// that is not a checkpoint block.
         CheckpointChallengesNotFound,
+
+        /// The forest proof submitted by the Provider is invalid.
+        /// This could be because the proof is not valid for the root, or because the proof is
+        /// not sufficient for the challenges made.
+        ForestProofVerificationFailed,
+
+        /// There is at least one key proven in the forest proof, that does not have a corresponding
+        /// key proof.
+        KeyProofNotFound,
+
+        /// A key proof submitted by the Provider is invalid.
+        /// This could be because the proof is not valid for the root of that key, or because the proof
+        /// is not sufficient for the challenges made.
+        KeyProofVerificationFailed,
     }
 
     #[pallet::call]
@@ -390,7 +400,7 @@ pub mod pallet {
             };
 
             // TODO: Handle result of verification.
-            Self::do_submit_proof(&provider, &proof.forest_proof, &proof.key_proofs)?;
+            Self::do_submit_proof(&provider, &proof)?;
 
             // TODO: Emit correct event.
             Self::deposit_event(Event::ProofAccepted { provider, proof });
