@@ -139,13 +139,13 @@ pub mod pallet {
         },
         /// Event emitted when a payment stream is removed. Provides information about the user that removed the stream,
         /// and the Backup Storage Provider that the stream was for.
-        PaymentStreamRemoved {
+        PaymentStreamDeleted {
             user_account: T::AccountId,
             backup_storage_provider_id: BackupStorageProviderId<T>,
         },
         /// Event emitted when a payment is charged. Provides information about the user that was charged,
         /// the Backup Storage Provider that received the funds, and the amount that was charged.
-        PaymentCharged {
+        PaymentStreamCharged {
             user_account: T::AccountId,
             backup_storage_provider_id: BackupStorageProviderId<T>,
             amount: BalanceOf<T>,
@@ -179,7 +179,7 @@ pub mod pallet {
         UpdateRateToZero,
         /// Error thrown when the block of the last charged proof of a payment stream is greater than the block of the last valid proof
         LastChargeGreaterThanLastValidProof,
-        /// Error thrown when the last valid proof block number that is trying to be set is greater than the current block number
+        /// Error thrown when the new last valid proof block number that is trying to be set is greater than the current block number or the last valid proof block number
         InvalidLastValidProofBlockNumber,
         /// Error thrown when charging a payment stream would result in an overflow of the balance type (TODO: maybe we should use saturating arithmetic instead)
         ChargeOverflow,
@@ -314,7 +314,7 @@ pub mod pallet {
         /// 2. Check that the payment stream exists
         /// 3. Update the Payment Streams storage to remove the payment stream
         ///
-        /// Emits `PaymentStreamRemoved` event when successful.
+        /// Emits `PaymentStreamDeleted` event when successful.
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn delete_payment_stream(
@@ -334,7 +334,7 @@ pub mod pallet {
                     .ok_or(Error::<T>::NotABackupStorageProvider)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::PaymentStreamRemoved {
+            Self::deposit_event(Event::<T>::PaymentStreamDeleted {
                 user_account,
                 backup_storage_provider_id: bsp_id,
             });
@@ -360,7 +360,7 @@ pub mod pallet {
         /// 6. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
         /// 7. Update the last charge of the payment stream
         ///
-        /// Emits `PaymentCharged` event when successful.
+        /// Emits `PaymentStreamCharged` event when successful.
         #[pallet::call_index(3)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().reads_writes(1, 1))]
         pub fn charge_payment_stream(
@@ -379,7 +379,7 @@ pub mod pallet {
                     .ok_or(Error::<T>::NotABackupStorageProvider)?;
 
             // Emit the corresponding event (we always emit it even if the charged amount was 0)
-            Self::deposit_event(Event::<T>::PaymentCharged {
+            Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account,
                 backup_storage_provider_id: bsp_id,
                 amount,
