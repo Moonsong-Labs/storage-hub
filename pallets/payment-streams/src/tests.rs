@@ -1,9 +1,12 @@
 use crate::{mock::*, types::BalanceOf, Error, Event, RegisteredUsers};
 
+use frame_support::assert_noop;
 use frame_support::pallet_prelude::Weight;
 use frame_support::traits::fungible::Mutate;
 use frame_support::traits::{Get, OnFinalize, OnIdle, OnInitialize};
 use frame_support::{assert_ok, BoundedVec};
+use sp_runtime::DispatchError;
+use storage_hub_traits::PaymentStreamsInterface;
 use storage_hub_traits::ProvidersInterface;
 
 // `payment-streams` types:
@@ -24,9 +27,6 @@ pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
 
 /// This module holds the tests for the creation of a payment stream
 mod create_stream {
-    use frame_support::assert_noop;
-    use sp_runtime::DispatchError;
-    use storage_hub_traits::PaymentStreamsInterface;
 
     use super::*;
 
@@ -248,6 +248,1209 @@ mod create_stream {
             assert_noop!(
                 PaymentStreams::create_payment_stream(RuntimeOrigin::root(), charlie, bob, rate),
                 DispatchError::Arithmetic(sp_runtime::ArithmeticError::Overflow)
+            );
+        });
+    }
+}
+
+/// This module holds the tests for updating a payment stream (right now, only the rate can be updated)
+mod update_stream {
+
+    use super::*;
+
+    #[test]
+    fn update_payment_stream_works() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
+            register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+
+            // Create a payment stream from Bob to Alice of 10 units per block
+            let rate: BalanceOf<Test> = 10;
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Update the rate of the payment stream from Bob to Alice to 20 units per block
+            let new_rate: BalanceOf<Test> = 20;
+            assert_ok!(PaymentStreams::update_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                new_rate
+            ));
+
+            // Get the payment stream information
+            let payment_stream_info =
+                PaymentStreams::get_payment_stream_info(&alice_bsp_id, &bob).unwrap();
+
+            // The payment stream should be updated with the correct rate
+            assert_eq!(payment_stream_info.rate, new_rate);
+
+            // The event should be emitted
+            System::assert_last_event(
+                Event::<Test>::PaymentStreamUpdated {
+                    user_account: bob,
+                    backup_storage_provider_id: alice_bsp_id,
+                    new_rate,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn update_payment_stream_fails_if_bsp_account_has_not_registered_as_bsp() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+
+            // Try to update the rate of a payment stream from Bob to Alice without registering Alice as a BSP
+            let rate: BalanceOf<Test> = 10;
+            assert_noop!(
+                PaymentStreams::update_payment_stream(RuntimeOrigin::root(), alice, bob, rate),
+                Error::<Test>::NotABackupStorageProvider
+            );
+        });
+    }
+
+    #[test]
+    fn update_payment_stream_fails_if_new_rate_is_zero() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+
+            // Register Alice as a BSP with 100 units of data
+            register_account_as_bsp(alice, 100);
+
+            // Create a payment stream from Bob to Alice of 10 units per block
+            let rate: BalanceOf<Test> = 10;
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Try to update the rate of the payment stream from Bob to Alice to 0 units per block
+            let new_rate: BalanceOf<Test> = 0;
+            assert_noop!(
+                PaymentStreams::update_payment_stream(RuntimeOrigin::root(), alice, bob, new_rate),
+                Error::<Test>::UpdateRateToZero
+            );
+        });
+    }
+
+    #[test]
+    fn update_payment_stream_fails_if_new_rate_is_equal_to_old_rate() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+
+            // Register Alice as a BSP with 100 units of data
+            register_account_as_bsp(alice, 100);
+
+            // Create a payment stream from Bob to Alice of 10 units per block
+            let rate: BalanceOf<Test> = 10;
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Try to update the rate of the payment stream from Bob to Alice to 10 units per block
+            assert_noop!(
+                PaymentStreams::update_payment_stream(RuntimeOrigin::root(), alice, bob, rate),
+                Error::<Test>::UpdateRateToSameRate
+            );
+        });
+    }
+
+    #[test]
+    fn update_payment_stream_fails_if_stream_does_not_exist() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+
+            // Register Alice as a BSP with 100 units of data
+            register_account_as_bsp(alice, 100);
+
+            // Try to update the rate of a payment stream that does not exist
+            assert_noop!(
+                PaymentStreams::update_payment_stream(RuntimeOrigin::root(), alice, bob, 10),
+                Error::<Test>::PaymentStreamNotFound
+            );
+        });
+    }
+
+    #[test]
+    fn update_payment_stream_fails_if_user_is_flagged_as_without_funds() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+            let bob_initial_balance = NativeBalance::free_balance(&bob);
+
+            // Register Alice as a BSP with 100 units of data
+            register_account_as_bsp(alice, 100);
+
+            // Create a payment stream from Bob to Alice of `bob_initial_balance / 10` units per block
+            let rate: BalanceOf<Test> = bob_initial_balance / 10; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
+            run_to_block(System::block_number() + 10);
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                )
+            );
+
+            // Try to charge the payment stream (Bob will not have enough balance to pay for the 10th block and will get flagged as without funds)
+            assert_ok!(PaymentStreams::charge_payment_stream(
+                RuntimeOrigin::signed(alice),
+                bob
+            ));
+
+            // Check that the UserWithoutFunds event was emitted for Bob
+            System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+
+            // Try to update the rate of the payment stream from Bob to Alice to 20 units per block
+            let new_rate: BalanceOf<Test> = 20;
+            assert_noop!(
+                PaymentStreams::update_payment_stream(RuntimeOrigin::root(), alice, bob, new_rate),
+                Error::<Test>::UserWithoutFunds
+            );
+        });
+    }
+
+    #[test]
+    fn updated_payment_stream_charges_pending_blocks_with_old_rate() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+            let bob_initial_balance = NativeBalance::free_balance(&bob);
+
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
+            register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+
+            // Create a payment stream from Bob to Alice of 10 units per block
+            let rate: BalanceOf<Test> = 10;
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Check the new free balance of Bob (after the new user deposit)
+            let bob_new_balance =
+                bob_initial_balance - <NewUserDeposit as Get<BalanceOf<Test>>>::get();
+            assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+            // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
+            run_to_block(System::block_number() + 10);
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                )
+            );
+
+            // Update the rate of the payment stream from Bob to Alice to 20 units per block
+            let new_rate: BalanceOf<Test> = 20;
+            assert_ok!(PaymentStreams::update_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                new_rate
+            ));
+
+            // Check that Bob was charged 10 blocks at the old 10 units/block rate after the payment stream was updated
+            assert_eq!(
+                NativeBalance::free_balance(&bob),
+                bob_new_balance - 10 * rate
+            );
+            System::assert_has_event(
+                Event::<Test>::PaymentStreamCharged {
+                    user_account: bob,
+                    backup_storage_provider_id: alice_bsp_id,
+                    amount: 10 * rate,
+                }
+                .into(),
+            );
+
+            // Get the payment stream information
+            let payment_stream_info =
+                PaymentStreams::get_payment_stream_info(&alice_bsp_id, &bob).unwrap();
+
+            // The payment stream should be updated with the correct rate
+            assert_eq!(payment_stream_info.rate, new_rate);
+
+            // The payment stream should be updated with the correct last valid proof
+            assert_eq!(payment_stream_info.last_valid_proof, System::block_number());
+
+            // The payment stream should be updated with the correct last charged proof
+            assert_eq!(
+                payment_stream_info.last_charged_proof,
+                System::block_number()
+            );
+        });
+    }
+}
+
+mod delete_stream {
+
+    use super::*;
+
+    #[test]
+    fn delete_payment_stream_works() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+            let bob_initial_balance = NativeBalance::free_balance(&bob);
+
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
+            register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+
+            // Create a payment stream from Bob to Alice of 10 units per block
+            let rate: BalanceOf<Test> = 10;
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Check the new free balance of Bob (after the new user deposit)
+            let bob_new_balance =
+                bob_initial_balance - <NewUserDeposit as Get<BalanceOf<Test>>>::get();
+            assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+            // Delete the payment stream from Bob to Alice
+            assert_ok!(PaymentStreams::delete_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob
+            ));
+
+            // The payment stream should be deleted
+            assert!(matches!(
+                PaymentStreams::get_payment_stream_info(&alice_bsp_id, &bob),
+                Err(Error::<Test>::PaymentStreamNotFound)
+            ));
+
+            // Bob should have 0 payment streams open
+            assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 0);
+
+            // Bob should have his initial balance back
+            assert_eq!(NativeBalance::free_balance(&bob), bob_initial_balance);
+
+            // The event should be emitted
+            System::assert_last_event(
+                Event::<Test>::PaymentStreamDeleted {
+                    user_account: bob,
+                    backup_storage_provider_id: alice_bsp_id,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn delete_payment_stream_fails_if_stream_does_not_exist() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+
+            // Register Alice as a BSP with 100 units of data
+            register_account_as_bsp(alice, 100);
+
+            // Try to delete a payment stream that does not exist
+            assert_noop!(
+                PaymentStreams::delete_payment_stream(RuntimeOrigin::root(), alice, bob),
+                Error::<Test>::PaymentStreamNotFound
+            );
+        });
+    }
+
+    #[test]
+    fn delete_payment_stream_fails_if_bsp_account_has_not_registered_as_bsp() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+
+            // Try to delete a payment stream from Bob to Alice without registering Alice as a BSP
+            assert_noop!(
+                PaymentStreams::delete_payment_stream(RuntimeOrigin::root(), alice, bob),
+                Error::<Test>::NotABackupStorageProvider
+            );
+        });
+    }
+
+    #[test]
+    fn delete_payment_stream_fails_if_user_is_flagged_as_without_funds() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+            let bob_initial_balance = NativeBalance::free_balance(&bob);
+
+            // Register Alice as a BSP with 100 units of data
+            register_account_as_bsp(alice, 100);
+
+            // Create a payment stream from Bob to Alice of `bob_initial_balance / 10` units per block
+            let rate: BalanceOf<Test> = bob_initial_balance / 10; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
+            run_to_block(System::block_number() + 10);
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                )
+            );
+
+            // Try to charge the payment stream (Bob will not have enough balance to pay for the 10th block and will get flagged as without funds)
+            assert_ok!(PaymentStreams::charge_payment_stream(
+                RuntimeOrigin::signed(alice),
+                bob
+            ));
+
+            // Check that the UserWithoutFunds event was emitted for Bob
+            System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+
+            // Try to delete the payment stream from Bob to Alice
+            assert_noop!(
+                PaymentStreams::delete_payment_stream(RuntimeOrigin::root(), alice, bob),
+                Error::<Test>::UserWithoutFunds
+            );
+        });
+    }
+
+    #[test]
+    fn delete_payment_stream_charges_pending_blocks() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+            let bob_initial_balance = NativeBalance::free_balance(&bob);
+
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
+            register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+
+            // Create a payment stream from Bob to Alice of 10 units per block
+            let rate: BalanceOf<Test> = 10;
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Check the new free balance of Bob (after the new user deposit)
+            let bob_new_balance =
+                bob_initial_balance - <NewUserDeposit as Get<BalanceOf<Test>>>::get();
+            assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+            // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
+            run_to_block(System::block_number() + 10);
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                )
+            );
+
+            // Delete the payment stream from Bob to Alice
+            assert_ok!(PaymentStreams::delete_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob
+            ));
+
+            // Check that Bob was returned his deposit AND charged 10 blocks at the 10 units/block rate after the payment stream was deleted
+            assert_eq!(
+                NativeBalance::free_balance(&bob),
+                bob_new_balance + <NewUserDeposit as Get<BalanceOf<Test>>>::get() - 10 * rate
+            );
+            System::assert_has_event(
+                Event::<Test>::PaymentStreamCharged {
+                    user_account: bob,
+                    backup_storage_provider_id: alice_bsp_id,
+                    amount: 10 * rate,
+                }
+                .into(),
+            );
+
+            // The payment stream should be deleted
+            assert!(matches!(
+                PaymentStreams::get_payment_stream_info(&alice_bsp_id, &bob),
+                Err(Error::<Test>::PaymentStreamNotFound)
+            ));
+
+            // Bob should have 0 payment streams open
+            assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 0);
+
+            // Bob should have his deposit back (but not the charged amount)
+            assert_eq!(
+                NativeBalance::free_balance(&bob),
+                bob_initial_balance - 10 * rate
+            );
+        });
+    }
+}
+
+mod charge_stream {
+
+    use crate::UsersWithoutFunds;
+
+    use super::*;
+
+    #[test]
+    fn charge_payment_stream_works() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+            let bob_initial_balance = NativeBalance::free_balance(&bob);
+
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
+            register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+
+            // Create a payment stream from Bob to Alice of 10 units per block
+            let rate: BalanceOf<Test> = 10;
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Check the new free balance of Bob (after the new user deposit)
+            let bob_new_balance =
+                bob_initial_balance - <NewUserDeposit as Get<BalanceOf<Test>>>::get();
+            assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+            // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
+            run_to_block(System::block_number() + 10);
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                )
+            );
+
+            // Charge the payment stream from Bob to Alice
+            assert_ok!(PaymentStreams::charge_payment_stream(
+                RuntimeOrigin::signed(alice),
+                bob
+            ));
+
+            // Check that Bob was charged 10 blocks at the 10 units/block rate
+            assert_eq!(
+                NativeBalance::free_balance(&bob),
+                bob_new_balance - 10 * rate
+            );
+            System::assert_has_event(
+                Event::<Test>::PaymentStreamCharged {
+                    user_account: bob,
+                    backup_storage_provider_id: alice_bsp_id,
+                    amount: 10 * rate,
+                }
+                .into(),
+            );
+
+            // Get the payment stream information
+            let payment_stream_info =
+                PaymentStreams::get_payment_stream_info(&alice_bsp_id, &bob).unwrap();
+
+            // The payment stream should be updated with the correct last charged proof
+            assert_eq!(
+                payment_stream_info.last_charged_proof,
+                System::block_number()
+            );
+        });
+    }
+
+    #[test]
+    fn charge_payment_stream_correctly_updates_last_charged_proof_to_last_valid_proof() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+            let bob_initial_balance = NativeBalance::free_balance(&bob);
+
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
+            register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+
+            // Create a payment stream from Bob to Alice of 10 units per block
+            let rate: BalanceOf<Test> = 10;
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Check the new free balance of Bob (after the new user deposit)
+            let bob_new_balance =
+                bob_initial_balance - <NewUserDeposit as Get<BalanceOf<Test>>>::get();
+            assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+            // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
+            run_to_block(System::block_number() + 10);
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                )
+            );
+
+            // Advance some blocks so the last valid proof is not the same as the current block
+            run_to_block(System::block_number() + 5);
+
+            // Charge the payment stream from Bob to Alice
+            assert_ok!(PaymentStreams::charge_payment_stream(
+                RuntimeOrigin::signed(alice),
+                bob
+            ));
+
+            // Check that Bob was charged 10 blocks at the 10 units/block rate
+            assert_eq!(
+                NativeBalance::free_balance(&bob),
+                bob_new_balance - 10 * rate
+            );
+            System::assert_has_event(
+                Event::<Test>::PaymentStreamCharged {
+                    user_account: bob,
+                    backup_storage_provider_id: alice_bsp_id,
+                    amount: 10 * rate,
+                }
+                .into(),
+            );
+
+            // Get the payment stream information
+            let payment_stream_info =
+                PaymentStreams::get_payment_stream_info(&alice_bsp_id, &bob).unwrap();
+
+            // The payment stream should be updated with the correct last charged proof
+            assert_eq!(
+                payment_stream_info.last_charged_proof,
+                payment_stream_info.last_valid_proof
+            );
+
+            // And not with the current block
+            assert_ne!(
+                payment_stream_info.last_charged_proof,
+                System::block_number()
+            );
+        });
+    }
+
+    #[test]
+    fn charge_payment_stream_correctly_uses_the_latest_rate() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+            let bob_initial_balance = NativeBalance::free_balance(&bob);
+
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
+            register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+
+            // Create a payment stream from Bob to Alice of 10 units per block
+            let rate: BalanceOf<Test> = 10;
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Check the new free balance of Bob (after the new user deposit)
+            let bob_new_balance =
+                bob_initial_balance - <NewUserDeposit as Get<BalanceOf<Test>>>::get();
+            assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+            // Update the rate of the payment stream from Bob to Alice to 20 units per block
+            let new_rate: BalanceOf<Test> = 20;
+            assert_ok!(PaymentStreams::update_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                new_rate
+            ));
+
+            // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
+            run_to_block(System::block_number() + 10);
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                )
+            );
+
+            // Charge the payment stream from Bob to Alice
+            assert_ok!(PaymentStreams::charge_payment_stream(
+                RuntimeOrigin::signed(alice),
+                bob
+            ));
+
+            // Check that Bob was charged 10 blocks at the 20 units/block rate
+            assert_eq!(
+                NativeBalance::free_balance(&bob),
+                bob_new_balance - 10 * new_rate
+            );
+            System::assert_has_event(
+                Event::<Test>::PaymentStreamCharged {
+                    user_account: bob,
+                    backup_storage_provider_id: alice_bsp_id,
+                    amount: 10 * new_rate,
+                }
+                .into(),
+            );
+
+            // Get the payment stream information
+            let payment_stream_info =
+                PaymentStreams::get_payment_stream_info(&alice_bsp_id, &bob).unwrap();
+
+            // The payment stream should be updated with the correct last charged proof
+            assert_eq!(
+                payment_stream_info.last_charged_proof,
+                System::block_number()
+            );
+
+            // The payment stream should be updated with the correct rate
+            assert_eq!(payment_stream_info.rate, new_rate);
+
+            // The payment stream should be updated with the correct last valid proof
+            assert_eq!(payment_stream_info.last_valid_proof, System::block_number());
+        });
+    }
+
+    #[test]
+    fn charge_payment_works_after_two_charges() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+            let bob_initial_balance = NativeBalance::free_balance(&bob);
+
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
+            register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+
+            // Create a payment stream from Bob to Alice of 10 units per block
+            let rate: BalanceOf<Test> = 10;
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Check the new free balance of Bob (after the new user deposit)
+            let bob_new_balance =
+                bob_initial_balance - <NewUserDeposit as Get<BalanceOf<Test>>>::get();
+            assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+            // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
+            run_to_block(System::block_number() + 10);
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                )
+            );
+
+            // Charge the payment stream from Bob to Alice
+            assert_ok!(PaymentStreams::charge_payment_stream(
+                RuntimeOrigin::signed(alice),
+                bob
+            ));
+
+            // Check that Bob was charged 10 blocks at the 10 units/block rate
+            assert_eq!(
+                NativeBalance::free_balance(&bob),
+                bob_new_balance - 10 * rate
+            );
+            System::assert_has_event(
+                Event::<Test>::PaymentStreamCharged {
+                    user_account: bob,
+                    backup_storage_provider_id: alice_bsp_id,
+                    amount: 10 * rate,
+                }
+                .into(),
+            );
+
+            // Get the payment stream information
+            let payment_stream_info =
+                PaymentStreams::get_payment_stream_info(&alice_bsp_id, &bob).unwrap();
+
+            // The payment stream should be updated with the correct last charged proof
+            assert_eq!(
+                payment_stream_info.last_charged_proof,
+                System::block_number()
+            );
+
+            // Set the last valid proof of the payment stream from Bob to Alice to 20 blocks ahead
+            run_to_block(System::block_number() + 20);
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                )
+            );
+
+            // Charge the payment stream from Bob to Alice
+            assert_ok!(PaymentStreams::charge_payment_stream(
+                RuntimeOrigin::signed(alice),
+                bob
+            ));
+
+            // Check that Bob was charged 20 blocks at the 10 units/block rate
+            assert_eq!(
+                NativeBalance::free_balance(&bob),
+                bob_new_balance - 10 * rate - 20 * rate
+            );
+            System::assert_has_event(
+                Event::<Test>::PaymentStreamCharged {
+                    user_account: bob,
+                    backup_storage_provider_id: alice_bsp_id,
+                    amount: 20 * rate,
+                }
+                .into(),
+            );
+
+            // Get the payment stream information
+            let payment_stream_info =
+                PaymentStreams::get_payment_stream_info(&alice_bsp_id, &bob).unwrap();
+
+            // The payment stream should be updated with the correct last charged proof
+            assert_eq!(
+                payment_stream_info.last_charged_proof,
+                System::block_number()
+            );
+        });
+    }
+
+    #[test]
+    fn charge_payment_stream_fails_if_bsp_account_has_not_registered_as_bsp() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+
+            // Try to charge a payment stream from Bob to Alice without registering Alice as a BSP
+            assert_noop!(
+                PaymentStreams::charge_payment_stream(RuntimeOrigin::signed(alice), bob),
+                Error::<Test>::NotABackupStorageProvider
+            );
+        });
+    }
+
+    #[test]
+    fn charge_payment_stream_fails_if_stream_does_not_exist() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+
+            // Register Alice as a BSP with 100 units of data
+            register_account_as_bsp(alice, 100);
+
+            // Try to charge a payment stream that does not exist
+            assert_noop!(
+                PaymentStreams::charge_payment_stream(RuntimeOrigin::signed(alice), bob),
+                Error::<Test>::PaymentStreamNotFound
+            );
+        });
+    }
+
+    #[test]
+    fn charge_payment_stream_fails_if_total_amount_would_overflow_balance_type() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+            let bob_initial_balance = NativeBalance::free_balance(&bob);
+
+            // Register Alice as a BSP with 100 units of data
+            register_account_as_bsp(alice, 100);
+
+            // Create a payment stream from Bob to Alice of u128::MAX - 1 units per block
+            let rate: BalanceOf<Test> = u128::MAX - 1;
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Check the new free balance of Bob (after the new user deposit)
+            let bob_new_balance =
+                bob_initial_balance - <NewUserDeposit as Get<BalanceOf<Test>>>::get();
+            assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+            // Set the last valid proof of the payment stream from Bob to Alice to 2 blocks ahead
+            run_to_block(System::block_number() + 2);
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                )
+            );
+
+            // Try to charge the payment stream from Bob to Alice
+            assert_noop!(
+                PaymentStreams::charge_payment_stream(RuntimeOrigin::signed(alice), bob),
+                Error::<Test>::ChargeOverflow
+            );
+
+            // Check that Bob's balance has not changed
+            assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+        });
+    }
+
+    #[test]
+    fn charge_payment_stream_correctly_flags_user_as_without_funds() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+            let charlie: AccountId = 2;
+            let bob_initial_balance = NativeBalance::free_balance(&bob);
+
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
+            register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+
+            // Register Charlie as a BSP with 1000 units of data
+            register_account_as_bsp(charlie, 1000);
+
+            // Create a payment stream from Bob to Alice of `bob_initial_balance / 10` units per block
+            let rate: BalanceOf<Test> = bob_initial_balance / 10; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Check the new free balance of Bob (after the new user deposit)
+            let bob_new_balance =
+                bob_initial_balance - <NewUserDeposit as Get<BalanceOf<Test>>>::get();
+            assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+            // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
+            run_to_block(System::block_number() + 10);
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                )
+            );
+
+            // Try to charge the payment stream (Bob will not have enough balance to pay for it and will get flagged as without funds)
+            assert_ok!(PaymentStreams::charge_payment_stream(
+                RuntimeOrigin::signed(alice),
+                bob
+            ));
+
+            // Check that the UserWithoutFunds event was emitted for Bob
+            System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+
+            // Check that no funds where charged from Bob's account
+            assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+            System::assert_has_event(
+                Event::<Test>::PaymentStreamCharged {
+                    user_account: bob,
+                    backup_storage_provider_id: alice_bsp_id,
+                    amount: 0,
+                }
+                .into(),
+            );
+
+            // Try to create a new stream from Charlie to Bob
+            assert_noop!(
+                PaymentStreams::create_payment_stream(RuntimeOrigin::root(), charlie, bob, rate),
+                Error::<Test>::UserWithoutFunds
+            );
+        });
+    }
+
+    #[test]
+    fn charge_payment_stream_unflags_user_if_it_now_has_enough_funds() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+            let charlie: AccountId = 2;
+            let bob_initial_balance = NativeBalance::free_balance(&bob);
+
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
+            register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+
+            // Register Charlie as a BSP with 1000 units of data
+            register_account_as_bsp(charlie, 1000);
+
+            // Create a payment stream from Bob to Alice of `bob_initial_balance / 10` units per block
+            let rate: BalanceOf<Test> = bob_initial_balance / 10; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Check the new free balance of Bob (after the new user deposit)
+            let bob_new_balance =
+                bob_initial_balance - <NewUserDeposit as Get<BalanceOf<Test>>>::get();
+            assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+            // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
+            run_to_block(System::block_number() + 10);
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                )
+            );
+
+            // Try to charge the payment stream (Bob will not have enough balance to pay for it and will get flagged as without funds)
+            assert_ok!(PaymentStreams::charge_payment_stream(
+                RuntimeOrigin::signed(alice),
+                bob
+            ));
+
+            // Check that the UserWithoutFunds event was emitted for Bob
+            System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+
+            // Check that no funds where charged from Bob's account
+            assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+            System::assert_has_event(
+                Event::<Test>::PaymentStreamCharged {
+                    user_account: bob,
+                    backup_storage_provider_id: alice_bsp_id,
+                    amount: 0,
+                }
+                .into(),
+            );
+
+            // Deposit enough funds to Bob's account
+            let deposit_amount = rate * 5;
+            assert_ok!(NativeBalance::mint_into(&bob, deposit_amount));
+
+            // Try to charge the payment stream again
+            assert_ok!(PaymentStreams::charge_payment_stream(
+                RuntimeOrigin::signed(alice),
+                bob
+            ));
+
+            // Check that Bob was charged 10 blocks at the (bob_initial_balance / 10) units/block rate
+            assert_eq!(
+                NativeBalance::free_balance(&bob),
+                bob_new_balance + deposit_amount - 10 * rate
+            );
+            System::assert_last_event(
+                Event::<Test>::PaymentStreamCharged {
+                    user_account: bob,
+                    backup_storage_provider_id: alice_bsp_id,
+                    amount: 10 * rate,
+                }
+                .into(),
+            );
+
+            // Check that Bob is no longer flagged as a user without funds (TODO: we should have an event about this if we leave this behavior in prod)
+            assert!(!UsersWithoutFunds::<Test>::contains_key(bob));
+        });
+    }
+}
+mod update_last_valid_proof {
+
+    use super::*;
+
+    #[test]
+    fn update_last_valid_proof_works() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
+            register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+
+            // Create a payment stream from Bob to Alice of 10 units per block
+            let rate: BalanceOf<Test> = 10;
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
+            run_to_block(System::block_number() + 10);
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                )
+            );
+
+            // Get the payment stream information
+            let payment_stream_info =
+                PaymentStreams::get_payment_stream_info(&alice_bsp_id, &bob).unwrap();
+
+            // The payment stream should be updated with the correct last valid proof
+            assert_eq!(payment_stream_info.last_valid_proof, System::block_number());
+        });
+    }
+
+    #[test]
+    fn update_last_valid_proof_fails_if_stream_does_not_exist() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+
+            // Register Alice as a BSP with 100 units of data
+            register_account_as_bsp(alice, 100);
+
+            // Try to update the last valid proof of a payment stream that does not exist
+            assert_noop!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                ),
+                Error::<Test>::PaymentStreamNotFound
+            );
+        });
+    }
+
+    #[test]
+    fn update_last_valid_proof_fails_if_bsp_account_has_not_registered_as_bsp() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+
+            // Try to update the last valid proof of a payment stream from Bob to Alice without registering Alice as a BSP
+            assert_noop!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                ),
+                Error::<Test>::NotABackupStorageProvider
+            );
+        });
+    }
+
+    #[test]
+    fn update_last_valid_proof_fails_if_trying_to_set_greater_than_current_block_number() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+
+            // Register Alice as a BSP with 100 units of data
+            register_account_as_bsp(alice, 100);
+
+            // Create a payment stream from Bob to Alice of 10 units per block
+            let rate: BalanceOf<Test> = 10;
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Try to set the last valid proof of the payment stream from Bob to Alice to a block number greater than the current block number
+            assert_noop!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number() + 1
+                ),
+                Error::<Test>::InvalidLastValidProofBlockNumber
+            );
+        });
+    }
+
+    #[test]
+    fn update_last_valid_proof_fails_if_trying_to_set_less_than_previous_value() {
+        ExtBuilder::build().execute_with(|| {
+            let alice: AccountId = 0;
+            let bob: AccountId = 1;
+
+            // Register Alice as a BSP with 100 units of data
+            register_account_as_bsp(alice, 100);
+
+            // Create a payment stream from Bob to Alice of 10 units per block
+            let rate: BalanceOf<Test> = 10;
+            assert_ok!(PaymentStreams::create_payment_stream(
+                RuntimeOrigin::root(),
+                alice,
+                bob,
+                rate
+            ));
+
+            // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
+            run_to_block(System::block_number() + 10);
+            assert_ok!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number()
+                )
+            );
+
+            // Try to set the last valid proof of the payment stream from Bob to Alice to a block number less than the last valid proof block number already set
+            assert_noop!(
+                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                    &alice,
+                    &bob,
+                    System::block_number() - 1
+                ),
+                Error::<Test>::InvalidLastValidProofBlockNumber
             );
         });
     }
