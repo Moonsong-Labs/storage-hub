@@ -6,9 +6,7 @@ use storage_hub_infra::{
     types::{ChunkId, FileProof, Key},
 };
 
-use crate::services::FileTransferService;
-
-use super::schema;
+use super::{schema, FileTransferService};
 
 /// Messages understood by the FileTransfer service actor
 pub enum FileTransferServiceCommand {

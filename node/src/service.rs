@@ -8,10 +8,11 @@ use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
 
 use futures::{Stream, StreamExt};
-use polkadot_primitives::{HeadData, ValidationCode};
+use polkadot_primitives::{BlakeTwo256, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
+use sp_trie::LayoutV1;
 use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
 use storage_hub_runtime::{
@@ -53,8 +54,12 @@ use substrate_prometheus_endpoint::Registry;
 use crate::{
     cli::StorageLayer,
     services::{
-        blockchain::handler::BlockchainService, file_transfer::configure_file_transfer_network,
-        InMemoryStorageHubConfig, RocksDBStorageHubConfig, StorageHubHandlerInitializer,
+        blockchain::handler::BlockchainService,
+        file_transfer::configure_file_transfer_network,
+        handler::{
+            InMemoryStorageHubConfig, RocksDBStorageHubConfig, StorageHubHandler,
+            StorageHubHandlerConfig, StorageHubHandlerInitializer,
+        },
     },
 };
 use crate::{
@@ -63,7 +68,6 @@ use crate::{
     services::{
         blockchain::{spawn_blockchain_service, KEY_TYPE},
         file_transfer::spawn_file_transfer_service,
-        StorageHubHandler, StorageHubHandlerConfig,
     },
 };
 
@@ -238,7 +242,7 @@ async fn start_storage_provider(
     // Initialise the StorageHubHandler, for tasks to have access to the services.
     match provider_options.storage_layer {
         StorageLayer::Memory => {
-            let sh_handler = InMemoryStorageHubConfig::initialize(
+            let sh_handler = InMemoryStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
                 caller_pub_key,
                 task_spawner,
                 file_transfer_service_handle,
@@ -248,7 +252,7 @@ async fn start_storage_provider(
             start_provider_tasks(provider_options, sh_handler);
         }
         StorageLayer::Rocksdb => {
-            let sh_handler = RocksDBStorageHubConfig::initialize(
+            let sh_handler = RocksDBStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
                 caller_pub_key,
                 task_spawner,
                 file_transfer_service_handle,

@@ -12,7 +12,7 @@ use crate::{traits::ForestStorage, types::ForestStorageErrors, utils::deserializ
 ///   will seek this key within the trie to determine relational nodes.
 ///
 /// # Returns
-/// This function returns an `Ok` wrapping an `Option<Proven<F::RawKey, F::Value>>` which:
+/// This function returns an `Ok` wrapping an `Proven<F::RawKey, F::Value>` which:
 /// - `None` indicates that no relevant keys were found (unevaluable situation).
 /// - An instance of `Proven`, which depending on the located keys, could be:
 ///   1. An exact match.

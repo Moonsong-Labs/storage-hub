@@ -9,7 +9,7 @@ use crate::services::{
         commands::BlockchainServiceInterface, events::NewStorageRequest,
         handler::BlockchainService, types::ExtrinsicResult,
     },
-    StorageHubHandler, StorageHubHandlerConfig,
+    handler::{StorageHubHandler, StorageHubHandlerConfig},
 };
 
 const LOG_TARGET: &str = "bsp-volunteer-mock-task";

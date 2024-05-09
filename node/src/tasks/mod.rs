@@ -7,7 +7,7 @@ use storage_hub_infra::event_bus::EventHandler;
 
 use crate::services::blockchain::events::{AcceptedBspVolunteer, NewStorageRequest};
 use crate::services::file_transfer::events::RemoteUploadRequest;
-use crate::services::{StorageHubHandler, StorageHubHandlerConfig};
+use crate::services::handler::{StorageHubHandler, StorageHubHandlerConfig};
 
 // ! The following are examples of task definitions.
 pub struct ResolveRemoteUploadRequest<SHC: StorageHubHandlerConfig> {
