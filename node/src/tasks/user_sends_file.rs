@@ -12,7 +12,9 @@ use storage_hub_infra::types::Metadata;
 
 const LOG_TARGET: &str = "user-sends-file-task";
 
-/// Handles the events related to users submitting files to be stored.
+/// Handles the events related to users sending a file to be stored by BSPs.
+/// It can serve multiple BSPs volunteering to store each file, since
+/// it reacts to every `AcceptedBspVolunteer` from the runtime.
 pub struct UserSendsFileTask<SHC: StorageHubHandlerConfig> {
     storage_hub_handler: StorageHubHandler<SHC>,
 }
@@ -36,10 +38,14 @@ impl<SHC: StorageHubHandlerConfig> UserSendsFileTask<SHC> {
 impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
     for UserSendsFileTask<SHC>
 {
+    /// Reacts to BSPs volunteering (`AcceptedBspVolunteer` from the runtime) to store the user's file,
+    /// establishes a connection to each BSPs through the p2p network and sends the file.
+    /// At this point we assume that the file is merkleised and already in file storage, and
+    /// for this reason the file transfer to the BSP should not fail unless the p2p connection fails. 
     async fn handle_event(&self, event: AcceptedBspVolunteer) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Handling file submitted by user {:?} to BSP with location {:?}",
+            "Handling BSP volunteering to store a file from user [{:?}], with location [{:?}]",
             event.owner,
             event.location,
         );
@@ -62,7 +68,8 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
 
         // TODO: Check how we can improve this.
         // We could either make sure this scenario doesn't happen beforehand,
-        // or try to fetch new peer_ids from the runtime at this point.
+        // by implementing formatting checks for multiaddresses in the runtime,
+        // or try to fetch new peer ids from the runtime at this point.
         if peer_ids.is_empty() {
             info!(target: LOG_TARGET, "No peers were found to receive file {:?}", file_metadata.fingerprint);
         }
@@ -89,12 +96,15 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
                     }
                     Err(e) => {
                         error!(target: LOG_TARGET, "Failed to upload chunk_id {:?} to peer {:?} due to {:?}", chunk_id, peer_id, e);
-                        // In case of an error, we stop sending to this peer and go to the next one.
+                        // In case of an error, we stop sending to this peer id and go to the next one.
                         break;
                     }
                 }
             }
-            info!(target: LOG_TARGET, "Succesfully sent file {:?} to peer {:?}", file_metadata.fingerprint, peer_id);
+            info!(target: LOG_TARGET, "Successfully sent file {:?} to peer {:?}", file_metadata.fingerprint, peer_id);
+            // If we successfully sent the file, we can break the loop
+            // since all of the peer ids belong to the same BSP.
+            break;
         }
 
         Ok(())
