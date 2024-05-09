@@ -10,14 +10,14 @@ use sc_network::PeerId;
 use storage_hub_infra::event_bus::EventHandler;
 use storage_hub_infra::types::Metadata;
 
-const LOG_TARGET: &str = "user-submitted-file-task";
+const LOG_TARGET: &str = "user-sends-file-task";
 
 /// Handles the events related to users submitting files to be stored.
-pub struct UserSubmittedFileTask<SHC: StorageHubHandlerConfig> {
+pub struct UserSendsFileTask<SHC: StorageHubHandlerConfig> {
     storage_hub_handler: StorageHubHandler<SHC>,
 }
 
-impl<SHC: StorageHubHandlerConfig> Clone for UserSubmittedFileTask<SHC> {
+impl<SHC: StorageHubHandlerConfig> Clone for UserSendsFileTask<SHC> {
     fn clone(&self) -> Self {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
@@ -25,7 +25,7 @@ impl<SHC: StorageHubHandlerConfig> Clone for UserSubmittedFileTask<SHC> {
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> UserSubmittedFileTask<SHC> {
+impl<SHC: StorageHubHandlerConfig> UserSendsFileTask<SHC> {
     pub fn new(storage_hub_handler: StorageHubHandler<SHC>) -> Self {
         Self {
             storage_hub_handler,
@@ -34,7 +34,7 @@ impl<SHC: StorageHubHandlerConfig> UserSubmittedFileTask<SHC> {
 }
 
 impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
-    for UserSubmittedFileTask<SHC>
+    for UserSendsFileTask<SHC>
 {
     async fn handle_event(&self, event: AcceptedBspVolunteer) -> anyhow::Result<()> {
         info!(
