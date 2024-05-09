@@ -35,13 +35,11 @@ impl<SHC: StorageHubHandlerConfig> UserSendsFileTask<SHC> {
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
-    for UserSendsFileTask<SHC>
-{
+impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSendsFileTask<SHC> {
     /// Reacts to BSPs volunteering (`AcceptedBspVolunteer` from the runtime) to store the user's file,
     /// establishes a connection to each BSPs through the p2p network and sends the file.
     /// At this point we assume that the file is merkleised and already in file storage, and
-    /// for this reason the file transfer to the BSP should not fail unless the p2p connection fails. 
+    /// for this reason the file transfer to the BSP should not fail unless the p2p connection fails.
     async fn handle_event(&self, event: AcceptedBspVolunteer) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
@@ -74,6 +72,9 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
             info!(target: LOG_TARGET, "No peers were found to receive file {:?}", file_metadata.fingerprint);
         }
 
+        // Iterates and tries to send file to peer.
+        // Breaks loop after first successful attempt,
+        // since all peer ids belong to the same BSP.
         for peer_id in peer_ids {
             for chunk_id in 0..chunk_count {
                 let proof = self
@@ -96,14 +97,13 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
                     }
                     Err(e) => {
                         error!(target: LOG_TARGET, "Failed to upload chunk_id {:?} to peer {:?} due to {:?}", chunk_id, peer_id, e);
-                        // In case of an error, we stop sending to this peer id and go to the next one.
+                        // In case of an error, we break the inner loop
+                        // and try to connect to the next peer id.
                         break;
                     }
                 }
             }
             info!(target: LOG_TARGET, "Successfully sent file {:?} to peer {:?}", file_metadata.fingerprint, peer_id);
-            // If we successfully sent the file, we can break the loop
-            // since all of the peer ids belong to the same BSP.
             break;
         }
 
