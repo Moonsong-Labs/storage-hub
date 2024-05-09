@@ -15,10 +15,9 @@ use crate::{
     prove::prove,
     traits::ForestStorage,
     types::{ForestStorageErrors, HashT, HasherOutT, RawKey},
-    utils::{deserialize_value, serialize_value},
+    utils::{convert_raw_bytes_to_hasher_out, deserialize_value, serialize_value},
+    LOG_TARGET,
 };
-
-const LOG_TARGET: &str = "forest_storage";
 
 mod well_known_keys {
     pub const ROOT: &[u8] = b":root";
@@ -61,10 +60,10 @@ impl<H: Hasher> Storage<H> for StorageDb<H> {
     }
 }
 
-/// Backend storage used by the [`RocksDBForestStorage`].
+/// Trait that [`RocksDBForestStorage`] requires to interact with the storage backend.
 pub trait Backend<T: TrieLayout>: Storage<HashT<T>>
 where
-    <T::Hash as Hasher>::Out: TryFrom<Vec<u8>>,
+    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
     /// Write the transaction to the storage.
     fn write(&mut self, transaction: DBTransaction) -> Result<(), ForestStorageErrors>;
@@ -74,7 +73,7 @@ where
 
 impl<T: TrieLayout> Backend<T> for StorageDb<HashT<T>>
 where
-    <T::Hash as Hasher>::Out: TryFrom<Vec<u8>>,
+    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
     fn write(&mut self, transaction: DBTransaction) -> Result<(), ForestStorageErrors> {
         self.db.write(transaction).map_err(|e| {
@@ -90,19 +89,14 @@ where
         })?;
 
         let root = maybe_root
-            .map(|root| {
-                HasherOutT::<T>::try_from(root).map_err(|_| {
-                    warn!(target: LOG_TARGET, "Failed to parse root from DB");
-                    ForestStorageErrors::FailedToParseRoot
-                })
-            })
+            .map(|root| convert_raw_bytes_to_hasher_out::<T>(root))
             .transpose()?;
 
         Ok(root)
     }
 }
 
-/// Forest storage backend using RocksDB.
+/// RocksDB based [`ForestStorage`] implementation.
 pub struct RocksDBForestStorage<T: TrieLayout> {
     /// RocksDB storage backend.
     storage: Box<dyn Backend<T>>,
@@ -115,7 +109,7 @@ pub struct RocksDBForestStorage<T: TrieLayout> {
 
 impl<T: TrieLayout + Send + Sync> RocksDBForestStorage<T>
 where
-    <T::Hash as Hasher>::Out: TryFrom<Vec<u8>>,
+    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
     /// This will open the RocksDB database and read the storage [`ROOT`](`well_known_keys::ROOT`) from it.
     /// If the root hash is not found in storage, a new trie will be created and the root hash will be stored in storage.
@@ -148,7 +142,7 @@ where
                     TrieDBMutBuilder::<T>::new(rocksdb_forest_storage.as_hash_db_mut(), &mut root)
                         .build();
 
-                // Drop the `trie` to free `rockdb_forest_storage` and `root`.
+                // Drop the `trie` to free `rocksdb_forest_storage` and `root`.
                 drop(trie);
 
                 let mut transaction = DBTransaction::new();
@@ -270,7 +264,7 @@ impl<T: TrieLayout + Send + Sync> hash_db::HashDB<HashT<T>, DBValue> for RocksDB
 
 impl<T: TrieLayout + Send + Sync> ForestStorage for RocksDBForestStorage<T>
 where
-    <T::Hash as Hasher>::Out: TryFrom<Vec<u8>>,
+    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
     type LookupKey = HasherOutT<T>;
     type RawKey = RawKey<T>;
@@ -391,7 +385,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use reference_trie::RefHasher;
+    use sp_core::H256;
+    use sp_runtime::traits::BlakeTwo256;
     use sp_trie::LayoutV1;
     use storage_hub_infra::types::Proven;
 
@@ -409,7 +404,7 @@ mod tests {
 
     impl<T: TrieLayout> Backend<T> for MockStorageDb
     where
-        <T::Hash as Hasher>::Out: TryFrom<Vec<u8>>,
+        <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
     {
         fn write(&mut self, transaction: DBTransaction) -> Result<(), ForestStorageErrors> {
             for op in transaction.ops {
@@ -437,12 +432,7 @@ mod tests {
             Ok(self
                 .data
                 .get(well_known_keys::ROOT)
-                .map(|root| {
-                    HasherOutT::<T>::try_from(root.clone()).map_err(|_| {
-                        warn!(target: LOG_TARGET, "Failed to parse root from DB");
-                        ForestStorageErrors::FailedToParseRoot
-                    })
-                })
+                .map(|root| convert_raw_bytes_to_hasher_out::<T>(root.to_owned()))
                 .transpose()?)
         }
     }
@@ -451,7 +441,7 @@ mod tests {
     fn setup_storage<T>() -> RocksDBForestStorage<T>
     where
         T: TrieLayout + Send + Sync,
-        <T::Hash as Hasher>::Out: TryFrom<Vec<u8>>,
+        <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
     {
         let storage = Box::new(MockStorageDb {
             data: Default::default(),
@@ -469,6 +459,7 @@ mod tests {
         }
     }
 
+    /// Reusable function to create metadata, insert it into the storage and return the lookup key and metadata.
     fn create_and_insert_metadata<T>(
         forest_storage: &mut RocksDBForestStorage<T>,
         owner: &str,
@@ -477,7 +468,7 @@ mod tests {
     ) -> (HasherOutT<T>, Metadata)
     where
         T: TrieLayout + Send + Sync,
-        <T::Hash as Hasher>::Out: TryFrom<Vec<u8>>,
+        <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
     {
         let metadata = create_metadata(owner, location.clone(), size);
         let raw_key = RawKey::new(location);
@@ -487,8 +478,8 @@ mod tests {
 
     #[test]
     fn test_initialization_with_no_existing_root() {
-        let forest_storage = setup_storage::<LayoutV1<RefHasher>>();
-        let expected_hash = HasherOutT::<LayoutV1<RefHasher>>::try_from([
+        let forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>();
+        let expected_hash = HasherOutT::<LayoutV1<BlakeTwo256>>::try_from([
             188, 54, 120, 158, 122, 30, 40, 20, 54, 70, 66, 41, 130, 143, 129, 125, 102, 18, 247,
             180, 119, 214, 101, 145, 255, 150, 169, 224, 100, 188, 201, 138,
         ])
@@ -502,7 +493,7 @@ mod tests {
 
     #[test]
     fn test_write_read() {
-        let mut forest_storage = setup_storage::<LayoutV1<RefHasher>>();
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>();
 
         let (lookup_key, metadata) =
             create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
@@ -514,7 +505,7 @@ mod tests {
 
     #[test]
     fn test_remove_existing_file_key() {
-        let mut forest_storage = setup_storage::<LayoutV1<RefHasher>>();
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>();
 
         let (lookup_key, _) =
             create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
@@ -525,44 +516,65 @@ mod tests {
 
     #[test]
     fn test_remove_non_existent_file_key() {
-        let mut forest_storage = setup_storage::<LayoutV1<RefHasher>>();
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>();
         assert!(forest_storage.delete_file_key(&[0u8; 32].into()).is_ok());
     }
 
     #[test]
     fn test_generate_proof_exact_key() {
-        let mut forest_storage = setup_storage::<LayoutV1<RefHasher>>();
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>();
 
-        let (lookup_key, _) =
-            create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
+        let mut keys = Vec::new();
+        for i in 0..50 {
+            let (lookup_key, _) =
+                create_and_insert_metadata(&mut forest_storage, "Alice", vec![i], 200);
+            keys.push(lookup_key);
+        }
 
-        let proof = forest_storage.generate_proof(&vec![lookup_key]).unwrap();
-
-        assert_eq!(proof.proven.len(), 1);
-        assert!(
-            matches!(proof.proven.first().expect("Proven leaves should have proven 1 challenge"), Proven::ExactKey(leaf) if leaf.key.as_ref() == lookup_key)
-        );
-    }
-
-    #[test]
-    fn test_generate_proof_neighboor_keys() {
-        let mut forest_storage = setup_storage::<LayoutV1<RefHasher>>();
-
-        let (lookup_key1, _) =
-            create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
-        let (lookup_key2, _) =
-            create_and_insert_metadata(&mut forest_storage, "Alice", vec![7, 8, 10], 200);
-
-        let smallest = std::cmp::min(lookup_key1, lookup_key2);
-        let largest = std::cmp::max(lookup_key1, lookup_key2);
-        let mut challenge = smallest.clone();
-        challenge[0] = challenge[0] + 1;
+        let challenge = keys[0];
 
         let proof = forest_storage.generate_proof(&vec![challenge]).unwrap();
 
         assert_eq!(proof.proven.len(), 1);
         assert!(
-            matches!(proof.proven.first().expect("Proven leaves should have proven 1 challenge"), Proven::NeighbourKeys((Some(left_leaf), Some(right_leaf))) if left_leaf.key.as_ref() == smallest && right_leaf.key.as_ref() == largest)
+            matches!(proof.proven.first().expect("Proven leaves should have proven 1 challenge"), Proven::ExactKey(leaf) if leaf.key.as_ref() == challenge.as_bytes())
+        );
+    }
+
+    #[test]
+    fn test_generate_proof_neighbor_keys() {
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>();
+
+        let mut keys = Vec::new();
+        for i in 0..50 {
+            let (lookup_key, _) =
+                create_and_insert_metadata(&mut forest_storage, "Alice", vec![i], 200);
+            keys.push(lookup_key);
+        }
+
+        let hash_db = forest_storage.as_hash_db();
+        let root = forest_storage.root.clone();
+        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&hash_db, &root).build();
+
+        let mut iter = trie.iter().unwrap();
+        let first_key = iter.next().unwrap().unwrap().0;
+        let second_key = iter.next().unwrap().unwrap().0;
+
+        // increment last byte by 1
+        let challenge = first_key[0..31]
+            .iter()
+            .chain(std::iter::once(&(first_key[31] + 1)))
+            .copied()
+            .collect::<Vec<u8>>();
+        let challenge_hash = H256::from_slice(&challenge);
+
+        let proof = forest_storage
+            .generate_proof(&vec![challenge_hash])
+            .unwrap();
+
+        assert_eq!(proof.proven.len(), 1);
+        assert!(
+            matches!(proof.proven.first().expect("Proven leaves should have proven 1 challenge"), Proven::NeighbourKeys((Some(left_leaf), Some(right_leaf))) if left_leaf.key.as_ref() == first_key && right_leaf.key.as_ref() == second_key)
         );
     }
 
@@ -570,7 +582,7 @@ mod tests {
     #[test]
     #[ignore = "double ended iterator has inconsistent behaviour"]
     fn test_generate_proof_challenge_before_first_leaf() {
-        let mut forest_storage = setup_storage::<LayoutV1<RefHasher>>();
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>();
 
         let (lookup_key1, _) =
             create_and_insert_metadata(&mut forest_storage, "Alice", vec![10], 200);
@@ -578,34 +590,67 @@ mod tests {
             create_and_insert_metadata(&mut forest_storage, "Alice", vec![11], 200);
 
         let mut challenge = lookup_key1.clone();
-        challenge[0] = challenge[0] - 1;
+        let challenge_bytes = challenge.as_mut();
+        challenge_bytes[0] = challenge_bytes[0] - 1;
 
         let proof = forest_storage.generate_proof(&vec![challenge]).unwrap();
 
         assert_eq!(proof.proven.len(), 1);
         assert!(
-            matches!(proof.proven.first().expect("Proven leaves should have proven 1 challenge"), Proven::NeighbourKeys((None, Some(leaf))) if leaf.key.as_ref() == lookup_key1)
+            matches!(proof.proven.first().expect("Proven leaves should have proven 1 challenge"), Proven::NeighbourKeys((None, Some(leaf))) if leaf.key.as_ref() == lookup_key1.as_bytes())
         );
     }
 
     #[test]
     fn test_generate_proof_challenge_after_last_leaf() {
-        let mut forest_storage = setup_storage::<LayoutV1<RefHasher>>();
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>();
 
-        let (lookup_key1, _) =
-            create_and_insert_metadata(&mut forest_storage, "Alice", vec![1, 2, 3], 200);
-        let (lookup_key2, _) =
-            create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
+        let mut keys = Vec::new();
+        for i in 0..50 {
+            let (lookup_key, _) =
+                create_and_insert_metadata(&mut forest_storage, "Alice", vec![i], 200);
+            keys.push(lookup_key);
+        }
 
-        let largest = std::cmp::max(lookup_key1, lookup_key2);
+        let largest = keys.iter().max().unwrap();
         let mut challenge = largest.clone();
-        challenge[0] = challenge[0] + 1;
+        let challenge_bytes = challenge.as_mut();
+        challenge_bytes[0] = challenge_bytes[0] + 1;
 
         let proof = forest_storage.generate_proof(&vec![challenge]).unwrap();
 
         assert_eq!(proof.proven.len(), 1);
         assert!(
-            matches!(proof.proven.first().expect("Proven leaves should have proven 1 challenge"), Proven::NeighbourKeys((Some(leaf), None)) if leaf.key.as_ref() == largest)
+            matches!(proof.proven.first().expect("Proven leaves should have proven 1 challenge"), Proven::NeighbourKeys((Some(leaf), None)) if leaf.key.as_ref() == largest.as_bytes())
         );
+    }
+
+    #[test]
+    fn test_trie_with_over_16_consecutive_leaves() {
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>();
+
+        let mut keys = Vec::new();
+        for i in 0..50 {
+            let (lookup_key, _) =
+                create_and_insert_metadata(&mut forest_storage, "Alice", vec![i], 200);
+            keys.push(lookup_key);
+        }
+
+        // Remove specific keys
+        let keys_to_remove = keys
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| i % 2 == 0)
+            .map(|(_, key)| key.clone())
+            .collect::<Vec<_>>();
+
+        for key in &keys_to_remove {
+            assert!(forest_storage.delete_file_key(&key).is_ok());
+        }
+
+        // Test that the keys are removed
+        for key in keys_to_remove {
+            assert!(forest_storage.get_file_key(&key).unwrap().is_none());
+        }
     }
 }

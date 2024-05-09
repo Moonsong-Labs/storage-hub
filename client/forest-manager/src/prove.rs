@@ -62,16 +62,6 @@ pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
                 .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
         }
         // Scenario 3: Before the first leaf
-        (Some((prev_key, _)), Some((next_key, next_value)))
-            if prev_key == next_key && iter.next_back().is_none() =>
-        {
-            let next_leaf = Leaf::new(next_key.into(), deserialize_value(&next_value)?);
-
-            Ok(Proven::new_neighbour_keys(None, Some(next_leaf))
-                .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
-        }
-        // Scenario 3: Before the first leaf
-        // TODO: Understand why this is different from the previous match clause when using no storage layer.
         (None, Some((key, value))) if *challenged_file_key.as_ref() < *key => {
             let leaf = Leaf::new(key.into(), deserialize_value(&value)?);
 
@@ -91,7 +81,7 @@ pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{in_memory::InMemoryForestStorage, tests::build_merkle_patricia_forest};
+    use crate::{in_memory::InMemoryForestStorage, test_utils::build_merkle_patricia_forest};
 
     use super::*;
     use reference_trie::RefHasher;

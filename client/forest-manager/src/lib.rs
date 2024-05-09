@@ -6,4 +6,6 @@ pub mod types;
 pub(crate) mod utils;
 
 #[cfg(test)]
-mod tests;
+mod test_utils;
+
+const LOG_TARGET: &str = "forest_storage";

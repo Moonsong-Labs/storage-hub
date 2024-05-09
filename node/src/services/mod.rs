@@ -1,7 +1,7 @@
 pub mod blockchain;
 pub mod file_transfer;
 
-use reference_trie::RefHasher;
+use polkadot_primitives::BlakeTwo256;
 use sp_core::H256;
 use sp_trie::LayoutV1;
 use std::sync::Arc;
@@ -29,8 +29,8 @@ pub trait StorageHubHandlerConfig: StorageHubHandlerInitializer + Send + 'static
 pub struct InMemoryStorageHubConfig {}
 
 impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
-    type FileStorage = InMemoryFileStorage<LayoutV1<RefHasher>>;
-    type ForestStorage = InMemoryForestStorage<LayoutV1<RefHasher>>;
+    type FileStorage = InMemoryFileStorage<LayoutV1<BlakeTwo256>>;
+    type ForestStorage = InMemoryForestStorage<LayoutV1<BlakeTwo256>>;
 }
 
 impl StorageHubHandlerInitializer for InMemoryStorageHubConfig {
@@ -45,10 +45,10 @@ impl StorageHubHandlerInitializer for InMemoryStorageHubConfig {
             file_transfer,
             blockchain,
             Arc::new(RwLock::new(
-                InMemoryFileStorage::<LayoutV1<RefHasher>>::new(),
+                InMemoryFileStorage::<LayoutV1<BlakeTwo256>>::new(),
             )),
             Arc::new(RwLock::new(
-                InMemoryForestStorage::<LayoutV1<RefHasher>>::new(),
+                InMemoryForestStorage::<LayoutV1<BlakeTwo256>>::new(),
             )),
         )
     }
@@ -57,8 +57,8 @@ impl StorageHubHandlerInitializer for InMemoryStorageHubConfig {
 pub struct RocksDBStorageHubConfig {}
 
 impl StorageHubHandlerConfig for RocksDBStorageHubConfig {
-    type FileStorage = InMemoryFileStorage<LayoutV1<RefHasher>>;
-    type ForestStorage = RocksDBForestStorage<LayoutV1<RefHasher>>;
+    type FileStorage = InMemoryFileStorage<LayoutV1<BlakeTwo256>>;
+    type ForestStorage = RocksDBForestStorage<LayoutV1<BlakeTwo256>>;
 }
 
 impl StorageHubHandlerInitializer for RocksDBStorageHubConfig {
@@ -69,7 +69,7 @@ impl StorageHubHandlerInitializer for RocksDBStorageHubConfig {
         blockchain: ActorHandle<BlockchainService>,
     ) -> StorageHubHandler<Self> {
         let storage_path = hex::encode(provider_pub_key);
-        let storage = RocksDBForestStorage::<LayoutV1<RefHasher>>::rocksdb_storage(storage_path)
+        let storage = RocksDBForestStorage::<LayoutV1<BlakeTwo256>>::rocksdb_storage(storage_path)
             .expect("Failed to create RocksDB");
 
         StorageHubHandler::new(
@@ -77,10 +77,10 @@ impl StorageHubHandlerInitializer for RocksDBStorageHubConfig {
             file_transfer,
             blockchain,
             Arc::new(RwLock::new(
-                InMemoryFileStorage::<LayoutV1<RefHasher>>::new(),
+                InMemoryFileStorage::<LayoutV1<BlakeTwo256>>::new(),
             )),
             Arc::new(RwLock::new(
-                RocksDBForestStorage::<LayoutV1<RefHasher>>::new(Box::new(storage))
+                RocksDBForestStorage::<LayoutV1<BlakeTwo256>>::new(Box::new(storage))
                     .expect("Failed to create RocksDB"),
             )),
         )
@@ -133,30 +133,6 @@ impl<S: StorageHubHandlerConfig> StorageHubHandler<S> {
             file_storage,
             forest_storage,
         }
-    }
-
-    /// Add file to the forest storage.
-    pub async fn _add_file_to_forest(
-        &self,
-        who: String,
-        location: Vec<u8>,
-        size: u64,
-        fingerprint: H256,
-    ) -> anyhow::Result<<S::ForestStorage as ForestStorage>::LookupKey> {
-        let mut forest_storage = self.forest_storage.write().await;
-
-        let metadata = Metadata::new(who, location, size, fingerprint);
-
-        let metadata_serialized = bincode::serialize(&metadata)?;
-
-        let file_key = forest_storage
-            .insert_file_key(
-                &metadata_serialized.clone().into(),
-                &metadata_serialized.into(),
-            )
-            .map_err(|e| anyhow::anyhow!("Failed to insert file key: {:?}", e))?;
-
-        Ok(file_key)
     }
 
     pub fn start_bsp_tasks(&self) {
