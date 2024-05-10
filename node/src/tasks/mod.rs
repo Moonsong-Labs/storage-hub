@@ -37,7 +37,7 @@ where
 {
     async fn handle_event(&self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         info!(
-            "[ResolveRemoteUploadRequest] - file location: {}",
+            "[ResolveRemoteUploadRequest] - file location: {:?}",
             event.file_key
         );
 

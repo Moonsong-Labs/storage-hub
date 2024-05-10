@@ -17,24 +17,35 @@ use super::{blockchain::handler::BlockchainService, file_transfer::FileTransferS
 
 /// Wrapper trait encompassing all the necessary implementations which [`StorageHubHandler`] requires.
 pub trait StorageHubHandlerConfig: StorageHubHandlerInitializer + Send + 'static {
+    /// Type which implements [`TrieLayout`].
+    ///
+    /// This is primarily used for constructing
+    type TrieLayout: TrieLayout;
     /// Type which implements [`FileStorage`].
     ///
     /// This layer stores all files (chunked).
-    type FileStorage: FileStorage + Send + Sync;
+    type FileStorage: FileStorage<Self::TrieLayout> + Send + Sync;
     /// Type which implements [`ForestStorage`].
     ///
     /// This layer tracks all of the files stored in [`FileStorage`](StorageHubHandlerConfig::FileStorage).
-    type ForestStorage: ForestStorage + Send + Sync;
+    type ForestStorage: ForestStorage<Self::TrieLayout> + Send + Sync;
 }
 
 pub struct InMemoryStorageHubConfig<T: TrieLayout>(std::marker::PhantomData<T>);
 
-impl<T: TrieLayout + Send + 'static> StorageHubHandlerConfig for InMemoryStorageHubConfig<T> {
+impl<T: TrieLayout + Send + 'static> StorageHubHandlerConfig for InMemoryStorageHubConfig<T>
+where
+    <<T as TrieLayout>::Hash as sp_core::Hasher>::Out: TryFrom<[u8; 32]>,
+{
+    type TrieLayout = T;
     type FileStorage = InMemoryFileStorage<T>;
     type ForestStorage = InMemoryForestStorage<T>;
 }
 
-impl<T: TrieLayout + Send + 'static> StorageHubHandlerInitializer for InMemoryStorageHubConfig<T> {
+impl<T: TrieLayout + Send + 'static> StorageHubHandlerInitializer for InMemoryStorageHubConfig<T>
+where
+    <<T as TrieLayout>::Hash as sp_core::Hasher>::Out: TryFrom<[u8; 32]>,
+{
     fn initialize(
         _provider_pub_key: [u8; 32],
         task_spawner: TaskSpawner,
@@ -57,6 +68,7 @@ impl<T: TrieLayout + Send + Sync + 'static> StorageHubHandlerConfig for RocksDBS
 where
     <<T as TrieLayout>::Hash as sp_core::Hasher>::Out: TryFrom<[u8; 32]>,
 {
+    type TrieLayout = T;
     type FileStorage = InMemoryFileStorage<T>;
     type ForestStorage = RocksDBForestStorage<T>;
 }

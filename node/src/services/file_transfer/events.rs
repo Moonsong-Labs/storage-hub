@@ -1,11 +1,9 @@
+use common::types::{ChunkId, FileProof, Key};
 use sc_network::config::OutgoingResponse;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use storage_hub_infra::{
-    event_bus::{EventBus, EventBusMessage, ProvidesEventBus},
-    types::{ChunkId, FileProof, Key},
-};
+use storage_hub_infra::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 
 #[derive(Clone)]
 pub struct RemoteUploadRequest {

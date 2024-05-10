@@ -1,10 +1,8 @@
 use anyhow::Result;
+use common::types::{ChunkId, FileProof, Key};
 use prost::Message;
 use sc_network::{Multiaddr, PeerId, ProtocolName, RequestFailure};
-use storage_hub_infra::{
-    actor::ActorHandle,
-    types::{ChunkId, FileProof, Key},
-};
+use storage_hub_infra::actor::ActorHandle;
 
 use super::{schema, FileTransferService};
 

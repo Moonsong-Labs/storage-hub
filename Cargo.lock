@@ -1471,7 +1471,9 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "parity-scale-codec",
  "reference-trie",
+ "serde",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "storage-hub-infra",
@@ -3296,12 +3298,14 @@ dependencies = [
  "kvdb",
  "kvdb-rocksdb",
  "log",
+ "parity-scale-codec",
  "reference-trie",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-runtime 31.0.1",
  "sp-state-machine 0.35.0",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "storage-hub-infra",
+ "thiserror",
  "trie-db 0.29.0",
 ]
 
@@ -14404,6 +14408,7 @@ dependencies = [
  "bincode",
  "clap",
  "color-print",
+ "common 0.1.0",
  "cumulus-client-cli",
  "cumulus-client-collator",
  "cumulus-client-consensus-aura",

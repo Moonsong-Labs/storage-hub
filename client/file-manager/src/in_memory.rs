@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
-use common::types::HashT;
+use common::types::{Chunk, ChunkId, FileProof, HasherOutT, Leaf, Metadata};
 use sp_core::H256;
-use storage_hub_infra::types::{Chunk, ChunkId, FileProof, Key, Leaf, Metadata};
 
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::TrieDBMutBuilder;
@@ -10,7 +9,7 @@ use trie_db::TrieDBMutBuilder;
 use crate::traits::{FileStorage, FileStorageError, FileStorageWriteStatus};
 
 pub struct FileData<T: TrieLayout + 'static> {
-    root: HashT<T>,
+    root: HasherOutT<T>,
     memdb: MemoryDB<T::Hash>,
 }
 
@@ -39,8 +38,8 @@ impl<T: TrieLayout + 'static> FileData<T> {
 }
 
 pub struct InMemoryFileStorage<T: TrieLayout + 'static> {
-    pub metadata: HashMap<Key, Metadata>,
-    pub file_data: HashMap<Key, FileData<T>>,
+    pub metadata: HashMap<HasherOutT<T>, Metadata>,
+    pub file_data: HashMap<HasherOutT<T>, FileData<T>>,
 }
 
 impl<T: TrieLayout> InMemoryFileStorage<T> {
@@ -52,10 +51,10 @@ impl<T: TrieLayout> InMemoryFileStorage<T> {
     }
 }
 
-impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
+impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
     fn generate_proof(
         &self,
-        file_key: &Key,
+        file_key: &HasherOutT<T>,
         chunk_id: &ChunkId,
     ) -> Result<FileProof, FileStorageError> {
         let metadata = self
@@ -75,7 +74,7 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
             return Err(FileStorageError::IncompleteFile);
         }
 
-        if file_data.get_root() != metadata.fingerprint {
+        if file_data.root.as_ref().to_vec() != metadata.fingerprint {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 
@@ -113,24 +112,28 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
         })
     }
 
-    fn delete_file(&mut self, file_key: &Key) {
+    fn delete_file(&mut self, file_key: &HasherOutT<T>) {
         self.metadata.remove(file_key);
         self.file_data.remove(file_key);
     }
 
-    fn get_metadata(&self, file_key: &Key) -> Result<Metadata, FileStorageError> {
+    fn get_metadata(&self, file_key: &HasherOutT<T>) -> Result<Metadata, FileStorageError> {
         self.metadata
             .get(file_key)
             .cloned()
             .ok_or(FileStorageError::FileDoesNotExist)
     }
 
-    fn set_metadata(&mut self, file_key: Key, metadata: Metadata) {
+    fn set_metadata(&mut self, file_key: HasherOutT<T>, metadata: Metadata) {
         self.metadata.insert(file_key, metadata);
         self.file_data.insert(file_key, FileData::new());
     }
 
-    fn get_chunk(&self, file_key: &Key, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError> {
+    fn get_chunk(
+        &self,
+        file_key: &HasherOutT<T>,
+        chunk_id: &ChunkId,
+    ) -> Result<Chunk, FileStorageError> {
         let file_data = self.file_data.get(file_key);
         let file_data = file_data.ok_or(FileStorageError::FileDoesNotExist)?;
 
@@ -143,7 +146,7 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
 
     fn write_chunk(
         &mut self,
-        file_key: &Key,
+        file_key: &HasherOutT<T>,
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<FileStorageWriteStatus, FileStorageError> {
@@ -184,7 +187,7 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
 
         // If we have all the chunks, check if the file metadata fingerprint and the file trie
         // root matches.
-        if file_data.get_root() != metadata.fingerprint {
+        if file_data.root.as_ref().to_vec() != metadata.fingerprint {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 

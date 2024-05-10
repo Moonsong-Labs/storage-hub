@@ -1,21 +1,22 @@
 use std::{io, path::PathBuf, sync::Arc};
 
+use common::types::{ForestProof, HashT, HasherOutT, Metadata};
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use kvdb_rocksdb::{Database, DatabaseConfig};
 use log::debug;
+use sp_core::Encode;
 use sp_state_machine::{warn, Storage};
 use sp_trie::{
-    prefixed_key, recorder::Recorder, PrefixedMemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut,
+    prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieDBBuilder, TrieLayout, TrieMut,
 };
-use storage_hub_infra::types::{ForestProof, Metadata};
 use trie_db::{DBValue, Hasher, TrieDBMutBuilder};
 
 use crate::{
+    error::{Error, ForestStorageError},
     prove::prove,
     traits::ForestStorage,
-    types::{ForestStorageErrors, HashT, HasherOutT, RawKey},
-    utils::{convert_raw_bytes_to_hasher_out, deserialize_value, serialize_value},
+    utils::{convert_raw_bytes_to_hasher_out, get_and_decode_value},
     LOG_TARGET,
 };
 
@@ -66,26 +67,26 @@ where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
     /// Write the transaction to the storage.
-    fn write(&mut self, transaction: DBTransaction) -> Result<(), ForestStorageErrors>;
+    fn write(&mut self, transaction: DBTransaction) -> Result<(), Error>;
     /// Get the [`ROOT`](`well_known_keys::ROOT`) from storage.
-    fn storage_root(&self) -> Result<Option<HasherOutT<T>>, ForestStorageErrors>;
+    fn storage_root(&self) -> Result<Option<HasherOutT<T>>, Error>;
 }
 
 impl<T: TrieLayout> Backend<T> for StorageDb<HashT<T>>
 where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
-    fn write(&mut self, transaction: DBTransaction) -> Result<(), ForestStorageErrors> {
+    fn write(&mut self, transaction: DBTransaction) -> Result<(), Error> {
         self.db.write(transaction).map_err(|e| {
             warn!(target: LOG_TARGET, "Failed to write to DB: {}", e);
-            ForestStorageErrors::FailedToWriteToStorage
+            ForestStorageError::FailedToWriteToStorage.into()
         })
     }
 
-    fn storage_root(&self) -> Result<Option<HasherOutT<T>>, ForestStorageErrors> {
+    fn storage_root(&self) -> Result<Option<HasherOutT<T>>, Error> {
         let maybe_root = self.db.get(0, well_known_keys::ROOT).map_err(|e| {
             warn!(target: LOG_TARGET, "Failed to read root from DB: {}", e);
-            ForestStorageErrors::FailedToReadStorage
+            ForestStorageError::FailedToReadStorage
         })?;
 
         let root = maybe_root
@@ -113,7 +114,7 @@ where
 {
     /// This will open the RocksDB database and read the storage [`ROOT`](`well_known_keys::ROOT`) from it.
     /// If the root hash is not found in storage, a new trie will be created and the root hash will be stored in storage.
-    pub fn new(storage: Box<dyn Backend<T>>) -> Result<Self, ForestStorageErrors> {
+    pub fn new(storage: Box<dyn Backend<T>>) -> Result<Self, Error> {
         let maybe_root = storage.storage_root()?;
 
         let rocksdb_forest_storage = match maybe_root {
@@ -166,10 +167,10 @@ where
     }
 
     /// Open the RocksDB database at `dp_path` and return a new instance of [`StorageDb`].
-    pub fn rocksdb_storage(dp_path: String) -> Result<StorageDb<HashT<T>>, ForestStorageErrors> {
+    pub fn rocksdb_storage(dp_path: String) -> Result<StorageDb<HashT<T>>, Error> {
         let db = open_creating_rocksdb(dp_path).map_err(|e| {
             warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
-            ForestStorageErrors::FailedToReadStorage
+            ForestStorageError::FailedToReadStorage
         })?;
 
         Ok(StorageDb {
@@ -182,11 +183,11 @@ where
     ///
     /// This will write the changes applied to the overlay, including the [`root`](`RocksDBForestStorage::root`). If the root has not changed, the commit will be skipped.
     /// The `overlay` will be cleared.
-    pub fn commit(&mut self) -> Result<(), ForestStorageErrors> {
+    pub fn commit(&mut self) -> Result<(), Error> {
         let root = &self
             .storage
             .storage_root()?
-            .ok_or(ForestStorageErrors::ExpectingRootToBeInStorage)?;
+            .ok_or(ForestStorageError::ExpectingRootToBeInStorage)?;
 
         // Skip commit if the root has not changed.
         if &self.root == root {
@@ -262,37 +263,21 @@ impl<T: TrieLayout + Send + Sync> hash_db::HashDB<HashT<T>, DBValue> for RocksDB
     }
 }
 
-impl<T: TrieLayout + Send + Sync> ForestStorage for RocksDBForestStorage<T>
+impl<T: TrieLayout + Send + Sync> ForestStorage<T> for RocksDBForestStorage<T>
 where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
-    type LookupKey = HasherOutT<T>;
-    type RawKey = RawKey<T>;
-    type Value = Metadata;
-
-    fn get_file_key(
-        &self,
-        file_key: &Self::LookupKey,
-    ) -> Result<Option<Self::Value>, ForestStorageErrors> {
+    fn get_metadata(&self, file_key: &HasherOutT<T>) -> Result<Option<Metadata>, Error> {
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
 
-        let maybe_metadata = trie.get(file_key.as_ref()).map_err(|e| {
-            warn!(target: LOG_TARGET, "Failed to get file key: {:?}", e);
-            ForestStorageErrors::FailedToGetFileKey
-        })?;
-
-        let maybe_metadata = maybe_metadata
-            .map(|raw_metadata| deserialize_value(&raw_metadata))
-            .transpose()?;
-
-        Ok(maybe_metadata)
+        get_and_decode_value(trie, file_key)
     }
 
     fn generate_proof(
         &self,
-        challenged_file_keys: &Vec<Self::LookupKey>,
-    ) -> Result<ForestProof<Self::RawKey>, ForestStorageErrors> {
+        challenged_file_keys: Vec<HasherOutT<T>>,
+    ) -> Result<ForestProof<T>, Error> {
         let recorder: Recorder<T::Hash> = Recorder::default();
 
         // A `TrieRecorder` is needed to create a proof of the "visited" leafs, by the end of this process.
@@ -306,7 +291,7 @@ where
         // Get the proven leaves or leaf
         let proven = challenged_file_keys
             .iter()
-            .map(|file_key| prove::<_, Self>(&trie, file_key))
+            .map(|file_key| prove::<_>(&trie, file_key))
             .collect::<Result<Vec<_>, _>>()?;
 
         // Drop the `trie_recorder` to release the `self` and `recorder`
@@ -316,36 +301,29 @@ where
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<T::Hash>(self.root)
-            .map_err(|_| ForestStorageErrors::FailedToGenerateCompactProof)?;
+            .map_err(|_| ForestStorageError::FailedToGenerateCompactProof)?;
 
         Ok(ForestProof {
             proven,
             proof,
-            root: self.root.as_ref().to_vec().into(),
+            root: self.root,
         })
     }
 
-    fn insert_file_key(
-        &mut self,
-        raw_file_key: &Self::RawKey,
-        metadata: &Self::Value,
-    ) -> Result<Self::LookupKey, ForestStorageErrors> {
-        let file_key = <T::Hash as Hasher>::hash(&raw_file_key.key);
+    fn insert_metadata(&mut self, metadata: &Metadata) -> Result<HasherOutT<T>, Error> {
+        let file_key = metadata.key::<T::Hash>();
 
-        if self.get_file_key(&file_key)?.is_some() {
-            return Err(ForestStorageErrors::FileKeyAlreadyExists);
+        if self.get_metadata(&file_key)?.is_some() {
+            return Err(ForestStorageError::FileKeyAlreadyExists.into());
         }
 
         let mut root = self.root.clone();
         let mut trie =
             TrieDBMutBuilder::<T>::from_existing(self.as_hash_db_mut(), &mut root).build();
 
-        // Serialize the metadata.
-        let raw_metadata = serialize_value(metadata)?;
-
         // Insert the file key and metadata into the trie.
-        trie.insert(file_key.as_ref(), &raw_metadata)
-            .map_err(|_| ForestStorageErrors::FailedToInsertFileKey)?;
+        trie.insert(file_key.as_ref(), &metadata.encode())
+            .map_err(|_| ForestStorageError::FailedToInsertFileKey)?;
 
         // Drop trie to free `self`.
         drop(trie);
@@ -359,7 +337,7 @@ where
         Ok(file_key)
     }
 
-    fn delete_file_key(&mut self, file_key: &Self::LookupKey) -> Result<(), ForestStorageErrors> {
+    fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), Error> {
         let mut root = self.root.clone();
         let mut trie =
             TrieDBMutBuilder::<T>::from_existing(self.as_hash_db_mut(), &mut root).build();
@@ -367,7 +345,7 @@ where
         // Remove the file key from the trie.
         let _ = trie
             .remove(file_key.as_ref())
-            .map_err(|_| ForestStorageErrors::FailedToRemoveFileKey)?;
+            .map_err(|_| ForestStorageError::FailedToRemoveFileKey)?;
 
         // Drop trie to free `self`.
         drop(trie);
@@ -385,10 +363,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use common::types::{Metadata, Proven};
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_trie::LayoutV1;
-    use storage_hub_infra::types::Proven;
+    use trie_db::Trie;
 
     /// Mock that simulates the backend for testing purposes.
     struct MockStorageDb {
@@ -406,7 +385,7 @@ mod tests {
     where
         <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
     {
-        fn write(&mut self, transaction: DBTransaction) -> Result<(), ForestStorageErrors> {
+        fn write(&mut self, transaction: DBTransaction) -> Result<(), Error> {
             for op in transaction.ops {
                 match op {
                     kvdb::DBOp::Insert {
@@ -428,7 +407,7 @@ mod tests {
             Ok(())
         }
 
-        fn storage_root(&self) -> Result<Option<HasherOutT<T>>, ForestStorageErrors> {
+        fn storage_root(&self) -> Result<Option<HasherOutT<T>>, Error> {
             Ok(self
                 .data
                 .get(well_known_keys::ROOT)
@@ -471,17 +450,16 @@ mod tests {
         <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
     {
         let metadata = create_metadata(owner, location.clone(), size);
-        let raw_key = RawKey::new(location);
-        let lookup_key = forest_storage.insert_file_key(&raw_key, &metadata).unwrap();
-        (lookup_key, metadata)
+        let file_key = forest_storage.insert_metadata(&metadata).unwrap();
+        (file_key, metadata)
     }
 
     #[test]
     fn test_initialization_with_no_existing_root() {
         let forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>();
         let expected_hash = HasherOutT::<LayoutV1<BlakeTwo256>>::try_from([
-            188, 54, 120, 158, 122, 30, 40, 20, 54, 70, 66, 41, 130, 143, 129, 125, 102, 18, 247,
-            180, 119, 214, 101, 145, 255, 150, 169, 224, 100, 188, 201, 138,
+            3, 23, 10, 46, 117, 151, 183, 183, 227, 216, 76, 5, 57, 29, 19, 154, 98, 177, 87, 231,
+            135, 134, 216, 192, 130, 242, 157, 207, 76, 17, 19, 20,
         ])
         .unwrap();
 
@@ -495,10 +473,10 @@ mod tests {
     fn test_write_read() {
         let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>();
 
-        let (lookup_key, metadata) =
+        let (file_key, metadata) =
             create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
 
-        let retrieved_metadata = forest_storage.get_file_key(&lookup_key).unwrap().unwrap();
+        let retrieved_metadata = forest_storage.get_metadata(&file_key).unwrap().unwrap();
 
         assert_eq!(retrieved_metadata, metadata);
     }
@@ -507,11 +485,11 @@ mod tests {
     fn test_remove_existing_file_key() {
         let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>();
 
-        let (lookup_key, _) =
+        let (file_key, _) =
             create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
 
-        assert!(forest_storage.delete_file_key(&lookup_key).is_ok());
-        assert!(forest_storage.get_file_key(&lookup_key).unwrap().is_none());
+        assert!(forest_storage.delete_file_key(&file_key).is_ok());
+        assert!(forest_storage.get_metadata(&file_key).unwrap().is_none());
     }
 
     #[test]
@@ -533,7 +511,7 @@ mod tests {
 
         let challenge = keys[0];
 
-        let proof = forest_storage.generate_proof(&vec![challenge]).unwrap();
+        let proof = forest_storage.generate_proof(vec![challenge]).unwrap();
 
         assert_eq!(proof.proven.len(), 1);
         assert!(
@@ -568,9 +546,7 @@ mod tests {
             .collect::<Vec<u8>>();
         let challenge_hash = H256::from_slice(&challenge);
 
-        let proof = forest_storage
-            .generate_proof(&vec![challenge_hash])
-            .unwrap();
+        let proof = forest_storage.generate_proof(vec![challenge_hash]).unwrap();
 
         assert_eq!(proof.proven.len(), 1);
         assert!(
@@ -593,7 +569,7 @@ mod tests {
         let challenge_bytes = challenge.as_mut();
         challenge_bytes[0] = challenge_bytes[0] - 1;
 
-        let proof = forest_storage.generate_proof(&vec![challenge]).unwrap();
+        let proof = forest_storage.generate_proof(vec![challenge]).unwrap();
 
         assert_eq!(proof.proven.len(), 1);
         assert!(
@@ -617,7 +593,7 @@ mod tests {
         let challenge_bytes = challenge.as_mut();
         challenge_bytes[0] = challenge_bytes[0] + 1;
 
-        let proof = forest_storage.generate_proof(&vec![challenge]).unwrap();
+        let proof = forest_storage.generate_proof(vec![challenge]).unwrap();
 
         assert_eq!(proof.proven.len(), 1);
         assert!(
@@ -650,7 +626,7 @@ mod tests {
 
         // Test that the keys are removed
         for key in keys_to_remove {
-            assert!(forest_storage.get_file_key(&key).unwrap().is_none());
+            assert!(forest_storage.get_metadata(&key).unwrap().is_none());
         }
     }
 }
