@@ -12,7 +12,8 @@ use storage_hub_infra::types::Metadata;
 
 const LOG_TARGET: &str = "user-sends-file-task";
 
-/// Handles the events related to users sending a file to be stored by BSPs.
+/// Handles the events related to users sending a file to be stored by BSPs
+/// volunteering for that file.
 /// It can serve multiple BSPs volunteering to store each file, since
 /// it reacts to every `AcceptedBspVolunteer` from the runtime.
 pub struct UserSendsFileTask<SHC: StorageHubHandlerConfig> {
