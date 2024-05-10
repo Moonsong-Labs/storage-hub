@@ -460,6 +460,7 @@ pub mod pallet {
             capacity: StorageData<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             value_prop: ValueProposition<T>,
+            payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -472,6 +473,7 @@ pub mod pallet {
                 multiaddresses: multiaddresses.clone(),
                 value_prop: value_prop.clone(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
+                payment_account,
             };
 
             // Sign up the new MSP (if possible), updating storage
@@ -519,6 +521,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             capacity: StorageData<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -530,6 +533,7 @@ pub mod pallet {
                 multiaddresses: multiaddresses.clone(),
                 root: MerklePatriciaRoot::<T>::default(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
+                payment_account,
             };
 
             // Sign up the new BSP (if possible), updating storage
