@@ -266,7 +266,7 @@ async fn start_storage_provider(
 
 fn start_provider_tasks<SHC: StorageHubHandlerConfig>(
     provider_options: ProviderOptions,
-    storage_hub_handler: StorageHubHandler<SHC>,
+    sh_handler: StorageHubHandler<SHC>,
 ) {
     // Starting the tasks according to the provider type.
     match provider_options.provider_type {
