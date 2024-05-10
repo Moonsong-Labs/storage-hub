@@ -87,7 +87,7 @@ pub struct ProviderConfigurations {
         long,
         value_enum,
         value_name = "STORAGE_LAYER",
-        required_if_eq("provider", "true")
+        default_value = "memory"
     )]
     pub storage_layer: Option<StorageLayer>,
 

@@ -30,7 +30,6 @@ args = [
     "--provider",
     "--provider-type bsp",
     "--seed-file ./Cargo.toml",
-    "--storage-layer memory",
 ]
 
 [types.Header]
