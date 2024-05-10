@@ -1487,6 +1487,7 @@ fn register_account_as_bsp(account: AccountId, storage_amount: StorageData<Test>
         RuntimeOrigin::signed(account),
         storage_amount,
         multiaddresses.clone(),
+        account
     ));
 
     // Advance enough blocks for randomness to be valid
