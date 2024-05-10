@@ -25,18 +25,16 @@ pub fn build_merkle_patricia_forest<T: TrieLayout>() -> (
     let mut file_leaves = Vec::new();
 
     for user_id in user_ids {
-        let file_path = format!(
-            "{}-{}-{}.txt",
-            String::from_utf8(user_id.to_vec()).unwrap(),
-            String::from_utf8(bucket.to_vec()).unwrap(),
-            String::from_utf8(file_name.to_vec()).unwrap()
-        );
+        let mut file_path = Vec::new();
+        file_path.append(&mut user_id.to_vec());
+        file_path.append(&mut bucket.to_vec());
+        file_path.append(&mut file_name.to_vec());
 
         let fingerprint = H256::from_slice(&[0; 32]);
 
         let metadata = Metadata {
             owner: String::from("owner"),
-            location: file_path.as_bytes().to_vec(),
+            location: file_path,
             size: 0,
             fingerprint,
         };
@@ -46,7 +44,6 @@ pub fn build_merkle_patricia_forest<T: TrieLayout>() -> (
 
         file_leaves.push((metadata_hash, metadata));
     }
-
     // Construct the Merkle Patricia Forest
     let mut memdb = MemoryDB::<T::Hash>::default();
     let mut root: HashT<T> = Default::default();

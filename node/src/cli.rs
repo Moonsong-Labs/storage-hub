@@ -54,6 +54,8 @@ pub enum ProviderType {
     Msp,
     /// Backup Storage Provider
     Bsp,
+    /// TODO: This is temporary. Remove it once we have implemented all the User related code.
+    User,
 }
 
 #[derive(ValueEnum, Clone, Debug)]

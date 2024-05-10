@@ -270,7 +270,8 @@ fn start_provider_tasks<SHC: StorageHubHandlerConfig>(
 ) {
     // Starting the tasks according to the provider type.
     match provider_options.provider_type {
-        ProviderType::Bsp => storage_hub_handler.start_bsp_tasks(),
+        ProviderType::Bsp => sh_handler.start_bsp_tasks(),
+        ProviderType::User => sh_handler.start_user_tasks(),
         _ => {}
     }
 }

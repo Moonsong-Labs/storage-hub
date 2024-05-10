@@ -12,7 +12,7 @@ use storage_hub_infra::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 pub use self::handler::FileTransferService;
 
 /// For defining the commands processed by the file transfer service.
-mod commands;
+pub mod commands;
 /// For defining the events emitted by the file transfer service.
 pub mod events;
 /// For incoming provider requests.
