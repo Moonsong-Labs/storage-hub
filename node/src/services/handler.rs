@@ -15,8 +15,15 @@ use crate::tasks::{bsp_volunteer_mock::BspVolunteerMockTask, user_sends_file::Us
 
 use super::{blockchain::handler::BlockchainService, file_transfer::FileTransferService};
 
+/// Wrapper trait encompassing all the necessary implementations which [`StorageHubHandler`] requires.
 pub trait StorageHubHandlerConfig: StorageHubHandlerInitializer + Send + 'static {
+    /// Type which implements [`FileStorage`].
+    ///
+    /// This layer stores all files (chunked).
     type FileStorage: FileStorage + Send + Sync;
+    /// Type which implements [`ForestStorage`].
+    ///
+    /// This layer tracks all of the files stored in [`FileStorage`](StorageHubHandlerConfig::FileStorage).
     type ForestStorage: ForestStorage + Send + Sync;
 }
 
@@ -82,6 +89,7 @@ where
     }
 }
 
+/// A trait which initializes the [`StorageHubHandler`] with the necessary components.
 pub trait StorageHubHandlerInitializer {
     fn initialize(
         provider_pub_key: [u8; 32],
@@ -93,11 +101,17 @@ pub trait StorageHubHandlerInitializer {
         Self: Sized + StorageHubHandlerConfig;
 }
 
+/// Represents the handler for the Storage Hub service.
 pub struct StorageHubHandler<S: StorageHubHandlerConfig> {
+    /// The task spawner for spawning asynchronous tasks.
     pub task_spawner: TaskSpawner,
+    /// The actor handle for the file transfer service.
     pub file_transfer: ActorHandle<FileTransferService>,
+    /// The actor handle for the blockchain service.
     pub blockchain: ActorHandle<BlockchainService>,
+    /// The file storage layer which stores all files in chunks.
     pub file_storage: Arc<RwLock<S::FileStorage>>,
+    /// The forest storage layer which tracks all files stored in the file storage layer.
     pub forest_storage: Arc<RwLock<S::ForestStorage>>,
 }
 
