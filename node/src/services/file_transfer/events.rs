@@ -1,4 +1,4 @@
-use sc_network::config::OutgoingResponse;
+use sc_network::{config::OutgoingResponse, PeerId};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -9,6 +9,7 @@ use storage_hub_infra::{
 
 #[derive(Clone)]
 pub struct RemoteUploadRequest {
+    pub peer: PeerId,
     pub file_key: Key,
     pub chunk_with_proof: FileProof,
     // TODO: Confirm whether this is needed and should be here in the first place.

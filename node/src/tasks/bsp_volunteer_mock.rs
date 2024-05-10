@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use log::{debug, error, info};
 use sp_core::H256;
-use storage_hub_infra::{actor::ActorHandle, event_bus::EventHandler};
+use storage_hub_infra::{actor::ActorHandle, event_bus::EventHandler, types::Metadata};
 
 use crate::services::{
     blockchain::{
@@ -46,7 +46,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
         // Build extrinsic.
         let call =
             storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
-                location: event.location,
+                location: event.location.clone(),
                 fingerprint: event.fingerprint,
             });
 
@@ -117,6 +117,14 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
         }
 
         info!(target: LOG_TARGET, "Events in extrinsic: {:?}", &extrinsic_in_block.events);
+
+        let metadata = Metadata {
+            owner: event.who.to_string(),
+            size: event.size as u64,
+            fingerprint: event.fingerprint,
+            location: String::from_utf8(event.location.to_vec())
+                .expect("location should be valid utf8; qed"),
+        };
 
         Ok(())
     }

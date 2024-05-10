@@ -1,5 +1,7 @@
 // TODO: Remove this once we don't need the examples in this file
 #![allow(dead_code)]
+
+pub mod bsp_upload_request;
 pub mod bsp_volunteer_mock;
 
 use sc_tracing::tracing::info;

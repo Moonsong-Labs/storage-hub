@@ -7,7 +7,7 @@ use storage_hub_infra::types::{Chunk, ChunkId, FileProof, Key, Leaf, Metadata};
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::TrieDBMutBuilder;
 
-use crate::traits::{FileStorage, FileStorageError, FileStorageWriteStatus};
+use crate::traits::{FileStorage, FileStorageError, FileStorageWriteError, FileStorageWriteStatus};
 
 pub struct FileData<T: TrieLayout + 'static> {
     root: HashT<T>,
@@ -146,11 +146,11 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
         file_key: &Key,
         chunk_id: &ChunkId,
         data: &Chunk,
-    ) -> Result<FileStorageWriteStatus, FileStorageError> {
+    ) -> Result<FileStorageWriteStatus, FileStorageWriteError> {
         let file_data = self
             .file_data
             .get_mut(file_key)
-            .ok_or(FileStorageError::FileDoesNotExist)?;
+            .ok_or(FileStorageWriteError::FileDoesNotExist)?;
 
         let mut trie =
             TrieDBMutBuilder::<T>::new(&mut file_data.memdb, &mut file_data.root).build();
@@ -158,14 +158,14 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
         // Check that we don't have a chunk already stored.
         if trie
             .contains(&chunk_id.to_be_bytes())
-            .map_err(|_| FileStorageError::FailedToGetFileChunk)?
+            .map_err(|_| FileStorageWriteError::FailedToGetFileChunk)?
         {
-            return Err(FileStorageError::FileChunkAlreadyExists);
+            return Err(FileStorageWriteError::FileChunkAlreadyExists);
         }
 
         // Insert the chunk into the file trie.
         trie.insert(&chunk_id.to_be_bytes(), &data)
-            .map_err(|_| FileStorageError::FailedToInsertFileChunk)?;
+            .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
 
         drop(trie);
 
@@ -185,7 +185,7 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
         // If we have all the chunks, check if the file metadata fingerprint and the file trie
         // root matches.
         if file_data.get_root() != metadata.fingerprint {
-            return Err(FileStorageError::FingerprintAndStoredFileMismatch);
+            return Err(FileStorageWriteError::FingerprintAndStoredFileMismatch);
         }
 
         Ok(FileStorageWriteStatus::FileComplete)

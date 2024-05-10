@@ -286,6 +286,7 @@ impl FileTransferService {
                     }
                 };
                 self.emit(RemoteUploadRequest {
+                    peer,
                     file_key,
                     chunk_with_proof,
                     maybe_pending_response: Arc::new(Mutex::new(Some(pending_response))),

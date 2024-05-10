@@ -1,6 +1,20 @@
 use storage_hub_infra::types::{Chunk, ChunkId, FileProof, Key, Metadata};
 
 #[derive(Debug)]
+pub enum FileStorageWriteError {
+    /// The requested file does not exist.
+    FileDoesNotExist,
+    /// File chunk already exists.
+    FileChunkAlreadyExists,
+    /// Failed to insert the file chunk.
+    FailedToInsertFileChunk,
+    /// Failed to get file chunk.
+    FailedToGetFileChunk,
+    /// File metadata fingerprint does not match the stored file fingerprint.
+    FingerprintAndStoredFileMismatch,
+}
+
+#[derive(Debug)]
 pub enum FileStorageError {
     /// File chunk already exists.
     FileChunkAlreadyExists,
@@ -55,5 +69,5 @@ pub trait FileStorage: 'static {
         key: &Key,
         chunk_id: &ChunkId,
         data: &Chunk,
-    ) -> Result<FileStorageWriteStatus, FileStorageError>;
+    ) -> Result<FileStorageWriteStatus, FileStorageWriteError>;
 }

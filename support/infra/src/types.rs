@@ -116,3 +116,10 @@ pub struct FileProof {
     /// The root hash of the trie, also known as the fingerprint of the file.
     pub root: H256,
 }
+
+impl FileProof {
+    pub fn verify(&self) -> bool {
+        // TODO: implement this using the verifier from runtime after we have it.
+        true
+    }
+}
