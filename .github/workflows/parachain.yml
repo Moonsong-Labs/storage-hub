@@ -27,7 +27,7 @@ on:
 
 jobs:
   setup:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, pc-sk]
     outputs:
       node_changed: ${{ steps.node_check.outputs.changed }}
       image-tag: ${{ steps.set-tag.outputs.tag }}
@@ -63,7 +63,7 @@ jobs:
     needs: [setup]
     if: needs.setup.outputs.node_changed == 'true'
     name: "Build node image"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, pc-sk]
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
@@ -139,7 +139,7 @@ jobs:
   #   needs: [build_image, setup]
   #   if: always()
   #   name: "Test Simple Network"
-  #   runs-on: ubuntu-latest
+  #   runs-on: [self-hosted, pc-sk]
   #   env:
   #     SH_IMAGE: ${{ needs.setup.outputs.image-tag }}
   #   defaults:
@@ -167,7 +167,7 @@ jobs:
     needs: [build_image, setup]
     if: always()
     name: "Run Para & Relay Network Test"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, pc-sk]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v1
@@ -204,7 +204,7 @@ jobs:
     needs: [build_image, setup]
     if: always()
     name: "Run Zombienet Tests"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, pc-sk]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v1
