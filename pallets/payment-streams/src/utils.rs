@@ -11,6 +11,7 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_runtime::traits::Convert;
+use storage_hub_traits::ProvidersInterface;
 
 use crate::*;
 use storage_hub_traits::PaymentStreamsInterface;
@@ -54,15 +55,15 @@ where
     ///
     /// Note: Maybe we should add a check to make sure the user has enough balance to pay for at least X amount of blocks?
     pub fn do_create_payment_stream(
-        bsp_account: &T::AccountId,
+        bsp_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
         rate: BalanceOf<T>,
     ) -> DispatchResult {
-        // Get the BSP ID of the BSP account
-        let bsp_id = <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(
-            bsp_account.clone(),
-        )
-        .ok_or(Error::<T>::NotABackupStorageProvider)?;
+        // Check that the given ID belongs to an actual provider
+        ensure!(
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*bsp_id),
+            Error::<T>::NotAProvider
+        );
 
         // Check that a payment stream between that BSP and user does not exist yet
         ensure!(
@@ -130,15 +131,15 @@ where
 
     /// This function holds the logic that checks if a payment stream can be updated and, if so, updates the payment stream in the PaymentStreams mapping.
     pub fn do_update_payment_stream(
-        bsp_account: &T::AccountId,
+        bsp_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
         new_rate: BalanceOf<T>,
     ) -> DispatchResult {
-        // Get the BSP ID of the BSP account
-        let bsp_id = <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(
-            bsp_account.clone(),
-        )
-        .ok_or(Error::<T>::NotABackupStorageProvider)?;
+        // Check that the given ID belongs to an actual provider
+        ensure!(
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*bsp_id),
+            Error::<T>::NotAProvider
+        );
 
         // Ensure that the new rate is not 0 (should use remove_payment_stream instead)
         ensure!(new_rate != Zero::zero(), Error::<T>::UpdateRateToZero);
@@ -160,12 +161,12 @@ where
         );
 
         // Charge the payment stream with the old rate before updating it to prevent abuse
-        let amount_charged = Self::do_charge_payment_stream(&bsp_account, user_account)?;
+        let amount_charged = Self::do_charge_payment_stream(&bsp_id, user_account)?;
         if amount_charged > Zero::zero() {
             // We emit a payment charged event only if the user had to pay for its storage before the payment stream was updated
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
-                backup_storage_provider_id: bsp_id,
+                backup_storage_provider_id: *bsp_id,
                 amount: amount_charged,
             });
         }
@@ -196,14 +197,14 @@ where
     /// This function holds the logic that checks if a payment stream can be removed and, if so, removes the payment stream from the PaymentStreams mapping,
     /// decreases the user's payment streams count and, if the user has no more payment streams, releases the deposit.
     pub fn do_delete_payment_stream(
-        bsp_account: &T::AccountId,
+        bsp_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
     ) -> DispatchResult {
-        // Get the BSP ID of the BSP account
-        let bsp_id = <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(
-            bsp_account.clone(),
-        )
-        .ok_or(Error::<T>::NotABackupStorageProvider)?;
+        // Check that the given ID belongs to an actual provider
+        ensure!(
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*bsp_id),
+            Error::<T>::NotAProvider
+        );
 
         // Check that a payment stream between that BSP and user exists
         ensure!(
@@ -212,12 +213,12 @@ where
         );
 
         // Charge the payment stream before deletion to make sure the storage provided by the provider is paid in full for its duration
-        let amount_charged = Self::do_charge_payment_stream(&bsp_account, user_account)?;
+        let amount_charged = Self::do_charge_payment_stream(&bsp_id, user_account)?;
         if amount_charged > Zero::zero() {
             // We emit a payment charged event only if the user had to pay for its storage before deleting the payment stream
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
-                backup_storage_provider_id: bsp_id,
+                backup_storage_provider_id: *bsp_id,
                 amount: amount_charged,
             });
         }
@@ -262,14 +263,14 @@ where
     /// Note: right now, the other functions receive the BSP's account ID because it is needed to transfer the user payment to it in this function, but the idea is to change the
     /// BSP struct to hold a `payment_address` where the payment should be received, and then the functions of this pallet will receive the BSP's ID instead.
     pub fn do_charge_payment_stream(
-        bsp_account: &T::AccountId,
+        bsp_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
     ) -> Result<BalanceOf<T>, DispatchError> {
-        // Get the BSP ID of the BSP account
-        let bsp_id = <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(
-            bsp_account.clone(),
-        )
-        .ok_or(Error::<T>::NotABackupStorageProvider)?;
+        // Check that the given ID belongs to an actual provider
+        ensure!(
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*bsp_id),
+            Error::<T>::NotAProvider
+        );
 
         // Check that a payment stream between that BSP and user exists
         ensure!(
@@ -323,10 +324,17 @@ where
             // TODO: Design a more robust way of handling out-of-funds users
             UsersWithoutFunds::<T>::remove(user_account);
 
+            // Get the payment account of the BSP
+            let bsp_payment_account = expect_or_err!(
+                <T::ProvidersPallet as ProvidersInterface>::get_provider_payment_account(*bsp_id),
+                "Backup Storage Provider should exist and have a payment account if its ID exists.",
+                Error::<T>::BspInconsistencyError
+            );
+
             // Charge the payment stream from the user's balance
             T::NativeBalance::transfer(
                 user_account,
-                bsp_account,
+                &bsp_payment_account,
                 amount_to_charge,
                 Preservation::Preserve,
             )?;
@@ -353,28 +361,23 @@ where
 
 impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     type AccountId = T::AccountId;
+    type ProviderId = ProviderIdFor<T>;
     type Balance = T::NativeBalance;
     type BlockNumber = BlockNumberFor<T>;
     type PaymentStream = PaymentStream<T>;
 
     fn create_payment_stream(
-        bsp_account: &Self::AccountId,
+        bsp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         rate: <Self::Balance as Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult {
         // Execute the logic to create a payment stream
-        Self::do_create_payment_stream(bsp_account, user_account, rate)?;
-
-        // Get the BSP ID of the BSP account
-        let bsp_id = <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(
-            bsp_account.clone(),
-        )
-        .ok_or(Error::<T>::NotABackupStorageProvider)?;
+        Self::do_create_payment_stream(bsp_id, user_account, rate)?;
 
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::PaymentStreamCreated {
             user_account: user_account.clone(),
-            backup_storage_provider_id: bsp_id,
+            backup_storage_provider_id: *bsp_id,
             rate,
         });
 
@@ -383,23 +386,17 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     }
 
     fn update_payment_stream(
-        bsp_account: &Self::AccountId,
+        bsp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         new_rate: <Self::Balance as Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult {
         // Execute the logic to update a payment stream
-        Self::do_update_payment_stream(bsp_account, user_account, new_rate)?;
-
-        // Get the BSP ID of the BSP account
-        let bsp_id = <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(
-            bsp_account.clone(),
-        )
-        .ok_or(Error::<T>::NotABackupStorageProvider)?;
+        Self::do_update_payment_stream(bsp_id, user_account, new_rate)?;
 
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::PaymentStreamUpdated {
             user_account: user_account.clone(),
-            backup_storage_provider_id: bsp_id,
+            backup_storage_provider_id: *bsp_id,
             new_rate,
         });
 
@@ -408,22 +405,16 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     }
 
     fn delete_payment_stream(
-        bsp_account: &Self::AccountId,
+        bsp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> DispatchResult {
         // Execute the logic to delete a payment stream
-        Self::do_delete_payment_stream(bsp_account, user_account)?;
-
-        // Get the BSP ID of the BSP account
-        let bsp_id = <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(
-            bsp_account.clone(),
-        )
-        .ok_or(Error::<T>::NotABackupStorageProvider)?;
+        Self::do_delete_payment_stream(bsp_id, user_account)?;
 
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::PaymentStreamDeleted {
             user_account: user_account.clone(),
-            backup_storage_provider_id: bsp_id,
+            backup_storage_provider_id: *bsp_id,
         });
 
         // Return a successful DispatchResult
@@ -431,21 +422,21 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     }
 
     fn update_last_valid_proof(
-        bsp_account: &Self::AccountId,
+        bsp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         last_valid_proof_block: Self::BlockNumber,
     ) -> DispatchResult {
+        // Check that the given ID belongs to an actual provider
+        ensure!(
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*bsp_id),
+            Error::<T>::NotAProvider
+        );
+
         // Ensure that the last valid proof block that is being submitted is not greater than the current block number
         ensure!(
             last_valid_proof_block <= frame_system::Pallet::<T>::block_number(),
             Error::<T>::InvalidLastValidProofBlockNumber
         );
-
-        // Get the BSP ID of the BSP account
-        let bsp_id = <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(
-            bsp_account.clone(),
-        )
-        .ok_or(Error::<T>::NotABackupStorageProvider)?;
 
         // Get the information of the payment stream to update
         let payment_stream = PaymentStreams::<T>::get(bsp_id, user_account)
@@ -476,14 +467,9 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     }
 
     fn get_payment_stream_info(
-        bsp_account: &Self::AccountId,
+        bsp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> Option<Self::PaymentStream> {
-        // Get the BSP ID of the BSP account
-        let bsp_id = <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(
-            bsp_account.clone(),
-        )?;
-
         // Return the payment stream information
         PaymentStreams::<T>::get(bsp_id, user_account)
     }

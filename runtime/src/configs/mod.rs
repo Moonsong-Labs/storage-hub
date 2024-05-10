@@ -414,7 +414,7 @@ impl Convert<BlockNumber, Balance> for BlockNumberToBalance {
 impl pallet_payment_streams::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
-    type Providers = Providers;
+    type ProvidersPallet = Providers;
     type RuntimeHoldReason = RuntimeHoldReason;
     type NewUserDeposit = ConstU128<10>;
     type BlockNumberToBalance = BlockNumberToBalance;

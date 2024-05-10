@@ -6,6 +6,7 @@ use frame_support::pallet_prelude::*;
 use frame_support::traits::fungible::Inspect;
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
+use storage_hub_traits::ProvidersInterface;
 
 /// Structure that has the payment stream information
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
@@ -23,5 +24,6 @@ pub struct PaymentStream<T: Config> {
 pub type BalanceOf<T> =
     <<T as Config>::NativeBalance as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
-/// BackupStorageProviderId is the type that represents an ID of a Backup Storage Provider, uniquely linked with an AccountId
-pub type BackupStorageProviderId<T> = <T as frame_system::Config>::Hash;
+/// Syntactic sugar for the ProviderId type used in the proofs pallet.
+pub type ProviderIdFor<T> =
+    <<T as crate::Config>::ProvidersPallet as ProvidersInterface>::ProviderId;

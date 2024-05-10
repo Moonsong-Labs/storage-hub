@@ -5,6 +5,7 @@ use frame_support::pallet_prelude::Weight;
 use frame_support::traits::fungible::Mutate;
 use frame_support::traits::{Get, OnFinalize, OnIdle, OnInitialize};
 use frame_support::{assert_ok, BoundedVec};
+use sp_core::H256;
 use sp_runtime::DispatchError;
 use storage_hub_traits::PaymentStreamsInterface;
 use storage_hub_traits::ProvidersInterface;
@@ -40,13 +41,13 @@ mod create_stream {
             // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
             let alice_bsp_id =
-                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -99,21 +100,28 @@ mod create_stream {
             let alice: AccountId = 0;
             let bob: AccountId = 1;
 
-            // Register Alice as a BSP with 100 units of data
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
 
             // Try to create a payment stream from Bob to Alice of 10 units per block again
             assert_noop!(
-                PaymentStreams::create_payment_stream(RuntimeOrigin::root(), alice, bob, rate),
+                PaymentStreams::create_payment_stream(
+                    RuntimeOrigin::root(),
+                    alice_bsp_id,
+                    bob,
+                    rate
+                ),
                 Error::<Test>::PaymentStreamAlreadyExists
             );
         });
@@ -122,14 +130,18 @@ mod create_stream {
     #[test]
     fn create_payment_stream_fails_if_bsp_account_has_not_registered_as_bsp() {
         ExtBuilder::build().execute_with(|| {
-            let alice: AccountId = 0;
             let bob: AccountId = 1;
 
-            // Try to create a payment stream from Bob to Alice of 10 units per block without registering Alice as a BSP
+            // Try to create a payment stream from Bob to a random not registered BSP of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_noop!(
-                PaymentStreams::create_payment_stream(RuntimeOrigin::root(), alice, bob, rate),
-                Error::<Test>::NotABackupStorageProvider
+                PaymentStreams::create_payment_stream(
+                    RuntimeOrigin::root(),
+                    H256::random(),
+                    bob,
+                    rate
+                ),
+                Error::<Test>::NotAProvider
             );
         });
     }
@@ -142,17 +154,21 @@ mod create_stream {
             let bob: AccountId = 1;
             let bob_initial_balance = NativeBalance::free_balance(&bob);
 
-            // Register Alice as a BSP with 100 units of data
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
-            // Register Charlie as a BSP with 1000 units of data
+            // Register Charlie as a BSP with 1000 units of data and get his BSP ID
             register_account_as_bsp(charlie, 1000);
+            let charlie_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(charlie).unwrap();
 
             // Create a payment stream from Bob to Alice of `bob_initial_balance / 10` units per block
             let rate: BalanceOf<Test> = bob_initial_balance / 10; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -161,7 +177,7 @@ mod create_stream {
             run_to_block(System::block_number() + 10);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -179,7 +195,12 @@ mod create_stream {
             // Try to create a payment stream from Bob to Charlie of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_noop!(
-                PaymentStreams::create_payment_stream(RuntimeOrigin::root(), charlie, bob, rate),
+                PaymentStreams::create_payment_stream(
+                    RuntimeOrigin::root(),
+                    charlie_bsp_id,
+                    bob,
+                    rate
+                ),
                 Error::<Test>::UserWithoutFunds
             );
         });
@@ -192,8 +213,10 @@ mod create_stream {
             let bob: AccountId = 1;
             let bob_initial_balance = NativeBalance::free_balance(&bob);
 
-            // Register Alice as a BSP with 100 units of data
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Transfer almost all of Bob's balance to Alice (Bob keeps `NewUserDeposit - 1` balance)
             assert_ok!(Balances::transfer(
@@ -206,7 +229,12 @@ mod create_stream {
             // Try to create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_noop!(
-                PaymentStreams::create_payment_stream(RuntimeOrigin::root(), alice, bob, rate),
+                PaymentStreams::create_payment_stream(
+                    RuntimeOrigin::root(),
+                    alice_bsp_id,
+                    bob,
+                    rate
+                ),
                 Error::<Test>::CannotHoldDeposit
             );
         });
@@ -219,11 +247,15 @@ mod create_stream {
             let bob: AccountId = 1;
             let charlie: AccountId = 2;
 
-            // Register Alice as a BSP with 100 units of data
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
-            // Register Charlie as a BSP with 1000 units of data
+            // Register Charlie as a BSP with 1000 units of data and get his BSP ID
             register_account_as_bsp(charlie, 1000);
+            let charlie_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(charlie).unwrap();
 
             // Set the amount of payment streams that Bob has to u32::MAX - 1
             RegisteredUsers::<Test>::insert(&bob, u32::MAX - 1);
@@ -232,7 +264,7 @@ mod create_stream {
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ),);
@@ -246,7 +278,12 @@ mod create_stream {
             // Create a payment stream from Bob to Charlie of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_noop!(
-                PaymentStreams::create_payment_stream(RuntimeOrigin::root(), charlie, bob, rate),
+                PaymentStreams::create_payment_stream(
+                    RuntimeOrigin::root(),
+                    charlie_bsp_id,
+                    bob,
+                    rate
+                ),
                 DispatchError::Arithmetic(sp_runtime::ArithmeticError::Overflow)
             );
         });
@@ -267,13 +304,13 @@ mod update_stream {
             // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
             let alice_bsp_id =
-                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -282,7 +319,7 @@ mod update_stream {
             let new_rate: BalanceOf<Test> = 20;
             assert_ok!(PaymentStreams::update_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 new_rate
             ));
@@ -307,34 +344,21 @@ mod update_stream {
     }
 
     #[test]
-    fn update_payment_stream_fails_if_bsp_account_has_not_registered_as_bsp() {
-        ExtBuilder::build().execute_with(|| {
-            let alice: AccountId = 0;
-            let bob: AccountId = 1;
-
-            // Try to update the rate of a payment stream from Bob to Alice without registering Alice as a BSP
-            let rate: BalanceOf<Test> = 10;
-            assert_noop!(
-                PaymentStreams::update_payment_stream(RuntimeOrigin::root(), alice, bob, rate),
-                Error::<Test>::NotABackupStorageProvider
-            );
-        });
-    }
-
-    #[test]
     fn update_payment_stream_fails_if_new_rate_is_zero() {
         ExtBuilder::build().execute_with(|| {
             let alice: AccountId = 0;
             let bob: AccountId = 1;
 
-            // Register Alice as a BSP with 100 units of data
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -342,7 +366,12 @@ mod update_stream {
             // Try to update the rate of the payment stream from Bob to Alice to 0 units per block
             let new_rate: BalanceOf<Test> = 0;
             assert_noop!(
-                PaymentStreams::update_payment_stream(RuntimeOrigin::root(), alice, bob, new_rate),
+                PaymentStreams::update_payment_stream(
+                    RuntimeOrigin::root(),
+                    alice_bsp_id,
+                    bob,
+                    new_rate
+                ),
                 Error::<Test>::UpdateRateToZero
             );
         });
@@ -354,21 +383,28 @@ mod update_stream {
             let alice: AccountId = 0;
             let bob: AccountId = 1;
 
-            // Register Alice as a BSP with 100 units of data
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
 
             // Try to update the rate of the payment stream from Bob to Alice to 10 units per block
             assert_noop!(
-                PaymentStreams::update_payment_stream(RuntimeOrigin::root(), alice, bob, rate),
+                PaymentStreams::update_payment_stream(
+                    RuntimeOrigin::root(),
+                    alice_bsp_id,
+                    bob,
+                    rate
+                ),
                 Error::<Test>::UpdateRateToSameRate
             );
         });
@@ -380,13 +416,34 @@ mod update_stream {
             let alice: AccountId = 0;
             let bob: AccountId = 1;
 
-            // Register Alice as a BSP with 100 units of data
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Try to update the rate of a payment stream that does not exist
             assert_noop!(
-                PaymentStreams::update_payment_stream(RuntimeOrigin::root(), alice, bob, 10),
+                PaymentStreams::update_payment_stream(RuntimeOrigin::root(), alice_bsp_id, bob, 10),
                 Error::<Test>::PaymentStreamNotFound
+            );
+        });
+    }
+
+    #[test]
+    fn update_payment_stream_fails_if_bsp_account_has_not_registered_as_bsp() {
+        ExtBuilder::build().execute_with(|| {
+            let bob: AccountId = 1;
+
+            // Try to update a payment stream from Bob to a random not registered BSP of 10 units per block
+            let new_rate: BalanceOf<Test> = 20;
+            assert_noop!(
+                PaymentStreams::update_payment_stream(
+                    RuntimeOrigin::root(),
+                    H256::random(),
+                    bob,
+                    new_rate
+                ),
+                Error::<Test>::NotAProvider
             );
         });
     }
@@ -398,14 +455,16 @@ mod update_stream {
             let bob: AccountId = 1;
             let bob_initial_balance = NativeBalance::free_balance(&bob);
 
-            // Register Alice as a BSP with 100 units of data
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of `bob_initial_balance / 10` units per block
             let rate: BalanceOf<Test> = bob_initial_balance / 10; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -414,7 +473,7 @@ mod update_stream {
             run_to_block(System::block_number() + 10);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -432,7 +491,12 @@ mod update_stream {
             // Try to update the rate of the payment stream from Bob to Alice to 20 units per block
             let new_rate: BalanceOf<Test> = 20;
             assert_noop!(
-                PaymentStreams::update_payment_stream(RuntimeOrigin::root(), alice, bob, new_rate),
+                PaymentStreams::update_payment_stream(
+                    RuntimeOrigin::root(),
+                    alice_bsp_id,
+                    bob,
+                    new_rate
+                ),
                 Error::<Test>::UserWithoutFunds
             );
         });
@@ -448,13 +512,13 @@ mod update_stream {
             // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
             let alice_bsp_id =
-                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -468,7 +532,7 @@ mod update_stream {
             run_to_block(System::block_number() + 10);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -478,7 +542,7 @@ mod update_stream {
             let new_rate: BalanceOf<Test> = 20;
             assert_ok!(PaymentStreams::update_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 new_rate
             ));
@@ -530,13 +594,13 @@ mod delete_stream {
             // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
             let alice_bsp_id =
-                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -549,7 +613,7 @@ mod delete_stream {
             // Delete the payment stream from Bob to Alice
             assert_ok!(PaymentStreams::delete_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob
             ));
 
@@ -582,12 +646,14 @@ mod delete_stream {
             let alice: AccountId = 0;
             let bob: AccountId = 1;
 
-            // Register Alice as a BSP with 100 units of data
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Try to delete a payment stream that does not exist
             assert_noop!(
-                PaymentStreams::delete_payment_stream(RuntimeOrigin::root(), alice, bob),
+                PaymentStreams::delete_payment_stream(RuntimeOrigin::root(), alice_bsp_id, bob),
                 Error::<Test>::PaymentStreamNotFound
             );
         });
@@ -596,13 +662,12 @@ mod delete_stream {
     #[test]
     fn delete_payment_stream_fails_if_bsp_account_has_not_registered_as_bsp() {
         ExtBuilder::build().execute_with(|| {
-            let alice: AccountId = 0;
             let bob: AccountId = 1;
 
-            // Try to delete a payment stream from Bob to Alice without registering Alice as a BSP
+            // Try to delete a payment stream from Bob to a random not registered BSP
             assert_noop!(
-                PaymentStreams::delete_payment_stream(RuntimeOrigin::root(), alice, bob),
-                Error::<Test>::NotABackupStorageProvider
+                PaymentStreams::delete_payment_stream(RuntimeOrigin::root(), H256::random(), bob),
+                Error::<Test>::NotAProvider
             );
         });
     }
@@ -614,14 +679,16 @@ mod delete_stream {
             let bob: AccountId = 1;
             let bob_initial_balance = NativeBalance::free_balance(&bob);
 
-            // Register Alice as a BSP with 100 units of data
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of `bob_initial_balance / 10` units per block
             let rate: BalanceOf<Test> = bob_initial_balance / 10; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -630,7 +697,7 @@ mod delete_stream {
             run_to_block(System::block_number() + 10);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -647,7 +714,7 @@ mod delete_stream {
 
             // Try to delete the payment stream from Bob to Alice
             assert_noop!(
-                PaymentStreams::delete_payment_stream(RuntimeOrigin::root(), alice, bob),
+                PaymentStreams::delete_payment_stream(RuntimeOrigin::root(), alice_bsp_id, bob),
                 Error::<Test>::UserWithoutFunds
             );
         });
@@ -663,13 +730,13 @@ mod delete_stream {
             // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
             let alice_bsp_id =
-                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -683,7 +750,7 @@ mod delete_stream {
             run_to_block(System::block_number() + 10);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -692,7 +759,7 @@ mod delete_stream {
             // Delete the payment stream from Bob to Alice
             assert_ok!(PaymentStreams::delete_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob
             ));
 
@@ -744,13 +811,13 @@ mod charge_stream {
             // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
             let alice_bsp_id =
-                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -764,7 +831,7 @@ mod charge_stream {
             run_to_block(System::block_number() + 10);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -812,13 +879,13 @@ mod charge_stream {
             // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
             let alice_bsp_id =
-                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -832,7 +899,7 @@ mod charge_stream {
             run_to_block(System::block_number() + 10);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -889,13 +956,13 @@ mod charge_stream {
             // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
             let alice_bsp_id =
-                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -909,7 +976,7 @@ mod charge_stream {
             let new_rate: BalanceOf<Test> = 20;
             assert_ok!(PaymentStreams::update_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 new_rate
             ));
@@ -918,7 +985,7 @@ mod charge_stream {
             run_to_block(System::block_number() + 10);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -972,13 +1039,13 @@ mod charge_stream {
             // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
             let alice_bsp_id =
-                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -992,7 +1059,7 @@ mod charge_stream {
             run_to_block(System::block_number() + 10);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -1032,7 +1099,7 @@ mod charge_stream {
             run_to_block(System::block_number() + 20);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -1079,7 +1146,7 @@ mod charge_stream {
             // Try to charge a payment stream from Bob to Alice without registering Alice as a BSP
             assert_noop!(
                 PaymentStreams::charge_payment_stream(RuntimeOrigin::signed(alice), bob),
-                Error::<Test>::NotABackupStorageProvider
+                Error::<Test>::NotAProvider
             );
         });
     }
@@ -1108,14 +1175,16 @@ mod charge_stream {
             let bob: AccountId = 1;
             let bob_initial_balance = NativeBalance::free_balance(&bob);
 
-            // Register Alice as a BSP with 100 units of data
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of u128::MAX - 1 units per block
             let rate: BalanceOf<Test> = u128::MAX - 1;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -1129,7 +1198,7 @@ mod charge_stream {
             run_to_block(System::block_number() + 2);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -1157,16 +1226,18 @@ mod charge_stream {
             // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
             let alice_bsp_id =
-                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
-            // Register Charlie as a BSP with 1000 units of data
+            // Register Charlie as a BSP with 1000 units of data and get his BSP ID
             register_account_as_bsp(charlie, 1000);
+            let charlie_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(charlie).unwrap();
 
             // Create a payment stream from Bob to Alice of `bob_initial_balance / 10` units per block
             let rate: BalanceOf<Test> = bob_initial_balance / 10; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -1180,7 +1251,7 @@ mod charge_stream {
             run_to_block(System::block_number() + 10);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -1208,7 +1279,12 @@ mod charge_stream {
 
             // Try to create a new stream from Charlie to Bob
             assert_noop!(
-                PaymentStreams::create_payment_stream(RuntimeOrigin::root(), charlie, bob, rate),
+                PaymentStreams::create_payment_stream(
+                    RuntimeOrigin::root(),
+                    charlie_bsp_id,
+                    bob,
+                    rate
+                ),
                 Error::<Test>::UserWithoutFunds
             );
         });
@@ -1225,7 +1301,7 @@ mod charge_stream {
             // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
             let alice_bsp_id =
-                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Register Charlie as a BSP with 1000 units of data
             register_account_as_bsp(charlie, 1000);
@@ -1234,7 +1310,7 @@ mod charge_stream {
             let rate: BalanceOf<Test> = bob_initial_balance / 10; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -1248,7 +1324,7 @@ mod charge_stream {
             run_to_block(System::block_number() + 10);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -1316,13 +1392,13 @@ mod update_last_valid_proof {
             // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
             let alice_bsp_id =
-                <StorageProviders as ProvidersInterface>::get_provider(alice).unwrap();
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -1331,7 +1407,7 @@ mod update_last_valid_proof {
             run_to_block(System::block_number() + 10);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -1352,13 +1428,15 @@ mod update_last_valid_proof {
             let alice: AccountId = 0;
             let bob: AccountId = 1;
 
-            // Register Alice as a BSP with 100 units of data
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Try to update the last valid proof of a payment stream that does not exist
             assert_noop!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 ),
@@ -1370,17 +1448,16 @@ mod update_last_valid_proof {
     #[test]
     fn update_last_valid_proof_fails_if_bsp_account_has_not_registered_as_bsp() {
         ExtBuilder::build().execute_with(|| {
-            let alice: AccountId = 0;
             let bob: AccountId = 1;
 
-            // Try to update the last valid proof of a payment stream from Bob to Alice without registering Alice as a BSP
+            // Try to update the last valid proof of a payment stream from Bob to a random not registered BSP
             assert_noop!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &H256::random(),
                     &bob,
                     System::block_number()
                 ),
-                Error::<Test>::NotABackupStorageProvider
+                Error::<Test>::NotAProvider
             );
         });
     }
@@ -1391,14 +1468,16 @@ mod update_last_valid_proof {
             let alice: AccountId = 0;
             let bob: AccountId = 1;
 
-            // Register Alice as a BSP with 100 units of data
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -1406,7 +1485,7 @@ mod update_last_valid_proof {
             // Try to set the last valid proof of the payment stream from Bob to Alice to a block number greater than the current block number
             assert_noop!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number() + 1
                 ),
@@ -1421,14 +1500,16 @@ mod update_last_valid_proof {
             let alice: AccountId = 0;
             let bob: AccountId = 1;
 
-            // Register Alice as a BSP with 100 units of data
+            // Register Alice as a BSP with 100 units of data and get her BSP ID
             register_account_as_bsp(alice, 100);
+            let alice_bsp_id =
+                <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
             // Create a payment stream from Bob to Alice of 10 units per block
             let rate: BalanceOf<Test> = 10;
             assert_ok!(PaymentStreams::create_payment_stream(
                 RuntimeOrigin::root(),
-                alice,
+                alice_bsp_id,
                 bob,
                 rate
             ));
@@ -1437,7 +1518,7 @@ mod update_last_valid_proof {
             run_to_block(System::block_number() + 10);
             assert_ok!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number()
                 )
@@ -1446,7 +1527,7 @@ mod update_last_valid_proof {
             // Try to set the last valid proof of the payment stream from Bob to Alice to a block number less than the last valid proof block number already set
             assert_noop!(
                 <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
-                    &alice,
+                    &alice_bsp_id,
                     &bob,
                     System::block_number() - 1
                 ),
