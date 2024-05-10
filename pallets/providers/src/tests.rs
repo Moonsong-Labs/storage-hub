@@ -110,7 +110,7 @@ mod sign_up {
                     );
 
                     // Check that Alice is still NOT a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
 
                     // Check the event was emitted
@@ -208,7 +208,7 @@ mod sign_up {
                     );
 
                     // Check that Alice is still NOT a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
 
                     // Advance enough blocks for randomness to be valid
@@ -224,7 +224,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice is now a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_some());
                     assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
 
@@ -303,7 +303,7 @@ mod sign_up {
                     );
 
                     // Check that Alice is still NOT a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
 
                     // Advance enough blocks for randomness to be valid
@@ -319,7 +319,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice is now a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_some());
                     assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
 
@@ -516,7 +516,7 @@ mod sign_up {
                     )));
 
                     // Check that Alice is not a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
 
                     // Check that Alice's sign up request no longer exists
@@ -590,7 +590,7 @@ mod sign_up {
                     );
 
                     // Check that Alice is still NOT a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
 
                     // Check that the total capacity of the Backup Storage Providers has NOT yet increased
@@ -682,7 +682,7 @@ mod sign_up {
                     );
 
                     // Check that Alice is still NOT a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
 
                     // Check that the total capacity of the Backup Storage Providers has NOT yet increased
@@ -711,7 +711,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice is now a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_some());
                     assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
 
@@ -785,7 +785,7 @@ mod sign_up {
                     );
 
                     // Check that Alice is still NOT a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
 
                     // Check that the total capacity of the Backup Storage Providers has NOT yet increased
@@ -814,7 +814,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice is now a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_some());
                     assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
 
@@ -995,7 +995,7 @@ mod sign_up {
                     )));
 
                     // Check that Alice is not a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
 
                     // Check that Alice's sign up request no longer exists
@@ -1205,7 +1205,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice is now a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_some());
                     assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
 
@@ -1221,7 +1221,7 @@ mod sign_up {
                     );
 
                     // Check that Bob is still NOT a Storage Provider
-                    let bob_sp_id = StorageProviders::get_provider(bob);
+                    let bob_sp_id = StorageProviders::get_provider_id(bob);
                     assert!(bob_sp_id.is_none());
                 });
             }
@@ -1296,7 +1296,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice is now a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_some());
                     assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
 
@@ -1318,7 +1318,7 @@ mod sign_up {
                     ));
 
                     // Check that Bob is now a Storage Provider
-                    let bob_sp_id = StorageProviders::get_provider(bob);
+                    let bob_sp_id = StorageProviders::get_provider_id(bob);
                     assert!(bob_sp_id.is_some());
                     assert!(StorageProviders::is_provider(bob_sp_id.unwrap()));
 
@@ -1404,7 +1404,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice is now a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_some());
                     assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
 
@@ -1423,7 +1423,7 @@ mod sign_up {
                     assert_ok!(StorageProviders::cancel_sign_up(RuntimeOrigin::signed(bob)));
 
                     // Check that Bob is still not a Storage Provider
-                    let bob_sp_id = StorageProviders::get_provider(bob);
+                    let bob_sp_id = StorageProviders::get_provider_id(bob);
                     assert!(bob_sp_id.is_none());
 
                     // Check that Bob's request no longer exists
@@ -1485,7 +1485,7 @@ mod sign_up {
                     assert_eq!(confirm_result, Ok(Pays::No.into()));
 
                     // Check that Alice is now a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_some());
                     assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
 
@@ -1711,7 +1711,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice is not a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
 
                     // Advance blocks but not enough for randomness to be valid
@@ -1731,7 +1731,7 @@ mod sign_up {
                     );
 
                     // Check that Alice is still not a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
                 });
             }
@@ -1771,7 +1771,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice is not a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
 
                     // Advance enough blocks for randomness to be too old (expiring the request)
@@ -1790,7 +1790,7 @@ mod sign_up {
                     );
 
                     // Check that Alice is still not a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
                 });
             }
@@ -2025,7 +2025,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice is not a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
 
                     // Advance blocks but not enough for randomness to be valid
@@ -2045,7 +2045,7 @@ mod sign_up {
                     );
 
                     // Check that Alice is still not a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
                 });
             }
@@ -2079,7 +2079,7 @@ mod sign_up {
                     ));
 
                     // Check that Alice is not a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
 
                     // Advance enough blocks for randomness to be too old (expiring the request)
@@ -2098,7 +2098,7 @@ mod sign_up {
                     );
 
                     // Check that Alice is still not a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
                 });
             }
@@ -2334,7 +2334,7 @@ mod sign_up {
                     );
 
                     // Check that Alice is still not a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
                 });
             }
@@ -2734,7 +2734,7 @@ mod sign_off {
                     assert_eq!(StorageProviders::get_msp_count(), 0);
 
                     // Check that Alice is not a Main Storage Provider anymore
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
 
                     // Check the MSP Sign Off event was emitted
@@ -2788,7 +2788,7 @@ mod sign_off {
                     );
 
                     // Check that Alice is not a Backup Storage Provider anymore
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_none());
 
                     // Check that the counter of registered BSPs has decreased
@@ -2848,7 +2848,7 @@ mod sign_off {
                     assert_eq!(StorageProviders::get_msp_count(), 1);
 
                     // Check that Alice does not have any used storage
-                    let alice_sp_id = StorageProviders::get_provider(alice).unwrap();
+                    let alice_sp_id = StorageProviders::get_provider_id(alice).unwrap();
                     assert_eq!(
                         StorageProviders::get_used_storage_of_msp(&alice_sp_id).unwrap(),
                         0
@@ -2868,7 +2868,7 @@ mod sign_off {
                     );
 
                     // Make sure that Alice is still registered as a Main Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_some());
                     assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
 
@@ -2922,7 +2922,7 @@ mod sign_off {
                     assert_eq!(StorageProviders::get_total_bsp_capacity(), storage_amount);
 
                     // Check that Alice does not have any used storage
-                    let alice_sp_id = StorageProviders::get_provider(alice).unwrap();
+                    let alice_sp_id = StorageProviders::get_provider_id(alice).unwrap();
                     assert_eq!(
                         StorageProviders::get_used_storage_of_bsp(&alice_sp_id).unwrap(),
                         0
@@ -2942,7 +2942,7 @@ mod sign_off {
                     );
 
                     // Make sure that Alice is still registered as a Backup Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_some());
                     assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
 

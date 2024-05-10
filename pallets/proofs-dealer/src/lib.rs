@@ -301,7 +301,7 @@ pub mod pallet {
             let provider = match provider {
                 Some(provider) => provider,
                 None => {
-                    let sp = T::ProvidersPallet::get_provider(who.clone())
+                    let sp = T::ProvidersPallet::get_provider_id(who.clone())
                         .ok_or(Error::<T>::NotProvider)?;
                     sp
                 }
