@@ -15,7 +15,7 @@ on:
 jobs:
   check-rust-fmt:
     name: "Check format with rustfmt"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, pc-sk]
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
@@ -26,7 +26,7 @@ jobs:
 
   check-rust-lint:
     name: "Check lint with clippy"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, pc-sk]
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
@@ -43,7 +43,7 @@ jobs:
 
   check-ts-fmt:
     name: "Check format with biome"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, pc-sk]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v1
@@ -52,7 +52,7 @@ jobs:
 
   check-ts-lint:
     name: "Check lint with biome"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, pc-sk]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v1
