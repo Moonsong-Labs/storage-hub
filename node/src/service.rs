@@ -253,6 +253,7 @@ async fn start_storage_provider(
     // Starting the tasks according to the provider type.
     match provider_options.provider_type {
         ProviderType::Bsp => sh_handler.start_bsp_tasks(),
+        ProviderType::User => sh_handler.start_user_tasks(),
         _ => {}
     }
 }

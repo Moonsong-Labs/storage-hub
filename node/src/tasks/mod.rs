@@ -3,6 +3,7 @@
 
 pub mod bsp_upload_request;
 pub mod bsp_volunteer_mock;
+pub mod user_sends_file;
 
 use sc_tracing::tracing::info;
 use storage_hub_infra::event_bus::EventHandler;
