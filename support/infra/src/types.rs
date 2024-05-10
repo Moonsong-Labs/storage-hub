@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
+use sp_runtime::traits::BlakeTwo256;
 use std::fmt::Debug;
 
-use sp_core::Blake2Hasher;
 use sp_core::Hasher;
 use sp_core::H256;
 use sp_trie::CompactProof;
@@ -43,7 +43,7 @@ impl Metadata {
 
     pub fn key(&self) -> Key {
         // TODO(Arthur): double check this, I'm assuming Blake2 as the Trie hash function.
-        Blake2Hasher::hash(&serde_json::to_vec(&self).expect("Should not fail. This is a bug."))
+        BlakeTwo256::hash(&serde_json::to_vec(&self).expect("Should not fail. This is a bug."))
     }
 }
 
