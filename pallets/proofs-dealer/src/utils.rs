@@ -166,7 +166,6 @@ where
         );
 
         // Get seed for challenges block.
-        println!("challenges_block: {:?}", challenges_block);
         let seed = expect_or_err!(
             BlockToChallengesSeed::<T>::get(challenges_block),
             "Seed for challenges block not found, when checked it should be within history.",
