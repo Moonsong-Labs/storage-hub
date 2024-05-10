@@ -925,7 +925,6 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
     type Balance = T::NativeBalance;
     type AccountId = T::AccountId;
     type ProviderId = HashId<T>;
-    type Provider = StorageProvider<T>;
     type MerkleHash = MerklePatriciaRoot<T>;
 
     // TODO: Refine, add checks and tests for all the logic in this implementation
