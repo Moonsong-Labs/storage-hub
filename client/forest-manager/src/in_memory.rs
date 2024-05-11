@@ -7,7 +7,7 @@ use trie_db::TrieDBMutBuilder;
 use common::types::ForestProof;
 
 use crate::{
-    error::{Error, ForestStorageError},
+    error::{ErrorT, ForestStorageError},
     prove::prove,
     traits::ForestStorage,
     utils::get_and_decode_value,
@@ -31,7 +31,7 @@ impl<T: TrieLayout> ForestStorage<T> for InMemoryForestStorage<T>
 where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
-    fn get_metadata(&self, file_key: &HasherOutT<T>) -> Result<Option<Metadata>, Error> {
+    fn get_metadata(&self, file_key: &HasherOutT<T>) -> Result<Option<Metadata>, ErrorT<T>> {
         let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
 
         get_and_decode_value(trie, file_key)
@@ -40,7 +40,7 @@ where
     fn generate_proof(
         &self,
         challenged_file_keys: Vec<HasherOutT<T>>,
-    ) -> Result<ForestProof<T>, Error> {
+    ) -> Result<ForestProof<T>, ErrorT<T>> {
         let recorder: Recorder<T::Hash> = Recorder::default();
 
         // A `TrieRecorder` is needed to create a proof of the "visited" leafs, by the end of this process.
@@ -62,8 +62,7 @@ where
         // Generate proof
         let proof = recorder
             .drain_storage_proof()
-            .to_compact_proof::<T::Hash>(self.root)
-            .map_err(|_| ForestStorageError::FailedToGenerateCompactProof)?;
+            .to_compact_proof::<T::Hash>(self.root)?;
 
         Ok(ForestProof {
             proven,
@@ -72,28 +71,25 @@ where
         })
     }
 
-    fn insert_metadata(&mut self, metadata: &Metadata) -> Result<HasherOutT<T>, Error> {
+    fn insert_metadata(&mut self, metadata: &Metadata) -> Result<HasherOutT<T>, ErrorT<T>> where {
         let file_key = metadata.key::<T::Hash>();
         if self.get_metadata(&file_key)?.is_some() {
-            return Err(ForestStorageError::FileKeyAlreadyExists.into());
+            return Err(ForestStorageError::FileKeyAlreadyExists(file_key).into());
         }
 
         let mut trie = TrieDBMutBuilder::<T>::new(&mut self.memdb, &mut self.root).build();
 
         // Insert the file key and metadata into the trie.
-        trie.insert(file_key.as_ref(), &metadata.encode())
-            .map_err(|_| ForestStorageError::FailedToInsertFileKey)?;
+        trie.insert(file_key.as_ref(), &metadata.encode())?;
 
         Ok(file_key)
     }
 
-    fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), Error> {
+    fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>> {
         let mut trie = TrieDBMutBuilder::<T>::new(&mut self.memdb, &mut self.root).build();
 
         // Remove the file key from the trie.
-        let _ = trie
-            .remove(file_key.as_ref())
-            .map_err(|_| ForestStorageError::FailedToRemoveFileKey)?;
+        let _ = trie.remove(file_key.as_ref())?;
 
         Ok(())
     }

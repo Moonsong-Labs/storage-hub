@@ -5,19 +5,19 @@ use log::warn;
 use trie_db::{Trie, TrieLayout};
 
 use crate::{
-    error::{Error, ForestStorageError},
+    error::{ErrorT, ForestStorageError},
     LOG_TARGET,
 };
 
 pub(crate) fn get_and_decode_value<T: TrieLayout>(
     trie: trie_db::TrieDB<T>,
     file_key: &HasherOutT<T>,
-) -> Result<Option<Metadata>, Error> {
+) -> Result<Option<Metadata>, ErrorT<T>> {
     let maybe_metadata = trie
         .get(file_key.as_ref())
         .map_err(|e| {
             warn!(target: "trie", "Failed to get file key: {:?}", e);
-            ForestStorageError::FailedToGetFileKey
+            ForestStorageError::FailedToGetFileKey(file_key.clone())
         })?
         .map(|raw_metadata| {
             decode_from_bytes(raw_metadata.into()).map_err(|_| {
@@ -31,7 +31,7 @@ pub(crate) fn get_and_decode_value<T: TrieLayout>(
 
 pub(crate) fn convert_raw_bytes_to_hasher_out<T: TrieLayout>(
     root: Vec<u8>,
-) -> Result<<<T as TrieLayout>::Hash as Hasher>::Out, Error>
+) -> Result<HasherOutT<T>, ErrorT<T>>
 where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
@@ -39,8 +39,10 @@ where
         .try_into()
         .map_err(|_| ForestStorageError::FailedToParseRoot)?;
 
-    HasherOutT::<T>::try_from(root).map_err(|_| {
+    let root = HasherOutT::<T>::try_from(root).map_err(|_| {
         warn!(target: LOG_TARGET, "Failed to parse root from DB");
-        ForestStorageError::FailedToParseRoot.into()
-    })
+        ForestStorageError::FailedToParseRoot
+    })?;
+
+    Ok(root)
 }

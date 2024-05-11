@@ -1,65 +1,69 @@
+use common::types::HasherOutT;
+use trie_db::CError;
+
+pub(crate) type ErrorT<T> = Error<HasherOutT<T>, CError<T>>;
+
+type BoxTrieError<H, CodecError> = Box<trie_db::TrieError<H, CodecError>>;
+
 #[derive(thiserror::Error, Debug)]
-pub enum Error {
+pub enum Error<H, CodecError> {
     #[error("Forest storage error: {0}")]
-    ForestStorage(#[from] ForestStorageError),
+    ForestStorage(ForestStorageError<H>),
     #[error(transparent)]
     Codec(#[from] codec::Error),
+    #[error("Trie error: {0:?}")]
+    TrieError(BoxTrieError<H, CodecError>),
+    #[error(transparent)]
+    CompactProofError(#[from] sp_trie::CompactProofError<H, sp_trie::Error<H>>),
+}
+
+impl<H, CodecError> From<BoxTrieError<H, CodecError>> for Error<H, CodecError> {
+    fn from(x: BoxTrieError<H, CodecError>) -> Self {
+        Error::TrieError(x)
+    }
+}
+
+impl<H, CodecError> From<ForestStorageError<H>> for Error<H, CodecError> {
+    fn from(x: ForestStorageError<H>) -> Self {
+        Error::ForestStorage(x)
+    }
 }
 
 /// Error type for the in-memory forest storage.
 #[derive(thiserror::Error, Debug, PartialEq)]
-pub enum ForestStorageError {
-    /// Failed to create trie iterator.
+pub enum ForestStorageError<H> {
     #[error("Failed to create trie iterator")]
     FailedToCreateTrieIterator,
-    /// Failed to seek to the challenged file key.
-    #[error("Failed to seek to the challenged file key")]
-    FailedToSeek,
-    /// Failed to read leaf.
-    #[error("Failed to read leaf")]
-    FailedToReadLeaf,
-    /// Failed to insert file key.
-    #[error("Failed to insert file key")]
-    FailedToInsertFileKey,
-    /// Expecting root to be in storage.
+    #[error("Failed to seek to the challenged file key: ({0:x?})")]
+    FailedToSeek(H),
+    #[error("Failed to read leaf: ({0:x?})")]
+    FailedToReadLeaf(H),
+    #[error("Failed to insert file key: ({0:x?})")]
+    FailedToInsertFileKey(H),
     #[error("Expecting root to be in storage")]
     ExpectingRootToBeInStorage,
-    /// Failed to parse root.
     #[error("Failed to parse root")]
     FailedToParseRoot,
-    /// Failed to read storage.
     #[error("Failed to read storage")]
     FailedToReadStorage,
-    /// Failed to write to storage.
     #[error("Failed to write to storage")]
     FailedToWriteToStorage,
-    /// Failed to deserialize value.
-    #[error("Failed to deserialize value")]
+    #[error("Failed to decode value")]
     FailedToDecodeValue,
-    /// Failed to serialize value.
-    #[error("Failed to serialize value")]
-    FailedToSerializeValue,
-    /// Failed to generate compact proof.
+    #[error("Failed to encode value")]
+    FailedToEncodeValue,
     #[error("Failed to generate compact proof")]
     FailedToGenerateCompactProof,
-    /// Failed to insert file key.
-    #[error("Failed to insert file key")]
-    FileKeyAlreadyExists,
-    /// Failed to get leaf or leaves to prove.
+    #[error("Failed to insert file key: ({0:x?})")]
+    FileKeyAlreadyExists(H),
     #[error("Failed to get leaf or leaves to prove")]
     FailedToGetLeafOrLeavesToProve,
-    /// Failed to remove file key.
-    #[error("Failed to remove file key")]
-    FailedToRemoveFileKey,
-    /// Invalid proving scenario.
+    #[error("Failed to remove file key: ({0:x?})")]
+    FailedToRemoveFileKey(H),
     #[error("Invalid proving scenario")]
     InvalidProvingScenario,
-    /// Failed to get file key.
-    #[error("Failed to get file key")]
-    FailedToGetFileKey,
-    /// Failed to construct proven leaves.
-    ///
-    /// This will normally happen if both left and right leaves are `None`.
+    #[error("Failed to get file key: ({0:x?})")]
+    FailedToGetFileKey(H),
     #[error("Failed to construct proven leaves")]
     FailedToConstructProvenLeaves,
 }

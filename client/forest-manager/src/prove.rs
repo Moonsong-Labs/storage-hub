@@ -4,7 +4,7 @@ use log::warn;
 use trie_db::{TrieIterator, TrieLayout};
 
 use crate::{
-    error::{Error, ForestStorageError},
+    error::{ErrorT, ForestStorageError},
     utils::convert_raw_bytes_to_hasher_out,
 };
 
@@ -31,7 +31,7 @@ use crate::{
 pub(crate) fn prove<T: TrieLayout>(
     trie: &trie_db::TrieDB<'_, '_, T>,
     challenged_file_key: &<T::Hash as Hasher>::Out,
-) -> Result<Proven<HasherOutT<T>, Metadata>, Error>
+) -> Result<Proven<HasherOutT<T>, Metadata>, ErrorT<T>>
 where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
@@ -41,17 +41,10 @@ where
         .map_err(|_| ForestStorageError::FailedToCreateTrieIterator)?;
 
     // Position the iterator close to or on the challenged key.
-    iter.seek(challenged_file_key.as_ref())
-        .map_err(|_| ForestStorageError::FailedToSeek)?;
+    iter.seek(challenged_file_key.as_ref())?;
 
-    let next = iter
-        .next()
-        .transpose()
-        .map_err(|_| ForestStorageError::FailedToReadLeaf)?;
-    let prev = iter
-        .next_back()
-        .transpose()
-        .map_err(|_| ForestStorageError::FailedToReadLeaf)?;
+    let next = iter.next().transpose()?;
+    let prev = iter.next_back().transpose()?;
 
     match (prev, next) {
         // Scenario 1: Exact match
