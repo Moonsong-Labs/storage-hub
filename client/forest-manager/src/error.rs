@@ -11,7 +11,7 @@ pub enum Error<H, CodecError> {
     ForestStorage(ForestStorageError<H>),
     #[error(transparent)]
     Codec(#[from] codec::Error),
-    #[error("Trie error: {0:?}")]
+    #[error(transparent)]
     TrieError(BoxTrieError<H, CodecError>),
     #[error(transparent)]
     CompactProofError(#[from] sp_trie::CompactProofError<H, sp_trie::Error<H>>),
