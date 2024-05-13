@@ -29,7 +29,7 @@ pub(crate) fn other_io_error(err: String) -> io::Error {
 }
 
 /// Open the database on disk, creating it if it doesn't exist.
-fn open_creating_rocksdb(db_path: String) -> io::Result<Database> {
+fn open_or_creating_rocksdb(db_path: String) -> io::Result<Database> {
     let root = PathBuf::from("/tmp/");
     let path = root.join("storagehub").join(db_path);
 
@@ -165,7 +165,7 @@ where
 
     /// Open the RocksDB database at `dp_path` and return a new instance of [`StorageDb`].
     pub fn rocksdb_storage(dp_path: String) -> Result<StorageDb<HashT<T>>, ErrorT<T>> {
-        let db = open_creating_rocksdb(dp_path).map_err(|e| {
+        let db = open_or_creating_rocksdb(dp_path).map_err(|e| {
             warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
             ForestStorageError::FailedToReadStorage
         })?;

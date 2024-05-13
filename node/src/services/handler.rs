@@ -123,7 +123,7 @@ pub struct StorageHubHandler<S: StorageHubHandlerConfig> {
     pub blockchain: ActorHandle<BlockchainService>,
     /// The file storage layer which stores all files in chunks.
     pub file_storage: Arc<RwLock<S::FileStorage>>,
-    /// The forest storage layer which tracks all files stored in the file storage layer.
+    /// The forest storage layer which tracks all complete files stored in the file storage layer.
     pub forest_storage: Arc<RwLock<S::ForestStorage>>,
 }
 

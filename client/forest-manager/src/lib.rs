@@ -8,4 +8,4 @@ pub(crate) mod utils;
 #[cfg(test)]
 mod test_utils;
 
-const LOG_TARGET: &str = "forest_storage";
+const LOG_TARGET: &str = "forest-storage";
