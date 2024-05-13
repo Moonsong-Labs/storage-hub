@@ -7,7 +7,9 @@ use storage_hub_infra::types::{Chunk, ChunkId, FileProof, Key, Leaf, Metadata};
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::TrieDBMutBuilder;
 
-use crate::traits::{FileStorage, FileStorageError, FileStorageWriteError, FileStorageWriteStatus};
+use crate::traits::{
+    FileStorage, FileStorageError, FileStorageWriteError, FileStorageWriteOutcome,
+};
 
 pub struct FileData<T: TrieLayout + 'static> {
     root: HashT<T>,
@@ -146,7 +148,7 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
         file_key: &Key,
         chunk_id: &ChunkId,
         data: &Chunk,
-    ) -> Result<FileStorageWriteStatus, FileStorageWriteError> {
+    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
         let file_data = self
             .file_data
             .get_mut(file_key)
@@ -179,7 +181,7 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
 
         // Check if we have all the chunks for the file.
         if metadata.chunk_count() != file_data.stored_chunks_count() {
-            return Ok(FileStorageWriteStatus::FileIncomplete);
+            return Ok(FileStorageWriteOutcome::FileIncomplete);
         }
 
         // If we have all the chunks, check if the file metadata fingerprint and the file trie
@@ -188,6 +190,6 @@ impl<T: TrieLayout + 'static> FileStorage for InMemoryFileStorage<T> {
             return Err(FileStorageWriteError::FingerprintAndStoredFileMismatch);
         }
 
-        Ok(FileStorageWriteStatus::FileComplete)
+        Ok(FileStorageWriteOutcome::FileComplete)
     }
 }

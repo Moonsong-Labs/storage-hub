@@ -3,7 +3,7 @@ use std::path::Path;
 use sc_tracing::tracing::{error, info, warn};
 use sp_core::H256;
 
-use file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteStatus};
+use file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use storage_hub_infra::event_bus::EventHandler;
 use tokio::{fs::File, io::AsyncWriteExt};
 
@@ -57,10 +57,10 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<RemoteUploadRequest>
 
         match write_chunk_result {
             Ok(outcome) => match outcome {
-                FileStorageWriteStatus::FileComplete => {
+                FileStorageWriteOutcome::FileComplete => {
                     self.on_file_complete(&event.file_key).await
                 }
-                FileStorageWriteStatus::FileIncomplete => {}
+                FileStorageWriteOutcome::FileIncomplete => {}
             },
             Err(error) => match error {
                 FileStorageWriteError::FileChunkAlreadyExists => {

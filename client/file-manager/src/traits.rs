@@ -35,7 +35,7 @@ pub enum FileStorageError {
 }
 
 #[derive(Debug)]
-pub enum FileStorageWriteStatus {
+pub enum FileStorageWriteOutcome {
     /// The file storage was completed after this write.
     /// All chunks for the file are stored and the fingerprints match too.
     FileComplete,
@@ -69,5 +69,5 @@ pub trait FileStorage: 'static {
         key: &Key,
         chunk_id: &ChunkId,
         data: &Chunk,
-    ) -> Result<FileStorageWriteStatus, FileStorageWriteError>;
+    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError>;
 }
