@@ -22,7 +22,10 @@
 //! `crate::request_responses::RequestResponsesBehaviour` with
 //! [`LightClientRequestHandler`](handler::LightClientRequestHandler).
 
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use futures::prelude::*;
 use futures::stream::select;
@@ -52,10 +55,18 @@ use super::{
 const LOG_TARGET: &str = "file-transfer-service";
 
 pub struct FileTransferService {
+    /// Protocol name used by substrate network for the file transfer service.
     protocol_name: ProtocolName,
+    /// Receiver for incoming requests.
     request_receiver: async_channel::Receiver<IncomingRequest>,
+    /// Substrate network service that gives access to P2p operations.
     network: Arc<ParachainNetworkService>,
-    peer_file_registry: HashSet<(PeerId, Key)>,
+    /// Registry of (peer, file key) pairs for which we accept requests.
+    peer_file_allow_list: HashSet<(PeerId, Key)>,
+    /// Registry of peers by file key, used for cleanup.
+    peers_by_file: HashMap<Key, Vec<PeerId>>,
+    /// The event bus provider for the file transfer service.
+    /// Part of the actor framework, allows for emitting events.
     event_bus_provider: FileTransferServiceEventBusProvider,
 }
 
@@ -163,7 +174,7 @@ impl Actor for FileTransferService {
                     file_key,
                     callback,
                 } => {
-                    let result = match self.peer_file_registry.insert((peer_id, file_key)) {
+                    let result = match self.peer_file_allow_list.insert((peer_id, file_key)) {
                         true => Ok(()),
                         false => Err(RequestError::FileAlreadyRegisteredForPeer),
                     };
@@ -176,14 +187,16 @@ impl Actor for FileTransferService {
                         ),
                     }
                 }
-                FileTransferServiceCommand::UnregisterFile {
-                    peer_id,
-                    file_key,
-                    callback,
-                } => {
-                    let result = match self.peer_file_registry.remove(&(peer_id, file_key)) {
-                        true => Ok(()),
-                        false => Err(RequestError::FileNotRegisteredForPeer),
+                FileTransferServiceCommand::UnregisterFile { file_key, callback } => {
+                    let result = match self.peers_by_file.get(&file_key) {
+                        Some(peers) => {
+                            for peer_id in peers {
+                                self.peer_file_allow_list.remove(&(*peer_id, file_key));
+                            }
+                            self.peers_by_file.remove(&file_key);
+                            Ok(())
+                        }
+                        None => Err(RequestError::FileNotRegistered),
                     };
                     match callback.send(result) {
                         Ok(()) => {}
@@ -268,7 +281,8 @@ impl FileTransferService {
             protocol_name,
             request_receiver,
             network,
-            peer_file_registry: HashSet::new(),
+            peer_file_allow_list: HashSet::new(),
+            peers_by_file: HashMap::new(),
             event_bus_provider: FileTransferServiceEventBusProvider::new(),
         }
     }

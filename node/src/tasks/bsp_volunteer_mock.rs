@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use log::{debug, error, info};
+use sc_network::PeerId;
 use sp_core::H256;
 use storage_hub_infra::{actor::ActorHandle, event_bus::EventHandler, types::Metadata};
 
@@ -9,6 +10,7 @@ use crate::services::{
         commands::BlockchainServiceInterface, events::NewStorageRequest,
         handler::BlockchainService, types::ExtrinsicResult,
     },
+    file_transfer::commands::FileTransferServiceInterface,
     StorageHubHandler, StorageHubHandlerConfig,
 };
 
@@ -122,9 +124,20 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
             owner: event.who.to_string(),
             size: event.size as u64,
             fingerprint: event.fingerprint,
-            location: String::from_utf8(event.location.to_vec())
-                .expect("location should be valid utf8; qed"),
+            location: event.location.to_vec(),
         };
+
+        let file_key = metadata.key();
+
+        for peer_id in event.user_peer_ids.iter() {
+            let peer_id =
+                PeerId::from_bytes(peer_id.as_slice()).expect("PeerId should be valid; qed");
+            self.storage_hub_handler
+                .file_transfer
+                .register_new_file_peer(peer_id.clone(), file_key.clone())
+                .await
+                .expect("Registering file should not fail; qed");
+        }
 
         Ok(())
     }

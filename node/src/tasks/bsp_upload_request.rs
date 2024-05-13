@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use sc_network::PeerId;
 use sc_tracing::tracing::{error, info, warn};
 use sp_core::H256;
 
@@ -59,7 +58,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<RemoteUploadRequest>
         match write_chunk_result {
             Ok(outcome) => match outcome {
                 FileStorageWriteStatus::FileComplete => {
-                    self.on_file_complete(&event.peer, &event.file_key).await
+                    self.on_file_complete(&event.file_key).await
                 }
                 FileStorageWriteStatus::FileIncomplete => {}
             },
@@ -101,14 +100,15 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<RemoteUploadRequest>
 }
 
 impl<SHC: StorageHubHandlerConfig> BspUploadRequestHandler<SHC> {
-    async fn on_file_complete(&self, peer: &PeerId, file_key: &H256) {
+    async fn on_file_complete(&self, file_key: &H256) {
         info!(target: LOG_TARGET, "File upload complete ({})", file_key);
 
         // Unregister the file from the file transfer service.
         self.storage_hub_handler
             .file_transfer
-            .unregister_file(peer.clone(), file_key.clone())
-            .await;
+            .unregister_file(file_key.clone())
+            .await
+            .expect("File is not registered. This should not happen!");
 
         // Get the metadata for the file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
@@ -120,13 +120,16 @@ impl<SHC: StorageHubHandlerConfig> BspUploadRequestHandler<SHC> {
         // TODO: update the forest storage with the new file metadata & send the proof to runtime
         // Save the newly stored file metadata in the forest storage.
         let write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
-        // write_forest_storage.insert_file_key(file_key, metadata);
+        // write_forest_storage.insert_file_key(file_key.as_bytes().into(), metadata);
         let read_forest_storage = write_forest_storage.downgrade();
-        // read_forest_storage.generate_proof(challenged_key);
+        // read_forest_storage.generate_proof(file_key);
         drop(read_forest_storage);
 
         // TODO: put this under an RPC call
-        let file_path = Path::new("./storage/").join(metadata.location.clone());
+        let file_path = Path::new("./storage/").join(
+            String::from_utf8(metadata.location.clone())
+                .expect("File location should be an utf8 string"),
+        );
         info!("Saving file to: {:?}", file_path);
         let mut file = File::create(file_path)
             .await

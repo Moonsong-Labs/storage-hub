@@ -39,7 +39,6 @@ pub enum FileTransferServiceCommand {
         callback: tokio::sync::oneshot::Sender<Result<(), RequestError>>,
     },
     UnregisterFile {
-        peer_id: PeerId,
         file_key: Key,
         callback: tokio::sync::oneshot::Sender<Result<(), RequestError>>,
     },
@@ -55,8 +54,8 @@ pub enum RequestError {
     UnexpectedResponse,
     /// File is already stored in for this Peer in the registry.
     FileAlreadyRegisteredForPeer,
-    /// File not found in for this Peer in the registry.
-    FileNotRegisteredForPeer,
+    /// File not found in the registry.
+    FileNotRegistered,
 }
 
 /// Allows our ActorHandle to implement
@@ -82,9 +81,13 @@ pub trait FileTransferServiceInterface {
         multiaddress: Multiaddr,
     ) -> Result<(), RequestError>;
 
-    async fn register_new_file(&self, peer_id: PeerId, file_key: Key) -> Result<(), RequestError>;
+    async fn register_new_file_peer(
+        &self,
+        peer_id: PeerId,
+        file_key: Key,
+    ) -> Result<(), RequestError>;
 
-    async fn unregister_file(&self, peer_id: PeerId, file_key: Key) -> Result<(), RequestError>;
+    async fn unregister_file(&self, file_key: Key) -> Result<(), RequestError>;
 }
 
 impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
@@ -198,7 +201,11 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
     /// Tell the FileTransferService to start listening for new upload requests from peer_id
     /// on file file_key.
     /// This returns as soon as the message has been dispatched (not processed) to the service.
-    async fn register_new_file(&self, peer_id: PeerId, file_key: Key) -> Result<(), RequestError> {
+    async fn register_new_file_peer(
+        &self,
+        peer_id: PeerId,
+        file_key: Key,
+    ) -> Result<(), RequestError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let command = FileTransferServiceCommand::RegisterNewFile {
             peer_id,
@@ -212,13 +219,9 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
     /// Tell the FileTransferService to no longer listen for upload requests from peer_id on file
     /// file_key.
     /// This returns as soon as the message has been dispatched (not processed) to the service.
-    async fn unregister_file(&self, peer_id: PeerId, file_key: Key) -> Result<(), RequestError> {
+    async fn unregister_file(&self, file_key: Key) -> Result<(), RequestError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
-        let command = FileTransferServiceCommand::UnregisterFile {
-            peer_id,
-            file_key,
-            callback,
-        };
+        let command = FileTransferServiceCommand::UnregisterFile { file_key, callback };
         self.send(command).await;
         rx.await.expect("Failed to unregister file")
     }
