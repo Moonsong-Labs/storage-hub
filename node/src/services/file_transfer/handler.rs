@@ -339,12 +339,23 @@ impl FileTransferService {
                         return;
                     }
                 };
-                self.emit(RemoteUploadRequest {
-                    peer,
-                    file_key,
-                    chunk_with_proof,
-                    maybe_pending_response: Arc::new(Mutex::new(Some(pending_response))),
-                });
+                if self.peer_file_allow_list.contains(&(peer, file_key)) {
+                    self.emit(RemoteUploadRequest {
+                        peer,
+                        file_key,
+                        chunk_with_proof,
+                        maybe_pending_response: Arc::new(Mutex::new(Some(pending_response))),
+                    });
+                } else {
+                    error!(
+                        target: LOG_TARGET,
+                        "Received unexpected upload request from {} for file key {:?}",
+                        peer,
+                        file_key
+                    );
+
+                    self.handle_bad_request(pending_response);
+                }
             }
             Some(schema::v1::provider::request::Request::RemoteDownloadDataRequest(r)) => {
                 let file_key = match bincode::deserialize(&r.file_key) {
