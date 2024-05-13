@@ -58,6 +58,27 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
             .send_extrinsic(call)
             .await?;
 
+        // Optimistically register the file for upload in the file transfer service.
+        // This solves the race condition between the user and the BSP.
+        let metadata = Metadata {
+            owner: event.who.to_string(),
+            size: event.size as u64,
+            fingerprint: event.fingerprint,
+            location: event.location.to_vec(),
+        };
+
+        let file_key = metadata.key();
+
+        for peer_id in event.user_peer_ids.iter() {
+            let peer_id =
+                PeerId::from_bytes(peer_id.as_slice()).expect("PeerId should be valid; qed");
+            self.storage_hub_handler
+                .file_transfer
+                .register_new_file_peer(peer_id.clone(), file_key.clone())
+                .await
+                .expect("Registering file should not fail; qed");
+        }
+
         // Wait for the transaction to be included in a block.
         let mut block_hash = None;
         // TODO: Consider adding a timeout.
@@ -119,25 +140,6 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
         }
 
         info!(target: LOG_TARGET, "Events in extrinsic: {:?}", &extrinsic_in_block.events);
-
-        let metadata = Metadata {
-            owner: event.who.to_string(),
-            size: event.size as u64,
-            fingerprint: event.fingerprint,
-            location: event.location.to_vec(),
-        };
-
-        let file_key = metadata.key();
-
-        for peer_id in event.user_peer_ids.iter() {
-            let peer_id =
-                PeerId::from_bytes(peer_id.as_slice()).expect("PeerId should be valid; qed");
-            self.storage_hub_handler
-                .file_transfer
-                .register_new_file_peer(peer_id.clone(), file_key.clone())
-                .await
-                .expect("Registering file should not fail; qed");
-        }
 
         Ok(())
     }
