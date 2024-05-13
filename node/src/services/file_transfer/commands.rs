@@ -5,6 +5,7 @@ use storage_hub_infra::{
     actor::ActorHandle,
     types::{ChunkId, FileProof, Key},
 };
+use thiserror::Error;
 
 use crate::services::FileTransferService;
 
@@ -44,17 +45,22 @@ pub enum FileTransferServiceCommand {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum RequestError {
     /// The request failed. More details are provided in the `RequestFailure`.
-    RequestFailure(RequestFailure),
+    #[error("Request failed: {0}")]
+    RequestFailure(#[from] RequestFailure),
     /// The response was not a valid protobuf message.
+    #[error("Failed to decode response: {0}")]
     DecodeError(prost::DecodeError),
     /// The response was decoded successfully, but it was not the expected response.
+    #[error("Unexpected response")]
     UnexpectedResponse,
     /// File is already stored in for this Peer in the registry.
+    #[error("File already registered for peer")]
     FileAlreadyRegisteredForPeer,
     /// File not found in the registry.
+    #[error("File not found in registry")]
     FileNotRegistered,
 }
 

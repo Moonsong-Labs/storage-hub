@@ -1,9 +1,16 @@
+use anyhow::anyhow;
+use log::{debug, error, info};
 use std::str::FromStr;
 
-use log::{debug, error, info};
 use sc_network::PeerId;
 use sp_core::H256;
-use storage_hub_infra::{actor::ActorHandle, event_bus::EventHandler, types::Metadata};
+
+use file_manager::traits::FileStorage;
+use storage_hub_infra::{
+    actor::ActorHandle,
+    event_bus::EventHandler,
+    types::{Key, Metadata},
+};
 
 use crate::services::{
     blockchain::{
@@ -18,12 +25,14 @@ const LOG_TARGET: &str = "bsp-volunteer-mock-task";
 
 pub struct BspVolunteerMockTask<SHC: StorageHubHandlerConfig> {
     storage_hub_handler: StorageHubHandler<SHC>,
+    file_key_cleanup: Option<Key>,
 }
 
 impl<SHC: StorageHubHandlerConfig> Clone for BspVolunteerMockTask<SHC> {
     fn clone(&self) -> BspVolunteerMockTask<SHC> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
+            file_key_cleanup: self.file_key_cleanup.clone(),
         }
     }
 }
@@ -32,6 +41,7 @@ impl<SHC: StorageHubHandlerConfig> BspVolunteerMockTask<SHC> {
     pub fn new(storage_hub_handler: StorageHubHandler<SHC>) -> Self {
         Self {
             storage_hub_handler,
+            file_key_cleanup: None,
         }
     }
 }
@@ -45,6 +55,24 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
             event.fingerprint
         );
 
+        let result = self.inner_handle_event(event).await;
+        if result.is_err() {
+            if let Some(file_key) = &self.file_key_cleanup {
+                let _ = self
+                    .storage_hub_handler
+                    .file_transfer
+                    .unregister_file(*file_key)
+                    .await;
+                let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+                write_file_storage.delete_file(file_key);
+            }
+        }
+        result
+    }
+}
+
+impl<SHC: StorageHubHandlerConfig> BspVolunteerMockTask<SHC> {
+    async fn inner_handle_event(&self, event: NewStorageRequest) -> anyhow::Result<()> {
         // Build extrinsic.
         let call =
             storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
@@ -58,8 +86,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
             .send_extrinsic(call)
             .await?;
 
-        // Optimistically register the file for upload in the file transfer service.
-        // This solves the race condition between the user and the BSP.
+        // Construct file metadata.
         let metadata = Metadata {
             owner: event.who.to_string(),
             size: event.size as u64,
@@ -67,16 +94,19 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
             location: event.location.to_vec(),
         };
 
+        // Get the file key.
         let file_key = metadata.key();
 
+        // Optimistically register the file for upload in the file transfer service.
+        // This solves the race condition between the user and the BSP.
         for peer_id in event.user_peer_ids.iter() {
-            let peer_id =
-                PeerId::from_bytes(peer_id.as_slice()).expect("PeerId should be valid; qed");
+            let peer_id = PeerId::from_bytes(peer_id.as_slice())
+                .map_err(|_| anyhow!("PeerId should be valid; qed"))?;
             self.storage_hub_handler
                 .file_transfer
                 .register_new_file_peer(peer_id.clone(), file_key.clone())
                 .await
-                .expect("Registering file should not fail; qed");
+                .map_err(|_| anyhow!("Failed to register peer file."))?;
         }
 
         // Wait for the transaction to be included in a block.
@@ -84,8 +114,9 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
         // TODO: Consider adding a timeout.
         while let Some(tx_result) = tx_watcher.recv().await {
             // Parse the JSONRPC string, now that we know it is not an error.
-            let json: serde_json::Value = serde_json::from_str(&tx_result)
-                .expect("The result, if not an error, can only be a JSONRPC string; qed");
+            let json: serde_json::Value = serde_json::from_str(&tx_result).map_err(|_| {
+                anyhow!("The result, if not an error, can only be a JSONRPC string; qed")
+            })?;
 
             debug!(target: LOG_TARGET, "Transaction information: {:?}", json);
 
@@ -96,7 +127,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
                 block_hash = Some(H256::from_str(in_block)?);
                 let subscription_id = json["params"]["subscription"]
                     .as_number()
-                    .expect("Subscription should exist and be a number; qed");
+                    .ok_or_else(|| anyhow!("Subscription should exist and be a number; qed"))?;
 
                 // Unwatch extrinsic to release tx_watcher.
                 self.storage_hub_handler
@@ -113,9 +144,9 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
         }
 
         // Get the extrinsic from the block, with its events.
-        let block_hash = block_hash.expect(
-            "Block hash should exist after waiting for extrinsic to be included in a block; qed",
-        );
+        let block_hash = block_hash.ok_or_else(
+            || anyhow!("Block hash should exist after waiting for extrinsic to be included in a block; qed")
+        )?;
         let extrinsic_in_block = self
             .storage_hub_handler
             .blockchain
@@ -125,7 +156,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
         // Check if the extrinsic was successful. In this mocked task we know this should fail if Alice is
         // not a registered BSP.
         let extrinsic_successful = ActorHandle::<BlockchainService>::extrinsic_result(extrinsic_in_block.clone())
-            .expect("Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed");
+            .map_err(|_| anyhow!("Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed"))?;
         match extrinsic_successful {
             ExtrinsicResult::Success { dispatch_info } => {
                 info!(target: LOG_TARGET, "Extrinsic successful with dispatch info: {:?}", dispatch_info);
