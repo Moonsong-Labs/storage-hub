@@ -50,20 +50,12 @@ pub enum ForestStorageError<H> {
     FailedToWriteToStorage,
     #[error("Failed to decode value")]
     FailedToDecodeValue,
-    #[error("Failed to encode value")]
-    FailedToEncodeValue,
     #[error("Failed to generate compact proof")]
     FailedToGenerateCompactProof,
     #[error("Failed to insert file key: ({0:x?})")]
     FileKeyAlreadyExists(H),
-    #[error("Failed to get leaf or leaves to prove")]
-    FailedToGetLeafOrLeavesToProve,
-    #[error("Failed to remove file key: ({0:x?})")]
-    FailedToRemoveFileKey(H),
     #[error("Invalid proving scenario")]
     InvalidProvingScenario,
-    #[error("Failed to get file key: ({0:x?})")]
-    FailedToGetFileKey(H),
     #[error("Failed to construct proven leaves")]
     FailedToConstructProvenLeaves,
 }

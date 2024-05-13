@@ -152,7 +152,7 @@ impl<K, D: Debug> Proven<K, D> {
 /// Proof of file key(s) in the forest trie.
 pub struct ForestProof<T: TrieLayout> {
     /// The file key that was proven.
-    pub proven: Vec<Proven<HasherOutT<T>, Metadata>>,
+    pub proven: Vec<Proven<HasherOutT<T>, ()>>,
     /// The compact proof.
     pub proof: CompactProof,
     /// The root hash of the trie.

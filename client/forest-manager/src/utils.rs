@@ -1,33 +1,12 @@
-use codec::decode_from_bytes;
-use common::types::{HasherOutT, Metadata};
+use common::types::HasherOutT;
 use hash_db::Hasher;
 use log::warn;
-use trie_db::{Trie, TrieLayout};
+use trie_db::TrieLayout;
 
 use crate::{
     error::{ErrorT, ForestStorageError},
     LOG_TARGET,
 };
-
-pub(crate) fn get_and_decode_value<T: TrieLayout>(
-    trie: trie_db::TrieDB<T>,
-    file_key: &HasherOutT<T>,
-) -> Result<Option<Metadata>, ErrorT<T>> {
-    let maybe_metadata = trie
-        .get(file_key.as_ref())
-        .map_err(|e| {
-            warn!(target: "trie", "Failed to get file key: {:?}", e);
-            ForestStorageError::FailedToGetFileKey(file_key.clone())
-        })?
-        .map(|raw_metadata| {
-            decode_from_bytes(raw_metadata.into()).map_err(|_| {
-                warn!(target: "trie", "Failed to decode metadata");
-                ForestStorageError::FailedToDecodeValue
-            })
-        })
-        .transpose()?;
-    Ok(maybe_metadata)
-}
 
 pub(crate) fn convert_raw_bytes_to_hasher_out<T: TrieLayout>(
     root: Vec<u8>,

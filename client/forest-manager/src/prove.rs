@@ -1,6 +1,5 @@
-use common::types::{HasherOutT, Leaf, Metadata, Proven};
+use common::types::{HasherOutT, Leaf, Proven};
 use hash_db::Hasher;
-use log::warn;
 use trie_db::{TrieIterator, TrieLayout};
 
 use crate::{
@@ -31,7 +30,7 @@ use crate::{
 pub(crate) fn prove<T: TrieLayout>(
     trie: &trie_db::TrieDB<'_, '_, T>,
     challenged_file_key: &<T::Hash as Hasher>::Out,
-) -> Result<Proven<HasherOutT<T>, Metadata>, ErrorT<T>>
+) -> Result<Proven<HasherOutT<T>, ()>, ErrorT<T>>
 where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
@@ -48,60 +47,31 @@ where
 
     match (prev, next) {
         // Scenario 1: Exact match
-        (_, Some((key, value))) if challenged_file_key.as_ref() == key => {
-            Ok(Proven::new_exact_key(
-                convert_raw_bytes_to_hasher_out::<T>(key)?,
-                Metadata::from_scale_encoded(value).map_err(|_| {
-                    warn!(target: "trie", "Failed to decode metadata");
-                    ForestStorageError::FailedToDecodeValue
-                })?,
-            ))
-        }
+        (_, Some((key, _))) if challenged_file_key.as_ref() == key => Ok(Proven::new_exact_key(
+            convert_raw_bytes_to_hasher_out::<T>(key)?,
+            (),
+        )),
         // Scenario 2: Between two keys
-        (Some((prev_key, prev_value)), Some((next_key, next_value)))
+        (Some((prev_key, _)), Some((next_key, _)))
             if prev_key < challenged_file_key.as_ref().to_vec()
                 && next_key > challenged_file_key.as_ref().to_vec() =>
         {
-            let prev_leaf = Leaf::new(
-                convert_raw_bytes_to_hasher_out::<T>(prev_key)?,
-                Metadata::from_scale_encoded(prev_value).map_err(|_| {
-                    warn!(target: "trie", "Failed to decode metadata");
-                    ForestStorageError::FailedToDecodeValue
-                })?,
-            );
-            let next_leaf = Leaf::new(
-                convert_raw_bytes_to_hasher_out::<T>(next_key)?,
-                Metadata::from_scale_encoded(next_value).map_err(|_| {
-                    warn!(target: "trie", "Failed to decode metadata");
-                    ForestStorageError::FailedToDecodeValue
-                })?,
-            );
+            let prev_leaf = Leaf::new(convert_raw_bytes_to_hasher_out::<T>(prev_key)?, ());
+            let next_leaf = Leaf::new(convert_raw_bytes_to_hasher_out::<T>(next_key)?, ());
 
             Ok(Proven::new_neighbour_keys(Some(prev_leaf), Some(next_leaf))
                 .map_err(|_| ForestStorageError::FailedToConstructProvenLeaves)?)
         }
         // Scenario 3: Before the first leaf
-        (None, Some((key, value))) if *challenged_file_key.as_ref() < *key => {
-            let leaf = Leaf::new(
-                convert_raw_bytes_to_hasher_out::<T>(key)?,
-                Metadata::from_scale_encoded(value).map_err(|_| {
-                    warn!(target: "trie", "Failed to decode metadata");
-                    ForestStorageError::FailedToDecodeValue
-                })?,
-            );
+        (None, Some((key, _))) if *challenged_file_key.as_ref() < *key => {
+            let leaf = Leaf::new(convert_raw_bytes_to_hasher_out::<T>(key)?, ());
 
             Ok(Proven::new_neighbour_keys(None, Some(leaf))
                 .map_err(|_| ForestStorageError::FailedToConstructProvenLeaves)?)
         }
         // Scenario 4: After the last leaf
-        (Some((key, value)), None) if *challenged_file_key.as_ref() > *key => {
-            let leaf = Leaf::new(
-                convert_raw_bytes_to_hasher_out::<T>(key)?,
-                Metadata::from_scale_encoded(value).map_err(|_| {
-                    warn!(target: "trie", "Failed to decode metadata");
-                    ForestStorageError::FailedToDecodeValue
-                })?,
-            );
+        (Some((key, _)), None) if *challenged_file_key.as_ref() > *key => {
+            let leaf = Leaf::new(convert_raw_bytes_to_hasher_out::<T>(key)?, ());
 
             Ok(Proven::new_neighbour_keys(Some(leaf), None)
                 .map_err(|_| ForestStorageError::FailedToConstructProvenLeaves)?)

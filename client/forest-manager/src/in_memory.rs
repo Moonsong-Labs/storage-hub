@@ -1,8 +1,7 @@
 use common::types::{HasherOutT, Metadata};
 use hash_db::Hasher;
-use sp_core::Encode;
 use sp_trie::{recorder::Recorder, MemoryDB, TrieDBBuilder, TrieLayout, TrieMut};
-use trie_db::TrieDBMutBuilder;
+use trie_db::{Trie, TrieDBMutBuilder};
 
 use common::types::ForestProof;
 
@@ -10,7 +9,6 @@ use crate::{
     error::{ErrorT, ForestStorageError},
     prove::prove,
     traits::ForestStorage,
-    utils::get_and_decode_value,
 };
 
 pub struct InMemoryForestStorage<T: TrieLayout + 'static> {
@@ -31,10 +29,9 @@ impl<T: TrieLayout> ForestStorage<T> for InMemoryForestStorage<T>
 where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
-    fn get_metadata(&self, file_key: &HasherOutT<T>) -> Result<Option<Metadata>, ErrorT<T>> {
+    fn contains_file_key(&self, file_key: &HasherOutT<T>) -> Result<bool, ErrorT<T>> {
         let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
-
-        get_and_decode_value(trie, file_key)
+        Ok(trie.contains(file_key.as_ref())?)
     }
 
     fn generate_proof(
@@ -73,14 +70,14 @@ where
 
     fn insert_metadata(&mut self, metadata: &Metadata) -> Result<HasherOutT<T>, ErrorT<T>> where {
         let file_key = metadata.key::<T::Hash>();
-        if self.get_metadata(&file_key)?.is_some() {
+        if self.contains_file_key(&file_key)? {
             return Err(ForestStorageError::FileKeyAlreadyExists(file_key).into());
         }
 
         let mut trie = TrieDBMutBuilder::<T>::new(&mut self.memdb, &mut self.root).build();
 
         // Insert the file key and metadata into the trie.
-        trie.insert(file_key.as_ref(), &metadata.encode())?;
+        trie.insert(file_key.as_ref(), b"")?;
 
         Ok(file_key)
     }
