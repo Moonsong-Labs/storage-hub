@@ -24,6 +24,34 @@ pub type Key = Vec<u8>;
 /// This type mirrors the `FileLocation<T>` type from the runtime, which is a BoundedVec.
 type FileLocation = Vec<u8>;
 
+#[derive(Encode, Decode, Clone, Debug, PartialEq, Eq, Default)]
+pub struct Fingerprint(H256);
+
+impl Fingerprint {
+    /// Returns the hash of the fingerprint.
+    pub fn hash(&self) -> H256 {
+        self.0
+    }
+}
+
+impl From<H256> for Fingerprint {
+    fn from(hash: H256) -> Self {
+        Self(hash)
+    }
+}
+
+impl Into<H256> for Fingerprint {
+    fn into(self) -> H256 {
+        self.0
+    }
+}
+
+impl From<&[u8]> for Fingerprint {
+    fn from(bytes: &[u8]) -> Self {
+        Self(H256::from_slice(bytes))
+    }
+}
+
 // TODO: this is currently a placeholder in order to define Storage interface.
 /// Metadata contains information about a file.
 /// Most importantly, the fingerprint which is the root Merkle hash of the file.
@@ -32,11 +60,11 @@ pub struct Metadata {
     pub owner: String,
     pub location: FileLocation,
     pub size: u64,
-    pub fingerprint: Key,
+    pub fingerprint: Fingerprint,
 }
 
 impl Metadata {
-    pub fn new(owner: String, location: Vec<u8>, size: u64, fingerprint: Key) -> Self {
+    pub fn new(owner: String, location: Vec<u8>, size: u64, fingerprint: Fingerprint) -> Self {
         Self {
             owner,
             location,
@@ -53,17 +81,28 @@ impl Metadata {
         full_chunks
     }
 
-    pub fn chunk_ids(&self) -> impl Iterator<Item = ChunkId> {
-        0..self.chunk_count()
-    }
-
-    /// Compute the hash of the SCALE encoded metadata using [`Hasher`].
+    /// Generates a hash key from the file metadata using the provided [`Hasher`].
+    ///
+    /// The key is created by combining the [SCALE](https://wentelteefje.github.io/parity-scale-codec-page/) encoded representations of the file's
+    /// `owner`, `location`, `size`, and `fingerprint` hash. This order must be respected to ensure the same resultant hash is generated for the same metadata.
+    /// The encoded values are flattened into a single byte vector and finally hashed.
     pub fn key<H: Hasher>(&self) -> H::Out {
-        H::hash(&self.encode())
+        H::hash(
+            &[
+                &self.owner.encode(),
+                &self.location.encode(),
+                &self.size.encode(),
+                &self.fingerprint.hash().encode(),
+            ]
+            .into_iter()
+            .flatten()
+            .cloned()
+            .collect::<Vec<u8>>(),
+        )
     }
 
-    /// Decode metadata from the SCALE encoded metadata bytes.
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, codec::Error> {
+    /// Decode metadata from the [SCALE](https://wentelteefje.github.io/parity-scale-codec-page/) encoded metadata bytes.
+    pub fn from_scale_encoded(bytes: Vec<u8>) -> Result<Self, codec::Error> {
         decode_from_bytes(bytes.into())
     }
 }

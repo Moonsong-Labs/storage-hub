@@ -308,7 +308,7 @@ impl BlockchainService {
                         ) => self.emit(NewStorageRequest {
                             who,
                             location,
-                            fingerprint,
+                            fingerprint: fingerprint.into(),
                             size,
                             user_peer_ids: peer_ids,
                         }),

@@ -74,7 +74,7 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
             return Err(FileStorageError::IncompleteFile);
         }
 
-        if file_data.root.as_ref().to_vec() != metadata.fingerprint {
+        if metadata.fingerprint != file_data.root.as_ref().into() {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 
@@ -187,7 +187,7 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
 
         // If we have all the chunks, check if the file metadata fingerprint and the file trie
         // root matches.
-        if file_data.root.as_ref().to_vec() != metadata.fingerprint {
+        if metadata.fingerprint != file_data.root.as_ref().into() {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 

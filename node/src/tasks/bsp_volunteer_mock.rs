@@ -47,7 +47,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
         let call =
             storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
                 location: event.location,
-                fingerprint: event.fingerprint,
+                fingerprint: event.fingerprint.into(),
             });
 
         let (mut tx_watcher, tx_hash) = self

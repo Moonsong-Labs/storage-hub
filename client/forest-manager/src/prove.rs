@@ -51,7 +51,7 @@ where
         (_, Some((key, value))) if challenged_file_key.as_ref() == key => {
             Ok(Proven::new_exact_key(
                 convert_raw_bytes_to_hasher_out::<T>(key)?,
-                Metadata::from_bytes(value).map_err(|_| {
+                Metadata::from_scale_encoded(value).map_err(|_| {
                     warn!(target: "trie", "Failed to decode metadata");
                     ForestStorageError::FailedToDecodeValue
                 })?,
@@ -64,14 +64,14 @@ where
         {
             let prev_leaf = Leaf::new(
                 convert_raw_bytes_to_hasher_out::<T>(prev_key)?,
-                Metadata::from_bytes(prev_value).map_err(|_| {
+                Metadata::from_scale_encoded(prev_value).map_err(|_| {
                     warn!(target: "trie", "Failed to decode metadata");
                     ForestStorageError::FailedToDecodeValue
                 })?,
             );
             let next_leaf = Leaf::new(
                 convert_raw_bytes_to_hasher_out::<T>(next_key)?,
-                Metadata::from_bytes(next_value).map_err(|_| {
+                Metadata::from_scale_encoded(next_value).map_err(|_| {
                     warn!(target: "trie", "Failed to decode metadata");
                     ForestStorageError::FailedToDecodeValue
                 })?,
@@ -84,7 +84,7 @@ where
         (None, Some((key, value))) if *challenged_file_key.as_ref() < *key => {
             let leaf = Leaf::new(
                 convert_raw_bytes_to_hasher_out::<T>(key)?,
-                Metadata::from_bytes(value).map_err(|_| {
+                Metadata::from_scale_encoded(value).map_err(|_| {
                     warn!(target: "trie", "Failed to decode metadata");
                     ForestStorageError::FailedToDecodeValue
                 })?,
@@ -97,7 +97,7 @@ where
         (Some((key, value)), None) if *challenged_file_key.as_ref() > *key => {
             let leaf = Leaf::new(
                 convert_raw_bytes_to_hasher_out::<T>(key)?,
-                Metadata::from_bytes(value).map_err(|_| {
+                Metadata::from_scale_encoded(value).map_err(|_| {
                     warn!(target: "trie", "Failed to decode metadata");
                     ForestStorageError::FailedToDecodeValue
                 })?,

@@ -1,4 +1,4 @@
-use common::types::{HashT, HasherOutT, Metadata};
+use common::types::{Fingerprint, HashT, HasherOutT, Metadata};
 
 use codec::Encode;
 use sp_trie::MemoryDB;
@@ -30,7 +30,7 @@ pub fn build_merkle_patricia_forest<T: TrieLayout>(
             owner: String::from("owner"),
             location: file_path,
             size: 0,
-            fingerprint: Vec::new(),
+            fingerprint: Fingerprint::default(),
         };
 
         file_leaves.push((metadata.key::<HashT<T>>(), metadata.encode()));

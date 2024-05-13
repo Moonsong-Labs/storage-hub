@@ -316,7 +316,7 @@ where
         let mut trie =
             TrieDBMutBuilder::<T>::from_existing(self.as_hash_db_mut(), &mut root).build();
 
-        // Insert the file key and metadata into the trie.
+        // Insert the file key and SCALE encoded metadata into the trie.
         trie.insert(file_key.as_ref(), &metadata.encode())
             .map_err(|_| ForestStorageError::FailedToInsertFileKey(file_key))?;
 
@@ -358,7 +358,7 @@ mod tests {
     use crate::error::ErrorT;
 
     use super::*;
-    use common::types::{Metadata, Proven};
+    use common::types::{Fingerprint, Metadata, Proven};
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_trie::LayoutV1;
@@ -429,7 +429,7 @@ mod tests {
             owner: owner.to_string(),
             location,
             size,
-            fingerprint: Default::default(),
+            fingerprint: Fingerprint::default(),
         }
     }
 
