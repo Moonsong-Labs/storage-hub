@@ -21,6 +21,7 @@ sp-runtime = { workspace = true }
 
 # Local
 file-manager = { workspace =  true }
+storage-hub-infra = { workspace = true }
 
 [features]
 default = ["std"]
