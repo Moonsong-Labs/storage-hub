@@ -158,8 +158,7 @@ pallet-randomness = { path = "pallets/randomness", default-features = false }
 common = { path = "client/common", default-features = false }
 file-manager = { path = "client/file-manager", default-features = false }
 forest-manager = { path = "client/forest-manager", default-features = false }
-
-storage-hub-rpc = { path = "client/rpc", default-features =  false }
+shc-rpc = { path = "client/rpc", default-features =  false }
 storage-hub-traits = { path = "support/traits", default-features = false }
 storage-hub-infra = { path = "support/infra", default-features = false }
 storage-hub-runtime = { path = "runtime", default-features = false }

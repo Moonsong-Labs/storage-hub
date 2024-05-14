@@ -31,8 +31,9 @@ tokio = { workspace = true }
 file-manager = { workspace = true }
 forest-manager = { workspace = true }
 pallet-file-system = { workspace = true }
+shc-rpc = { workspace =  true }
+
 storage-hub-infra = { workspace = true }
-storage-hub-rpc = { workspace =  true }
 storage-hub-runtime = { workspace = true }
 
 clap = { workspace = true }

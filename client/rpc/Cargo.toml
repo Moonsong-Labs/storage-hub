@@ -1,5 +1,5 @@
 [package]
-name = "storage-hub-rpc"
+name = "shc-rpc"
 description = "RPCs for the StorageHub client."
 version = "0.1.0"
 homepage = { workspace = true }
