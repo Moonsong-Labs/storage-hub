@@ -456,7 +456,7 @@ impl pallet_proofs_dealer::Config for Runtime {
     type CheckpointChallengePeriod = CheckpointChallengePeriod;
     type ChallengesFee = ChallengesFee;
     type Treasury = TreasuryAccount;
-    type RandomnessProvider = Randomness;
+    type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
     type StakeToChallengePeriod = StakeToChallengePeriod;
 }
 
