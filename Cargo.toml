@@ -154,10 +154,12 @@ pallet-file-system = { path = "pallets/file-system", default-features = false }
 pallet-proofs-dealer = { path = "pallets/proofs-dealer", default-features = false }
 pallet-randomness = { path = "pallets/randomness", default-features = false }
 
+# Local Utilities
 common = { path = "client/common", default-features = false }
 file-manager = { path = "client/file-manager", default-features = false }
 forest-manager = { path = "client/forest-manager", default-features = false }
 
+storage-hub-rpc = { path = "client/rpc", default-features =  false }
 storage-hub-traits = { path = "support/traits", default-features = false }
 storage-hub-infra = { path = "support/infra", default-features = false }
 storage-hub-runtime = { path = "runtime", default-features = false }
