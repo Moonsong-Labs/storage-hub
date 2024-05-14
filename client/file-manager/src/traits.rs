@@ -1,4 +1,4 @@
-use common::types::{Chunk, ChunkId, FileProof, HasherOutT, Metadata};
+use shc_common::types::{Chunk, ChunkId, FileProof, HasherOutT, Metadata};
 use trie_db::TrieLayout;
 
 #[derive(Debug)]

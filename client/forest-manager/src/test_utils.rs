@@ -1,4 +1,4 @@
-use common::types::{Fingerprint, HashT, HasherOutT, Metadata};
+use shc_common::types::{Fingerprint, HashT, HasherOutT, Metadata};
 
 use codec::Encode;
 use sp_trie::MemoryDB;

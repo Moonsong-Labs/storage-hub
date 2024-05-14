@@ -1,9 +1,9 @@
-use common::types::{HasherOutT, Metadata};
+use shc_common::types::{HasherOutT, Metadata};
 use hash_db::Hasher;
 use sp_trie::{recorder::Recorder, MemoryDB, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::{Trie, TrieDBMutBuilder};
 
-use common::types::ForestProof;
+use shc_common::types::ForestProof;
 
 use crate::{
     error::{ErrorT, ForestStorageError},

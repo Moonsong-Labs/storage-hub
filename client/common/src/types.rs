@@ -24,31 +24,41 @@ pub type Key = Vec<u8>;
 /// This type mirrors the `FileLocation<T>` type from the runtime, which is a BoundedVec.
 type FileLocation = Vec<u8>;
 
+type Hash = [u8; 32];
+
 #[derive(Encode, Decode, Clone, Debug, PartialEq, Eq, Default)]
-pub struct Fingerprint(H256);
+pub struct Fingerprint(Hash);
 
 impl Fingerprint {
     /// Returns the hash of the fingerprint.
-    pub fn hash(&self) -> H256 {
+    pub fn hash(&self) -> Hash {
         self.0
     }
 }
 
-impl From<H256> for Fingerprint {
-    fn from(hash: H256) -> Self {
+impl From<Hash> for Fingerprint {
+    fn from(hash: Hash) -> Self {
         Self(hash)
     }
 }
 
-impl Into<H256> for Fingerprint {
-    fn into(self) -> H256 {
+impl Into<Hash> for Fingerprint {
+    fn into(self) -> Hash {
         self.0
     }
 }
 
 impl From<&[u8]> for Fingerprint {
     fn from(bytes: &[u8]) -> Self {
-        Self(H256::from_slice(bytes))
+        let mut hash = [0u8; 32];
+        hash.copy_from_slice(&bytes);
+        Self(hash)
+    }
+}
+
+impl AsRef<[u8]> for Fingerprint {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
     }
 }
 

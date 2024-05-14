@@ -1,6 +1,6 @@
 use std::{io, path::PathBuf, sync::Arc};
 
-use common::types::{ForestProof, HashT, HasherOutT, Metadata};
+use shc_common::types::{ForestProof, HashT, HasherOutT, Metadata};
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use kvdb_rocksdb::{Database, DatabaseConfig};
@@ -358,7 +358,7 @@ mod tests {
     use crate::error::ErrorT;
 
     use super::*;
-    use common::types::{Fingerprint, Metadata, Proven};
+    use shc_common::types::{Fingerprint, Metadata, Proven};
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_trie::LayoutV1;

@@ -1,4 +1,4 @@
-use common::types::{ForestProof, HasherOutT, Metadata};
+use shc_common::types::{ForestProof, HasherOutT, Metadata};
 use trie_db::TrieLayout;
 
 use crate::error::ErrorT;

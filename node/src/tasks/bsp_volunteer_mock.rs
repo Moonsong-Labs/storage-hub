@@ -43,11 +43,17 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
             event.fingerprint
         );
 
+        let fingerprint: [u8; 32] = event
+            .fingerprint
+            .as_ref()
+            .try_into()
+            .expect("Fingerprint should be 32 bytes; qed");
+
         // Build extrinsic.
         let call =
             storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
                 location: event.location,
-                fingerprint: event.fingerprint.into(),
+                fingerprint: fingerprint.into(),
             });
 
         let (mut tx_watcher, tx_hash) = self

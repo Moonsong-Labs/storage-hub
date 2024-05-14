@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use common::types::{Chunk, ChunkId, FileProof, HasherOutT, Leaf, Metadata};
+use shc_common::types::{Chunk, ChunkId, FileProof, HasherOutT, Leaf, Metadata};
 use sp_core::H256;
 
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};

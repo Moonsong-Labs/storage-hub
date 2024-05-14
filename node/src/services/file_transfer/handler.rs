@@ -24,7 +24,7 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use common::types::Key;
+use shc_common::types::Key;
 use futures::prelude::*;
 use futures::stream::select;
 use libp2p_identity::PeerId;

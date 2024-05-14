@@ -1,6 +1,6 @@
-use common::types::HasherOutT;
 use hash_db::Hasher;
 use log::warn;
+use shc_common::types::HasherOutT;
 use trie_db::TrieLayout;
 
 use crate::{

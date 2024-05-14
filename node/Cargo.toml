@@ -34,7 +34,7 @@ storage-hub-runtime = { workspace = true }
 storage-hub-infra = { workspace = true }
 file-manager = { workspace = true }
 forest-manager = { workspace = true }
-common = { workspace = true }
+shc-common = { workspace = true }
 
 clap = { workspace = true }
 log = { workspace = true }

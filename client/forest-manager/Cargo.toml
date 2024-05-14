@@ -30,5 +30,5 @@ sp-core = { workspace = true }
 sp-trie = { workspace = true, default-features = true }
 sp-runtime = { workspace = true }
 
-common = { workspace = true }
+shc-common = { workspace = true }
 storage-hub-infra = { workspace = true }

@@ -1,5 +1,5 @@
-use common::types::{HasherOutT, Leaf, Proven};
 use hash_db::Hasher;
+use shc_common::types::{HasherOutT, Leaf, Proven};
 use trie_db::{TrieIterator, TrieLayout};
 
 use crate::{

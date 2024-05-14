@@ -1,4 +1,4 @@
-use common::types::HasherOutT;
+use shc_common::types::HasherOutT;
 use trie_db::CError;
 
 pub(crate) type ErrorT<T> = Error<HasherOutT<T>, CError<T>>;
