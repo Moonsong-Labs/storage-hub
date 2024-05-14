@@ -59,11 +59,22 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSe
         let chunk_count = file_metadata.chunk_count();
         let file_key = file_metadata.key();
 
-        let peer_ids = event
-            .multiaddresses
-            .iter()
-            .filter_map(|multiaddr| PeerId::try_from_multiaddr(&multiaddr))
-            .collect::<Vec<PeerId>>();
+        // Adds the multiaddresses of the BSP volunteering to store the file to the known addresses of the file transfer service.
+        // This is required to establish a connection to the BSP.
+        let mut peer_ids = Vec::new();
+        for multiaddress in &event.multiaddresses {
+            if let Some(peer_id) = PeerId::try_from_multiaddr(&multiaddress) {
+                if let Err(error) = self
+                    .storage_hub_handler
+                    .file_transfer
+                    .add_known_address(peer_id, multiaddress.clone())
+                    .await
+                {
+                    error!(target: LOG_TARGET, "Failed to add known address {:?} for peer {:?} due to {:?}", multiaddress, peer_id, error);
+                }
+                peer_ids.push(peer_id);
+            }
+        }
 
         // TODO: Check how we can improve this.
         // We could either make sure this scenario doesn't happen beforehand,
