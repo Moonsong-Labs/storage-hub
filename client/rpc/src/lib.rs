@@ -6,24 +6,24 @@ use storage_hub_infra::types::Metadata;
 
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::proc_macros::rpc;
+use jsonrpsee::types::error::ErrorObjectOwned as JsonRpseeError;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
-use jsonrpsee::types::error::ErrorObjectOwned as JsonRpseeError;
 use jsonrpsee::types::ErrorObjectOwned;
 
 use sp_blockchain::HeaderBackend;
-use sp_core::H256;
-use sp_core::Blake2Hasher;
-use sp_runtime::traits::Block as BlockT;
-use sp_runtime::DeserializeOwned;
 
+use sp_core::H256;
+use sp_runtime::traits::Block as BlockT;
+
+
+use log::debug;
 use std::fmt::Debug;
 use std::fs::File;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::io::Read;
-use log::debug;
 
 const LOG_TARGET: &str = "file-system-rpc";
 
@@ -41,7 +41,11 @@ pub struct FileSystemRpc<C, B, FL, FS> {
 }
 
 impl<C, B, FL, FS> FileSystemRpc<C, B, FL, FS> {
-    pub fn new(client: Arc<C>, file_storage: Arc<RwLock<FL>>, forest_storage: Arc<RwLock<FS>>) -> Self {
+    pub fn new(
+        client: Arc<C>,
+        file_storage: Arc<RwLock<FL>>,
+        forest_storage: Arc<RwLock<FS>>,
+    ) -> Self {
         Self {
             client,
             file_storage,
@@ -78,19 +82,22 @@ where
         // Loops until EOF or until some error that is not `ErrorKind::Interrupted` is found.
         loop {
             let mut buffer = Vec::with_capacity(FILE_CHUNK_SIZE);
-            let result = file.by_ref().take(FILE_CHUNK_SIZE as u64).read_to_end(&mut buffer);
+            let result = file
+                .by_ref()
+                .take(FILE_CHUNK_SIZE as u64)
+                .read_to_end(&mut buffer);
             match result {
                 // Reached EOF.
-                Ok(0) => { 
-                    debug!(target: LOG_TARGET, "Finished reading file");    
-                    break 
-                },
+                Ok(0) => {
+                    debug!(target: LOG_TARGET, "Finished reading file");
+                    break;
+                }
                 // Haven't reached EOF yet. Keep looping.
                 Ok(bytes_read) => {
                     debug!(target: LOG_TARGET, "Read {} bytes from file", bytes_read);
-                    file_chunks.push(buffer) 
-                },
-                Err(e) => { return Err(into_rpc_error(e)) }
+                    file_chunks.push(buffer)
+                }
+                Err(e) => return Err(into_rpc_error(e)),
             }
         }
 
@@ -100,8 +107,12 @@ where
         for (chunk_id, chunk) in file_chunks.iter().enumerate() {
             let key = H256::default();
             let chunk_id = chunk_id as u64;
-            forest_storage_lock.insert_file_key(&key, &file_metadata).map_err(into_rpc_error)?;
-            file_storage_lock.write_chunk(&key, &chunk_id, &chunk.to_vec()).map_err(into_rpc_error)?;
+            forest_storage_lock
+                .insert_file_key(&key, &file_metadata)
+                .map_err(into_rpc_error)?;
+            file_storage_lock
+                .write_chunk(&key, &chunk_id, &chunk.to_vec())
+                .map_err(into_rpc_error)?;
         }
 
         Ok(())

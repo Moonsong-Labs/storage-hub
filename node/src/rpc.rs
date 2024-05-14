@@ -16,11 +16,11 @@ use storage_hub_runtime::{opaque::Block, AccountId, Balance, Nonce};
 
 pub use sc_rpc::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
+use shc_rpc::FileSystemApiServer;
+
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
-use shc_rpc::FileSystemRpc;
-use shc_rpc::FileSystemApiServer;
 
 /// A type representing all RPC extensions.
 pub type RpcExtension = jsonrpsee::RpcModule<()>;
