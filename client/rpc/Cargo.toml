@@ -10,6 +10,7 @@ edition = { workspace = true }
 
 [dependencies]
 codec = { workspace = true }
+log = { workspace = true }
 jsonrpsee = { workspace = true }
 
 # Substrate
@@ -21,6 +22,7 @@ sp-runtime = { workspace = true }
 
 # Local
 file-manager = { workspace =  true }
+forest-manager = { workspace = true }
 storage-hub-infra = { workspace = true }
 
 [features]

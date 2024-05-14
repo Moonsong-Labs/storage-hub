@@ -12350,7 +12350,9 @@ name = "shc-rpc"
 version = "0.1.0"
 dependencies = [
  "file-manager",
+ "forest-manager",
  "jsonrpsee",
+ "log",
  "parity-scale-codec",
  "sc-transaction-pool-api",
  "sp-api 26.0.0",
