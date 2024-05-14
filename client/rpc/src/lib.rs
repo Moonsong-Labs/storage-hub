@@ -1,4 +1,8 @@
 use file_manager::traits::FileStorage;
+use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
+use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
+use jsonrpsee::types::error::ErrorObjectOwned as JsonRpseeError;
+use jsonrpsee::types::ErrorObjectOwned;
 use sp_core::H256;
 use storage_hub_infra::constants::FILE_CHUNK_SIZE;
 
@@ -9,6 +13,7 @@ use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::Block as BlockT;
 
 use std::fs::File;
+use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -45,26 +50,41 @@ where
     fn send_file(&self, at: Option<<B as BlockT>::Hash>, location: String) -> RpcResult<()> {
         let _at = at.unwrap_or_else(|| self.client.info().best_hash);
 
-        // TODO: deal with result.
-        let mut file = File::open(PathBuf::from(location)).expect("Can't open file.");
-        let file_metadata = file.metadata().expect("Can't get metadata.");
+        let mut file = File::open(PathBuf::from(location)).map_err(into_rpc_error)?;
+        let file_metadata = file.metadata().map_err(into_rpc_error)?;
         let file_size = file_metadata.len();
-        let mut file_chunks = Vec::<[u8; FILE_CHUNK_SIZE]>::new();
-        let mut buffer = [1; FILE_CHUNK_SIZE];
+        let mut file_chunks = Vec::new();
 
+        // Read file in chunks of `FILE_CHUNK_SIZE` into a buffer and push them into a vector.
+        // Loops until EOF or if some error different from `ErrorKind::Interrupted` is found.
         loop {
-            file.read_exact(&mut buffer).expect("Can't read file in chunks");
-            file_chunks.push(buffer)
+            let mut buffer = Vec::with_capacity(FILE_CHUNK_SIZE);
+            let result = file.by_ref().take(FILE_CHUNK_SIZE as u64).read_to_end(&mut buffer);
+            match result {
+                // Reached EOF.
+                Ok(0) => break, 
+                Ok(_) => file_chunks.push(buffer),
+                Err(e) => { return Err(into_rpc_error(e)) }
+            }
         }
-        let lock = self.file_storage.write().expect("Can't acquire lock");
+
+        let mut lock = self.file_storage.write().map_err(into_rpc_error)?;
 
         for (chunk_id, chunk) in file_chunks.iter().enumerate() {
             let key = H256::default();
             let chunk_id = chunk_id as u64;
             let _ = lock.write_chunk(&key, &chunk_id, &chunk.to_vec());
-
         }
 
         Ok(())
     }
+}
+
+/// Converts into an RPC error.
+fn into_rpc_error(e: impl std::fmt::Debug) -> JsonRpseeError {
+    ErrorObjectOwned::owned(
+        INTERNAL_ERROR_CODE,
+        INTERNAL_ERROR_MSG,
+        Some(format!("{:?}", e)),
+    )
 }
