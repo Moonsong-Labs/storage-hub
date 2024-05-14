@@ -66,7 +66,7 @@ where
 
     io.merge(System::new(client.clone(), pool, deny_unsafe).into_rpc())?;
     io.merge(TransactionPayment::new(client.clone()).into_rpc())?;
-    // io.merge(FileSystemRpc::new(client, file_storage).into_rpc())?;
+    // io.merge(FileSystemRpc::new(client, file_storage, forest_storage).into_rpc())?;
 
     if let Some(command_sink) = command_sink {
         io.merge(
