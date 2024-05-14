@@ -12,6 +12,7 @@ edition = { workspace = true }
 codec = { workspace = true }
 log = { workspace = true }
 jsonrpsee = { workspace = true }
+tokio = { workspace = true }
 
 # Substrate
 sc-transaction-pool-api = { workspace = true }

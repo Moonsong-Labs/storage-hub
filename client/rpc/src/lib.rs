@@ -1,6 +1,7 @@
 use file_manager::traits::FileStorage;
 use forest_manager::traits::ForestStorage;
 
+use jsonrpsee::core::async_trait;
 use storage_hub_infra::constants::FILE_CHUNK_SIZE;
 use storage_hub_infra::types::Metadata;
 
@@ -22,14 +23,15 @@ use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::RwLock;
+use tokio::sync::RwLock;
 
 const LOG_TARGET: &str = "file-system-rpc";
 
-#[rpc(server)]
+#[rpc(server, namespace = "filesystem")]
+#[async_trait]
 pub trait FileSystemApi<BlockHash> {
-    #[method(name = "filesystem_sendFile")]
-    fn send_file(&self, at: Option<BlockHash>, location: String) -> RpcResult<()>;
+    #[method(name = "sendFile")]
+    async fn send_file(&self, at: Option<BlockHash>, location: String) -> RpcResult<()>;
 }
 
 pub struct FileSystemRpc<C, B, FL, FS> {
@@ -54,14 +56,15 @@ impl<C, B, FL, FS> FileSystemRpc<C, B, FL, FS> {
     }
 }
 
+#[async_trait]
 impl<C, B, FL, FS> FileSystemApiServer<<B as BlockT>::Hash> for FileSystemRpc<C, B, FL, FS>
 where
     B: BlockT,
     C: Send + Sync + 'static + HeaderBackend<B>,
     FL: Send + Sync + FileStorage,
-    FS: Send + Sync + ForestStorage<LookupKey = H256, Value = Metadata>,
+    FS: Send + Sync + ForestStorage<LookupKey = [u8; 32], Value = Metadata>,
 {
-    fn send_file(&self, at: Option<<B as BlockT>::Hash>, location: String) -> RpcResult<()> {
+    async fn send_file(&self, at: Option<<B as BlockT>::Hash>, location: String) -> RpcResult<()> {
         let _at = at.unwrap_or_else(|| self.client.info().best_hash);
 
         let mut file = File::open(PathBuf::from(location.clone())).map_err(into_rpc_error)?;
@@ -94,14 +97,13 @@ where
             }
         }
 
-        let mut file_storage_lock = self.file_storage.write().map_err(into_rpc_error)?;
-        let mut forest_storage_lock = self.forest_storage.write().map_err(into_rpc_error)?;
+        let mut file_storage_lock = self.file_storage.write().await;
+        let mut forest_storage_lock = self.forest_storage.write().await;
 
         let fs_metadata = file.metadata().map_err(into_rpc_error)?;
         let file_size = fs_metadata.len();
         // let fingerprint = ();
         // TODO: get owner from RPC?
-        // let owner = ();
         let file_metadata = Metadata {
             size: file_size,
             fingerprint: H256::default(),
@@ -109,14 +111,15 @@ where
             location: location.into(),
         };
 
-        for (chunk_id, chunk) in file_chunks.iter().enumerate() {
-            let key = H256::default();
+        let file_key = file_metadata.key();
+        let _ = forest_storage_lock
+        .insert_file_key(&file_key.into(), &file_metadata)
+        .map_err(into_rpc_error)?;
+
+        for (chunk_id, chunk) in file_chunks.iter().enumerate() { 
             let chunk_id = chunk_id as u64;
-            forest_storage_lock
-                .insert_file_key(&key, &file_metadata)
-                .map_err(into_rpc_error)?;
             file_storage_lock
-                .write_chunk(&key, &chunk_id, &chunk.to_vec())
+                .write_chunk(&file_key, &chunk_id, &chunk.to_vec())
                 .map_err(into_rpc_error)?;
         }
 
