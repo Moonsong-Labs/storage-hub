@@ -1,5 +1,5 @@
-use shc_common::types::Fingerprint;
 use sc_network::Multiaddr;
+use shc_common::types::Fingerprint;
 use sp_runtime::AccountId32;
 use storage_hub_infra::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 

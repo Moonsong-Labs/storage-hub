@@ -2,9 +2,9 @@ use crate::services::file_transfer::commands::FileTransferServiceInterface;
 use crate::tasks::AcceptedBspVolunteer;
 use crate::tasks::StorageHubHandler;
 use crate::tasks::StorageHubHandlerConfig;
-use shc_common::types::Metadata;
 use file_manager::traits::FileStorage;
 use log::{debug, error, info};
+use shc_common::types::Metadata;
 
 use sc_network::PeerId;
 

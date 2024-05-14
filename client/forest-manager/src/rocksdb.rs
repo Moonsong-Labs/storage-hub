@@ -1,10 +1,10 @@
 use std::{io, path::PathBuf, sync::Arc};
 
-use shc_common::types::{ForestProof, HashT, HasherOutT, Metadata};
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use kvdb_rocksdb::{Database, DatabaseConfig};
 use log::debug;
+use shc_common::types::{ForestProof, HashT, HasherOutT, Metadata};
 use sp_state_machine::{warn, Storage};
 use sp_trie::{
     prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieDBBuilder, TrieLayout, TrieMut,

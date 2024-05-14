@@ -1,5 +1,5 @@
-use shc_common::types::{ChunkId, FileProof, Key};
 use sc_network::config::OutgoingResponse;
+use shc_common::types::{ChunkId, FileProof, Key};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 

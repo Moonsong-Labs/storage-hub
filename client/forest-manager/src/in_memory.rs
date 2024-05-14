@@ -1,5 +1,5 @@
-use shc_common::types::{HasherOutT, Metadata};
 use hash_db::Hasher;
+use shc_common::types::{HasherOutT, Metadata};
 use sp_trie::{recorder::Recorder, MemoryDB, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::{Trie, TrieDBMutBuilder};
 

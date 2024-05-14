@@ -24,7 +24,6 @@
 
 use std::{collections::HashSet, sync::Arc};
 
-use shc_common::types::Key;
 use futures::prelude::*;
 use futures::stream::select;
 use libp2p_identity::PeerId;
@@ -34,6 +33,7 @@ use sc_network::{
     IfDisconnected, NetworkPeers, NetworkRequest, ProtocolName, ReputationChange,
 };
 use sc_tracing::tracing::{debug, error, info, warn};
+use shc_common::types::Key;
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
 use tokio::sync::Mutex;
 
