@@ -147,7 +147,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "double ended iterator has inconsistent behaviour"]
     fn test_prove_challenge_before_first_key() {
         let (memdb, root, keys) = build_merkle_patricia_forest::<LayoutV1<RefHasher>>();
         let trie = TrieDBBuilder::<LayoutV1<RefHasher>>::new(&memdb, &root).build();
