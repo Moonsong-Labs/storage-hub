@@ -354,11 +354,8 @@ fn commitment_verifier_challenge_key_before_first_key_success() {
 
         let challenged_key_vec = challenge_key.0.to_vec();
 
-        // Assert that challenge_key is below next_leaf and that prev_leaf is equal to next_leaf.
-        // This is due to some inconsistent behaviour in the iterator, that when you seek to a key
-        // that is less than the first key, it will return the first key as the next_back leaf,
-        // even if it is not lower than the challenge key.
-        assert!(prev_leaf == next_leaf && challenged_key_vec < next_leaf.unwrap().unwrap().0);
+        // Assert that challenge_key is below next_leaf and that prev_leaf is None.
+        assert!(prev_leaf.is_none() && challenged_key_vec < next_leaf.unwrap().unwrap().0);
     }
 
     // Generate proof

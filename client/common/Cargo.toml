@@ -16,7 +16,9 @@ workspace = true
 
 [dependencies]
 bincode = { workspace = true }
+codec = { workspace = true }
 reference-trie = { workspace = true }
+serde = { workspace = true }
 trie-db = { workspace = true }
 
 sp-core = { workspace = true }

@@ -88,25 +88,6 @@ where
                 .transpose()
                 .map_err(|_| "Failed to get previous leaf.")?;
 
-            // We check before the loop if the iterator has at least one leaf.
-            // Therefore, if `prev_leaf` is `None` here, it means that the behaviour of the double ended iterator has changed.
-            // This is because of an inconsistency in the behaviour of the iterator. If there is no leaf lower than the challenge,
-            // the iterator will return the same for both `next()` and `next_back()`. This is why we check if `prev_leaf` is `None`,
-            // because it shouldn't be, even in that case.
-            if prev_leaf.is_none() {
-                #[cfg(test)]
-                unreachable!(
-                    "This should not happen. We check if the iterator has at least one leaf."
-                );
-
-                #[allow(unreachable_code)]
-                {
-                    return Err(
-                        "Unexpected double ended iterator behaviour: no previous leaf.".into(),
-                    );
-                }
-            }
-
             // Check if there is a valid combination of leaves which validate the proof given the challenged key.
             match (prev_leaf, next_leaf) {
                 // Scenario 1 (valid): `next_leaf` is the challenged leaf which is included in the proof.
@@ -162,21 +143,19 @@ where
                 }
                 // Scenario 3 (valid): `next_leaf` is the first leaf since the next previous leaf is `None`.
                 // The challenge is before the first leaf (i.e. the challenge does not exist in the trie).
-                (Some((prev_key, _)), Some((next_key, _)))
-                    if prev_key == next_key && trie_de_iter.next_back().is_none() =>
-                {
+                (None, Some((next_key, _))) => {
                     // Converting the key to a slice and then to a fixed size array.
-                    let prev_key: &[u8; H_LENGTH] = prev_key
+                    let next_key: &[u8; H_LENGTH] = next_key
                         .as_slice()
                         .try_into()
                         .map_err(|_| "Failed to convert proven key to a fixed size array.")?;
 
                     // Converting the fixed size array to the key type.
-                    let prev_key = prev_key
+                    let next_key = next_key
                         .try_into()
                         .map_err(|_| "Failed to convert proven key.")?;
 
-                    proven_keys.insert(prev_key);
+                    proven_keys.insert(next_key);
 
                     continue;
                 }
