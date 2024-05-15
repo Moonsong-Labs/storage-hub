@@ -1,14 +1,10 @@
 use anyhow::Result;
 use prost::Message;
 use sc_network::{Multiaddr, PeerId, ProtocolName, RequestFailure};
-use storage_hub_infra::{
-    actor::ActorHandle,
-    types::{ChunkId, FileProof, Key},
-};
+use shc_common::types::{ChunkId, FileProof, Key};
+use storage_hub_infra::actor::ActorHandle;
 
-use crate::services::FileTransferService;
-
-use super::schema;
+use super::{schema, FileTransferService};
 
 /// Messages understood by the FileTransfer service actor
 pub enum FileTransferServiceCommand {

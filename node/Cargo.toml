@@ -21,6 +21,7 @@ async-io = { workspace = true }
 bincode = { workspace = true }
 color-print = { workspace = true }
 futures-timer = { workspace = true }
+hex = { workspace = true }
 lazy-static = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
 prost = { workspace = true }
@@ -33,6 +34,7 @@ storage-hub-runtime = { workspace = true }
 storage-hub-infra = { workspace = true }
 file-manager = { workspace = true }
 forest-manager = { workspace = true }
+shc-common = { workspace = true }
 
 clap = { workspace = true }
 log = { workspace = true }

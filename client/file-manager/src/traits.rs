@@ -1,4 +1,5 @@
-use storage_hub_infra::types::{Chunk, ChunkId, FileProof, Key, Metadata};
+use shc_common::types::{Chunk, ChunkId, FileProof, HasherOutT, Metadata};
+use trie_db::TrieLayout;
 
 #[derive(Debug)]
 pub enum FileStorageError {
@@ -30,29 +31,34 @@ pub enum FileStorageWriteStatus {
 }
 
 /// Storage interface to be implemented by the storage providers.
-pub trait FileStorage: 'static {
+pub trait FileStorage<T: TrieLayout>: 'static {
     /// Generate proof for a chunk of a file. If the file does not exists or any chunk is missing,
     /// no proof will be returned.
-    fn generate_proof(&self, key: &Key, chunk_id: &ChunkId) -> Result<FileProof, FileStorageError>;
+    fn generate_proof(
+        &self,
+        key: &HasherOutT<T>,
+        chunk_id: &ChunkId,
+    ) -> Result<FileProof, FileStorageError>;
 
     /// Remove a file from storage.
-    fn delete_file(&mut self, key: &Key);
+    fn delete_file(&mut self, key: &HasherOutT<T>);
 
     /// Get metadata for a file.
-    fn get_metadata(&self, key: &Key) -> Result<Metadata, FileStorageError>;
+    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<Metadata, FileStorageError>;
 
     /// Set metadata for a file. This should be called before you start adding chunks since it
     /// will overwrite any previous Metadata and delete already stored file chunks.
-    fn set_metadata(&mut self, key: Key, metadata: Metadata);
+    fn set_metadata(&mut self, key: HasherOutT<T>, metadata: Metadata);
 
     /// Get a file chunk from storage.
-    fn get_chunk(&self, key: &Key, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError>;
+    fn get_chunk(&self, key: &HasherOutT<T>, chunk_id: &ChunkId)
+        -> Result<Chunk, FileStorageError>;
 
     /// Write a file chunk in storage. It is expected that you verify the associated proof that the
     /// [`Chunk`] is part of the file before writing it.
     fn write_chunk(
         &mut self,
-        key: &Key,
+        key: &HasherOutT<T>,
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<FileStorageWriteStatus, FileStorageError>;

@@ -14,7 +14,7 @@ use storage_hub_runtime::Block;
 
 use crate::{
     chain_spec,
-    cli::{Cli, ProviderType, RelayChainCli, Subcommand},
+    cli::{Cli, ProviderType, RelayChainCli, StorageLayer, Subcommand},
     service::new_partial,
 };
 
@@ -25,6 +25,8 @@ pub struct ProviderOptions {
     pub provider_type: ProviderType,
     /// Seed to generate deterministic peer id.
     pub seed_file: String,
+    /// Storage layer.
+    pub storage_layer: StorageLayer,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {

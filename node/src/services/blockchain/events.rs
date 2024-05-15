@@ -1,5 +1,5 @@
 use sc_network::Multiaddr;
-use sp_core::H256;
+use shc_common::types::Fingerprint;
 use sp_runtime::AccountId32;
 use storage_hub_infra::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 
@@ -25,7 +25,7 @@ pub struct NewStorageRequest {
     /// Location of the file (as a file path).
     pub location: FileLocation,
     /// Fingerprint of the file (root hash of the merklised file).
-    pub fingerprint: H256,
+    pub fingerprint: Fingerprint,
     /// Size of the file.
     pub size: StorageData,
     /// lib2p peer IDs from where the user would send the file.
@@ -39,7 +39,7 @@ impl EventBusMessage for NewStorageRequest {}
 pub struct AcceptedBspVolunteer {
     pub who: AccountId32,
     pub location: FileLocation,
-    pub fingerprint: H256,
+    pub fingerprint: Fingerprint,
     pub multiaddresses: Vec<Multiaddr>,
     pub owner: AccountId32,
     pub size: StorageData,
