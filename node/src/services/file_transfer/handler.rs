@@ -36,10 +36,8 @@ use sc_network::{
     IfDisconnected, NetworkPeers, NetworkRequest, ProtocolName, ReputationChange,
 };
 use sc_tracing::tracing::{debug, error, info, warn};
-use storage_hub_infra::{
-    actor::{Actor, ActorEventLoop},
-    types::Key,
-};
+use shc_common::types::Key;
+use storage_hub_infra::actor::{Actor, ActorEventLoop};
 use tokio::sync::Mutex;
 
 use crate::{
@@ -191,7 +189,8 @@ impl Actor for FileTransferService {
                     let result = match self.peers_by_file.get(&file_key) {
                         Some(peers) => {
                             for peer_id in peers {
-                                self.peer_file_allow_list.remove(&(*peer_id, file_key));
+                                self.peer_file_allow_list
+                                    .remove(&(*peer_id, file_key.clone()));
                             }
                             self.peers_by_file.remove(&file_key);
                             Ok(())

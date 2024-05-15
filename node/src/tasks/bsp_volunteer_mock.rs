@@ -1,16 +1,14 @@
 use anyhow::anyhow;
 use log::{debug, error, info};
+use shc_common::types::{HasherOutT, Key, Metadata};
+use sp_trie::TrieLayout;
 use std::str::FromStr;
 
 use sc_network::PeerId;
 use sp_core::H256;
 
 use file_manager::traits::FileStorage;
-use storage_hub_infra::{
-    actor::ActorHandle,
-    event_bus::EventHandler,
-    types::{Key, Metadata},
-};
+use storage_hub_infra::{actor::ActorHandle, event_bus::EventHandler};
 
 use crate::services::{
     blockchain::{
@@ -18,14 +16,14 @@ use crate::services::{
         handler::BlockchainService, types::ExtrinsicResult,
     },
     file_transfer::commands::FileTransferServiceInterface,
-    StorageHubHandler, StorageHubHandlerConfig,
+    handler::{StorageHubHandler, StorageHubHandlerConfig},
 };
 
 const LOG_TARGET: &str = "bsp-volunteer-mock-task";
 
 pub struct BspVolunteerMockTask<SHC: StorageHubHandlerConfig> {
     storage_hub_handler: StorageHubHandler<SHC>,
-    file_key_cleanup: Option<Key>,
+    file_key_cleanup: Option<HasherOutT<SHC::TrieLayout>>,
 }
 
 impl<SHC: StorageHubHandlerConfig> Clone for BspVolunteerMockTask<SHC> {
@@ -61,7 +59,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
                 let _ = self
                     .storage_hub_handler
                     .file_transfer
-                    .unregister_file(*file_key)
+                    .unregister_file(file_key.as_ref().into())
                     .await;
                 let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
                 write_file_storage.delete_file(file_key);
@@ -73,11 +71,17 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunt
 
 impl<SHC: StorageHubHandlerConfig> BspVolunteerMockTask<SHC> {
     async fn inner_handle_event(&self, event: NewStorageRequest) -> anyhow::Result<()> {
+        let fingerprint: [u8; 32] = event
+            .fingerprint
+            .as_ref()
+            .try_into()
+            .expect("Fingerprint should be 32 bytes; qed");
+
         // Build extrinsic.
         let call =
             storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
                 location: event.location.clone(),
-                fingerprint: event.fingerprint,
+                fingerprint: fingerprint.into(),
             });
 
         let (mut tx_watcher, tx_hash) = self
@@ -95,7 +99,10 @@ impl<SHC: StorageHubHandlerConfig> BspVolunteerMockTask<SHC> {
         };
 
         // Get the file key.
-        let file_key = metadata.key();
+        let file_key: Key = metadata
+            .key::<<SHC::TrieLayout as TrieLayout>::Hash>()
+            .as_ref()
+            .try_into()?;
 
         // Optimistically register the file for upload in the file transfer service.
         // This solves the race condition between the user and the BSP.

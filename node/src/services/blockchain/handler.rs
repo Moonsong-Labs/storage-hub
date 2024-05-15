@@ -308,7 +308,7 @@ impl BlockchainService {
                         ) => self.emit(NewStorageRequest {
                             who,
                             location,
-                            fingerprint,
+                            fingerprint: fingerprint.as_ref().into(),
                             size,
                             user_peer_ids: peer_ids,
                         }),
@@ -435,14 +435,7 @@ impl BlockchainService {
             ),
         );
 
-        // Getting signer public key.
-        let caller_pub_key = self.keystore.sr25519_public_keys(KEY_TYPE).pop().expect(
-            format!(
-                "There should be at least one sr25519 key in the keystore with key type '{:?}' ; qed",
-                KEY_TYPE
-            )
-            .as_str(),
-        );
+        let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
 
         // Sign the payload.
         let signature = raw_payload
@@ -459,6 +452,18 @@ impl BlockchainService {
             polkadot_primitives::Signature::Sr25519(signature.clone()),
             extra.clone(),
         )
+    }
+
+    // Getting signer public key.
+    pub fn caller_pub_key(keystore: KeystorePtr) -> sp_core::sr25519::Public {
+        let caller_pub_key = keystore.sr25519_public_keys(KEY_TYPE).pop().expect(
+            format!(
+                "There should be at least one sr25519 key in the keystore with key type '{:?}' ; qed",
+                KEY_TYPE
+            )
+            .as_str(),
+        );
+        caller_pub_key
     }
 
     /// Get an extrinsic from a block.

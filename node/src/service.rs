@@ -6,12 +6,12 @@ use std::{sync::Arc, time::Duration};
 use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
-use file_manager::in_memory::InMemoryFileStorage;
-use forest_manager::in_memory::InMemoryForestStorage;
+
 use futures::{Stream, StreamExt};
-use polkadot_primitives::{HeadData, ValidationCode};
-use reference_trie::RefHasher;
+use log::debug;
+use polkadot_primitives::{BlakeTwo256, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
+use shc_common::types::HasherOutT;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
 use sp_trie::LayoutV1;
@@ -52,16 +52,24 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::traits::Block as BlockT;
 use substrate_prometheus_endpoint::Registry;
-use tokio::sync::RwLock;
 
-use crate::services::file_transfer::configure_file_transfer_network;
+use crate::{
+    cli::StorageLayer,
+    services::{
+        blockchain::handler::BlockchainService,
+        file_transfer::configure_file_transfer_network,
+        handler::{
+            InMemoryStorageHubConfig, RocksDBStorageHubConfig, StorageHubHandler,
+            StorageHubHandlerConfig, StorageHubHandlerInitializer,
+        },
+    },
+};
 use crate::{
     cli::{self, ProviderType},
     command::ProviderOptions,
     services::{
         blockchain::{spawn_blockchain_service, KEY_TYPE},
         file_transfer::spawn_file_transfer_service,
-        StorageHubHandler, StorageHubHandlerConfig,
     },
 };
 
@@ -231,25 +239,43 @@ async fn start_storage_provider(
     )
     .await;
 
-    let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
-    let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
-
-    struct InMemoryStorageHubConfig {}
-
-    impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
-        type FileStorage = InMemoryFileStorage<LayoutV1<RefHasher>>;
-        type ForestStorage = InMemoryForestStorage<LayoutV1<RefHasher>>;
-    }
+    let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
 
     // Initialise the StorageHubHandler, for tasks to have access to the services.
-    let sh_handler = StorageHubHandler::<InMemoryStorageHubConfig>::new(
-        task_spawner,
-        file_transfer_service_handle,
-        blockchain_service_handle,
-        file_storage,
-        forest_storage,
-    );
+    match provider_options.storage_layer {
+        StorageLayer::Memory => {
+            debug!("Starting in-memory storage hub handler.");
 
+            let sh_handler = InMemoryStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
+                caller_pub_key,
+                task_spawner,
+                file_transfer_service_handle,
+                blockchain_service_handle,
+            );
+
+            start_provider_tasks(provider_options, sh_handler);
+        }
+        StorageLayer::Rocksdb => {
+            debug!("Starting rocksdb storage hub handler.");
+
+            let sh_handler = RocksDBStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
+                caller_pub_key,
+                task_spawner,
+                file_transfer_service_handle,
+                blockchain_service_handle,
+            );
+
+            start_provider_tasks(provider_options, sh_handler);
+        }
+    };
+}
+
+fn start_provider_tasks<SHC: StorageHubHandlerConfig>(
+    provider_options: ProviderOptions,
+    sh_handler: StorageHubHandler<SHC>,
+) where
+    HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
+{
     // Starting the tasks according to the provider type.
     match provider_options.provider_type {
         ProviderType::Bsp => sh_handler.start_bsp_tasks(),

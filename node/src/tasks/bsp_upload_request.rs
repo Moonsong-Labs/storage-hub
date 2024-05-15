@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use sc_tracing::tracing::{error, info, warn};
-use sp_core::H256;
+use shc_common::types::HasherOutT;
 
 use file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use storage_hub_infra::event_bus::EventHandler;
@@ -9,7 +9,7 @@ use tokio::{fs::File, io::AsyncWriteExt};
 
 use crate::services::{
     file_transfer::{commands::FileTransferServiceInterface, events::RemoteUploadRequest},
-    StorageHubHandler, StorageHubHandlerConfig,
+    handler::{StorageHubHandler, StorageHubHandlerConfig},
 };
 
 const LOG_TARGET: &str = "bsp-upload-request-handler";
@@ -36,20 +36,25 @@ impl<SHC: StorageHubHandlerConfig> BspUploadRequestHandler<SHC> {
 
 impl<SHC: StorageHubHandlerConfig> EventHandler<RemoteUploadRequest>
     for BspUploadRequestHandler<SHC>
+where
+    HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
 {
     async fn handle_event(&self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         if !event.chunk_with_proof.verify() {
             error!(
                 target: LOG_TARGET,
-                "Received invalid proof for chunk: {} (file: {}))", event.chunk_with_proof.proven.key, event.file_key
+                "Received invalid proof for chunk: {} (file: {:?}))", event.chunk_with_proof.proven.key, event.file_key
             );
             // TODO: Record this for further reputation actions
             return Ok(());
         }
 
+        let file_key: HasherOutT<SHC::TrieLayout> = TryFrom::try_from(*event.file_key.as_ref())
+            .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
+
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
         let write_chunk_result = write_file_storage.write_chunk(
-            &event.file_key,
+            &file_key,
             &event.chunk_with_proof.proven.key,
             &event.chunk_with_proof.proven.data,
         );
@@ -57,9 +62,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<RemoteUploadRequest>
 
         match write_chunk_result {
             Ok(outcome) => match outcome {
-                FileStorageWriteOutcome::FileComplete => {
-                    self.on_file_complete(&event.file_key).await
-                }
+                FileStorageWriteOutcome::FileComplete => self.on_file_complete(&file_key).await,
                 FileStorageWriteOutcome::FileIncomplete => {}
             },
             Err(error) => match error {
@@ -75,7 +78,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<RemoteUploadRequest>
                 | FileStorageWriteError::FailedToInsertFileChunk => {
                     error!(
                         target: LOG_TARGET,
-                        "Internal trie read/write error {}:{}",
+                        "Internal trie read/write error {:?}:{}",
                         event.file_key,
                         event.chunk_with_proof.proven.key
                     );
@@ -83,13 +86,13 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<RemoteUploadRequest>
                 FileStorageWriteError::FileDoesNotExist => {
                     error!(
                         target: LOG_TARGET,
-                        "File does not exist for key {}. Maybe we forgot to unregister before deleting?", event.file_key
+                        "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key
                     );
                 }
                 FileStorageWriteError::FingerprintAndStoredFileMismatch => {
                     error!(
                         target: LOG_TARGET,
-                        "Invariant broken! Fingerprint and stored file mismatch for key {}.", event.file_key
+                        "Invariant broken! Fingerprint and stored file mismatch for key {:?}.", event.file_key
                     );
                 }
             },
@@ -100,13 +103,13 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<RemoteUploadRequest>
 }
 
 impl<SHC: StorageHubHandlerConfig> BspUploadRequestHandler<SHC> {
-    async fn on_file_complete(&self, file_key: &H256) {
-        info!(target: LOG_TARGET, "File upload complete ({})", file_key);
+    async fn on_file_complete(&self, file_key: &HasherOutT<SHC::TrieLayout>) {
+        info!(target: LOG_TARGET, "File upload complete ({:?})", file_key);
 
         // Unregister the file from the file transfer service.
         self.storage_hub_handler
             .file_transfer
-            .unregister_file(file_key.clone())
+            .unregister_file(file_key.as_ref().into())
             .await
             .expect("File is not registered. This should not happen!");
 
@@ -136,7 +139,7 @@ impl<SHC: StorageHubHandlerConfig> BspUploadRequestHandler<SHC> {
             .expect("Failed to open file for writing.");
 
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        for chunk_id in metadata.chunk_ids() {
+        for chunk_id in 0..metadata.chunk_count() {
             let chunk = read_file_storage
                 .get_chunk(file_key, &chunk_id)
                 .expect("Chunk not found in storage.");
