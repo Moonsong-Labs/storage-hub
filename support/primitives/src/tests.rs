@@ -473,9 +473,7 @@ fn commitment_verifier_multiple_exact_challenge_keys_success() {
     assert_eq!(proof_keys, challenge_keys);
 }
 
-// TODO: This test is currently failing due to a bug in the trie iterator. It will be fixed in a future PR.
 #[test]
-#[ignore = "This test is currently failing due to a bug in the trie iterator. It will be fixed in a future PR."]
 fn commitment_verifier_multiple_in_between_challenge_keys_success() {
     let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
 
@@ -584,9 +582,7 @@ fn commitment_verifier_multiple_in_between_challenge_keys_starting_before_first_
     assert_eq!(proof_keys, [leaf_keys[0], leaf_keys[1], leaf_keys[2]]);
 }
 
-// TODO: This test is currently failing due to a bug in the trie iterator. It will be fixed in a future PR.
 #[test]
-#[ignore = "This test is currently failing due to a bug in the trie iterator. It will be fixed in a future PR."]
 fn commitment_verifier_multiple_in_between_challenge_keys_and_one_after_last_key_success() {
     let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
 
@@ -602,9 +598,9 @@ fn commitment_verifier_multiple_in_between_challenge_keys_and_one_after_last_key
         *largest_key,
     ];
 
-    // Increment the most significant bit of every challenge key by 1.
+    // Increment the least significant byte of every challenge key by 1.
     for key in &mut challenge_keys {
-        key.0[0] += 1;
+        key.0[31] += 1;
     }
 
     {
@@ -819,9 +815,7 @@ fn commitment_verifier_multiple_challenges_single_key_trie_success() {
     assert_eq!(proof_keys, [leaf_keys[0]]);
 }
 
-// TODO: This test is currently failing due to a bug in the trie iterator. It will be fixed in a future PR.
 #[test]
-#[ignore = "This test is currently failing due to a bug in the trie iterator. It will be fixed in a future PR."]
 fn commitment_verifier_challenge_in_between_existing_leafs_shares_prefix_with_next_leaf() {
     let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
 
