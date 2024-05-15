@@ -29,6 +29,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
+    use sp_runtime::traits::Convert;
     use storage_hub_traits::{CommitmentVerifier, ProvidersInterface};
     use types::{KeyFor, ProviderFor};
 
@@ -89,6 +90,9 @@ pub mod pallet {
 
         /// The hashing system (algorithm) being used for the Merkle Patricia Forests (e.g. Blake2).
         type MerkleHashing: Hash<Output = Self::MerkleHash> + TypeInfo;
+
+        /// The type to convert a balance to a block number.
+        type StakeToBlockNumber: Convert<BalanceFor<Self>, BlockNumberFor<Self>>;
 
         /// The number of random challenges that are generated per block, using the random seed
         /// generated for that block.

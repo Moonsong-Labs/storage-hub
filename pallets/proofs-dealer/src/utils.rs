@@ -11,8 +11,8 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::prelude::vec::Vec;
 use sp_runtime::{
-    traits::{CheckedAdd, CheckedDiv, Hash, Zero},
-    ArithmeticError, DispatchError, SaturatedConversion, Saturating,
+    traits::{CheckedAdd, CheckedDiv, Convert, Hash, Zero},
+    ArithmeticError, DispatchError, Saturating,
 };
 use storage_hub_traits::{CommitmentVerifier, ProofsDealerInterface, ProvidersInterface};
 
@@ -229,20 +229,11 @@ where
     /// Stake is divided by `StakeToChallengePeriod` to get the number of blocks in between challenges
     /// for a Provider. The result is then converted to `BlockNumber` type.
     fn stake_to_challenge_period(stake: BalanceFor<T>) -> Result<BlockNumberFor<T>, DispatchError> {
-        let block_period_res = stake
+        let block_period = stake
             .checked_div(&StakeToChallengePeriodFor::<T>::get())
-            .unwrap_or(1u32.into())
-            .try_into();
+            .unwrap_or(1u32.into());
 
-        let block_period: u128 = expect_or_err!(
-            block_period_res.ok(),
-            "A balance could not be converted to u128, which shouldn't be possible.",
-            Error::<T>::StakeCouldNotBeConverted
-        );
-
-        Ok(SaturatedConversion::saturated_into::<BlockNumberFor<T>>(
-            block_period,
-        ))
+        Ok(T::StakeToBlockNumber::convert(block_period))
     }
 
     /// Add challenge to ChallengesQueue.

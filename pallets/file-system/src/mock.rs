@@ -6,11 +6,12 @@ use frame_support::{
 use frame_system as system;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, Bounded, IdentityLookup},
-    AccountId32, BuildStorage, DispatchError, FixedU128,
+    traits::{BlakeTwo256, Bounded, Convert, IdentityLookup},
+    AccountId32, BuildStorage, DispatchError, FixedU128, SaturatedConversion,
 };
 use sp_trie::CompactProof;
 use storage_hub_traits::CommitmentVerifier;
+use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
@@ -174,6 +175,7 @@ impl pallet_proofs_dealer::Config for Test {
     type MerkleHashing = BlakeTwo256;
     type ForestVerifier = MockVerifier;
     type KeyVerifier = MockVerifier;
+    type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
@@ -272,4 +274,14 @@ pub(crate) fn compute_set_get_initial_threshold() -> ThresholdType {
         .expect("Initial threshold should be computable");
     crate::BspsAssignmentThreshold::<Test>::put(initial_threshold);
     initial_threshold
+}
+
+// Converter from the Balance type to the BlockNumber type for math.
+// It performs a saturated conversion, so that the result is always a valid BlockNumber.
+pub struct SaturatingBalanceToBlockNumber;
+
+impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
+    fn convert(block_number: Balance) -> BlockNumberFor<Test> {
+        block_number.saturated_into()
+    }
 }

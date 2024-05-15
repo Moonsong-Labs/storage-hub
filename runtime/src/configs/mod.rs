@@ -38,6 +38,7 @@ use frame_support::{
 };
 use frame_system::{
     limits::{BlockLength, BlockWeights},
+    pallet_prelude::BlockNumberFor,
     EnsureRoot,
 };
 use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
@@ -47,7 +48,10 @@ use polkadot_runtime_common::{
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
-use sp_runtime::{traits::BlakeTwo256, AccountId32, DispatchError, FixedU128, Perbill};
+use sp_runtime::{
+    traits::{BlakeTwo256, Convert},
+    AccountId32, DispatchError, FixedU128, Perbill, SaturatedConversion,
+};
 use sp_std::vec::Vec;
 use sp_trie::CompactProof;
 use sp_trie::LayoutV1;
@@ -448,6 +452,7 @@ impl pallet_proofs_dealer::Config for Runtime {
     type MerkleHashing = BlakeTwo256;
     type ForestVerifier = TrieVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type KeyVerifier = ProofTrieVerifier;
+    type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = RandomChallengesPerBlock;
     type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
     type MaxProvidersChallengedPerBlock = MaxProvidersChallengedPerBlock;
@@ -509,4 +514,14 @@ impl pallet_file_system::Config for Runtime {
     type MaxDataServerMultiAddresses = ConstU32<10>;
     type StorageRequestTtl = ConstU32<40>;
     type MaxExpiredStorageRequests = ConstU32<100>;
+}
+
+// Converter from the Balance type to the BlockNumber type for math.
+// It performs a saturated conversion, so that the result is always a valid BlockNumber.
+pub struct SaturatingBalanceToBlockNumber;
+
+impl Convert<Balance, BlockNumberFor<Runtime>> for SaturatingBalanceToBlockNumber {
+    fn convert(block_number: Balance) -> BlockNumberFor<Runtime> {
+        block_number.saturated_into()
+    }
 }

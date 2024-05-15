@@ -8,8 +8,8 @@ use frame_support::{
 use frame_system as system;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage, DispatchError, DispatchResult,
+    traits::{BlakeTwo256, Convert, IdentityLookup},
+    BuildStorage, DispatchError, DispatchResult, SaturatedConversion,
 };
 use sp_trie::CompactProof;
 use storage_hub_traits::{CommitmentVerifier, SubscribeProvidersInterface};
@@ -136,6 +136,7 @@ impl crate::Config for Test {
     type MerkleHashing = BlakeTwo256;
     type ForestVerifier = MockVerifier;
     type KeyVerifier = MockVerifier;
+    type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
@@ -188,4 +189,14 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         .build_storage()
         .unwrap()
         .into()
+}
+
+// Converter from the Balance type to the BlockNumber type for math.
+// It performs a saturated conversion, so that the result is always a valid BlockNumber.
+pub struct SaturatingBalanceToBlockNumber;
+
+impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
+    fn convert(block_number: Balance) -> BlockNumberFor<Test> {
+        block_number.saturated_into()
+    }
 }
