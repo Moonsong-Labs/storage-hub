@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use forest_manager::traits::ForestStorage;
 use sc_tracing::tracing::{error, info, warn};
 use shc_common::types::HasherOutT;
 
@@ -120,15 +121,20 @@ impl<SHC: StorageHubHandlerConfig> BspUploadRequestHandler<SHC> {
             .expect("File metadata not found");
         drop(read_file_storage);
 
-        // TODO: update the forest storage with the new file metadata & send the proof to runtime
-        // Save the newly stored file metadata in the forest storage.
-        let write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
-        // write_forest_storage.insert_file_key(file_key.as_bytes().into(), metadata);
+        // Save [`FileMetadata`] of the newly stored file in the forest storage.
+        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
+        let file_key = write_forest_storage
+            .insert_metadata(&metadata)
+            .expect("Failed to insert metadata.");
         let read_forest_storage = write_forest_storage.downgrade();
-        // read_forest_storage.generate_proof(file_key);
+        let _forest_proof = read_forest_storage
+            .generate_proof(vec![file_key])
+            .expect("Failed to generate forest proof.");
         drop(read_forest_storage);
 
-        // TODO: put this under an RPC call
+        // TODO: send the proof for the new file to the runtime
+
+        // TODO: move this under an RPC call
         let file_path = Path::new("./storage/").join(
             String::from_utf8(metadata.location.clone())
                 .expect("File location should be an utf8 string"),
@@ -141,7 +147,7 @@ impl<SHC: StorageHubHandlerConfig> BspUploadRequestHandler<SHC> {
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         for chunk_id in 0..metadata.chunk_count() {
             let chunk = read_file_storage
-                .get_chunk(file_key, &chunk_id)
+                .get_chunk(&file_key, &chunk_id)
                 .expect("Chunk not found in storage.");
             file.write_all(&chunk)
                 .await
