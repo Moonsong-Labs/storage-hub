@@ -2,6 +2,8 @@ use file_manager::traits::FileStorage;
 use forest_manager::traits::ForestStorage;
 
 use jsonrpsee::core::async_trait;
+use sp_api::ProvideRuntimeApi;
+use sp_runtime::AccountId32;
 use storage_hub_infra::constants::FILE_CHUNK_SIZE;
 use storage_hub_infra::types::Metadata;
 
@@ -31,7 +33,7 @@ const LOG_TARGET: &str = "file-system-rpc";
 #[async_trait]
 pub trait FileSystemApi<BlockHash> {
     #[method(name = "sendFile")]
-    async fn send_file(&self, at: Option<BlockHash>, location: String) -> RpcResult<()>;
+    async fn send_file(&self, at: Option<BlockHash>, file_path: String, location: String, owner: AccountId32) -> RpcResult<()>;
 }
 
 pub struct FileSystemRpc<C, B, FL, FS> {
@@ -64,13 +66,13 @@ where
     FL: Send + Sync + FileStorage,
     FS: Send + Sync + ForestStorage<LookupKey = [u8; 32], Value = Metadata>,
 {
-    async fn send_file(&self, at: Option<<B as BlockT>::Hash>, location: String) -> RpcResult<()> {
+    async fn send_file(&self, at: Option<<B as BlockT>::Hash>, file_path: String, location: String, owner: AccountId32) -> RpcResult<()> {
         let _at = at.unwrap_or_else(|| self.client.info().best_hash);
 
-        let mut file = File::open(PathBuf::from(location.clone())).map_err(into_rpc_error)?;
+        let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
         let mut file_chunks = Vec::new();
 
-        // Read file in chunks of `FILE_CHUNK_SIZE` into buffer and push them into a vector.
+        // Read file in chunks of `FILE_CHUNK_SIZE` into buffer then push buffer into a vector.
         // Loops until EOF or until some error that is NOT `ErrorKind::Interrupted` is found.
         // https://doc.rust-lang.org/std/io/trait.Read.html#method.read_to_end
         loop {
@@ -102,12 +104,12 @@ where
 
         let fs_metadata = file.metadata().map_err(into_rpc_error)?;
         let file_size = fs_metadata.len();
-        // let fingerprint = ();
-        // TODO: get owner from RPC?
         let file_metadata = Metadata {
             size: file_size,
+            // TODO(Arthur/Alexandru): Fingerprint is a missing piece right now.
+            // We will get it from `FileData`.
             fingerprint: H256::default(),
-            owner: "Owner".to_string(),
+            owner: owner.to_string(),
             location: location.into(),
         };
 
