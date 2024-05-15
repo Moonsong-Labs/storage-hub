@@ -4,7 +4,7 @@ use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use kvdb_rocksdb::{Database, DatabaseConfig};
 use log::debug;
-use shc_common::types::{ForestProof, HashT, HasherOutT, Metadata};
+use shc_common::types::{FileMetadata, ForestProof, HashT, HasherOutT};
 use sp_state_machine::{warn, Storage};
 use sp_trie::{
     prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieDBBuilder, TrieLayout, TrieMut,
@@ -304,7 +304,7 @@ where
         })
     }
 
-    fn insert_metadata(&mut self, metadata: &Metadata) -> Result<HasherOutT<T>, ErrorT<T>> {
+    fn insert_metadata(&mut self, metadata: &FileMetadata) -> Result<HasherOutT<T>, ErrorT<T>> {
         let file_key = metadata.key::<T::Hash>();
 
         if self.contains_file_key(&file_key)? {
@@ -358,7 +358,7 @@ mod tests {
     use crate::error::ErrorT;
 
     use super::*;
-    use shc_common::types::{Fingerprint, Metadata, Proven};
+    use shc_common::types::{FileMetadata, Fingerprint, Proven};
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_trie::LayoutV1;
@@ -424,8 +424,8 @@ mod tests {
     }
 
     // Reused function to create metadata with variable parameters.
-    fn create_metadata(owner: &str, location: Vec<u8>, size: u64) -> Metadata {
-        Metadata {
+    fn create_metadata(owner: &str, location: Vec<u8>, size: u64) -> FileMetadata {
+        FileMetadata {
             owner: owner.to_string(),
             location,
             size,

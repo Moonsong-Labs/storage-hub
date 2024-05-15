@@ -4,7 +4,7 @@ use crate::tasks::StorageHubHandler;
 use crate::tasks::StorageHubHandlerConfig;
 use file_manager::traits::FileStorage;
 use log::{debug, error, info};
-use shc_common::types::Metadata;
+use shc_common::types::FileMetadata;
 
 use sc_network::PeerId;
 
@@ -50,7 +50,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSe
             event.location,
         );
 
-        let file_metadata = Metadata {
+        let file_metadata = FileMetadata {
             owner: event.owner.to_string(),
             size: event.size.into(),
             location: event.location.into_inner(),

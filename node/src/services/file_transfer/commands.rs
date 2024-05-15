@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use sc_network::{Multiaddr, PeerId, ProtocolName, RequestFailure};
 
-use shc_common::types::{ChunkId, FileProof, Key};
+use shc_common::types::{ChunkId, FileKey, FileProof};
 use storage_hub_infra::actor::ActorHandle;
 
 use super::{schema, FileTransferService};
@@ -13,7 +13,7 @@ use super::{schema, FileTransferService};
 pub enum FileTransferServiceCommand {
     UploadRequest {
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
         chunk_with_proof: FileProof,
         callback: tokio::sync::oneshot::Sender<
             futures::channel::oneshot::Receiver<Result<(Vec<u8>, ProtocolName), RequestFailure>>,
@@ -21,7 +21,7 @@ pub enum FileTransferServiceCommand {
     },
     DownloadRequest {
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
         chunk_id: ChunkId,
         callback: tokio::sync::oneshot::Sender<
             futures::channel::oneshot::Receiver<Result<(Vec<u8>, ProtocolName), RequestFailure>>,
@@ -34,11 +34,11 @@ pub enum FileTransferServiceCommand {
     },
     RegisterNewFile {
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
         callback: tokio::sync::oneshot::Sender<Result<(), RequestError>>,
     },
     UnregisterFile {
-        file_key: Key,
+        file_key: FileKey,
         callback: tokio::sync::oneshot::Sender<Result<(), RequestError>>,
     },
 }
@@ -68,14 +68,14 @@ pub trait FileTransferServiceInterface {
     async fn upload_request(
         &self,
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
         data: FileProof,
     ) -> Result<schema::v1::provider::RemoteUploadDataResponse, RequestError>;
 
     async fn download_request(
         &self,
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
         chunk_id: ChunkId,
     ) -> Result<schema::v1::provider::RemoteDownloadDataResponse, RequestError>;
 
@@ -88,10 +88,10 @@ pub trait FileTransferServiceInterface {
     async fn register_new_file_peer(
         &self,
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
     ) -> Result<(), RequestError>;
 
-    async fn unregister_file(&self, file_key: Key) -> Result<(), RequestError>;
+    async fn unregister_file(&self, file_key: FileKey) -> Result<(), RequestError>;
 }
 
 impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
@@ -100,7 +100,7 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
     async fn upload_request(
         &self,
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
         chunk_with_proof: FileProof,
     ) -> Result<schema::v1::provider::RemoteUploadDataResponse, RequestError> {
         let (callback, file_transfer_rx) = tokio::sync::oneshot::channel();
@@ -145,7 +145,7 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
     async fn download_request(
         &self,
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
         chunk_id: ChunkId,
     ) -> Result<schema::v1::provider::RemoteDownloadDataResponse, RequestError> {
         let (callback, file_transfer_rx) = tokio::sync::oneshot::channel();
@@ -208,7 +208,7 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
     async fn register_new_file_peer(
         &self,
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
     ) -> Result<(), RequestError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let command = FileTransferServiceCommand::RegisterNewFile {
@@ -223,7 +223,7 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
     /// Tell the FileTransferService to no longer listen for upload requests from peer_id on file
     /// file_key.
     /// This returns as soon as the message has been dispatched (not processed) to the service.
-    async fn unregister_file(&self, file_key: Key) -> Result<(), RequestError> {
+    async fn unregister_file(&self, file_key: FileKey) -> Result<(), RequestError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let command = FileTransferServiceCommand::UnregisterFile { file_key, callback };
         self.send(command).await;

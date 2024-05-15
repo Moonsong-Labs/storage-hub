@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use shc_common::types::{Chunk, ChunkId, FileProof, HasherOutT, Leaf, Metadata};
+use shc_common::types::{Chunk, ChunkId, FileMetadata, FileProof, HasherOutT, Leaf};
 use sp_core::H256;
 
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
@@ -40,7 +40,7 @@ impl<T: TrieLayout + 'static> FileData<T> {
 }
 
 pub struct InMemoryFileStorage<T: TrieLayout + 'static> {
-    pub metadata: HashMap<HasherOutT<T>, Metadata>,
+    pub metadata: HashMap<HasherOutT<T>, FileMetadata>,
     pub file_data: HashMap<HasherOutT<T>, FileData<T>>,
 }
 
@@ -119,14 +119,14 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
         self.file_data.remove(file_key);
     }
 
-    fn get_metadata(&self, file_key: &HasherOutT<T>) -> Result<Metadata, FileStorageError> {
+    fn get_metadata(&self, file_key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError> {
         self.metadata
             .get(file_key)
             .cloned()
             .ok_or(FileStorageError::FileDoesNotExist)
     }
 
-    fn set_metadata(&mut self, file_key: HasherOutT<T>, metadata: Metadata) {
+    fn set_metadata(&mut self, file_key: HasherOutT<T>, metadata: FileMetadata) {
         self.metadata.insert(file_key, metadata);
         self.file_data.insert(file_key, FileData::new());
     }

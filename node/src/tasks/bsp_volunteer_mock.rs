@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use log::{debug, error, info};
-use shc_common::types::{HasherOutT, Key, Metadata};
+use shc_common::types::{FileKey, FileMetadata, HasherOutT};
 use sp_trie::TrieLayout;
 use std::str::FromStr;
 
@@ -91,7 +91,7 @@ impl<SHC: StorageHubHandlerConfig> BspVolunteerMockTask<SHC> {
             .await?;
 
         // Construct file metadata.
-        let metadata = Metadata {
+        let metadata = FileMetadata {
             owner: event.who.to_string(),
             size: event.size as u64,
             fingerprint: event.fingerprint,
@@ -99,7 +99,7 @@ impl<SHC: StorageHubHandlerConfig> BspVolunteerMockTask<SHC> {
         };
 
         // Get the file key.
-        let file_key: Key = metadata
+        let file_key: FileKey = metadata
             .key::<<SHC::TrieLayout as TrieLayout>::Hash>()
             .as_ref()
             .try_into()?;

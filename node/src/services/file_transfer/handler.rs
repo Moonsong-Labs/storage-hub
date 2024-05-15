@@ -36,7 +36,7 @@ use sc_network::{
     IfDisconnected, NetworkPeers, NetworkRequest, ProtocolName, ReputationChange,
 };
 use sc_tracing::tracing::{debug, error, info, warn};
-use shc_common::types::Key;
+use shc_common::types::FileKey;
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
 use tokio::sync::Mutex;
 
@@ -60,9 +60,9 @@ pub struct FileTransferService {
     /// Substrate network service that gives access to P2p operations.
     network: Arc<ParachainNetworkService>,
     /// Registry of (peer, file key) pairs for which we accept requests.
-    peer_file_allow_list: HashSet<(PeerId, Key)>,
+    peer_file_allow_list: HashSet<(PeerId, FileKey)>,
     /// Registry of peers by file key, used for cleanup.
-    peers_by_file: HashMap<Key, Vec<PeerId>>,
+    peers_by_file: HashMap<FileKey, Vec<PeerId>>,
     /// The event bus provider for the file transfer service.
     /// Part of the actor framework, allows for emitting events.
     event_bus_provider: FileTransferServiceEventBusProvider,

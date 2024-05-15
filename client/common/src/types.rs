@@ -21,26 +21,26 @@ pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 
 type Hash = [u8; 32];
 
-/// Key is the identifier for a file.
+/// FileKey is the identifier for a file.
 /// Computed as the hash of the FileMetadata.
 #[derive(
     Encode, Decode, Clone, Copy, Debug, PartialEq, Eq, Default, Hash, Serialize, Deserialize,
 )]
-pub struct Key(Hash);
+pub struct FileKey(Hash);
 
-impl From<Hash> for Key {
+impl From<Hash> for FileKey {
     fn from(hash: Hash) -> Self {
         Self(hash)
     }
 }
 
-impl Into<Hash> for Key {
+impl Into<Hash> for FileKey {
     fn into(self) -> Hash {
         self.0
     }
 }
 
-impl From<&[u8]> for Key {
+impl From<&[u8]> for FileKey {
     fn from(bytes: &[u8]) -> Self {
         let mut hash = [0u8; 32];
         hash.copy_from_slice(&bytes);
@@ -48,19 +48,19 @@ impl From<&[u8]> for Key {
     }
 }
 
-impl AsRef<[u8]> for Key {
+impl AsRef<[u8]> for FileKey {
     fn as_ref(&self) -> &[u8] {
         &self.0
     }
 }
 
-impl From<&[u8; 32]> for Key {
+impl From<&[u8; 32]> for FileKey {
     fn from(bytes: &[u8; 32]) -> Self {
         Self(*bytes)
     }
 }
 
-impl AsRef<[u8; 32]> for Key {
+impl AsRef<[u8; 32]> for FileKey {
     fn as_ref(&self) -> &[u8; 32] {
         &self.0
     }
@@ -103,17 +103,17 @@ impl AsRef<[u8]> for Fingerprint {
 }
 
 // TODO: this is currently a placeholder in order to define Storage interface.
-/// Metadata contains information about a file.
+/// FileMetadata contains information about a file.
 /// Most importantly, the fingerprint which is the root Merkle hash of the file.
 #[derive(Encode, Decode, Clone, Debug, PartialEq, Eq)]
-pub struct Metadata {
+pub struct FileMetadata {
     pub owner: String,
     pub location: FileLocation,
     pub size: u64,
     pub fingerprint: Fingerprint,
 }
 
-impl Metadata {
+impl FileMetadata {
     pub fn new(owner: String, location: Vec<u8>, size: u64, fingerprint: Fingerprint) -> Self {
         Self {
             owner,

@@ -1,4 +1,4 @@
-use shc_common::types::{Chunk, ChunkId, FileProof, HasherOutT, Metadata};
+use shc_common::types::{Chunk, ChunkId, FileMetadata, FileProof, HasherOutT};
 use trie_db::TrieLayout;
 
 #[derive(Debug)]
@@ -58,11 +58,11 @@ pub trait FileStorage<T: TrieLayout>: 'static {
     fn delete_file(&mut self, key: &HasherOutT<T>);
 
     /// Get metadata for a file.
-    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<Metadata, FileStorageError>;
+    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError>;
 
     /// Set metadata for a file. This should be called before you start adding chunks since it
     /// will overwrite any previous Metadata and delete already stored file chunks.
-    fn set_metadata(&mut self, key: HasherOutT<T>, metadata: Metadata);
+    fn set_metadata(&mut self, key: HasherOutT<T>, metadata: FileMetadata);
 
     /// Get a file chunk from storage.
     fn get_chunk(&self, key: &HasherOutT<T>, chunk_id: &ChunkId)
