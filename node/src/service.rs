@@ -389,11 +389,14 @@ async fn start_dev_impl(
             }
         };
 
-    let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
-    let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
-    let sh_backend = StorageHubBackend {
-        file_storage, forest_storage
-    };
+    let sh_backend = None;
+    if provider_options.is_some() {
+        let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
+        let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
+        let sh_backend = Some(StorageHubBackend {
+            file_storage, forest_storage
+        });
+    }
 
     let rpc_builder = {
         let client = client.clone();
@@ -438,7 +441,7 @@ async fn start_dev_impl(
             &task_manager,
             network.clone(),
             client.clone(),
-            sh_backend.clone(),
+            sh_backend.clone().expect("StorageHub backend should already be initialized."),
             rpc_handlers,
             keystore.clone(),
             file_transfer_request_protocol_name,
@@ -650,11 +653,14 @@ async fn start_node_impl(
         );
     }
 
-    let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
-    let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
-    let sh_backend = StorageHubBackend {
-        file_storage, forest_storage
-    };
+    let sh_backend = None;
+    if provider_options.is_some() {
+        let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
+        let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
+        let sh_backend = Some(StorageHubBackend {
+            file_storage, forest_storage
+        });
+    }
 
     let rpc_builder = {
         let client = client.clone();
@@ -699,7 +705,7 @@ async fn start_node_impl(
             &task_manager,
             network.clone(),
             client.clone(),
-            sh_backend.clone(),
+            sh_backend.clone().expect("StorageHub backend should already be initialized."),
             rpc_handlers,
             keystore.clone(),
             file_transfer_request_protocol_name,
