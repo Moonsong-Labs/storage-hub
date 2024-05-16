@@ -311,7 +311,7 @@ where
             return Err(ForestStorageError::FileKeyAlreadyExists(file_key).into());
         }
 
-        let mut root = self.root.clone();
+        let mut root = self.root;
         let mut trie =
             TrieDBMutBuilder::<T>::from_existing(self.as_hash_db_mut(), &mut root).build();
 
@@ -333,7 +333,7 @@ where
     }
 
     fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>> {
-        let mut root = self.root.clone();
+        let mut root = self.root;
         let mut trie =
             TrieDBMutBuilder::<T>::from_existing(self.as_hash_db_mut(), &mut root).build();
 
