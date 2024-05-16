@@ -1,14 +1,18 @@
 use core::cmp::max;
 
 use codec::{Decode, Encode};
-use frame_support::{ensure, pallet_prelude::DispatchResult, traits::Get};
+use frame_support::{
+    ensure, pallet_prelude::DispatchResult, traits::nonfungibles_v2::Create, traits::Get,
+};
 use frame_system::pallet_prelude::BlockNumberFor;
+use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
+use sp_core::{Hasher, H256};
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
 };
 use sp_std::{vec, vec::Vec};
-use storage_hub_traits::ReadProvidersInterface;
+use storage_hub_traits::{MutateProvidersInterface, ReadProvidersInterface};
 
 use crate::{
     pallet,
@@ -20,7 +24,7 @@ use crate::{
     StorageRequestExpirations, StorageRequests,
 };
 use crate::{
-    types::{FileKey, TargetBspsRequired},
+    types::{CollectionConfigFor, FileKey, TargetBspsRequired},
     BspsAssignmentThreshold,
 };
 
@@ -58,6 +62,40 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
+    /// Create a bucket for a owner (user) under a given MSP account.
+    pub(crate) fn do_create_bucket(
+        owner: T::AccountId,
+        msp_account_id: T::AccountId,
+    ) -> DispatchResult {
+        let config: CollectionConfigFor<T> = CollectionConfig {
+            settings: CollectionSettings::all_enabled(),
+            max_supply: None,
+            mint_settings: MintSettings {
+                mint_type: MintType::Issuer,
+                price: None,
+                start_block: None,
+                end_block: None,
+                default_item_settings: ItemSettings::all_enabled(),
+            },
+        };
+
+        let collection_id = T::Nfts::create_collection(&owner, &owner, &config)?;
+
+        let msp_provider_id = <<T as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::get_provider(msp_account_id)
+                .ok_or(Error::<T>::NotABsp)?;
+
+        let bucket_id_hash = T::Hasher::hash(&collection_id.encode());
+        let bucket_id_hash = H256::from_slice(&bucket_id_hash.as_ref());
+
+        <T::Providers as MutateProvidersInterface>::add_bucket(
+            msp_provider_id,
+            owner,
+            bucket_id_hash,
+        )?;
+
+        Ok(())
+    }
+
     /// Request storage for a file.
     ///
     /// In the event that a storage request is created without any user multiaddresses (checkout `do_bsp_stop_storing`),

@@ -1,6 +1,7 @@
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::BoundedVec;
+use frame_support::{traits::Currency, BoundedVec};
 use frame_system::pallet_prelude::BlockNumberFor;
+use pallet_nfts::CollectionConfig;
 use scale_info::TypeInfo;
 
 use crate::Config;
@@ -110,3 +111,11 @@ pub type MaxMultiAddresses<T> =
 
 /// Alias for a bounded vector of [`MultiAddress`].
 pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;
+
+/// Alias for the `Balance` type used in the FileSystem pallet.
+type BalanceOf<T> =
+    <<T as crate::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+
+/// Alias for the `CollectionConfig` type used in the FileSystem pallet.
+pub(super) type CollectionConfigFor<T> =
+    CollectionConfig<BalanceOf<T>, BlockNumberFor<T>, <T as Config>::NftCollectionId>;

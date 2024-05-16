@@ -45,6 +45,7 @@ pallet-aura = { workspace = true }
 pallet-authorship = { workspace = true }
 pallet-balances = { workspace = true }
 pallet-message-queue = { workspace = true }
+pallet-nfts = { workspace = true }
 pallet-session = { workspace = true }
 pallet-sudo = { workspace = true }
 pallet-timestamp = { workspace = true }
@@ -115,6 +116,7 @@ std = [
 	"pallet-collator-selection/std",
 	"pallet-file-system/std",
 	"pallet-message-queue/std",
+	"pallet-nfts/std",
 	"pallet-proofs-dealer/std",
 	"pallet-randomness/std",
 	"pallet-session/std",
@@ -167,6 +169,7 @@ runtime-benchmarks = [
 	"pallet-collator-selection/runtime-benchmarks",
 	"pallet-file-system/runtime-benchmarks",
 	"pallet-message-queue/runtime-benchmarks",
+	"pallet-nfts/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-randomness/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
@@ -197,6 +200,7 @@ try-runtime = [
 	"pallet-collator-selection/try-runtime",
 	"pallet-file-system/try-runtime",
 	"pallet-message-queue/try-runtime",
+	"pallet-nfts/try-runtime",
 	"pallet-proofs-dealer/try-runtime",
 	"pallet-randomness/try-runtime",
 	"pallet-session/try-runtime",

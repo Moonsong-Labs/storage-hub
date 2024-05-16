@@ -788,8 +788,6 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
 
 /// Implement the StorageProvidersInterface trait for the Storage Providers pallet.
 impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
-    type AccountId = T::AccountId;
-    type Provider = HashId<T>;
     type StorageData = T::StorageData;
     type BucketId = HashId<T>;
     type MerklePatriciaRoot = T::MerklePatriciaRoot;
@@ -835,12 +833,11 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
         msp_id: MainStorageProviderId<T>,
         user_id: T::AccountId,
         bucket_id: BucketId<T>,
-        bucket_root: MerklePatriciaRoot<T>,
     ) -> DispatchResult {
         // TODO: Check that the bucket does not exist yet
         // TODO: Get BucketId by hashing Bucket with salt, add it to the MSP vector of buckets
         let bucket = Bucket {
-            root: bucket_root,
+            root: MerklePatriciaRoot::<T>::default(),
             user_id,
             msp_id,
         };

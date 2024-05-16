@@ -105,11 +105,7 @@ pub trait ReadProvidersInterface: ProvidersInterface {
 }
 
 /// Interface to allow the File System pallet to modify the data used by the Storage Providers pallet.
-pub trait MutateProvidersInterface {
-    /// The type which can be used to identify accounts.
-    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-    /// The type which represents a registered Provider.
-    type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+pub trait MutateProvidersInterface: ProvidersInterface {
     /// Data type for the measurement of storage size
     type StorageData: Parameter
         + Member
@@ -162,7 +158,6 @@ pub trait MutateProvidersInterface {
         msp_id: Self::Provider,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
-        bucket_root: Self::MerklePatriciaRoot,
     ) -> DispatchResult;
 
     /// Change the root of a bucket

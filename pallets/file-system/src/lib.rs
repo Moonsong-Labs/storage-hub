@@ -44,19 +44,25 @@ mod benchmarking;
 #[frame_support::pallet]
 pub mod pallet {
     use super::types::*;
-    use codec::HasCompact;
+    use codec::{Codec, HasCompact};
     use frame_support::{
         dispatch::DispatchResult,
         pallet_prelude::{ValueQuery, *},
         sp_runtime::traits::{AtLeast32Bit, CheckEqual, MaybeDisplay, SimpleBitOps},
+        traits::{
+            nonfungibles_v2::{Create, Inspect as NonFungiblesInspect},
+            ReservableCurrency,
+        },
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
+    use sp_core::{Hasher, H256};
     use sp_runtime::{traits::EnsureFrom, BoundedVec};
     use sp_runtime::{
         traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
         FixedPointNumber,
     };
+    use sp_std::fmt::Display;
 
     // TODO: add conditional to check that block number does not exceed u64 type. It it does, the fixed point number that we convert to from a block
     // number might be too loarge to fit into the threshold type.
@@ -66,9 +72,10 @@ pub mod pallet {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
+        // TODO: change H256 with generic parameter
         /// The trait for reading and mutating storage provider data.
-        type Providers: storage_hub_traits::ReadProvidersInterface<AccountId = Self::AccountId, Provider = <Self::Providers as storage_hub_traits::MutateProvidersInterface>::Provider>
-            + storage_hub_traits::MutateProvidersInterface<AccountId = Self::AccountId, MerklePatriciaRoot = <Self::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash>;
+        type Providers: storage_hub_traits::ReadProvidersInterface<AccountId = Self::AccountId>
+            + storage_hub_traits::MutateProvidersInterface<AccountId = Self::AccountId, BucketId = H256, MerklePatriciaRoot = <Self::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash>;
 
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: storage_hub_traits::ProofsDealerInterface<
@@ -125,6 +132,25 @@ pub mod pallet {
             + PartialOrd
             + FixedPointNumber
             + EnsureFrom<u128>;
+
+        /// The currency mechanism, used for paying for reserves.
+        type Currency: ReservableCurrency<Self::AccountId>;
+
+        /// Identifier for the collection of NFT.
+        type NftCollectionId: Member + Parameter + MaxEncodedLen + Copy + Codec + Display;
+
+        /// The type used to identify an NFT within a collection.
+        type NftId: Member + Parameter + MaxEncodedLen + Copy + Display;
+
+        /// Registry for minted NFTs.
+        type Nfts: NonFungiblesInspect<
+                Self::AccountId,
+                ItemId = Self::NftId,
+                CollectionId = Self::NftCollectionId,
+            > + Create<Self::AccountId, CollectionConfigFor<Self>>;
+
+        /// The hasher used to generate a bucket Id from a collection id.
+        type Hasher: Hasher;
 
         /// The multiplier increases the threshold over time (blocks) which increases the
         /// likelihood of a BSP successfully volunteering to store a file.
@@ -366,8 +392,12 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn create_bucket(_origin: OriginFor<T>) -> DispatchResult {
-            todo!()
+        pub fn create_bucket(origin: OriginFor<T>, msp_account_id: T::AccountId) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            Self::do_create_bucket(who, msp_account_id)?;
+
+            Ok(())
         }
 
         /// Issue a new storage request for a file
