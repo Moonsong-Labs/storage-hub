@@ -202,11 +202,23 @@ pub fn new_partial(
     })
 }
 
+#[derive(Clone)]
+pub struct StorageHubBackend {
+    pub file_storage: Arc<RwLock<InMemoryFileStorage<LayoutV1<RefHasher>>>>,
+    pub forest_storage: Arc<RwLock<InMemoryForestStorage<LayoutV1<RefHasher>>>>
+}
+
+impl StorageHubHandlerConfig for StorageHubBackend {
+    type FileStorage = InMemoryFileStorage<LayoutV1<RefHasher>>;
+    type ForestStorage = InMemoryForestStorage<LayoutV1<RefHasher>>;
+}
+
 async fn start_storage_provider(
     provider_options: ProviderOptions,
     task_manager: &TaskManager,
     network: Arc<ParachainNetworkService>,
     client: Arc<ParachainClient>,
+    storage_hub_backend: StorageHubBackend,
     rpc_handlers: RpcHandlers,
     keystore: KeystorePtr,
     file_transfer_request_protocol_name: ProtocolName,
@@ -231,23 +243,13 @@ async fn start_storage_provider(
     )
     .await;
 
-    let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
-    let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
-
-    struct InMemoryStorageHubConfig {}
-
-    impl StorageHubHandlerConfig for InMemoryStorageHubConfig {
-        type FileStorage = InMemoryFileStorage<LayoutV1<RefHasher>>;
-        type ForestStorage = InMemoryForestStorage<LayoutV1<RefHasher>>;
-    }
-
     // Initialise the StorageHubHandler, for tasks to have access to the services.
-    let sh_handler = StorageHubHandler::<InMemoryStorageHubConfig>::new(
+    let sh_handler = StorageHubHandler::<StorageHubBackend>::new(
         task_spawner,
         file_transfer_service_handle,
         blockchain_service_handle,
-        file_storage,
-        forest_storage,
+        storage_hub_backend.file_storage,
+        storage_hub_backend.forest_storage,
     );
 
     // Starting the tasks according to the provider type.
@@ -387,14 +389,22 @@ async fn start_dev_impl(
             }
         };
 
+    let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
+    let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
+    let sh_backend = StorageHubBackend {
+        file_storage, forest_storage
+    };
+
     let rpc_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
+        let sh_backend = sh_backend.clone();
 
         Box::new(move |deny_unsafe, _| {
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
+                storage_hub_backend: sh_backend.clone(),
                 command_sink: command_sink.clone(),
                 deny_unsafe,
             };
@@ -428,6 +438,7 @@ async fn start_dev_impl(
             &task_manager,
             network.clone(),
             client.clone(),
+            sh_backend.clone(),
             rpc_handlers,
             keystore.clone(),
             file_transfer_request_protocol_name,
@@ -639,14 +650,22 @@ async fn start_node_impl(
         );
     }
 
+    let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
+    let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
+    let sh_backend = StorageHubBackend {
+        file_storage, forest_storage
+    };
+
     let rpc_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
+        let sh_backend = sh_backend.clone();
 
         Box::new(move |deny_unsafe, _| {
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
+                storage_hub_backend: sh_backend.clone(),
                 command_sink: None,
                 deny_unsafe,
             };
@@ -680,6 +699,7 @@ async fn start_node_impl(
             &task_manager,
             network.clone(),
             client.clone(),
+            sh_backend.clone(),
             rpc_handlers,
             keystore.clone(),
             file_transfer_request_protocol_name,

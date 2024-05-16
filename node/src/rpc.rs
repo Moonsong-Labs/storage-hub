@@ -16,11 +16,14 @@ use storage_hub_runtime::{opaque::Block, AccountId, Balance, Nonce};
 
 pub use sc_rpc::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
+use shc_rpc::FileSystemRpc;
 use shc_rpc::FileSystemApiServer;
 
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
+
+use crate::service::StorageHubBackend;
 
 /// A type representing all RPC extensions.
 pub type RpcExtension = jsonrpsee::RpcModule<()>;
@@ -31,6 +34,7 @@ pub struct FullDeps<C, P> {
     pub client: Arc<C>,
     /// Transaction pool instance.
     pub pool: Arc<P>,
+    pub storage_hub_backend: StorageHubBackend,
     /// Manual seal command sink
     pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<H256>>>,
     /// Whether to deny unsafe calls
@@ -60,13 +64,14 @@ where
     let FullDeps {
         client,
         pool,
+        storage_hub_backend,
         command_sink,
         deny_unsafe,
     } = deps;
 
     io.merge(System::new(client.clone(), pool, deny_unsafe).into_rpc())?;
     io.merge(TransactionPayment::new(client.clone()).into_rpc())?;
-    // io.merge(FileSystemRpc::new(client, file_storage, forest_storage).into_rpc())?;
+    io.merge(FileSystemRpc::new(client, storage_hub_backend.file_storage, storage_hub_backend.forest_storage).into_rpc())?;
 
     if let Some(command_sink) = command_sink {
         io.merge(
