@@ -25,7 +25,6 @@ pub trait StorageHubHandlerConfig: StorageHubHandlerInitializer + Send + 'static
     ///
     /// This is primarily used for constructing
     type TrieLayout: TrieLayout;
-
     /// Type which implements [`FileStorage`].
     ///
     /// This layer stores all files (chunked).

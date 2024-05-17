@@ -57,7 +57,7 @@ pub struct FileTransferService {
     protocol_name: ProtocolName,
     /// Receiver for incoming requests.
     request_receiver: async_channel::Receiver<IncomingRequest>,
-    /// Substrate network service that gives access to P2p operations.
+    /// Substrate network service that gives access to p2p operations.
     network: Arc<ParachainNetworkService>,
     /// Registry of (peer, file key) pairs for which we accept requests.
     peer_file_allow_list: HashSet<(PeerId, FileKey)>,
