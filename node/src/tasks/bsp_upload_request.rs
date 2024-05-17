@@ -46,8 +46,8 @@ where
                 target: LOG_TARGET,
                 "Received invalid proof for chunk: {} (file: {:?}))", event.chunk_with_proof.proven.key, event.file_key
             );
-            // TODO: Record this for further reputation actions
-            return Ok(());
+            // TODO: Unregister file and peer id from the file transfer service registry.
+            return Err(anyhow::anyhow!("Invalid proof"));
         }
 
         let file_key: HasherOutT<SHC::TrieLayout> = TryFrom::try_from(*event.file_key.as_ref())
@@ -73,28 +73,42 @@ where
                         "Received duplicate chunk with key: {}",
                         event.chunk_with_proof.proven.key
                     );
-                    // TODO: Record this for further reputation actions
-                }
-                FileStorageWriteError::FailedToGetFileChunk
-                | FileStorageWriteError::FailedToInsertFileChunk => {
-                    error!(
-                        target: LOG_TARGET,
-                        "Internal trie read/write error {:?}:{}",
-                        event.file_key,
-                        event.chunk_with_proof.proven.key
-                    );
+
+                    // TODO: Consider informing this to the file transfer service so that it can handle reputation for this peer id.
                 }
                 FileStorageWriteError::FileDoesNotExist => {
                     error!(
                         target: LOG_TARGET,
                         "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key
                     );
+
+                    // TODO: Unregister file and peer id from the file transfer service registry.
+                    return Err(anyhow::anyhow!("File does not exist"));
+                }
+                FileStorageWriteError::FailedToGetFileChunk
+                | FileStorageWriteError::FailedToInsertFileChunk => {
+                    // This internal error should not happen.
+                    // This means that something is seriously wrong, so we error out the whole task.
+                    error!(
+                        target: LOG_TARGET,
+                        "Internal trie read/write error {:?}:{}",
+                        event.file_key,
+                        event.chunk_with_proof.proven.key
+                    );
+
+                    // TODO: Unregister file and peer id from the file transfer service registry.
+                    return Err(anyhow::anyhow!("Internal trie read/write error"));
                 }
                 FileStorageWriteError::FingerprintAndStoredFileMismatch => {
+                    // This should never happen, given that the first check in the handler is verifying the proof.
+                    // This means that something is seriously wrong, so we error out the whole task.
                     error!(
                         target: LOG_TARGET,
                         "Invariant broken! Fingerprint and stored file mismatch for key {:?}.", event.file_key
                     );
+
+                    // TODO: Unregister file and peer id from the file transfer service registry.
+                    return Err(anyhow::anyhow!("Invariant broken"));
                 }
             },
         }
