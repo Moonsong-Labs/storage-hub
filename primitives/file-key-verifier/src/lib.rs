@@ -20,7 +20,7 @@ where
 }
 
 /// Implement the `CommitmentVerifier` trait for the `TrieVerifier` struct.
-impl<T: TrieLayout> CommitmentVerifier for TrieVerifier<T>
+impl<T: TrieLayout> CommitmentVerifier for FileKeyVerifier<T>
 where
     <T::Hash as sp_core::Hasher>::Out: TryFrom<Vec<u8>>,
 {

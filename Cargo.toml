@@ -9,7 +9,7 @@ homepage = "https://moonsonglabs.com/"
 panic = "unwind"
 
 [workspace]
-members = ["runtime", "pallets/*", "node", "client/*", "support/*"]
+members = ["runtime", "pallets/*", "node", "client/*", "support/*", "primitives/*"]
 resolver = "2"
 
 [workspace.dependencies]
