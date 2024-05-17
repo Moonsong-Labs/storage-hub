@@ -4,7 +4,6 @@ use codec::decode_from_bytes;
 use codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use sp_core::Hasher;
-use sp_core::H256;
 use sp_trie::CompactProof;
 use trie_db::TrieLayout;
 
@@ -26,7 +25,7 @@ type FileLocation = Vec<u8>;
 
 type Hash = [u8; 32];
 
-#[derive(Encode, Decode, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Encode, Decode, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Fingerprint(Hash);
 
 impl Fingerprint {
@@ -198,5 +197,5 @@ pub struct FileProof {
     /// The compact proof.
     pub proof: SerializableCompactProof,
     /// The root hash of the trie, also known as the fingerprint of the file.
-    pub root: H256,
+    pub root: Fingerprint,
 }

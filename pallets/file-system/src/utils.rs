@@ -187,7 +187,7 @@ where
                 .as_ref()
                 .try_into()
                 .map_err(|_| Error::<T>::FailedToEncodeFingerprint)?,
-            &who.encode()
+            &bsp.encode()
                 .try_into()
                 .map_err(|_| Error::<T>::FailedToEncodeBsp)?,
         )?;
