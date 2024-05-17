@@ -105,7 +105,9 @@ impl<SHC: StorageHubHandlerConfig> BspVolunteerMockTask<SHC> {
             .try_into()?;
 
         // Optimistically register the file for upload in the file transfer service.
-        // This solves the race condition between the user and the BSP.
+        // This solves the race condition between the user and the BSP, where the user could react faster
+        // to the BSP volunteering than the BSP, and therefore initiate a new upload request before the
+        // BSP has registered the file and peer ID in the file transfer service.
         for peer_id in event.user_peer_ids.iter() {
             let peer_id = PeerId::from_bytes(peer_id.as_slice())
                 .map_err(|_| anyhow!("PeerId should be valid; qed"))?;
