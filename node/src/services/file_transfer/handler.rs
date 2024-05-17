@@ -339,10 +339,13 @@ impl FileTransferService {
                     }
                 };
                 if self.peer_file_allow_list.contains(&(peer, file_key)) {
+                    // TODO: Respond to the pending_response with Ok.
+
                     self.emit(RemoteUploadRequest {
                         peer,
                         file_key,
                         chunk_with_proof,
+                        // TODO: Remove this and respond within this function.
                         maybe_pending_response: Arc::new(Mutex::new(Some(pending_response))),
                     });
                 } else {
@@ -357,6 +360,7 @@ impl FileTransferService {
                 }
             }
             Some(schema::v1::provider::request::Request::RemoteDownloadDataRequest(r)) => {
+                // TODO: Respond to the pending_response with some criteria of what is a valid download request.
                 let file_key = match bincode::deserialize(&r.file_key) {
                     Ok(file_key) => file_key,
                     Err(e) => {
@@ -376,6 +380,7 @@ impl FileTransferService {
                 self.emit(RemoteDownloadRequest {
                     file_key,
                     chunk_id,
+                    // TODO: Remove this and respond within this function.
                     maybe_pending_response: Arc::new(Mutex::new(Some(pending_response))),
                 });
             }
