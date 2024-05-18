@@ -30,7 +30,8 @@ where
 
     /// Verifies a proof against a root (i.e. commitment) and a set of challenges.
     ///
-    /// Assumes that the challenges are ordered in ascending numerical order, and not repeated.
+    /// Iterates over the challenges and checks if there is a pair of consecutive
+    /// leaves that match the challenge, or an exact leaf that matches the challenge.
     fn verify_proof(
         root: &Self::Key,
         challenges: &[Self::Key],
