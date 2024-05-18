@@ -19,7 +19,7 @@ where
     pub _phantom: core::marker::PhantomData<T>,
 }
 
-/// Implement the `CommitmentVerifier` trait for the `TrieVerifier` struct.
+/// Implement the `CommitmentVerifier` trait for the `ForestVerifier` struct.
 impl<T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for ForestVerifier<T, H_LENGTH>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
