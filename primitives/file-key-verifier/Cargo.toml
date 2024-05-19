@@ -1,6 +1,6 @@
 [package]
 name = "shp-file-key-verifier"
-description = "An implementation of CommitmentVerifier trait for verifying file keys whose challenges are given by calculating the modulo of the challenge seeds with the number of chunks in the file."
+description = "An implementation of CommitmentVerifier trait for verifying file keys whose challenges are given by calculating the modulo of the challenged hashes with the number of chunks in the file."
 version = "0.1.0"
 homepage = { workspace = true }
 license = { workspace = true }
@@ -16,6 +16,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { workspace = true }
+num-bigint = { workspace = true }
 scale-info = { workspace = true }
 
 # Local

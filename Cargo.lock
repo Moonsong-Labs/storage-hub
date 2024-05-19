@@ -12370,6 +12370,7 @@ dependencies = [
  "bincode",
  "frame-support 28.0.0",
  "frame-system 28.0.0",
+ "num-bigint",
  "parity-scale-codec",
  "reference-trie",
  "scale-info",
@@ -12381,6 +12382,40 @@ dependencies = [
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "storage-hub-traits",
  "trie-db 0.29.1",
+]
+
+[[package]]
+name = "shp-forest-verifier"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "frame-support 28.0.0",
+ "frame-system 28.0.0",
+ "parity-scale-codec",
+ "reference-trie",
+ "scale-info",
+ "serde",
+ "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-io 30.0.0",
+ "sp-runtime 31.0.1",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
+ "storage-hub-traits",
+ "trie-db 0.29.1",
+]
+
+[[package]]
+name = "shp-traits"
+version = "0.1.0"
+dependencies = [
+ "frame-support 28.0.0",
+ "frame-system 28.0.0",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-io 30.0.0",
+ "sp-runtime 31.0.1",
 ]
 
 [[package]]
