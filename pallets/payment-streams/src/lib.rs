@@ -47,10 +47,7 @@ pub mod pallet {
         type NativeBalance: Inspect<Self::AccountId>
             + Mutate<Self::AccountId>
             + hold::Inspect<Self::AccountId, Reason = Self::RuntimeHoldReason>
-            // , Reason = Self::HoldReason> We will probably have to hold deposits
-            + hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>
-            + freeze::Inspect<Self::AccountId>
-            + freeze::Mutate<Self::AccountId>;
+            + hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>;
 
         /// The trait for reading storage provider data.
         type ProvidersPallet: ProvidersInterface<AccountId = Self::AccountId>;
