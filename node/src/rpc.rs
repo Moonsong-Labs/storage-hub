@@ -9,11 +9,14 @@ use std::sync::Arc;
 
 use crate::types::StorageHubBackend;
 
+use file_manager::in_memory::InMemoryFileStorage;
+use reference_trie::RefHasher;
 use sc_consensus_manual_seal::{
     rpc::{ManualSeal, ManualSealApiServer},
     EngineCommand,
 };
 use sp_core::H256;
+use sp_trie::LayoutV1;
 use storage_hub_runtime::{opaque::Block, AccountId, Balance, Nonce};
 
 pub use sc_rpc::DenyUnsafe;
@@ -73,7 +76,7 @@ where
     io.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 
     if let Some(storage_hub_backend) = storage_hub_backend {
-        io.merge(FileSystemRpc::new(storage_hub_backend.file_storage).into_rpc())?;
+        io.merge(FileSystemRpc::<InMemoryFileStorage<LayoutV1<RefHasher>>, LayoutV1<RefHasher>>::new(storage_hub_backend.file_storage).into_rpc())?;
     }
 
     if let Some(command_sink) = command_sink {

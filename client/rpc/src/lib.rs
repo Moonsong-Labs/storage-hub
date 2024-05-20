@@ -10,6 +10,10 @@ use sp_core::H256;
 
 use sp_runtime::AccountId32;
 
+use sp_trie::MemoryDB;
+use sp_trie::TrieDBMutBuilder;
+use sp_trie::TrieLayout;
+use sp_trie::TrieMut;
 use storage_hub_infra::constants::FILE_CHUNK_SIZE;
 use storage_hub_infra::types::Metadata;
 
@@ -21,6 +25,7 @@ use log::error;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::Read;
+use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -38,30 +43,33 @@ pub trait FileSystemApi {
         file_path: String,
         location: String,
         owner: AccountId32,
-    ) -> RpcResult<()>;
+    ) -> RpcResult<Metadata>;
 }
 
-pub struct FileSystemRpc<FL> {
+pub struct FileSystemRpc<FL, T> {
     file_storage: Arc<RwLock<FL>>,
+    _marker: PhantomData<T>,
 }
 
-impl<FL> FileSystemRpc<FL> {
+impl<FL, T> FileSystemRpc<FL, T> {
     pub fn new(file_storage: Arc<RwLock<FL>>) -> Self {
-        Self { file_storage }
+        Self { file_storage, _marker: Default::default() }
     }
 }
 
 #[async_trait]
-impl<FL> FileSystemApiServer for FileSystemRpc<FL>
+impl<FL, T> FileSystemApiServer for FileSystemRpc<FL, T>
 where
     FL: Send + Sync + FileStorage,
+    T: Send + Sync + TrieLayout + 'static,
+    <T::Hash as sp_core::Hasher>::Out: Into<H256>
 {
     async fn upload_file(
         &self,
         file_path: String,
         location: String,
         owner: AccountId32,
-    ) -> RpcResult<()> {
+    ) -> RpcResult<Metadata> {
         let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
         let mut file_chunks = Vec::new();
 
@@ -92,15 +100,15 @@ where
             }
         }
 
-        // let mut memdb = MemoryDB::<FL>::default();
-        // let root = Default::default();
-        // {
-        //     let mut t = TrieDBMutBuilder::<FL>::new(&mut memdb, &mut root).build();
-        //     for (chunk_id, chunk) in file_chunks.iter().enumerate() {
-        //         let chunk_id = chunk_id as u64;
-        //         t.insert(chunk_id, chunk).expect("error");
-        //     }
-        // }
+        let mut memdb = MemoryDB::<T::Hash>::default();
+        let mut root = Default::default();
+        {
+            let mut t = TrieDBMutBuilder::<T>::new(&mut memdb, &mut root).build();
+            for (chunk_id, chunk) in file_chunks.iter().enumerate() {
+                let chunk_id = chunk_id.to_be_bytes();
+                t.insert(&chunk_id, chunk).expect("error");
+            }
+        }
 
         let mut file_storage_lock = self.file_storage.write().await;
 
@@ -109,9 +117,7 @@ where
 
         let file_metadata = Metadata {
             size: file_size,
-            // TODO(Arthur/Alexandru): Fingerprint is a missing piece right now.
-            // We will get it from `FileData`.
-            fingerprint: H256::default(),
+            fingerprint: root.into(),
             owner: owner.to_string(),
             location: location.clone().into(),
         };
@@ -125,7 +131,7 @@ where
                 .map_err(into_rpc_error)?;
         }
 
-        Ok(())
+        Ok(file_metadata)
     }
 }
 
