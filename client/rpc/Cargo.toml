@@ -12,23 +12,31 @@ edition = { workspace = true }
 codec = { workspace = true }
 log = { workspace = true }
 jsonrpsee = { workspace = true }
+serde = { workspace =  true }
 tokio = { workspace = true }
 
 # Substrate
+sc-client-api = { workspace = true }
 sc-transaction-pool-api = { workspace = true }
 sp-api = { workspace = true }
 sp-blockchain = { workspace = true }
+sp-block-builder = { workspace = true }
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
+sp-trie = { workspace = true }
 
 # Local
 file-manager = { workspace =  true }
 forest-manager = { workspace = true }
+pallet-file-system = { workspace = true }
 storage-hub-infra = { workspace = true }
+storage-hub-runtime = { workspace = true }
 
 [features]
 default = ["std"]
 std = [
   "sp-api/std",
-  "sp-runtime/std",
+  "sp-core/std",
+  "pallet-file-system/std",
+  "storage-hub-runtime/std"
 ]

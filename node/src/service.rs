@@ -11,6 +11,7 @@ use forest_manager::in_memory::InMemoryForestStorage;
 use futures::{Stream, StreamExt};
 use polkadot_primitives::{HeadData, ValidationCode};
 use reference_trie::RefHasher;
+use sp_runtime::traits::BlakeTwo256;
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
@@ -63,6 +64,7 @@ use crate::{
         file_transfer::spawn_file_transfer_service,
         StorageHubHandler, StorageHubHandlerConfig,
     },
+    types::StorageHubBackend,
 };
 
 #[cfg(not(feature = "runtime-benchmarks"))]
@@ -200,17 +202,6 @@ pub fn new_partial(
         select_chain,
         other: (block_import, telemetry, telemetry_worker_handle),
     })
-}
-
-#[derive(Clone)]
-pub struct StorageHubBackend {
-    pub file_storage: Arc<RwLock<InMemoryFileStorage<LayoutV1<RefHasher>>>>,
-    pub forest_storage: Arc<RwLock<InMemoryForestStorage<LayoutV1<RefHasher>>>>
-}
-
-impl StorageHubHandlerConfig for StorageHubBackend {
-    type FileStorage = InMemoryFileStorage<LayoutV1<RefHasher>>;
-    type ForestStorage = InMemoryForestStorage<LayoutV1<RefHasher>>;
 }
 
 async fn start_storage_provider(

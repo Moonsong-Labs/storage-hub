@@ -9,6 +9,7 @@ mod rpc;
 mod service;
 mod services;
 mod tasks;
+mod types;
 
 fn main() -> sc_cli::Result<()> {
     command::run()
