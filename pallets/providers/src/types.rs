@@ -29,6 +29,7 @@ pub struct MainStorageProvider<T: Config> {
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub value_prop: ValueProposition<T>,
     pub last_capacity_change: BlockNumberFor<T>,
+    pub payment_account: T::AccountId,
 }
 
 /// Structure that represents a Backup Storage Provider. It holds the total data that the BSP is able to store, the amount of data that it is storing,
@@ -41,6 +42,7 @@ pub struct BackupStorageProvider<T: Config> {
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub root: MerklePatriciaRoot<T>,
     pub last_capacity_change: BlockNumberFor<T>,
+    pub payment_account: T::AccountId,
 }
 
 /// Structure that represents a Bucket. It holds the root of the Merkle Patricia Trie, the User ID that owns the bucket,

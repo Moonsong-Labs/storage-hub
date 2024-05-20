@@ -7,7 +7,10 @@ use crate::{
     Config, Error, Event, StorageRequestExpirations,
 };
 use frame_support::{
-    assert_noop, assert_ok, dispatch::DispatchResultWithPostInfo, traits::Hooks, weights::Weight,
+    assert_noop, assert_ok,
+    dispatch::DispatchResultWithPostInfo,
+    traits::{Hooks, OriginTrait},
+    weights::Weight,
 };
 use sp_core::H256;
 use sp_runtime::{
@@ -1138,6 +1141,7 @@ fn bsp_sign_up(
         bsp_signed.clone(),
         storage_amount,
         multiaddresses,
+        bsp_signed.clone().into_signer().unwrap()
     ));
 
     // Advance enough blocks for randomness to be valid

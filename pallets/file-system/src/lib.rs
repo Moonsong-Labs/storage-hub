@@ -67,12 +67,12 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         /// The trait for reading and mutating storage provider data.
-        type Providers: storage_hub_traits::ReadProvidersInterface<AccountId = Self::AccountId, Provider = <Self::Providers as storage_hub_traits::MutateProvidersInterface>::Provider>
+        type Providers: storage_hub_traits::ReadProvidersInterface<AccountId = Self::AccountId, ProviderId = <Self::Providers as storage_hub_traits::MutateProvidersInterface>::ProviderId>
             + storage_hub_traits::MutateProvidersInterface<AccountId = Self::AccountId, MerklePatriciaRoot = <Self::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash>;
 
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: storage_hub_traits::ProofsDealerInterface<
-            Provider = <Self::Providers as storage_hub_traits::ProvidersInterface>::Provider,
+            ProviderId = <Self::Providers as storage_hub_traits::ProvidersInterface>::ProviderId,
         >;
 
         /// Type for identifying a file, generally a hash.

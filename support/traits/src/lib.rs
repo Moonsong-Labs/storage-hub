@@ -30,8 +30,14 @@ pub trait ProvidersInterface {
     type Balance: fungible::Inspect<Self::AccountId> + fungible::hold::Inspect<Self::AccountId>;
     /// The type which can be used to identify accounts.
     type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-    /// The type which represents a registered Provider.
-    type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a registered Provider's ID.
+    type ProviderId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + Ord
+        + MaxEncodedLen
+        + Copy;
     /// The type corresponding to the root of a registered Provider.
     type MerkleHash: Parameter
         + Member
@@ -48,17 +54,20 @@ pub trait ProvidersInterface {
         + MaxEncodedLen
         + FullCodec;
     /// Check if an account is a registered Provider.
-    fn is_provider(who: Self::Provider) -> bool;
+    fn is_provider(who: Self::ProviderId) -> bool;
 
-    /// Get Provider from AccountId, if it is a registered Provider.
-    fn get_provider(who: Self::AccountId) -> Option<Self::Provider>;
+    /// Get the ProviderId from AccountId, if it is a registered Provider.
+    fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId>;
+
+    /// Get the payment account of a registered Provider.
+    fn get_provider_payment_account(who: Self::ProviderId) -> Option<Self::AccountId>;
 
     /// Get the root for a registered Provider.
-    fn get_root(who: Self::Provider) -> Option<Self::MerkleHash>;
+    fn get_root(who: Self::ProviderId) -> Option<Self::MerkleHash>;
 
     /// Get the stake for a registered  Provider.
     fn get_stake(
-        who: Self::Provider,
+        who: Self::ProviderId,
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
 }
 
@@ -92,17 +101,17 @@ pub trait ReadProvidersInterface: ProvidersInterface {
     type MaxNumberOfMultiAddresses: Get<u32>;
 
     /// Check if provider is a BSP.
-    fn is_bsp(who: &Self::Provider) -> bool;
+    fn is_bsp(who: &Self::ProviderId) -> bool;
 
     /// Check if provider is a MSP.
-    fn is_msp(who: &Self::Provider) -> bool;
+    fn is_msp(who: &Self::ProviderId) -> bool;
 
     /// Get number of registered BSPs.
     fn get_number_of_bsps() -> Self::SpCount;
 
     /// Get multiaddresses of a BSP.
     fn get_bsp_multiaddresses(
-        who: &Self::Provider,
+        who: &Self::ProviderId,
     ) -> Result<BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>, DispatchError>;
 }
 
@@ -111,7 +120,7 @@ pub trait MutateProvidersInterface {
     /// The type which can be used to identify accounts.
     type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
     /// The type which represents a registered Provider.
-    type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    type ProviderId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
     /// Data type for the measurement of storage size
     type StorageData: Parameter
         + Member
@@ -161,7 +170,7 @@ pub trait MutateProvidersInterface {
 
     /// Add a new Bucket as a Provider
     fn add_bucket(
-        msp_id: Self::Provider,
+        msp_id: Self::ProviderId,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         bucket_root: Self::MerklePatriciaRoot,
@@ -175,7 +184,7 @@ pub trait MutateProvidersInterface {
 
     /// Change the root of a BSP
     fn change_root_bsp(
-        bsp_id: Self::Provider,
+        bsp_id: Self::ProviderId,
         new_root: Self::MerklePatriciaRoot,
     ) -> DispatchResult;
 
@@ -186,13 +195,13 @@ pub trait MutateProvidersInterface {
 /// The interface to subscribe to updates on the Storage Providers pallet.
 pub trait SubscribeProvidersInterface {
     /// The type which represents a registered Provider.
-    type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    type ProviderId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
 
     /// Subscribe to the sign off of a BSP.
-    fn subscribe_bsp_sign_off(who: &Self::Provider) -> DispatchResult;
+    fn subscribe_bsp_sign_off(who: &Self::ProviderId) -> DispatchResult;
 
     /// Subscribe to the sign up of a BSP.
-    fn subscribe_bsp_sign_up(who: &Self::Provider) -> DispatchResult;
+    fn subscribe_bsp_sign_up(who: &Self::ProviderId) -> DispatchResult;
 }
 
 /// The interface for the ProofsDealer pallet.
@@ -202,7 +211,7 @@ pub trait SubscribeProvidersInterface {
 /// submit a new challenge with priority.
 pub trait ProofsDealerInterface {
     /// The type which represents a registered Provider.
-    type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    type ProviderId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
     /// The type that represents the proof.
     type Proof: Parameter + Member + Debug;
     /// The type corresponding to the root of a registered Provider.
@@ -223,7 +232,7 @@ pub trait ProofsDealerInterface {
 
     /// Verify a proof for a given Provider, who should have a given Root.
     fn verify_proof(
-        who: &Self::Provider,
+        who: &Self::ProviderId,
         root: &Self::MerkleHash,
         proof: &Self::Proof,
     ) -> DispatchResult;
@@ -271,6 +280,14 @@ pub trait PaymentStreamsInterface {
         + fungible::hold::Mutate<Self::AccountId>;
     /// The type which represents an account identifier.
     type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a provider identifier.
+    type ProviderId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + Ord
+        + MaxEncodedLen
+        + Copy;
     /// The type which represents a block number.
     type BlockNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
     /// The type which represents a payment stream.
@@ -285,33 +302,33 @@ pub trait PaymentStreamsInterface {
 
     /// Create a new payment stream from a user to a Backup Storage Provider.
     fn create_payment_stream(
-        bsp_account: &Self::AccountId,
+        bsp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         rate: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult;
 
     /// Update the rate of an existing payment stream.
     fn update_payment_stream(
-        bsp_account: &Self::AccountId,
+        bsp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         rate: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult;
 
     /// Delete a payment stream.
     fn delete_payment_stream(
-        bsp_account: &Self::AccountId,
+        bsp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> DispatchResult;
 
     /// Get the payment stream information for a user and a Backup Storage Provider.
     fn get_payment_stream_info(
-        bsp_account: &Self::AccountId,
+        bsp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> Option<Self::PaymentStream>;
 
     /// Update the last valid proof of a payment stream.
     fn update_last_valid_proof(
-        bsp_account: &Self::AccountId,
+        bsp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         last_valid_proof_block: Self::BlockNumber,
     ) -> DispatchResult;

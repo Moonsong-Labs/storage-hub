@@ -34,7 +34,7 @@ where
     /// - `ChallengesQueueOverflow`: If the challenges queue is full.
     pub fn do_challenge(who: &AccountIdFor<T>, key: &KeyFor<T>) -> DispatchResult {
         // Check if sender is a registered Provider.
-        if ProvidersPalletFor::<T>::get_provider(who.clone()).is_none() {
+        if ProvidersPalletFor::<T>::get_provider_id(who.clone()).is_none() {
             // Charge a fee for the challenge if it is not.
             BalancePalletFor::<T>::transfer(
                 &who,
@@ -132,12 +132,12 @@ where
 }
 
 impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
-    type Provider = ProviderFor<T>;
+    type ProviderId = ProviderFor<T>;
     type Proof = CompactProof;
     type MerkleHash = T::MerkleHash;
 
     fn verify_proof(
-        who: &Self::Provider,
+        who: &Self::ProviderId,
         root: &Self::MerkleHash,
         proof: &Self::Proof,
     ) -> DispatchResult {
