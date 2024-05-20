@@ -170,8 +170,8 @@ pub mod pallet {
         CannotHoldDeposit,
         /// Error thrown when trying to update the rate of a payment stream to the same rate as before
         UpdateRateToSameRate,
-        /// Error thrown when trying to update the rate of a payment stream to 0 (should use remove_payment_stream instead)
-        UpdateRateToZero,
+        /// Error thrown when trying to create a payment stream with rate 0 or update the rate of an existing one to 0 (should use remove_payment_stream instead)
+        RateCantBeZero,
         /// Error thrown when the block of the last charged proof of a payment stream is greater than the block of the last valid proof
         LastChargeGreaterThanLastValidProof,
         /// Error thrown when the new last valid proof block number that is trying to be set is greater than the current block number or the last valid proof block number

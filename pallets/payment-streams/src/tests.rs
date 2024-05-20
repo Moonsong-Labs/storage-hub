@@ -373,7 +373,7 @@ mod update_stream {
                     &bob,
                     new_rate
                 ),
-                Error::<Test>::UpdateRateToZero
+                Error::<Test>::RateCantBeZero
             );
         });
     }

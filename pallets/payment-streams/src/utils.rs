@@ -51,7 +51,7 @@ where
     T: pallet::Config,
 {
     /// This function holds the logic that checks if a payment stream can be created and, if so, stores the payment stream in the PaymentStreams mapping
-    /// and holds the necessary balance from the sender if it's its first payment stream
+    /// and holds the necessary balance from the sender if it's its first payment stream.
     ///
     /// Note: Maybe we should add a check to make sure the user has enough balance to pay for at least X amount of blocks?
     pub fn do_create_payment_stream(
@@ -64,6 +64,9 @@ where
             <T::ProvidersPallet as ProvidersInterface>::is_provider(*sp_id),
             Error::<T>::NotAProvider
         );
+
+        // Check that the given rate is not 0
+        ensure!(rate != Zero::zero(), Error::<T>::RateCantBeZero);
 
         // Check that a payment stream between that SP and user does not exist yet
         ensure!(
@@ -144,7 +147,7 @@ where
         );
 
         // Ensure that the new rate is not 0 (should use remove_payment_stream instead)
-        ensure!(new_rate != Zero::zero(), Error::<T>::UpdateRateToZero);
+        ensure!(new_rate != Zero::zero(), Error::<T>::RateCantBeZero);
 
         // Check that a payment stream between that BSP and user exists
         ensure!(
