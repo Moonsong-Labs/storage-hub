@@ -52,17 +52,18 @@ where
     HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
 {
     async fn handle_event(&self, event: RemoteUploadRequest) -> anyhow::Result<()> {
-        if !event.chunk_with_proof.verify() {
-            error!(
-                target: LOG_TARGET,
-                "Received invalid proof for chunk: {} (file: {:?}))", event.chunk_with_proof.proven.key, event.file_key
-            );
-            // TODO: Unregister file and peer id from the file transfer service registry.
-            return Err(anyhow::anyhow!("Invalid proof"));
-        }
-
         let file_key: HasherOutT<SHC::TrieLayout> = TryFrom::try_from(*event.file_key.as_ref())
             .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
+
+        if !event.chunk_with_proof.verify() {
+            // Unvolunteer the file.
+            self.unvolunteer_file(file_key).await?;
+
+            return Err(anyhow::anyhow!(format!(
+                "Received invalid proof for chunk: {} (file: {:?}))",
+                event.chunk_with_proof.proven.key, event.file_key
+            )));
+        }
 
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
         let write_chunk_result = write_file_storage.write_chunk(
@@ -89,14 +90,18 @@ where
                     // TODO: Consider informing this to the file transfer service so that it can handle reputation for this peer id.
                 }
                 FileStorageWriteError::FileDoesNotExist => {
-                    // TODO: Unregister file and peer id from the file transfer service registry.
+                    // Unvolunteer the file.
+                    self.unvolunteer_file(file_key).await?;
+
                     return Err(anyhow::anyhow!(format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key)));
                 }
                 FileStorageWriteError::FailedToGetFileChunk
                 | FileStorageWriteError::FailedToInsertFileChunk => {
                     // This internal error should not happen.
 
-                    // TODO: Unregister file and peer id from the file transfer service registry.
+                    // Unvolunteer the file.
+                    self.unvolunteer_file(file_key).await?;
+
                     return Err(anyhow::anyhow!(format!(
                         "Internal trie read/write error {:?}:{}",
                         event.file_key, event.chunk_with_proof.proven.key
