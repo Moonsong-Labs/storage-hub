@@ -61,8 +61,7 @@ pub mod pallet {
         /// A converter to be able to convert the block number type to the balance type for charging (multiplying time (blocks) by rate (balance))
         type BlockNumberToBalance: Convert<BlockNumberFor<Self>, BalanceOf<Self>>;
 
-        /// The amounts of funds to hold when a user first registers to the network (TODO: Again, this should not be done here but since we don't
-        /// have it elsewhere, we will leave it here for now)
+        /// The amounts of funds to hold when a user first registers to the network
         #[pallet::constant]
         type NewUserDeposit: Get<BalanceOf<Self>>;
     }
@@ -72,9 +71,9 @@ pub mod pallet {
 
     // Storage:
 
-    /// The mapping from a Backup Storage Provider to its provided users to their payment streams.
+    /// The mapping from a Storage Provider to its provided users to their payment streams.
     ///
-    /// This is used to get the payment stream of a user for a specific Backup Storage Provider.
+    /// This is used to get the payment stream of a user for a specific Storage Provider.
     ///
     /// This storage is updated in:
     /// - [add_payment_stream](crate::dispatchables::add_payment_stream), which adds a new entry to the map.
@@ -121,40 +120,40 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// Event emitted when a payment stream is created. Provides information about the user that created the stream,
-        /// the Backup Storage Provider that the stream is for, and the rate of the stream.
+        /// the Storage Provider that the stream is for, and the rate of the stream.
         PaymentStreamCreated {
             user_account: T::AccountId,
-            backup_storage_provider_id: ProviderIdFor<T>,
+            storage_provider_id: ProviderIdFor<T>,
             rate: BalanceOf<T>,
         },
         /// Event emitted when a payment stream is updated. Provides information about the user that updated the stream,
-        /// the Backup Storage Provider that the stream is for, and the new rate of the stream.
+        /// the Storage Provider that the stream is for, and the new rate of the stream.
         PaymentStreamUpdated {
             user_account: T::AccountId,
-            backup_storage_provider_id: ProviderIdFor<T>,
+            storage_provider_id: ProviderIdFor<T>,
             new_rate: BalanceOf<T>,
         },
         /// Event emitted when a payment stream is removed. Provides information about the user that removed the stream,
-        /// and the Backup Storage Provider that the stream was for.
+        /// and the Storage Provider that the stream was for.
         PaymentStreamDeleted {
             user_account: T::AccountId,
-            backup_storage_provider_id: ProviderIdFor<T>,
+            storage_provider_id: ProviderIdFor<T>,
         },
         /// Event emitted when a payment is charged. Provides information about the user that was charged,
-        /// the Backup Storage Provider that received the funds, and the amount that was charged.
+        /// the Storage Provider that received the funds, and the amount that was charged.
         PaymentStreamCharged {
             user_account: T::AccountId,
-            backup_storage_provider_id: ProviderIdFor<T>,
+            storage_provider_id: ProviderIdFor<T>,
             amount: BalanceOf<T>,
         },
         /// Event emitted when a payment stream's last valid proof is updated. Provides information about the user that the stream is for,
-        /// the Backup Storage Provider that provided the proof, and the new block number of the last valid proof.
+        /// the Storage Provider that provided the proof, and the new block number of the last valid proof.
         ValidProofUpdated {
             user_account: T::AccountId,
-            backup_storage_provider_id: ProviderIdFor<T>,
+            storage_provider_id: ProviderIdFor<T>,
         },
-        /// Event emitted when a BSP is correctly trying to charge a user and that user does not have enough funds to pay for their storage
-        /// This event is emitted to flag the user and let the network know that the user is not paying for their storage, so other BSPs can
+        /// Event emitted when a Storage Provider is correctly trying to charge a user and that user does not have enough funds to pay for their storage
+        /// This event is emitted to flag the user and let the network know that the user is not paying for their storage, so other SPs can
         /// stop providing storage to that user.
         UserWithoutFunds { who: T::AccountId },
     }
@@ -166,9 +165,9 @@ pub mod pallet {
         PaymentStreamAlreadyExists,
         /// Error thrown when a user of this pallet tries to update, remove or charge a payment stream that does not exist.
         PaymentStreamNotFound,
-        /// Error thrown when a user tries to charge a payment stream and it's not a registered Backup Storage Provider
+        /// Error thrown when a user tries to charge a payment stream and it's not a registered Storage Provider
         NotAProvider,
-        /// Error thrown when failing to get the payment account of a registered Backup Storage Provider
+        /// Error thrown when failing to get the payment account of a registered Storage Provider
         BspInconsistencyError,
         /// Error thrown when the system can't hold funds from the user as a deposit for the storage used in this pallet
         CannotHoldDeposit,
@@ -192,33 +191,29 @@ pub mod pallet {
     /// held because of this pallet
     #[pallet::composite_enum]
     pub enum HoldReason {
-        /// Deposit that a user has to pay to open payment streams (TODO: This should go on user registration I believe, not in this pallet)
+        /// Deposit that a user has to pay to open payment streams
         PaymentStreamStorageDeposit,
         // TODO: Only for testing, remove this for production
         AnotherUnrelatedHold,
     }
 
-    /// The hooks that this pallet utilizes (TODO: Check this, we might not need any)
-    #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
-
     /// Dispatchables (extrinsics) exposed by this pallet
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// Dispatchable extrinsic that allows users to add a payment stream to a Backup Storage Provider and user.
+        /// Dispatchable extrinsic that allows root to add a payment stream from a user to a Storage Provider.
         ///
         /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
-        /// this extrinsic is for testing only).
+        /// this extrinsic is for manual testing).
         ///
         /// Parameters:
-        /// - `bsp_id`: The Backup Storage Provider ID that the payment stream is for.
+        /// - `sp_id`: The Storage Provider ID that the payment stream is for.
         /// - `user_account`: The user ID that the payment stream is for.
         /// - `rate`: The initial rate of the payment stream.
         ///
         /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was executed by the root origin
         /// 2. Check that the payment stream does not already exist
-        /// 3. Check that the user has enough funds to pay the deposit (TODO: This should be done in the user registration, not here)
+        /// 3. Check that the user has enough funds to pay the deposit
         /// 4. Hold the deposit from the user
         /// 5. Update the Payment Streams storage to add the new payment stream
         ///
@@ -227,7 +222,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn create_payment_stream(
             origin: OriginFor<T>,
-            bsp_id: ProviderIdFor<T>,
+            sp_id: ProviderIdFor<T>,
             user_account: T::AccountId,
             rate: BalanceOf<T>,
         ) -> DispatchResultWithPostInfo {
@@ -235,12 +230,12 @@ pub mod pallet {
             ensure_root(origin)?;
 
             // Execute checks and logic, update storage
-            Self::do_create_payment_stream(&bsp_id, &user_account, rate)?;
+            Self::do_create_payment_stream(&sp_id, &user_account, rate)?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::PaymentStreamCreated {
                 user_account,
-                backup_storage_provider_id: bsp_id,
+                storage_provider_id: sp_id,
                 rate,
             });
 
@@ -248,13 +243,13 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// Dispatchable extrinsic that allows users to update a payment stream from a Backup Storage Provider and user.
+        /// Dispatchable extrinsic that allows root to update an existing payment stream between a user and a Storage Provider.
         ///
-        /// The dispatch origin for this call must be Root (Payment streams should only be updated by traits in other pallets,
-        /// this extrinsic is for testing only).
+        /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
+        /// this extrinsic is for manual testing).
         ///
         /// Parameters:
-        /// - `bsp_id`: The Backup Storage Provider ID that the payment stream is for.
+        /// - `sp_id`: The Storage Provider ID that the payment stream is for.
         /// - `user_account`: The user ID that the payment stream is for.
         /// - `new_rate`: The new rate of the payment stream.
         ///
@@ -268,7 +263,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn update_payment_stream(
             origin: OriginFor<T>,
-            bsp_id: ProviderIdFor<T>,
+            sp_id: ProviderIdFor<T>,
             user_account: T::AccountId,
             new_rate: BalanceOf<T>,
         ) -> DispatchResultWithPostInfo {
@@ -276,12 +271,12 @@ pub mod pallet {
             ensure_root(origin)?;
 
             // Execute checks and logic, update storage
-            Self::do_update_payment_stream(&bsp_id, &user_account, new_rate)?;
+            Self::do_update_payment_stream(&sp_id, &user_account, new_rate)?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::PaymentStreamUpdated {
                 user_account,
-                backup_storage_provider_id: bsp_id,
+                storage_provider_id: sp_id,
                 new_rate,
             });
 
@@ -289,13 +284,13 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// Dispatchable extrinsic that allows users to remove a payment stream from a Backup Storage Provider and user.
+        /// Dispatchable extrinsic that allows root to delete an existing payment stream between a user and a Storage Provider.
         ///
-        /// The dispatch origin for this call must be Root (Payment streams should only be removed by traits in other pallets,
-        /// this extrinsic is for testing only).
+        /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
+        /// this extrinsic is for manual testing).
         ///
         /// Parameters:
-        /// - `bsp_id`: The Backup Storage Provider ID that the payment stream is for.
+        /// - `sp_id`: The Storage Provider ID that the payment stream is for.
         /// - `user_account`: The user ID that the payment stream is for.
         ///
         /// This extrinsic will perform the following checks and logic:
@@ -308,36 +303,36 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn delete_payment_stream(
             origin: OriginFor<T>,
-            bsp_id: ProviderIdFor<T>,
+            sp_id: ProviderIdFor<T>,
             user_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was executed by the root origin
             ensure_root(origin)?;
 
             // Execute checks and logic, update storage
-            Self::do_delete_payment_stream(&bsp_id, &user_account)?;
+            Self::do_delete_payment_stream(&sp_id, &user_account)?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::PaymentStreamDeleted {
                 user_account,
-                backup_storage_provider_id: bsp_id,
+                storage_provider_id: sp_id,
             });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
         }
 
-        /// Dispatchable extrinsic that allows Backup Storage Providers to charge a payment stream from a user.
+        /// Dispatchable extrinsic that allows Storage Providers to charge a payment stream from a user.
         ///
         /// The dispatch origin for this call must be Signed.
-        /// The origin must be the Backup Storage Provider that has a payment stream with the user.
+        /// The origin must be the Storage Provider that has a payment stream with the user.
         ///
         /// Parameters:
         /// - `user_account`: The user ID that the payment stream is for.
         ///
         /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was signed and get the signer.
-        /// 2. Check that the payment stream between the signer (BSP) and the user exists
+        /// 2. Check that the payment stream between the signer (SP) and the user exists
         /// 3. Get the rate of the payment stream
         /// 4. Get the difference between the last charge and the last proof of the stream
         /// 5. Calculate the amount to charge
@@ -352,19 +347,19 @@ pub mod pallet {
             user_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer
-            let bsp_account = ensure_signed(origin)?;
+            let sp_account = ensure_signed(origin)?;
 
             // Get the BSP ID of the signer
-            let bsp_id = <T::ProvidersPallet as ProvidersInterface>::get_provider_id(bsp_account)
+            let sp_id = <T::ProvidersPallet as ProvidersInterface>::get_provider_id(sp_account)
                 .ok_or(Error::<T>::NotAProvider)?;
 
             // Execute checks and logic, update storage
-            let amount = Self::do_charge_payment_stream(&bsp_id, &user_account)?;
+            let amount = Self::do_charge_payment_stream(&sp_id, &user_account)?;
 
             // Emit the corresponding event (we always emit it even if the charged amount was 0)
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account,
-                backup_storage_provider_id: bsp_id,
+                storage_provider_id: sp_id,
                 amount,
             });
 
@@ -378,24 +373,24 @@ pub mod pallet {
 impl<T: Config> Pallet<T> {
     /// A helper function to get the information of a payment stream
     pub fn get_payment_stream_info(
-        bsp_id: &ProviderIdFor<T>,
+        sp_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
     ) -> Result<PaymentStream<T>, Error<T>> {
-        PaymentStreams::<T>::get(bsp_id, user_account).ok_or(Error::<T>::PaymentStreamNotFound)
+        PaymentStreams::<T>::get(sp_id, user_account).ok_or(Error::<T>::PaymentStreamNotFound)
     }
 
-    /// A helper function to get all users that have a payment stream with a Backup Storage Provider
-    pub fn get_users_with_payment_stream_with_bsp(bsp_id: &ProviderIdFor<T>) -> Vec<T::AccountId> {
-        PaymentStreams::<T>::iter_prefix(bsp_id)
+    /// A helper function to get all users that have a payment stream with a Storage Provider
+    pub fn get_users_with_payment_stream_with_sp(sp_id: &ProviderIdFor<T>) -> Vec<T::AccountId> {
+        PaymentStreams::<T>::iter_prefix(sp_id)
             .map(|(user_account, _)| user_account)
             .collect()
     }
 
-    /// A helper function that gets all payment streams of a Backup Storage Provider
-    pub fn get_payment_streams_of_bsp(
-        bsp_id: &ProviderIdFor<T>,
+    /// A helper function that gets all payment streams of a Storage Provider
+    pub fn get_payment_streams_of_sp(
+        sp_id: &ProviderIdFor<T>,
     ) -> Vec<(T::AccountId, PaymentStream<T>)> {
-        PaymentStreams::<T>::iter_prefix(bsp_id).collect()
+        PaymentStreams::<T>::iter_prefix(sp_id).collect()
     }
 
     /// A helper function that gets all payment streams of a user
@@ -404,7 +399,7 @@ impl<T: Config> Pallet<T> {
     ) -> Vec<(ProviderIdFor<T>, PaymentStream<T>)> {
         PaymentStreams::<T>::iter()
             .filter(|(_, user, _)| user == user_account)
-            .map(|(bsp_id, _, stream)| (bsp_id, stream))
+            .map(|(sp_id, _, stream)| (sp_id, stream))
             .collect()
     }
 

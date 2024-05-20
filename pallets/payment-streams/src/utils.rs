@@ -55,19 +55,19 @@ where
     ///
     /// Note: Maybe we should add a check to make sure the user has enough balance to pay for at least X amount of blocks?
     pub fn do_create_payment_stream(
-        bsp_id: &ProviderIdFor<T>,
+        sp_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
         rate: BalanceOf<T>,
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*bsp_id),
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*sp_id),
             Error::<T>::NotAProvider
         );
 
-        // Check that a payment stream between that BSP and user does not exist yet
+        // Check that a payment stream between that SP and user does not exist yet
         ensure!(
-            !PaymentStreams::<T>::contains_key(bsp_id, user_account),
+            !PaymentStreams::<T>::contains_key(sp_id, user_account),
             Error::<T>::PaymentStreamAlreadyExists
         );
 
@@ -78,6 +78,8 @@ where
         );
 
         // Check if the user is already registered and, if not, try to hold the deposit
+        // TODO: The deposit held should be proportional to the rate of the payment stream (so we hold X amount of blocks of storage)
+        // TODO: Also, we should hold the deposit each time a user creates or updates a payment stream, not only when creating its first one like here
         let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
         if user_payment_streams_count == 0 {
             // Check that the user has enough balance to pay the deposit
@@ -117,7 +119,7 @@ where
         // We initiate the last_valid_proof and last_charged_proof with the current block number to be able to keep track of the
         // time passed since the payment stream was originally created
         PaymentStreams::<T>::insert(
-            bsp_id,
+            sp_id,
             user_account,
             PaymentStream {
                 rate,
@@ -131,13 +133,13 @@ where
 
     /// This function holds the logic that checks if a payment stream can be updated and, if so, updates the payment stream in the PaymentStreams mapping.
     pub fn do_update_payment_stream(
-        bsp_id: &ProviderIdFor<T>,
+        sp_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
         new_rate: BalanceOf<T>,
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*bsp_id),
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*sp_id),
             Error::<T>::NotAProvider
         );
 
@@ -146,12 +148,12 @@ where
 
         // Check that a payment stream between that BSP and user exists
         ensure!(
-            PaymentStreams::<T>::contains_key(bsp_id, user_account),
+            PaymentStreams::<T>::contains_key(sp_id, user_account),
             Error::<T>::PaymentStreamNotFound
         );
 
         // Get the information of the payment stream
-        let payment_stream = PaymentStreams::<T>::get(bsp_id, user_account)
+        let payment_stream = PaymentStreams::<T>::get(sp_id, user_account)
             .ok_or(Error::<T>::PaymentStreamNotFound)?;
 
         // Verify that the new rate is different from the current one
@@ -160,25 +162,27 @@ where
             Error::<T>::UpdateRateToSameRate
         );
 
-        // Charge the payment stream with the old rate before updating it to prevent abuse
-        let amount_charged = Self::do_charge_payment_stream(&bsp_id, user_account)?;
-        if amount_charged > Zero::zero() {
-            // We emit a payment charged event only if the user had to pay for its storage before the payment stream was updated
-            Self::deposit_event(Event::<T>::PaymentStreamCharged {
-                user_account: user_account.clone(),
-                backup_storage_provider_id: *bsp_id,
-                amount: amount_charged,
-            });
-        }
-
-        // Check that the user is not flagged as without funds (after charging, to make sure it makes sense to update the payment stream)
+        // Check that the user is not flagged as without funds
         ensure!(
             !UsersWithoutFunds::<T>::contains_key(user_account),
             Error::<T>::UserWithoutFunds
         );
 
+        // Charge the payment stream with the old rate before updating it to prevent abuse
+        let amount_charged = Self::do_charge_payment_stream(&sp_id, user_account)?;
+        if amount_charged > Zero::zero() {
+            // We emit a payment charged event only if the user had to pay for its storage before the payment stream was updated
+            Self::deposit_event(Event::<T>::PaymentStreamCharged {
+                user_account: user_account.clone(),
+                storage_provider_id: *sp_id,
+                amount: amount_charged,
+            });
+        }
+
+        // TODO: We should check if the new rate is lower or higher than the current one, and release or hold the difference in deposit accordingly
+
         // Update the payment stream in the PaymentStreams mapping
-        PaymentStreams::<T>::mutate(bsp_id, user_account, |payment_stream| {
+        PaymentStreams::<T>::mutate(sp_id, user_account, |payment_stream| {
             match payment_stream {
                 Some(payment_stream) => {
                     payment_stream.rate = new_rate;
@@ -195,43 +199,43 @@ where
     }
 
     /// This function holds the logic that checks if a payment stream can be removed and, if so, removes the payment stream from the PaymentStreams mapping,
-    /// decreases the user's payment streams count and, if the user has no more payment streams, releases the deposit.
+    /// decreases the user's payment streams count and releases the deposit of that payment stream.
     pub fn do_delete_payment_stream(
-        bsp_id: &ProviderIdFor<T>,
+        sp_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*bsp_id),
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*sp_id),
             Error::<T>::NotAProvider
         );
 
         // Check that a payment stream between that BSP and user exists
         ensure!(
-            PaymentStreams::<T>::contains_key(bsp_id, user_account),
+            PaymentStreams::<T>::contains_key(sp_id, user_account),
             Error::<T>::PaymentStreamNotFound
         );
 
-        // Charge the payment stream before deletion to make sure the storage provided by the provider is paid in full for its duration
-        let amount_charged = Self::do_charge_payment_stream(&bsp_id, user_account)?;
-        if amount_charged > Zero::zero() {
-            // We emit a payment charged event only if the user had to pay for its storage before deleting the payment stream
-            Self::deposit_event(Event::<T>::PaymentStreamCharged {
-                user_account: user_account.clone(),
-                backup_storage_provider_id: *bsp_id,
-                amount: amount_charged,
-            });
-        }
-
         // TODO: What do we do when a user is flagged as without funds? Does the provider assume the loss and we remove the payment stream?
-        // Check that the user is not flagged as without funds (after charging, to make sure it makes sense to delete the payment stream)
+        // Check that the user is not flagged as without funds
         ensure!(
             !UsersWithoutFunds::<T>::contains_key(user_account),
             Error::<T>::UserWithoutFunds
         );
 
+        // Charge the payment stream before deletion to make sure the storage provided by the provider is paid in full for its duration
+        let amount_charged = Self::do_charge_payment_stream(&sp_id, user_account)?;
+        if amount_charged > Zero::zero() {
+            // We emit a payment charged event only if the user had to pay for its storage before deleting the payment stream
+            Self::deposit_event(Event::<T>::PaymentStreamCharged {
+                user_account: user_account.clone(),
+                storage_provider_id: *sp_id,
+                amount: amount_charged,
+            });
+        }
+
         // Remove the payment stream from the PaymentStreams mapping
-        PaymentStreams::<T>::remove(bsp_id, user_account);
+        PaymentStreams::<T>::remove(sp_id, user_account);
 
         // Decrease the user's payment streams count
         let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
@@ -241,6 +245,7 @@ where
         RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
 
         // If the user has no more payment streams, release the deposit
+        // TODO: We should actually release the deposit of that specific payment stream. We might have to keep track of the deposit held for each payment stream
         if user_payment_streams_count == 0 {
             // Release the deposit from the user
             T::NativeBalance::release_all(
@@ -260,29 +265,28 @@ where
     /// The charge is calculated as: rate * time_passed where time_passed is the time between the last valid proof submitted and the last charged proof of this payment stream.
     /// As such, the last charged proof can't be greater than the last valid proof, and if they are equal then no charge is made.
     ///
-    /// Note: right now, the other functions receive the BSP's account ID because it is needed to transfer the user payment to it in this function, but the idea is to change the
-    /// BSP struct to hold a `payment_address` where the payment should be received, and then the functions of this pallet will receive the BSP's ID instead.
+    /// TODO: Change charging system to utilize a price index instead of relying on the block number directly
     pub fn do_charge_payment_stream(
-        bsp_id: &ProviderIdFor<T>,
+        sp_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
     ) -> Result<BalanceOf<T>, DispatchError> {
         // Check that the given ID belongs to an actual provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*bsp_id),
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*sp_id),
             Error::<T>::NotAProvider
         );
 
         // Check that a payment stream between that BSP and user exists
         ensure!(
-            PaymentStreams::<T>::contains_key(bsp_id, user_account),
+            PaymentStreams::<T>::contains_key(sp_id, user_account),
             Error::<T>::PaymentStreamNotFound
         );
 
         // Get the information of the payment stream
-        let payment_stream = PaymentStreams::<T>::get(bsp_id, user_account)
+        let payment_stream = PaymentStreams::<T>::get(sp_id, user_account)
             .ok_or(Error::<T>::PaymentStreamNotFound)?;
 
-        // Note: No need to check if a new proof has been submitted since the last charge as the only consecuence of that is charging 0 to the user,
+        // Note: No need to check if a new proof has been submitted since the last charge as the only consequence of that is charging 0 to the user,
         // and not erroring out helps to be able to call this function without errors when updating or removing a payment stream.
 
         // Calculate the time passed between the last valid proof and the last charged proof
@@ -309,6 +313,7 @@ where
 
         // If the user does not have enough balance to pay for its storage:
         if user_balance < amount_to_charge {
+            // TODO: Probably just charge what the user has and then flag it
             // Flag it in the UsersWithoutFunds mapping and emit the UserWithoutFunds event
             UsersWithoutFunds::<T>::insert(user_account, ());
             Self::deposit_event(Event::<T>::UserWithoutFunds {
@@ -324,23 +329,23 @@ where
             // TODO: Design a more robust way of handling out-of-funds users
             UsersWithoutFunds::<T>::remove(user_account);
 
-            // Get the payment account of the BSP
-            let bsp_payment_account = expect_or_err!(
-                <T::ProvidersPallet as ProvidersInterface>::get_provider_payment_account(*bsp_id),
-                "Backup Storage Provider should exist and have a payment account if its ID exists.",
+            // Get the payment account of the SP
+            let sp_payment_account = expect_or_err!(
+                <T::ProvidersPallet as ProvidersInterface>::get_provider_payment_account(*sp_id),
+                "Storage Provider should exist and have a payment account if its ID exists.",
                 Error::<T>::BspInconsistencyError
             );
 
             // Charge the payment stream from the user's balance
             T::NativeBalance::transfer(
                 user_account,
-                &bsp_payment_account,
+                &sp_payment_account,
                 amount_to_charge,
                 Preservation::Preserve,
             )?;
 
             // Set the last charge to the block number of the last valid proof submitted
-            PaymentStreams::<T>::mutate(bsp_id, user_account, |payment_stream| {
+            PaymentStreams::<T>::mutate(sp_id, user_account, |payment_stream| {
                 match payment_stream {
                     Some(payment_stream) => {
                         payment_stream.last_charged_proof = payment_stream.last_valid_proof;
@@ -367,17 +372,17 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     type PaymentStream = PaymentStream<T>;
 
     fn create_payment_stream(
-        bsp_id: &Self::ProviderId,
+        sp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         rate: <Self::Balance as Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult {
         // Execute the logic to create a payment stream
-        Self::do_create_payment_stream(bsp_id, user_account, rate)?;
+        Self::do_create_payment_stream(sp_id, user_account, rate)?;
 
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::PaymentStreamCreated {
             user_account: user_account.clone(),
-            backup_storage_provider_id: *bsp_id,
+            storage_provider_id: *sp_id,
             rate,
         });
 
@@ -386,17 +391,17 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     }
 
     fn update_payment_stream(
-        bsp_id: &Self::ProviderId,
+        sp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         new_rate: <Self::Balance as Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult {
         // Execute the logic to update a payment stream
-        Self::do_update_payment_stream(bsp_id, user_account, new_rate)?;
+        Self::do_update_payment_stream(sp_id, user_account, new_rate)?;
 
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::PaymentStreamUpdated {
             user_account: user_account.clone(),
-            backup_storage_provider_id: *bsp_id,
+            storage_provider_id: *sp_id,
             new_rate,
         });
 
@@ -405,16 +410,16 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     }
 
     fn delete_payment_stream(
-        bsp_id: &Self::ProviderId,
+        sp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> DispatchResult {
         // Execute the logic to delete a payment stream
-        Self::do_delete_payment_stream(bsp_id, user_account)?;
+        Self::do_delete_payment_stream(sp_id, user_account)?;
 
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::PaymentStreamDeleted {
             user_account: user_account.clone(),
-            backup_storage_provider_id: *bsp_id,
+            storage_provider_id: *sp_id,
         });
 
         // Return a successful DispatchResult
@@ -422,13 +427,13 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     }
 
     fn update_last_valid_proof(
-        bsp_id: &Self::ProviderId,
+        sp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         last_valid_proof_block: Self::BlockNumber,
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*bsp_id),
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*sp_id),
             Error::<T>::NotAProvider
         );
 
@@ -439,7 +444,7 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         );
 
         // Get the information of the payment stream to update
-        let payment_stream = PaymentStreams::<T>::get(bsp_id, user_account)
+        let payment_stream = PaymentStreams::<T>::get(sp_id, user_account)
             .ok_or(Error::<T>::PaymentStreamNotFound)?;
 
         // Ensure that the new last valid proof block is greater than the last valid proof block of the payment stream
@@ -449,7 +454,7 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         );
 
         // Update the last valid proof block of the payment stream
-        PaymentStreams::<T>::mutate(bsp_id, user_account, |payment_stream| {
+        PaymentStreams::<T>::mutate(sp_id, user_account, |payment_stream| {
             match payment_stream {
                 Some(payment_stream) => {
                     payment_stream.last_valid_proof = last_valid_proof_block;
@@ -467,10 +472,10 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     }
 
     fn get_payment_stream_info(
-        bsp_id: &Self::ProviderId,
+        sp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> Option<Self::PaymentStream> {
         // Return the payment stream information
-        PaymentStreams::<T>::get(bsp_id, user_account)
+        PaymentStreams::<T>::get(sp_id, user_account)
     }
 }

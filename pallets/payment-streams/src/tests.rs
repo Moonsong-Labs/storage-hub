@@ -86,7 +86,7 @@ mod create_stream {
             System::assert_last_event(
                 Event::<Test>::PaymentStreamCreated {
                     user_account: bob,
-                    backup_storage_provider_id: alice_bsp_id,
+                    storage_provider_id: alice_bsp_id,
                     rate,
                 }
                 .into(),
@@ -335,7 +335,7 @@ mod update_stream {
             System::assert_last_event(
                 Event::<Test>::PaymentStreamUpdated {
                     user_account: bob,
-                    backup_storage_provider_id: alice_bsp_id,
+                    storage_provider_id: alice_bsp_id,
                     new_rate,
                 }
                 .into(),
@@ -555,7 +555,7 @@ mod update_stream {
             System::assert_has_event(
                 Event::<Test>::PaymentStreamCharged {
                     user_account: bob,
-                    backup_storage_provider_id: alice_bsp_id,
+                    storage_provider_id: alice_bsp_id,
                     amount: 10 * rate,
                 }
                 .into(),
@@ -633,7 +633,7 @@ mod delete_stream {
             System::assert_last_event(
                 Event::<Test>::PaymentStreamDeleted {
                     user_account: bob,
-                    backup_storage_provider_id: alice_bsp_id,
+                    storage_provider_id: alice_bsp_id,
                 }
                 .into(),
             );
@@ -771,7 +771,7 @@ mod delete_stream {
             System::assert_has_event(
                 Event::<Test>::PaymentStreamCharged {
                     user_account: bob,
-                    backup_storage_provider_id: alice_bsp_id,
+                    storage_provider_id: alice_bsp_id,
                     amount: 10 * rate,
                 }
                 .into(),
@@ -851,7 +851,7 @@ mod charge_stream {
             System::assert_has_event(
                 Event::<Test>::PaymentStreamCharged {
                     user_account: bob,
-                    backup_storage_provider_id: alice_bsp_id,
+                    storage_provider_id: alice_bsp_id,
                     amount: 10 * rate,
                 }
                 .into(),
@@ -922,7 +922,7 @@ mod charge_stream {
             System::assert_has_event(
                 Event::<Test>::PaymentStreamCharged {
                     user_account: bob,
-                    backup_storage_provider_id: alice_bsp_id,
+                    storage_provider_id: alice_bsp_id,
                     amount: 10 * rate,
                 }
                 .into(),
@@ -1005,7 +1005,7 @@ mod charge_stream {
             System::assert_has_event(
                 Event::<Test>::PaymentStreamCharged {
                     user_account: bob,
-                    backup_storage_provider_id: alice_bsp_id,
+                    storage_provider_id: alice_bsp_id,
                     amount: 10 * new_rate,
                 }
                 .into(),
@@ -1079,7 +1079,7 @@ mod charge_stream {
             System::assert_has_event(
                 Event::<Test>::PaymentStreamCharged {
                     user_account: bob,
-                    backup_storage_provider_id: alice_bsp_id,
+                    storage_provider_id: alice_bsp_id,
                     amount: 10 * rate,
                 }
                 .into(),
@@ -1119,7 +1119,7 @@ mod charge_stream {
             System::assert_has_event(
                 Event::<Test>::PaymentStreamCharged {
                     user_account: bob,
-                    backup_storage_provider_id: alice_bsp_id,
+                    storage_provider_id: alice_bsp_id,
                     amount: 20 * rate,
                 }
                 .into(),
@@ -1271,7 +1271,7 @@ mod charge_stream {
             System::assert_has_event(
                 Event::<Test>::PaymentStreamCharged {
                     user_account: bob,
-                    backup_storage_provider_id: alice_bsp_id,
+                    storage_provider_id: alice_bsp_id,
                     amount: 0,
                 }
                 .into(),
@@ -1344,7 +1344,7 @@ mod charge_stream {
             System::assert_has_event(
                 Event::<Test>::PaymentStreamCharged {
                     user_account: bob,
-                    backup_storage_provider_id: alice_bsp_id,
+                    storage_provider_id: alice_bsp_id,
                     amount: 0,
                 }
                 .into(),
@@ -1368,7 +1368,7 @@ mod charge_stream {
             System::assert_last_event(
                 Event::<Test>::PaymentStreamCharged {
                     user_account: bob,
-                    backup_storage_provider_id: alice_bsp_id,
+                    storage_provider_id: alice_bsp_id,
                     amount: 10 * rate,
                 }
                 .into(),
