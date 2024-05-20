@@ -9,12 +9,12 @@ use forest_manager::{
 };
 use storage_hub_infra::{
     actor::{ActorHandle, TaskSpawner},
-    event_bus::EventHandler,
+    event_bus::{EventBusListener, EventHandler},
 };
 
-use crate::tasks::{
-    bsp_upload_request::BspUploadRequestHandler, bsp_volunteer_mock::BspVolunteerMockTask,
-    user_sends_file::UserSendsFileTask,
+use crate::{
+    services::{blockchain::events::NewStorageRequest, file_transfer::events::RemoteUploadRequest},
+    tasks::{bsp_upload_file_task::BspUploadFileTask, user_sends_file::UserSendsFileTask},
 };
 
 use super::{blockchain::handler::BlockchainService, file_transfer::FileTransferService};
@@ -175,12 +175,19 @@ where
         log::info!("Starting BSP tasks");
 
         // TODO: Start the actual BSP tasks here and remove mock task.
-        BspVolunteerMockTask::new(self.clone())
-            .subscribe_to(&self.task_spawner, &self.blockchain)
-            .start();
+        // BspVolunteerMockTask::new(self.clone())
+        //     .subscribe_to(&self.task_spawner, &self.blockchain)
+        //     .start();
 
-        BspUploadRequestHandler::new(self.clone())
-            .subscribe_to(&self.task_spawner, &self.file_transfer)
-            .start();
+        let bsp_upload_file_task = BspUploadFileTask::new(self.clone());
+
+        let event_bus_listener: EventBusListener<RemoteUploadRequest, _> = bsp_upload_file_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.file_transfer);
+        event_bus_listener.start();
+
+        let event_bus_listener: EventBusListener<NewStorageRequest, _> =
+            bsp_upload_file_task.subscribe_to(&self.task_spawner, &self.blockchain);
+        event_bus_listener.start();
     }
 }
