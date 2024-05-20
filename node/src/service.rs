@@ -10,12 +10,11 @@ use file_manager::in_memory::InMemoryFileStorage;
 use forest_manager::in_memory::InMemoryForestStorage;
 use futures::{Stream, StreamExt};
 use polkadot_primitives::{HeadData, ValidationCode};
-use reference_trie::RefHasher;
-use sp_runtime::traits::BlakeTwo256;
+
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
-use sp_trie::LayoutV1;
+
 use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
 use storage_hub_runtime::{
@@ -62,7 +61,7 @@ use crate::{
     services::{
         blockchain::{spawn_blockchain_service, KEY_TYPE},
         file_transfer::spawn_file_transfer_service,
-        StorageHubHandler, StorageHubHandlerConfig,
+        StorageHubHandler,
     },
     types::StorageHubBackend,
 };
@@ -384,8 +383,9 @@ async fn start_dev_impl(
     if provider_options.is_some() {
         let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
         let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
-        let sh_backend = Some(StorageHubBackend {
-            file_storage, forest_storage
+        let _sh_backend = Some(StorageHubBackend {
+            file_storage,
+            forest_storage,
         });
     }
 
@@ -432,7 +432,9 @@ async fn start_dev_impl(
             &task_manager,
             network.clone(),
             client.clone(),
-            sh_backend.clone().expect("StorageHub backend should already be initialized."),
+            sh_backend
+                .clone()
+                .expect("StorageHub backend should already be initialized."),
             rpc_handlers,
             keystore.clone(),
             file_transfer_request_protocol_name,
@@ -648,8 +650,9 @@ async fn start_node_impl(
     if provider_options.is_some() {
         let file_storage = Arc::new(RwLock::new(InMemoryFileStorage::new()));
         let forest_storage = Arc::new(RwLock::new(InMemoryForestStorage::new()));
-        let sh_backend = Some(StorageHubBackend {
-            file_storage, forest_storage
+        let _sh_backend = Some(StorageHubBackend {
+            file_storage,
+            forest_storage,
         });
     }
 
@@ -696,7 +699,9 @@ async fn start_node_impl(
             &task_manager,
             network.clone(),
             client.clone(),
-            sh_backend.clone().expect("StorageHub backend should already be initialized."),
+            sh_backend
+                .clone()
+                .expect("StorageHub backend should already be initialized."),
             rpc_handlers,
             keystore.clone(),
             file_transfer_request_protocol_name,

@@ -6,48 +6,39 @@ use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
 use jsonrpsee::types::ErrorObjectOwned;
 
-use sc_transaction_pool_api::TransactionPool;
-use sc_transaction_pool_api::TransactionSource;
-use sc_client_api::backend::{Backend, StorageProvider};
-use sp_api::ProvideRuntimeApi;
-use sp_blockchain::HeaderBackend;
 use sp_core::H256;
-use sp_block_builder::BlockBuilder as BlockBuilderApi;
-use sp_runtime::traits::Block as BlockT;
-use sp_runtime::BoundedVec;
+
 use sp_runtime::AccountId32;
-use sp_trie::MemoryDB;
-use sp_trie::TrieDBMutBuilder;
-use sp_runtime::generic::UncheckedExtrinsic;
+
 use storage_hub_infra::constants::FILE_CHUNK_SIZE;
 use storage_hub_infra::types::Metadata;
-use storage_hub_runtime::AccountId;
-use storage_hub_runtime::RuntimeCall;
 
 use file_manager::traits::FileStorage;
-use forest_manager::traits::ForestStorage;
 
 use log::debug;
 use log::error;
-use serde::de::DeserializeOwned;
-use storage_hub_runtime::Signature;
-use storage_hub_runtime::SignedExtra;
+
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Arc;
+
 use tokio::sync::RwLock;
 
 const LOG_TARGET: &str = "file-system-rpc";
-
 
 // CHANGE NAME
 #[rpc(server, namespace = "filesystem")]
 #[async_trait]
 pub trait FileSystemApi {
     #[method(name = "sendFile")]
-    async fn upload_file(&self, file_path: String, location: String, owner: AccountId32) -> RpcResult<()>;
+    async fn upload_file(
+        &self,
+        file_path: String,
+        location: String,
+        owner: AccountId32,
+    ) -> RpcResult<()>;
 }
 
 pub struct FileSystemRpc<FL> {
@@ -55,12 +46,8 @@ pub struct FileSystemRpc<FL> {
 }
 
 impl<FL> FileSystemRpc<FL> {
-    pub fn new(
-        file_storage: Arc<RwLock<FL>>,
-    ) -> Self {
-        Self {
-            file_storage,
-        }
+    pub fn new(file_storage: Arc<RwLock<FL>>) -> Self {
+        Self { file_storage }
     }
 }
 
@@ -69,8 +56,12 @@ impl<FL> FileSystemApiServer for FileSystemRpc<FL>
 where
     FL: Send + Sync + FileStorage,
 {
-    async fn upload_file(&self, file_path: String, location: String, owner: AccountId32) -> RpcResult<()> {
-
+    async fn upload_file(
+        &self,
+        file_path: String,
+        location: String,
+        owner: AccountId32,
+    ) -> RpcResult<()> {
         let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
         let mut file_chunks = Vec::new();
 
@@ -94,10 +85,10 @@ where
                     debug!(target: LOG_TARGET, "Read {} bytes from file", bytes_read);
                     file_chunks.push(buffer)
                 }
-                Err(e) => { 
+                Err(e) => {
                     error!(target: LOG_TARGET, "Error when trying to read file: {:?}", e);
-                    return Err(into_rpc_error(e)) 
-                },
+                    return Err(into_rpc_error(e));
+                }
             }
         }
 
@@ -127,7 +118,7 @@ where
 
         let file_key = file_metadata.key();
 
-        for (chunk_id, chunk) in file_chunks.iter().enumerate() { 
+        for (chunk_id, chunk) in file_chunks.iter().enumerate() {
             let chunk_id = chunk_id as u64;
             file_storage_lock
                 .write_chunk(&file_key, &chunk_id, &chunk.to_vec())

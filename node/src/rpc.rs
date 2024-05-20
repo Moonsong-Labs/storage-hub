@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use crate::{services::StorageHubHandlerConfig, types::StorageHubBackend};
+use crate::types::StorageHubBackend;
 
 use sc_consensus_manual_seal::{
     rpc::{ManualSeal, ManualSealApiServer},
@@ -18,8 +18,8 @@ use storage_hub_runtime::{opaque::Block, AccountId, Balance, Nonce};
 
 pub use sc_rpc::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
-use shc_rpc::{FileSystemRpc};
 use shc_rpc::FileSystemApiServer;
+use shc_rpc::FileSystemRpc;
 
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
