@@ -450,6 +450,14 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
             Error::<T>::InvalidLastValidProofBlockNumber
         );
 
+        // Ensure that the new last valid proof block is greater than the last charged proof block of the payment stream
+        expect_or_err!(
+			last_valid_proof_block > payment_stream.last_charged_proof,
+			"Last valid proof (which was checked previously) should always be greater than or equal to the last charged proof.",
+			Error::<T>::LastChargeGreaterThanLastValidProof,
+			bool
+		);
+
         // Update the last valid proof block of the payment stream
         PaymentStreams::<T>::mutate(sp_id, user_account, |payment_stream| {
             let payment_stream = expect_or_err!(
