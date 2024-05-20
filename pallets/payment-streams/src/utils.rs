@@ -186,16 +186,13 @@ where
 
         // Update the payment stream in the PaymentStreams mapping
         PaymentStreams::<T>::mutate(sp_id, user_account, |payment_stream| {
-            match payment_stream {
-                Some(payment_stream) => {
-                    payment_stream.rate = new_rate;
-                    Ok(())
-                }
-                None => {
-                    // This should never happen as we already checked that the payment stream exists
-                    return Err(Error::<T>::PaymentStreamNotFound);
-                }
-            }
+            let payment_stream = expect_or_err!(
+                payment_stream,
+                "Payment stream should exist if it was found before.",
+                Error::<T>::PaymentStreamNotFound
+            );
+            payment_stream.rate = new_rate;
+            Ok::<(), DispatchError>(())
         })?;
 
         Ok(())
@@ -265,7 +262,7 @@ where
     }
 
     /// This function holds the logic that checks if a payment stream can be charged and, if so, charges the payment stream from the user's balance.
-    /// The charge is calculated as: rate * time_passed where time_passed is the time between the last valid proof submitted and the last charged proof of this payment stream.
+    /// The charge is calculated as: `rate * time_passed` where `time_passed` is the time between the last valid proof submitted and the last charged proof of this payment stream.
     /// As such, the last charged proof can't be greater than the last valid proof, and if they are equal then no charge is made.
     ///
     /// TODO: Change charging system to utilize a price index instead of relying on the block number directly
@@ -349,16 +346,13 @@ where
 
             // Set the last charge to the block number of the last valid proof submitted
             PaymentStreams::<T>::mutate(sp_id, user_account, |payment_stream| {
-                match payment_stream {
-                    Some(payment_stream) => {
-                        payment_stream.last_charged_proof = payment_stream.last_valid_proof;
-                        Ok(())
-                    }
-                    None => {
-                        // This should never happen as we already checked that the payment stream exists
-                        return Err(Error::<T>::PaymentStreamNotFound);
-                    }
-                }
+                let payment_stream = expect_or_err!(
+                    payment_stream,
+                    "Payment stream should exist if it was found before.",
+                    Error::<T>::PaymentStreamNotFound
+                );
+                payment_stream.last_charged_proof = payment_stream.last_valid_proof;
+                Ok::<(), DispatchError>(())
             })?;
 
             // Return the amount that has been charged
@@ -458,16 +452,13 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
 
         // Update the last valid proof block of the payment stream
         PaymentStreams::<T>::mutate(sp_id, user_account, |payment_stream| {
-            match payment_stream {
-                Some(payment_stream) => {
-                    payment_stream.last_valid_proof = last_valid_proof_block;
-                    Ok(())
-                }
-                None => {
-                    // This should never happen as we already checked that the payment stream exists
-                    return Err(Error::<T>::PaymentStreamNotFound);
-                }
-            }
+            let payment_stream = expect_or_err!(
+                payment_stream,
+                "Payment stream should exist if it was found before.",
+                Error::<T>::PaymentStreamNotFound
+            );
+            payment_stream.last_valid_proof = last_valid_proof_block;
+            Ok::<(), DispatchError>(())
         })?;
 
         // Return a successful DispatchResult
