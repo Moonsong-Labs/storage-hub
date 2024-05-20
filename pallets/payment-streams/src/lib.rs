@@ -68,7 +68,7 @@ pub mod pallet {
 
     // Storage:
 
-    /// The mapping from a Storage Provider to its provided users to their payment streams.
+    /// The double mapping from a Storage Provider, to its provided users, to their payment streams.
     ///
     /// This is used to get the payment stream of a user for a specific Storage Provider.
     ///
