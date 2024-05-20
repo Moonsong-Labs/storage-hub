@@ -14,7 +14,7 @@ use sp_runtime::traits::Convert;
 use storage_hub_traits::ProvidersInterface;
 
 use crate::*;
-use storage_hub_traits::PaymentStreamsInterface;
+use storage_hub_traits::{PaymentManager, PaymentStreamsInterface};
 
 macro_rules! expect_or_err {
     // Handle Option type
@@ -423,7 +423,21 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         Ok(())
     }
 
-    fn update_last_valid_proof(
+    fn get_payment_stream_info(
+        sp_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> Option<Self::PaymentStream> {
+        // Return the payment stream information
+        PaymentStreams::<T>::get(sp_id, user_account)
+    }
+}
+
+impl<T: pallet::Config> PaymentManager for pallet::Pallet<T> {
+    type AccountId = T::AccountId;
+    type ProviderId = ProviderIdFor<T>;
+    type BlockNumber = BlockNumberFor<T>;
+
+    fn update_last_chargeable_block(
         sp_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         last_valid_proof_block: Self::BlockNumber,
@@ -471,13 +485,5 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
 
         // Return a successful DispatchResult
         Ok(())
-    }
-
-    fn get_payment_stream_info(
-        sp_id: &Self::ProviderId,
-        user_account: &Self::AccountId,
-    ) -> Option<Self::PaymentStream> {
-        // Return the payment stream information
-        PaymentStreams::<T>::get(sp_id, user_account)
     }
 }

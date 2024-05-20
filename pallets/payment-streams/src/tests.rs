@@ -7,6 +7,7 @@ use frame_support::traits::{Get, OnFinalize, OnIdle, OnInitialize};
 use frame_support::{assert_ok, BoundedVec};
 use sp_core::H256;
 use sp_runtime::DispatchError;
+use storage_hub_traits::PaymentManager;
 use storage_hub_traits::PaymentStreamsInterface;
 use storage_hub_traits::ProvidersInterface;
 
@@ -177,7 +178,7 @@ mod create_stream {
             // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
             run_to_block(System::block_number() + 10);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -477,7 +478,7 @@ mod update_stream {
             // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
             run_to_block(System::block_number() + 10);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -536,7 +537,7 @@ mod update_stream {
             // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
             run_to_block(System::block_number() + 10);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -711,7 +712,7 @@ mod delete_stream {
             // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
             run_to_block(System::block_number() + 10);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -768,7 +769,7 @@ mod delete_stream {
             // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
             run_to_block(System::block_number() + 10);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -851,7 +852,7 @@ mod charge_stream {
             // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
             run_to_block(System::block_number() + 10);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -920,7 +921,7 @@ mod charge_stream {
             // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
             run_to_block(System::block_number() + 10);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -1008,7 +1009,7 @@ mod charge_stream {
             // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
             run_to_block(System::block_number() + 10);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -1083,7 +1084,7 @@ mod charge_stream {
             // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
             run_to_block(System::block_number() + 10);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -1123,7 +1124,7 @@ mod charge_stream {
             // Set the last valid proof of the payment stream from Bob to Alice to 20 blocks ahead
             run_to_block(System::block_number() + 20);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -1223,7 +1224,7 @@ mod charge_stream {
             // Set the last valid proof of the payment stream from Bob to Alice to 2 blocks ahead
             run_to_block(System::block_number() + 2);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -1277,7 +1278,7 @@ mod charge_stream {
             // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
             run_to_block(System::block_number() + 10);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -1350,7 +1351,7 @@ mod charge_stream {
             // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
             run_to_block(System::block_number() + 10);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -1434,7 +1435,7 @@ mod update_last_valid_proof {
             // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
             run_to_block(System::block_number() + 10);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -1463,7 +1464,7 @@ mod update_last_valid_proof {
 
             // Try to update the last valid proof of a payment stream that does not exist
             assert_noop!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -1480,7 +1481,7 @@ mod update_last_valid_proof {
 
             // Try to update the last valid proof of a payment stream from Bob to a random not registered BSP
             assert_noop!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &H256::random(),
                     &bob,
                     System::block_number()
@@ -1513,7 +1514,7 @@ mod update_last_valid_proof {
 
             // Try to set the last valid proof of the payment stream from Bob to Alice to a block number greater than the current block number
             assert_noop!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number() + 1
@@ -1547,7 +1548,7 @@ mod update_last_valid_proof {
             // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
             run_to_block(System::block_number() + 10);
             assert_ok!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number()
@@ -1556,7 +1557,7 @@ mod update_last_valid_proof {
 
             // Try to set the last valid proof of the payment stream from Bob to Alice to a block number less than the last valid proof block number already set
             assert_noop!(
-                <PaymentStreams as PaymentStreamsInterface>::update_last_valid_proof(
+                <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                     &alice_bsp_id,
                     &bob,
                     System::block_number() - 1

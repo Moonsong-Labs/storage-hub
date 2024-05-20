@@ -268,10 +268,6 @@ pub trait CommitmentVerifier {
 /// The interface of the Payment Streams pallet.
 ///
 /// It is to be used by other pallets to interact with the Payment Streams pallet to create, update and delete payment streams.
-/// One example: the Proofs Dealer pallet uses this interface to update the block when a Backup Storage Provider last submitted a valid proof.
-///
-/// TODO: Update this alongisde the Payment Streams pallet to add the `payment_account` to the BSP struct, so we can handle each function with
-/// the BSP ID instead of relying on account IDs.
 pub trait PaymentStreamsInterface {
     /// The type which represents the balance of the runtime.
     type Balance: fungible::Inspect<Self::AccountId>
@@ -300,36 +296,53 @@ pub trait PaymentStreamsInterface {
         + PartialEq
         + Clone;
 
-    /// Create a new payment stream from a user to a Backup Storage Provider.
+    /// Create a new payment stream from a user to a Provider.
     fn create_payment_stream(
-        bsp_id: &Self::ProviderId,
+        provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         rate: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult;
 
     /// Update the rate of an existing payment stream.
     fn update_payment_stream(
-        bsp_id: &Self::ProviderId,
+        provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         rate: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult;
 
     /// Delete a payment stream.
     fn delete_payment_stream(
-        bsp_id: &Self::ProviderId,
+        provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> DispatchResult;
 
     /// Get the payment stream information for a user and a Backup Storage Provider.
     fn get_payment_stream_info(
-        bsp_id: &Self::ProviderId,
+        provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> Option<Self::PaymentStream>;
+}
 
-    /// Update the last valid proof of a payment stream.
-    fn update_last_valid_proof(
-        bsp_id: &Self::ProviderId,
+/// The interface of a Payment Manager, which has to be made aware of the last block for which a charge of a payment can be made by a provider.
+/// Example: the Proofs Dealer pallet uses this interface to update the block when a Storage Provider last submitted a valid proof for the Payment Streams pallet.
+pub trait PaymentManager {
+    /// The type which represents an account identifier.
+    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a provider identifier.
+    type ProviderId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + Ord
+        + MaxEncodedLen
+        + Copy;
+    /// The type which represents a block number.
+    type BlockNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+
+    /// Update the last valid block for which a charge of a payment can be made
+    fn update_last_chargeable_block(
+        provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
-        last_valid_proof_block: Self::BlockNumber,
+        last_chargeable_block: Self::BlockNumber,
     ) -> DispatchResult;
 }
