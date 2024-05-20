@@ -1,7 +1,10 @@
-use storage_hub_infra::types::{Chunk, ChunkId, FileProof, Key, Metadata};
+use shc_common::types::{Chunk, ChunkId, FileProof, HasherOutT, Metadata};
+use trie_db::TrieLayout;
 
 #[derive(Debug)]
 pub enum FileStorageError {
+    /// File already exists.
+    FileAlreadyExists,
     /// File chunk already exists.
     FileChunkAlreadyExists,
     /// File chunk does not exist.
@@ -29,30 +32,68 @@ pub enum FileStorageWriteStatus {
     FileIncomplete,
 }
 
+pub trait FileDataTrie<T: TrieLayout> {
+    /// Get the root of the trie.
+    fn get_root(&self) -> &HasherOutT<T>;
+
+    /// Get the number of stored chunks in the trie.
+    fn stored_chunks_count(&self) -> u64;
+
+    /// Generate proof for a chunk of a file. Returns error if the chunk does not exist.
+    fn generate_proof(&self, chunk_id: &ChunkId) -> Result<FileProof, FileStorageError>;
+
+    /// Get a file chunk from storage. Returns error if the chunk does not exist.
+    fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError>;
+
+    /// Write a file chunk in storage updating the root hash of the trie.
+    fn write_chunk(&mut self, chunk_id: &ChunkId, data: &Chunk) -> Result<(), FileStorageError>;
+}
+
 /// Storage interface to be implemented by the storage providers.
-pub trait FileStorage: 'static {
+pub trait FileStorage<T: TrieLayout>: 'static {
+    type FileDataTrie: FileDataTrie<T> + Default;
+
     /// Generate proof for a chunk of a file. If the file does not exists or any chunk is missing,
     /// no proof will be returned.
-    fn generate_proof(&self, key: &Key, chunk_id: &ChunkId) -> Result<FileProof, FileStorageError>;
+    fn generate_proof(
+        &self,
+        key: &HasherOutT<T>,
+        chunk_id: &ChunkId,
+    ) -> Result<FileProof, FileStorageError>;
 
     /// Remove a file from storage.
-    fn delete_file(&mut self, key: &Key);
+    fn delete_file(&mut self, key: &HasherOutT<T>);
 
     /// Get metadata for a file.
-    fn get_metadata(&self, key: &Key) -> Result<Metadata, FileStorageError>;
+    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<Metadata, FileStorageError>;
 
-    /// Set metadata for a file. This should be called before you start adding chunks since it
-    /// will overwrite any previous Metadata and delete already stored file chunks.
-    fn set_metadata(&mut self, key: Key, metadata: Metadata);
+    /// Inserts a new file. If the file already exists, it will return an error.
+    /// It is expected that the file key is indeed computed from the [Metadata].
+    /// This method does not require the actual data, file [Chunk]s being inserted separately.
+    fn insert_file(
+        &mut self,
+        key: HasherOutT<T>,
+        metadata: Metadata,
+    ) -> Result<(), FileStorageError>;
+
+    /// Inserts a new file with the associated trie data. If the file already exists, it will
+    /// return an error.
+    fn insert_file_with_data(
+        &mut self,
+        key: HasherOutT<T>,
+        metadata: Metadata,
+        file_data: Self::FileDataTrie,
+    ) -> Result<(), FileStorageError>;
 
     /// Get a file chunk from storage.
-    fn get_chunk(&self, key: &Key, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError>;
+    fn get_chunk(&self, key: &HasherOutT<T>, chunk_id: &ChunkId)
+        -> Result<Chunk, FileStorageError>;
 
     /// Write a file chunk in storage. It is expected that you verify the associated proof that the
     /// [`Chunk`] is part of the file before writing it.
     fn write_chunk(
         &mut self,
-        key: &Key,
+        key: &HasherOutT<T>,
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<FileStorageWriteStatus, FileStorageError>;

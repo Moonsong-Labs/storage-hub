@@ -4,11 +4,12 @@ use crate::tasks::StorageHubHandler;
 use crate::tasks::StorageHubHandlerConfig;
 use file_manager::traits::FileStorage;
 use log::{debug, error, info};
+use shc_common::types::Metadata;
 
 use sc_network::PeerId;
 
+use sp_trie::TrieLayout;
 use storage_hub_infra::event_bus::EventHandler;
-use storage_hub_infra::types::Metadata;
 
 const LOG_TARGET: &str = "user-sends-file-task";
 
@@ -57,7 +58,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSe
         };
 
         let chunk_count = file_metadata.chunk_count();
-        let file_key = file_metadata.key();
+        let file_key = file_metadata.key::<<SHC::TrieLayout as TrieLayout>::Hash>();
 
         let peer_ids = event
             .multiaddresses
@@ -89,7 +90,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSe
                 let upload_response = self
                     .storage_hub_handler
                     .file_transfer
-                    .upload_request(peer_id, file_key, proof)
+                    .upload_request(peer_id, file_key.as_ref().to_vec(), proof)
                     .await;
 
                 match upload_response {
