@@ -190,7 +190,8 @@ pub mod pallet {
     pub enum HoldReason {
         /// Deposit that a user has to pay to open payment streams
         PaymentStreamStorageDeposit,
-        // TODO: Only for testing, remove this for production
+        // Only for testing, another unrelated hold reason
+        #[cfg(test)]
         AnotherUnrelatedHold,
     }
 

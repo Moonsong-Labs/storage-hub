@@ -415,7 +415,8 @@ pub mod pallet {
     pub enum HoldReason {
         /// Deposit that a Storage Provider has to pay to be registered as such
         StorageProviderDeposit,
-        // TODO: Only for testing, remove this for production
+        // Only for testing, another unrelated hold reason
+        #[cfg(test)]
         AnotherUnrelatedHold,
     }
 
