@@ -174,20 +174,19 @@ where
     pub fn start_bsp_tasks(&self) {
         log::info!("Starting BSP tasks");
 
-        // TODO: Start the actual BSP tasks here and remove mock task.
-        // BspVolunteerMockTask::new(self.clone())
-        //     .subscribe_to(&self.task_spawner, &self.blockchain)
-        //     .start();
-
+        // BspUploadFileTask is triggered by a NewStorageRequest event, to which it responds by
+        // volunteering to store the file. Then it waits for RemoteUploadRequest events, which
+        // happens when the user, now aware of the BSP volunteering, submits chunks of the file,
+        // along with a proof of storage.
         let bsp_upload_file_task = BspUploadFileTask::new(self.clone());
-
-        let event_bus_listener: EventBusListener<RemoteUploadRequest, _> = bsp_upload_file_task
+        // Subscribing to events from the BlockchainService.
+        let bs_event_bus_listener: EventBusListener<NewStorageRequest, _> = bsp_upload_file_task
             .clone()
-            .subscribe_to(&self.task_spawner, &self.file_transfer);
-        event_bus_listener.start();
-
-        let event_bus_listener: EventBusListener<NewStorageRequest, _> =
-            bsp_upload_file_task.subscribe_to(&self.task_spawner, &self.blockchain);
-        event_bus_listener.start();
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        bs_event_bus_listener.start();
+        // Subscribing to events from the FileTransferService.
+        let fts_event_bus_listener: EventBusListener<RemoteUploadRequest, _> =
+            bsp_upload_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
+        fts_event_bus_listener.start();
     }
 }

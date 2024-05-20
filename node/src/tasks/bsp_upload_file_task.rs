@@ -24,6 +24,18 @@ use crate::services::{
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
+/// BSP Upload File Task: Handles the whole flow of a file being uploaded to a BSP, from
+/// the BSP's perspective.
+///
+/// The flow is split into two parts, which are represented here as two handlers for two
+/// different events:
+/// - `NewStorageRequest` event: The first part of the flow. It is triggered by an
+///   on-chain event of a user submitting a storage request to StorageHub. It responds
+///   by sending a volunteer transaction and registering the interest of this BSP in
+///   receiving the file.
+/// - `RemoteUploadRequest` event: The second part of the flow. It is triggered by a
+///   user sending a chunk of the file to the BSP. It checks the proof for the chunk
+///   and if it is valid, stores it, until the whole file is stored.
 pub struct BspUploadFileTask<SHC: StorageHubHandlerConfig> {
     storage_hub_handler: StorageHubHandler<SHC>,
     file_key_cleanup: Option<HasherOutT<SHC::TrieLayout>>,
@@ -47,6 +59,36 @@ impl<SHC: StorageHubHandlerConfig> BspUploadFileTask<SHC> {
     }
 }
 
+/// Handles the `NewStorageRequest` event.
+///
+/// This event is triggered by an on-chain event of a user submitting a storage request to StorageHub.
+/// It responds by sending a volunteer transaction and registering the interest of this BSP in
+/// receiving the file. This task optimistically assumes the transaction will succeed, and registers
+/// the user and file key in the registry of the File Transfer Service, which handles incoming p2p
+/// upload requests.
+impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspUploadFileTask<SHC> {
+    async fn handle_event(&self, event: NewStorageRequest) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET,
+            "Initiating BSP volunteer mock for location: {:?}, fingerprint: {:?}",
+            event.location,
+            event.fingerprint
+        );
+
+        let result = self.handle_new_storage_request_event(event).await;
+        if result.is_err() {
+            if let Some(file_key) = &self.file_key_cleanup {
+                self.unvolunteer_file(file_key.clone()).await?;
+            }
+        }
+        result
+    }
+}
+
+/// Handles the `RemoteUploadRequest` event.
+///
+/// This event is triggered by a user sending a chunk of the file to the BSP. It checks the proof
+/// for the chunk and if it is valid, stores it, until the whole file is stored.
 impl<SHC: StorageHubHandlerConfig> EventHandler<RemoteUploadRequest> for BspUploadFileTask<SHC>
 where
     HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
@@ -126,100 +168,7 @@ where
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspUploadFileTask<SHC> {
-    async fn handle_event(&self, event: NewStorageRequest) -> anyhow::Result<()> {
-        info!(
-            target: LOG_TARGET,
-            "Initiating BSP volunteer mock for location: {:?}, fingerprint: {:?}",
-            event.location,
-            event.fingerprint
-        );
-
-        let result = self.handle_new_storage_request_event(event).await;
-        if result.is_err() {
-            if let Some(file_key) = &self.file_key_cleanup {
-                self.unvolunteer_file(file_key.clone()).await?;
-            }
-        }
-        result
-    }
-}
-
 impl<SHC: StorageHubHandlerConfig> BspUploadFileTask<SHC> {
-    async fn on_file_complete(&self, file_key: &HasherOutT<SHC::TrieLayout>) {
-        info!(target: LOG_TARGET, "File upload complete ({:?})", file_key);
-
-        // Unregister the file from the file transfer service.
-        self.storage_hub_handler
-            .file_transfer
-            .unregister_file(file_key.as_ref().into())
-            .await
-            .expect("File is not registered. This should not happen!");
-
-        // Get the metadata for the file.
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let metadata = read_file_storage
-            .get_metadata(file_key)
-            .expect("File metadata not found");
-        // Release the file storage read lock as soon as possible.
-        drop(read_file_storage);
-
-        // Save [`FileMetadata`] of the newly stored file in the forest storage.
-        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
-        let file_key = write_forest_storage
-            .insert_metadata(&metadata)
-            .expect("Failed to insert metadata.");
-        // Since we are done writing but need to generate a proof we choose to downgrade the lock to
-        // a read lock.
-        let read_forest_storage = write_forest_storage.downgrade();
-        let _forest_proof = read_forest_storage
-            .generate_proof(vec![file_key])
-            .expect("Failed to generate forest proof.");
-        // Release the forest storage read lock.
-        drop(read_forest_storage);
-
-        // TODO: send the proof for the new file to the runtime
-
-        // TODO: move this under an RPC call
-        let file_path = Path::new("./storage/").join(
-            String::from_utf8(metadata.location.clone())
-                .expect("File location should be an utf8 string"),
-        );
-        info!("Saving file to: {:?}", file_path);
-        let mut file = File::create(file_path)
-            .await
-            .expect("Failed to open file for writing.");
-
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        for chunk_id in 0..metadata.chunk_count() {
-            let chunk = read_file_storage
-                .get_chunk(&file_key, &chunk_id)
-                .expect("Chunk not found in storage.");
-            file.write_all(&chunk)
-                .await
-                .expect("Failed to write file chunk.");
-        }
-        drop(read_file_storage);
-    }
-
-    async fn unvolunteer_file(&self, file_key: HasherOutT<SHC::TrieLayout>) -> anyhow::Result<()> {
-        // Unregister the file from the file transfer service.
-        // The error is ignored, as the file might already be unregistered.
-        let _ = self
-            .storage_hub_handler
-            .file_transfer
-            .unregister_file(file_key.as_ref().into())
-            .await;
-
-        // Delete the file from the file storage.
-        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        write_file_storage.delete_file(&file_key);
-
-        // TODO: Send transaction to runtime to unvolunteer the file.
-
-        Ok(())
-    }
-
     async fn handle_new_storage_request_event(
         &self,
         event: NewStorageRequest,
@@ -335,5 +284,79 @@ impl<SHC: StorageHubHandlerConfig> BspUploadFileTask<SHC> {
         info!(target: LOG_TARGET, "Events in extrinsic: {:?}", &extrinsic_in_block.events);
 
         Ok(())
+    }
+
+    async fn unvolunteer_file(&self, file_key: HasherOutT<SHC::TrieLayout>) -> anyhow::Result<()> {
+        // Unregister the file from the file transfer service.
+        // The error is ignored, as the file might already be unregistered.
+        let _ = self
+            .storage_hub_handler
+            .file_transfer
+            .unregister_file(file_key.as_ref().into())
+            .await;
+
+        // Delete the file from the file storage.
+        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+        write_file_storage.delete_file(&file_key);
+
+        // TODO: Send transaction to runtime to unvolunteer the file.
+
+        Ok(())
+    }
+
+    async fn on_file_complete(&self, file_key: &HasherOutT<SHC::TrieLayout>) {
+        info!(target: LOG_TARGET, "File upload complete ({:?})", file_key);
+
+        // Unregister the file from the file transfer service.
+        self.storage_hub_handler
+            .file_transfer
+            .unregister_file(file_key.as_ref().into())
+            .await
+            .expect("File is not registered. This should not happen!");
+
+        // Get the metadata for the file.
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let metadata = read_file_storage
+            .get_metadata(file_key)
+            .expect("File metadata not found");
+        // Release the file storage read lock as soon as possible.
+        drop(read_file_storage);
+
+        // Save [`FileMetadata`] of the newly stored file in the forest storage.
+        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
+        let file_key = write_forest_storage
+            .insert_metadata(&metadata)
+            .expect("Failed to insert metadata.");
+        // Since we are done writing but need to generate a proof we choose to downgrade the lock to
+        // a read lock.
+        let read_forest_storage = write_forest_storage.downgrade();
+        let _forest_proof = read_forest_storage
+            .generate_proof(vec![file_key])
+            .expect("Failed to generate forest proof.");
+        // Release the forest storage read lock.
+        drop(read_forest_storage);
+
+        // TODO: send the proof for the new file to the runtime
+
+        // TODO: move this under an RPC call
+        let file_path = Path::new("./storage/").join(
+            String::from_utf8(metadata.location.clone())
+                .expect("File location should be an utf8 string"),
+        );
+        info!("Saving file to: {:?}", file_path);
+        let mut file = File::create(file_path)
+            .await
+            .expect("Failed to open file for writing.");
+
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        for chunk_id in 0..metadata.chunk_count() {
+            let chunk = read_file_storage
+                .get_chunk(&file_key, &chunk_id)
+                .expect("Chunk not found in storage.");
+            file.write_all(&chunk)
+                .await
+                .expect("Failed to write file chunk.");
+        }
+        drop(read_file_storage);
     }
 }
