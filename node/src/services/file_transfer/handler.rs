@@ -38,7 +38,6 @@ use sc_network::{
 use sc_tracing::tracing::{debug, error, info, warn};
 use shc_common::types::FileKey;
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
-use tokio::sync::Mutex;
 
 use crate::{
     service::ParachainNetworkService, services::file_transfer::events::RemoteUploadRequest,
@@ -339,15 +338,31 @@ impl FileTransferService {
                     }
                 };
                 if self.peer_file_allow_list.contains(&(peer, file_key)) {
-                    // TODO: Respond to the pending_response with Ok.
-
+                    // Emit the event to the event bus, letting the upper layers know about the
+                    // upload request.
                     self.emit(RemoteUploadRequest {
                         peer,
                         file_key,
                         chunk_with_proof,
-                        // TODO: Remove this and respond within this function.
-                        maybe_pending_response: Arc::new(Mutex::new(Some(pending_response))),
                     });
+
+                    let response =
+                        schema::v1::provider::response::Response::RemoteUploadDataResponse(
+                            schema::v1::provider::RemoteUploadDataResponse { success: true },
+                        );
+
+                    // Serialize the response
+                    let mut response_data = Vec::new();
+                    response.encode(&mut response_data);
+
+                    let response = OutgoingResponse {
+                        result: Ok(response_data),
+                        reputation_changes: Vec::new(),
+                        sent_feedback: None,
+                    };
+
+                    // Send the response back.
+                    pending_response.send(response).unwrap();
                 } else {
                     error!(
                         target: LOG_TARGET,
@@ -377,12 +392,9 @@ impl FileTransferService {
                     }
                 };
                 let chunk_id = r.file_chunk_id;
-                self.emit(RemoteDownloadRequest {
-                    file_key,
-                    chunk_id,
-                    // TODO: Remove this and respond within this function.
-                    maybe_pending_response: Arc::new(Mutex::new(Some(pending_response))),
-                });
+                // TODO: A request id and mapping to the pending_response is required to respond to
+                // the download request from upper layers.
+                self.emit(RemoteDownloadRequest { file_key, chunk_id });
             }
             None => {
                 error!(
