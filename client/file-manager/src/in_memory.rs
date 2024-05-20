@@ -1,47 +1,116 @@
 use std::collections::HashMap;
 
 use shc_common::types::{Chunk, ChunkId, FileMetadata, FileProof, HasherOutT, Leaf};
-use sp_core::H256;
 
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::TrieDBMutBuilder;
 
 use crate::traits::{
-    FileStorage, FileStorageError, FileStorageWriteError, FileStorageWriteOutcome,
+    FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError, FileStorageWriteOutcome,
 };
 
-pub struct FileData<T: TrieLayout + 'static> {
+pub struct InMemoryFileDataTrie<T: TrieLayout + 'static> {
     root: HasherOutT<T>,
     memdb: MemoryDB<T::Hash>,
 }
 
-impl<T: TrieLayout + 'static> FileData<T> {
+impl<T: TrieLayout> Default for InMemoryFileDataTrie<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: TrieLayout + 'static> InMemoryFileDataTrie<T> {
     fn new() -> Self {
         Self {
             root: Default::default(),
             memdb: MemoryDB::default(),
         }
     }
+}
 
-    pub fn get_root(&self) -> H256 {
-        H256::from_slice(
-            self.root
-                .as_ref()
-                .try_into()
-                .expect("trie hash should be 32 bytes"),
-        )
+impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
+    fn get_root(&self) -> &HasherOutT<T> {
+        &self.root
     }
 
-    pub fn stored_chunks_count(&self) -> u64 {
+    fn stored_chunks_count(&self) -> u64 {
         let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
         let stored_chunks = trie.key_iter().iter().count() as u64;
         stored_chunks
+    }
+
+    fn generate_proof(&self, chunk_id: &ChunkId) -> Result<FileProof, FileStorageError> {
+        let recorder: Recorder<T::Hash> = Recorder::default();
+
+        // A `TrieRecorder` is needed to create a proof of the "visited" leafs, by the end of this process.
+        let mut trie_recorder = recorder.as_trie_recorder(self.root);
+
+        let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        let chunk: Option<Vec<u8>> = trie
+            .get(&chunk_id.to_be_bytes())
+            .map_err(|_| FileStorageError::FailedToGetFileChunk)?;
+
+        let chunk = chunk.ok_or(FileStorageError::FileChunkDoesNotExist)?;
+
+        // Drop the `trie_recorder` to release the `recorder`
+        drop(trie_recorder);
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<T::Hash>(self.root)
+            .map_err(|_| FileStorageError::FailedToGenerateCompactProof)?;
+
+        Ok(FileProof {
+            proven: Leaf {
+                key: (*chunk_id),
+                data: chunk,
+            },
+            proof: proof.into(),
+            root: self.get_root().as_ref().into(),
+        })
+    }
+
+    fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError> {
+        let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
+
+        trie.get(&chunk_id.to_be_bytes())
+            .map_err(|_| FileStorageError::FailedToGetFileChunk)?
+            .ok_or(FileStorageError::FileChunkDoesNotExist)
+    }
+
+    fn write_chunk(
+        &mut self,
+        chunk_id: &ChunkId,
+        data: &Chunk,
+    ) -> Result<(), FileStorageWriteError> {
+        let mut trie = TrieDBMutBuilder::<T>::new(&mut self.memdb, &mut self.root).build();
+
+        // Check that we don't have a chunk already stored.
+        if trie
+            .contains(&chunk_id.to_be_bytes())
+            .map_err(|_| FileStorageWriteError::FailedToGetFileChunk)?
+        {
+            return Err(FileStorageWriteError::FileChunkAlreadyExists);
+        }
+
+        // Insert the chunk into the file trie.
+        trie.insert(&chunk_id.to_be_bytes(), &data)
+            .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
+
+        drop(trie);
+
+        Ok(())
     }
 }
 
 pub struct InMemoryFileStorage<T: TrieLayout + 'static> {
     pub metadata: HashMap<HasherOutT<T>, FileMetadata>,
-    pub file_data: HashMap<HasherOutT<T>, FileData<T>>,
+    pub file_data: HashMap<HasherOutT<T>, InMemoryFileDataTrie<T>>,
 }
 
 impl<T: TrieLayout> InMemoryFileStorage<T> {
@@ -54,6 +123,8 @@ impl<T: TrieLayout> InMemoryFileStorage<T> {
 }
 
 impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
+    type FileDataTrie = InMemoryFileDataTrie<T>;
+
     fn generate_proof(
         &self,
         file_key: &HasherOutT<T>,
@@ -80,38 +151,7 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 
-        let recorder: Recorder<T::Hash> = Recorder::default();
-
-        // A `TrieRecorder` is needed to create a proof of the "visited" leafs, by the end of this process.
-        let mut trie_recorder = recorder.as_trie_recorder(file_data.root);
-
-        let trie = TrieDBBuilder::<T>::new(&file_data.memdb, &file_data.root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        let chunk: Option<Vec<u8>> = trie
-            .get(&chunk_id.to_be_bytes())
-            .map_err(|_| FileStorageError::FailedToGetFileChunk)?;
-
-        let chunk = chunk.ok_or(FileStorageError::FileChunkDoesNotExist)?;
-
-        // Drop the `trie_recorder` to release the `recorder`
-        drop(trie_recorder);
-
-        // Generate proof
-        let proof = recorder
-            .drain_storage_proof()
-            .to_compact_proof::<T::Hash>(file_data.root)
-            .map_err(|_| FileStorageError::FailedToGenerateCompactProof)?;
-
-        Ok(FileProof {
-            proven: Leaf {
-                key: (*chunk_id),
-                data: chunk,
-            },
-            proof: proof.into(),
-            root: file_data.get_root(),
-        })
+        file_data.generate_proof(chunk_id)
     }
 
     fn delete_file(&mut self, file_key: &HasherOutT<T>) {
@@ -126,9 +166,41 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
             .ok_or(FileStorageError::FileDoesNotExist)
     }
 
-    fn set_metadata(&mut self, file_key: HasherOutT<T>, metadata: FileMetadata) {
-        self.metadata.insert(file_key, metadata);
-        self.file_data.insert(file_key, FileData::new());
+    fn insert_file(
+        &mut self,
+        key: HasherOutT<T>,
+        metadata: FileMetadata,
+    ) -> Result<(), FileStorageError> {
+        if self.metadata.contains_key(&key) {
+            return Err(FileStorageError::FileAlreadyExists);
+        }
+        self.metadata.insert(key, metadata);
+
+        let previous = self.file_data.insert(key, InMemoryFileDataTrie::default());
+        if previous.is_some() {
+            panic!("Invariant broken! Inconsistent metadata and file data storage.");
+        }
+
+        Ok(())
+    }
+
+    fn insert_file_with_data(
+        &mut self,
+        key: HasherOutT<T>,
+        metadata: FileMetadata,
+        file_data: Self::FileDataTrie,
+    ) -> Result<(), FileStorageError> {
+        if self.metadata.contains_key(&key) {
+            return Err(FileStorageError::FileAlreadyExists);
+        }
+        self.metadata.insert(key, metadata);
+
+        let previous = self.file_data.insert(key, file_data);
+        if previous.is_some() {
+            panic!("Invariant broken! Inconsistent metadata and file data storage.");
+        }
+
+        Ok(())
     }
 
     fn get_chunk(
@@ -139,11 +211,7 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
         let file_data = self.file_data.get(file_key);
         let file_data = file_data.ok_or(FileStorageError::FileDoesNotExist)?;
 
-        let trie = TrieDBBuilder::<T>::new(&file_data.memdb, &file_data.root).build();
-
-        trie.get(&chunk_id.to_be_bytes())
-            .map_err(|_| FileStorageError::FailedToGetFileChunk)?
-            .ok_or(FileStorageError::FileChunkDoesNotExist)
+        file_data.get_chunk(chunk_id)
     }
 
     fn write_chunk(
@@ -171,8 +239,9 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
         // Insert the chunk into the file trie.
         trie.insert(&chunk_id.to_be_bytes(), &data)
             .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
-
         drop(trie);
+
+        file_data.write_chunk(chunk_id, data)?;
 
         let metadata = self.metadata.get(file_key).expect(
             format!(
