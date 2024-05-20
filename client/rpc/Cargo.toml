@@ -28,6 +28,7 @@ sp-trie = { workspace = true }
 # Local
 file-manager = { workspace =  true }
 forest-manager = { workspace = true }
+shc-common = { workspace = true }
 pallet-file-system = { workspace = true }
 storage-hub-infra = { workspace = true }
 storage-hub-runtime = { workspace = true }

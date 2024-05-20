@@ -10,9 +10,6 @@ use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, 
 use futures::{Stream, StreamExt};
 use log::debug;
 use polkadot_primitives::{BlakeTwo256, HeadData, ValidationCode};
-use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
-use sp_consensus_aura::Slot;
-use sp_core::H256;
 
 use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
@@ -39,6 +36,8 @@ use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
 use sc_client_api::{Backend, HeaderBackend};
 use sc_consensus::{ImportQueue, LongestChain};
+use sp_consensus_aura::Slot;
+use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use sc_executor::{HeapAllocStrategy, WasmExecutor, DEFAULT_HEAP_ALLOC_STRATEGY};
 use sc_network::{config::IncomingRequest, ProtocolName};
 use sc_network::{NetworkBlock, NetworkService};
@@ -50,6 +49,8 @@ use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerH
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::traits::Block as BlockT;
+use sp_core::H256;
+use sp_trie::LayoutV1;
 use substrate_prometheus_endpoint::Registry;
 
 use crate::{
@@ -72,6 +73,10 @@ use crate::{
     },
     types::StorageHubBackend,
 };
+
+use tokio::sync::RwLock;
+use file_manager::in_memory::InMemoryFileStorage;
+use forest_manager::in_memory::InMemoryForestStorage;
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = (
@@ -215,7 +220,6 @@ async fn start_storage_provider(
     task_manager: &TaskManager,
     network: Arc<ParachainNetworkService>,
     client: Arc<ParachainClient>,
-    storage_hub_backend: StorageHubBackend,
     rpc_handlers: RpcHandlers,
     keystore: KeystorePtr,
     file_transfer_request_protocol_name: ProtocolName,
@@ -465,9 +469,6 @@ async fn start_dev_impl(
             &task_manager,
             network.clone(),
             client.clone(),
-            sh_backend
-                .clone()
-                .expect("StorageHub backend should already be initialized."),
             rpc_handlers,
             keystore.clone(),
             file_transfer_request_protocol_name,
@@ -732,9 +733,6 @@ async fn start_node_impl(
             &task_manager,
             network.clone(),
             client.clone(),
-            sh_backend
-                .clone()
-                .expect("StorageHub backend should already be initialized."),
             rpc_handlers,
             keystore.clone(),
             file_transfer_request_protocol_name,

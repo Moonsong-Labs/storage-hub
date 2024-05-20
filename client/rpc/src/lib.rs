@@ -14,8 +14,9 @@ use sp_trie::MemoryDB;
 use sp_trie::TrieDBMutBuilder;
 use sp_trie::TrieLayout;
 use sp_trie::TrieMut;
-use storage_hub_infra::constants::FILE_CHUNK_SIZE;
-use storage_hub_infra::types::Metadata;
+use shc_common::types::FILE_CHUNK_SIZE;
+use shc_common::types::Metadata;
+use shc_common::types::Fingerprint;
 
 use file_manager::traits::FileStorage;
 
@@ -34,6 +35,9 @@ use tokio::sync::RwLock;
 const LOG_TARGET: &str = "file-system-rpc";
 
 // CHANGE NAME
+// add doc comments
+// check alphabetical order in imports in files and .toml
+
 #[rpc(server, namespace = "filesystem")]
 #[async_trait]
 pub trait FileSystemApi {
@@ -60,9 +64,9 @@ impl<FL, T> FileSystemRpc<FL, T> {
 #[async_trait]
 impl<FL, T> FileSystemApiServer for FileSystemRpc<FL, T>
 where
-    FL: Send + Sync + FileStorage,
+    FL: Send + Sync + FileStorage<T>,
     T: Send + Sync + TrieLayout + 'static,
-    <T::Hash as sp_core::Hasher>::Out: Into<H256>
+    <T::Hash as sp_core::Hasher>::Out: Into<[u8; 32]>
 {
     async fn upload_file(
         &self,
@@ -75,7 +79,6 @@ where
 
         // Read file in chunks of `FILE_CHUNK_SIZE` into buffer then push buffer into a vector.
         // Loops until EOF or until some error that is NOT `ErrorKind::Interrupted` is found.
-        // https://doc.rust-lang.org/std/io/trait.Read.html#method.read_to_end
         loop {
             let mut buffer = Vec::with_capacity(FILE_CHUNK_SIZE);
             let read_result = file
@@ -117,12 +120,12 @@ where
 
         let file_metadata = Metadata {
             size: file_size,
-            fingerprint: root.into(),
+            fingerprint: Fingerprint::new(root.into()),
             owner: owner.to_string(),
             location: location.clone().into(),
         };
 
-        let file_key = file_metadata.key();
+        let file_key = file_metadata.key::<T::Hash>();
 
         for (chunk_id, chunk) in file_chunks.iter().enumerate() {
             let chunk_id = chunk_id as u64;

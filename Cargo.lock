@@ -12359,6 +12359,7 @@ dependencies = [
 name = "shc-rpc"
 version = "0.1.0"
 dependencies = [
+ "common 0.1.0",
  "file-manager",
  "forest-manager",
  "jsonrpsee",

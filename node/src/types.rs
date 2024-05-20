@@ -5,7 +5,7 @@ use sp_trie::LayoutV1;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::services::StorageHubHandlerConfig;
+use crate::services::handler::StorageHubHandlerConfig;
 
 #[derive(Clone)]
 pub struct StorageHubBackend {
