@@ -100,22 +100,25 @@ where
         let file_key: HasherOutT<SHC::TrieLayout> = TryFrom::try_from(*event.file_key.as_ref())
             .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
 
+        let proven = event
+            .chunk_with_proof
+            .proven
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("Proven should contain one element; qed"))?;
+
         if !event.chunk_with_proof.verify() {
             // Unvolunteer the file.
             self.unvolunteer_file(file_key).await?;
 
             return Err(anyhow::anyhow!(format!(
                 "Received invalid proof for chunk: {} (file: {:?}))",
-                event.chunk_with_proof.proven.key, event.file_key
+                proven.key, event.file_key
             )));
         }
 
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        let write_chunk_result = write_file_storage.write_chunk(
-            &file_key,
-            &event.chunk_with_proof.proven.key,
-            &event.chunk_with_proof.proven.data,
-        );
+        let write_chunk_result =
+            write_file_storage.write_chunk(&file_key, &proven.key, &proven.data);
         // Release the file storage write lock as soon as possible.
         drop(write_file_storage);
 
@@ -129,7 +132,7 @@ where
                     warn!(
                         target: LOG_TARGET,
                         "Received duplicate chunk with key: {}",
-                        event.chunk_with_proof.proven.key
+                        proven.key
                     );
 
                     // TODO: Consider informing this to the file transfer service so that it can handle reputation for this peer id.
@@ -149,7 +152,7 @@ where
 
                     return Err(anyhow::anyhow!(format!(
                         "Internal trie read/write error {:?}:{}",
-                        event.file_key, event.chunk_with_proof.proven.key
+                        event.file_key, proven.key
                     )));
                 }
                 FileStorageWriteError::FingerprintAndStoredFileMismatch => {
