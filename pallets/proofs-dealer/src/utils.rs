@@ -212,7 +212,7 @@ where
 
             // Verify key proof.
             let key_challenges = Self::hashes_to_key_challenges(&challenges);
-            KeyVerifierFor::<T>::verify_proof(&key_proven, key_challenges, &key_proof.proof)
+            KeyVerifierFor::<T>::verify_proof(&key_proven, &key_challenges, &key_proof.proof)
                 .map_err(|_| Error::<T>::KeyProofVerificationFailed)?;
         }
 
@@ -314,9 +314,13 @@ where
     }
 
     // TODO: Document this function.
-    fn hashes_to_key_challenges(hashes: &[MerkleHashFor<T>]) -> &[KeyChallengeFor<T>] {
-        // TODO: Implement this function
-        todo!("Implement this function")
+    fn hashes_to_key_challenges(hashes: &[MerkleHashFor<T>]) -> Vec<KeyChallengeFor<T>> {
+        // TODO: Implement this function. Temporarily return an array with some dummy values.
+        let mut challenges = Vec::new();
+        for hash in hashes {
+            challenges.push(KeyChallengeFor::<T>::default());
+        }
+        challenges
     }
 
     /// Returns the default forest root.
@@ -361,7 +365,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     ) -> Result<Vec<Self::MerkleHash>, DispatchError> {
         // Verify key proof.
         let key_challenges = Self::hashes_to_key_challenges(challenges);
-        KeyVerifierFor::<T>::verify_proof(key, key_challenges, proof)
+        KeyVerifierFor::<T>::verify_proof(key, &key_challenges, proof)
             .map_err(|_| Error::<T>::KeyProofVerificationFailed)?;
 
         Ok(challenges.to_vec())
