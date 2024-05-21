@@ -66,8 +66,11 @@ impl<SHC: StorageHubHandlerConfig> BspUploadFileTask<SHC> {
 /// receiving the file. This task optimistically assumes the transaction will succeed, and registers
 /// the user and file key in the registry of the File Transfer Service, which handles incoming p2p
 /// upload requests.
-impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspUploadFileTask<SHC> {
-    async fn handle_event(&self, event: NewStorageRequest) -> anyhow::Result<()> {
+impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspUploadFileTask<SHC>
+where
+    HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
+{
+    async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Initiating BSP volunteer mock for location: {:?}, fingerprint: {:?}",
@@ -93,7 +96,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<RemoteUploadRequest> for BspUplo
 where
     HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
 {
-    async fn handle_event(&self, event: RemoteUploadRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         let file_key: HasherOutT<SHC::TrieLayout> = TryFrom::try_from(*event.file_key.as_ref())
             .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
 
@@ -170,9 +173,12 @@ where
 
 impl<SHC: StorageHubHandlerConfig> BspUploadFileTask<SHC> {
     async fn handle_new_storage_request_event(
-        &self,
+        &mut self,
         event: NewStorageRequest,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<()>
+    where
+        HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
+    {
         let fingerprint: [u8; 32] = event
             .fingerprint
             .as_ref()
@@ -205,6 +211,11 @@ impl<SHC: StorageHubHandlerConfig> BspUploadFileTask<SHC> {
             .key::<<SHC::TrieLayout as TrieLayout>::Hash>()
             .as_ref()
             .try_into()?;
+
+        let file_key_hash: HasherOutT<SHC::TrieLayout> =
+            TryFrom::<[u8; 32]>::try_from(*file_key.as_ref())
+                .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
+        self.file_key_cleanup = Some(file_key_hash.clone());
 
         // Optimistically register the file for upload in the file transfer service.
         // This solves the race condition between the user and the BSP, where the user could react faster

@@ -37,7 +37,7 @@ impl<SHC> EventHandler<RemoteUploadRequest> for ResolveRemoteUploadRequest<SHC>
 where
     SHC: StorageHubHandlerConfig,
 {
-    async fn handle_event(&self, event: RemoteUploadRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         info!(
             "[ResolveRemoteUploadRequest] - file location: {:?}",
             event.file_key
@@ -72,7 +72,7 @@ impl<SHC: StorageHubHandlerConfig> Clone for NewStorageRequestHandler<SHC> {
 impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest>
     for NewStorageRequestHandler<SHC>
 {
-    async fn handle_event(&self, event: NewStorageRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!("[NewStorageRequestHandler] - received event: {:?}", event);
 
         // TODO: implement
@@ -104,7 +104,7 @@ impl<SHC: StorageHubHandlerConfig> AcceptedBspVolunteerHandler<SHC> {
 impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
     for AcceptedBspVolunteerHandler<SHC>
 {
-    async fn handle_event(&self, event: AcceptedBspVolunteer) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: AcceptedBspVolunteer) -> anyhow::Result<()> {
         info!("[NewStorageRequestHandler] - received event: {:?}", event);
 
         // TODO: implement
