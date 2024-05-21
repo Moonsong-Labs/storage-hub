@@ -9,9 +9,12 @@ use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
 use storage_hub_traits::CommitmentVerifier;
 use trie_db::Trie;
+use types::FileKeyChallenge;
 
 #[cfg(test)]
 mod tests;
+
+pub mod types;
 
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment
 /// is a Merkle Patricia Trie root hash and the response to a challenge is given
@@ -39,17 +42,18 @@ where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
     type Proof = FileKeyProof;
-    type Key = <T::Hash as sp_core::Hasher>::Out;
+    type Commitment = <T::Hash as sp_core::Hasher>::Out;
+    type Challenge = FileKeyChallenge;
 
     /// Verifies a proof against a root (i.e. commitment) and a set of challenges.
     ///
     /// Iterates over the challenges, computes the modulo of the challenged hashes with the number of chunks in the file,
     /// and checks if the resulting leaf is in the proof.
     fn verify_proof(
-        expected_file_key: &Self::Key,
-        challenges: &[Self::Key],
+        expected_file_key: &Self::Commitment,
+        challenges: &[Self::Challenge],
         proof: &Self::Proof,
-    ) -> Result<Vec<Self::Key>, DispatchError> {
+    ) -> Result<Vec<Self::Challenge>, DispatchError> {
         // Check that `challenges` is not empty.
         if challenges.is_empty() {
             return Err("No challenges provided.".into());
@@ -82,7 +86,7 @@ where
             .as_slice()
             .try_into()
             .map_err(|_| "Failed to convert fingerprint to a fixed size array.")?;
-        let expected_root: Self::Key = expected_root
+        let expected_root: Self::Commitment = expected_root
             .try_into()
             .map_err(|_| "Failed to convert fingerprint to a hasher output.")?;
 
@@ -96,8 +100,8 @@ where
 
         let trie = TrieDBBuilder::<T>::new(&memdb, &root).build();
 
-        // Initialise vector of proven keys. We use a `BTreeSet` to ensure that the keys are unique.
-        let mut proven_keys = BTreeSet::new();
+        // Initialise vector of proven challenges. We use a `BTreeSet` to ensure that the keys are unique.
+        let mut proven_challenges = BTreeSet::new();
         let mut challenges_iter = challenges.iter();
 
         // Iterate over the challenges compute the modulo of the challenged hashes with the number of chunks in the file,
@@ -128,19 +132,10 @@ where
                 );
             }
 
-            // Convert the challenged chunk to a key (now that we know it is a proven key).
-            let challenged_chunk_bytes = challenged_chunk.to_be_bytes();
-            let proven_key: &[u8; H_LENGTH] = challenged_chunk_bytes
-                .as_slice()
-                .try_into()
-                .map_err(|_| "Failed to convert a challenged chunk (u64) to a fixed size array.")?;
-            let proven_key: Self::Key = proven_key.try_into().map_err(|_| {
-                "Failed to convert a challenged chunk as an array of bytes to a key."
-            })?;
-            // Add the challenge to the proven keys.
-            proven_keys.insert(proven_key);
+            // Add the challenge to the proven challenges.
+            proven_challenges.insert(challenged_chunk.into());
         }
 
-        return Ok(Vec::from_iter(proven_keys));
+        return Ok(Vec::from_iter(proven_challenges));
     }
 }

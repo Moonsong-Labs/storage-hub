@@ -42,6 +42,9 @@ sp-io = { workspace = true }
 # Frame
 pallet-balances = { workspace = true, features = ["std"] }
 
+# Local
+shp-file-key-verifier = { workspace = true }
+
 [features]
 default = ["std"]
 runtime-benchmarks = [

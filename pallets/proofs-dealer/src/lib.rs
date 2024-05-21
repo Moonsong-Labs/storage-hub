@@ -30,7 +30,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
     use sp_runtime::traits::Convert;
-    use storage_hub_traits::{CommitmentVerifier, ProvidersInterface};
+    use storage_hub_traits::{CommitmentVerifier, MaybeDebug, ProvidersInterface};
     use types::{KeyFor, ProviderFor};
 
     use crate::types::*;
@@ -52,14 +52,28 @@ pub mod pallet {
         /// The type used to verify Merkle Patricia Forest proofs.
         /// This verifies proofs of keys belonging to the Merkle Patricia Forest.
         /// Something that implements the `CommitmentVerifier` trait.
-        type ForestVerifier: CommitmentVerifier<Key = KeyFor<Self>>;
+        /// The type of the challenge is a hash, and it is expected that a proof will provide the
+        /// exact hash if it exists in the forest, or the previous and next hashes if it does not.
+        type ForestVerifier: CommitmentVerifier<Commitment = KeyFor<Self>, Challenge = KeyFor<Self>>;
 
         /// The type used to verify the proof of a specific key within the Merkle Patricia Forest.
         /// While `ForestVerifier` verifies that some keys are in the Merkle Patricia Forest, this
         /// verifies specifically a proof for that key. For example, if the keys in the forest
         /// represent files, this would verify the proof for a specific file, and `ForestVerifier`
         /// would verify that the file is in the forest.
-        type KeyVerifier: CommitmentVerifier<Key = KeyFor<Self>>;
+        /// The type of the challenge is a [u8; 8] that actually represents a u64 number, which is
+        /// the index of the chunk being challenged.
+        type KeyVerifier: CommitmentVerifier<
+            Commitment = KeyFor<Self>,
+            Challenge = Self::KeyChallenge,
+        >;
+
+        /// The type of the challenge that is used to verify a proof for a specific key.
+        /// This type is created to ensure that the challenge used by [`Self::KeyVerifier`] is
+        /// something that can be converted from a u64 number.
+        /// Usually this can be set to the `Challenge` type of the `CommitmentVerifier` used
+        /// for the [`Self::KeyVerifier`].
+        type KeyChallenge: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]> + From<u64>;
 
         /// Type to access the Balances Pallet.
         type NativeBalance: fungible::Inspect<Self::AccountId>

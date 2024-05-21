@@ -168,7 +168,11 @@ storage-hub-traits = { path = "support/traits", default-features = false }
 storage-hub-infra = { path = "support/infra", default-features = false }
 storage-hub-runtime = { path = "runtime", default-features = false }
 storage-hub-primitives = { path = "support/primitives", default-features = false }
-session-keys-primitives = { path = "primitives/session-keys", default-features = false }
+
+shp-session-keys = { path = "primitives/session-keys", default-features = false }
+shp-file-key-verifier = { path = "primitives/file-key-verifier", default-features = false }
+shp-forest-verifier = { path = "primitives/forest-verifier", default-features = false }
+shp-traits = { path = "primitives/traits", default-features = false }
 
 [workspace.lints.rust]
 suspicious_double_ref_op = { level = "allow", priority = 2 }

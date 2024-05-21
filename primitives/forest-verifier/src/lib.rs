@@ -25,17 +25,18 @@ where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
     type Proof = CompactProof;
-    type Key = <T::Hash as sp_core::Hasher>::Out;
+    type Commitment = <T::Hash as sp_core::Hasher>::Out;
+    type Challenge = <T::Hash as sp_core::Hasher>::Out;
 
     /// Verifies a proof against a root (i.e. commitment) and a set of challenges.
     ///
     /// Iterates over the challenges and checks if there is a pair of consecutive
     /// leaves that match the challenge, or an exact leaf that matches the challenge.
     fn verify_proof(
-        root: &Self::Key,
-        challenges: &[Self::Key],
+        root: &Self::Commitment,
+        challenges: &[Self::Challenge],
         proof: &Self::Proof,
-    ) -> Result<Vec<Self::Key>, DispatchError> {
+    ) -> Result<Vec<Self::Challenge>, DispatchError> {
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
         let (memdb, root) = proof.to_memory_db(Some(root.into())).map_err(|_| {
             "Failed to convert proof to memory DB, root doesn't match with expected."

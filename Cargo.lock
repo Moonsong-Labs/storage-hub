@@ -6964,6 +6964,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serde",
+ "shp-file-key-verifier",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io 30.0.0",
  "sp-runtime 31.0.1",
@@ -7295,6 +7296,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serde",
+ "shp-file-key-verifier",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io 30.0.0",
  "sp-runtime 31.0.1",
@@ -7330,7 +7332,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serde",
- "session-keys-primitives",
+ "shp-session-keys",
  "sp-consensus-babe 0.32.0",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io 30.0.0",
@@ -12274,23 +12276,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "session-keys-primitives"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "frame-support 28.0.0",
- "parity-scale-codec",
- "scale-info",
- "sp-api 26.0.0",
- "sp-consensus-babe 0.32.0",
- "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
- "sp-inherents 26.0.0",
- "sp-keystore 0.34.0",
- "sp-runtime 31.0.1",
- "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
-]
-
-[[package]]
 name = "sha-1"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12402,6 +12387,23 @@ dependencies = [
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "storage-hub-traits",
  "trie-db 0.29.1",
+]
+
+[[package]]
+name = "shp-session-keys"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "frame-support 28.0.0",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-api 26.0.0",
+ "sp-consensus-babe 0.32.0",
+ "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-inherents 26.0.0",
+ "sp-keystore 0.34.0",
+ "sp-runtime 31.0.1",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
 ]
 
 [[package]]
@@ -14606,6 +14608,7 @@ dependencies = [
  "polkadot-runtime-common 7.0.0",
  "polkadot-runtime-constants",
  "scale-info",
+ "shp-file-key-verifier",
  "smallvec",
  "sp-api 26.0.0",
  "sp-block-builder",

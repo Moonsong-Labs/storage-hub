@@ -20,9 +20,9 @@ use crate::{
     pallet,
     types::{
         AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor, ChallengesFeeFor,
-        ForestRootFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor, KeyVerifierFor,
-        KeyVerifierProofFor, Proof, ProviderFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
-        StakeToChallengePeriodFor, TreasuryAccountFor,
+        ForestRootFor, ForestVerifierFor, ForestVerifierProofFor, KeyChallengeFor, KeyFor,
+        KeyVerifierFor, KeyVerifierProofFor, MerkleHashFor, Proof, ProviderFor, ProvidersPalletFor,
+        RandomChallengesPerBlockFor, StakeToChallengePeriodFor, TreasuryAccountFor,
     },
     BlockToChallengesSeed, BlockToCheckpointChallenges, ChallengesQueue, Error,
     LastBlockProviderSubmittedProofFor, LastCheckpointBlock, Pallet, PriorityChallengesQueue,
@@ -211,7 +211,8 @@ where
                 Self::generate_challenges_from_seed(seed, submitter, key_proof.challenge_count);
 
             // Verify key proof.
-            KeyVerifierFor::<T>::verify_proof(&key_proven, &challenges, &key_proof.proof)
+            let key_challenges = Self::hashes_to_key_challenges(&challenges);
+            KeyVerifierFor::<T>::verify_proof(&key_proven, key_challenges, &key_proof.proof)
                 .map_err(|_| Error::<T>::KeyProofVerificationFailed)?;
         }
 
@@ -312,14 +313,10 @@ where
         challenges
     }
 
-    // TODO: Document.
-    fn verify_proof(
-        who: &ProviderFor<T>,
-        challenges: &[T::MerkleHash],
-        proof: &Proof<T>,
-    ) -> DispatchResult {
-        // TODO
-        Ok(())
+    // TODO: Document this function.
+    fn hashes_to_key_challenges(hashes: &[MerkleHashFor<T>]) -> &[KeyChallengeFor<T>] {
+        // TODO: Implement this function
+        todo!("Implement this function")
     }
 
     /// Returns the default forest root.
@@ -363,8 +360,11 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         proof: &Self::KeyProof,
     ) -> Result<Vec<Self::MerkleHash>, DispatchError> {
         // Verify key proof.
-        KeyVerifierFor::<T>::verify_proof(key, challenges, proof)
-            .map_err(|_| Error::<T>::KeyProofVerificationFailed.into())
+        let key_challenges = Self::hashes_to_key_challenges(challenges);
+        KeyVerifierFor::<T>::verify_proof(key, key_challenges, proof)
+            .map_err(|_| Error::<T>::KeyProofVerificationFailed)?;
+
+        Ok(challenges.to_vec())
     }
 
     fn challenge(key_challenged: &Self::MerkleHash) -> DispatchResult {
