@@ -139,7 +139,7 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
     fn generate_proof(
         &self,
         file_key: &HasherOutT<T>,
-        chunk_id: &ChunkId,
+        chunk_id: &Vec<ChunkId>,
     ) -> Result<FileProof, FileStorageError> {
         let metadata = self
             .metadata
@@ -162,7 +162,7 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 
-        file_data.generate_proof(&vec![*chunk_id])
+        file_data.generate_proof(chunk_id)
     }
 
     fn delete_file(&mut self, file_key: &HasherOutT<T>) {

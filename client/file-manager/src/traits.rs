@@ -76,7 +76,7 @@ pub trait FileStorage<T: TrieLayout>: 'static {
     fn generate_proof(
         &self,
         key: &HasherOutT<T>,
-        chunk_id: &ChunkId,
+        chunk_id: &Vec<ChunkId>,
     ) -> Result<FileProof, FileStorageError>;
 
     /// Remove a file from storage.

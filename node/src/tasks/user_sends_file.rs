@@ -95,7 +95,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSe
                     .file_storage
                     .read()
                     .await
-                    .generate_proof(&file_key, &chunk_id)
+                    .generate_proof(&file_key, &vec![chunk_id])
                     .expect("File is not in storage, or proof does not exist.");
 
                 let upload_response = self
