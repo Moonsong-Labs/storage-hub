@@ -4,7 +4,7 @@ use crate::tasks::StorageHubHandler;
 use crate::tasks::StorageHubHandlerConfig;
 use file_manager::traits::FileStorage;
 use log::{debug, error, info};
-use shc_common::types::Metadata;
+use shc_common::types::FileMetadata;
 
 use sc_network::PeerId;
 
@@ -42,7 +42,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSe
     /// establishes a connection to each BSPs through the p2p network and sends the file.
     /// At this point we assume that the file is merkleised and already in file storage, and
     /// for this reason the file transfer to the BSP should not fail unless the p2p connection fails.
-    async fn handle_event(&self, event: AcceptedBspVolunteer) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: AcceptedBspVolunteer) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Handling BSP volunteering to store a file from user [{:?}], with location [{:?}]",
@@ -50,7 +50,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSe
             event.location,
         );
 
-        let file_metadata = Metadata {
+        let file_metadata = FileMetadata {
             owner: event.owner.to_string(),
             size: event.size.into(),
             location: event.location.into_inner(),
@@ -60,11 +60,22 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSe
         let chunk_count = file_metadata.chunk_count();
         let file_key = file_metadata.key::<<SHC::TrieLayout as TrieLayout>::Hash>();
 
-        let peer_ids = event
-            .multiaddresses
-            .iter()
-            .filter_map(|multiaddr| PeerId::try_from_multiaddr(&multiaddr))
-            .collect::<Vec<PeerId>>();
+        // Adds the multiaddresses of the BSP volunteering to store the file to the known addresses of the file transfer service.
+        // This is required to establish a connection to the BSP.
+        let mut peer_ids = Vec::new();
+        for multiaddress in &event.multiaddresses {
+            if let Some(peer_id) = PeerId::try_from_multiaddr(&multiaddress) {
+                if let Err(error) = self
+                    .storage_hub_handler
+                    .file_transfer
+                    .add_known_address(peer_id, multiaddress.clone())
+                    .await
+                {
+                    error!(target: LOG_TARGET, "Failed to add known address {:?} for peer {:?} due to {:?}", multiaddress, peer_id, error);
+                }
+                peer_ids.push(peer_id);
+            }
+        }
 
         // TODO: Check how we can improve this.
         // We could either make sure this scenario doesn't happen beforehand,
@@ -90,7 +101,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSe
                 let upload_response = self
                     .storage_hub_handler
                     .file_transfer
-                    .upload_request(peer_id, file_key.as_ref().to_vec(), proof)
+                    .upload_request(peer_id, file_key.as_ref().into(), proof)
                     .await;
 
                 match upload_response {

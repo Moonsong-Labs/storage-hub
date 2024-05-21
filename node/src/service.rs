@@ -11,6 +11,7 @@ use futures::{Stream, StreamExt};
 use log::debug;
 use polkadot_primitives::{BlakeTwo256, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
+use shc_common::types::HasherOutT;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
 use sp_trie::LayoutV1;
@@ -272,7 +273,9 @@ async fn start_storage_provider(
 fn start_provider_tasks<SHC: StorageHubHandlerConfig>(
     provider_options: ProviderOptions,
     sh_handler: StorageHubHandler<SHC>,
-) {
+) where
+    HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
+{
     // Starting the tasks according to the provider type.
     match provider_options.provider_type {
         ProviderType::Bsp => sh_handler.start_bsp_tasks(),

@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 
+use shc_common::types::{Chunk, ChunkId, FileMetadata, FileProof, HasherOutT, Leaf};
+
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::TrieDBMutBuilder;
 
-use shc_common::types::{Chunk, ChunkId, FileProof, HasherOutT, Leaf, Metadata};
-
-use crate::traits::{FileDataTrie, FileStorage, FileStorageError, FileStorageWriteStatus};
+use crate::traits::{
+    FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError, FileStorageWriteOutcome,
+};
 
 pub struct InMemoryFileDataTrie<T: TrieLayout + 'static> {
     root: HasherOutT<T>,
@@ -81,20 +83,24 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
             .ok_or(FileStorageError::FileChunkDoesNotExist)
     }
 
-    fn write_chunk(&mut self, chunk_id: &ChunkId, data: &Chunk) -> Result<(), FileStorageError> {
+    fn write_chunk(
+        &mut self,
+        chunk_id: &ChunkId,
+        data: &Chunk,
+    ) -> Result<(), FileStorageWriteError> {
         let mut trie = TrieDBMutBuilder::<T>::new(&mut self.memdb, &mut self.root).build();
 
         // Check that we don't have a chunk already stored.
         if trie
             .contains(&chunk_id.to_be_bytes())
-            .map_err(|_| FileStorageError::FailedToGetFileChunk)?
+            .map_err(|_| FileStorageWriteError::FailedToGetFileChunk)?
         {
-            return Err(FileStorageError::FileChunkAlreadyExists);
+            return Err(FileStorageWriteError::FileChunkAlreadyExists);
         }
 
         // Insert the chunk into the file trie.
         trie.insert(&chunk_id.to_be_bytes(), &data)
-            .map_err(|_| FileStorageError::FailedToInsertFileChunk)?;
+            .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
 
         drop(trie);
 
@@ -103,7 +109,7 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
 }
 
 pub struct InMemoryFileStorage<T: TrieLayout + 'static> {
-    pub metadata: HashMap<HasherOutT<T>, Metadata>,
+    pub metadata: HashMap<HasherOutT<T>, FileMetadata>,
     pub file_data: HashMap<HasherOutT<T>, InMemoryFileDataTrie<T>>,
 }
 
@@ -153,7 +159,7 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
         self.file_data.remove(file_key);
     }
 
-    fn get_metadata(&self, file_key: &HasherOutT<T>) -> Result<Metadata, FileStorageError> {
+    fn get_metadata(&self, file_key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError> {
         self.metadata
             .get(file_key)
             .cloned()
@@ -163,7 +169,7 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
     fn insert_file(
         &mut self,
         key: HasherOutT<T>,
-        metadata: Metadata,
+        metadata: FileMetadata,
     ) -> Result<(), FileStorageError> {
         if self.metadata.contains_key(&key) {
             return Err(FileStorageError::FileAlreadyExists);
@@ -181,7 +187,7 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
     fn insert_file_with_data(
         &mut self,
         key: HasherOutT<T>,
-        metadata: Metadata,
+        metadata: FileMetadata,
         file_data: Self::FileDataTrie,
     ) -> Result<(), FileStorageError> {
         if self.metadata.contains_key(&key) {
@@ -213,11 +219,27 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
         file_key: &HasherOutT<T>,
         chunk_id: &ChunkId,
         data: &Chunk,
-    ) -> Result<FileStorageWriteStatus, FileStorageError> {
+    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
         let file_data = self
             .file_data
             .get_mut(file_key)
-            .ok_or(FileStorageError::FileDoesNotExist)?;
+            .ok_or(FileStorageWriteError::FileDoesNotExist)?;
+
+        let mut trie =
+            TrieDBMutBuilder::<T>::new(&mut file_data.memdb, &mut file_data.root).build();
+
+        // Check that we don't have a chunk already stored.
+        if trie
+            .contains(&chunk_id.to_be_bytes())
+            .map_err(|_| FileStorageWriteError::FailedToGetFileChunk)?
+        {
+            return Err(FileStorageWriteError::FileChunkAlreadyExists);
+        }
+
+        // Insert the chunk into the file trie.
+        trie.insert(&chunk_id.to_be_bytes(), &data)
+            .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
+        drop(trie);
 
         file_data.write_chunk(chunk_id, data)?;
 
@@ -231,15 +253,15 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
 
         // Check if we have all the chunks for the file.
         if metadata.chunk_count() != file_data.stored_chunks_count() {
-            return Ok(FileStorageWriteStatus::FileIncomplete);
+            return Ok(FileStorageWriteOutcome::FileIncomplete);
         }
 
         // If we have all the chunks, check if the file metadata fingerprint and the file trie
         // root matches.
         if metadata.fingerprint != file_data.root.as_ref().into() {
-            return Err(FileStorageError::FingerprintAndStoredFileMismatch);
+            return Err(FileStorageWriteError::FingerprintAndStoredFileMismatch);
         }
 
-        Ok(FileStorageWriteStatus::FileComplete)
+        Ok(FileStorageWriteOutcome::FileComplete)
     }
 }

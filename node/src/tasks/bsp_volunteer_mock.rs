@@ -35,7 +35,7 @@ impl<SHC: StorageHubHandlerConfig> BspVolunteerMockTask<SHC> {
 }
 
 impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunteerMockTask<SHC> {
-    async fn handle_event(&self, event: NewStorageRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Initiating BSP volunteer mock for location: {:?}, fingerprint: {:?}",
