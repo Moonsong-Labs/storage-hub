@@ -1,8 +1,8 @@
 use crate::services::file_transfer::commands::FileTransferServiceInterface;
 use crate::tasks::AcceptedBspVolunteer;
 use crate::tasks::StorageHubHandler;
-use crate::tasks::StorageHubHandlerConfig;
 use file_manager::traits::FileStorage;
+use forest_manager::traits::ForestStorage;
 use log::{debug, error, info};
 use shc_common::types::FileMetadata;
 
@@ -17,11 +17,16 @@ const LOG_TARGET: &str = "user-sends-file-task";
 /// volunteering for that file.
 /// It can serve multiple BSPs volunteering to store each file, since
 /// it reacts to every `AcceptedBspVolunteer` from the runtime.
-pub struct UserSendsFileTask<SHC: StorageHubHandlerConfig> {
-    storage_hub_handler: StorageHubHandler<SHC>,
+pub struct UserSendsFileTask<T, FL, FS> {
+    storage_hub_handler: StorageHubHandler<T, FL, FS>,
 }
 
-impl<SHC: StorageHubHandlerConfig> Clone for UserSendsFileTask<SHC> {
+impl<T, FL, FS> Clone for UserSendsFileTask<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+{
     fn clone(&self) -> Self {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
@@ -29,15 +34,20 @@ impl<SHC: StorageHubHandlerConfig> Clone for UserSendsFileTask<SHC> {
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> UserSendsFileTask<SHC> {
-    pub fn new(storage_hub_handler: StorageHubHandler<SHC>) -> Self {
+impl<T, FL, FS> UserSendsFileTask<T, FL, FS> {
+    pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSendsFileTask<SHC> {
+impl<T, FL, FS> EventHandler<AcceptedBspVolunteer> for UserSendsFileTask<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+{
     /// Reacts to BSPs volunteering (`AcceptedBspVolunteer` from the runtime) to store the user's file,
     /// establishes a connection to each BSPs through the p2p network and sends the file.
     /// At this point we assume that the file is merkleised and already in file storage, and
@@ -58,7 +68,7 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer> for UserSe
         };
 
         let chunk_count = file_metadata.chunk_count();
-        let file_key = file_metadata.key::<<SHC::TrieLayout as TrieLayout>::Hash>();
+        let file_key = file_metadata.key::<T::Hash>();
 
         // Adds the multiaddresses of the BSP volunteering to store the file to the known addresses of the file transfer service.
         // This is required to establish a connection to the BSP.

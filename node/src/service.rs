@@ -7,6 +7,8 @@ use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
 
+use file_manager::in_memory::InMemoryFileStorage;
+use forest_manager::{in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage};
 use futures::{Stream, StreamExt};
 use log::debug;
 use polkadot_primitives::{BlakeTwo256, HeadData, ValidationCode};
@@ -52,16 +54,13 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::traits::Block as BlockT;
 use substrate_prometheus_endpoint::Registry;
+use tokio::sync::RwLock;
 
 use crate::{
     cli::StorageLayer,
     services::{
-        blockchain::handler::BlockchainService,
-        file_transfer::configure_file_transfer_network,
-        handler::{
-            InMemoryStorageHubConfig, RocksDBStorageHubConfig, StorageHubHandler,
-            StorageHubHandlerConfig, StorageHubHandlerInitializer,
-        },
+        blockchain::handler::BlockchainService, builder::StorageHubBuilder,
+        file_transfer::configure_file_transfer_network, handler::StorageHubHandler,
     },
 };
 use crate::{
@@ -210,79 +209,79 @@ pub fn new_partial(
     })
 }
 
-async fn start_storage_provider(
-    provider_options: ProviderOptions,
-    task_manager: &TaskManager,
-    network: Arc<ParachainNetworkService>,
-    client: Arc<ParachainClient>,
-    rpc_handlers: RpcHandlers,
-    keystore: KeystorePtr,
-    file_transfer_request_protocol_name: ProtocolName,
-    file_transfer_request_receiver: async_channel::Receiver<IncomingRequest>,
-) {
-    let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+// async fn start_storage_provider(
+//     provider_options: ProviderOptions,
+//     task_manager: &TaskManager,
+//     network: Arc<ParachainNetworkService>,
+//     client: Arc<ParachainClient>,
+//     rpc_handlers: RpcHandlers,
+//     keystore: KeystorePtr,
+//     file_transfer_request_protocol_name: ProtocolName,
+//     file_transfer_request_receiver: async_channel::Receiver<IncomingRequest>,
+// ) {
+//     let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
-    let file_transfer_service_handle = spawn_file_transfer_service(
-        &task_spawner,
-        file_transfer_request_receiver,
-        file_transfer_request_protocol_name,
-        network,
-    )
-    .await;
+//     let file_transfer_service_handle = spawn_file_transfer_service(
+//         &task_spawner,
+//         file_transfer_request_receiver,
+//         file_transfer_request_protocol_name,
+//         network,
+//     )
+//     .await;
 
-    // Spawn the Blockchain Service.
-    let blockchain_service_handle = spawn_blockchain_service(
-        &task_spawner,
-        client.clone(),
-        Arc::new(rpc_handlers),
-        keystore.clone(),
-    )
-    .await;
+//     // Spawn the Blockchain Service.
+//     let blockchain_service_handle = spawn_blockchain_service(
+//         &task_spawner,
+//         client.clone(),
+//         Arc::new(rpc_handlers),
+//         keystore.clone(),
+//     )
+//     .await;
 
-    let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
+//     let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
 
-    // Initialise the StorageHubHandler, for tasks to have access to the services.
-    match provider_options.storage_layer {
-        StorageLayer::Memory => {
-            debug!("Starting in-memory storage hub handler.");
+//     // Initialise the StorageHubHandler, for tasks to have access to the services.
+//     match provider_options.storage_layer {
+//         StorageLayer::Memory => {
+//             debug!("Starting in-memory storage hub handler.");
 
-            let sh_handler = InMemoryStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
-                caller_pub_key,
-                task_spawner,
-                file_transfer_service_handle,
-                blockchain_service_handle,
-            );
+//             let sh_handler = InMemoryStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
+//                 caller_pub_key,
+//                 task_spawner,
+//                 file_transfer_service_handle,
+//                 blockchain_service_handle,
+//             );
 
-            start_provider_tasks(provider_options, sh_handler);
-        }
-        StorageLayer::Rocksdb => {
-            debug!("Starting rocksdb storage hub handler.");
+//             start_provider_tasks(provider_options, sh_handler);
+//         }
+//         StorageLayer::Rocksdb => {
+//             debug!("Starting rocksdb storage hub handler.");
 
-            let sh_handler = RocksDBStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
-                caller_pub_key,
-                task_spawner,
-                file_transfer_service_handle,
-                blockchain_service_handle,
-            );
+//             let sh_handler = RocksDBStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
+//                 caller_pub_key,
+//                 task_spawner,
+//                 file_transfer_service_handle,
+//                 blockchain_service_handle,
+//             );
 
-            start_provider_tasks(provider_options, sh_handler);
-        }
-    };
-}
+//             start_provider_tasks(provider_options, sh_handler);
+//         }
+//     };
+// }
 
-fn start_provider_tasks<SHC: StorageHubHandlerConfig>(
-    provider_options: ProviderOptions,
-    sh_handler: StorageHubHandler<SHC>,
-) where
-    HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
-{
-    // Starting the tasks according to the provider type.
-    match provider_options.provider_type {
-        ProviderType::Bsp => sh_handler.start_bsp_tasks(),
-        ProviderType::User => sh_handler.start_user_tasks(),
-        _ => {}
-    }
-}
+// fn start_provider_tasks<SHC: StorageHubHandlerConfig>(
+//     provider_options: ProviderOptions,
+//     sh_handler: StorageHubHandler<SHC>,
+// ) where
+//     HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
+// {
+//     // Starting the tasks according to the provider type.
+//     match provider_options.provider_type {
+//         ProviderType::Bsp => sh_handler.start_bsp_tasks(),
+//         ProviderType::User => sh_handler.start_user_tasks(),
+//         _ => {}
+//     }
+// }
 
 /// Start a development node with the given solo chain `Configuration`.
 #[sc_tracing::logging::prefix_logs_with("Solo chain 💾")]
@@ -446,20 +445,20 @@ async fn start_dev_impl(
 
     // Spawning the Blockchain Service if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
-        let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
-            file_transfer_request_protocol
-                .expect("FileTransfer request protocol should already be initialized.");
-        start_storage_provider(
-            provider_options,
-            &task_manager,
-            network.clone(),
-            client.clone(),
-            rpc_handlers,
-            keystore.clone(),
-            file_transfer_request_protocol_name,
-            file_transfer_request_receiver,
-        )
-        .await;
+        // let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
+        //     file_transfer_request_protocol
+        //         .expect("FileTransfer request protocol should already be initialized.");
+        // start_storage_provider(
+        //     provider_options,
+        //     &task_manager,
+        //     network.clone(),
+        //     client.clone(),
+        //     rpc_handlers,
+        //     keystore.clone(),
+        //     file_transfer_request_protocol_name,
+        //     file_transfer_request_receiver,
+        // )
+        // .await;
     }
 
     if let Some(hwbench) = hwbench {
@@ -665,6 +664,69 @@ async fn start_node_impl(
         );
     }
 
+    let mut sh_builder = None;
+    if let Some(provider_options) = provider_options {
+        let sh_builder = match provider_options.storage_layer {
+            StorageLayer::Memory => {
+                // Start building the StorageHubHandler, if running as a provider.
+                let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+
+                // Create builder for the StorageHubHandler.
+                let mut storage_hub_builder = StorageHubBuilder::<
+                    LayoutV1<BlakeTwo256>,
+                    InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
+                    InMemoryForestStorage<LayoutV1<BlakeTwo256>>,
+                >::new(&task_spawner);
+
+                // Add FileTransfer Service to the StorageHubHandler.
+                let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
+                    file_transfer_request_protocol
+                        .expect("FileTransfer request protocol should already be initialized.");
+                storage_hub_builder
+                    .with_file_transfer(
+                        file_transfer_request_receiver,
+                        file_transfer_request_protocol_name,
+                        network.clone(),
+                    )
+                    .await;
+
+                debug!("Starting in-memory storage hub handler.");
+
+                storage_hub_builder.with_in_memory_storage();
+                storage_hub_builder
+            }
+            StorageLayer::Rocksdb => {
+                // Start building the StorageHubHandler, if running as a provider.
+                let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+
+                // Create builder for the StorageHubHandler.
+                let mut storage_hub_builder = StorageHubBuilder::<
+                    LayoutV1<BlakeTwo256>,
+                    InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
+                    RocksDBForestStorage<LayoutV1<BlakeTwo256>>,
+                >::new(&task_spawner);
+
+                // Add FileTransfer Service to the StorageHubHandler.
+                let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
+                    file_transfer_request_protocol
+                        .expect("FileTransfer request protocol should already be initialized.");
+                storage_hub_builder
+                    .with_file_transfer(
+                        file_transfer_request_receiver,
+                        file_transfer_request_protocol_name,
+                        network.clone(),
+                    )
+                    .await;
+
+                debug!("Starting rocksdb storage hub handler.");
+
+                let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
+                storage_hub_builder.with_rocksdb_storage(caller_pub_key);
+                storage_hub_builder
+            }
+        };
+    }
+
     let rpc_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
@@ -698,20 +760,27 @@ async fn start_node_impl(
 
     // Spawning the Blockchain Service if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
-        let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
-            file_transfer_request_protocol
-                .expect("FileTransfer request protocol should already be initialized.");
-        start_storage_provider(
-            provider_options,
-            &task_manager,
-            network.clone(),
-            client.clone(),
-            rpc_handlers,
-            keystore.clone(),
-            file_transfer_request_protocol_name,
-            file_transfer_request_receiver,
-        )
-        .await;
+        // let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
+        //     file_transfer_request_protocol
+        //         .expect("FileTransfer request protocol should already be initialized.");
+        // start_storage_provider(
+        //     provider_options,
+        //     &task_manager,
+        //     network.clone(),
+        //     client.clone(),
+        //     rpc_handlers,
+        //     keystore.clone(),
+        //     file_transfer_request_protocol_name,
+        //     file_transfer_request_receiver,
+        // )
+        // .await;
+
+        let mut storage_hub_builder =
+            sh_builder.expect("StorageHubBuilder should already be initialized.");
+
+        storage_hub_builder
+            .with_blockchain(client.clone(), Arc::new(rpc_handlers), keystore.clone())
+            .await;
     }
 
     if let Some(hwbench) = hwbench {
