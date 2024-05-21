@@ -1,7 +1,7 @@
 // TODO: Remove this once we don't need the examples in this file
 #![allow(dead_code)]
 
-pub mod bsp_upload_file_task;
+pub mod bsp_upload_file;
 pub mod bsp_volunteer_mock;
 pub mod user_sends_file;
 
