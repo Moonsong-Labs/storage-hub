@@ -20,9 +20,9 @@ use crate::{
     pallet,
     types::{
         AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor, ChallengesFeeFor,
-        ForestRootFor, ForestVerifierFor, ForestVerifierProofFor, KeyChallengeFor, KeyFor,
-        KeyVerifierFor, KeyVerifierProofFor, MerkleHashFor, Proof, ProviderFor, ProvidersPalletFor,
-        RandomChallengesPerBlockFor, StakeToChallengePeriodFor, TreasuryAccountFor,
+        ForestRootFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor, KeyVerifierFor,
+        KeyVerifierProofFor, Proof, ProviderFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
+        StakeToChallengePeriodFor, TreasuryAccountFor,
     },
     BlockToChallengesSeed, BlockToCheckpointChallenges, ChallengesQueue, Error,
     LastBlockProviderSubmittedProofFor, LastCheckpointBlock, Pallet, PriorityChallengesQueue,
@@ -211,8 +211,7 @@ where
                 Self::generate_challenges_from_seed(seed, submitter, key_proof.challenge_count);
 
             // Verify key proof.
-            let key_challenges = Self::hashes_to_key_challenges(&challenges);
-            KeyVerifierFor::<T>::verify_proof(&key_proven, &key_challenges, &key_proof.proof)
+            KeyVerifierFor::<T>::verify_proof(&key_proven, &challenges, &key_proof.proof)
                 .map_err(|_| Error::<T>::KeyProofVerificationFailed)?;
         }
 
@@ -313,16 +312,6 @@ where
         challenges
     }
 
-    // TODO: Document this function.
-    fn hashes_to_key_challenges(hashes: &[MerkleHashFor<T>]) -> Vec<KeyChallengeFor<T>> {
-        // TODO: Implement this function. Temporarily return an array with some dummy values.
-        let mut challenges = Vec::new();
-        for hash in hashes {
-            challenges.push(KeyChallengeFor::<T>::default());
-        }
-        challenges
-    }
-
     /// Returns the default forest root.
     fn default_forest_root() -> ForestRootFor<T> {
         // TODO: Check that this returns the root for an empty forest and change if necessary.
@@ -364,11 +353,8 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         proof: &Self::KeyProof,
     ) -> Result<Vec<Self::MerkleHash>, DispatchError> {
         // Verify key proof.
-        let key_challenges = Self::hashes_to_key_challenges(challenges);
-        KeyVerifierFor::<T>::verify_proof(key, &key_challenges, proof)
-            .map_err(|_| Error::<T>::KeyProofVerificationFailed)?;
-
-        Ok(challenges.to_vec())
+        KeyVerifierFor::<T>::verify_proof(key, &challenges, proof)
+            .map_err(|_| Error::<T>::KeyProofVerificationFailed.into())
     }
 
     fn challenge(key_challenged: &Self::MerkleHash) -> DispatchResult {

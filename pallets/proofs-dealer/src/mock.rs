@@ -6,7 +6,6 @@ use frame_support::{
     weights::constants::RocksDbWeight,
 };
 use frame_system as system;
-use shp_file_key_verifier::types::FileKeyChallenge;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, IdentityLookup},
@@ -136,8 +135,7 @@ impl crate::Config for Test {
     type MerkleHash = H256;
     type MerkleHashing = BlakeTwo256;
     type ForestVerifier = MockVerifier<H256>;
-    type KeyVerifier = MockVerifier<FileKeyChallenge>;
-    type KeyChallenge = FileKeyChallenge;
+    type KeyVerifier = MockVerifier<H256>;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;

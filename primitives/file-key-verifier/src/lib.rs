@@ -9,12 +9,9 @@ use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
 use storage_hub_traits::CommitmentVerifier;
 use trie_db::Trie;
-use types::FileKeyChallenge;
 
 #[cfg(test)]
 mod tests;
-
-pub mod types;
 
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment
 /// is a Merkle Patricia Trie root hash and the response to a challenge is given
@@ -43,7 +40,7 @@ where
 {
     type Proof = FileKeyProof;
     type Commitment = <T::Hash as sp_core::Hasher>::Out;
-    type Challenge = FileKeyChallenge;
+    type Challenge = <T::Hash as sp_core::Hasher>::Out;
 
     /// Verifies a proof against a root (i.e. commitment) and a set of challenges.
     ///
@@ -132,8 +129,17 @@ where
                 );
             }
 
-            // Add the challenge to the proven challenges.
-            proven_challenges.insert(challenged_chunk.into());
+            // Convert the challenged chunk to a key (now that we know it is a proven key).
+            let challenged_chunk_bytes = challenged_chunk.to_be_bytes();
+            let proven_challenge: &[u8; H_LENGTH] = challenged_chunk_bytes
+                .as_slice()
+                .try_into()
+                .map_err(|_| "Failed to convert a challenged chunk (u64) to a fixed size array.")?;
+            let proven_challenge: Self::Challenge = proven_challenge.try_into().map_err(|_| {
+                "Failed to convert a challenged chunk as an array of bytes to a key."
+            })?;
+            // Add the challenge to the proven keys.
+            proven_challenges.insert(proven_challenge);
         }
 
         return Ok(Vec::from_iter(proven_challenges));

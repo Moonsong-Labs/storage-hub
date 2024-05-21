@@ -30,7 +30,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
     use sp_runtime::traits::Convert;
-    use storage_hub_traits::{CommitmentVerifier, MaybeDebug, ProvidersInterface};
+    use storage_hub_traits::{CommitmentVerifier, ProvidersInterface};
     use types::{KeyFor, ProviderFor};
 
     use crate::types::*;
@@ -63,17 +63,7 @@ pub mod pallet {
         /// would verify that the file is in the forest.
         /// The type of the challenge is a [u8; 8] that actually represents a u64 number, which is
         /// the index of the chunk being challenged.
-        type KeyVerifier: CommitmentVerifier<
-            Commitment = KeyFor<Self>,
-            Challenge = Self::KeyChallenge,
-        >;
-
-        /// The type of the challenge that is used to verify a proof for a specific key.
-        /// This type is created to ensure that the challenge used by [`Self::KeyVerifier`] is
-        /// something that can be converted from a u64 number.
-        /// Usually this can be set to the `Challenge` type of the `CommitmentVerifier` used
-        /// for the [`Self::KeyVerifier`].
-        type KeyChallenge: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]> + From<u64>;
+        type KeyVerifier: CommitmentVerifier<Commitment = KeyFor<Self>, Challenge = KeyFor<Self>>;
 
         /// Type to access the Balances Pallet.
         type NativeBalance: fungible::Inspect<Self::AccountId>

@@ -46,7 +46,7 @@ use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
-use shp_file_key_verifier::types::FileKeyChallenge;
+use shp_file_key_verifier::FileKeyVerifier;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
@@ -61,7 +61,7 @@ use storage_hub_primitives::TrieVerifier;
 use storage_hub_traits::{CommitmentVerifier, MaybeDebug};
 use xcm::latest::prelude::BodyId;
 
-use crate::ParachainInfo;
+use crate::{ParachainInfo, FILE_CHUNK_SIZE};
 
 use self::currency::UNITS;
 
@@ -452,8 +452,8 @@ impl pallet_proofs_dealer::Config for Runtime {
     type MerkleHash = Hash;
     type MerkleHashing = BlakeTwo256;
     type ForestVerifier = TrieVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
-    type KeyVerifier = MockVerifier<FileKeyChallenge>;
-    type KeyChallenge = FileKeyChallenge;
+    type KeyVerifier =
+        FileKeyVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }, { FILE_CHUNK_SIZE }>;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = RandomChallengesPerBlock;
     type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;

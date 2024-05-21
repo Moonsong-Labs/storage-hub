@@ -119,9 +119,6 @@ pub type KeyVerifierFor<T> = <T as crate::Config>::KeyVerifier;
 /// Syntactic sugar for the KeyVerifier::Proof type used in the proofs pallet.
 pub type KeyVerifierProofFor<T> = <<T as crate::Config>::KeyVerifier as CommitmentVerifier>::Proof;
 
-/// Syntactic sugar for the KeyChallenge type used in the proofs pallet.
-pub type KeyChallengeFor<T> = <T as crate::Config>::KeyChallenge;
-
 /// Syntactic sugar for the type of NativeBalance pallet.
 pub type BalancePalletFor<T> = <T as crate::Config>::NativeBalance;
 
