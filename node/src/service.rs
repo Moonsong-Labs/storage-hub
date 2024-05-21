@@ -52,6 +52,7 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::traits::Block as BlockT;
 use substrate_prometheus_endpoint::Registry;
+use tokio::sync::RwLock;
 
 use crate::{
     cli::StorageLayer,
@@ -210,70 +211,71 @@ pub fn new_partial(
     })
 }
 
-async fn start_storage_provider(
-    provider_options: ProviderOptions,
-    task_manager: &TaskManager,
-    network: Arc<ParachainNetworkService>,
-    client: Arc<ParachainClient>,
-    rpc_handlers: RpcHandlers,
-    keystore: KeystorePtr,
-    file_transfer_request_protocol_name: ProtocolName,
-    file_transfer_request_receiver: async_channel::Receiver<IncomingRequest>,
-) {
-    let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+// async fn start_storage_provider(
+//     provider_options: ProviderOptions,
+//     task_manager: &TaskManager,
+//     network: Arc<ParachainNetworkService>,
+//     client: Arc<ParachainClient>,
+//     rpc_handlers: RpcHandlers,
+//     keystore: KeystorePtr,
+//     file_transfer_request_protocol_name: ProtocolName,
+//     file_transfer_request_receiver: async_channel::Receiver<IncomingRequest>,
+// ) {
+//     let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
-    let file_transfer_service_handle = spawn_file_transfer_service(
-        &task_spawner,
-        file_transfer_request_receiver,
-        file_transfer_request_protocol_name,
-        network,
-    )
-    .await;
+//     let file_transfer_service_handle = spawn_file_transfer_service(
+//         &task_spawner,
+//         file_transfer_request_receiver,
+//         file_transfer_request_protocol_name,
+//         network,
+//     )
+//     .await;
 
-    // Spawn the Blockchain Service.
-    let blockchain_service_handle = spawn_blockchain_service(
-        &task_spawner,
-        client.clone(),
-        Arc::new(rpc_handlers),
-        keystore.clone(),
-    )
-    .await;
+//     // Spawn the Blockchain Service.
+//     let blockchain_service_handle = spawn_blockchain_service(
+//         &task_spawner,
+//         client.clone(),
+//         Arc::new(rpc_handlers),
+//         keystore.clone(),
+//     )
+//     .await;
 
-    let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
+//     let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
 
-    // Initialise the StorageHubHandler, for tasks to have access to the services.
-    match provider_options.storage_layer {
-        StorageLayer::Memory => {
-            debug!("Starting in-memory storage hub handler.");
+//     // Initialise the StorageHubHandler, for tasks to have access to the services.
+//     match provider_options.storage_layer {
+//         StorageLayer::Memory => {
+//             debug!("Starting in-memory storage hub handler.");
 
-            let sh_handler = InMemoryStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
-                caller_pub_key,
-                task_spawner,
-                file_transfer_service_handle,
-                blockchain_service_handle,
-            );
+//             let sh_handler = InMemoryStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
+//                 caller_pub_key,
+//                 task_spawner,
+//                 file_transfer_service_handle,
+//                 blockchain_service_handle,
+//             );
 
-            start_provider_tasks(provider_options, sh_handler);
-        }
-        StorageLayer::Rocksdb => {
-            debug!("Starting rocksdb storage hub handler.");
+//             start_provider_tasks(provider_options, sh_handler);
+//         }
+//         StorageLayer::Rocksdb => {
+//             debug!("Starting rocksdb storage hub handler.");
 
-            let sh_handler = RocksDBStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
-                caller_pub_key,
-                task_spawner,
-                file_transfer_service_handle,
-                blockchain_service_handle,
-            );
+//             let sh_handler = RocksDBStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
+//                 caller_pub_key,
+//                 task_spawner,
+//                 file_transfer_service_handle,
+//                 blockchain_service_handle,
+//             );
 
-            start_provider_tasks(provider_options, sh_handler);
-        }
-    };
-}
+//             start_provider_tasks(provider_options, sh_handler);
+//         }
+//     };
+// }
 
 fn start_provider_tasks<SHC: StorageHubHandlerConfig>(
     provider_options: ProviderOptions,
     sh_handler: StorageHubHandler<SHC>,
-) where
+) -> StorageHubHandler<SHC>
+where
     HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
 {
     // Starting the tasks according to the provider type.
@@ -282,6 +284,7 @@ fn start_provider_tasks<SHC: StorageHubHandlerConfig>(
         ProviderType::User => sh_handler.start_user_tasks(),
         _ => {}
     }
+    sh_handler
 }
 
 /// Start a development node with the given solo chain `Configuration`.
@@ -413,6 +416,63 @@ async fn start_dev_impl(
             }
         };
 
+    // Spawning the Blockchain Service if node is running as a Storage Provider.
+    if let Some(provider_options) = provider_options {
+        let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
+            file_transfer_request_protocol
+                .expect("FileTransfer request protocol should already be initialized.");
+
+        let caller_pub_key: [u8; 32] = BlockchainService::caller_pub_key(keystore.clone()).0;
+
+        match provider_options.storage_layer {
+            StorageLayer::Memory => {
+                let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+
+                let file_transfer_service_handle = spawn_file_transfer_service(
+                    &task_spawner,
+                    file_transfer_request_receiver,
+                    file_transfer_request_protocol_name,
+                    network.clone(),
+                )
+                .await;
+
+                // Spawn the Blockchain Service.
+                let blockchain_service_handle =
+                    spawn_blockchain_service(&task_spawner, client.clone(), None, keystore.clone())
+                        .await;
+                InMemoryStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
+                    caller_pub_key,
+                    task_spawner,
+                    file_transfer_service_handle,
+                    blockchain_service_handle,
+                );
+            }
+            StorageLayer::Rocksdb => {
+                let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+
+                let file_transfer_service_handle = spawn_file_transfer_service(
+                    &task_spawner,
+                    file_transfer_request_receiver,
+                    file_transfer_request_protocol_name,
+                    network.clone(),
+                )
+                .await;
+
+                // Spawn the Blockchain Service.
+                let blockchain_service_handle =
+                    spawn_blockchain_service(&task_spawner, client.clone(), None, keystore.clone())
+                        .await;
+
+                RocksDBStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
+                    caller_pub_key,
+                    task_spawner,
+                    file_transfer_service_handle,
+                    blockchain_service_handle,
+                );
+            }
+        }
+    }
+
     let rpc_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
@@ -443,24 +503,6 @@ async fn start_dev_impl(
         tx_handler_controller,
         telemetry: telemetry.as_mut(),
     })?;
-
-    // Spawning the Blockchain Service if node is running as a Storage Provider.
-    if let Some(provider_options) = provider_options {
-        let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
-            file_transfer_request_protocol
-                .expect("FileTransfer request protocol should already be initialized.");
-        start_storage_provider(
-            provider_options,
-            &task_manager,
-            network.clone(),
-            client.clone(),
-            rpc_handlers,
-            keystore.clone(),
-            file_transfer_request_protocol_name,
-            file_transfer_request_receiver,
-        )
-        .await;
-    }
 
     if let Some(hwbench) = hwbench {
         sc_sysinfo::print_hwbench(&hwbench);
@@ -665,53 +707,134 @@ async fn start_node_impl(
         );
     }
 
-    let rpc_builder = {
-        let client = client.clone();
-        let transaction_pool = transaction_pool.clone();
-
-        Box::new(move |deny_unsafe, _| {
-            let deps = crate::rpc::FullDeps {
-                client: client.clone(),
-                pool: transaction_pool.clone(),
-                command_sink: None,
-                deny_unsafe,
-            };
-
-            crate::rpc::create_full(deps).map_err(Into::into)
-        })
-    };
-
-    let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
-        rpc_builder,
-        client: client.clone(),
-        transaction_pool: transaction_pool.clone(),
-        task_manager: &mut task_manager,
-        config: parachain_config,
-        keystore: params.keystore_container.keystore(),
-        backend: backend.clone(),
-        network: network.clone(),
-        sync_service: sync_service.clone(),
-        system_rpc_tx,
-        tx_handler_controller,
-        telemetry: telemetry.as_mut(),
-    })?;
-
     // Spawning the Blockchain Service if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
         let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
             file_transfer_request_protocol
                 .expect("FileTransfer request protocol should already be initialized.");
-        start_storage_provider(
-            provider_options,
-            &task_manager,
-            network.clone(),
-            client.clone(),
-            rpc_handlers,
-            keystore.clone(),
-            file_transfer_request_protocol_name,
-            file_transfer_request_receiver,
-        )
-        .await;
+
+        let caller_pub_key: [u8; 32] = BlockchainService::caller_pub_key(keystore.clone()).0;
+
+        match provider_options.storage_layer {
+            StorageLayer::Memory => {
+                let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+
+                let file_transfer_service_handle = spawn_file_transfer_service(
+                    &task_spawner,
+                    file_transfer_request_receiver,
+                    file_transfer_request_protocol_name,
+                    network.clone(),
+                )
+                .await;
+
+                // Spawn the Blockchain Service.
+                let blockchain_service_handle =
+                    spawn_blockchain_service(&task_spawner, client.clone(), None, keystore.clone())
+                        .await;
+
+                let mut sh_handler = InMemoryStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
+                    caller_pub_key,
+                    task_spawner,
+                    file_transfer_service_handle,
+                    blockchain_service_handle,
+                );
+
+                sh_handler = start_provider_tasks(provider_options, sh_handler);
+
+                let rpc_builder = {
+                    let client = client.clone();
+                    let transaction_pool = transaction_pool.clone();
+
+                    Box::new(move |deny_unsafe, _| {
+                        let deps = crate::rpc::FullDeps {
+                            client: client.clone(),
+                            pool: transaction_pool.clone(),
+                            command_sink: None,
+                            deny_unsafe,
+                        };
+
+                        crate::rpc::create_full(deps).map_err(Into::into)
+                    })
+                };
+
+                let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+                    rpc_builder,
+                    client: client.clone(),
+                    transaction_pool: transaction_pool.clone(),
+                    task_manager: &mut task_manager,
+                    config: parachain_config,
+                    keystore: params.keystore_container.keystore(),
+                    backend: backend.clone(),
+                    network: network.clone(),
+                    sync_service: sync_service.clone(),
+                    system_rpc_tx,
+                    tx_handler_controller,
+                    telemetry: telemetry.as_mut(),
+                })?;
+
+                // TODO: Update BlockchainService with rpc_handlers
+                // Do the same thing as above to `start_dev_impl`
+            }
+            StorageLayer::Rocksdb => {
+                let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+
+                let file_transfer_service_handle = spawn_file_transfer_service(
+                    &task_spawner,
+                    file_transfer_request_receiver,
+                    file_transfer_request_protocol_name,
+                    network.clone(),
+                )
+                .await;
+
+                // Spawn the Blockchain Service.
+                let blockchain_service_handle =
+                    spawn_blockchain_service(&task_spawner, client.clone(), None, keystore.clone())
+                        .await;
+
+                let mut sh_handler = RocksDBStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
+                    caller_pub_key,
+                    task_spawner,
+                    file_transfer_service_handle,
+                    blockchain_service_handle,
+                );
+
+                sh_handler = start_provider_tasks(provider_options, sh_handler);
+
+                let rpc_builder = {
+                    let client = client.clone();
+                    let transaction_pool = transaction_pool.clone();
+
+                    Box::new(move |deny_unsafe, _| {
+                        let deps = crate::rpc::FullDeps {
+                            client: client.clone(),
+                            pool: transaction_pool.clone(),
+                            command_sink: None,
+                            deny_unsafe,
+                        };
+
+                        crate::rpc::create_full(deps).map_err(Into::into)
+                    })
+                };
+
+                let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+                    rpc_builder,
+                    client: client.clone(),
+                    transaction_pool: transaction_pool.clone(),
+                    task_manager: &mut task_manager,
+                    config: parachain_config,
+                    keystore: params.keystore_container.keystore(),
+                    backend: backend.clone(),
+                    network: network.clone(),
+                    sync_service: sync_service.clone(),
+                    system_rpc_tx,
+                    tx_handler_controller,
+                    telemetry: telemetry.as_mut(),
+                })?;
+
+                // TODO: Update BlockchainService with rpc_handlers
+                // Do the same thing as above to `start_dev_impl`
+            }
+        }
     }
 
     if let Some(hwbench) = hwbench {

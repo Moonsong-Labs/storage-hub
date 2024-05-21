@@ -41,6 +41,7 @@ use sp_runtime::{
 };
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
+use tokio::sync::RwLock;
 
 use crate::service::ParachainClient;
 
@@ -82,9 +83,15 @@ pub struct BlockchainService {
     /// The keystore. Used to sign extrinsics.
     keystore: KeystorePtr,
     /// The RPC handlers. Used to send extrinsics.
-    rpc_handlers: Arc<RpcHandlers>,
+    rpc_handlers: Option<Arc<RwLock<RpcHandlers>>>,
     /// Nonce counter for the extrinsics.
     nonce_counter: u32,
+}
+
+impl BlockchainService {
+    pub fn set_rpc_handlers(&mut self, rpc_handlers: Arc<RwLock<RpcHandlers>>) {
+        self.rpc_handlers = Some(rpc_handlers)
+    }
 }
 
 /// Implement the Actor trait for the BlockchainService actor.
@@ -269,7 +276,7 @@ impl BlockchainService {
     /// Create a new [`BlockchainService`].
     pub fn new(
         client: Arc<ParachainClient>,
-        rpc_handlers: Arc<RpcHandlers>,
+        rpc_handlers: Option<Arc<RwLock<RpcHandlers>>>,
         keystore: KeystorePtr,
     ) -> Self {
         Self {
@@ -349,6 +356,10 @@ impl BlockchainService {
 
         let (result, rx) = self
             .rpc_handlers
+            .as_ref()
+            .expect("RPC handlers for Blockchain Service are not set.")
+            .read()
+            .await
             .rpc_query(&format!(
                 r#"{{
                     "jsonrpc": "2.0",
@@ -515,6 +526,10 @@ impl BlockchainService {
     async fn unwatch_extrinsic(&self, subscription_id: Number) -> Result<String> {
         let (result, _rx) = self
             .rpc_handlers
+            .as_ref()
+            .expect("RPC handlers for Blockchain Service are not set.")
+            .read()
+            .await
             .rpc_query(&format!(
                 r#"{{
                     "jsonrpc": "2.0",

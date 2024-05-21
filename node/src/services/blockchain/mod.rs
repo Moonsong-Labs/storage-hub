@@ -9,6 +9,7 @@ use sc_service::RpcHandlers;
 use sp_keystore::KeystorePtr;
 use sp_runtime::KeyTypeId;
 use storage_hub_infra::actor::{ActorHandle, ActorSpawner, TaskSpawner};
+use tokio::sync::RwLock;
 
 use crate::service::ParachainClient;
 
@@ -19,7 +20,7 @@ pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"bcsv");
 pub async fn spawn_blockchain_service(
     task_spawner: &TaskSpawner,
     client: Arc<ParachainClient>,
-    rpc_handlers: Arc<RpcHandlers>,
+    rpc_handlers: Option<Arc<RwLock<RpcHandlers>>>,
     keystore: KeystorePtr,
 ) -> ActorHandle<BlockchainService> {
     let task_spawner = task_spawner
