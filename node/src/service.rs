@@ -225,7 +225,7 @@ fn start_provider_tasks<T, FL, FS>(
 
 /// Start a development node with the given solo chain `Configuration`.
 #[sc_tracing::logging::prefix_logs_with("Solo chain 💾")]
-async fn start_dev_impl<FL, FS>(
+async fn start_dev_impl<T, FL, FS>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
@@ -233,10 +233,11 @@ async fn start_dev_impl<FL, FS>(
     sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager>
 where
-    StorageHubBuilder<LayoutV1<BlakeTwo256>, FL, FS>: StorageLayerBuilder,
-    FL: FileStorage<LayoutV1<BlakeTwo256>> + Send + Sync,
-    FS: ForestStorage<LayoutV1<BlakeTwo256>> + Send + Sync + 'static,
-    HasherOutT<LayoutV1<BlakeTwo256>>: TryFrom<[u8; 32]>,
+    T: TrieLayout + Send + Sync + 'static,
+    StorageHubBuilder<T, FL, FS>: StorageLayerBuilder,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     use async_io::Timer;
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
@@ -365,8 +366,7 @@ where
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
         // Create builder for the StorageHubHandler.
-        let mut storage_hub_builder =
-            StorageHubBuilder::<LayoutV1<BlakeTwo256>, FL, FS>::new(task_spawner);
+        let mut storage_hub_builder = StorageHubBuilder::<T, FL, FS>::new(task_spawner);
 
         // Add FileTransfer Service to the StorageHubHandler.
         let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
@@ -556,7 +556,7 @@ where
 ///
 /// This is the actual implementation that is abstract over the executor and the runtime api.
 #[sc_tracing::logging::prefix_logs_with("StorageHub 💾")]
-async fn start_node_impl<FL, FS>(
+async fn start_node_impl<T, FL, FS>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
@@ -565,10 +565,11 @@ async fn start_node_impl<FL, FS>(
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
 where
-    StorageHubBuilder<LayoutV1<BlakeTwo256>, FL, FS>: StorageLayerBuilder,
-    FL: FileStorage<LayoutV1<BlakeTwo256>> + Send + Sync,
-    FS: ForestStorage<LayoutV1<BlakeTwo256>> + Send + Sync + 'static,
-    HasherOutT<LayoutV1<BlakeTwo256>>: TryFrom<[u8; 32]>,
+    T: TrieLayout + Send + Sync + 'static,
+    StorageHubBuilder<T, FL, FS>: StorageLayerBuilder,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     let parachain_config = prepare_node_config(parachain_config);
 
@@ -652,8 +653,7 @@ where
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
         // Create builder for the StorageHubHandler.
-        let mut storage_hub_builder =
-            StorageHubBuilder::<LayoutV1<BlakeTwo256>, FL, FS>::new(task_spawner);
+        let mut storage_hub_builder = StorageHubBuilder::<T, FL, FS>::new(task_spawner);
 
         // Add FileTransfer Service to the StorageHubHandler.
         let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
@@ -925,29 +925,30 @@ pub async fn start_dev_node(
         Some(provider_options) => match provider_options.storage_layer {
             StorageLayer::Memory => {
                 start_dev_impl::<
-                    InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
-                    InMemoryForestStorage<LayoutV1<BlakeTwo256>>,
+                    LayoutV1<BlakeTwo256>,
+                    InMemoryFileStorage<_>,
+                    InMemoryForestStorage<_>,
                 >(config, Some(provider_options), hwbench, para_id, sealing)
                 .await
             }
             StorageLayer::RocksDB => {
                 start_dev_impl::<
+                    LayoutV1<BlakeTwo256>,
                     // TODO: Change this to RocksDB File Storage once it is implemented.
-                    InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
-                    RocksDBForestStorage<LayoutV1<BlakeTwo256>>,
+                    InMemoryFileStorage<_>,
+                    RocksDBForestStorage<_>,
                 >(config, Some(provider_options), hwbench, para_id, sealing)
                 .await
             }
         },
         // In this case, it is not really important the types used for the storage layer, as
         // the node will not run as a provider.
-        None => {
-            start_dev_impl::<
-                InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
-                InMemoryForestStorage<LayoutV1<BlakeTwo256>>,
-            >(config, None, hwbench, para_id, sealing)
-            .await
-        }
+        None => start_dev_impl::<
+            LayoutV1<BlakeTwo256>,
+            InMemoryFileStorage<_>,
+            InMemoryForestStorage<_>,
+        >(config, None, hwbench, para_id, sealing)
+        .await,
     }
 }
 
@@ -964,8 +965,9 @@ pub async fn start_parachain_node(
         Some(provider_options) => match provider_options.storage_layer {
             StorageLayer::Memory => {
                 start_node_impl::<
-                    InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
-                    InMemoryForestStorage<LayoutV1<BlakeTwo256>>,
+                    LayoutV1<BlakeTwo256>,
+                    InMemoryFileStorage<_>,
+                    InMemoryForestStorage<_>,
                 >(
                     parachain_config,
                     polkadot_config,
@@ -978,9 +980,10 @@ pub async fn start_parachain_node(
             }
             StorageLayer::RocksDB => {
                 start_node_impl::<
+                    LayoutV1<BlakeTwo256>,
                     // TODO: Change this to RocksDB File Storage once it is implemented.
-                    InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
-                    RocksDBForestStorage<LayoutV1<BlakeTwo256>>,
+                    InMemoryFileStorage<_>,
+                    RocksDBForestStorage<_>,
                 >(
                     parachain_config,
                     polkadot_config,
@@ -996,8 +999,9 @@ pub async fn start_parachain_node(
             // In this case, it is not really important the types used for the storage layer, as
             // the node will not run as a provider.
             start_node_impl::<
-                InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
-                InMemoryForestStorage<LayoutV1<BlakeTwo256>>,
+                LayoutV1<BlakeTwo256>,
+                InMemoryFileStorage<_>,
+                InMemoryForestStorage<_>,
             >(
                 parachain_config,
                 polkadot_config,
