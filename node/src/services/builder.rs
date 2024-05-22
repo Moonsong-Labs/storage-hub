@@ -123,6 +123,8 @@ where
     }
 }
 
+/// Provides an interface for defining the concrete types of
+/// each `StorageLayer` kind, so that their specific requirements can be fulfilled.
 pub trait StorageLayerBuilder {
     fn setup_storage_layer(&mut self) -> &mut Self;
 }
