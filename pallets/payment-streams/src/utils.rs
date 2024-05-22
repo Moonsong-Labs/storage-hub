@@ -72,7 +72,7 @@ where
             Error::<T>::PaymentStreamAlreadyExists
         );
 
-        // Check that the user is not flagged as without funds
+        // Check that the User is not flagged as without funds
         ensure!(
             !UsersWithoutFunds::<T>::contains_key(user_account),
             Error::<T>::UserWithoutFunds
@@ -178,7 +178,50 @@ where
             });
         }
 
-        // TODO: We should check if the new rate is lower or higher than the current one, and release or hold the difference in deposit accordingly
+        // Check if the new rate is lower or higher than the current one
+        // If the new rate is lower than the current one, we should release the difference in deposit
+        // If the new rate is higher than the current one, we should hold the difference in deposit
+        if new_rate < payment_stream.rate {
+            // Calculate the difference in deposit
+            let difference_in_deposit = payment_stream
+                .rate
+                .checked_sub(&new_rate)
+                .ok_or(ArithmeticError::Underflow)?
+                .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+                .ok_or(ArithmeticError::Overflow)?;
+
+            // Release the difference in deposit from the user
+            T::NativeBalance::release(
+                &HoldReason::PaymentStreamDeposit.into(),
+                &user_account,
+                difference_in_deposit,
+                Precision::Exact,
+            )?;
+        } else if new_rate > payment_stream.rate {
+            // Calculate the difference in deposit
+            let difference_in_deposit = new_rate
+                .checked_sub(&payment_stream.rate)
+                .ok_or(ArithmeticError::Underflow)?
+                .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+                .ok_or(ArithmeticError::Overflow)?;
+
+            // Check if we can hold the difference in deposit from the user
+            ensure!(
+                T::NativeBalance::can_hold(
+                    &HoldReason::PaymentStreamDeposit.into(),
+                    &user_account,
+                    difference_in_deposit
+                ),
+                Error::<T>::CannotHoldDeposit
+            );
+
+            // Hold the difference in deposit from the user
+            T::NativeBalance::hold(
+                &HoldReason::PaymentStreamDeposit.into(),
+                &user_account,
+                difference_in_deposit,
+            )?;
+        }
 
         // Update the payment stream in the FixedRatePaymentStreams mapping
         FixedRatePaymentStreams::<T>::mutate(provider_id, user_account, |payment_stream| {
@@ -245,13 +288,40 @@ where
         Ok(())
     }
 
+    /// This function holds the logic that checks if a dynamic-rate payment stream can be created and, if so, stores the payment
+    /// stream in the DynamicRatePaymentStreams mapping and holds the deposit from the User.
+    fn do_create_dynamic_rate_payment_stream(
+        provider_id: &ProviderIdFor<T>,
+        user_account: &T::AccountId,
+        amount_provided: UnitsProvidedFor<T>,
+    ) -> DispatchResult {
+        // TODO: Implement this
+        Ok(())
+    }
+
+    fn do_update_dynamic_rate_payment_stream(
+        provider_id: &ProviderIdFor<T>,
+        user_account: &T::AccountId,
+        new_amount_provided: UnitsProvidedFor<T>,
+    ) -> DispatchResult {
+        // TODO: Implement this
+        Ok(())
+    }
+
+    fn do_delete_dynamic_rate_payment_stream(
+        provider_id: &ProviderIdFor<T>,
+        user_account: &T::AccountId,
+    ) -> DispatchResult {
+        // TODO: Implement this
+        Ok(())
+    }
+
     /// This function holds the logic that checks if any payment stream exists between a Provider and a User and, if so,
     /// charges the payment stream/s from the User's balance.
     /// For fixed-rate payment streams, the charge is calculated as: `rate * time_passed` where `time_passed` is the time between the last chargeable block and
     /// the last charged block of this payment stream.  As such, the last charged block can't ever be greater than the last chargeable block, and if they are equal then no charge is made.
     /// For dynamic-rate payment streams, the charge is calculated as: `amount_provided * (price_index_when_last_charged - price_index_at_last_chargeable_block)`. In this case,
     /// the price index at the last charged block can't ever be greater than the price index at the last chargeable block, and if they are equal then no charge is made.
-
     pub fn do_charge_payment_streams(
         provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
