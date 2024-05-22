@@ -403,8 +403,7 @@ mod tests {
         }
 
         fn storage_root(&self) -> Result<Option<HasherOutT<T>>, ErrorT<T>> {
-            self
-                .data
+            self.data
                 .get(well_known_keys::ROOT)
                 .map(|root| convert_raw_bytes_to_hasher_out::<T>(root.to_owned()))
                 .transpose()
