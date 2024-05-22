@@ -189,7 +189,7 @@ impl Actor for FileTransferService {
                         Some(peers) => {
                             for peer_id in peers {
                                 self.peer_file_allow_list
-                                    .remove(&(*peer_id, file_key.clone()));
+                                    .remove(&(*peer_id, file_key));
                             }
                             self.peers_by_file.remove(&file_key);
                             Ok(())

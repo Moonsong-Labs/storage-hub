@@ -57,7 +57,7 @@ where
     fn clone(&self) -> BspUploadFileTask<T, FL, FS> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
-            file_key_cleanup: self.file_key_cleanup.clone(),
+            file_key_cleanup: self.file_key_cleanup,
         }
     }
 }
@@ -102,7 +102,7 @@ where
         let result = self.handle_new_storage_request_event(event).await;
         if result.is_err() {
             if let Some(file_key) = &self.file_key_cleanup {
-                self.unvolunteer_file(file_key.clone()).await?;
+                self.unvolunteer_file(*file_key).await?;
             }
         }
         result
@@ -244,7 +244,7 @@ where
 
         let file_key_hash: HasherOutT<T> = TryFrom::<[u8; 32]>::try_from(*file_key.as_ref())
             .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
-        self.file_key_cleanup = Some(file_key_hash.clone());
+        self.file_key_cleanup = Some(file_key_hash);
 
         // Optimistically register the file for upload in the file transfer service.
         // This solves the race condition between the user and the BSP, where the user could react faster
@@ -255,7 +255,7 @@ where
                 .map_err(|_| anyhow!("PeerId should be valid; qed"))?;
             self.storage_hub_handler
                 .file_transfer
-                .register_new_file_peer(peer_id.clone(), file_key.clone())
+                .register_new_file_peer(peer_id, file_key)
                 .await
                 .map_err(|_| anyhow!("Failed to register peer file."))?;
         }
