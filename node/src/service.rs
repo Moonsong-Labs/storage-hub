@@ -441,7 +441,7 @@ where
     )
     .await;
 
-    let maybe_file_storage = if let Some(sh_builder) = sh_builder {
+    let maybe_file_storage = if let Some(ref sh_builder) = sh_builder {
         sh_builder.file_storage().clone()
     } else {
         None
@@ -711,7 +711,7 @@ where
     )
     .await;
 
-    let maybe_file_storage = if let Some(sh_builder) = sh_builder {
+    let maybe_file_storage = if let Some(ref sh_builder) = sh_builder {
         sh_builder.file_storage().clone()
     } else {
         None
