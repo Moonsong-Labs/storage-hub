@@ -19,9 +19,11 @@ use super::{blockchain::handler::BlockchainService, file_transfer::FileTransferS
 
 /// Represents the handler for the Storage Hub service.
 pub struct StorageHubHandler<T, FL, FS>
-where T: TrieLayout,
-      FL: FileStorage<T> + Send + Sync,
-      FS: ForestStorage<T> + Send + Sync, {
+where
+    T: TrieLayout,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync,
+{
     /// The task spawner for spawning asynchronous tasks.
     pub task_spawner: TaskSpawner,
     /// The actor handle for the file transfer service.
@@ -37,9 +39,11 @@ where T: TrieLayout,
 }
 
 impl<T, FL, FS> Clone for StorageHubHandler<T, FL, FS>
-where T: TrieLayout,
-      FL: FileStorage<T> + Send + Sync,
-      FS: ForestStorage<T> + Send + Sync, {
+where
+    T: TrieLayout,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync,
+{
     fn clone(&self) -> StorageHubHandler<T, FL, FS> {
         Self {
             task_spawner: self.task_spawner.clone(),
@@ -53,9 +57,10 @@ where T: TrieLayout,
 }
 
 impl<T, FL, FS> StorageHubHandler<T, FL, FS>
-where T: TrieLayout,
-      FL: FileStorage<T> + Send + Sync,
-      FS: ForestStorage<T> + Send + Sync,
+where
+    T: TrieLayout + Send + Sync + 'static,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync + 'static,
     HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     pub fn new(

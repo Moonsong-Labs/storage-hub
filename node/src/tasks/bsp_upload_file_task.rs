@@ -86,9 +86,9 @@ where
 /// upload requests.
 impl<T, FL, FS> EventHandler<NewStorageRequest> for BspUploadFileTask<T, FL, FS>
 where
-    T: TrieLayout,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
+    T: TrieLayout + Send + Sync + 'static,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync + 'static,
     HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
@@ -115,9 +115,9 @@ where
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
 impl<T, FL, FS> EventHandler<RemoteUploadRequest> for BspUploadFileTask<T, FL, FS>
 where
-    T: TrieLayout,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
+    T: TrieLayout + Send + Sync + 'static,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync + 'static,
     HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
@@ -242,9 +242,8 @@ where
             .as_ref()
             .try_into()?;
 
-        let file_key_hash: HasherOutT<T> =
-            TryFrom::<[u8; 32]>::try_from(*file_key.as_ref())
-                .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
+        let file_key_hash: HasherOutT<T> = TryFrom::<[u8; 32]>::try_from(*file_key.as_ref())
+            .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
         self.file_key_cleanup = Some(file_key_hash.clone());
 
         // Optimistically register the file for upload in the file transfer service.

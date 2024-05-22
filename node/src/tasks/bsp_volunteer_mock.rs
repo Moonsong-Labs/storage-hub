@@ -17,15 +17,20 @@ use crate::services::{
 
 const LOG_TARGET: &str = "bsp-volunteer-mock-task";
 
-pub struct BspVolunteerMockTask<T, FL, FS> {
+pub struct BspVolunteerMockTask<T, FL, FS>
+where
+    T: Send + Sync + TrieLayout + 'static,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T> + 'static,
+{
     storage_hub_handler: StorageHubHandler<T, FL, FS>,
 }
 
 impl<T, FL, FS> Clone for BspVolunteerMockTask<T, FL, FS>
 where
-    T: TrieLayout,
+    T: Send + Sync + TrieLayout + 'static,
     FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
+    FS: Send + Sync + ForestStorage<T> + 'static,
 {
     fn clone(&self) -> BspVolunteerMockTask<T, FL, FS> {
         Self {
@@ -36,9 +41,9 @@ where
 
 impl<T, FL, FS> BspVolunteerMockTask<T, FL, FS>
 where
-    T: TrieLayout,
+    T: Send + Sync + TrieLayout + 'static,
     FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>
+    FS: Send + Sync + ForestStorage<T> + 'static,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
         Self {
@@ -47,7 +52,12 @@ where
     }
 }
 
-impl<T, FL, FS> EventHandler<NewStorageRequest> for BspVolunteerMockTask<T, FL, FS> {
+impl<T, FL, FS> EventHandler<NewStorageRequest> for BspVolunteerMockTask<T, FL, FS>
+where
+    T: Send + Sync + TrieLayout + 'static,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T> + 'static,
+{
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,

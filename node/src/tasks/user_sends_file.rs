@@ -17,15 +17,20 @@ const LOG_TARGET: &str = "user-sends-file-task";
 /// volunteering for that file.
 /// It can serve multiple BSPs volunteering to store each file, since
 /// it reacts to every `AcceptedBspVolunteer` from the runtime.
-pub struct UserSendsFileTask<T, FL, FS> {
+pub struct UserSendsFileTask<T, FL, FS>
+where
+    T: Send + Sync + TrieLayout + 'static,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T> + 'static,
+{
     storage_hub_handler: StorageHubHandler<T, FL, FS>,
 }
 
 impl<T, FL, FS> Clone for UserSendsFileTask<T, FL, FS>
 where
-    T: TrieLayout,
+    T: Send + Sync + TrieLayout + 'static,
     FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
+    FS: Send + Sync + ForestStorage<T> + 'static,
 {
     fn clone(&self) -> Self {
         Self {
@@ -34,7 +39,12 @@ where
     }
 }
 
-impl<T, FL, FS> UserSendsFileTask<T, FL, FS> {
+impl<T, FL, FS> UserSendsFileTask<T, FL, FS>
+where
+    T: Send + Sync + TrieLayout + 'static,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T> + 'static,
+{
     pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
         Self {
             storage_hub_handler,
@@ -44,9 +54,9 @@ impl<T, FL, FS> UserSendsFileTask<T, FL, FS> {
 
 impl<T, FL, FS> EventHandler<AcceptedBspVolunteer> for UserSendsFileTask<T, FL, FS>
 where
-    T: TrieLayout,
+    T: Send + Sync + TrieLayout + 'static,
     FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
+    FS: Send + Sync + ForestStorage<T> + 'static,
 {
     /// Reacts to BSPs volunteering (`AcceptedBspVolunteer` from the runtime) to store the user's file,
     /// establishes a connection to each BSPs through the p2p network and sends the file.

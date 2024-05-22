@@ -7,8 +7,10 @@ use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
 
-use file_manager::in_memory::InMemoryFileStorage;
-use forest_manager::{in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage};
+use file_manager::{in_memory::InMemoryFileStorage, traits::FileStorage};
+use forest_manager::{
+    in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
+};
 use futures::{Stream, StreamExt};
 use log::debug;
 use polkadot_primitives::{BlakeTwo256, HeadData, ValidationCode};
@@ -16,7 +18,7 @@ use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_common::types::HasherOutT;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
-use sp_trie::LayoutV1;
+use sp_trie::{LayoutV1, TrieLayout};
 use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
 use storage_hub_runtime::{
@@ -43,33 +45,27 @@ use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
 use sc_client_api::{Backend, HeaderBackend};
 use sc_consensus::{ImportQueue, LongestChain};
 use sc_executor::{HeapAllocStrategy, WasmExecutor, DEFAULT_HEAP_ALLOC_STRATEGY};
-use sc_network::{config::IncomingRequest, ProtocolName};
 use sc_network::{NetworkBlock, NetworkService};
 use sc_network_sync::SyncingService;
-use sc_service::{
-    Configuration, PartialComponents, RpcHandlers, TFullBackend, TFullClient, TaskManager,
-};
+use sc_service::{Configuration, PartialComponents, TFullBackend, TFullClient, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::traits::Block as BlockT;
 use substrate_prometheus_endpoint::Registry;
-use tokio::sync::RwLock;
 
 use crate::{
     cli::StorageLayer,
     services::{
-        blockchain::handler::BlockchainService, builder::StorageHubBuilder,
-        file_transfer::configure_file_transfer_network, handler::StorageHubHandler,
+        builder::{StorageHubBuilder, StorageLayerBuilder},
+        file_transfer::configure_file_transfer_network,
+        handler::StorageHubHandler,
     },
 };
 use crate::{
     cli::{self, ProviderType},
     command::ProviderOptions,
-    services::{
-        blockchain::{spawn_blockchain_service, KEY_TYPE},
-        file_transfer::spawn_file_transfer_service,
-    },
+    services::blockchain::KEY_TYPE,
 };
 
 #[cfg(not(feature = "runtime-benchmarks"))]
@@ -209,89 +205,38 @@ pub fn new_partial(
     })
 }
 
-// async fn start_storage_provider(
-//     provider_options: ProviderOptions,
-//     task_manager: &TaskManager,
-//     network: Arc<ParachainNetworkService>,
-//     client: Arc<ParachainClient>,
-//     rpc_handlers: RpcHandlers,
-//     keystore: KeystorePtr,
-//     file_transfer_request_protocol_name: ProtocolName,
-//     file_transfer_request_receiver: async_channel::Receiver<IncomingRequest>,
-// ) {
-//     let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
-
-//     let file_transfer_service_handle = spawn_file_transfer_service(
-//         &task_spawner,
-//         file_transfer_request_receiver,
-//         file_transfer_request_protocol_name,
-//         network,
-//     )
-//     .await;
-
-//     // Spawn the Blockchain Service.
-//     let blockchain_service_handle = spawn_blockchain_service(
-//         &task_spawner,
-//         client.clone(),
-//         Arc::new(rpc_handlers),
-//         keystore.clone(),
-//     )
-//     .await;
-
-//     let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-
-//     // Initialise the StorageHubHandler, for tasks to have access to the services.
-//     match provider_options.storage_layer {
-//         StorageLayer::Memory => {
-//             debug!("Starting in-memory storage hub handler.");
-
-//             let sh_handler = InMemoryStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
-//                 caller_pub_key,
-//                 task_spawner,
-//                 file_transfer_service_handle,
-//                 blockchain_service_handle,
-//             );
-
-//             start_provider_tasks(provider_options, sh_handler);
-//         }
-//         StorageLayer::Rocksdb => {
-//             debug!("Starting rocksdb storage hub handler.");
-
-//             let sh_handler = RocksDBStorageHubConfig::<LayoutV1<BlakeTwo256>>::initialize(
-//                 caller_pub_key,
-//                 task_spawner,
-//                 file_transfer_service_handle,
-//                 blockchain_service_handle,
-//             );
-
-//             start_provider_tasks(provider_options, sh_handler);
-//         }
-//     };
-// }
-
-// fn start_provider_tasks<SHC: StorageHubHandlerConfig>(
-//     provider_options: ProviderOptions,
-//     sh_handler: StorageHubHandler<SHC>,
-// ) where
-//     HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
-// {
-//     // Starting the tasks according to the provider type.
-//     match provider_options.provider_type {
-//         ProviderType::Bsp => sh_handler.start_bsp_tasks(),
-//         ProviderType::User => sh_handler.start_user_tasks(),
-//         _ => {}
-//     }
-// }
+fn start_provider_tasks<T, FL, FS>(
+    provider_options: ProviderOptions,
+    sh_handler: StorageHubHandler<T, FL, FS>,
+) where
+    T: TrieLayout + Send + Sync + 'static,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    // Starting the tasks according to the provider type.
+    match provider_options.provider_type {
+        ProviderType::Bsp => sh_handler.start_bsp_tasks(),
+        ProviderType::User => sh_handler.start_user_tasks(),
+        _ => {}
+    }
+}
 
 /// Start a development node with the given solo chain `Configuration`.
 #[sc_tracing::logging::prefix_logs_with("Solo chain 💾")]
-async fn start_dev_impl(
+async fn start_dev_impl<FL, FS>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
     para_id: ParaId,
     sealing: cli::Sealing,
-) -> sc_service::error::Result<TaskManager> {
+) -> sc_service::error::Result<TaskManager>
+where
+    StorageHubBuilder<LayoutV1<BlakeTwo256>, FL, FS>: StorageLayerBuilder,
+    FL: FileStorage<LayoutV1<BlakeTwo256>> + Send + Sync,
+    FS: ForestStorage<LayoutV1<BlakeTwo256>> + Send + Sync + 'static,
+    HasherOutT<LayoutV1<BlakeTwo256>>: TryFrom<[u8; 32]>,
+{
     use async_io::Timer;
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
 
@@ -412,6 +357,34 @@ async fn start_dev_impl(
             }
         };
 
+    // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
+    let mut sh_builder = None;
+    if provider_options.is_some() {
+        // Start building the StorageHubHandler, if running as a provider.
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+
+        // Create builder for the StorageHubHandler.
+        let mut storage_hub_builder =
+            StorageHubBuilder::<LayoutV1<BlakeTwo256>, FL, FS>::new(task_spawner);
+
+        // Add FileTransfer Service to the StorageHubHandler.
+        let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
+            file_transfer_request_protocol
+                .expect("FileTransfer request protocol should already be initialized.");
+        storage_hub_builder
+            .with_file_transfer(
+                file_transfer_request_receiver,
+                file_transfer_request_protocol_name,
+                network.clone(),
+            )
+            .await;
+
+        debug!("Starting in-memory storage hub handler.");
+
+        storage_hub_builder.setup_storage_layer();
+        sh_builder = Some(storage_hub_builder);
+    }
+
     let rpc_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
@@ -443,22 +416,20 @@ async fn start_dev_impl(
         telemetry: telemetry.as_mut(),
     })?;
 
-    // Spawning the Blockchain Service if node is running as a Storage Provider.
+    // Finish building the StorageHubBuilder if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
-        // let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
-        //     file_transfer_request_protocol
-        //         .expect("FileTransfer request protocol should already be initialized.");
-        // start_storage_provider(
-        //     provider_options,
-        //     &task_manager,
-        //     network.clone(),
-        //     client.clone(),
-        //     rpc_handlers,
-        //     keystore.clone(),
-        //     file_transfer_request_protocol_name,
-        //     file_transfer_request_receiver,
-        // )
-        // .await;
+        let mut storage_hub_builder =
+            sh_builder.expect("StorageHubBuilder should already be initialized.");
+
+        // Spawn the Blockchain Service if node is running as a Storage Provider, now that
+        // the rpc handlers has been created.
+        storage_hub_builder
+            .with_blockchain(client.clone(), Arc::new(rpc_handlers), keystore.clone())
+            .await;
+
+        // Finally build the StorageHubBuilder and start the Provider tasks.
+        let sh_handler = storage_hub_builder.build();
+        start_provider_tasks(provider_options, sh_handler);
     }
 
     if let Some(hwbench) = hwbench {
@@ -581,14 +552,20 @@ async fn start_dev_impl(
 ///
 /// This is the actual implementation that is abstract over the executor and the runtime api.
 #[sc_tracing::logging::prefix_logs_with("StorageHub 💾")]
-async fn start_node_impl(
+async fn start_node_impl<FL, FS>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
     provider_options: Option<ProviderOptions>,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
-) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
+) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
+where
+    StorageHubBuilder<LayoutV1<BlakeTwo256>, FL, FS>: StorageLayerBuilder,
+    FL: FileStorage<LayoutV1<BlakeTwo256>> + Send + Sync,
+    FS: ForestStorage<LayoutV1<BlakeTwo256>> + Send + Sync + 'static,
+    HasherOutT<LayoutV1<BlakeTwo256>>: TryFrom<[u8; 32]>,
+{
     let parachain_config = prepare_node_config(parachain_config);
 
     let params = new_partial(&parachain_config, false)?;
@@ -664,67 +641,32 @@ async fn start_node_impl(
         );
     }
 
+    // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
     let mut sh_builder = None;
-    if let Some(provider_options) = provider_options {
-        let sh_builder = match provider_options.storage_layer {
-            StorageLayer::Memory => {
-                // Start building the StorageHubHandler, if running as a provider.
-                let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+    if provider_options.is_some() {
+        // Start building the StorageHubHandler, if running as a provider.
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
-                // Create builder for the StorageHubHandler.
-                let mut storage_hub_builder = StorageHubBuilder::<
-                    LayoutV1<BlakeTwo256>,
-                    InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
-                    InMemoryForestStorage<LayoutV1<BlakeTwo256>>,
-                >::new(&task_spawner);
+        // Create builder for the StorageHubHandler.
+        let mut storage_hub_builder =
+            StorageHubBuilder::<LayoutV1<BlakeTwo256>, FL, FS>::new(task_spawner);
 
-                // Add FileTransfer Service to the StorageHubHandler.
-                let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
-                    file_transfer_request_protocol
-                        .expect("FileTransfer request protocol should already be initialized.");
-                storage_hub_builder
-                    .with_file_transfer(
-                        file_transfer_request_receiver,
-                        file_transfer_request_protocol_name,
-                        network.clone(),
-                    )
-                    .await;
+        // Add FileTransfer Service to the StorageHubHandler.
+        let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
+            file_transfer_request_protocol
+                .expect("FileTransfer request protocol should already be initialized.");
+        storage_hub_builder
+            .with_file_transfer(
+                file_transfer_request_receiver,
+                file_transfer_request_protocol_name,
+                network.clone(),
+            )
+            .await;
 
-                debug!("Starting in-memory storage hub handler.");
+        debug!("Starting in-memory storage hub handler.");
 
-                storage_hub_builder.with_in_memory_storage();
-                storage_hub_builder
-            }
-            StorageLayer::Rocksdb => {
-                // Start building the StorageHubHandler, if running as a provider.
-                let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
-
-                // Create builder for the StorageHubHandler.
-                let mut storage_hub_builder = StorageHubBuilder::<
-                    LayoutV1<BlakeTwo256>,
-                    InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
-                    RocksDBForestStorage<LayoutV1<BlakeTwo256>>,
-                >::new(&task_spawner);
-
-                // Add FileTransfer Service to the StorageHubHandler.
-                let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
-                    file_transfer_request_protocol
-                        .expect("FileTransfer request protocol should already be initialized.");
-                storage_hub_builder
-                    .with_file_transfer(
-                        file_transfer_request_receiver,
-                        file_transfer_request_protocol_name,
-                        network.clone(),
-                    )
-                    .await;
-
-                debug!("Starting rocksdb storage hub handler.");
-
-                let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-                storage_hub_builder.with_rocksdb_storage(caller_pub_key);
-                storage_hub_builder
-            }
-        };
+        storage_hub_builder.setup_storage_layer();
+        sh_builder = Some(storage_hub_builder);
     }
 
     let rpc_builder = {
@@ -758,29 +700,20 @@ async fn start_node_impl(
         telemetry: telemetry.as_mut(),
     })?;
 
-    // Spawning the Blockchain Service if node is running as a Storage Provider.
+    // Finish building the StorageHubBuilder if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
-        // let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
-        //     file_transfer_request_protocol
-        //         .expect("FileTransfer request protocol should already be initialized.");
-        // start_storage_provider(
-        //     provider_options,
-        //     &task_manager,
-        //     network.clone(),
-        //     client.clone(),
-        //     rpc_handlers,
-        //     keystore.clone(),
-        //     file_transfer_request_protocol_name,
-        //     file_transfer_request_receiver,
-        // )
-        // .await;
-
         let mut storage_hub_builder =
             sh_builder.expect("StorageHubBuilder should already be initialized.");
 
+        // Spawn the Blockchain Service if node is running as a Storage Provider, now that
+        // the rpc handlers has been created.
         storage_hub_builder
             .with_blockchain(client.clone(), Arc::new(rpc_handlers), keystore.clone())
             .await;
+
+        // Finally build the StorageHubBuilder and start the Provider tasks.
+        let sh_handler = storage_hub_builder.build();
+        start_provider_tasks(provider_options, sh_handler);
     }
 
     if let Some(hwbench) = hwbench {
@@ -981,7 +914,32 @@ pub async fn start_dev_node(
     para_id: ParaId,
     sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager> {
-    start_dev_impl(config, provider_options, hwbench, para_id, sealing).await
+    match provider_options {
+        Some(provider_options) => match provider_options.storage_layer {
+            StorageLayer::Memory => {
+                start_dev_impl::<
+                    InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
+                    InMemoryForestStorage<LayoutV1<BlakeTwo256>>,
+                >(config, Some(provider_options), hwbench, para_id, sealing)
+                .await
+            }
+            StorageLayer::RocksDB => {
+                start_dev_impl::<
+                    // TODO: Change this to RocksDB File Storage once it is implemented.
+                    InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
+                    RocksDBForestStorage<LayoutV1<BlakeTwo256>>,
+                >(config, Some(provider_options), hwbench, para_id, sealing)
+                .await
+            }
+        },
+        None => {
+            start_dev_impl::<
+                InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
+                InMemoryForestStorage<LayoutV1<BlakeTwo256>>,
+            >(config, None, hwbench, para_id, sealing)
+            .await
+        }
+    }
 }
 
 /// Start a parachain node.
@@ -993,13 +951,51 @@ pub async fn start_parachain_node(
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
-    start_node_impl(
-        parachain_config,
-        polkadot_config,
-        collator_options,
-        provider_options,
-        para_id,
-        hwbench,
-    )
-    .await
+    match provider_options {
+        Some(provider_options) => match provider_options.storage_layer {
+            StorageLayer::Memory => {
+                start_node_impl::<
+                    InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
+                    InMemoryForestStorage<LayoutV1<BlakeTwo256>>,
+                >(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            StorageLayer::RocksDB => {
+                start_node_impl::<
+                    // TODO: Change this to RocksDB File Storage once it is implemented.
+                    InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
+                    RocksDBForestStorage<LayoutV1<BlakeTwo256>>,
+                >(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+        },
+        None => {
+            start_node_impl::<
+                InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
+                InMemoryForestStorage<LayoutV1<BlakeTwo256>>,
+            >(
+                parachain_config,
+                polkadot_config,
+                collator_options,
+                None,
+                para_id,
+                hwbench,
+            )
+            .await
+        }
+    }
 }
