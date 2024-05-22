@@ -14,7 +14,7 @@ use storage_hub_infra::{
 
 use crate::{
     services::{blockchain::events::NewStorageRequest, file_transfer::events::RemoteUploadRequest},
-    tasks::{bsp_upload_file_task::BspUploadFileTask, user_sends_file::UserSendsFileTask},
+    tasks::{bsp_upload_file::BspUploadFileTask, user_sends_file::UserSendsFileTask},
 };
 
 use super::{blockchain::handler::BlockchainService, file_transfer::FileTransferService};
