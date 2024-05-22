@@ -380,8 +380,6 @@ where
             )
             .await;
 
-        debug!("Starting in-memory storage hub handler.");
-
         storage_hub_builder.setup_storage_layer();
         sh_builder = Some(storage_hub_builder);
     }
@@ -420,7 +418,7 @@ where
     // Finish building the StorageHubBuilder if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
         let mut storage_hub_builder =
-            sh_builder.expect("StorageHubBuilder should already be initialized.");
+            sh_builder.expect("StorageHubBuilder should already be initialised.");
 
         // Spawn the Blockchain Service if node is running as a Storage Provider, now that
         // the rpc handlers has been created.
@@ -669,8 +667,6 @@ where
             )
             .await;
 
-        debug!("Starting in-memory storage hub handler.");
-
         storage_hub_builder.setup_storage_layer();
         sh_builder = Some(storage_hub_builder);
     }
@@ -709,13 +705,18 @@ where
     // Finish building the StorageHubBuilder if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
         let mut storage_hub_builder =
-            sh_builder.expect("StorageHubBuilder should already be initialized.");
+            sh_builder.expect("StorageHubBuilder should already be initialised.");
 
         // Spawn the Blockchain Service if node is running as a Storage Provider, now that
         // the rpc handlers has been created.
         storage_hub_builder
             .with_blockchain(client.clone(), Arc::new(rpc_handlers), keystore.clone())
             .await;
+
+        // Getting the caller pub key used for the blockchain service, from the keystore.
+        // Then add it to the StorageHub builder.
+        let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
+        storage_hub_builder.with_provider_pub_key(caller_pub_key);
 
         // Finally build the StorageHubBuilder and start the Provider tasks.
         let sh_handler = storage_hub_builder.build();
