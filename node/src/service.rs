@@ -57,6 +57,7 @@ use substrate_prometheus_endpoint::Registry;
 use crate::{
     cli::StorageLayer,
     services::{
+        blockchain::BlockchainService,
         builder::{StorageHubBuilder, StorageLayerBuilder},
         file_transfer::configure_file_transfer_network,
         handler::StorageHubHandler,
@@ -426,6 +427,11 @@ where
         storage_hub_builder
             .with_blockchain(client.clone(), Arc::new(rpc_handlers), keystore.clone())
             .await;
+
+        // Getting the caller pub key used for the blockchain service, from the keystore.
+        // Then add it to the StorageHub builder.
+        let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
+        storage_hub_builder.with_provider_pub_key(caller_pub_key);
 
         // Finally build the StorageHubBuilder and start the Provider tasks.
         let sh_handler = storage_hub_builder.build();

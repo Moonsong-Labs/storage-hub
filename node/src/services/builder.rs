@@ -51,11 +51,6 @@ where
         }
     }
 
-    pub fn with_task_spawner(&mut self, task_spawner: TaskSpawner) -> &mut Self {
-        self.task_spawner = Some(task_spawner);
-        self
-    }
-
     pub async fn with_file_transfer(
         &mut self,
         file_transfer_request_receiver: Receiver<IncomingRequest>,
@@ -112,24 +107,8 @@ where
         self
     }
 
-    pub fn task_spawner(&self) -> &Option<TaskSpawner> {
-        &self.task_spawner
-    }
-
-    pub fn file_transfer(&self) -> &Option<ActorHandle<FileTransferService>> {
-        &self.file_transfer
-    }
-
-    pub fn blockchain(&self) -> &Option<ActorHandle<BlockchainService>> {
-        &self.blockchain
-    }
-
-    pub fn file_storage(&self) -> &Option<Arc<RwLock<FL>>> {
+    pub fn _file_storage(&self) -> &Option<Arc<RwLock<FL>>> {
         &self.file_storage
-    }
-
-    pub fn forest_storage(&self) -> &Option<Arc<RwLock<FS>>> {
-        &self.forest_storage
     }
 
     pub fn build(self) -> StorageHubHandler<T, FL, FS> {

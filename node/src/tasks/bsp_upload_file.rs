@@ -94,7 +94,7 @@ where
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Initiating BSP volunteer mock for location: {:?}, fingerprint: {:?}",
+            "Initiating BSP volunteer for location: {:?}, fingerprint: {:?}",
             event.location,
             event.fingerprint
         );
