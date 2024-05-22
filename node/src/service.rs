@@ -984,6 +984,8 @@ pub async fn start_parachain_node(
             }
         },
         None => {
+            // In this case, it is not really important the types used for the storage layer, as
+            // the node will not run as a provider.
             start_node_impl::<
                 InMemoryFileStorage<LayoutV1<BlakeTwo256>>,
                 InMemoryForestStorage<LayoutV1<BlakeTwo256>>,
