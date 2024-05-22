@@ -4,7 +4,7 @@ use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use kvdb_rocksdb::{Database, DatabaseConfig};
 use log::debug;
-use shc_common::types::{ForestProof, HashT, HasherOutT, Metadata};
+use shc_common::types::{FileMetadata, ForestProof, HashT, HasherOutT};
 use sp_state_machine::{warn, Storage};
 use sp_trie::{
     prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieDBBuilder, TrieLayout, TrieMut,
@@ -304,7 +304,7 @@ where
         })
     }
 
-    fn insert_metadata(&mut self, metadata: &Metadata) -> Result<HasherOutT<T>, ErrorT<T>> {
+    fn insert_metadata(&mut self, metadata: &FileMetadata) -> Result<HasherOutT<T>, ErrorT<T>> {
         let file_key = metadata.key::<T::Hash>();
 
         if self.contains_file_key(&file_key)? {
@@ -358,7 +358,7 @@ mod tests {
     use crate::error::ErrorT;
 
     use super::*;
-    use shc_common::types::{Fingerprint, Metadata, Proven};
+    use shc_common::types::{FileMetadata, Fingerprint, Proven};
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_trie::LayoutV1;
@@ -403,11 +403,10 @@ mod tests {
         }
 
         fn storage_root(&self) -> Result<Option<HasherOutT<T>>, ErrorT<T>> {
-            Ok(self
-                .data
+            self.data
                 .get(well_known_keys::ROOT)
                 .map(|root| convert_raw_bytes_to_hasher_out::<T>(root.to_owned()))
-                .transpose()?)
+                .transpose()
         }
     }
 
@@ -424,8 +423,8 @@ mod tests {
     }
 
     // Reused function to create metadata with variable parameters.
-    fn create_metadata(owner: &str, location: Vec<u8>, size: u64) -> Metadata {
-        Metadata {
+    fn create_metadata(owner: &str, location: Vec<u8>, size: u64) -> FileMetadata {
+        FileMetadata {
             owner: owner.to_string(),
             location,
             size,
@@ -520,7 +519,7 @@ mod tests {
         }
 
         let hash_db = forest_storage.as_hash_db();
-        let root = forest_storage.root.clone();
+        let root = forest_storage.root;
         let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&hash_db, &root).build();
 
         let mut iter = trie.iter().unwrap();
@@ -552,7 +551,7 @@ mod tests {
         let file_key1 = create_and_insert_metadata(&mut forest_storage, "Alice", vec![10], 200);
         let _file_key2 = create_and_insert_metadata(&mut forest_storage, "Alice", vec![11], 200);
 
-        let mut challenge = file_key1.clone();
+        let mut challenge = file_key1;
         let challenge_bytes = challenge.as_mut();
         challenge_bytes[0] = challenge_bytes[0] - 1;
 
@@ -575,7 +574,7 @@ mod tests {
         }
 
         let largest = keys.iter().max().unwrap();
-        let mut challenge = largest.clone();
+        let mut challenge = *largest;
         let challenge_bytes = challenge.as_mut();
         challenge_bytes[0] = challenge_bytes[0] + 1;
 
@@ -602,7 +601,7 @@ mod tests {
             .iter()
             .enumerate()
             .filter(|(i, _)| i % 2 == 0)
-            .map(|(_, key)| key.clone())
+            .map(|(_, key)| *key)
             .collect::<Vec<_>>();
 
         for key in &keys_to_remove {

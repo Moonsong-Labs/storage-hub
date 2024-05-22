@@ -46,7 +46,7 @@ pub trait ProvidesEventBus<T: EventBusMessage> {
 }
 
 pub trait EventHandler<E: EventBusMessage>: Clone + Send + 'static {
-    fn handle_event(&self, event: E) -> impl std::future::Future<Output = Result<()>> + Send;
+    fn handle_event(&mut self, event: E) -> impl std::future::Future<Output = Result<()>> + Send;
 
     fn subscribe_to_provider<EP: ProvidesEventBus<E>>(
         self,
@@ -90,7 +90,7 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
 
     async fn run(&mut self) {
         while let Ok(event) = self.receiver.recv().await {
-            let cloned_event_handler = self.event_handler.clone();
+            let mut cloned_event_handler = self.event_handler.clone();
             self.spawner.spawn(async move {
                 match cloned_event_handler.handle_event(event).await {
                     Ok(_) => {}

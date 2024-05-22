@@ -1,5 +1,19 @@
-use shc_common::types::{Chunk, ChunkId, FileProof, HasherOutT, Metadata};
+use shc_common::types::{Chunk, ChunkId, FileMetadata, FileProof, HasherOutT};
 use trie_db::TrieLayout;
+
+#[derive(Debug)]
+pub enum FileStorageWriteError {
+    /// The requested file does not exist.
+    FileDoesNotExist,
+    /// File chunk already exists.
+    FileChunkAlreadyExists,
+    /// Failed to insert the file chunk.
+    FailedToInsertFileChunk,
+    /// Failed to get file chunk.
+    FailedToGetFileChunk,
+    /// File metadata fingerprint does not match the stored file fingerprint.
+    FingerprintAndStoredFileMismatch,
+}
 
 #[derive(Debug)]
 pub enum FileStorageError {
@@ -24,7 +38,7 @@ pub enum FileStorageError {
 }
 
 #[derive(Debug)]
-pub enum FileStorageWriteStatus {
+pub enum FileStorageWriteOutcome {
     /// The file storage was completed after this write.
     /// All chunks for the file are stored and the fingerprints match too.
     FileComplete,
@@ -46,7 +60,11 @@ pub trait FileDataTrie<T: TrieLayout> {
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError>;
 
     /// Write a file chunk in storage updating the root hash of the trie.
-    fn write_chunk(&mut self, chunk_id: &ChunkId, data: &Chunk) -> Result<(), FileStorageError>;
+    fn write_chunk(
+        &mut self,
+        chunk_id: &ChunkId,
+        data: &Chunk,
+    ) -> Result<(), FileStorageWriteError>;
 }
 
 /// Storage interface to be implemented by the storage providers.
@@ -65,7 +83,7 @@ pub trait FileStorage<T: TrieLayout>: 'static {
     fn delete_file(&mut self, key: &HasherOutT<T>);
 
     /// Get metadata for a file.
-    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<Metadata, FileStorageError>;
+    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError>;
 
     /// Inserts a new file. If the file already exists, it will return an error.
     /// It is expected that the file key is indeed computed from the [Metadata].
@@ -73,7 +91,7 @@ pub trait FileStorage<T: TrieLayout>: 'static {
     fn insert_file(
         &mut self,
         key: HasherOutT<T>,
-        metadata: Metadata,
+        metadata: FileMetadata,
     ) -> Result<(), FileStorageError>;
 
     /// Inserts a new file with the associated trie data. If the file already exists, it will
@@ -81,7 +99,7 @@ pub trait FileStorage<T: TrieLayout>: 'static {
     fn insert_file_with_data(
         &mut self,
         key: HasherOutT<T>,
-        metadata: Metadata,
+        metadata: FileMetadata,
         file_data: Self::FileDataTrie,
     ) -> Result<(), FileStorageError>;
 
@@ -96,5 +114,5 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         key: &HasherOutT<T>,
         chunk_id: &ChunkId,
         data: &Chunk,
-    ) -> Result<FileStorageWriteStatus, FileStorageError>;
+    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError>;
 }

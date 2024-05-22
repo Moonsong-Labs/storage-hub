@@ -1,4 +1,4 @@
-use shc_common::types::{ForestProof, HasherOutT, Metadata};
+use shc_common::types::{FileMetadata, ForestProof, HasherOutT};
 use trie_db::TrieLayout;
 
 use crate::error::ErrorT;
@@ -13,7 +13,7 @@ pub trait ForestStorage<T: TrieLayout> {
         challenged_key: Vec<HasherOutT<T>>,
     ) -> Result<ForestProof<T>, ErrorT<T>>;
     /// Insert metadata and get back the file key (hash of the metadata).
-    fn insert_metadata(&mut self, metadata: &Metadata) -> Result<HasherOutT<T>, ErrorT<T>>;
+    fn insert_metadata(&mut self, metadata: &FileMetadata) -> Result<HasherOutT<T>, ErrorT<T>>;
     /// Delete a file key and generate a proof for it.
     fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>>;
 }

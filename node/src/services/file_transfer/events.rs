@@ -1,28 +1,21 @@
-use sc_network::config::OutgoingResponse;
-use shc_common::types::{ChunkId, FileProof, Key};
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use sc_network::PeerId;
+use shc_common::types::{ChunkId, FileKey, FileProof};
 
 use storage_hub_infra::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 
 #[derive(Clone)]
 pub struct RemoteUploadRequest {
-    pub file_key: Key,
+    pub peer: PeerId,
+    pub file_key: FileKey,
     pub chunk_with_proof: FileProof,
-    // TODO: Confirm whether this is needed and should be here in the first place.
-    pub maybe_pending_response:
-        Arc<Mutex<Option<futures::channel::oneshot::Sender<OutgoingResponse>>>>,
 }
 
 impl EventBusMessage for RemoteUploadRequest {}
 
 #[derive(Clone)]
 pub struct RemoteDownloadRequest {
-    pub file_key: Key,
+    pub file_key: FileKey,
     pub chunk_id: ChunkId,
-    // TODO: Confirm whether this is needed and should be here in the first place.
-    pub maybe_pending_response:
-        Arc<Mutex<Option<futures::channel::oneshot::Sender<OutgoingResponse>>>>,
 }
 
 impl EventBusMessage for RemoteDownloadRequest {}
