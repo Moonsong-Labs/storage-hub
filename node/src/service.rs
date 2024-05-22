@@ -939,6 +939,8 @@ pub async fn start_dev_node(
                 .await
             }
         },
+        // In this case, it is not really important the types used for the storage layer, as
+        // the node will not run as a provider.
         None => {
             start_dev_impl::<
                 InMemoryFileStorage<LayoutV1<BlakeTwo256>>,

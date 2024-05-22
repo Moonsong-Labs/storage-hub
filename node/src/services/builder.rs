@@ -21,7 +21,8 @@ use super::{
     handler::StorageHubHandler,
 };
 
-// TODO: Add documentation
+/// Builds the `StorageHubHandler` by adding each component separately.
+/// Provides setters and getters for each component.
 pub struct StorageHubBuilder<T, FL, FS> {
     task_spawner: Option<TaskSpawner>,
     file_transfer: Option<ActorHandle<FileTransferService>>,
