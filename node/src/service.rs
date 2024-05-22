@@ -56,7 +56,7 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::traits::Block as BlockT;
 use substrate_prometheus_endpoint::Registry;
-use tokio::sync::RwLock;
+
 
 use crate::{
     cli::StorageLayer,

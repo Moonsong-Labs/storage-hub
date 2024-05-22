@@ -69,10 +69,6 @@ impl AsRef<[u8; 32]> for FileKey {
 pub struct Fingerprint(Hash);
 
 impl Fingerprint {
-    pub fn new(hash: Hash) -> Self {
-        Fingerprint(hash)
-    }
-
     /// Returns the hash of the fingerprint.
     pub fn hash(&self) -> Hash {
         self.0
