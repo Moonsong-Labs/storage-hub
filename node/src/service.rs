@@ -3,6 +3,7 @@
 // std
 use std::{sync::Arc, time::Duration};
 
+use async_channel::Receiver;
 use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
@@ -45,9 +46,11 @@ use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
 use sc_client_api::{Backend, HeaderBackend};
 use sc_consensus::{ImportQueue, LongestChain};
 use sc_executor::{HeapAllocStrategy, WasmExecutor, DEFAULT_HEAP_ALLOC_STRATEGY};
-use sc_network::{NetworkBlock, NetworkService};
+use sc_network::{config::IncomingRequest, NetworkBlock, NetworkService, ProtocolName};
 use sc_network_sync::SyncingService;
-use sc_service::{Configuration, PartialComponents, TFullBackend, TFullClient, TaskManager};
+use sc_service::{
+    Configuration, PartialComponents, RpcHandlers, TFullBackend, TFullClient, TaskManager,
+};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::{Keystore, KeystorePtr};
@@ -206,6 +209,75 @@ pub fn new_partial(
     })
 }
 
+async fn init_sh_builder<T, FL, FS>(
+    provider_options: &Option<ProviderOptions>,
+    task_manager: &TaskManager,
+    file_transfer_request_protocol: Option<(ProtocolName, Receiver<IncomingRequest>)>,
+    network: Arc<ParachainNetworkService>,
+) -> Option<StorageHubBuilder<T, FL, FS>>
+where
+    StorageHubBuilder<T, FL, FS>: StorageLayerBuilder,
+    T: TrieLayout + Send + Sync + 'static,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    match provider_options {
+        Some(_) => {
+            // Start building the StorageHubHandler, if running as a provider.
+            let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
+
+            // Create builder for the StorageHubHandler.
+            let mut storage_hub_builder = StorageHubBuilder::<T, FL, FS>::new(task_spawner);
+
+            // Add FileTransfer Service to the StorageHubHandler.
+            let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
+                file_transfer_request_protocol
+                    .expect("FileTransfer request protocol should already be initialized.");
+            storage_hub_builder
+                .with_file_transfer(
+                    file_transfer_request_receiver,
+                    file_transfer_request_protocol_name,
+                    network.clone(),
+                )
+                .await;
+
+            storage_hub_builder.setup_storage_layer();
+            Some(storage_hub_builder)
+        }
+        None => None,
+    }
+}
+
+async fn finish_sh_builder_and_build<T, FL, FS>(
+    mut sh_builder: StorageHubBuilder<T, FL, FS>,
+    client: Arc<ParachainClient>,
+    rpc_handlers: RpcHandlers,
+    keystore: KeystorePtr,
+    provider_options: ProviderOptions,
+) where
+    StorageHubBuilder<T, FL, FS>: StorageLayerBuilder,
+    T: TrieLayout + Send + Sync + 'static,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    // Spawn the Blockchain Service if node is running as a Storage Provider, now that
+    // the rpc handlers has been created.
+    sh_builder
+        .with_blockchain(client.clone(), Arc::new(rpc_handlers), keystore.clone())
+        .await;
+
+    // Getting the caller pub key used for the blockchain service, from the keystore.
+    // Then add it to the StorageHub builder.
+    let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
+    sh_builder.with_provider_pub_key(caller_pub_key);
+
+    // Finally build the StorageHubBuilder and start the Provider tasks.
+    let sh_handler = sh_builder.build();
+    start_provider_tasks(provider_options, sh_handler);
+}
+
 fn start_provider_tasks<T, FL, FS>(
     provider_options: ProviderOptions,
     sh_handler: StorageHubHandler<T, FL, FS>,
@@ -360,29 +432,13 @@ where
         };
 
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
-    let mut sh_builder = None;
-    if provider_options.is_some() {
-        // Start building the StorageHubHandler, if running as a provider.
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
-
-        // Create builder for the StorageHubHandler.
-        let mut storage_hub_builder = StorageHubBuilder::<T, FL, FS>::new(task_spawner);
-
-        // Add FileTransfer Service to the StorageHubHandler.
-        let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
-            file_transfer_request_protocol
-                .expect("FileTransfer request protocol should already be initialized.");
-        storage_hub_builder
-            .with_file_transfer(
-                file_transfer_request_receiver,
-                file_transfer_request_protocol_name,
-                network.clone(),
-            )
-            .await;
-
-        storage_hub_builder.setup_storage_layer();
-        sh_builder = Some(storage_hub_builder);
-    }
+    let sh_builder = init_sh_builder(
+        &provider_options,
+        &task_manager,
+        file_transfer_request_protocol,
+        network.clone(),
+    )
+    .await;
 
     let rpc_builder = {
         let client = client.clone();
@@ -417,23 +473,14 @@ where
 
     // Finish building the StorageHubBuilder if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
-        let mut storage_hub_builder =
-            sh_builder.expect("StorageHubBuilder should already be initialised.");
-
-        // Spawn the Blockchain Service if node is running as a Storage Provider, now that
-        // the rpc handlers has been created.
-        storage_hub_builder
-            .with_blockchain(client.clone(), Arc::new(rpc_handlers), keystore.clone())
-            .await;
-
-        // Getting the caller pub key used for the blockchain service, from the keystore.
-        // Then add it to the StorageHub builder.
-        let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-        storage_hub_builder.with_provider_pub_key(caller_pub_key);
-
-        // Finally build the StorageHubBuilder and start the Provider tasks.
-        let sh_handler = storage_hub_builder.build();
-        start_provider_tasks(provider_options, sh_handler);
+        finish_sh_builder_and_build(
+            sh_builder.expect("StorageHubBuilder should already be initialised."),
+            client.clone(),
+            rpc_handlers,
+            keystore.clone(),
+            provider_options,
+        )
+        .await;
     }
 
     if let Some(hwbench) = hwbench {
@@ -565,8 +612,8 @@ async fn start_node_impl<T, FL, FS>(
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
 where
-    T: TrieLayout + Send + Sync + 'static,
     StorageHubBuilder<T, FL, FS>: StorageLayerBuilder,
+    T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync + 'static,
     HasherOutT<T>: TryFrom<[u8; 32]>,
@@ -647,29 +694,13 @@ where
     }
 
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
-    let mut sh_builder = None;
-    if provider_options.is_some() {
-        // Start building the StorageHubHandler, if running as a provider.
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
-
-        // Create builder for the StorageHubHandler.
-        let mut storage_hub_builder = StorageHubBuilder::<T, FL, FS>::new(task_spawner);
-
-        // Add FileTransfer Service to the StorageHubHandler.
-        let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
-            file_transfer_request_protocol
-                .expect("FileTransfer request protocol should already be initialized.");
-        storage_hub_builder
-            .with_file_transfer(
-                file_transfer_request_receiver,
-                file_transfer_request_protocol_name,
-                network.clone(),
-            )
-            .await;
-
-        storage_hub_builder.setup_storage_layer();
-        sh_builder = Some(storage_hub_builder);
-    }
+    let sh_builder = init_sh_builder(
+        &provider_options,
+        &task_manager,
+        file_transfer_request_protocol,
+        network.clone(),
+    )
+    .await;
 
     let rpc_builder = {
         let client = client.clone();
@@ -704,23 +735,14 @@ where
 
     // Finish building the StorageHubBuilder if node is running as a Storage Provider.
     if let Some(provider_options) = provider_options {
-        let mut storage_hub_builder =
-            sh_builder.expect("StorageHubBuilder should already be initialised.");
-
-        // Spawn the Blockchain Service if node is running as a Storage Provider, now that
-        // the rpc handlers has been created.
-        storage_hub_builder
-            .with_blockchain(client.clone(), Arc::new(rpc_handlers), keystore.clone())
-            .await;
-
-        // Getting the caller pub key used for the blockchain service, from the keystore.
-        // Then add it to the StorageHub builder.
-        let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-        storage_hub_builder.with_provider_pub_key(caller_pub_key);
-
-        // Finally build the StorageHubBuilder and start the Provider tasks.
-        let sh_handler = storage_hub_builder.build();
-        start_provider_tasks(provider_options, sh_handler);
+        finish_sh_builder_and_build(
+            sh_builder.expect("StorageHubBuilder should already be initialised."),
+            client.clone(),
+            rpc_handlers,
+            keystore.clone(),
+            provider_options,
+        )
+        .await;
     }
 
     if let Some(hwbench) = hwbench {

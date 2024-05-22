@@ -21,7 +21,7 @@ use super::{
     handler::StorageHubHandler,
 };
 
-/// Builds the `StorageHubHandler` by adding each component separately.
+/// Builds the [`StorageHubHandler`] by adding each component separately.
 /// Provides setters and getters for each component.
 pub struct StorageHubBuilder<T, FL, FS> {
     task_spawner: Option<TaskSpawner>,
