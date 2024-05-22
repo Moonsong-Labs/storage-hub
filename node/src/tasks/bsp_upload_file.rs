@@ -19,7 +19,7 @@ use crate::services::{
         handler::BlockchainService, types::ExtrinsicResult,
     },
     file_transfer::{commands::FileTransferServiceInterface, events::RemoteUploadRequest},
-    handler::{StorageHubHandler, StorageHubHandlerConfig},
+    handler::StorageHubHandler,
 };
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
@@ -36,22 +36,40 @@ const LOG_TARGET: &str = "bsp-upload-file-task";
 /// - `RemoteUploadRequest` event: The second part of the flow. It is triggered by a
 ///   user sending a chunk of the file to the BSP. It checks the proof for the chunk
 ///   and if it is valid, stores it, until the whole file is stored.
-pub struct BspUploadFileTask<SHC: StorageHubHandlerConfig> {
-    storage_hub_handler: StorageHubHandler<SHC>,
-    file_key_cleanup: Option<HasherOutT<SHC::TrieLayout>>,
+pub struct BspUploadFileTask<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    storage_hub_handler: StorageHubHandler<T, FL, FS>,
+    file_key_cleanup: Option<HasherOutT<T>>,
 }
 
-impl<SHC: StorageHubHandlerConfig> Clone for BspUploadFileTask<SHC> {
-    fn clone(&self) -> BspUploadFileTask<SHC> {
+impl<T, FL, FS> Clone for BspUploadFileTask<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    fn clone(&self) -> BspUploadFileTask<T, FL, FS> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
-            file_key_cleanup: self.file_key_cleanup.clone(),
+            file_key_cleanup: self.file_key_cleanup,
         }
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> BspUploadFileTask<SHC> {
-    pub fn new(storage_hub_handler: StorageHubHandler<SHC>) -> Self {
+impl<T, FL, FS> BspUploadFileTask<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
         Self {
             storage_hub_handler,
             file_key_cleanup: None,
@@ -66,14 +84,17 @@ impl<SHC: StorageHubHandlerConfig> BspUploadFileTask<SHC> {
 /// receiving the file. This task optimistically assumes the transaction will succeed, and registers
 /// the user and file key in the registry of the File Transfer Service, which handles incoming p2p
 /// upload requests.
-impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspUploadFileTask<SHC>
+impl<T, FL, FS> EventHandler<NewStorageRequest> for BspUploadFileTask<T, FL, FS>
 where
-    HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
+    T: TrieLayout + Send + Sync + 'static,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Initiating BSP volunteer mock for location: {:?}, fingerprint: {:?}",
+            "Initiating BSP volunteer for location: {:?}, fingerprint: {:?}",
             event.location,
             event.fingerprint
         );
@@ -81,7 +102,7 @@ where
         let result = self.handle_new_storage_request_event(event).await;
         if result.is_err() {
             if let Some(file_key) = &self.file_key_cleanup {
-                self.unvolunteer_file(file_key.clone()).await?;
+                self.unvolunteer_file(*file_key).await?;
             }
         }
         result
@@ -92,12 +113,15 @@ where
 ///
 /// This event is triggered by a user sending a chunk of the file to the BSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
-impl<SHC: StorageHubHandlerConfig> EventHandler<RemoteUploadRequest> for BspUploadFileTask<SHC>
+impl<T, FL, FS> EventHandler<RemoteUploadRequest> for BspUploadFileTask<T, FL, FS>
 where
-    HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
+    T: TrieLayout + Send + Sync + 'static,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
-        let file_key: HasherOutT<SHC::TrieLayout> = TryFrom::try_from(*event.file_key.as_ref())
+        let file_key: HasherOutT<T> = TryFrom::try_from(*event.file_key.as_ref())
             .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
 
         if !event.chunk_with_proof.verify() {
@@ -171,13 +195,19 @@ where
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> BspUploadFileTask<SHC> {
+impl<T, FL, FS> BspUploadFileTask<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
     async fn handle_new_storage_request_event(
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()>
     where
-        HasherOutT<SHC::TrieLayout>: TryFrom<[u8; 32]>,
+        HasherOutT<T>: TryFrom<[u8; 32]>,
     {
         let fingerprint: [u8; 32] = event
             .fingerprint
@@ -208,14 +238,13 @@ impl<SHC: StorageHubHandlerConfig> BspUploadFileTask<SHC> {
 
         // Get the file key.
         let file_key: FileKey = metadata
-            .key::<<SHC::TrieLayout as TrieLayout>::Hash>()
+            .key::<<T as TrieLayout>::Hash>()
             .as_ref()
             .try_into()?;
 
-        let file_key_hash: HasherOutT<SHC::TrieLayout> =
-            TryFrom::<[u8; 32]>::try_from(*file_key.as_ref())
-                .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
-        self.file_key_cleanup = Some(file_key_hash.clone());
+        let file_key_hash: HasherOutT<T> = TryFrom::<[u8; 32]>::try_from(*file_key.as_ref())
+            .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
+        self.file_key_cleanup = Some(file_key_hash);
 
         // Optimistically register the file for upload in the file transfer service.
         // This solves the race condition between the user and the BSP, where the user could react faster
@@ -226,7 +255,7 @@ impl<SHC: StorageHubHandlerConfig> BspUploadFileTask<SHC> {
                 .map_err(|_| anyhow!("PeerId should be valid; qed"))?;
             self.storage_hub_handler
                 .file_transfer
-                .register_new_file_peer(peer_id.clone(), file_key.clone())
+                .register_new_file_peer(peer_id, file_key)
                 .await
                 .map_err(|_| anyhow!("Failed to register peer file."))?;
         }
@@ -297,7 +326,7 @@ impl<SHC: StorageHubHandlerConfig> BspUploadFileTask<SHC> {
         Ok(())
     }
 
-    async fn unvolunteer_file(&self, file_key: HasherOutT<SHC::TrieLayout>) -> anyhow::Result<()> {
+    async fn unvolunteer_file(&self, file_key: HasherOutT<T>) -> anyhow::Result<()> {
         // Unregister the file from the file transfer service.
         // The error is ignored, as the file might already be unregistered.
         let _ = self
@@ -315,7 +344,7 @@ impl<SHC: StorageHubHandlerConfig> BspUploadFileTask<SHC> {
         Ok(())
     }
 
-    async fn on_file_complete(&self, file_key: &HasherOutT<SHC::TrieLayout>) {
+    async fn on_file_complete(&self, file_key: &HasherOutT<T>) {
         info!(target: LOG_TARGET, "File upload complete ({:?})", file_key);
 
         // Unregister the file from the file transfer service.

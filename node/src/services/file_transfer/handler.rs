@@ -188,8 +188,7 @@ impl Actor for FileTransferService {
                     let result = match self.peers_by_file.get(&file_key) {
                         Some(peers) => {
                             for peer_id in peers {
-                                self.peer_file_allow_list
-                                    .remove(&(*peer_id, file_key.clone()));
+                                self.peer_file_allow_list.remove(&(*peer_id, file_key));
                             }
                             self.peers_by_file.remove(&file_key);
                             Ok(())

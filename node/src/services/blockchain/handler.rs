@@ -220,7 +220,7 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
     }
 
     async fn run(mut self) {
-        info!(target: LOG_TARGET, "FileTransferService starting up!");
+        info!(target: LOG_TARGET, "BlockchainService starting up!");
 
         // Import notification stream to be notified of new blocks.
         let notification_stream = self.actor.client.import_notification_stream();
