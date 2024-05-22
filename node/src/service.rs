@@ -56,6 +56,7 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::traits::Block as BlockT;
 use substrate_prometheus_endpoint::Registry;
+use tokio::sync::RwLock;
 
 use crate::{
     cli::StorageLayer,
@@ -440,6 +441,12 @@ where
     )
     .await;
 
+    let maybe_file_storage = if let Some(sh_builder) = sh_builder {
+        sh_builder.file_storage().clone()
+    } else {
+        None
+    };
+
     let rpc_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
@@ -448,8 +455,10 @@ where
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
+                maybe_file_storage: maybe_file_storage.clone(),
                 command_sink: command_sink.clone(),
                 deny_unsafe,
+                _marker: Default::default(),
             };
 
             crate::rpc::create_full(deps).map_err(Into::into)
@@ -702,6 +711,12 @@ where
     )
     .await;
 
+    let maybe_file_storage = if let Some(sh_builder) = sh_builder {
+        sh_builder.file_storage().clone()
+    } else {
+        None
+    };
+
     let rpc_builder = {
         let client = client.clone();
         let transaction_pool = transaction_pool.clone();
@@ -710,8 +725,10 @@ where
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
+                maybe_file_storage: maybe_file_storage.clone(),
                 command_sink: None,
                 deny_unsafe,
+                _marker: Default::default(),
             };
 
             crate::rpc::create_full(deps).map_err(Into::into)

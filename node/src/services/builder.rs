@@ -128,8 +128,7 @@ where
         self
     }
 
-    /// Get the [`FileStorage`] from the builder.
-    pub fn _file_storage(&self) -> &Option<Arc<RwLock<FL>>> {
+    pub fn file_storage(&self) -> &Option<Arc<RwLock<FL>>> {
         &self.file_storage
     }
 

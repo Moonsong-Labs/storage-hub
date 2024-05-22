@@ -69,6 +69,10 @@ impl AsRef<[u8; 32]> for FileKey {
 pub struct Fingerprint(Hash);
 
 impl Fingerprint {
+    pub fn new(hash: Hash) -> Self {
+        Fingerprint(hash)
+    }
+
     /// Returns the hash of the fingerprint.
     pub fn hash(&self) -> Hash {
         self.0
@@ -104,7 +108,7 @@ impl AsRef<[u8]> for Fingerprint {
 // TODO: this is currently a placeholder in order to define Storage interface.
 /// FileMetadata contains information about a file.
 /// Most importantly, the fingerprint which is the root Merkle hash of the file.
-#[derive(Encode, Decode, Clone, Debug, PartialEq, Eq)]
+#[derive(Encode, Decode, Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct FileMetadata {
     pub owner: String,
     pub location: FileLocation,
