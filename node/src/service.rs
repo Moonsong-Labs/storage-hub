@@ -12,7 +12,7 @@ use forest_manager::{
     in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
 };
 use futures::{Stream, StreamExt};
-use log::debug;
+
 use polkadot_primitives::{BlakeTwo256, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_common::types::HasherOutT;
