@@ -10,7 +10,7 @@ use frame_support::traits::fungible;
 use frame_support::Parameter;
 use scale_info::prelude::{fmt::Debug, vec::Vec};
 use sp_core::Get;
-use sp_runtime::traits::AtLeast32BitUnsigned;
+use sp_runtime::traits::{AtLeast32BitUnsigned, Saturating};
 use sp_runtime::{BoundedVec, DispatchError};
 
 #[cfg(feature = "std")]
@@ -274,9 +274,9 @@ pub trait PaymentStreamsInterface {
         + fungible::Mutate<Self::AccountId>
         + fungible::hold::Inspect<Self::AccountId>
         + fungible::hold::Mutate<Self::AccountId>;
-    /// The type which represents an account identifier.
+    /// The type which represents a User account identifier.
     type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-    /// The type which represents a provider identifier.
+    /// The type which represents a Provider identifier.
     type ProviderId: Parameter
         + Member
         + MaybeSerializeDeserialize
@@ -286,8 +286,8 @@ pub trait PaymentStreamsInterface {
         + Copy;
     /// The type which represents a block number.
     type BlockNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-    /// The type which represents a payment stream.
-    type PaymentStream: Encode
+    /// The type which represents a fixed-rate payment stream.
+    type FixedRatePaymentStream: Encode
         + Decode
         + Parameter
         + Member
@@ -295,37 +295,86 @@ pub trait PaymentStreamsInterface {
         + MaxEncodedLen
         + PartialEq
         + Clone;
+    /// The type which represents a dynamic-rate payment stream.
+    type DynamicRatePaymentStream: Encode
+        + Decode
+        + Parameter
+        + Member
+        + Debug
+        + MaxEncodedLen
+        + PartialEq
+        + Clone;
+    /// The type of the units that the Provider provides to the User (for example, for storage could be terabytes)
+    type Units: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Default
+        + MaybeDisplay
+        + AtLeast32BitUnsigned
+        + Saturating
+        + Copy
+        + MaxEncodedLen
+        + HasCompact
+        + Into<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
 
-    /// Create a new payment stream from a user to a Provider.
-    fn create_payment_stream(
+    /// Create a new fixed-rate payment stream from a User to a Provider.
+    fn create_fixed_rate_payment_stream(
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         rate: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult;
 
-    /// Update the rate of an existing payment stream.
-    fn update_payment_stream(
+    /// Update the rate of an existing fixed-rate payment stream.
+    fn update_fixed_rate_payment_stream(
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
-        rate: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
+        new_rate: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult;
 
-    /// Delete a payment stream.
-    fn delete_payment_stream(
+    /// Delete a fixed-rate payment stream.
+    fn delete_fixed_rate_payment_stream(
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> DispatchResult;
 
-    /// Get the payment stream information for a user and a Backup Storage Provider.
-    fn get_payment_stream_info(
+    /// Get the fixed-rate payment stream information between a User and a Provider
+    fn get_fixed_rate_payment_stream_info(
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
-    ) -> Option<Self::PaymentStream>;
+    ) -> Option<Self::FixedRatePaymentStream>;
+
+    /// Create a new dynamic-rate payment stream from a User to a Provider.
+    fn create_dynamic_rate_payment_stream(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+        amount_provided: &Self::Units,
+    ) -> DispatchResult;
+
+    /// Update the amount provided of an existing dynamic-rate payment stream.
+    fn update_dynamic_rate_payment_stream(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+        new_amount_provided: &Self::Units,
+    ) -> DispatchResult;
+
+    /// Delete a dynamic-rate payment stream.
+    fn delete_dynamic_rate_payment_stream(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> DispatchResult;
+
+    /// Get the dynamic-rate payment stream information between a User and a Provider
+    fn get_dynamic_rate_payment_stream_info(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> Option<Self::DynamicRatePaymentStream>;
 }
 
 /// The interface of a Payment Manager, which has to be made aware of the last block for which a charge of a payment can be made by a provider.
 /// Example: the Proofs Dealer pallet uses this interface to update the block when a Storage Provider last submitted a valid proof for the Payment Streams pallet.
 pub trait PaymentManager {
+    /// The type which represents the balance of the runtime.
+    type Balance: fungible::Inspect<Self::AccountId>;
     /// The type which represents an account identifier.
     type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
     /// The type which represents a provider identifier.
@@ -343,6 +392,15 @@ pub trait PaymentManager {
     fn update_last_chargeable_block(
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
-        last_chargeable_block: Self::BlockNumber,
+        new_last_chargeable_block: Self::BlockNumber,
+    ) -> DispatchResult;
+
+    /// Update the accumulated price index that can be used to calculate the amount to be charged
+    /// TODO: The way to avoid having to have this function is to only allow `update_last_chargeable_block` to use the current
+    /// block number (that way, the price index is readily available in the Payment Streams pallet). I'd rather not do that.
+    fn update_chargeable_price_index(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+        new_last_chargeable_price_index: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult;
 }

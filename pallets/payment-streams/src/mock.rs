@@ -16,6 +16,7 @@ use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
+type StorageUnit = u32;
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
@@ -108,7 +109,7 @@ impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageData = u32;
+    type StorageData = StorageUnit;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
@@ -145,7 +146,8 @@ impl crate::Config for Test {
     type NativeBalance = Balances;
     type ProvidersPallet = StorageProviders;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type NewUserDeposit = ConstU128<10>;
+    type Units = StorageUnit;
+    type NewStreamDeposit = ConstU64<10>;
     type BlockNumberToBalance = BlockNumberToBalance;
 }
 

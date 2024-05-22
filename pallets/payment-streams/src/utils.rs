@@ -1,7 +1,7 @@
 use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::sp_runtime::{
-    traits::{CheckedMul, CheckedSub, Zero},
+    traits::{CheckedAdd, CheckedMul, CheckedSub, Zero},
     ArithmeticError, DispatchError,
 };
 use frame_support::traits::{
@@ -50,27 +50,25 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
-    /// This function holds the logic that checks if a payment stream can be created and, if so, stores the payment stream in the PaymentStreams mapping
-    /// and holds the necessary balance from the sender if it's its first payment stream.
-    ///
-    /// Note: Maybe we should add a check to make sure the user has enough balance to pay for at least X amount of blocks?
-    pub fn do_create_payment_stream(
-        sp_id: &ProviderIdFor<T>,
+    /// This function holds the logic that checks if a fixed-rate payment stream can be created and, if so, stores the payment
+    /// stream in the FixedRatePaymentStreams mapping and holds the deposit from the User.
+    pub fn do_create_fixed_rate_payment_stream(
+        provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
         rate: BalanceOf<T>,
     ) -> DispatchResult {
-        // Check that the given ID belongs to an actual provider
+        // Check that the given ID belongs to an actual Provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*sp_id),
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
 
         // Check that the given rate is not 0
         ensure!(rate != Zero::zero(), Error::<T>::RateCantBeZero);
 
-        // Check that a payment stream between that SP and user does not exist yet
+        // Check that a fixed-rate payment stream between that Provider and User does not exist yet
         ensure!(
-            !PaymentStreams::<T>::contains_key(sp_id, user_account),
+            !FixedRatePaymentStreams::<T>::contains_key(provider_id, user_account),
             Error::<T>::PaymentStreamAlreadyExists
         );
 
@@ -80,83 +78,81 @@ where
             Error::<T>::UserWithoutFunds
         );
 
-        // Check if the user is already registered and, if not, try to hold the deposit
-        // TODO: The deposit held should be proportional to the rate of the payment stream (so we hold X amount of blocks of storage)
-        // TODO: Also, we should hold the deposit each time a user creates or updates a payment stream, not only when creating its first one like here
-        let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
-        if user_payment_streams_count == 0 {
-            // Check that the user has enough balance to pay the deposit
-            let user_balance = T::NativeBalance::reducible_balance(
-                &user_account,
-                Preservation::Preserve,
-                Fortitude::Polite,
-            );
-            let deposit = T::NewUserDeposit::get();
-            ensure!(user_balance >= deposit, Error::<T>::CannotHoldDeposit);
+        // Check that the user has enough balance to pay the deposit
+        let user_balance = T::NativeBalance::reducible_balance(
+            &user_account,
+            Preservation::Preserve,
+            Fortitude::Polite,
+        );
+        let deposit = rate
+            .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+            .ok_or(ArithmeticError::Overflow)?;
+        ensure!(user_balance >= deposit, Error::<T>::CannotHoldDeposit);
 
-            // Check if we can hold the deposit from the user
-            ensure!(
-                T::NativeBalance::can_hold(
-                    &HoldReason::PaymentStreamStorageDeposit.into(),
-                    &user_account,
-                    deposit
-                ),
-                Error::<T>::CannotHoldDeposit
-            );
-
-            // Hold the deposit from the user
-            T::NativeBalance::hold(
-                &HoldReason::PaymentStreamStorageDeposit.into(),
+        // Check if we can hold the deposit from the user
+        ensure!(
+            T::NativeBalance::can_hold(
+                &HoldReason::PaymentStreamDeposit.into(),
                 &user_account,
-                deposit,
-            )?;
-        }
+                deposit
+            ),
+            Error::<T>::CannotHoldDeposit
+        );
+
+        // Hold the deposit from the user
+        T::NativeBalance::hold(
+            &HoldReason::PaymentStreamDeposit.into(),
+            &user_account,
+            deposit,
+        )?;
 
         // Add one to the user's payment streams count
-        user_payment_streams_count = user_payment_streams_count
-            .checked_add(1)
-            .ok_or(ArithmeticError::Overflow)?;
-        RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+        RegisteredUsers::<T>::mutate(user_account, |user_payment_streams_count| {
+            *user_payment_streams_count = user_payment_streams_count
+                .checked_add(1)
+                .ok_or(ArithmeticError::Overflow)?;
+            Ok::<(), DispatchError>(())
+        })?;
 
-        // Store the new payment stream in the PaymentStreams mapping
-        // We initiate the last_valid_proof and last_charged_proof with the current block number to be able to keep track of the
+        // Store the new fixed-rate payment stream in the FixedRatePaymentStreams mapping
+        // We initiate the `last_charged_block` and `last_chargeable_block` with the current block number to be able to keep track of the
         // time passed since the payment stream was originally created
-        PaymentStreams::<T>::insert(
-            sp_id,
+        FixedRatePaymentStreams::<T>::insert(
+            provider_id,
             user_account,
-            PaymentStream {
+            FixedRatePaymentStream {
                 rate,
-                last_valid_proof: frame_system::Pallet::<T>::block_number(),
-                last_charged_proof: frame_system::Pallet::<T>::block_number(),
+                last_chargeable_block: frame_system::Pallet::<T>::block_number(),
+                last_charged_block: frame_system::Pallet::<T>::block_number(),
             },
         );
 
         Ok(())
     }
 
-    /// This function holds the logic that checks if a payment stream can be updated and, if so, updates the payment stream in the PaymentStreams mapping.
-    pub fn do_update_payment_stream(
-        sp_id: &ProviderIdFor<T>,
+    /// This function holds the logic that checks if a fixed-rate payment stream can be updated and, if so, updates it in the FixedRatePaymentStreams mapping.
+    pub fn do_update_fixed_rate_payment_stream(
+        provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
         new_rate: BalanceOf<T>,
     ) -> DispatchResult {
-        // Check that the given ID belongs to an actual provider
+        // Check that the given ID belongs to an actual Provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*sp_id),
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
 
-        // Ensure that the new rate is not 0 (should use remove_payment_stream instead)
+        // Ensure that the new rate is not 0 (should use remove_fixed_rate_payment_stream instead)
         ensure!(new_rate != Zero::zero(), Error::<T>::RateCantBeZero);
 
-        // Check that a payment stream between that BSP and user exists
+        // Check that a fixed-rate payment stream between the Provider and User exists
         ensure!(
-            PaymentStreams::<T>::contains_key(sp_id, user_account),
+            FixedRatePaymentStreams::<T>::contains_key(provider_id, user_account),
             Error::<T>::PaymentStreamNotFound
         );
 
         // Get the information of the payment stream
-        let payment_stream = PaymentStreams::<T>::get(sp_id, user_account)
+        let payment_stream = FixedRatePaymentStreams::<T>::get(provider_id, user_account)
             .ok_or(Error::<T>::PaymentStreamNotFound)?;
 
         // Verify that the new rate is different from the current one
@@ -172,20 +168,20 @@ where
         );
 
         // Charge the payment stream with the old rate before updating it to prevent abuse
-        let amount_charged = Self::do_charge_payment_stream(&sp_id, user_account)?;
+        let amount_charged = Self::do_charge_payment_streams(&provider_id, user_account)?;
         if amount_charged > Zero::zero() {
-            // We emit a payment charged event only if the user had to pay for its storage before the payment stream was updated
+            // We emit a payment charged event only if the user had to pay before the payment stream could be updated
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
-                storage_provider_id: *sp_id,
+                provider_id: *provider_id,
                 amount: amount_charged,
             });
         }
 
         // TODO: We should check if the new rate is lower or higher than the current one, and release or hold the difference in deposit accordingly
 
-        // Update the payment stream in the PaymentStreams mapping
-        PaymentStreams::<T>::mutate(sp_id, user_account, |payment_stream| {
+        // Update the payment stream in the FixedRatePaymentStreams mapping
+        FixedRatePaymentStreams::<T>::mutate(provider_id, user_account, |payment_stream| {
             let payment_stream = expect_or_err!(
                 payment_stream,
                 "Payment stream should exist if it was found before.",
@@ -198,21 +194,21 @@ where
         Ok(())
     }
 
-    /// This function holds the logic that checks if a payment stream can be removed and, if so, removes the payment stream from the PaymentStreams mapping,
+    /// This function holds the logic that checks if a fixed-rate payment stream can be deleted and, if so, removes it from the FixedRatePaymentStreams mapping,
     /// decreases the user's payment streams count and releases the deposit of that payment stream.
-    pub fn do_delete_payment_stream(
-        sp_id: &ProviderIdFor<T>,
+    pub fn do_delete_fixed_rate_payment_stream(
+        provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
     ) -> DispatchResult {
-        // Check that the given ID belongs to an actual provider
+        // Check that the given ID belongs to an actual Provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*sp_id),
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
 
-        // Check that a payment stream between that BSP and user exists
+        // Check that a payment stream between that Provider and User exists
         ensure!(
-            PaymentStreams::<T>::contains_key(sp_id, user_account),
+            FixedRatePaymentStreams::<T>::contains_key(provider_id, user_account),
             Error::<T>::PaymentStreamNotFound
         );
 
@@ -223,19 +219,19 @@ where
             Error::<T>::UserWithoutFunds
         );
 
-        // Charge the payment stream before deletion to make sure the storage provided by the provider is paid in full for its duration
-        let amount_charged = Self::do_charge_payment_stream(&sp_id, user_account)?;
+        // Charge the payment stream before deletion to make sure the services provided by the Provider is paid in full for its duration
+        let amount_charged = Self::do_charge_payment_streams(&provider_id, user_account)?;
         if amount_charged > Zero::zero() {
-            // We emit a payment charged event only if the user had to pay for its storage before deleting the payment stream
+            // We emit a payment charged event only if the user had to pay before being able to delete the payment stream
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account: user_account.clone(),
-                storage_provider_id: *sp_id,
+                provider_id: *provider_id,
                 amount: amount_charged,
             });
         }
 
-        // Remove the payment stream from the PaymentStreams mapping
-        PaymentStreams::<T>::remove(sp_id, user_account);
+        // Remove the payment stream from the FixedRatePaymentStreams mapping
+        FixedRatePaymentStreams::<T>::remove(provider_id, user_account);
 
         // Decrease the user's payment streams count
         let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
@@ -244,120 +240,132 @@ where
             .ok_or(ArithmeticError::Underflow)?;
         RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
 
-        // If the user has no more payment streams, release the deposit
-        // TODO: We should actually release the deposit of that specific payment stream. We might have to keep track of the deposit held for each payment stream
-        if user_payment_streams_count == 0 {
-            // Release the deposit from the user
-            T::NativeBalance::release_all(
-                &HoldReason::PaymentStreamStorageDeposit.into(),
-                &user_account,
-                Precision::Exact,
-            )?;
-
-            // Remove the user from the UsersWithoutFunds mapping
-            UsersWithoutFunds::<T>::remove(user_account);
-        }
+        // TODO: Release the deposit of this payment stream to the User
 
         Ok(())
     }
 
-    /// This function holds the logic that checks if a payment stream can be charged and, if so, charges the payment stream from the user's balance.
-    /// The charge is calculated as: `rate * time_passed` where `time_passed` is the time between the last valid proof submitted and the last charged proof of this payment stream.
-    /// As such, the last charged proof can't be greater than the last valid proof, and if they are equal then no charge is made.
-    ///
-    /// TODO: Change charging system to utilize a price index instead of relying on the block number directly
-    pub fn do_charge_payment_stream(
-        sp_id: &ProviderIdFor<T>,
+    /// This function holds the logic that checks if any payment stream exists between a Provider and a User and, if so,
+    /// charges the payment stream/s from the User's balance.
+    /// For fixed-rate payment streams, the charge is calculated as: `rate * time_passed` where `time_passed` is the time between the last chargeable block and
+    /// the last charged block of this payment stream.  As such, the last charged block can't ever be greater than the last chargeable block, and if they are equal then no charge is made.
+    /// For dynamic-rate payment streams, the charge is calculated as: `amount_provided * (price_index_when_last_charged - price_index_at_last_chargeable_block)`. In this case,
+    /// the price index at the last charged block can't ever be greater than the price index at the last chargeable block, and if they are equal then no charge is made.
+
+    pub fn do_charge_payment_streams(
+        provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
     ) -> Result<BalanceOf<T>, DispatchError> {
-        // Check that the given ID belongs to an actual provider
+        // Check that the given ID belongs to an actual Provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*sp_id),
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
 
-        // Check that a payment stream between that BSP and user exists
+        // Check that a payment stream between that Provider and User exists
         ensure!(
-            PaymentStreams::<T>::contains_key(sp_id, user_account),
+            FixedRatePaymentStreams::<T>::contains_key(provider_id, user_account)
+                || DynamicRatePaymentStreams::<T>::contains_key(provider_id, user_account),
             Error::<T>::PaymentStreamNotFound
         );
 
-        // Get the information of the payment stream
-        let payment_stream = PaymentStreams::<T>::get(sp_id, user_account)
-            .ok_or(Error::<T>::PaymentStreamNotFound)?;
+        // Get the information of the fixed-rate payment stream (if it exists)
+        let fixed_rate_payment_stream =
+            FixedRatePaymentStreams::<T>::get(provider_id, user_account);
 
-        // Note: No need to check if a new proof has been submitted since the last charge as the only consequence of that is charging 0 to the user,
-        // and not erroring out helps to be able to call this function without errors when updating or removing a payment stream.
+        // Get the information of the dynamic-rate payment stream (if it exists)
+        let dynamic_rate_payment_stream =
+            DynamicRatePaymentStreams::<T>::get(provider_id, user_account);
 
-        // Calculate the time passed between the last valid proof and the last charged proof
-        let time_passed = expect_or_err!(payment_stream
-            .last_valid_proof
-            .checked_sub(&payment_stream.last_charged_proof), "Last valid proof should always be greater than or equal to the last charged proof, inconsistency error.",
-            Error::<T>::LastChargeGreaterThanLastValidProof);
+        // Note: No need to check if the last chargeable block/price index at last chargeable block has been updated since the last charge,
+        // as the only consequence of that is charging 0 to the user.
+        // Not erroring out in this situation helps to be able to call this function without errors when updating or removing a payment stream.
 
-        // Convert it to the balance type (for math)
-        let time_passed_balance_typed = T::BlockNumberToBalance::convert(time_passed);
+        // Initiate the variable that will hold the total amount that has been charged
+        let mut total_amount_charged: BalanceOf<T> = Zero::zero();
 
-        // Calculate the amount to charge
-        let amount_to_charge = payment_stream
-            .rate
-            .checked_mul(&time_passed_balance_typed)
-            .ok_or(Error::<T>::ChargeOverflow)?;
+        // If the fixed-rate payment stream exists:
+        if let Some(fixed_rate_payment_stream) = fixed_rate_payment_stream {
+            // Calculate the time passed between the last chargeable block and the last charged block
+            let time_passed = expect_or_err!(fixed_rate_payment_stream
+            .last_chargeable_block
+            .checked_sub(&fixed_rate_payment_stream.last_charged_block), "Last chargeable block should always be greater than or equal to the last charged block, inconsistency error.",
+            Error::<T>::LastChargedGreaterThanLastChargeable);
 
-        // Check the free balance of the user
-        let user_balance = T::NativeBalance::reducible_balance(
-            &user_account,
-            Preservation::Preserve,
-            Fortitude::Polite,
-        );
+            // Convert it to the balance type (for math)
+            let time_passed_balance_typed = T::BlockNumberToBalance::convert(time_passed);
 
-        // If the user does not have enough balance to pay for its storage:
-        if user_balance < amount_to_charge {
-            // TODO: Probably just charge what the user has and then flag it
-            // Flag it in the UsersWithoutFunds mapping and emit the UserWithoutFunds event
-            UsersWithoutFunds::<T>::insert(user_account, ());
-            Self::deposit_event(Event::<T>::UserWithoutFunds {
-                who: user_account.clone(),
-            });
+            // Calculate the amount to charge
+            let amount_to_charge = fixed_rate_payment_stream
+                .rate
+                .checked_mul(&time_passed_balance_typed)
+                .ok_or(Error::<T>::ChargeOverflow)?;
 
-            // Return 0 as the amount that has been charged
-            Ok(Zero::zero())
-        } else {
-            // If the user does have enough funds to pay for its storage:
-
-            // Clear the user from the UsersWithoutFunds mapping
-            // TODO: Design a more robust way of handling out-of-funds users
-            UsersWithoutFunds::<T>::remove(user_account);
-
-            // Get the payment account of the SP
-            let sp_payment_account = expect_or_err!(
-                <T::ProvidersPallet as ProvidersInterface>::get_provider_payment_account(*sp_id),
-                "Storage Provider should exist and have a payment account if its ID exists.",
-                Error::<T>::BspInconsistencyError
+            // Check the free balance of the user
+            let user_balance = T::NativeBalance::reducible_balance(
+                &user_account,
+                Preservation::Preserve,
+                Fortitude::Polite,
             );
 
-            // Charge the payment stream from the user's balance
-            T::NativeBalance::transfer(
-                user_account,
-                &sp_payment_account,
-                amount_to_charge,
-                Preservation::Preserve,
-            )?;
+            // If the user does not have enough balance to pay for its storage:
+            if user_balance < amount_to_charge {
+                // TODO: Probably just charge what the user has and then flag it
+                // Flag it in the UsersWithoutFunds mapping and emit the UserWithoutFunds event
+                UsersWithoutFunds::<T>::insert(user_account, ());
+                Self::deposit_event(Event::<T>::UserWithoutFunds {
+                    who: user_account.clone(),
+                });
+            } else {
+                // If the user does have enough funds to pay for its storage:
 
-            // Set the last charge to the block number of the last valid proof submitted
-            PaymentStreams::<T>::mutate(sp_id, user_account, |payment_stream| {
-                let payment_stream = expect_or_err!(
-                    payment_stream,
-                    "Payment stream should exist if it was found before.",
-                    Error::<T>::PaymentStreamNotFound
+                // Clear the user from the UsersWithoutFunds mapping
+                // TODO: Design a more robust way of handling out-of-funds users
+                UsersWithoutFunds::<T>::remove(user_account);
+
+                // Get the payment account of the SP
+                let provider_payment_account = expect_or_err!(
+                    <T::ProvidersPallet as ProvidersInterface>::get_provider_payment_account(
+                        *provider_id
+                    ),
+                    "Provider should exist and have a payment account if its ID exists.",
+                    Error::<T>::ProviderInconsistencyError
                 );
-                payment_stream.last_charged_proof = payment_stream.last_valid_proof;
-                Ok::<(), DispatchError>(())
-            })?;
 
-            // Return the amount that has been charged
-            Ok(amount_to_charge)
+                // Charge the payment stream from the user's balance
+                T::NativeBalance::transfer(
+                    user_account,
+                    &provider_payment_account,
+                    amount_to_charge,
+                    Preservation::Preserve,
+                )?;
+
+                // Set the last charged block to the block number of the last chargeable block
+                FixedRatePaymentStreams::<T>::mutate(
+                    provider_id,
+                    user_account,
+                    |payment_stream| {
+                        let payment_stream = expect_or_err!(
+                            payment_stream,
+                            "Payment stream should exist if it was found before.",
+                            Error::<T>::PaymentStreamNotFound
+                        );
+                        payment_stream.last_charged_block = payment_stream.last_chargeable_block;
+                        Ok::<(), DispatchError>(())
+                    },
+                )?;
+
+                // Update the total amount charged:
+                total_amount_charged = total_amount_charged
+                    .checked_add(&amount_to_charge)
+                    .ok_or(Error::<T>::ChargeOverflow)?;
+            }
         }
+
+        // If the dynamic-rate payment stream exists:
+        if let Some(dynamic_rate_payment_stream) = dynamic_rate_payment_stream {}
+
+        Ok(total_amount_charged)
     }
 }
 
@@ -366,20 +374,22 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     type ProviderId = ProviderIdFor<T>;
     type Balance = T::NativeBalance;
     type BlockNumber = BlockNumberFor<T>;
-    type PaymentStream = PaymentStream<T>;
+    type Units = UnitsProvidedFor<T>;
+    type FixedRatePaymentStream = FixedRatePaymentStream<T>;
+    type DynamicRatePaymentStream = DynamicRatePaymentStream<T>;
 
-    fn create_payment_stream(
-        sp_id: &Self::ProviderId,
+    fn create_fixed_rate_payment_stream(
+        provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         rate: <Self::Balance as Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult {
         // Execute the logic to create a payment stream
-        Self::do_create_payment_stream(sp_id, user_account, rate)?;
+        Self::do_create_fixed_rate_payment_stream(provider_id, user_account, rate)?;
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::PaymentStreamCreated {
+        Self::deposit_event(Event::<T>::FixedRatePaymentStreamCreated {
             user_account: user_account.clone(),
-            storage_provider_id: *sp_id,
+            provider_id: *provider_id,
             rate,
         });
 
@@ -387,18 +397,18 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         Ok(())
     }
 
-    fn update_payment_stream(
-        sp_id: &Self::ProviderId,
+    fn update_fixed_rate_payment_stream(
+        provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         new_rate: <Self::Balance as Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult {
         // Execute the logic to update a payment stream
-        Self::do_update_payment_stream(sp_id, user_account, new_rate)?;
+        Self::do_update_fixed_rate_payment_stream(provider_id, user_account, new_rate)?;
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::PaymentStreamUpdated {
+        Self::deposit_event(Event::<T>::FixedRatePaymentStreamUpdated {
             user_account: user_account.clone(),
-            storage_provider_id: *sp_id,
+            provider_id: *provider_id,
             new_rate,
         });
 
@@ -406,84 +416,128 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         Ok(())
     }
 
-    fn delete_payment_stream(
-        sp_id: &Self::ProviderId,
+    fn delete_fixed_rate_payment_stream(
+        provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> DispatchResult {
         // Execute the logic to delete a payment stream
-        Self::do_delete_payment_stream(sp_id, user_account)?;
+        Self::do_delete_fixed_rate_payment_stream(provider_id, user_account)?;
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::PaymentStreamDeleted {
+        Self::deposit_event(Event::<T>::FixedRatePaymentStreamDeleted {
             user_account: user_account.clone(),
-            storage_provider_id: *sp_id,
+            provider_id: *provider_id,
         });
 
         // Return a successful DispatchResult
         Ok(())
     }
 
-    fn get_payment_stream_info(
-        sp_id: &Self::ProviderId,
+    fn get_fixed_rate_payment_stream_info(
+        provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
-    ) -> Option<Self::PaymentStream> {
+    ) -> Option<Self::FixedRatePaymentStream> {
         // Return the payment stream information
-        PaymentStreams::<T>::get(sp_id, user_account)
+        FixedRatePaymentStreams::<T>::get(provider_id, user_account)
+    }
+
+    fn create_dynamic_rate_payment_stream(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+        amount_provided: &Self::Units,
+    ) -> DispatchResult {
+        // TODO: Implement the logic to create a dynamic-rate payment stream
+        Ok(())
+    }
+
+    fn update_dynamic_rate_payment_stream(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+        new_amount_provided: &Self::Units,
+    ) -> DispatchResult {
+        // TODO: Implement the logic to update a dynamic-rate payment stream
+        Ok(())
+    }
+
+    fn delete_dynamic_rate_payment_stream(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> DispatchResult {
+        // TODO: Implement the logic to delete a dynamic-rate payment stream
+        Ok(())
+    }
+
+    fn get_dynamic_rate_payment_stream_info(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> Option<Self::DynamicRatePaymentStream> {
+        // Return the payment stream information
+        DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
     }
 }
 
 impl<T: pallet::Config> PaymentManager for pallet::Pallet<T> {
+    type Balance = T::NativeBalance;
     type AccountId = T::AccountId;
     type ProviderId = ProviderIdFor<T>;
     type BlockNumber = BlockNumberFor<T>;
 
     fn update_last_chargeable_block(
-        sp_id: &Self::ProviderId,
+        provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
-        last_valid_proof_block: Self::BlockNumber,
+        new_last_chargeable_block: Self::BlockNumber,
     ) -> DispatchResult {
-        // Check that the given ID belongs to an actual provider
+        // Check that the given ID belongs to an actual Provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*sp_id),
+            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
 
-        // Ensure that the last valid proof block that is being submitted is not greater than the current block number
+        // Ensure that the new last chargeable block number that is being set is not greater than the current block number
         ensure!(
-            last_valid_proof_block <= frame_system::Pallet::<T>::block_number(),
-            Error::<T>::InvalidLastValidProofBlockNumber
+            new_last_chargeable_block <= frame_system::Pallet::<T>::block_number(),
+            Error::<T>::InvalidLastChargeableBlockNumber
         );
 
         // Get the information of the payment stream to update
-        let payment_stream = PaymentStreams::<T>::get(sp_id, user_account)
+        let payment_stream = FixedRatePaymentStreams::<T>::get(provider_id, user_account)
             .ok_or(Error::<T>::PaymentStreamNotFound)?;
 
-        // Ensure that the new last valid proof block is greater than the last valid proof block of the payment stream
+        // Ensure that the new last chargeable block number that is being set is greater than the previous last chargeable block number of the payment stream
         ensure!(
-            last_valid_proof_block > payment_stream.last_valid_proof,
-            Error::<T>::InvalidLastValidProofBlockNumber
+            new_last_chargeable_block > payment_stream.last_chargeable_block,
+            Error::<T>::InvalidLastChargeableBlockNumber
         );
 
-        // Ensure that the new last valid proof block is greater than the last charged proof block of the payment stream
+        // Ensure that the new last chargeable block number is greater than the last charged block number of the payment stream
         expect_or_err!(
-			last_valid_proof_block > payment_stream.last_charged_proof,
-			"Last valid proof (which was checked previously) should always be greater than or equal to the last charged proof.",
-			Error::<T>::LastChargeGreaterThanLastValidProof,
+			new_last_chargeable_block > payment_stream.last_charged_block,
+			"Last chargeable block (which was checked previously) should always be greater than or equal to the last charged block.",
+			Error::<T>::LastChargedGreaterThanLastChargeable,
 			bool
 		);
 
-        // Update the last valid proof block of the payment stream
-        PaymentStreams::<T>::mutate(sp_id, user_account, |payment_stream| {
+        // Update the last chargeable block number of the payment stream
+        FixedRatePaymentStreams::<T>::mutate(provider_id, user_account, |payment_stream| {
             let payment_stream = expect_or_err!(
                 payment_stream,
                 "Payment stream should exist if it was found before.",
                 Error::<T>::PaymentStreamNotFound
             );
-            payment_stream.last_valid_proof = last_valid_proof_block;
+            payment_stream.last_chargeable_block = new_last_chargeable_block;
             Ok::<(), DispatchError>(())
         })?;
 
         // Return a successful DispatchResult
+        Ok(())
+    }
+
+    fn update_chargeable_price_index(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+        new_last_chargeable_price_index: <Self::Balance as frame_support::traits::fungible::Inspect<Self::AccountId>>::Balance,
+    ) -> DispatchResult {
+        // TODO: Implement this
         Ok(())
     }
 }

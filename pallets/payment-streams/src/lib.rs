@@ -1,11 +1,6 @@
-//! # Storage Providers Pallet
+//! # Payment Streams Pallet
 //!
-//! This pallet provides the functionality to manage Main Storage Providers (MSPs)
-//! and Backup Storage Providers (BSPs) in a decentralized storage network.
-//!
-//! The functionality allows users to sign up and sign off as MSPs or BSPs and change
-//! their parameters. This is the way that users can offer their storage capacity to
-//! the network and get rewarded for it.
+//! This pallet provides the functionality to create, update, delete and charge payment streams.
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -29,12 +24,13 @@ use types::*;
 #[frame_support::pallet]
 pub mod pallet {
     use super::types::*;
+    use codec::HasCompact;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo, pallet_prelude::*, traits::fungible::*,
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
-    use sp_runtime::traits::Convert;
+    use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, Saturating};
     use storage_hub_traits::ProvidersInterface;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -49,7 +45,7 @@ pub mod pallet {
             + hold::Inspect<Self::AccountId, Reason = Self::RuntimeHoldReason>
             + hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>;
 
-        /// The trait for reading storage provider data.
+        /// The trait for reading provider data.
         type ProvidersPallet: ProvidersInterface<AccountId = Self::AccountId>;
 
         /// The overarching hold reason
@@ -58,9 +54,26 @@ pub mod pallet {
         /// A converter to be able to convert the block number type to the balance type for charging (multiplying time (blocks) by rate (balance))
         type BlockNumberToBalance: Convert<BlockNumberFor<Self>, BalanceOf<Self>>;
 
-        /// The amounts of funds to hold when a user first registers to the network
+        /// The type of the units that the Provider provides to the User (for example, for storage could be terabytes)
+        type Units: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Default
+            + MaybeDisplay
+            + AtLeast32BitUnsigned
+            + Saturating
+            + Copy
+            + MaxEncodedLen
+            + HasCompact
+            + Into<BalanceOf<Self>>;
+
+        /// The number of blocks that correspond to the deposit that a User has to pay to open a payment stream.
+        /// This means that, from the balance of the User for which the payment stream is being created, the amount
+        /// `NewStreamDeposit * rate` will be held as a deposit.
+        /// In the case of dynamic-rate payment streams, `rate` will be `amount_provided * current_service_price`, where `current_service_price` has
+        /// to be provided by the pallet using the `PaymentStreamsInterface` interface.
         #[pallet::constant]
-        type NewUserDeposit: Get<BalanceOf<Self>>;
+        type NewStreamDeposit: Get<BlockNumberFor<Self>>;
     }
 
     #[pallet::pallet]
@@ -68,44 +81,67 @@ pub mod pallet {
 
     // Storage:
 
-    /// The double mapping from a Storage Provider, to its provided users, to their payment streams.
+    /// The double mapping from a Provider, to its provided Users, to their fixed-rate payment streams.
     ///
-    /// This is used to get the payment stream of a user for a specific Storage Provider.
+    /// This is used to store and manage fixed-rate payment streams between Users and Providers.
     ///
     /// This storage is updated in:
-    /// - [add_payment_stream](crate::dispatchables::add_payment_stream), which adds a new entry to the map.
-    /// - [remove_payment_stream](crate::dispatchables::remove_payment_stream), which removes the corresponding entry from the map.
-    /// - [update_payment_stream](crate::dispatchables::update_payment_stream), which updates the entry's `rate`.
-    /// - [charge_payment](crate::dispatchables::charge_payment), which updates the entry's `last_charge`.
-    /// - [update_valid_proof](crate::dispatchables::update_valid_proof), which updates the entry's `last_valid_proof`.
+    /// - [add_fixed_rate_payment_stream](crate::dispatchables::add_fixed_rate_payment_stream), which adds a new entry to the map.
+    /// - [delete_fixed_rate_payment_stream](crate::dispatchables::delete_fixed_rate_payment_stream), which removes the corresponding entry from the map.
+    /// - [update_fixed_rate_payment_stream](crate::dispatchables::update_fixed_rate_payment_stream), which updates the entry's `rate`.
+    /// - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which updates the entry's `last_charged_block`.
+    /// - [update_last_chargeable_block](crate::dispatchables::update_last_chargeable_block), which updates the entry's `last_chargeable_block`.
     #[pallet::storage]
-    pub type PaymentStreams<T: Config> = StorageDoubleMap<
+    pub type FixedRatePaymentStreams<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         ProviderIdFor<T>,
         Blake2_128Concat,
         T::AccountId,
-        PaymentStream<T>,
+        FixedRatePaymentStream<T>,
     >;
 
-    /// The mapping from a user to if it has been flagged for not having enough funds to pay for its storage.
+    /// The double mapping from a Provider, to its provided Users, to their dynamic-rate payment streams.
     ///
-    /// This is used to flag users that do not have enough funds to pay for their storage, so other Backup Storage Providers
-    /// can stop providing storage to them.
+    /// This is used to store and manage dynamic-rate payment streams between Users and Providers.
     ///
     /// This storage is updated in:
-    /// - [charge_payment](crate::dispatchables::charge_payment), which emits a `UserWithoutFunds` event and sets the user's entry in this map if it does not
+    /// - [add_dynamic_rate_payment_stream](crate::dispatchables::add_dynamic_rate_payment_stream), which adds a new entry to the map.
+    /// - [delete_dynamic_rate_payment_stream](crate::dispatchables::delete_dynamic_rate_payment_stream), which removes the corresponding entry from the map.
+    /// - [update_dynamic_rate_payment_stream](crate::dispatchables::update_dynamic_rate_payment_stream), which updates the entry's `amount_provided`.
+    /// - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which updates the entry's `price_index_when_last_charged`.
+    /// - [update_last_chargeable_block](crate::dispatchables::update_last_chargeable_block), which updates the entry's `price_index_at_last_chargeable_block`.
+    #[pallet::storage]
+    pub type DynamicRatePaymentStreams<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        ProviderIdFor<T>,
+        Blake2_128Concat,
+        T::AccountId,
+        DynamicRatePaymentStream<T>,
+    >;
+
+    /// The mapping from a user to if it has been flagged for not having enough funds to pay for its requested services.
+    ///
+    /// This is used to flag users that do not have enough funds to pay for their requested services, so other Providers
+    /// can stop providing services to them.
+    ///
+    /// This storage is updated in:
+    /// - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which emits a `UserWithoutFunds` event and sets the user's entry in this map if it does not
     /// have enough funds, and clears the entry if it was set and the user has enough funds.
     #[pallet::storage]
     pub type UsersWithoutFunds<T: Config> = StorageMap<_, Blake2_128Concat, T::AccountId, ()>;
 
     /// The mapping from a user to if it has been registered to the network and the amount of payment streams it has.
     ///
-    /// This is used to check if a user has already been registered to the network and his deposit has been held.
+    /// Since users have to provide a deposit to be able to open each payment stream, this is used to keep track of the amount of payment streams
+    /// that a user has and it is also useful to check if a user has registered to the network.
     ///
     /// This storage is updated in:
-    /// - [add_payment_stream](crate::dispatchables::add_payment_stream), which holds the deposit of the user and adds one to this storage.
-    /// - [remove_payment_stream](crate::dispatchables::remove_payment_stream), which removes one from this storage and if it's 0 releases its deposit.
+    /// - [add_fixed_rate_payment_stream](crate::dispatchables::add_fixed_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
+    /// - [add_dynamic_rate_payment_stream](crate::dispatchables::add_dynamic_rate_payment_stream), which holds the deposit of the user and adds one to this storage.
+    /// - [remove_fixed_rate_payment_stream](crate::dispatchables::remove_fixed_rate_payment_stream), which removes one from this storage and releases the deposit.
+    /// - [remove_dynamic_rate_payment_stream](crate::dispatchables::remove_dynamic_rate_payment_stream), which removes one from this storage and releases the deposit.
     #[pallet::storage]
     pub type RegisteredUsers<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, u32, ValueQuery>;
@@ -116,42 +152,61 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// Event emitted when a payment stream is created. Provides information about the user that created the stream,
-        /// the Storage Provider that the stream is for, and the rate of the stream.
-        PaymentStreamCreated {
+        /// Event emitted when a fixed-rate payment stream is created. Provides information about the Provider and User of the stream
+        /// and its initial rate.
+        FixedRatePaymentStreamCreated {
             user_account: T::AccountId,
-            storage_provider_id: ProviderIdFor<T>,
+            provider_id: ProviderIdFor<T>,
             rate: BalanceOf<T>,
         },
-        /// Event emitted when a payment stream is updated. Provides information about the user that updated the stream,
-        /// the Storage Provider that the stream is for, and the new rate of the stream.
-        PaymentStreamUpdated {
+        /// Event emitted when a fixed-rate payment stream is updated. Provides information about the User and Provider of the stream
+        /// and the new rate of the stream.
+        FixedRatePaymentStreamUpdated {
             user_account: T::AccountId,
-            storage_provider_id: ProviderIdFor<T>,
+            provider_id: ProviderIdFor<T>,
             new_rate: BalanceOf<T>,
         },
-        /// Event emitted when a payment stream is removed. Provides information about the user that removed the stream,
-        /// and the Storage Provider that the stream was for.
-        PaymentStreamDeleted {
+        /// Event emitted when a fixed-rate payment stream is removed. Provides information about the User and Provider of the stream.
+        FixedRatePaymentStreamDeleted {
             user_account: T::AccountId,
-            storage_provider_id: ProviderIdFor<T>,
+            provider_id: ProviderIdFor<T>,
+        },
+        /// Event emitted when a dynamic-rate payment stream is created. Provides information about the User and Provider of the stream
+        /// and the initial amount provided.
+        DynamicRatePaymentStreamCreated {
+            user_account: T::AccountId,
+            provider_id: ProviderIdFor<T>,
+            amount_provided: UnitsProvidedFor<T>,
+        },
+        /// Event emitted when a dynamic-rate payment stream is updated. Provides information about the User and Provider of the stream
+        /// and the new amount provided.
+        DynamicRatePaymentStreamUpdated {
+            user_account: T::AccountId,
+            provider_id: ProviderIdFor<T>,
+            new_amount_provided: UnitsProvidedFor<T>,
+        },
+        /// Event emitted when a dynamic-rate payment stream is removed. Provides information about the User and Provider of the stream.
+        DynamicRatePaymentStreamDeleted {
+            user_account: T::AccountId,
+            provider_id: ProviderIdFor<T>,
         },
         /// Event emitted when a payment is charged. Provides information about the user that was charged,
-        /// the Storage Provider that received the funds, and the amount that was charged.
+        /// the Provider that received the funds, and the amount that was charged.
         PaymentStreamCharged {
             user_account: T::AccountId,
-            storage_provider_id: ProviderIdFor<T>,
+            provider_id: ProviderIdFor<T>,
             amount: BalanceOf<T>,
         },
-        /// Event emitted when a payment stream's last valid proof is updated. Provides information about the user that the stream is for,
-        /// the Storage Provider that provided the proof, and the new block number of the last valid proof.
-        ValidProofUpdated {
+        /// Event emitted when a payment stream's last chargeable block is updated. Provides information about the User and Provider of the stream
+        /// and the block number of the last chargeable block.
+        LastChargeableBlockUpdated {
             user_account: T::AccountId,
-            storage_provider_id: ProviderIdFor<T>,
+            provider_id: ProviderIdFor<T>,
+            last_chargeable_block: BlockNumberFor<T>,
         },
-        /// Event emitted when a Storage Provider is correctly trying to charge a user and that user does not have enough funds to pay for their storage
-        /// This event is emitted to flag the user and let the network know that the user is not paying for their storage, so other SPs can
-        /// stop providing storage to that user.
+        /// Event emitted when a Provider is correctly trying to charge a User and that User does not have enough funds to pay for their services.
+        /// This event is emitted to flag the user and let the network know that the user is not paying for the requested services, so other Providers can
+        /// stop providing services to that user.
         UserWithoutFunds { who: T::AccountId },
     }
 
@@ -162,23 +217,23 @@ pub mod pallet {
         PaymentStreamAlreadyExists,
         /// Error thrown when a user of this pallet tries to update, remove or charge a payment stream that does not exist.
         PaymentStreamNotFound,
-        /// Error thrown when a user tries to charge a payment stream and it's not a registered Storage Provider
+        /// Error thrown when a user tries to charge a payment stream and it's not a registered Provider
         NotAProvider,
-        /// Error thrown when failing to get the payment account of a registered Storage Provider
-        BspInconsistencyError,
-        /// Error thrown when the system can't hold funds from the user as a deposit for the storage used in this pallet
+        /// Error thrown when failing to get the payment account of a registered Provider
+        ProviderInconsistencyError,
+        /// Error thrown when the system can't hold funds from the User as a deposit for creating a new payment stream
         CannotHoldDeposit,
-        /// Error thrown when trying to update the rate of a payment stream to the same rate as before
+        /// Error thrown when trying to update the rate of a fixed-rate payment stream to the same rate as before
         UpdateRateToSameRate,
-        /// Error thrown when trying to create a payment stream with rate 0 or update the rate of an existing one to 0 (should use remove_payment_stream instead)
+        /// Error thrown when trying to create a new fixed-rate payment stream with rate 0 or update the rate of an existing one to 0 (should use remove_fixed_rate_payment_stream instead)
         RateCantBeZero,
-        /// Error thrown when the block of the last charged proof of a payment stream is greater than the block of the last valid proof
-        LastChargeGreaterThanLastValidProof,
-        /// Error thrown when the new last valid proof block number that is trying to be set is greater than the current block number or the last valid proof block number
-        InvalidLastValidProofBlockNumber,
+        /// Error thrown when the block number of when the payment stream was last charged is greater than the block number of the last chargeable block
+        LastChargedGreaterThanLastChargeable,
+        /// Error thrown when the new last chargeable block number that is trying to be set by the PaymentManager is greater than the current block number or smaller than the previous last chargeable block number
+        InvalidLastChargeableBlockNumber,
         /// Error thrown when charging a payment stream would result in an overflow of the balance type (TODO: maybe we should use saturating arithmetic instead)
         ChargeOverflow,
-        /// Error thrown when a payment stream is being created or updated and the user has been flagged for not having enough funds.
+        /// Error thrown when trying to operate when the User has been flagged for not having enough funds.
         UserWithoutFunds,
     }
 
@@ -189,7 +244,7 @@ pub mod pallet {
     #[pallet::composite_enum]
     pub enum HoldReason {
         /// Deposit that a user has to pay to open payment streams
-        PaymentStreamStorageDeposit,
+        PaymentStreamDeposit,
         // Only for testing, another unrelated hold reason
         #[cfg(test)]
         AnotherUnrelatedHold,
@@ -198,29 +253,29 @@ pub mod pallet {
     /// Dispatchables (extrinsics) exposed by this pallet
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// Dispatchable extrinsic that allows root to add a payment stream from a user to a Storage Provider.
+        /// Dispatchable extrinsic that allows root to add a fixed-rate payment stream from a User to a Provider.
         ///
         /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
         /// this extrinsic is for manual testing).
         ///
         /// Parameters:
-        /// - `sp_id`: The Storage Provider ID that the payment stream is for.
-        /// - `user_account`: The user ID that the payment stream is for.
+        /// - `provider_id`: The Provider ID that the payment stream is for.
+        /// - `user_account`: The User Account ID that the payment stream is for.
         /// - `rate`: The initial rate of the payment stream.
         ///
         /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was executed by the root origin
         /// 2. Check that the payment stream does not already exist
-        /// 3. Check that the user has enough funds to pay the deposit
-        /// 4. Hold the deposit from the user
+        /// 3. Check that the User has enough funds to pay the deposit
+        /// 4. Hold the deposit from the User
         /// 5. Update the Payment Streams storage to add the new payment stream
         ///
-        /// Emits `PaymentStreamCreated` event when successful.
+        /// Emits `FixedRatePaymentStreamCreated` event when successful.
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn create_payment_stream(
+        pub fn create_fixed_rate_payment_stream(
             origin: OriginFor<T>,
-            sp_id: ProviderIdFor<T>,
+            provider_id: ProviderIdFor<T>,
             user_account: T::AccountId,
             rate: BalanceOf<T>,
         ) -> DispatchResultWithPostInfo {
@@ -228,12 +283,12 @@ pub mod pallet {
             ensure_root(origin)?;
 
             // Execute checks and logic, update storage
-            Self::do_create_payment_stream(&sp_id, &user_account, rate)?;
+            Self::do_create_fixed_rate_payment_stream(&provider_id, &user_account, rate)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::PaymentStreamCreated {
+            Self::deposit_event(Event::<T>::FixedRatePaymentStreamCreated {
                 user_account,
-                storage_provider_id: sp_id,
+                provider_id: provider_id,
                 rate,
             });
 
@@ -241,14 +296,61 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// Dispatchable extrinsic that allows root to update an existing payment stream between a user and a Storage Provider.
+        /// Dispatchable extrinsic that allows root to add a dynamic-rate payment stream from a User to a Provider.
         ///
         /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
         /// this extrinsic is for manual testing).
         ///
         /// Parameters:
-        /// - `sp_id`: The Storage Provider ID that the payment stream is for.
-        /// - `user_account`: The user ID that the payment stream is for.
+        /// - `provider_id`: The Provider ID that the payment stream is for.
+        /// - `user_account`: The User Account ID that the payment stream is for.
+        /// - `amount_provided`: The initial amount provided by the Provider.
+        ///
+        /// This extrinsic will perform the following checks and logic:
+        /// 1. Check that the extrinsic was executed by the root origin
+        /// 2. Check that the payment stream does not already exist
+        /// 3. Check that the User has enough funds to pay the deposit
+        /// 4. Hold the deposit from the User
+        /// 5. Update the Payment Streams storage to add the new payment stream
+        ///
+        /// Emits `DynamicRatePaymentStreamCreated` event when successful.
+        #[pallet::call_index(1)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn create_dynamic_rate_payment_stream(
+            origin: OriginFor<T>,
+            provider_id: ProviderIdFor<T>,
+            user_account: T::AccountId,
+            amount_provided: UnitsProvidedFor<T>,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was executed by the root origin
+            ensure_root(origin)?;
+
+            // Execute checks and logic, update storage
+            Self::do_create_dynamic_rate_payment_stream(
+                &provider_id,
+                &user_account,
+                amount_provided,
+            )?;
+
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::DynamicRatePaymentStreamCreated {
+                user_account,
+                provider_id: provider_id,
+                amount_provided,
+            });
+
+            // Return a successful DispatchResultWithPostInfo
+            Ok(().into())
+        }
+
+        /// Dispatchable extrinsic that allows root to update an existing fixed-rate payment stream between a User and a Provider.
+        ///
+        /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
+        /// this extrinsic is for manual testing).
+        ///
+        /// Parameters:
+        /// - `provider_id`: The Provider ID that the payment stream is for.
+        /// - `user_account`: The User Account ID that the payment stream is for.
         /// - `new_rate`: The new rate of the payment stream.
         ///
         /// This extrinsic will perform the following checks and logic:
@@ -256,12 +358,12 @@ pub mod pallet {
         /// 2. Check that the payment stream exists
         /// 3. Update the Payment Streams storage to update the payment stream
         ///
-        /// Emits `PaymentStreamUpdated` event when successful.
-        #[pallet::call_index(1)]
+        /// Emits `FixedRatePaymentStreamUpdated` event when successful.
+        #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn update_payment_stream(
+        pub fn update_fixed_rate_payment_stream(
             origin: OriginFor<T>,
-            sp_id: ProviderIdFor<T>,
+            provider_id: ProviderIdFor<T>,
             user_account: T::AccountId,
             new_rate: BalanceOf<T>,
         ) -> DispatchResultWithPostInfo {
@@ -269,12 +371,12 @@ pub mod pallet {
             ensure_root(origin)?;
 
             // Execute checks and logic, update storage
-            Self::do_update_payment_stream(&sp_id, &user_account, new_rate)?;
+            Self::do_update_fixed_rate_payment_stream(&provider_id, &user_account, new_rate)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::PaymentStreamUpdated {
+            Self::deposit_event(Event::<T>::FixedRatePaymentStreamUpdated {
                 user_account,
-                storage_provider_id: sp_id,
+                provider_id: provider_id,
                 new_rate,
             });
 
@@ -282,83 +384,177 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// Dispatchable extrinsic that allows root to delete an existing payment stream between a user and a Storage Provider.
+        /// Dispatchable extrinsic that allows root to update an existing dynamic-rate payment stream between a User and a Provider.
         ///
         /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
         /// this extrinsic is for manual testing).
         ///
         /// Parameters:
-        /// - `sp_id`: The Storage Provider ID that the payment stream is for.
-        /// - `user_account`: The user ID that the payment stream is for.
+        /// - `provider_id`: The Provider ID that the payment stream is for.
+        /// - `user_account`: The User Account ID that the payment stream is for.
+        /// - `new_amount_provided`: The new amount provided by the Provider.
         ///
         /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was executed by the root origin
         /// 2. Check that the payment stream exists
-        /// 3. Update the Payment Streams storage to remove the payment stream
+        /// 3. Update the Payment Streams storage to update the payment stream
         ///
-        /// Emits `PaymentStreamDeleted` event when successful.
-        #[pallet::call_index(2)]
+        /// Emits `DynamicRatePaymentStreamUpdated` event when successful.
+        #[pallet::call_index(3)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn delete_payment_stream(
+        pub fn update_dynamic_rate_payment_stream(
             origin: OriginFor<T>,
-            sp_id: ProviderIdFor<T>,
+            provider_id: ProviderIdFor<T>,
             user_account: T::AccountId,
+            new_amount_provided: UnitsProvidedFor<T>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was executed by the root origin
             ensure_root(origin)?;
 
             // Execute checks and logic, update storage
-            Self::do_delete_payment_stream(&sp_id, &user_account)?;
+            Self::do_update_dynamic_rate_payment_stream(
+                &provider_id,
+                &user_account,
+                new_amount_provided,
+            )?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::PaymentStreamDeleted {
+            Self::deposit_event(Event::<T>::DynamicRatePaymentStreamUpdated {
                 user_account,
-                storage_provider_id: sp_id,
+                provider_id,
+                new_amount_provided,
             });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
         }
 
-        /// Dispatchable extrinsic that allows Storage Providers to charge a payment stream from a user.
+        /// Dispatchable extrinsic that allows root to delete an existing fixed-rate payment stream between a User and a Provider.
         ///
-        /// The dispatch origin for this call must be Signed.
-        /// The origin must be the Storage Provider that has a payment stream with the user.
+        /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
+        /// this extrinsic is for manual testing).
         ///
         /// Parameters:
-        /// - `user_account`: The user ID that the payment stream is for.
+        /// - `provider_id`: The Provider ID that the payment stream is for.
+        /// - `user_account`: The User Account ID that the payment stream is for.
+        ///
+        /// This extrinsic will perform the following checks and logic:
+        /// 1. Check that the extrinsic was executed by the root origin
+        /// 2. Check that the payment stream exists
+        /// 3. Update the Payment Streams storage to remove the payment stream
+        ///
+        /// Emits `FixedRatePaymentStreamDeleted` event when successful.
+        #[pallet::call_index(4)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn delete_fixed_rate_payment_stream(
+            origin: OriginFor<T>,
+            provider_id: ProviderIdFor<T>,
+            user_account: T::AccountId,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was executed by the root origin
+            ensure_root(origin)?;
+
+            // Execute checks and logic, update storage
+            Self::do_delete_fixed_rate_payment_stream(&provider_id, &user_account)?;
+
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::FixedRatePaymentStreamDeleted {
+                user_account,
+                provider_id: provider_id,
+            });
+
+            // Return a successful DispatchResultWithPostInfo
+            Ok(().into())
+        }
+
+        /// Dispatchable extrinsic that allows root to delete an existing dynamic-rate payment stream between a User and a Provider.
+        ///
+        /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
+        /// this extrinsic is for manual testing).
+        ///
+        /// Parameters:
+        /// - `provider_id`: The Provider ID that the payment stream is for.
+        /// - `user_account`: The User Account ID that the payment stream is for.
+        ///
+        /// This extrinsic will perform the following checks and logic:
+        /// 1. Check that the extrinsic was executed by the root origin
+        /// 2. Check that the payment stream exists
+        /// 3. Update the Payment Streams storage to remove the payment stream
+        ///
+        /// Emits `DynamicRatePaymentStreamDeleted` event when successful.
+        #[pallet::call_index(5)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn delete_dynamic_rate_payment_stream(
+            origin: OriginFor<T>,
+            provider_id: ProviderIdFor<T>,
+            user_account: T::AccountId,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was executed by the root origin
+            ensure_root(origin)?;
+
+            // Execute checks and logic, update storage
+            Self::do_delete_dynamic_rate_payment_stream(&provider_id, &user_account)?;
+
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::DynamicRatePaymentStreamDeleted {
+                user_account,
+                provider_id,
+            });
+
+            // Return a successful DispatchResultWithPostInfo
+            Ok(().into())
+        }
+
+        /// Dispatchable extrinsic that allows Providers to charge a payment stream from a User.
+        ///
+        /// The dispatch origin for this call must be Signed.
+        /// The origin must be the Provider that has at least one type of payment stream with the User.
+        ///
+        /// Parameters:
+        /// - `user_account`: The User Account ID that the payment stream is for.
         ///
         /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was signed and get the signer.
-        /// 2. Check that the payment stream between the signer (SP) and the user exists
-        /// 3. Get the rate of the payment stream
-        /// 4. Get the difference between the last charge and the last proof of the stream
-        /// 5. Calculate the amount to charge
-        /// 6. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
-        /// 7. Update the last charge of the payment stream
+        /// 2. Check that a payment stream between the signer (Provider) and the User exists
+        /// 3. If there is a fixed-rate payment stream:
+        ///    1. Get the rate of the payment stream
+        ///    2. Get the difference between the last charged block number and the last chargeable block number of the stream
+        ///    3. Calculate the amount to charge doing `rate * difference`
+        ///    4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
+        ///    5. Update the last charged block number of the payment stream
+        /// 4. If there is a dynamic-rate payment stream:
+        ///    1. Get the amount provided by the Provider
+        ///    2. Get the difference between price index when the stream was last charged and the price index at the last chargeable block
+        ///    3. Calculate the amount to charge doing `amount_provided * difference`
+        ///    4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
+        ///    5. Update the price index when the stream was last charged of the payment stream
         ///
-        /// Emits `PaymentStreamCharged` event when successful.
-        #[pallet::call_index(3)]
+        /// Emits a `PaymentStreamCharged` event when successful.
+        ///
+        /// Notes: a Provider could have both a fixed-rate and a dynamic-rate payment stream with a User. If that's the case, this extrinsic
+        /// will try to charge both and the amount charged will be the sum of the amounts charged for each payment stream.
+        #[pallet::call_index(6)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().reads_writes(1, 1))]
-        pub fn charge_payment_stream(
+        pub fn charge_payment_streams(
             origin: OriginFor<T>,
             user_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer
-            let sp_account = ensure_signed(origin)?;
+            let provider_account = ensure_signed(origin)?;
 
-            // Get the BSP ID of the signer
-            let sp_id = <T::ProvidersPallet as ProvidersInterface>::get_provider_id(sp_account)
-                .ok_or(Error::<T>::NotAProvider)?;
+            // Get the Provider ID of the signer
+            let provider_id =
+                <T::ProvidersPallet as ProvidersInterface>::get_provider_id(provider_account)
+                    .ok_or(Error::<T>::NotAProvider)?;
 
             // Execute checks and logic, update storage
-            let amount = Self::do_charge_payment_stream(&sp_id, &user_account)?;
+            let amount_charged = Self::do_charge_payment_streams(&provider_id, &user_account)?;
 
             // Emit the corresponding event (we always emit it even if the charged amount was 0)
             Self::deposit_event(Event::<T>::PaymentStreamCharged {
                 user_account,
-                storage_provider_id: sp_id,
-                amount,
+                provider_id: provider_id,
+                amount: amount_charged,
             });
 
             // Return a successful DispatchResultWithPostInfo
@@ -369,35 +565,74 @@ pub mod pallet {
 
 /// Helper functions (getters, setters, etc.) for this pallet
 impl<T: Config> Pallet<T> {
-    /// A helper function to get the information of a payment stream
-    pub fn get_payment_stream_info(
-        sp_id: &ProviderIdFor<T>,
+    /// A helper function to get the information of a fixed-rate payment stream
+    pub fn get_fixed_rate_payment_stream_info(
+        provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
-    ) -> Result<PaymentStream<T>, Error<T>> {
-        PaymentStreams::<T>::get(sp_id, user_account).ok_or(Error::<T>::PaymentStreamNotFound)
+    ) -> Result<FixedRatePaymentStream<T>, Error<T>> {
+        FixedRatePaymentStreams::<T>::get(provider_id, user_account)
+            .ok_or(Error::<T>::PaymentStreamNotFound)
     }
 
-    /// A helper function to get all users that have a payment stream with a Storage Provider
-    pub fn get_users_with_payment_stream_with_sp(sp_id: &ProviderIdFor<T>) -> Vec<T::AccountId> {
-        PaymentStreams::<T>::iter_prefix(sp_id)
-            .map(|(user_account, _)| user_account)
+    /// A helper function to get the information of a dynamic-rate payment stream
+    pub fn get_dynamic_rate_payment_stream_info(
+        provider_id: &ProviderIdFor<T>,
+        user_account: &T::AccountId,
+    ) -> Result<DynamicRatePaymentStream<T>, Error<T>> {
+        DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
+            .ok_or(Error::<T>::PaymentStreamNotFound)
+    }
+
+    /// A helper function to get all users that have a payment stream with a Provider
+    /// Note: users with both a fixed-rate and a dynamic-rate payment stream are duplicated in the result
+    pub fn get_users_with_payment_stream_with_provider(
+        provider_id: &ProviderIdFor<T>,
+    ) -> Vec<T::AccountId> {
+        let fixed_rate_users: Vec<T::AccountId> =
+            FixedRatePaymentStreams::<T>::iter_prefix(provider_id)
+                .map(|(user_account, _)| user_account)
+                .collect();
+        let dynamic_rate_users: Vec<T::AccountId> =
+            DynamicRatePaymentStreams::<T>::iter_prefix(provider_id)
+                .map(|(user_account, _)| user_account)
+                .collect();
+        fixed_rate_users
+            .into_iter()
+            .chain(dynamic_rate_users.into_iter())
             .collect()
     }
 
-    /// A helper function that gets all payment streams of a Storage Provider
-    pub fn get_payment_streams_of_sp(
-        sp_id: &ProviderIdFor<T>,
-    ) -> Vec<(T::AccountId, PaymentStream<T>)> {
-        PaymentStreams::<T>::iter_prefix(sp_id).collect()
+    /// A helper function that gets all fixed-rate payment streams of a Provider
+    pub fn get_fixed_rate_payment_streams_of_provider(
+        provider_id: &ProviderIdFor<T>,
+    ) -> Vec<(T::AccountId, FixedRatePaymentStream<T>)> {
+        FixedRatePaymentStreams::<T>::iter_prefix(provider_id).collect()
     }
 
-    /// A helper function that gets all payment streams of a user
-    pub fn get_payment_streams_of_user(
+    /// A helper function that gets all dynamic-rate payment streams of a Provider
+    pub fn get_dynamic_rate_payment_streams_of_provider(
+        provider_id: &ProviderIdFor<T>,
+    ) -> Vec<(T::AccountId, DynamicRatePaymentStream<T>)> {
+        DynamicRatePaymentStreams::<T>::iter_prefix(provider_id).collect()
+    }
+
+    /// A helper function that gets all fixed-rate payment streams of a User
+    pub fn get_fixed_rate_payment_streams_of_user(
         user_account: &T::AccountId,
-    ) -> Vec<(ProviderIdFor<T>, PaymentStream<T>)> {
-        PaymentStreams::<T>::iter()
+    ) -> Vec<(ProviderIdFor<T>, FixedRatePaymentStream<T>)> {
+        FixedRatePaymentStreams::<T>::iter()
             .filter(|(_, user, _)| user == user_account)
-            .map(|(sp_id, _, stream)| (sp_id, stream))
+            .map(|(provider_id, _, stream)| (provider_id, stream))
+            .collect()
+    }
+
+    /// A helper function that gets all dynamic-rate payment streams of a User
+    pub fn get_dynamic_rate_payment_streams_of_user(
+        user_account: &T::AccountId,
+    ) -> Vec<(ProviderIdFor<T>, DynamicRatePaymentStream<T>)> {
+        DynamicRatePaymentStreams::<T>::iter()
+            .filter(|(_, user, _)| user == user_account)
+            .map(|(provider_id, _, stream)| (provider_id, stream))
             .collect()
     }
 
