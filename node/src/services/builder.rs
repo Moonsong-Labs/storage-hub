@@ -52,6 +52,11 @@ where
         }
     }
 
+    /// Add a new [`FileTransferService`] to the builder and spawn it.
+    ///
+    /// This is the service that handles the transfer of data between peers.
+    /// It plugs into Substrate's p2p network and handles the transfer of a file
+    /// between a user and a Storage Provider, for example.
     pub async fn with_file_transfer(
         &mut self,
         file_transfer_request_receiver: Receiver<IncomingRequest>,
@@ -72,6 +77,11 @@ where
         self
     }
 
+    /// Add a new [`BlockchainService`] to the builder and spawn it.
+    ///
+    /// This is the service that handles the interaction with the blockchain.
+    /// It listens to on-chain events and bubbles them up to other tasks listening,
+    /// and also offers blockchain related functionality like sending extrinsics.
     pub async fn with_blockchain(
         &mut self,
         client: Arc<ParachainClient>,
@@ -93,25 +103,37 @@ where
         self
     }
 
+    /// Add a new [`FileStorage`] to the builder.
+    ///
+    /// This is the set of tools that allows a StorageHub node to store files as Merkle Patricia
+    /// Tries, in the way that the StorageHub protocol specifies.
     pub fn with_file_storage(&mut self, file_storage: Arc<RwLock<FL>>) -> &mut Self {
         self.file_storage = Some(file_storage);
         self
     }
 
+    /// Add a new [`ForestStorage`] to the builder.
+    ///
+    /// This is the set of tools that allows a StorageHub node to manage the files it is storing
+    /// as a Merkle Patricia Forest (a trie of Merkle Patricia Tries). It follows the specification
+    /// of the StorageHub protocol.
     pub fn with_forest_storage(&mut self, forest_storage: Arc<RwLock<FS>>) -> &mut Self {
         self.forest_storage = Some(forest_storage);
         self
     }
 
+    /// Set the public key that a StorageProvider will use to, for example, sign transactions.
     pub fn with_provider_pub_key(&mut self, provider_pub_key: [u8; 32]) -> &mut Self {
         self.provider_pub_key = Some(provider_pub_key);
         self
     }
 
+    /// Get the [`FileStorage`] from the builder.
     pub fn _file_storage(&self) -> &Option<Arc<RwLock<FL>>> {
         &self.file_storage
     }
 
+    /// Build the [`StorageHubHandler`] with the configuration set in the builder.
     pub fn build(self) -> StorageHubHandler<T, FL, FS> {
         StorageHubHandler::<T, FL, FS>::new(
             self.task_spawner.expect("Task Spawner not set"),
