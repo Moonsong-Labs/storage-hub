@@ -44,8 +44,7 @@ async function main() {
 
   // Check if executor parameters are set
 
-  const { executor_params } =
-    await relayApi.query.Configuration.ActiveConfig.getValue();
+  const { executor_params } = await relayApi.query.Configuration.ActiveConfig.getValue();
 
   if (isEqual(executor_params, idealExecutorParams)) {
     console.log("Executor parameters are already set to ideal values ✅");
@@ -66,12 +65,8 @@ async function main() {
     }).decodedCall;
 
     // Setting Async Config
-    process.stdout.write(
-      "Setting Executor Parameters config for relay chain... "
-    );
-    await relayApi.tx.Sudo.sudo({ call: setConfig }).signAndSubmit(
-      accounts.alice.sr25519.signer
-    );
+    process.stdout.write("Setting Executor Parameters config for relay chain... ");
+    await relayApi.tx.Sudo.sudo({ call: setConfig }).signAndSubmit(accounts.alice.sr25519.signer);
     process.stdout.write("✅\n");
   }
 
@@ -80,9 +75,7 @@ async function main() {
   // Settings Balances
   const {
     data: { free },
-  } = await storageApi.query.System.Account.getValue(
-    accounts["sh-BSP"].sr25519.id
-  );
+  } = await storageApi.query.System.Account.getValue(accounts["sh-BSP"].sr25519.id);
 
   if (free < 1_000_000_000_000n) {
     const setbalance = storageApi.tx.Balances.force_set_balance({
@@ -97,9 +90,7 @@ async function main() {
 
     process.stdout.write("Using sudo to increase BSP account balance... ");
 
-    const { nonce } = await storageApi.query.System.Account.getValue(
-      accounts.alice.sr25519.id
-    );
+    const { nonce } = await storageApi.query.System.Account.getValue(accounts.alice.sr25519.id);
     const tx1 = storageApi.tx.Sudo.sudo({ call: setbalance }).signAndSubmit(
       accounts.alice.sr25519.signer,
       { nonce }
@@ -115,29 +106,18 @@ async function main() {
     process.stdout.write("✅\n");
     const {
       data: { free },
-    } = await storageApi.query.System.Account.getValue(
-      accounts["sh-BSP"].sr25519.id
-    );
+    } = await storageApi.query.System.Account.getValue(accounts["sh-BSP"].sr25519.id);
 
-    console.log(
-      `BSP account balance reset by sudo, new free is ${
-        free / 10n ** 12n
-      } balance ✅`
-    );
+    console.log(`BSP account balance reset by sudo, new free is ${free / 10n ** 12n} balance ✅`);
   } else {
-    console.log(
-      `BSP account balance is  already ${free / 10n ** 12n} balance ✅`
-    );
+    console.log(`BSP account balance is  already ${free / 10n ** 12n} balance ✅`);
   }
   // Enrolling BSP
-  const string =
-    "0x8e6a748e6d787260f47f61df1e2cac065db8c1d41428eb178102177876071c6b";
+  const string = "0x8e6a748e6d787260f47f61df1e2cac065db8c1d41428eb178102177876071c6b";
   const buffer = Buffer.from(string, "utf8");
   const uint8Array = new Uint8Array(buffer);
 
-  process.stdout.write(
-    `Requesting sign up for ${accounts["sh-BSP"].sr25519.id} ...`
-  );
+  process.stdout.write(`Requesting sign up for ${accounts["sh-BSP"].sr25519.id} ...`);
   await storageApi.tx.Providers.request_bsp_sign_up({
     capacity: 5000000,
     multiaddresses: [new Binary(uint8Array)],
@@ -148,9 +128,7 @@ async function main() {
   await waitForChain(shClient, { blocks: 9, timeoutMs: 120_000 });
 
   // Confirm sign up
-  process.stdout.write(
-    `Confirming sign up for ${accounts["sh-BSP"].sr25519.id} ...`
-  );
+  process.stdout.write(`Confirming sign up for ${accounts["sh-BSP"].sr25519.id} ...`);
   await storageApi.tx.Providers.confirm_sign_up({
     provider_account: accounts["sh-BSP"].sr25519.id,
   }).signAndSubmit(accounts["sh-BSP"].sr25519.signer);
@@ -159,8 +137,7 @@ async function main() {
   // TODO: ERROR: Error thrown when a user tries to confirm a sign up that was not requested previously.
 
   // Confirm providers added
-  const providers =
-    await storageApi.query.Providers.BackupStorageProviders.getEntries();
+  const providers = await storageApi.query.Providers.BackupStorageProviders.getEntries();
 
   if (providers.length === 1) {
     console.log("✅ Provider added correctly");

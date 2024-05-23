@@ -15,10 +15,7 @@ export const waitForChain = async (
   process.stdout.write(
     `Waiting a maximum of ${
       options?.timeoutMs || 60_000 / 1000
-    } seconds for ${await client._request(
-      "system_chain",
-      []
-    )} chain to be ready...`
+    } seconds for ${await client._request("system_chain", [])} chain to be ready...`
   );
   const startTime = performance.now();
 

@@ -49,8 +49,5 @@ plainSpec.genesis.runtimeGenesis.patch = {
 };
 
 process.stdout.write(`Writing to: ${outputPath} ...`);
-await fs.writeFile(
-  outputPath,
-  convertExponentials(JSONbig.stringify(plainSpec, null, 3))
-);
+await fs.writeFile(outputPath, convertExponentials(JSONbig.stringify(plainSpec, null, 3)));
 process.stdout.write("Done \n");
