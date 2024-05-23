@@ -62,7 +62,7 @@ const people = [
     name: "bsp",
     sr25519Key: "0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be",
     ed25519Key: "0x87ef5876327965c5ddbdcdaf401499eb10212d59127a7a15254a28e184c7ffe5",
-    ecdsaKey: "0x1a02e99b89e0f7d3488d53ded5a3ef2cff6046543fc7f734206e3e842089e051",
+    ecdsaKey: "0xe52db172b00ffb0262d0e2d62ba71fc474665f2893b0354524b6139fcddb2b82",
   },
   {
     name: "collator",

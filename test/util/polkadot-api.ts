@@ -9,16 +9,16 @@ export const waitForChain = async (
   client: PolkadotClient,
   timeoutMs = 120000
 ) => {
-  console.log(
-    `Waiting a maximum of ${timeoutMs / 1000} seconds for chain to be ready...`
+ process.stdout.write(
+    `Waiting a maximum of ${timeoutMs / 1000} seconds for ${(await client.get()).name} chain to be ready...`
   );
   const startTime = performance.now();
 
   for (;;) {
     try {
-      const blockHeight = (await client.getBlockHeader()).number;
+      const blockHeight = (await client.getChainSpecData).number;
       if (blockHeight > 0) {
-        console.log(`Chain is ready at block height ${blockHeight}`);
+        process.stdout.write("✅\n")
         break;
       }
     } catch (e) {

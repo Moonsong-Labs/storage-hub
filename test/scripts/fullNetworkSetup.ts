@@ -66,7 +66,7 @@ async function main() {
   await storageApi.tx.Providers.request_bsp_sign_up({
     capacity: 5000000,
     multiaddresses: [new Binary(uint8Array)],
-  }).signAndSubmit(accounts.alice.sr25519.signer);
+  }).signAndSubmit(accounts.bsp.sr25519.signer);
   process.stdout.write("✅\n");
 
   // Wait for randomness (9 blocks)
