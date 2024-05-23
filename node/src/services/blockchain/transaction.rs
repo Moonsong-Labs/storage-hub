@@ -42,6 +42,10 @@ impl SubmittedTransaction {
         }
     }
 
+    /// Sets the timeout for the transaction.
+    ///
+    /// If the transaction is not successful within the specified timeout, it will be considered
+    /// failed and an error will be returned.
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
