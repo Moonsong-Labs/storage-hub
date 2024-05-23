@@ -47,6 +47,11 @@ impl SubmittedTransaction {
         self
     }
 
+    /// Handles the lifecycle of a submitted transaction.
+    ///
+    /// Waits for the transaction to be included in a block.
+    /// If the transaction is not included in a block within the specified timeout, it will be
+    /// considered failed and an error will be returned.
     pub async fn watch_for_success(
         &mut self,
         blockchain: &ActorHandle<BlockchainService>,
