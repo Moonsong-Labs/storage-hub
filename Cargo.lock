@@ -12350,22 +12350,10 @@ version = "0.1.0"
 dependencies = [
  "common 0.1.0",
  "file-manager",
- "forest-manager",
  "jsonrpsee",
  "log",
- "pallet-file-system",
- "parity-scale-codec",
- "sc-client-api",
- "sc-transaction-pool-api",
- "serde",
- "sp-api 26.0.0",
- "sp-block-builder",
- "sp-blockchain",
- "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-runtime 31.0.1",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-infra",
- "storage-hub-runtime",
  "tokio",
 ]
 
