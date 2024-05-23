@@ -1,41 +1,66 @@
 // TODO: Remove this once we don't need the examples in this file
 #![allow(dead_code)]
 
-pub mod bsp_upload_file_task;
+pub mod bsp_upload_file;
 pub mod bsp_volunteer_mock;
 pub mod user_sends_file;
 
+use file_manager::traits::FileStorage;
+use forest_manager::traits::ForestStorage;
 use sc_tracing::tracing::info;
+use shc_common::types::HasherOutT;
+use sp_trie::TrieLayout;
 use storage_hub_infra::event_bus::EventHandler;
 
 use crate::services::blockchain::events::{AcceptedBspVolunteer, NewStorageRequest};
 use crate::services::file_transfer::events::RemoteUploadRequest;
-use crate::services::handler::{StorageHubHandler, StorageHubHandlerConfig};
+use crate::services::handler::StorageHubHandler;
 
 // ! The following are examples of task definitions.
-pub struct ResolveRemoteUploadRequest<SHC: StorageHubHandlerConfig> {
-    _storage_hub_handler: StorageHubHandler<SHC>,
+pub struct ResolveRemoteUploadRequest<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    _storage_hub_handler: StorageHubHandler<T, FL, FS>,
 }
 
-impl<SHC: StorageHubHandlerConfig> Clone for ResolveRemoteUploadRequest<SHC> {
-    fn clone(&self) -> ResolveRemoteUploadRequest<SHC> {
+impl<T, FL, FS> Clone for ResolveRemoteUploadRequest<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    fn clone(&self) -> ResolveRemoteUploadRequest<T, FL, FS> {
         Self {
             _storage_hub_handler: self._storage_hub_handler.clone(),
         }
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> ResolveRemoteUploadRequest<SHC> {
-    pub fn new(storage_hub_handler: StorageHubHandler<SHC>) -> Self {
+impl<T, FL, FS> ResolveRemoteUploadRequest<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
         Self {
             _storage_hub_handler: storage_hub_handler,
         }
     }
 }
 
-impl<SHC> EventHandler<RemoteUploadRequest> for ResolveRemoteUploadRequest<SHC>
+impl<T, FL, FS> EventHandler<RemoteUploadRequest> for ResolveRemoteUploadRequest<T, FL, FS>
 where
-    SHC: StorageHubHandlerConfig,
+    T: Send + Sync + TrieLayout + 'static,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T> + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         info!(
@@ -49,28 +74,50 @@ where
     }
 }
 
-pub struct NewStorageRequestHandler<SHC: StorageHubHandlerConfig> {
-    _storage_hub_handler: StorageHubHandler<SHC>,
+pub struct NewStorageRequestHandler<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    _storage_hub_handler: StorageHubHandler<T, FL, FS>,
 }
 
-impl<SHC: StorageHubHandlerConfig> NewStorageRequestHandler<SHC> {
-    pub fn new(storage_hub_handler: StorageHubHandler<SHC>) -> Self {
+impl<T, FL, FS> NewStorageRequestHandler<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
         Self {
             _storage_hub_handler: storage_hub_handler,
         }
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> Clone for NewStorageRequestHandler<SHC> {
-    fn clone(&self) -> NewStorageRequestHandler<SHC> {
+impl<T, FL, FS> Clone for NewStorageRequestHandler<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    fn clone(&self) -> NewStorageRequestHandler<T, FL, FS> {
         Self {
             _storage_hub_handler: self._storage_hub_handler.clone(),
         }
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest>
-    for NewStorageRequestHandler<SHC>
+impl<T, FL, FS> EventHandler<NewStorageRequest> for NewStorageRequestHandler<T, FL, FS>
+where
+    T: Send + Sync + TrieLayout + 'static,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T> + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!("[NewStorageRequestHandler] - received event: {:?}", event);
@@ -81,28 +128,50 @@ impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest>
     }
 }
 
-pub struct AcceptedBspVolunteerHandler<SHC: StorageHubHandlerConfig> {
-    _storage_hub_handler: StorageHubHandler<SHC>,
+pub struct AcceptedBspVolunteerHandler<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    _storage_hub_handler: StorageHubHandler<T, FL, FS>,
 }
 
-impl<SHC: StorageHubHandlerConfig> Clone for AcceptedBspVolunteerHandler<SHC> {
-    fn clone(&self) -> AcceptedBspVolunteerHandler<SHC> {
+impl<T, FL, FS> Clone for AcceptedBspVolunteerHandler<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    fn clone(&self) -> AcceptedBspVolunteerHandler<T, FL, FS> {
         Self {
             _storage_hub_handler: self._storage_hub_handler.clone(),
         }
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> AcceptedBspVolunteerHandler<SHC> {
-    pub fn new(storage_hub_handler: StorageHubHandler<SHC>) -> Self {
+impl<T, FL, FS> AcceptedBspVolunteerHandler<T, FL, FS>
+where
+    T: TrieLayout,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T>,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
         Self {
             _storage_hub_handler: storage_hub_handler,
         }
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> EventHandler<AcceptedBspVolunteer>
-    for AcceptedBspVolunteerHandler<SHC>
+impl<T, FL, FS> EventHandler<AcceptedBspVolunteer> for AcceptedBspVolunteerHandler<T, FL, FS>
+where
+    T: Send + Sync + TrieLayout + 'static,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T> + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     async fn handle_event(&mut self, event: AcceptedBspVolunteer) -> anyhow::Result<()> {
         info!("[NewStorageRequestHandler] - received event: {:?}", event);
