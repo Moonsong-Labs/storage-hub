@@ -1,6 +1,10 @@
 //! # Payment Streams Pallet
 //!
 //! This pallet provides the functionality to create, update, delete and charge payment streams.
+//!
+//! Notes: we took the decision of considering that another pallet is the one in charge of keeping track of both the current global price
+//! and the accumulated price index since genesis. The alternative would be to keep those two things here, we believe any of the two approaches
+//! are valid, but we decided to keep this pallet as simple as possible.
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -225,12 +229,18 @@ pub mod pallet {
         CannotHoldDeposit,
         /// Error thrown when trying to update the rate of a fixed-rate payment stream to the same rate as before
         UpdateRateToSameRate,
+        /// Error thrown when trying to update the amount provided of a dynamic-rate payment stream to the same amount as before
+        UpdateAmountToSameAmount,
         /// Error thrown when trying to create a new fixed-rate payment stream with rate 0 or update the rate of an existing one to 0 (should use remove_fixed_rate_payment_stream instead)
         RateCantBeZero,
+        /// Error thrown when trying to create a new dynamic-rate payment stream with amount provided 0 or update the amount provided of an existing one to 0 (should use remove_dynamic_rate_payment_stream instead)
+        AmountProvidedCantBeZero,
         /// Error thrown when the block number of when the payment stream was last charged is greater than the block number of the last chargeable block
         LastChargedGreaterThanLastChargeable,
         /// Error thrown when the new last chargeable block number that is trying to be set by the PaymentManager is greater than the current block number or smaller than the previous last chargeable block number
         InvalidLastChargeableBlockNumber,
+        /// Error thrown when the new last chargeable price index that is trying to be set by the PaymentManager is greater than the current price index or smaller than the previous last chargeable price index
+        InvalidLastChargeablePriceIndex,
         /// Error thrown when charging a payment stream would result in an overflow of the balance type (TODO: maybe we should use saturating arithmetic instead)
         ChargeOverflow,
         /// Error thrown when trying to operate when the User has been flagged for not having enough funds.
@@ -296,53 +306,6 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// Dispatchable extrinsic that allows root to add a dynamic-rate payment stream from a User to a Provider.
-        ///
-        /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
-        /// this extrinsic is for manual testing).
-        ///
-        /// Parameters:
-        /// - `provider_id`: The Provider ID that the payment stream is for.
-        /// - `user_account`: The User Account ID that the payment stream is for.
-        /// - `amount_provided`: The initial amount provided by the Provider.
-        ///
-        /// This extrinsic will perform the following checks and logic:
-        /// 1. Check that the extrinsic was executed by the root origin
-        /// 2. Check that the payment stream does not already exist
-        /// 3. Check that the User has enough funds to pay the deposit
-        /// 4. Hold the deposit from the User
-        /// 5. Update the Payment Streams storage to add the new payment stream
-        ///
-        /// Emits `DynamicRatePaymentStreamCreated` event when successful.
-        #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn create_dynamic_rate_payment_stream(
-            origin: OriginFor<T>,
-            provider_id: ProviderIdFor<T>,
-            user_account: T::AccountId,
-            amount_provided: UnitsProvidedFor<T>,
-        ) -> DispatchResultWithPostInfo {
-            // Check that the extrinsic was executed by the root origin
-            ensure_root(origin)?;
-
-            // Execute checks and logic, update storage
-            Self::do_create_dynamic_rate_payment_stream(
-                &provider_id,
-                &user_account,
-                amount_provided,
-            )?;
-
-            // Emit the corresponding event
-            Self::deposit_event(Event::<T>::DynamicRatePaymentStreamCreated {
-                user_account,
-                provider_id: provider_id,
-                amount_provided,
-            });
-
-            // Return a successful DispatchResultWithPostInfo
-            Ok(().into())
-        }
-
         /// Dispatchable extrinsic that allows root to update an existing fixed-rate payment stream between a User and a Provider.
         ///
         /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
@@ -359,7 +322,7 @@ pub mod pallet {
         /// 3. Update the Payment Streams storage to update the payment stream
         ///
         /// Emits `FixedRatePaymentStreamUpdated` event when successful.
-        #[pallet::call_index(2)]
+        #[pallet::call_index(1)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn update_fixed_rate_payment_stream(
             origin: OriginFor<T>,
@@ -384,51 +347,6 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// Dispatchable extrinsic that allows root to update an existing dynamic-rate payment stream between a User and a Provider.
-        ///
-        /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
-        /// this extrinsic is for manual testing).
-        ///
-        /// Parameters:
-        /// - `provider_id`: The Provider ID that the payment stream is for.
-        /// - `user_account`: The User Account ID that the payment stream is for.
-        /// - `new_amount_provided`: The new amount provided by the Provider.
-        ///
-        /// This extrinsic will perform the following checks and logic:
-        /// 1. Check that the extrinsic was executed by the root origin
-        /// 2. Check that the payment stream exists
-        /// 3. Update the Payment Streams storage to update the payment stream
-        ///
-        /// Emits `DynamicRatePaymentStreamUpdated` event when successful.
-        #[pallet::call_index(3)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn update_dynamic_rate_payment_stream(
-            origin: OriginFor<T>,
-            provider_id: ProviderIdFor<T>,
-            user_account: T::AccountId,
-            new_amount_provided: UnitsProvidedFor<T>,
-        ) -> DispatchResultWithPostInfo {
-            // Check that the extrinsic was executed by the root origin
-            ensure_root(origin)?;
-
-            // Execute checks and logic, update storage
-            Self::do_update_dynamic_rate_payment_stream(
-                &provider_id,
-                &user_account,
-                new_amount_provided,
-            )?;
-
-            // Emit the corresponding event
-            Self::deposit_event(Event::<T>::DynamicRatePaymentStreamUpdated {
-                user_account,
-                provider_id,
-                new_amount_provided,
-            });
-
-            // Return a successful DispatchResultWithPostInfo
-            Ok(().into())
-        }
-
         /// Dispatchable extrinsic that allows root to delete an existing fixed-rate payment stream between a User and a Provider.
         ///
         /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
@@ -444,7 +362,7 @@ pub mod pallet {
         /// 3. Update the Payment Streams storage to remove the payment stream
         ///
         /// Emits `FixedRatePaymentStreamDeleted` event when successful.
-        #[pallet::call_index(4)]
+        #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn delete_fixed_rate_payment_stream(
             origin: OriginFor<T>,
@@ -461,6 +379,104 @@ pub mod pallet {
             Self::deposit_event(Event::<T>::FixedRatePaymentStreamDeleted {
                 user_account,
                 provider_id: provider_id,
+            });
+
+            // Return a successful DispatchResultWithPostInfo
+            Ok(().into())
+        }
+
+        /// Dispatchable extrinsic that allows root to add a dynamic-rate payment stream from a User to a Provider.
+        ///
+        /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
+        /// this extrinsic is for manual testing).
+        ///
+        /// Parameters:
+        /// - `provider_id`: The Provider ID that the payment stream is for.
+        /// - `user_account`: The User Account ID that the payment stream is for.
+        /// - `amount_provided`: The initial amount provided by the Provider.
+        ///
+        /// This extrinsic will perform the following checks and logic:
+        /// 1. Check that the extrinsic was executed by the root origin
+        /// 2. Check that the payment stream does not already exist
+        /// 3. Check that the User has enough funds to pay the deposit
+        /// 4. Hold the deposit from the User
+        /// 5. Update the Payment Streams storage to add the new payment stream
+        ///
+        /// Emits `DynamicRatePaymentStreamCreated` event when successful.
+        #[pallet::call_index(3)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn create_dynamic_rate_payment_stream(
+            origin: OriginFor<T>,
+            provider_id: ProviderIdFor<T>,
+            user_account: T::AccountId,
+            amount_provided: UnitsProvidedFor<T>,
+            current_price: BalanceOf<T>,
+            current_accumulated_price_index: BalanceOf<T>,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was executed by the root origin
+            ensure_root(origin)?;
+
+            // Execute checks and logic, update storage
+            Self::do_create_dynamic_rate_payment_stream(
+                &provider_id,
+                &user_account,
+                amount_provided,
+                current_price,
+                current_accumulated_price_index,
+            )?;
+
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::DynamicRatePaymentStreamCreated {
+                user_account,
+                provider_id: provider_id,
+                amount_provided,
+            });
+
+            // Return a successful DispatchResultWithPostInfo
+            Ok(().into())
+        }
+
+        /// Dispatchable extrinsic that allows root to update an existing dynamic-rate payment stream between a User and a Provider.
+        ///
+        /// The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
+        /// this extrinsic is for manual testing).
+        ///
+        /// Parameters:
+        /// - `provider_id`: The Provider ID that the payment stream is for.
+        /// - `user_account`: The User Account ID that the payment stream is for.
+        /// - `new_amount_provided`: The new amount provided by the Provider.
+        ///
+        /// This extrinsic will perform the following checks and logic:
+        /// 1. Check that the extrinsic was executed by the root origin
+        /// 2. Check that the payment stream exists
+        /// 3. Update the Payment Streams storage to update the payment stream
+        ///
+        /// Emits `DynamicRatePaymentStreamUpdated` event when successful.
+        #[pallet::call_index(4)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn update_dynamic_rate_payment_stream(
+            origin: OriginFor<T>,
+            provider_id: ProviderIdFor<T>,
+            user_account: T::AccountId,
+            new_amount_provided: UnitsProvidedFor<T>,
+            current_price: BalanceOf<T>,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was executed by the root origin
+            ensure_root(origin)?;
+
+            // Execute checks and logic, update storage
+            Self::do_update_dynamic_rate_payment_stream(
+                &provider_id,
+                &user_account,
+                new_amount_provided,
+                current_price,
+            )?;
+
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::DynamicRatePaymentStreamUpdated {
+                user_account,
+                provider_id,
+                new_amount_provided,
             });
 
             // Return a successful DispatchResultWithPostInfo
@@ -488,12 +504,17 @@ pub mod pallet {
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,
             user_account: T::AccountId,
+            current_price: BalanceOf<T>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was executed by the root origin
             ensure_root(origin)?;
 
             // Execute checks and logic, update storage
-            Self::do_delete_dynamic_rate_payment_stream(&provider_id, &user_account)?;
+            Self::do_delete_dynamic_rate_payment_stream(
+                &provider_id,
+                &user_account,
+                current_price,
+            )?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::DynamicRatePaymentStreamDeleted {

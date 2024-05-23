@@ -129,7 +129,7 @@ impl pallet_storage_providers::Config for Test {
 }
 
 parameter_types! {
-    pub const PaymentStreamHoldReason: RuntimeHoldReason = RuntimeHoldReason::PaymentStreams(pallet_payment_streams::HoldReason::PaymentStreamStorageDeposit);
+    pub const PaymentStreamHoldReason: RuntimeHoldReason = RuntimeHoldReason::PaymentStreams(pallet_payment_streams::HoldReason::PaymentStreamDeposit);
 }
 
 // Converter from the BlockNumber type to the Balance type for math
