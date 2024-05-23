@@ -33,6 +33,7 @@ use sc_client_api::{
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{error, info};
 use serde_json::Number;
+use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{
@@ -41,6 +42,7 @@ use sp_runtime::{
 };
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
+use substrate_frame_rpc_system::AccountNonceApi;
 
 use crate::service::ParachainClient;
 
@@ -272,12 +274,21 @@ impl BlockchainService {
         rpc_handlers: Arc<RpcHandlers>,
         keystore: KeystorePtr,
     ) -> Self {
+        // Get current nonce for one of the pub keys (in this case the last one)
+        // in our vector of keys in the Keystore.
+        let current_block_hash = client.chain_info().best_hash;
+        let pub_key = Self::caller_pub_key(keystore.clone());
+        let nonce = client
+            .runtime_api()
+            .account_nonce(current_block_hash, pub_key.into())
+            .expect("Fetching account nonce works; qed");
+
         Self {
             client,
             rpc_handlers,
             keystore,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
-            nonce_counter: 0,
+            nonce_counter: nonce,
         }
     }
 
