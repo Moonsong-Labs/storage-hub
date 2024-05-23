@@ -23,6 +23,7 @@ const LOG_TARGET: &str = "blockchain-transaction";
 /// transaction to either be successful or fail.
 #[derive(Debug)]
 pub struct SubmittedTransaction {
+    /// The watcher used to query the state of the transaction from the blockchain node.
     watcher: Receiver<String>,
     hash: ExtrinsicHash,
     timeout: Option<Duration>,
