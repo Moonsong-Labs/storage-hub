@@ -233,7 +233,7 @@ impl Into<CompactProof> for SerializableCompactProof {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FileProof {
     /// The file chunk (and id) that was proven.
-    pub proven: Leaf<ChunkId, Chunk>,
+    pub proven: Vec<Leaf<ChunkId, Chunk>>,
     /// The compact proof.
     pub proof: SerializableCompactProof,
     /// The root hash of the trie, also known as the fingerprint of the file.
