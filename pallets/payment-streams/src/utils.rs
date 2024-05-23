@@ -696,7 +696,10 @@ where
         }
 
         // If the dynamic-rate payment stream exists:
-        if let Some(dynamic_rate_payment_stream) = dynamic_rate_payment_stream {}
+        if let Some(_dynamic_rate_payment_stream) = dynamic_rate_payment_stream {
+            // TODO: Implement the logic to charge dynamic-rate payment streams
+            todo!();
+        }
 
         Ok(total_amount_charged)
     }
@@ -940,7 +943,7 @@ impl<T: pallet::Config> PaymentManager for pallet::Pallet<T> {
         );
 
         // Update the last chargeable price index of the payment stream
-        FixedRatePaymentStreams::<T>::mutate(provider_id, user_account, |payment_stream| {
+        DynamicRatePaymentStreams::<T>::mutate(provider_id, user_account, |payment_stream| {
             let payment_stream = expect_or_err!(
                 payment_stream,
                 "Payment stream should exist if it was found before.",
