@@ -41,6 +41,7 @@ pub mod pallet {
             AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps,
         },
         traits::fungible::*,
+        traits::Incrementable,
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
@@ -128,6 +129,9 @@ pub mod pallet {
 
         /// Subscribers to important updates
         type Subscribers: SubscribeProvidersInterface;
+
+        /// The type of the Bucket NFT Collection ID.
+        type BucketNftCollectionId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
 
         /// The minimum amount that an account has to deposit to become a storage provider.
         #[pallet::constant]

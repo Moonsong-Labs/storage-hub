@@ -23,7 +23,6 @@ frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 
-pallet-balances = { workspace = true, features = ["std"] }
 pallet-nfts = { workspace = true }
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }

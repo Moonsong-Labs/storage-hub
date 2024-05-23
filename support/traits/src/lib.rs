@@ -4,7 +4,7 @@ use codec::{FullCodec, HasCompact};
 use frame_support::dispatch::DispatchResult;
 use frame_support::pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member};
 use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
-use frame_support::traits::fungible;
+use frame_support::traits::{fungible, Incrementable};
 use frame_support::Parameter;
 use scale_info::prelude::{fmt::Debug, vec::Vec};
 use sp_core::Get;
@@ -45,6 +45,24 @@ pub trait ProvidersInterface {
         + AsMut<[u8]>
         + MaxEncodedLen
         + FullCodec;
+    /// The type of ID that uniquely identifies a Merkle Trie Holder (BSPs/Buckets) from an AccountId
+    type BucketId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+    /// The type of the Bucket NFT Collection ID.
+    type BucketNftCollectionId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
+
     /// Check if an account is a registered Provider.
     fn is_provider(who: Self::Provider) -> bool;
 
@@ -74,7 +92,6 @@ pub trait ReadProvidersInterface: ProvidersInterface {
         + Debug
         + scale_info::TypeInfo
         + MaxEncodedLen;
-
     /// Type that represents the multiaddress of a Storage Provider.
     type MultiAddress: Parameter
         + MaybeSerializeDeserialize
@@ -102,6 +119,11 @@ pub trait ReadProvidersInterface: ProvidersInterface {
     fn get_bsp_multiaddresses(
         who: &Self::Provider,
     ) -> Result<BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>, DispatchError>;
+
+    /// Get `collection_id` of a bucket if there is one.
+    fn get_collection_id_of_bucket(
+        bucket_id: &Self::BucketId,
+    ) -> Option<Self::BucketNftCollectionId>;
 }
 
 /// Interface to allow the File System pallet to modify the data used by the Storage Providers pallet.
@@ -116,21 +138,7 @@ pub trait MutateProvidersInterface: ProvidersInterface {
         + Copy
         + MaxEncodedLen
         + HasCompact;
-    /// The type of ID that uniquely identifies a Merkle Trie Holder (BSPs/Buckets) from an AccountId
-    type BucketId: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Debug
-        + MaybeDisplay
-        + SimpleBitOps
-        + Ord
-        + Default
-        + Copy
-        + CheckEqual
-        + AsRef<[u8]>
-        + AsMut<[u8]>
-        + MaxEncodedLen
-        + FullCodec;
+
     /// The type of the Merkle Patricia Root of the storage trie for BSPs and MSPs' buckets (a hash).
     type MerklePatriciaRoot: Parameter
         + Member

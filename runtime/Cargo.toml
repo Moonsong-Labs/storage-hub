@@ -29,6 +29,7 @@ pallet-file-system = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-randomness = { workspace = true }
+pallet-bucket-nfts = { workspace = true }
 
 storage-hub-traits = { workspace = true }
 storage-hub-primitives = { workspace = true }
@@ -119,6 +120,7 @@ std = [
 	"pallet-nfts/std",
 	"pallet-proofs-dealer/std",
 	"pallet-randomness/std",
+	"pallet-bucket-nfts/std",
 	"pallet-session/std",
 	"pallet-storage-providers/std",
 	"pallet-sudo/std",
@@ -172,6 +174,7 @@ runtime-benchmarks = [
 	"pallet-nfts/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-randomness/runtime-benchmarks",
+	"pallet-bucket-nfts/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
 	"pallet-sudo/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
@@ -203,6 +206,7 @@ try-runtime = [
 	"pallet-nfts/try-runtime",
 	"pallet-proofs-dealer/try-runtime",
 	"pallet-randomness/try-runtime",
+	"pallet-bucket-nfts/try-runtime",
 	"pallet-session/try-runtime",
 	"pallet-storage-providers/try-runtime",
 	"pallet-sudo/try-runtime",

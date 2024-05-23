@@ -9,7 +9,7 @@ use frame_support::sp_runtime::{
 use frame_support::traits::{
     fungible::{Inspect, InspectHold, MutateHold},
     tokens::{Fortitude, Precision, Preservation},
-    Get, Randomness,
+    Get, Incrementable, Randomness,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_runtime::BoundedVec;
@@ -789,7 +789,6 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
 /// Implement the StorageProvidersInterface trait for the Storage Providers pallet.
 impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
     type StorageData = T::StorageData;
-    type BucketId = HashId<T>;
     type MerklePatriciaRoot = T::MerklePatriciaRoot;
 
     fn increase_data_used(who: &T::AccountId, delta: T::StorageData) -> DispatchResult {
@@ -840,6 +839,7 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
             root: MerklePatriciaRoot::<T>::default(),
             user_id,
             msp_id,
+            collection_id: T::BucketNftCollectionId::initial_value(),
         };
         Buckets::<T>::insert(&bucket_id, &bucket);
         Ok(())
@@ -915,6 +915,16 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
             Err(Error::<T>::NotRegistered.into())
         }
     }
+
+    fn get_collection_id_of_bucket(
+        bucket_id: &Self::BucketId,
+    ) -> Option<Self::BucketNftCollectionId> {
+        if let Some(bucket) = Buckets::<T>::get(bucket_id) {
+            bucket.collection_id
+        } else {
+            None
+        }
+    }
 }
 
 impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
@@ -922,6 +932,8 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
     type AccountId = T::AccountId;
     type Provider = HashId<T>;
     type MerkleHash = MerklePatriciaRoot<T>;
+    type BucketId = HashId<T>;
+    type BucketNftCollectionId = T::BucketNftCollectionId;
 
     // TODO: Refine, add checks and tests for all the logic in this implementation
     fn is_provider(who: Self::Provider) -> bool {

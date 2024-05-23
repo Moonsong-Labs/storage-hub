@@ -159,6 +159,7 @@ pallet-storage-providers = { path = "pallets/providers", default-features = fals
 pallet-file-system = { path = "pallets/file-system", default-features = false }
 pallet-proofs-dealer = { path = "pallets/proofs-dealer", default-features = false }
 pallet-randomness = { path = "pallets/randomness", default-features = false }
+pallet-bucket-nfts = { path = "pallets/bucket-nfts", default-features = false }
 
 shc-common = { package = "common", path = "client/common", default-features = false }
 file-manager = { path = "client/file-manager", default-features = false }
