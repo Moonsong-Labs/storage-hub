@@ -15,6 +15,12 @@ use super::{types::ExtrinsicHash, BlockchainService};
 
 const LOG_TARGET: &str = "blockchain-transaction";
 
+/// A struct that handles the lifecycle of a submitted transaction.
+///
+/// It holds a `watcher` that is used to query the state of the transaction from
+/// the blockchain node, a `hash` that is used to identify the transaction, and an
+/// optional `timeout` that specifies the maximum amount of time to wait for the
+/// transaction to either be successful or fail.
 #[derive(Debug)]
 pub struct SubmittedTransaction {
     watcher: Receiver<String>,
