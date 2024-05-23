@@ -14,6 +14,7 @@ use sp_trie::TrieDBMutBuilder;
 use sp_trie::TrieLayout;
 use sp_trie::TrieMut;
 
+use file_manager::traits::FileDataTrie;
 use file_manager::traits::FileStorage;
 
 use log::debug;
@@ -104,39 +105,33 @@ where
             }
         }
 
-        // Build the file trie so we can use its root as the file fingerprint.
-        let mut memdb = MemoryDB::<T::Hash>::default();
-        let mut root = Default::default();
-        {
-            let mut t = TrieDBMutBuilder::<T>::new(&mut memdb, &mut root).build();
-            for (chunk_id, chunk) in file_chunks.iter().enumerate() {
-                let chunk_id = chunk_id.to_be_bytes();
-                t.insert(&chunk_id, chunk).expect("error");
-            }
+        // Build the [`FileDataTrie`] by writing the file chunks into it.
+        let mut file_data_trie = <FL as FileStorage<T>>::FileDataTrie::default();
+        for (chunk_id, chunk) in file_chunks.iter().enumerate() {
+            let chunk_id = chunk_id as u64;
+            file_data_trie
+                .write_chunk(&chunk_id, chunk)
+                .map_err(into_rpc_error)?;
         }
-
-        // Acquire FileStorage write lock.
-        let mut file_storage_lock = self.file_storage.write().await;
-
+        // Generate the necessary metadata so we can insert file into the File Storage.
+        let root = file_data_trie.get_root();
         let fs_metadata = file.metadata().map_err(into_rpc_error)?;
         let file_size = fs_metadata.len();
-
         let file_metadata = FileMetadata {
             size: file_size,
             fingerprint: root.as_ref().into(),
             owner: owner.to_string(),
             location: location.clone().into(),
         };
-
         let file_key = file_metadata.key::<T::Hash>();
 
-        // Stores file in chunks into FileStorage.
-        for (chunk_id, chunk) in file_chunks.iter().enumerate() {
-            let chunk_id = chunk_id as u64;
-            file_storage_lock
-                .write_chunk(&file_key, &chunk_id, &chunk.to_vec())
-                .map_err(into_rpc_error)?;
-        }
+        // Acquire FileStorage write lock.
+        let mut file_storage_lock = self.file_storage.write().await;
+
+        // Finally Store file into File Storage.
+        file_storage_lock
+            .insert_file_with_data(file_key, file_metadata.clone(), file_data_trie)
+            .map_err(into_rpc_error)?;
 
         Ok(file_metadata)
     }
