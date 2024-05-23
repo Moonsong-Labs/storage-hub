@@ -31,7 +31,7 @@ pub struct SubmittedTransaction {
     timeout: Option<Duration>,
 }
 
-const NO_TIMEOUT_WARN: Duration = Duration::from_secs(60);
+const NO_TIMEOUT_INTERVAL_WARNING: Duration = Duration::from_secs(60);
 
 impl SubmittedTransaction {
     pub fn new(watcher: Receiver<String>, hash: H256) -> Self {
@@ -68,14 +68,15 @@ impl SubmittedTransaction {
                 Some(timeout) => {
                     // Check if the timeout has been reached.
                     if elapsed > timeout {
-                        return Err(anyhow!(
-                            "Timeout waiting for transaction to be included in a block"
-                        ));
+                        return Err(anyhow!(format!(
+                            "Timeout waiting for transaction {} to be included in a block",
+                            self.hash
+                        )));
                     }
 
                     timeout - elapsed
                 }
-                None => NO_TIMEOUT_WARN,
+                None => NO_TIMEOUT_INTERVAL_WARNING,
             };
 
             // Wait for either a new message from the watcher, or the timeout to be reached.
@@ -96,7 +97,7 @@ impl SubmittedTransaction {
                         }
                         None => {
                             // No timeout set, continue waiting.
-                            warn!(target: LOG_TARGET, "No timeout set and {:?} elapsed, continuing to wait for transaction to be included in a block.", NO_TIMEOUT_WARN);
+                            warn!(target: LOG_TARGET, "No timeout set and {:?} elapsed, continuing to wait for transaction to be included in a block.", NO_TIMEOUT_INTERVAL_WARNING);
 
                             continue;
                         }
