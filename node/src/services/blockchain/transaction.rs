@@ -1,4 +1,7 @@
-use std::str::FromStr;
+use std::{
+    str::FromStr,
+    time::{Duration, Instant},
+};
 
 use anyhow::anyhow;
 use log::*;
@@ -16,11 +19,23 @@ const LOG_TARGET: &str = "blockchain-transaction";
 pub struct SubmittedTransaction {
     watcher: Receiver<String>,
     hash: ExtrinsicHash,
+    timeout: Option<Duration>,
 }
+
+const NO_TIMEOUT_WARN: Duration = Duration::from_secs(60);
 
 impl SubmittedTransaction {
     pub fn new(watcher: Receiver<String>, hash: H256) -> Self {
-        Self { watcher, hash }
+        Self {
+            watcher,
+            hash,
+            timeout: None,
+        }
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
     }
 
     pub async fn watch_for_success(
@@ -28,9 +43,52 @@ impl SubmittedTransaction {
         blockchain: &ActorHandle<BlockchainService>,
     ) -> anyhow::Result<()> {
         // Wait for the transaction to be included in a block.
-        let mut block_hash = None;
-        // TODO: Consider adding a timeout.
-        while let Some(result) = self.watcher.recv().await {
+        let block_hash;
+
+        let start_time = Instant::now();
+        loop {
+            // Get the elapsed time since submit.
+            let elapsed = start_time.elapsed();
+            // Calculate the remaining time to wait.
+            let remaining = match self.timeout {
+                Some(timeout) => {
+                    // Check if the timeout has been reached.
+                    if elapsed > timeout {
+                        return Err(anyhow!(
+                            "Timeout waiting for transaction to be included in a block"
+                        ));
+                    }
+
+                    timeout - elapsed
+                }
+                None => NO_TIMEOUT_WARN,
+            };
+
+            // Wait for either a new message from the watcher, or the timeout to be reached.
+            let result = match tokio::time::timeout(remaining, self.watcher.recv()).await {
+                Ok(result) => match result {
+                    Some(result) => result,
+                    None => {
+                        return Err(anyhow!("Transaction watcher channel closed"));
+                    }
+                },
+                Err(_) => {
+                    // Timeout reached, exit the loop.
+                    match self.timeout {
+                        Some(_) => {
+                            return Err(anyhow!(
+                                "Timeout waiting for transaction to be included in a block"
+                            ));
+                        }
+                        None => {
+                            // No timeout set, continue waiting.
+                            warn!(target: LOG_TARGET, "No timeout set and {:?} elapsed, continuing to wait for transaction to be included in a block.", NO_TIMEOUT_WARN);
+
+                            continue;
+                        }
+                    }
+                }
+            };
             // Parse the JSONRPC string, now that we know it is not an error.
             let json: serde_json::Value = serde_json::from_str(&result).map_err(|_| {
                 anyhow!("The result, if not an error, can only be a JSONRPC string; qed")

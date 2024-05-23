@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use file_manager::traits::FileStorage;
 use forest_manager::traits::ForestStorage;
 use log::*;
@@ -73,15 +75,11 @@ where
                 fingerprint: fingerprint.into(),
             });
 
-        // Send extrinsic.
-        let mut submitted_transaction = self
-            .storage_hub_handler
+        self.storage_hub_handler
             .blockchain
             .send_extrinsic(call)
-            .await?;
-
-        // Track transaction until success.
-        submitted_transaction
+            .await?
+            .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 

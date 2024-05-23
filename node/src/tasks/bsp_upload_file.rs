@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use anyhow::anyhow;
 use forest_manager::traits::ForestStorage;
@@ -249,13 +249,11 @@ where
                 fingerprint: fingerprint.into(),
             });
 
-        let mut submitted_transaction = self
-            .storage_hub_handler
+        self.storage_hub_handler
             .blockchain
             .send_extrinsic(call)
-            .await?;
-
-        submitted_transaction
+            .await?
+            .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
