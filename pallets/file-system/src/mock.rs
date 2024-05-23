@@ -4,13 +4,14 @@ use frame_support::{
     weights::{constants::RocksDbWeight, Weight},
 };
 use frame_system as system;
-use pallet_proofs_dealer::CompactProof;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, Bounded, IdentityLookup},
-    AccountId32, BuildStorage, DispatchError, FixedU128,
+    traits::{BlakeTwo256, Bounded, Convert, IdentityLookup},
+    AccountId32, BuildStorage, DispatchError, FixedU128, SaturatedConversion,
 };
+use sp_trie::CompactProof;
 use storage_hub_traits::CommitmentVerifier;
+use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
@@ -18,6 +19,13 @@ type Balance = u128;
 type AccountId = AccountId32;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10;
+const UNITS: Balance = 1_000_000_000_000;
+const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
+
+pub type ForestProof =
+    <<Test as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::ForestProof;
+pub type KeyProof =
+    <<Test as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::KeyProof;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;
@@ -163,15 +171,21 @@ impl pallet_proofs_dealer::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
-    type MerkleHash = H256;
+    type MerkleTrieHash = H256;
+    type MerkleTrieHashing = BlakeTwo256;
+    type ForestVerifier = MockVerifier;
     type KeyVerifier = MockVerifier;
-    type MaxChallengesPerBlock = ConstU32<10>;
+    type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
+    type RandomChallengesPerBlock = ConstU32<10>;
+    type MaxCustomChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
-    type ChallengeHistoryLength = ConstU32<10>;
+    type ChallengeHistoryLength = ConstU64<10>;
     type ChallengesQueueLength = ConstU32<10>;
     type CheckpointChallengePeriod = ConstU32<10>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = TreasuryAccount;
+    type RandomnessProvider = MockRandomness;
+    type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
@@ -260,4 +274,14 @@ pub(crate) fn compute_set_get_initial_threshold() -> ThresholdType {
         .expect("Initial threshold should be computable");
     crate::BspsAssignmentThreshold::<Test>::put(initial_threshold);
     initial_threshold
+}
+
+// Converter from the Balance type to the BlockNumber type for math.
+// It performs a saturated conversion, so that the result is always a valid BlockNumber.
+pub struct SaturatingBalanceToBlockNumber;
+
+impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
+    fn convert(block_number: Balance) -> BlockNumberFor<Test> {
+        block_number.saturated_into()
+    }
 }

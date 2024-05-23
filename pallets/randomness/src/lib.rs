@@ -261,14 +261,14 @@ impl<T: Config> RandomnessT<T::Hash, BlockNumberFor<T>> for RandomnessFromOneEpo
 }
 pub struct ParentBlockRandomness<T>(core::marker::PhantomData<T>);
 
-impl<T: Config> RandomnessT<Option<T::Hash>, BlockNumberFor<T>> for ParentBlockRandomness<T> {
+impl<T: Config> RandomnessT<T::Hash, BlockNumberFor<T>> for ParentBlockRandomness<T> {
     /// Uses the BABE randomness of two epochs ago in combination with the parent's block randomness
     /// to generate a random seed that can be used for commitments from previous blocks. Take extreme
     /// care, as the block producer can predict this randomness.
     ///
     /// The subject is a byte array that is hashed (to make it a fixed size) and then concatenated with
     /// the latest parent block randomness. The result is then hashed again to provide the final randomness.
-    fn random(subject: &[u8]) -> (Option<T::Hash>, BlockNumberFor<T>) {
+    fn random(subject: &[u8]) -> (T::Hash, BlockNumberFor<T>) {
         // If there's randomness available
         if let Some((parent_block_randomness, latest_valid_block)) =
             LatestParentBlockRandomness::<T>::get()
@@ -282,11 +282,12 @@ impl<T: Config> RandomnessT<Option<T::Hash>, BlockNumberFor<T>> for ParentBlockR
             let randomness = T::Hashing::hash(digest.as_slice());
             // Return the randomness for this subject and the latest block for which this randomness is useful
             // `subject` commitments done after `latest_valid_block` are predictable, and as such MUST be discarded
-            (Some(randomness), latest_valid_block)
+            (randomness, latest_valid_block)
         } else {
-            // If there's no randomness available, return None
+            // If there's no randomness available, return an empty randomness that's invalid for every block
+            let randomness = T::Hash::default();
             let latest_valid_block: BlockNumberFor<T> = sp_runtime::traits::Zero::zero();
-            (None, latest_valid_block)
+            (randomness, latest_valid_block)
         }
     }
 }
