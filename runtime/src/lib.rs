@@ -260,7 +260,7 @@ construct_runtime!(
         ProofsDealer: pallet_proofs_dealer = 42,
         Randomness: pallet_randomness = 43,
 
-        Nfts: pallet_nfts = 50,
+        Nfts: pallet_nfts::{Pallet, Storage, Event<T>} = 50,
     }
 );
 

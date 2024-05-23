@@ -6728,6 +6728,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-bucket-nfts"
+version = "0.1.0"
+dependencies = [
+ "frame-benchmarking 28.0.0",
+ "frame-support 28.0.0",
+ "frame-system 28.0.0",
+ "pallet-balances 28.0.0",
+ "pallet-nfts",
+ "pallet-proofs-dealer",
+ "pallet-storage-providers",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-io 30.0.0",
+ "sp-runtime 31.0.1",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "storage-hub-traits",
+]
+
+[[package]]
 name = "pallet-child-bounties"
 version = "27.0.0"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0#3c3d6fceb82372a3019b37117aa453d564b212de"
