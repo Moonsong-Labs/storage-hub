@@ -3,9 +3,6 @@ import { accounts, getZombieClients, waitForChain } from "../util";
 import { Binary } from "polkadot-api";
 import { isEqual } from "lodash";
 
-// TODO: WORK OUT WHY BSP AND COLLATOR ACCOUNTS NOT GETTING FUNDED
-// AFTER THAT IS DONE, CHANGE LAST BIT SO BSP SIGNS UP INSTEAD OF ALICE
-
 const idealExecutorParams = [
   {
     type: "MaxMemoryPages",
