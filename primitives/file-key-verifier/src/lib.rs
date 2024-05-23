@@ -70,6 +70,8 @@ where
             .collect::<Vec<u8>>(),
         );
 
+        // TODO: Check that the number of challenges is proportional to the size of the file.
+
         // Check that the file key is equal to the root.
         if &file_key != expected_file_key {
             return Err(
