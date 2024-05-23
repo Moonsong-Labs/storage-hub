@@ -274,7 +274,7 @@ impl BlockchainService {
         rpc_handlers: Arc<RpcHandlers>,
         keystore: KeystorePtr,
     ) -> Self {
-        // Get current nonce for one of the pub keys (in this case the last one)
+        // Get best nonce (not pending) for one of the pub keys (in this case the last one)
         // in our vector of keys in the Keystore.
         let current_block_hash = client.chain_info().best_hash;
         let pub_key = Self::caller_pub_key(keystore.clone());
@@ -346,10 +346,7 @@ impl BlockchainService {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
 
         // Get the nonce for the caller and increment it for the next transaction.
-        // TODO: Handle initialisation of nonce when node is restarted.
-        // TODO: Handle nonce overflow.
         let nonce = self.nonce_counter;
-        self.nonce_counter += 1;
 
         // Construct the extrinsic.
         let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce);
@@ -383,6 +380,10 @@ impl BlockchainService {
         if let Some(error) = error {
             return Err(anyhow::anyhow!("Error in RPC call: {}", error.to_string()));
         }
+
+        // Only update nonce after we are sure no errors
+        // occurred submitting the extrinsic.
+        self.nonce_counter += 1;
 
         Ok(RpcExtrinsicOutput {
             hash: id_hash,

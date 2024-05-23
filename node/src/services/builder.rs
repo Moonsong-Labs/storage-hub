@@ -128,11 +128,6 @@ where
         self
     }
 
-    /// Get the [`BlockchainService`] from the builder.
-    pub fn blockchain(&self) -> &Option<ActorHandle<BlockchainService>> {
-        &self.blockchain
-    }
-
     /// Get the [`FileStorage`] from the builder.
     pub fn _file_storage(&self) -> &Option<Arc<RwLock<FL>>> {
         &self.file_storage
