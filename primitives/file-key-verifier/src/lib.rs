@@ -16,8 +16,12 @@ mod tests;
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment
 /// is a Merkle Patricia Trie root hash and the response to a challenge is given
 /// by either the exact key or the next and previous keys in the trie.
-pub struct FileKeyVerifier<T: TrieLayout, const H_LENGTH: usize, const CHUNK_SIZE: u64>
-where
+pub struct FileKeyVerifier<
+    T: TrieLayout,
+    const H_LENGTH: usize,
+    const CHUNK_SIZE: u64,
+    const SIZE_TO_CHALLENGES: u64,
+> where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
     pub _phantom: core::marker::PhantomData<T>,
@@ -33,8 +37,12 @@ pub struct FileKeyProof {
 }
 
 /// Implement the `CommitmentVerifier` trait for the `FileKeyVerifier` struct.
-impl<T: TrieLayout, const H_LENGTH: usize, const CHUNK_SIZE: u64> CommitmentVerifier
-    for FileKeyVerifier<T, H_LENGTH, CHUNK_SIZE>
+impl<
+        T: TrieLayout,
+        const H_LENGTH: usize,
+        const CHUNK_SIZE: u64,
+        const SIZE_TO_CHALLENGES: u64,
+    > CommitmentVerifier for FileKeyVerifier<T, H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
@@ -70,7 +78,13 @@ where
             .collect::<Vec<u8>>(),
         );
 
-        // TODO: Check that the number of challenges is proportional to the size of the file.
+        // Check that the number of challenges is proportional to the size of the file.
+        let chunks_to_check = proof.size / SIZE_TO_CHALLENGES;
+        if challenges.len() != chunks_to_check as usize {
+            return Err(
+                "Number of challenges does not match the number of chunks that should have been challenged for a file of this size.".into(),
+            );
+        }
 
         // Check that the file key is equal to the root.
         if &file_key != expected_file_key {
