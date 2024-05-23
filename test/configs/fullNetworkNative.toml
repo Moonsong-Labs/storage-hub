@@ -33,7 +33,7 @@ args = ["--no-hardware-benchmarks", "-lparachain=debug"]
 [[parachains.collators]]
 name = "sh-BSP"
 validator = false
-ws_port = 33000
+ws_port = 35000
 command = "../target/release/storage-hub-node"
 args = [
     "--no-hardware-benchmarks",

@@ -193,11 +193,15 @@ jobs:
           bun zombie:run:native &
           
           sleep 60
-      - name: Run Tests
+      - name: Setup
         run: |
           cd test
           bun typegen
-          bun test
+          bun zombie:setup:native
+      - name: Run Zombienet Test!
+        run: |
+          cd test
+          bun test suites/zombie
 
 
   zombie_test:
