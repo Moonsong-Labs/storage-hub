@@ -40,7 +40,7 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
         stored_chunks
     }
 
-    fn generate_proof(&self, chunk_id: &ChunkId) -> Result<FileProof, FileStorageError> {
+    fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError> {
         let recorder: Recorder<T::Hash> = Recorder::default();
 
         // A `TrieRecorder` is needed to create a proof of the "visited" leafs, by the end of this process.
@@ -50,11 +50,16 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
             .with_recorder(&mut trie_recorder)
             .build();
 
-        let chunk: Option<Vec<u8>> = trie
-            .get(&chunk_id.to_be_bytes())
-            .map_err(|_| FileStorageError::FailedToGetFileChunk)?;
+        // Read all the chunks to prove from the trie.
+        let mut chunks = Vec::new();
+        for chunk_id in chunk_ids {
+            let chunk: Option<Vec<u8>> = trie
+                .get(&chunk_id.to_be_bytes())
+                .map_err(|_| FileStorageError::FailedToGetFileChunk)?;
 
-        let chunk = chunk.ok_or(FileStorageError::FileChunkDoesNotExist)?;
+            let chunk = chunk.ok_or(FileStorageError::FileChunkDoesNotExist)?;
+            chunks.push((*chunk_id, chunk));
+        }
 
         // Drop the `trie_recorder` to release the `recorder`
         drop(trie_recorder);
@@ -65,11 +70,17 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
             .to_compact_proof::<T::Hash>(self.root)
             .map_err(|_| FileStorageError::FailedToGenerateCompactProof)?;
 
-        Ok(FileProof {
-            proven: Leaf {
-                key: (*chunk_id),
+        // Convert the chunks to prove into `Leaf`s.
+        let leaves = chunks
+            .into_iter()
+            .map(|(id, chunk)| Leaf {
+                key: id,
                 data: chunk,
-            },
+            })
+            .collect();
+
+        Ok(FileProof {
+            proven: leaves,
             proof: proof.into(),
             root: self.get_root().as_ref().into(),
         })
@@ -128,7 +139,7 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
     fn generate_proof(
         &self,
         file_key: &HasherOutT<T>,
-        chunk_id: &ChunkId,
+        chunk_id: &Vec<ChunkId>,
     ) -> Result<FileProof, FileStorageError> {
         let metadata = self
             .metadata

@@ -54,7 +54,7 @@ pub trait FileDataTrie<T: TrieLayout> {
     fn stored_chunks_count(&self) -> u64;
 
     /// Generate proof for a chunk of a file. Returns error if the chunk does not exist.
-    fn generate_proof(&self, chunk_id: &ChunkId) -> Result<FileProof, FileStorageError>;
+    fn generate_proof(&self, chunk_id: &Vec<ChunkId>) -> Result<FileProof, FileStorageError>;
 
     /// Get a file chunk from storage. Returns error if the chunk does not exist.
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError>;
@@ -76,7 +76,7 @@ pub trait FileStorage<T: TrieLayout>: 'static {
     fn generate_proof(
         &self,
         key: &HasherOutT<T>,
-        chunk_id: &ChunkId,
+        chunk_id: &Vec<ChunkId>,
     ) -> Result<FileProof, FileStorageError>;
 
     /// Remove a file from storage.
