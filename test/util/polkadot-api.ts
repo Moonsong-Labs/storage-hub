@@ -4,7 +4,6 @@ import { relaychain, storagehub } from "@polkadot-api/descriptors";
 
 export type TypesBundle = typeof storagehub | typeof relaychain;
 
-// TODO add method for waiting for blocks instead of time
 export const waitForChain = async (
   client: PolkadotClient,
   options?: {

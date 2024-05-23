@@ -190,7 +190,7 @@ jobs:
           chmod +x target/release/storage-hub-node
           cd test
           bun install
-          bun zombie:run:native &
+          bun zombie:run:full:native &
           
           sleep 60
       - name: Setup
