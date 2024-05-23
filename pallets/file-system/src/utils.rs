@@ -340,6 +340,9 @@ where
             &key_proof,
         )?;
 
+        // TODO: Check if this is the first file added to the BSP's Forest. If so, initialise
+        // TODO: last block proven by this BSP accordingly.
+
         // Remove storage request if we reached the required number of bsps.
         if file_metadata.bsps_confirmed == file_metadata.bsps_required {
             // Remove storage request metadata.

@@ -45,7 +45,7 @@ pub mod pallet {
         /// To check if whoever submits a proof is a registered Provider.
         type ProvidersPallet: ProvidersInterface<
             AccountId = Self::AccountId,
-            MerkleHash = Self::MerkleHash,
+            MerkleHash = Self::MerkleTrieHash,
             Balance = Self::NativeBalance,
         >;
 
@@ -73,7 +73,7 @@ pub mod pallet {
         /// The type for the hashes of Merkle Patricia Forest nodes.
         /// Applies to file keys (leaf nodes) and root hashes (root nodes).
         /// Generally a hash (the output of a Hasher).
-        type MerkleHash: Parameter
+        type MerkleTrieHash: Parameter
             + Member
             + MaybeSerializeDeserialize
             + Debug
@@ -89,7 +89,7 @@ pub mod pallet {
             + FullCodec;
 
         /// The hashing system (algorithm) being used for the Merkle Patricia Forests (e.g. Blake2).
-        type MerkleHashing: Hash<Output = Self::MerkleHash> + TypeInfo;
+        type MerkleTrieHashing: Hash<Output = Self::MerkleTrieHash> + TypeInfo;
 
         /// The type to convert a balance to a block number.
         type StakeToBlockNumber: Convert<BalanceFor<Self>, BlockNumberFor<Self>>;

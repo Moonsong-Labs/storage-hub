@@ -132,8 +132,8 @@ impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
-    type MerkleHash = H256;
-    type MerkleHashing = BlakeTwo256;
+    type MerkleTrieHash = H256;
+    type MerkleTrieHashing = BlakeTwo256;
     type ForestVerifier = MockVerifier;
     type KeyVerifier = MockVerifier;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;

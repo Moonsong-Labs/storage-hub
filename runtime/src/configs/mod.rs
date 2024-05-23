@@ -448,8 +448,8 @@ impl pallet_proofs_dealer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
-    type MerkleHash = Hash;
-    type MerkleHashing = BlakeTwo256;
+    type MerkleTrieHash = Hash;
+    type MerkleTrieHashing = BlakeTwo256;
     type ForestVerifier = TrieVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type KeyVerifier = ProofTrieVerifier;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
