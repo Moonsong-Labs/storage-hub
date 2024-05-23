@@ -1,7 +1,10 @@
 use std::str::FromStr;
 
+use file_manager::traits::FileStorage;
+use forest_manager::traits::ForestStorage;
 use log::{debug, error, info};
 use sp_core::H256;
+use sp_trie::TrieLayout;
 use storage_hub_infra::{actor::ActorHandle, event_bus::EventHandler};
 
 use crate::services::{
@@ -9,33 +12,53 @@ use crate::services::{
         commands::BlockchainServiceInterface, events::NewStorageRequest,
         handler::BlockchainService, types::ExtrinsicResult,
     },
-    handler::{StorageHubHandler, StorageHubHandlerConfig},
+    handler::StorageHubHandler,
 };
 
 const LOG_TARGET: &str = "bsp-volunteer-mock-task";
 
-pub struct BspVolunteerMockTask<SHC: StorageHubHandlerConfig> {
-    storage_hub_handler: StorageHubHandler<SHC>,
+pub struct BspVolunteerMockTask<T, FL, FS>
+where
+    T: Send + Sync + TrieLayout + 'static,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T> + 'static,
+{
+    storage_hub_handler: StorageHubHandler<T, FL, FS>,
 }
 
-impl<SHC: StorageHubHandlerConfig> Clone for BspVolunteerMockTask<SHC> {
-    fn clone(&self) -> BspVolunteerMockTask<SHC> {
+impl<T, FL, FS> Clone for BspVolunteerMockTask<T, FL, FS>
+where
+    T: Send + Sync + TrieLayout + 'static,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T> + 'static,
+{
+    fn clone(&self) -> BspVolunteerMockTask<T, FL, FS> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> BspVolunteerMockTask<SHC> {
-    pub fn new(storage_hub_handler: StorageHubHandler<SHC>) -> Self {
+impl<T, FL, FS> BspVolunteerMockTask<T, FL, FS>
+where
+    T: Send + Sync + TrieLayout + 'static,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T> + 'static,
+{
+    pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<SHC: StorageHubHandlerConfig> EventHandler<NewStorageRequest> for BspVolunteerMockTask<SHC> {
-    async fn handle_event(&self, event: NewStorageRequest) -> anyhow::Result<()> {
+impl<T, FL, FS> EventHandler<NewStorageRequest> for BspVolunteerMockTask<T, FL, FS>
+where
+    T: Send + Sync + TrieLayout + 'static,
+    FL: Send + Sync + FileStorage<T>,
+    FS: Send + Sync + ForestStorage<T> + 'static,
+{
+    async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Initiating BSP volunteer mock for location: {:?}, fingerprint: {:?}",

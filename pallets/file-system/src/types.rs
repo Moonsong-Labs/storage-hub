@@ -66,9 +66,17 @@ pub struct StorageRequestBspsMetadata<T: Config> {
 pub type FileKey<T> =
     <<T as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash;
 
-/// Alias for the `Proof` type used in the ProofsDealerInterface.
-pub type Proof<T> =
-    <<T as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::Proof;
+/// Alias for the `ForestProof` type used in the ProofsDealerInterface.
+pub type ForestProof<T> =
+    <<T as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::ForestProof;
+
+/// Alias for the `KeyProof` type used in the ProofsDealerInterface.
+pub type KeyProof<T> =
+    <<T as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::KeyProof;
+
+/// Alias for the `MerkleHashing` type used in the ProofsDealerInterface.
+pub type FileKeyHasher<T> =
+    <<T as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHashing;
 
 /// Alias for the `MaxBsps` type used in the FileSystem pallet.
 pub type MaxBspsPerStorageRequest<T> = <T as crate::Config>::MaxBspsPerStorageRequest;

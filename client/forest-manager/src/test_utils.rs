@@ -1,4 +1,4 @@
-use shc_common::types::{Fingerprint, HashT, HasherOutT, Metadata};
+use shc_common::types::{FileMetadata, Fingerprint, HashT, HasherOutT};
 
 use codec::Encode;
 use sp_trie::MemoryDB;
@@ -26,7 +26,7 @@ pub fn build_merkle_patricia_forest<T: TrieLayout>(
         file_path.append(&mut bucket.to_vec());
         file_path.append(&mut file_name.to_vec());
 
-        let metadata = Metadata {
+        let metadata = FileMetadata {
             owner: String::from("owner"),
             location: file_path,
             size: 0,

@@ -22,7 +22,10 @@
 //! `crate::request_responses::RequestResponsesBehaviour` with
 //! [`LightClientRequestHandler`](handler::LightClientRequestHandler).
 
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use futures::prelude::*;
 use futures::stream::select;
@@ -33,9 +36,8 @@ use sc_network::{
     IfDisconnected, NetworkPeers, NetworkRequest, ProtocolName, ReputationChange,
 };
 use sc_tracing::tracing::{debug, error, info, warn};
-use shc_common::types::Key;
+use shc_common::types::FileKey;
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
-use tokio::sync::Mutex;
 
 use crate::{
     service::ParachainNetworkService, services::file_transfer::events::RemoteUploadRequest,
@@ -50,10 +52,18 @@ use super::{
 const LOG_TARGET: &str = "file-transfer-service";
 
 pub struct FileTransferService {
+    /// Protocol name used by substrate network for the file transfer service.
     protocol_name: ProtocolName,
+    /// Receiver for incoming requests.
     request_receiver: async_channel::Receiver<IncomingRequest>,
+    /// Substrate network service that gives access to p2p operations.
     network: Arc<ParachainNetworkService>,
-    peer_file_registry: HashSet<(PeerId, Key)>,
+    /// Registry of (peer, file key) pairs for which we accept requests.
+    peer_file_allow_list: HashSet<(PeerId, FileKey)>,
+    /// Registry of peers by file key, used for cleanup.
+    peers_by_file: HashMap<FileKey, Vec<PeerId>>,
+    /// The event bus provider for the file transfer service.
+    /// Part of the actor framework, allows for emitting events.
     event_bus_provider: FileTransferServiceEventBusProvider,
 }
 
@@ -161,7 +171,7 @@ impl Actor for FileTransferService {
                     file_key,
                     callback,
                 } => {
-                    let result = match self.peer_file_registry.insert((peer_id, file_key)) {
+                    let result = match self.peer_file_allow_list.insert((peer_id, file_key)) {
                         true => Ok(()),
                         false => Err(RequestError::FileAlreadyRegisteredForPeer),
                     };
@@ -174,14 +184,16 @@ impl Actor for FileTransferService {
                         ),
                     }
                 }
-                FileTransferServiceCommand::UnregisterFile {
-                    peer_id,
-                    file_key,
-                    callback,
-                } => {
-                    let result = match self.peer_file_registry.remove(&(peer_id, file_key)) {
-                        true => Ok(()),
-                        false => Err(RequestError::FileNotRegisteredForPeer),
+                FileTransferServiceCommand::UnregisterFile { file_key, callback } => {
+                    let result = match self.peers_by_file.get(&file_key) {
+                        Some(peers) => {
+                            for peer_id in peers {
+                                self.peer_file_allow_list.remove(&(*peer_id, file_key));
+                            }
+                            self.peers_by_file.remove(&file_key);
+                            Ok(())
+                        }
+                        None => Err(RequestError::FileNotRegistered),
                     };
                     match callback.send(result) {
                         Ok(()) => {}
@@ -266,7 +278,8 @@ impl FileTransferService {
             protocol_name,
             request_receiver,
             network,
-            peer_file_registry: HashSet::new(),
+            peer_file_allow_list: HashSet::new(),
+            peers_by_file: HashMap::new(),
             event_bus_provider: FileTransferServiceEventBusProvider::new(),
         }
     }
@@ -323,13 +336,45 @@ impl FileTransferService {
                         return;
                     }
                 };
-                self.emit(RemoteUploadRequest {
-                    file_key,
-                    chunk_with_proof,
-                    maybe_pending_response: Arc::new(Mutex::new(Some(pending_response))),
-                });
+                if self.peer_file_allow_list.contains(&(peer, file_key)) {
+                    // Emit the event to the event bus, letting the upper layers know about the
+                    // upload request.
+                    self.emit(RemoteUploadRequest {
+                        peer,
+                        file_key,
+                        chunk_with_proof,
+                    });
+
+                    let response =
+                        schema::v1::provider::response::Response::RemoteUploadDataResponse(
+                            schema::v1::provider::RemoteUploadDataResponse { success: true },
+                        );
+
+                    // Serialize the response
+                    let mut response_data = Vec::new();
+                    response.encode(&mut response_data);
+
+                    let response = OutgoingResponse {
+                        result: Ok(response_data),
+                        reputation_changes: Vec::new(),
+                        sent_feedback: None,
+                    };
+
+                    // Send the response back.
+                    pending_response.send(response).unwrap();
+                } else {
+                    error!(
+                        target: LOG_TARGET,
+                        "Received unexpected upload request from {} for file key {:?}",
+                        peer,
+                        file_key
+                    );
+
+                    self.handle_bad_request(pending_response);
+                }
             }
             Some(schema::v1::provider::request::Request::RemoteDownloadDataRequest(r)) => {
+                // TODO: Respond to the pending_response with some criteria of what is a valid download request.
                 let file_key = match bincode::deserialize(&r.file_key) {
                     Ok(file_key) => file_key,
                     Err(e) => {
@@ -346,11 +391,9 @@ impl FileTransferService {
                     }
                 };
                 let chunk_id = r.file_chunk_id;
-                self.emit(RemoteDownloadRequest {
-                    file_key,
-                    chunk_id,
-                    maybe_pending_response: Arc::new(Mutex::new(Some(pending_response))),
-                });
+                // TODO: A request id and mapping to the pending_response is required to respond to
+                // the download request from upper layers.
+                self.emit(RemoteDownloadRequest { file_key, chunk_id });
             }
             None => {
                 error!(

@@ -8,8 +8,8 @@ use frame_support::{
 use frame_system as system;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage, DispatchError, DispatchResult,
+    traits::{BlakeTwo256, Convert, IdentityLookup},
+    BuildStorage, DispatchError, DispatchResult, SaturatedConversion,
 };
 use sp_trie::CompactProof;
 use storage_hub_traits::{CommitmentVerifier, SubscribeProvidersInterface};
@@ -20,6 +20,8 @@ type Balance = u128;
 type AccountId = u64;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
+const UNITS: Balance = 1_000_000_000_000;
+const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumberFor<Test> = 3;
@@ -131,15 +133,21 @@ impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
-    type MerkleHash = H256;
+    type MerkleTrieHash = H256;
+    type MerkleTrieHashing = BlakeTwo256;
+    type ForestVerifier = MockVerifier;
     type KeyVerifier = MockVerifier;
-    type MaxChallengesPerBlock = ConstU32<10>;
+    type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
+    type RandomChallengesPerBlock = ConstU32<10>;
+    type MaxCustomChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
-    type ChallengeHistoryLength = ConstU32<10>;
+    type ChallengeHistoryLength = ConstU64<10>;
     type ChallengesQueueLength = ConstU32<10>;
     type CheckpointChallengePeriod = ConstU32<2>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = ConstU64<181222>;
+    type RandomnessProvider = MockRandomness;
+    type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
 }
 
 pub struct MockedProvidersSubscriber;
@@ -182,4 +190,14 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         .build_storage()
         .unwrap()
         .into()
+}
+
+// Converter from the Balance type to the BlockNumber type for math.
+// It performs a saturated conversion, so that the result is always a valid BlockNumber.
+pub struct SaturatingBalanceToBlockNumber;
+
+impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
+    fn convert(block_number: Balance) -> BlockNumberFor<Test> {
+        block_number.saturated_into()
+    }
 }

@@ -17,8 +17,8 @@ use storage_hub_traits::{MutateProvidersInterface, ReadProvidersInterface};
 use crate::{
     pallet,
     types::{
-        FileLocation, Fingerprint, MaxBspsPerStorageRequest, MultiAddresses, PeerIds, Proof,
-        StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest,
+        MultiAddresses, PeerIds, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
     },
     Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
     StorageRequestExpirations, StorageRequests,
@@ -297,7 +297,8 @@ where
         who: T::AccountId,
         location: FileLocation<T>,
         root: FileKey<T>,
-        proof: Proof<T>,
+        forest_proof: ForestProof<T>,
+        key_proof: KeyProof<T>,
     ) -> DispatchResult {
         let bsp =
             <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(who.clone())
@@ -356,10 +357,29 @@ where
             }
         }
 
-        // Check that the proof is valid.
-        <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::verify_proof(
-            &bsp, &root, &proof,
+        // TODO: Initialise challenges properly constructing the key for this particular file.
+        let file_key = FileKeyHasher::<T>::hash(&location.encode());
+        let challenges = vec![file_key];
+
+        // Check that the forest proof is valid.
+        <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::verify_forest_proof(
+            &bsp,
+            challenges.as_slice(),
+            &forest_proof,
         )?;
+
+        // TODO: Generate challenges for the key proof properly.
+        let challenges = vec![];
+
+        // Check that the key proof is valid.
+        <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::verify_key_proof(
+            &file_key,
+            &challenges,
+            &key_proof,
+        )?;
+
+        // TODO: Check if this is the first file added to the BSP's Forest. If so, initialise
+        // TODO: last block proven by this BSP accordingly.
 
         // Remove storage request if we reached the required number of bsps.
         if file_metadata.bsps_confirmed == file_metadata.bsps_required {

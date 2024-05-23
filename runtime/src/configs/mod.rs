@@ -28,6 +28,7 @@ mod xcm_config;
 // Substrate and Polkadot dependencies
 use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
 use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
+use currency::UNITS;
 use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
@@ -41,23 +42,26 @@ use frame_support::{
 };
 use frame_system::{
     limits::{BlockLength, BlockWeights},
+    pallet_prelude::BlockNumberFor,
     EnsureRoot, EnsureSigned,
 };
 use pallet_nfts::PalletFeatures;
-use pallet_proofs_dealer::CompactProof;
 use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{ConstU128, Get, H256};
+use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, Verify},
-    AccountId32, DispatchError, FixedU128, Perbill,
+    traits::{BlakeTwo256, Convert, Verify},
+    AccountId32, DispatchError, FixedU128, Perbill, SaturatedConversion,
 };
 use sp_std::vec::Vec;
+use sp_trie::CompactProof;
+use sp_trie::LayoutV1;
 use sp_version::RuntimeVersion;
+use storage_hub_primitives::TrieVerifier;
 use storage_hub_traits::CommitmentVerifier;
 use xcm::latest::prelude::BodyId;
 
@@ -75,6 +79,12 @@ use super::{
     UNINCLUDED_SEGMENT_CAPACITY, VERSION,
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
+
+pub mod currency {
+    use crate::Balance;
+
+    pub const UNITS: Balance = 1_000_000_000_000;
+}
 
 parameter_types! {
     pub const Version: RuntimeVersion = VERSION;
@@ -265,8 +275,8 @@ impl cumulus_pallet_xcmp_queue::Config for Runtime {
 }
 
 parameter_types! {
-    pub const Period: u32 = 6 * HOURS;
-    pub const Offset: u32 = 0;
+    pub const Period: BlockNumber = 6 * HOURS;
+    pub const Offset: BlockNumber = 0;
 }
 
 impl pallet_session::Config for Runtime {
@@ -469,20 +479,36 @@ impl Get<AccountId32> for TreasuryAccount {
     }
 }
 
+parameter_types! {
+    pub const RandomChallengesPerBlock: u32 = 10;
+    pub const MaxCustomChallengesPerBlock: u32 = 10;
+    pub const MaxProvidersChallengedPerBlock: u32 = 100;
+    pub const ChallengeHistoryLength: BlockNumber = 100;
+    pub const ChallengesQueueLength: u32 = 100;
+    pub const CheckpointChallengePeriod: u32 = 10;
+    pub const ChallengesFee: Balance = 1 * UNITS;
+    pub const StakeToChallengePeriod: Balance = 10 * UNITS;
+}
+
 impl pallet_proofs_dealer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
-    type MerkleHash = Hash;
+    type MerkleTrieHash = Hash;
+    type MerkleTrieHashing = BlakeTwo256;
+    type ForestVerifier = TrieVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type KeyVerifier = ProofTrieVerifier;
-    // type KeyVerifier = TrieVerifier<LayoutV1<RefHasher>>;
-    type MaxChallengesPerBlock = ConstU32<10>;
-    type MaxProvidersChallengedPerBlock = ConstU32<10>;
-    type ChallengeHistoryLength = ConstU32<10>;
-    type ChallengesQueueLength = ConstU32<10>;
-    type CheckpointChallengePeriod = ConstU32<10>;
-    type ChallengesFee = ConstU128<1_000_000>;
+    type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
+    type RandomChallengesPerBlock = RandomChallengesPerBlock;
+    type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
+    type MaxProvidersChallengedPerBlock = MaxProvidersChallengedPerBlock;
+    type ChallengeHistoryLength = ChallengeHistoryLength;
+    type ChallengesQueueLength = ChallengesQueueLength;
+    type CheckpointChallengePeriod = CheckpointChallengePeriod;
+    type ChallengesFee = ChallengesFee;
     type Treasury = TreasuryAccount;
+    type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
+    type StakeToChallengePeriod = StakeToChallengePeriod;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
@@ -539,4 +565,14 @@ impl pallet_file_system::Config for Runtime {
     type MaxDataServerMultiAddresses = ConstU32<10>;
     type StorageRequestTtl = ConstU32<40>;
     type MaxExpiredStorageRequests = ConstU32<100>;
+}
+
+// Converter from the Balance type to the BlockNumber type for math.
+// It performs a saturated conversion, so that the result is always a valid BlockNumber.
+pub struct SaturatingBalanceToBlockNumber;
+
+impl Convert<Balance, BlockNumberFor<Runtime>> for SaturatingBalanceToBlockNumber {
+    fn convert(block_number: Balance) -> BlockNumberFor<Runtime> {
+        block_number.saturated_into()
+    }
 }
