@@ -98,7 +98,7 @@ impl SubmittedTransaction {
                     }
                 }
             };
-            // Parse the JSONRPC string, now that we know it is not an error.
+            // Parse the JSONRPC string. The strings sent by the RPC wacher should be valid JSONRPC strings.
             let json: serde_json::Value = serde_json::from_str(&result).map_err(|_| {
                 anyhow!("The result, if not an error, can only be a JSONRPC string; qed")
             })?;
