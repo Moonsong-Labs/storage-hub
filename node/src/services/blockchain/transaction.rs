@@ -27,6 +27,7 @@ pub struct SubmittedTransaction {
     watcher: Receiver<String>,
     /// The hash of the transaction.
     hash: ExtrinsicHash,
+    /// The maximum amount of time to wait for the transaction to either be successful or fail.
     timeout: Option<Duration>,
 }
 
