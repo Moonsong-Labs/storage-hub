@@ -57,7 +57,6 @@ use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::traits::Block as BlockT;
 use substrate_prometheus_endpoint::Registry;
 
-
 use crate::{
     cli::StorageLayer,
     services::{
@@ -458,7 +457,6 @@ where
                 maybe_file_storage: maybe_file_storage.clone(),
                 command_sink: command_sink.clone(),
                 deny_unsafe,
-                _marker: Default::default(),
             };
 
             crate::rpc::create_full(deps).map_err(Into::into)
@@ -728,7 +726,6 @@ where
                 maybe_file_storage: maybe_file_storage.clone(),
                 command_sink: None,
                 deny_unsafe,
-                _marker: Default::default(),
             };
 
             crate::rpc::create_full(deps).map_err(Into::into)

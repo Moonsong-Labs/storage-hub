@@ -5,7 +5,7 @@
 
 #![warn(missing_docs)]
 
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 
 use file_manager::traits::FileStorage;
 use sc_consensus_manual_seal::{
@@ -29,7 +29,7 @@ use tokio::sync::RwLock;
 pub type RpcExtension = jsonrpsee::RpcModule<()>;
 
 /// Full client dependencies
-pub struct FullDeps<C, P, T, FL> {
+pub struct FullDeps<C, P, FL> {
     /// The client instance to use.
     pub client: Arc<C>,
     /// Transaction pool instance.
@@ -40,12 +40,11 @@ pub struct FullDeps<C, P, T, FL> {
     pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<H256>>>,
     /// Whether to deny unsafe calls
     pub deny_unsafe: DenyUnsafe,
-    pub _marker: PhantomData<T>,
 }
 
 /// Instantiate all RPC extensions.
 pub fn create_full<C, P, T, FL>(
-    deps: FullDeps<C, P, T, FL>,
+    deps: FullDeps<C, P, FL>,
 ) -> Result<RpcExtension, Box<dyn std::error::Error + Send + Sync>>
 where
     C: ProvideRuntimeApi<Block>
@@ -71,7 +70,6 @@ where
         maybe_file_storage,
         command_sink,
         deny_unsafe,
-        _marker,
     } = deps;
 
     io.merge(System::new(client.clone(), pool, deny_unsafe).into_rpc())?;
