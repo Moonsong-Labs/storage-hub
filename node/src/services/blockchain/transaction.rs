@@ -135,8 +135,7 @@ impl SubmittedTransaction {
             .get_extrinsic_from_block(block_hash, self.hash)
             .await?;
 
-        // Check if the extrinsic was successful. In this mocked task we know this should fail if Alice is
-        // not a registered BSP.
+        // Check if the extrinsic was successful.
         let extrinsic_successful = ActorHandle::<BlockchainService>::extrinsic_result(extrinsic_in_block.clone())
             .map_err(|_| anyhow!("Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed"))?;
         match extrinsic_successful {
