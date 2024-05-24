@@ -7,7 +7,7 @@ use codec::Encode;
 use num_bigint::BigUint;
 use rand::Rng;
 use shp_traits::AsCompact;
-use sp_runtime::traits::BlakeTwo256;
+use sp_runtime::traits::{BlakeTwo256, Keccak256};
 use sp_trie::{
     recorder::Recorder, LayoutV1, MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut,
 };
@@ -41,7 +41,11 @@ where
 {
     let user_id = b"user_id";
     let bucket = b"bucket";
-    let file_name = b"sample64b";
+    let file_name = if random {
+        b"random_file".as_slice()
+    } else {
+        b"large_file".as_slice()
+    };
     let file_size = FILE_SIZE;
 
     println!("Chunking file into 32 byte chunks and building Merkle Patricia Trie...");
@@ -54,9 +58,9 @@ where
     );
 
     if random {
-        create_random_test_file(&file_path, file_size as u64)
+        create_random_test_file(&file_path, file_size)
     } else {
-        create_test_file(&file_path, file_size as u64)
+        create_test_file(&file_path, file_size)
     };
     let (memdb, fingerprint) = merklise_file::<T>(&file_path);
 
@@ -91,8 +95,8 @@ fn build_merkle_patricia_trie_one_key<T: TrieLayout>() -> (MemoryDB<T::Hash>, Ha
 {
     let user_id = b"user_id";
     let bucket = b"bucket";
-    let file_name = b"sample64b";
-    let file_size = 2u64.pow(100);
+    let file_name = b"tiny_file";
+    let file_size = CHUNK_SIZE;
 
     println!("Chunking file into 32 byte chunks and building Merkle Patricia Trie...");
 
@@ -103,7 +107,7 @@ fn build_merkle_patricia_trie_one_key<T: TrieLayout>() -> (MemoryDB<T::Hash>, Ha
         String::from_utf8(file_name.to_vec()).unwrap()
     );
 
-    create_test_file(&file_path, CHUNK_SIZE);
+    create_test_file(&file_path, file_size);
     let (memdb, fingerprint) = merklise_file::<T>(&file_path);
 
     let metadata = FileMetadata {
@@ -264,8 +268,12 @@ fn commitment_verifier_many_challenges_success() {
     if FILE_SIZE % CHUNK_SIZE != 0 {
         chunks_count += 1;
     }
+    let mut challenges_count = FILE_SIZE / SIZE_TO_CHALLENGES;
+    if FILE_SIZE % SIZE_TO_CHALLENGES != 0 {
+        challenges_count += 1;
+    }
     let (mut challenges, chunks_challenged) =
-        generate_challenges::<LayoutV1<BlakeTwo256>>(FILE_SIZE / SIZE_TO_CHALLENGES, chunks_count);
+        generate_challenges::<LayoutV1<Keccak256>>(challenges_count, chunks_count);
 
     {
         // Creating trie inside of closure to drop it before generating proof.
@@ -310,3 +318,197 @@ fn commitment_verifier_many_challenges_success() {
 
     assert_eq!(proven_challenges.sort(), challenges.sort());
 }
+
+#[test]
+fn commitment_verifier_many_challenges_random_file_success() {
+    let (memdb, file_key, metadata) = build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(true);
+    let root = metadata.fingerprint.try_into().unwrap();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+    let mut chunks_count = FILE_SIZE / CHUNK_SIZE;
+    if FILE_SIZE % CHUNK_SIZE != 0 {
+        chunks_count += 1;
+    }
+    let mut challenges_count = FILE_SIZE / SIZE_TO_CHALLENGES;
+    if FILE_SIZE % SIZE_TO_CHALLENGES != 0 {
+        challenges_count += 1;
+    }
+    let (mut challenges, chunks_challenged) =
+        generate_challenges::<LayoutV1<Keccak256>>(challenges_count, chunks_count);
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        for challenged_chunk in chunks_challenged {
+            // Seek to the challenge key.
+            iter.seek(&challenged_chunk).unwrap();
+
+            // Read the leaf node.
+            iter.next();
+        }
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<BlakeTwo256>(root)
+        .expect("Failed to create compact proof from recorder");
+    let file_key_proof = FileKeyProof {
+        owner: metadata.owner.clone(),
+        location: metadata.location.clone(),
+        size: metadata.size,
+        fingerprint: metadata.fingerprint.clone(),
+        proof,
+    };
+
+    // Verify proof
+    let mut proven_challenges = FileKeyVerifier::<
+        LayoutV1<BlakeTwo256>,
+        { BlakeTwo256::LENGTH },
+        { CHUNK_SIZE },
+        { SIZE_TO_CHALLENGES },
+    >::verify_proof(&file_key, &challenges, &file_key_proof)
+    .expect("Failed to verify proof");
+
+    assert_eq!(proven_challenges.sort(), challenges.sort());
+}
+
+#[test]
+fn commitment_verifier_many_challenges_keccak_success() {
+    let (memdb, file_key, metadata) = build_merkle_patricia_trie::<LayoutV1<Keccak256>>(false);
+    let root = metadata.fingerprint.try_into().unwrap();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<Keccak256> = Recorder::default();
+
+    let mut chunks_count = FILE_SIZE / CHUNK_SIZE;
+    if FILE_SIZE % CHUNK_SIZE != 0 {
+        chunks_count += 1;
+    }
+    let mut challenges_count = FILE_SIZE / SIZE_TO_CHALLENGES;
+    if FILE_SIZE % SIZE_TO_CHALLENGES != 0 {
+        challenges_count += 1;
+    }
+    let (mut challenges, chunks_challenged) =
+        generate_challenges::<LayoutV1<Keccak256>>(challenges_count, chunks_count);
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<Keccak256>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        for challenged_chunk in chunks_challenged {
+            // Seek to the challenge key.
+            iter.seek(&challenged_chunk).unwrap();
+
+            // Read the leaf node.
+            iter.next();
+        }
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<Keccak256>(root)
+        .expect("Failed to create compact proof from recorder");
+    let file_key_proof = FileKeyProof {
+        owner: metadata.owner.clone(),
+        location: metadata.location.clone(),
+        size: metadata.size,
+        fingerprint: metadata.fingerprint.clone(),
+        proof,
+    };
+
+    // Verify proof
+    let mut proven_challenges = FileKeyVerifier::<
+        LayoutV1<Keccak256>,
+        { Keccak256::LENGTH },
+        { CHUNK_SIZE },
+        { SIZE_TO_CHALLENGES },
+    >::verify_proof(&file_key, &challenges, &file_key_proof)
+    .expect("Failed to verify proof");
+
+    assert_eq!(proven_challenges.sort(), challenges.sort());
+}
+
+#[test]
+fn commitment_verifier_many_challenges_one_chunk_success() {
+    let (memdb, file_key, metadata) = build_merkle_patricia_trie_one_key::<LayoutV1<BlakeTwo256>>();
+    let root = metadata.fingerprint.try_into().unwrap();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+    let file_size = metadata.size;
+    let mut chunks_count = file_size / CHUNK_SIZE;
+    if file_size % CHUNK_SIZE != 0 {
+        chunks_count += 1;
+    }
+    let mut challenges_count = file_size / SIZE_TO_CHALLENGES;
+    if file_size % SIZE_TO_CHALLENGES != 0 {
+        challenges_count += 1;
+    }
+    let (mut challenges, chunks_challenged) =
+        generate_challenges::<LayoutV1<BlakeTwo256>>(challenges_count, chunks_count);
+
+    println!("Challenges: {:?}", challenges);
+    println!("Chunks challenged: {:?}", chunks_challenged);
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        for challenged_chunk in chunks_challenged {
+            // Seek to the challenge key.
+            iter.seek(&challenged_chunk).unwrap();
+
+            // Read the leaf node.
+            iter.next();
+        }
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<BlakeTwo256>(root)
+        .expect("Failed to create compact proof from recorder");
+    let file_key_proof = FileKeyProof {
+        owner: metadata.owner.clone(),
+        location: metadata.location.clone(),
+        size: metadata.size,
+        fingerprint: metadata.fingerprint.clone(),
+        proof,
+    };
+
+    // Verify proof
+    let mut proven_challenges = FileKeyVerifier::<
+        LayoutV1<BlakeTwo256>,
+        { BlakeTwo256::LENGTH },
+        { CHUNK_SIZE },
+        { SIZE_TO_CHALLENGES },
+    >::verify_proof(&file_key, &challenges, &file_key_proof)
+    .expect("Failed to verify proof");
+
+    assert_eq!(proven_challenges.sort(), challenges.sort());
+}
+
+// TODO: Test file with two chunks
