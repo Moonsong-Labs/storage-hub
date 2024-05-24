@@ -99,15 +99,6 @@ where
             Error::<T>::CannotHoldDeposit
         );
 
-        // Check if adding one to the user's payment streams count would overflow
-        // NOTE: We check this BEFORE holding the deposit, as for some weird reason the `hold` function does NOT revert when the extrinsic fails !?!?
-        ensure!(
-            RegisteredUsers::<T>::get(user_account)
-                .checked_add(1)
-                .is_some(),
-            ArithmeticError::Overflow
-        );
-
         // Hold the deposit from the user
         T::NativeBalance::hold(
             &HoldReason::PaymentStreamDeposit.into(),
@@ -367,15 +358,6 @@ where
                 deposit
             ),
             Error::<T>::CannotHoldDeposit
-        );
-
-        // Check if adding one to the user's payment streams count would overflow
-        // NOTE: We check this BEFORE holding the deposit, as for some weird reason the `hold` function does NOT revert when the extrinsic fails !?!?
-        ensure!(
-            RegisteredUsers::<T>::get(user_account)
-                .checked_add(1)
-                .is_some(),
-            ArithmeticError::Overflow
         );
 
         // Hold the deposit from the User
@@ -681,15 +663,6 @@ where
                     ),
                     "Provider should exist and have a payment account if its ID exists.",
                     Error::<T>::ProviderInconsistencyError
-                );
-
-                // Check if the total amount charged would overflow
-                // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
-                ensure!(
-                    total_amount_charged
-                        .checked_add(&amount_to_charge)
-                        .is_some(),
-                    ArithmeticError::Overflow
                 );
 
                 // Charge the payment stream from the user's balance

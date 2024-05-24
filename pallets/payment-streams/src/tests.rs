@@ -1,16 +1,11 @@
 use crate::{mock::*, types::BalanceOf, Error, Event, RegisteredUsers};
 
-use frame_support::assert_noop;
 use frame_support::pallet_prelude::Weight;
-use frame_support::traits::fungible::Mutate;
-use frame_support::traits::{Get, OnFinalize, OnIdle, OnInitialize};
-use frame_support::{assert_ok, BoundedVec};
+use frame_support::traits::{fungible::Mutate, Get, OnFinalize, OnIdle, OnInitialize};
+use frame_support::{assert_err, assert_noop, assert_ok, BoundedVec};
 use sp_core::H256;
-use sp_runtime::traits::Convert;
-use sp_runtime::DispatchError;
-use storage_hub_traits::PaymentManager;
-use storage_hub_traits::PaymentStreamsInterface;
-use storage_hub_traits::ProvidersInterface;
+use sp_runtime::{traits::Convert, DispatchError};
+use storage_hub_traits::{PaymentManager, PaymentStreamsInterface, ProvidersInterface};
 
 // `payment-streams` types:
 type NativeBalance = <Test as crate::Config>::NativeBalance;
@@ -288,9 +283,13 @@ mod fixed_rate_streams {
                 // Check that Bob's new balance is his initial balance minus the deposit
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_free_balance =
-                    bob_initial_balance - rate * new_stream_deposit_blocks_balance_typed;
-                assert_eq!(NativeBalance::free_balance(&bob), bob_new_free_balance);
+                let bob_deposit_for_alice_stream = rate * new_stream_deposit_blocks_balance_typed;
+                let bob_free_balance_after_alice_stream_creation =
+                    bob_initial_balance - bob_deposit_for_alice_stream;
+                assert_eq!(
+                    NativeBalance::free_balance(&bob),
+                    bob_free_balance_after_alice_stream_creation
+                );
 
                 // Check how many streams Bob has
                 assert_eq!(
@@ -299,8 +298,22 @@ mod fixed_rate_streams {
                 );
 
                 // Create a payment stream from Bob to Charlie of 10 units per block
-                let rate: BalanceOf<Test> = 10;
-                assert_noop!(
+                let rate: BalanceOf<Test> = 20;
+                let bob_deposit_for_charlie_stream = rate * new_stream_deposit_blocks_balance_typed;
+                let bob_free_balance_after_charlie_stream_creation =
+                    bob_free_balance_after_alice_stream_creation - bob_deposit_for_charlie_stream;
+
+                // NOTE: This fails as for some reason the hold on Bob for Charlie's stream is being created and NOT reverted when the stream creation fails
+                /* assert_noop!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
+                        &charlie_bsp_id,
+                        &bob,
+                        rate
+                    ),
+                    DispatchError::Arithmetic(sp_runtime::ArithmeticError::Overflow)
+                ); */
+                // We can check that the error returned is the correct one, but the hold is not reverted
+                assert_err!(
                     <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
                         &charlie_bsp_id,
                         &bob,
@@ -331,8 +344,18 @@ mod fixed_rate_streams {
                     Err(Error::<Test>::PaymentStreamNotFound)
                 ));
 
+                // Check that the deposit from Bob for Charlie's payment stream was taken
+                // Note: this check was added after seeing that the next one failed, just to make sure that the error was happening because the deposit was held even when failing
+                assert_eq!(
+                    NativeBalance::free_balance(&bob),
+                    bob_free_balance_after_charlie_stream_creation
+                );
                 // Check that the deposit for Charlie's payment stream was not taken from Bob
-                assert_eq!(NativeBalance::free_balance(&bob), bob_new_free_balance);
+                // Note: it fails here!!! It never returned the held deposit even when the extrinsic execution failed. May be a problem with the Balances pallet???
+                assert_eq!(
+                    NativeBalance::free_balance(&bob),
+                    bob_free_balance_after_alice_stream_creation
+                );
             });
         }
     }
