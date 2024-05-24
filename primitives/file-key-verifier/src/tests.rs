@@ -471,4 +471,69 @@ fn commitment_verifier_many_challenges_one_chunk_success() {
     assert_eq!(proven_challenges.sort(), challenges.sort());
 }
 
-// TODO: Test file with two chunks
+#[test]
+fn commitment_verifier_many_challenges_two_chunks_success() {
+    let (memdb, file_key, metadata) =
+        build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, CHUNK_SIZE + 1);
+    let root = metadata.fingerprint.try_into().unwrap();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+    let file_size = metadata.size;
+    let mut chunks_count = file_size / CHUNK_SIZE;
+    if file_size % CHUNK_SIZE != 0 {
+        chunks_count += 1;
+    }
+    let mut challenges_count = file_size / SIZE_TO_CHALLENGES;
+    if file_size % SIZE_TO_CHALLENGES != 0 {
+        challenges_count += 1;
+    }
+    let (mut challenges, chunks_challenged) =
+        generate_challenges::<LayoutV1<BlakeTwo256>>(challenges_count, chunks_count);
+
+    println!("Challenges: {:?}", challenges);
+    println!("Chunks challenged: {:?}", chunks_challenged);
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        for challenged_chunk in chunks_challenged {
+            // Seek to the challenge key.
+            iter.seek(&challenged_chunk).unwrap();
+
+            // Read the leaf node.
+            iter.next();
+        }
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<BlakeTwo256>(root)
+        .expect("Failed to create compact proof from recorder");
+    let file_key_proof = FileKeyProof {
+        owner: metadata.owner.clone(),
+        location: metadata.location.clone(),
+        size: metadata.size,
+        fingerprint: metadata.fingerprint.clone(),
+        proof,
+    };
+
+    // Verify proof
+    let mut proven_challenges = FileKeyVerifier::<
+        LayoutV1<BlakeTwo256>,
+        { BlakeTwo256::LENGTH },
+        { CHUNK_SIZE },
+        { SIZE_TO_CHALLENGES },
+    >::verify_proof(&file_key, &challenges, &file_key_proof)
+    .expect("Failed to verify proof");
+
+    assert_eq!(proven_challenges.sort(), challenges.sort());
+}
