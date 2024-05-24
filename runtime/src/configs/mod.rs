@@ -399,7 +399,7 @@ impl pallet_storage_providers::Config for Runtime {
 }
 
 parameter_types! {
-    pub const PaymentStreamHoldReason: RuntimeHoldReason = RuntimeHoldReason::PaymentStreams(pallet_payment_streams::HoldReason::PaymentStreamStorageDeposit);
+    pub const PaymentStreamHoldReason: RuntimeHoldReason = RuntimeHoldReason::PaymentStreams(pallet_payment_streams::HoldReason::PaymentStreamDeposit);
 }
 
 // Converter from the BlockNumber type to the Balance type for math
@@ -416,7 +416,8 @@ impl pallet_payment_streams::Config for Runtime {
     type NativeBalance = Balances;
     type ProvidersPallet = Providers;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type NewUserDeposit = ConstU128<10>;
+    type NewStreamDeposit = ConstU32<10>; // Amount of blocks that the deposit of a new stream should be able to pay for
+    type Units = u32; // Storage unit
     type BlockNumberToBalance = BlockNumberToBalance;
 }
 
