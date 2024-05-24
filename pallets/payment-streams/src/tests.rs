@@ -25,9 +25,9 @@ pub type DepositPerData = <Test as pallet_storage_providers::Config>::DepositPer
 pub type SpMinCapacity = <Test as pallet_storage_providers::Config>::SpMinCapacity;
 pub type MaxMultiAddressAmount<Test> =
     <Test as pallet_storage_providers::Config>::MaxMultiAddressAmount;
-pub type MaxMultiAddressSize<Test> =
-    <Test as pallet_storage_providers::Config>::MaxMultiAddressSize;
-pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
+use pallet_storage_providers::types::MultiAddress;
+pub type ValuePropId = <Test as pallet_storage_providers::Config>::ValuePropId;
+use pallet_storage_providers::types::ValueProposition;
 
 /// This module holds all tests for fixed-rate payment streams
 mod fixed_rate_streams {
@@ -1669,9 +1669,7 @@ mod fixed_rate_streams {
     }
 }
 
-/// Helper function that registers an account as a Backup Storage Provider, with storage_amount StorageData units
-///
-/// Returns the deposit amount that was utilized from the account's balance and the BSP information
+/// Helper function that registers an account as a Backup Storage Provider, with storage_amount StorageData unit
 fn register_account_as_bsp(account: AccountId, storage_amount: StorageData<Test>) {
     // Initialize variables:
     let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
@@ -1707,6 +1705,54 @@ fn register_account_as_bsp(account: AccountId, storage_amount: StorageData<Test>
     run_to_block(frame_system::Pallet::<Test>::block_number() + 4);
 
     // Confirm the sign up of the account as a Backup Storage Provider
+    assert_ok!(StorageProviders::confirm_sign_up(
+        RuntimeOrigin::signed(account),
+        Some(account)
+    ));
+}
+
+/// Helper function that registers an account as a Main Storage Provider, with storage_amount StorageData units
+fn register_account_as_msp(account: AccountId, storage_amount: StorageData<Test>) {
+    // Initialize variables:
+    let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
+        BoundedVec::new();
+    multiaddresses.force_push(
+        "/ip4/127.0.0.1/udp/1234"
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .unwrap(),
+    );
+    let value_prop: ValueProposition<Test> = ValueProposition {
+        identifier: ValuePropId::default(),
+        data_limit: 10,
+        protocols: BoundedVec::new(),
+    };
+
+    // Get the deposit amount for the storage amount
+    // The deposit for any amount of storage is be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
+    let deposit_for_storage_amount: BalanceOf<Test> = <SpMinDeposit as Get<u128>>::get()
+        .saturating_add(
+            <DepositPerData as Get<u128>>::get()
+                .saturating_mul((storage_amount - <SpMinCapacity as Get<u32>>::get()).into()),
+        );
+
+    // Check the balance of the account to make sure it has more than the deposit amount needed
+    assert!(NativeBalance::free_balance(&account) >= deposit_for_storage_amount);
+
+    // Request to sign up the account as a Main Storage Provider
+    assert_ok!(StorageProviders::request_msp_sign_up(
+        RuntimeOrigin::signed(account),
+        storage_amount,
+        multiaddresses.clone(),
+        value_prop,
+        account
+    ));
+
+    // Advance enough blocks for randomness to be valid
+    run_to_block(frame_system::Pallet::<Test>::block_number() + 4);
+
+    // Confirm the sign up of the account as a Main Storage Provider
     assert_ok!(StorageProviders::confirm_sign_up(
         RuntimeOrigin::signed(account),
         Some(account)
