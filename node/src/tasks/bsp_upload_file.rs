@@ -1,23 +1,18 @@
-use std::{path::Path, str::FromStr};
+use std::{path::Path, time::Duration};
 
 use anyhow::anyhow;
 use forest_manager::traits::ForestStorage;
-use log::debug;
 use sc_network::PeerId;
-use sc_tracing::tracing::{error, info, warn};
+use sc_tracing::tracing::*;
 use shc_common::types::{FileKey, FileMetadata, HasherOutT};
 
 use file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
-use sp_core::H256;
 use sp_trie::TrieLayout;
-use storage_hub_infra::{actor::ActorHandle, event_bus::EventHandler};
+use storage_hub_infra::event_bus::EventHandler;
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use crate::services::{
-    blockchain::{
-        commands::BlockchainServiceInterface, events::NewStorageRequest,
-        handler::BlockchainService, types::ExtrinsicResult,
-    },
+    blockchain::{commands::BlockchainServiceInterface, events::NewStorageRequest},
     file_transfer::{commands::FileTransferServiceInterface, events::RemoteUploadRequest},
     handler::StorageHubHandler,
 };
@@ -218,19 +213,6 @@ where
             .try_into()
             .expect("Fingerprint should be 32 bytes; qed");
 
-        // Build extrinsic.
-        let call =
-            storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
-                location: event.location.clone(),
-                fingerprint: fingerprint.into(),
-            });
-
-        let (mut tx_watcher, tx_hash) = self
-            .storage_hub_handler
-            .blockchain
-            .send_extrinsic(call)
-            .await?;
-
         // Construct file metadata.
         let metadata = FileMetadata {
             owner: event.who.to_string(),
@@ -263,68 +245,20 @@ where
                 .map_err(|_| anyhow!("Failed to register peer file."))?;
         }
 
-        // Wait for the transaction to be included in a block.
-        let mut block_hash = None;
-        // TODO: Consider adding a timeout.
-        while let Some(tx_result) = tx_watcher.recv().await {
-            // Parse the JSONRPC string, now that we know it is not an error.
-            let json: serde_json::Value = serde_json::from_str(&tx_result).map_err(|_| {
-                anyhow!("The result, if not an error, can only be a JSONRPC string; qed")
-            })?;
+        // Build extrinsic.
+        let call =
+            storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
+                location: event.location.clone(),
+                fingerprint: fingerprint.into(),
+            });
 
-            debug!(target: LOG_TARGET, "Transaction information: {:?}", json);
-
-            // Checking if the transaction is included in a block.
-            // TODO: Consider if we might want to wait for "finalized".
-            // TODO: Handle other lifetime extrinsic edge cases. See https://github.com/paritytech/polkadot-sdk/blob/master/substrate/client/transaction-pool/api/src/lib.rs#L131
-            if let Some(in_block) = json["params"]["result"]["inBlock"].as_str() {
-                block_hash = Some(H256::from_str(in_block)?);
-                let subscription_id = json["params"]["subscription"]
-                    .as_number()
-                    .ok_or_else(|| anyhow!("Subscription should exist and be a number; qed"))?;
-
-                // Unwatch extrinsic to release tx_watcher.
-                self.storage_hub_handler
-                    .blockchain
-                    .unwatch_extrinsic(subscription_id.to_owned())
-                    .await?;
-
-                // Breaking while loop.
-                // Even though we unwatch the transaction, and the loop should break, we still break manually
-                // in case we continue to receive updates. This should not happen, but it is a safety measure,
-                // and we already have what we need.
-                break;
-            }
-        }
-
-        // Get the extrinsic from the block, with its events.
-        let block_hash = block_hash.ok_or_else(
-            || anyhow!("Block hash should exist after waiting for extrinsic to be included in a block; qed")
-        )?;
-        let extrinsic_in_block = self
-            .storage_hub_handler
+        self.storage_hub_handler
             .blockchain
-            .get_extrinsic_from_block(block_hash, tx_hash)
+            .send_extrinsic(call)
+            .await?
+            .with_timeout(Duration::from_secs(60))
+            .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
-
-        // Check if the extrinsic was successful. In this mocked task we know this should fail if Alice is
-        // not a registered BSP.
-        let extrinsic_successful = ActorHandle::<BlockchainService>::extrinsic_result(extrinsic_in_block.clone())
-            .map_err(|_| anyhow!("Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed"))?;
-        match extrinsic_successful {
-            ExtrinsicResult::Success { dispatch_info } => {
-                info!(target: LOG_TARGET, "Extrinsic successful with dispatch info: {:?}", dispatch_info);
-            }
-            ExtrinsicResult::Failure {
-                dispatch_error,
-                dispatch_info,
-            } => {
-                error!(target: LOG_TARGET, "Extrinsic failed with dispatch error: {:?}, dispatch info: {:?}", dispatch_error, dispatch_info);
-                return Err(anyhow::anyhow!("Extrinsic failed"));
-            }
-        }
-
-        info!(target: LOG_TARGET, "Events in extrinsic: {:?}", &extrinsic_in_block.events);
 
         Ok(())
     }
