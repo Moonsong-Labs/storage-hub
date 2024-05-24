@@ -71,19 +71,23 @@ where
         location: String,
         owner: AccountId32,
     ) -> RpcResult<FileMetadata> {
+        // Open file in the local file system.
         let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
-        let mut file_chunks = Vec::new();
+
+        // Build the [`FileDataTrie`] so we can write the file chunks into it.
+        let mut file_data_trie = <FL as FileStorage<T>>::FileDataTrie::default();
+        let mut chunk_id: u64 = 0;
 
         // Read file in chunks of [`FILE_CHUNK_SIZE`] into buffer then push buffer into a vector.
         // Loops until EOF or until some error that is NOT `ErrorKind::Interrupted` is found.
         // If `ErrorKind::Interrupted` is found, the operation is simply retried, as per
         // https://doc.rust-lang.org/std/io/trait.Read.html#errors-1
         loop {
-            let mut buffer = Vec::with_capacity(FILE_CHUNK_SIZE);
+            let mut chunk = Vec::with_capacity(FILE_CHUNK_SIZE);
             let read_result = file
                 .by_ref()
                 .take(FILE_CHUNK_SIZE as u64)
-                .read_to_end(&mut buffer);
+                .read_to_end(&mut chunk);
             match read_result {
                 // Reached EOF, break loop.
                 Ok(0) => {
@@ -93,7 +97,11 @@ where
                 // Haven't reached EOF yet, continue loop.
                 Ok(bytes_read) => {
                     debug!(target: LOG_TARGET, "Read {} bytes from file", bytes_read);
-                    file_chunks.push(buffer)
+
+                    file_data_trie
+                        .write_chunk(&chunk_id, &chunk)
+                        .map_err(into_rpc_error)?;
+                    chunk_id += 1;
                 }
                 Err(e) => {
                     error!(target: LOG_TARGET, "Error when trying to read file: {:?}", e);
@@ -102,20 +110,11 @@ where
             }
         }
 
-        // Build the [`FileDataTrie`] by writing the file chunks into it.
-        let mut file_data_trie = <FL as FileStorage<T>>::FileDataTrie::default();
-        for (chunk_id, chunk) in file_chunks.iter().enumerate() {
-            let chunk_id = chunk_id as u64;
-            file_data_trie
-                .write_chunk(&chunk_id, chunk)
-                .map_err(into_rpc_error)?;
-        }
         // Generate the necessary metadata so we can insert file into the File Storage.
         let root = file_data_trie.get_root();
         let fs_metadata = file.metadata().map_err(into_rpc_error)?;
-        let file_size = fs_metadata.len();
         let file_metadata = FileMetadata {
-            size: file_size,
+            size: fs_metadata.len(),
             fingerprint: root.as_ref().into(),
             owner: owner.to_string(),
             location: location.clone().into(),
@@ -123,10 +122,10 @@ where
         let file_key = file_metadata.key::<T::Hash>();
 
         // Acquire FileStorage write lock.
-        let mut file_storage_lock = self.file_storage.write().await;
+        let mut file_storage_write_lock = self.file_storage.write().await;
 
-        // Finally Store file into File Storage.
-        file_storage_lock
+        // Finally Store file in File Storage.
+        file_storage_write_lock
             .insert_file_with_data(file_key, file_metadata.clone(), file_data_trie)
             .map_err(into_rpc_error)?;
 
