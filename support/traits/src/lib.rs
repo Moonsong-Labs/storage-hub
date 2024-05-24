@@ -102,7 +102,8 @@ pub trait ReadProvidersInterface: ProvidersInterface {
         + AsMut<[u8]>
         + MaxEncodedLen
         + FullCodec;
-
+    /// Type that represents the limit of a string.
+    type StringLimit: Get<u32>;
     /// Maximum number of multiaddresses a provider can have.
     type MaxNumberOfMultiAddresses: Get<u32>;
 
@@ -124,6 +125,12 @@ pub trait ReadProvidersInterface: ProvidersInterface {
     fn get_collection_id_of_bucket(
         bucket_id: &Self::BucketId,
     ) -> Option<Self::BucketNftCollectionId>;
+
+    /// Derive bucket Id from the issuer and bucket name.
+    fn derive_bucket_id(
+        owner: &Self::AccountId,
+        bucket_name: BoundedVec<u8, Self::StringLimit>,
+    ) -> Self::BucketId;
 }
 
 /// Interface to allow the File System pallet to modify the data used by the Storage Providers pallet.

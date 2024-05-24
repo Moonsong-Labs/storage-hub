@@ -171,6 +171,10 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBuckets: Get<u32>;
 
+        /// Type that represents the limit of a string.
+        #[pallet::constant]
+        type StringLimit: Get<u32>;
+
         /// The maximum amount of blocks after which a sign up request expires so the randomness cannot be chosen
         #[pallet::constant]
         type MaxBlocksForRandomness: Get<BlockNumberFor<Self>>;

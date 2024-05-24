@@ -127,3 +127,7 @@ type BalanceOf<T> =
 /// Alias for the `CollectionConfig` type used in the FileSystem pallet.
 pub(super) type CollectionConfigFor<T> =
     CollectionConfig<BalanceOf<T>, BlockNumberFor<T>, <T as Config>::NftCollectionId>;
+
+/// Alias for the `StringLimit` type used in the ReadProvidersInterface.
+pub(super) type StringLimitFor<T> =
+    <<T as crate::Config>::Providers as storage_hub_traits::ReadProvidersInterface>::StringLimit;

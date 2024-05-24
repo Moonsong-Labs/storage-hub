@@ -5,6 +5,12 @@ pub use pallet::*;
 pub mod types;
 mod utils;
 
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
+
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
@@ -36,7 +42,7 @@ pub mod pallet {
         /// Notifies that a new file has been requested to be stored.
         AccessShared {
             issuer: T::AccountId,
-            account: AccountIdLookupTargetOf<T>,
+            recipient: AccountIdLookupTargetOf<T>,
         },
     }
 
@@ -53,20 +59,19 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn share_access(
             origin: OriginFor<T>,
-            account: AccountIdLookupSourceOf<T>,
+            recipient: AccountIdLookupSourceOf<T>,
             bucket: BucketIdFor<T>,
             item_id: T::ItemId,
             read_access_regex: BoundedVec<u8, T::StringLimit>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let target_account =
-                Self::do_share_access(&who, account, bucket, item_id, read_access_regex)?;
+            let recipient_account =
+                Self::do_share_access(&who, recipient, bucket, item_id, read_access_regex)?;
 
-            // Emit an event.
             Self::deposit_event(Event::AccessShared {
                 issuer: who,
-                account: target_account,
+                recipient: recipient_account,
             });
 
             Ok(())

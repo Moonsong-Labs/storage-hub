@@ -892,6 +892,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     type SpCount = T::SpCount;
     type MultiAddress = MultiAddress<T>;
     type MaxNumberOfMultiAddresses = T::MaxMultiAddressAmount;
+    type StringLimit = T::StringLimit;
 
     fn is_bsp(who: &Self::Provider) -> bool {
         BackupStorageProviders::<T>::contains_key(&who)
@@ -924,6 +925,15 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         } else {
             None
         }
+    }
+
+    fn derive_bucket_id(
+        issuer: &Self::AccountId,
+        bucket_name: BoundedVec<u8, Self::StringLimit>,
+    ) -> Self::BucketId {
+        <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(
+            &scale_info::prelude::format!("{:?}/{:?}", issuer, bucket_name.as_slice()).as_bytes(),
+        )
     }
 }
 

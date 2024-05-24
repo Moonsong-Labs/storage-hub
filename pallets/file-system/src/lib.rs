@@ -347,6 +347,8 @@ pub mod pallet {
         BspsRequiredExceedsMax,
         /// Account is not a BSP.
         NotABsp,
+        /// Account is not a MSP.
+        NotAMsp,
         /// BSP has not volunteered to store the given file.
         BspNotVolunteered,
         /// BSP has not confirmed storing the given file.
@@ -390,10 +392,14 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn create_bucket(origin: OriginFor<T>, msp_account_id: T::AccountId) -> DispatchResult {
+        pub fn create_bucket(
+            origin: OriginFor<T>,
+            msp: T::AccountId,
+            name: BoundedVec<u8, StringLimitFor<T>>,
+        ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            Self::do_create_bucket(who, msp_account_id)?;
+            Self::do_create_bucket(who, msp, name)?;
 
             Ok(())
         }

@@ -33,11 +33,17 @@ storage-hub-traits = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
-pallet-storage-providers = { workspace = true }
+
+pallet-file-system = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
+pallet-storage-providers = { workspace = true }
 
 # Substrate
 sp-io = { workspace = true }
+sp-keyring = { workspace = true }
+
+# Frame
+pallet-balances = { workspace = true, features = ["std"] }
 
 [features]
 default = ["std"]
@@ -45,6 +51,7 @@ runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"frame-support/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
+	"pallet-file-system/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
@@ -54,6 +61,7 @@ std = [
 	"frame-benchmarking?/std",
 	"frame-support/std",
 	"frame-system/std",
+	"pallet-file-system/std",
 	"pallet-proofs-dealer/std",
 	"pallet-storage-providers/std",
 	"scale-info/std",
@@ -64,6 +72,7 @@ std = [
 try-runtime = [
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
+	"pallet-file-system/try-runtime",
 	"pallet-proofs-dealer/try-runtime",
 	"pallet-storage-providers/try-runtime",
 	"sp-runtime/try-runtime",

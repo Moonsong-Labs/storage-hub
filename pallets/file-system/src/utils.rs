@@ -19,6 +19,7 @@ use crate::{
     types::{
         FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest,
         MultiAddresses, PeerIds, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StringLimitFor,
     },
     Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
     StorageRequestExpirations, StorageRequests,
@@ -66,6 +67,7 @@ where
     pub(crate) fn do_create_bucket(
         owner: T::AccountId,
         msp_account_id: T::AccountId,
+        name: BoundedVec<u8, StringLimitFor<T>>,
     ) -> DispatchResult {
         let config: CollectionConfigFor<T> = CollectionConfig {
             settings: CollectionSettings::all_enabled(),
@@ -79,12 +81,13 @@ where
             },
         };
 
-        let collection_id = T::Nfts::create_collection(&owner, &owner, &config)?;
+        T::Nfts::create_collection(&owner, &owner, &config)?;
 
-        let msp_provider_id = <<T as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::get_provider(msp_account_id)
-                .ok_or(Error::<T>::NotABsp)?;
+        let msp_provider_id = <<T as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::get_provider(msp_account_id.clone())
+                .ok_or(Error::<T>::NotAMsp)?;
 
-        let bucket_id_hash = T::Hasher::hash(&collection_id.encode());
+        let bucket_id_hash = <T as crate::Config>::Providers::derive_bucket_id(&owner, name);
+
         let bucket_id_hash = H256::from_slice(&bucket_id_hash.as_ref());
 
         <T::Providers as MutateProvidersInterface>::add_bucket(

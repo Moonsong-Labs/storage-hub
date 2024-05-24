@@ -17,13 +17,13 @@ where
     /// Share access by issuing an NFT to the account for a given bucket.
     pub(crate) fn do_share_access(
         issuer: &T::AccountId,
-        account: AccountIdLookupSourceOf<T>,
+        recipient: AccountIdLookupSourceOf<T>,
         bucket: BucketIdFor<T>,
         item_id: T::ItemId,
         read_access_regex: BoundedVec<u8, T::StringLimit>,
     ) -> Result<AccountIdLookupTargetOf<T>, DispatchError> {
         // Convert the lookup source to a target account.
-        let target_account = T::Lookup::lookup(account.clone())?;
+        let recipient_account = T::Lookup::lookup(recipient.clone())?;
 
         // Ensure the account is a provider.
         let maybe_collection_id = T::Providers::get_collection_id_of_bucket(&bucket);
@@ -38,7 +38,7 @@ where
             origin_issuer.clone(),
             collection_id,
             item_id,
-            account,
+            recipient,
             None,
         )?;
 
@@ -53,6 +53,6 @@ where
             metadata.encode().try_into().unwrap(),
         )?;
 
-        Ok(target_account)
+        Ok(recipient_account)
     }
 }
