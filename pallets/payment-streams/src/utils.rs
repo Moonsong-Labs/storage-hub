@@ -447,7 +447,6 @@ where
     pub fn do_delete_dynamic_rate_payment_stream(
         provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
-        current_price: BalanceOf<T>,
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual Provider
         ensure!(
@@ -629,9 +628,87 @@ where
         }
 
         // If the dynamic-rate payment stream exists:
-        if let Some(_dynamic_rate_payment_stream) = dynamic_rate_payment_stream {
-            // TODO: Implement the logic to charge dynamic-rate payment streams
-            todo!();
+        if let Some(dynamic_rate_payment_stream) = dynamic_rate_payment_stream {
+            // Calculate the difference between the last charged price index and the price index at the last chargeable block
+            let price_index_difference = expect_or_err!(dynamic_rate_payment_stream
+				.price_index_at_last_chargeable_block
+				.checked_sub(&dynamic_rate_payment_stream.price_index_when_last_charged), "Last chargeable price index should always be greater than or equal to the last charged price index, inconsistency error.",
+				Error::<T>::LastChargedGreaterThanLastChargeable);
+
+            // Calculate the amount to charge
+            let amount_to_charge = price_index_difference
+                .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
+                .ok_or(Error::<T>::ChargeOverflow)?;
+
+            // Check the free balance of the user
+            let user_balance = T::NativeBalance::reducible_balance(
+                &user_account,
+                Preservation::Preserve,
+                Fortitude::Polite,
+            );
+
+            // If the user does not have enough balance to pay for its storage:
+            if user_balance < amount_to_charge {
+                // TODO: Probably just charge what the user has and then flag it
+                // Flag it in the UsersWithoutFunds mapping and emit the UserWithoutFunds event
+                UsersWithoutFunds::<T>::insert(user_account, ());
+                Self::deposit_event(Event::<T>::UserWithoutFunds {
+                    who: user_account.clone(),
+                });
+            } else {
+                // If the user does have enough funds to pay for its storage:
+
+                // Clear the user from the UsersWithoutFunds mapping
+                // TODO: Design a more robust way of handling out-of-funds users
+                UsersWithoutFunds::<T>::remove(user_account);
+
+                // Get the payment account of the SP
+                let provider_payment_account = expect_or_err!(
+                    <T::ProvidersPallet as ProvidersInterface>::get_provider_payment_account(
+                        *provider_id
+                    ),
+                    "Provider should exist and have a payment account if its ID exists.",
+                    Error::<T>::ProviderInconsistencyError
+                );
+
+                // Check if the total amount charged would overflow
+                // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
+                ensure!(
+                    total_amount_charged
+                        .checked_add(&amount_to_charge)
+                        .is_some(),
+                    ArithmeticError::Overflow
+                );
+
+                // Charge the payment stream from the user's balance
+                T::NativeBalance::transfer(
+                    user_account,
+                    &provider_payment_account,
+                    amount_to_charge,
+                    Preservation::Preserve,
+                )?;
+
+                // Set the last charged price index to be the price index of the last chargeable block
+                DynamicRatePaymentStreams::<T>::mutate(
+                    provider_id,
+                    user_account,
+                    |payment_stream| {
+                        let payment_stream = expect_or_err!(
+                            payment_stream,
+                            "Payment stream should exist if it was found before.",
+                            Error::<T>::PaymentStreamNotFound
+                        );
+                        payment_stream.price_index_when_last_charged =
+                            payment_stream.price_index_at_last_chargeable_block;
+                        Ok::<(), DispatchError>(())
+                    },
+                )?;
+
+                // Update the total amount charged:
+                total_amount_charged = total_amount_charged
+                    .checked_add(&amount_to_charge)
+                    .ok_or(Error::<T>::ChargeOverflow)?;
+            }
         }
 
         Ok(total_amount_charged)
@@ -813,10 +890,9 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     fn delete_dynamic_rate_payment_stream(
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
-        current_price: <Self::Balance as Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult {
         // Execute the logic to delete a dynamic-rate payment stream
-        Self::do_delete_dynamic_rate_payment_stream(&provider_id, &user_account, current_price)?;
+        Self::do_delete_dynamic_rate_payment_stream(&provider_id, &user_account)?;
 
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::DynamicRatePaymentStreamDeleted {

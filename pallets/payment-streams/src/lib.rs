@@ -504,17 +504,12 @@ pub mod pallet {
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,
             user_account: T::AccountId,
-            current_price: BalanceOf<T>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was executed by the root origin
             ensure_root(origin)?;
 
             // Execute checks and logic, update storage
-            Self::do_delete_dynamic_rate_payment_stream(
-                &provider_id,
-                &user_account,
-                current_price,
-            )?;
+            Self::do_delete_dynamic_rate_payment_stream(&provider_id, &user_account)?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::DynamicRatePaymentStreamDeleted {

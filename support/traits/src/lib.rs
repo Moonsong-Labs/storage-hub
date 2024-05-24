@@ -364,7 +364,6 @@ pub trait PaymentStreamsInterface {
     fn delete_dynamic_rate_payment_stream(
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
-        current_price: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult;
 
     /// Get the dynamic-rate payment stream information between a User and a Provider
