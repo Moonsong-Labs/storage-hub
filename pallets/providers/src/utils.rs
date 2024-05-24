@@ -9,7 +9,7 @@ use frame_support::sp_runtime::{
 use frame_support::traits::{
     fungible::{Inspect, InspectHold, MutateHold},
     tokens::{Fortitude, Precision, Preservation},
-    Get, Incrementable, Randomness,
+    Get, Randomness,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_runtime::BoundedVec;
@@ -832,6 +832,7 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
         msp_id: MainStorageProviderId<T>,
         user_id: T::AccountId,
         bucket_id: BucketId<T>,
+        collection_id: Option<T::BucketNftCollectionId>,
     ) -> DispatchResult {
         // TODO: Check that the bucket does not exist yet
         // TODO: Get BucketId by hashing Bucket with salt, add it to the MSP vector of buckets
@@ -839,7 +840,7 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
             root: MerklePatriciaRoot::<T>::default(),
             user_id,
             msp_id,
-            collection_id: T::BucketNftCollectionId::initial_value(),
+            collection_id,
         };
         Buckets::<T>::insert(&bucket_id, &bucket);
         Ok(())

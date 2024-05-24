@@ -17,9 +17,9 @@ use storage_hub_traits::{MutateProvidersInterface, ReadProvidersInterface};
 use crate::{
     pallet,
     types::{
-        FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest,
-        MultiAddresses, PeerIds, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
-        StringLimitFor,
+        BucketPrivacy, FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof,
+        MaxBspsPerStorageRequest, MultiAddresses, PeerIds, StorageData, StorageRequestBspsMetadata,
+        StorageRequestMetadata, StringLimitFor,
     },
     Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
     StorageRequestExpirations, StorageRequests,
@@ -68,6 +68,7 @@ where
         owner: T::AccountId,
         msp_account_id: T::AccountId,
         name: BoundedVec<u8, StringLimitFor<T>>,
+        private: BucketPrivacy,
     ) -> DispatchResult {
         let config: CollectionConfigFor<T> = CollectionConfig {
             settings: CollectionSettings::all_enabled(),
@@ -81,19 +82,23 @@ where
             },
         };
 
-        T::Nfts::create_collection(&owner, &owner, &config)?;
+        // Create collection only if bucket is private
+        let maybe_collection_id = match private {
+            BucketPrivacy::Public => None,
+            BucketPrivacy::Private => Some(T::Nfts::create_collection(&owner, &owner, &config)?),
+        };
 
         let msp_provider_id = <<T as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::get_provider(msp_account_id.clone())
                 .ok_or(Error::<T>::NotAMsp)?;
 
         let bucket_id_hash = <T as crate::Config>::Providers::derive_bucket_id(&owner, name);
-
         let bucket_id_hash = H256::from_slice(&bucket_id_hash.as_ref());
 
         <T::Providers as MutateProvidersInterface>::add_bucket(
             msp_provider_id,
             owner,
             bucket_id_hash,
+            maybe_collection_id,
         )?;
 
         Ok(())

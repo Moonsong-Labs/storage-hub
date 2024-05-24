@@ -75,7 +75,7 @@ pub mod pallet {
         // TODO: change H256 with generic parameter
         /// The trait for reading and mutating storage provider data.
         type Providers: storage_hub_traits::ReadProvidersInterface<AccountId = Self::AccountId>
-            + storage_hub_traits::MutateProvidersInterface<AccountId = Self::AccountId, BucketId = H256, MerklePatriciaRoot = <Self::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash>;
+            + storage_hub_traits::MutateProvidersInterface<AccountId = Self::AccountId, BucketId = H256, BucketNftCollectionId = Self::NftCollectionId,MerklePatriciaRoot = <Self::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash>;
 
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: storage_hub_traits::ProofsDealerInterface<
@@ -396,10 +396,11 @@ pub mod pallet {
             origin: OriginFor<T>,
             msp: T::AccountId,
             name: BoundedVec<u8, StringLimitFor<T>>,
+            privacy: BucketPrivacy,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            Self::do_create_bucket(who, msp, name)?;
+            Self::do_create_bucket(who, msp, name, privacy)?;
 
             Ok(())
         }

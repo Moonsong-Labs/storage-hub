@@ -62,6 +62,13 @@ pub struct StorageRequestBspsMetadata<T: Config> {
     pub _phantom: core::marker::PhantomData<T>,
 }
 
+/// Bucket privacy settings.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+pub enum BucketPrivacy {
+    Public,
+    Private,
+}
+
 /// Alias for the `MerkleHash` type used in the ProofsDealerInterface.
 pub type FileKey<T> =
     <<T as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash;

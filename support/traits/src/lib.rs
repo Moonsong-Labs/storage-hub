@@ -126,7 +126,7 @@ pub trait ReadProvidersInterface: ProvidersInterface {
         bucket_id: &Self::BucketId,
     ) -> Option<Self::BucketNftCollectionId>;
 
-    /// Derive bucket Id from the issuer and bucket name.
+    /// Derive bucket Id from the owner and bucket name.
     fn derive_bucket_id(
         owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::StringLimit>,
@@ -173,6 +173,7 @@ pub trait MutateProvidersInterface: ProvidersInterface {
         msp_id: Self::Provider,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
+        collection_id: Option<Self::BucketNftCollectionId>,
     ) -> DispatchResult;
 
     /// Change the root of a bucket
