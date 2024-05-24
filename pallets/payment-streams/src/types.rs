@@ -15,6 +15,7 @@ pub struct FixedRatePaymentStream<T: Config> {
     pub rate: BalanceOf<T>,
     pub last_charged_block: BlockNumberFor<T>,
     pub last_chargeable_block: BlockNumberFor<T>,
+    pub user_deposit: BalanceOf<T>,
 }
 
 /// Structure that has the Dynamic-Rate Payment Stream information
@@ -24,6 +25,7 @@ pub struct DynamicRatePaymentStream<T: Config> {
     pub amount_provided: UnitsProvidedFor<T>,
     pub price_index_when_last_charged: BalanceOf<T>,
     pub price_index_at_last_chargeable_block: BalanceOf<T>,
+    pub user_deposit: BalanceOf<T>,
 }
 
 // Type aliases:

@@ -133,6 +133,7 @@ where
                 rate,
                 last_chargeable_block: frame_system::Pallet::<T>::block_number(),
                 last_charged_block: frame_system::Pallet::<T>::block_number(),
+                user_deposit: deposit,
             },
         );
 
@@ -187,52 +188,11 @@ where
             });
         }
 
-        // Check if the new rate is lower or higher than the current one
-        // If the new rate is lower than the current one, we should release the difference in deposit
-        // If the new rate is higher than the current one, we should hold the difference in deposit
-        // TODO: we should probably keep track of user deposits since the runtime constant `NewStreamDeposit` could be changed in a runtime
-        // upgrade. This is a potential security issue.
-        if new_rate < payment_stream.rate {
-            // Calculate the difference in deposit
-            let difference_in_deposit = payment_stream
-                .rate
-                .checked_sub(&new_rate)
-                .ok_or(ArithmeticError::Underflow)?
-                .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
-                .ok_or(ArithmeticError::Overflow)?;
-
-            // Release the difference in deposit from the user
-            T::NativeBalance::release(
-                &HoldReason::PaymentStreamDeposit.into(),
-                &user_account,
-                difference_in_deposit,
-                Precision::Exact,
-            )?;
-        } else if new_rate > payment_stream.rate {
-            // Calculate the difference in deposit
-            let difference_in_deposit = new_rate
-                .checked_sub(&payment_stream.rate)
-                .ok_or(ArithmeticError::Underflow)?
-                .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
-                .ok_or(ArithmeticError::Overflow)?;
-
-            // Check if we can hold the difference in deposit from the user
-            ensure!(
-                T::NativeBalance::can_hold(
-                    &HoldReason::PaymentStreamDeposit.into(),
-                    &user_account,
-                    difference_in_deposit
-                ),
-                Error::<T>::CannotHoldDeposit
-            );
-
-            // Hold the difference in deposit from the user
-            T::NativeBalance::hold(
-                &HoldReason::PaymentStreamDeposit.into(),
-                &user_account,
-                difference_in_deposit,
-            )?;
-        }
+        // Update the user's deposit based on the new rate
+        let new_deposit = new_rate
+            .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+            .ok_or(ArithmeticError::Overflow)?;
+        Self::update_user_deposit(&user_account, payment_stream.user_deposit, new_deposit)?;
 
         // Update the payment stream in the FixedRatePaymentStreams mapping
         FixedRatePaymentStreams::<T>::mutate(provider_id, user_account, |payment_stream| {
@@ -285,13 +245,9 @@ where
         }
 
         // Release the deposit of this payment stream to the User
-        // TODO: The same as in the `update_fixed_rate_payment_stream`: we should keep track of user deposits since the runtime constant `NewStreamDeposit`
-        // could be changed in a runtime upgrade. This is a potential security issue.
         let deposit = FixedRatePaymentStreams::<T>::get(provider_id, user_account)
             .ok_or(Error::<T>::PaymentStreamNotFound)?
-            .rate
-            .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
-            .ok_or(ArithmeticError::Overflow)?;
+            .user_deposit;
         T::NativeBalance::release(
             &HoldReason::PaymentStreamDeposit.into(),
             &user_account,
@@ -403,6 +359,7 @@ where
                 amount_provided,
                 price_index_when_last_charged: current_accumulated_price_index,
                 price_index_at_last_chargeable_block: current_accumulated_price_index,
+                user_deposit: deposit,
             },
         );
 
@@ -462,58 +419,14 @@ where
             });
         }
 
-        // Check if the new amount provided is lower or higher than the current one
-        // If the new amount is lower than the current one, we should release the difference in deposit
-        // If the new amount is higher than the current one, we should hold the difference in deposit
-        // TODO: we should probably keep track of user deposits since the runtime constant `NewStreamDeposit` could be changed in a runtime
-        // upgrade AND the current price (used for deposits) might also change. This is a potential security issue.
-        if new_amount_provided < payment_stream.amount_provided {
-            // Calculate the difference in deposit (`(amount_provided - new_amount_provided) * current_price * NewStreamDeposit`)
-            let difference_in_deposit = payment_stream
-                .amount_provided
-                .checked_sub(&new_amount_provided)
-                .ok_or(ArithmeticError::Underflow)?
-                .into()
-                .checked_mul(&current_price)
-                .ok_or(ArithmeticError::Overflow)?
-                .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
-                .ok_or(ArithmeticError::Overflow)?;
-
-            // Release the difference in deposit from the user
-            T::NativeBalance::release(
-                &HoldReason::PaymentStreamDeposit.into(),
-                &user_account,
-                difference_in_deposit,
-                Precision::Exact,
-            )?;
-        } else if new_amount_provided > payment_stream.amount_provided {
-            // Calculate the difference in deposit (`(new_amount_provided - amount_provided) * current_price * NewStreamDeposit`)
-            let difference_in_deposit = new_amount_provided
-                .checked_sub(&payment_stream.amount_provided)
-                .ok_or(ArithmeticError::Underflow)?
-                .into()
-                .checked_mul(&current_price)
-                .ok_or(ArithmeticError::Overflow)?
-                .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
-                .ok_or(ArithmeticError::Overflow)?;
-
-            // Check if we can hold the difference in deposit from the user
-            ensure!(
-                T::NativeBalance::can_hold(
-                    &HoldReason::PaymentStreamDeposit.into(),
-                    &user_account,
-                    difference_in_deposit
-                ),
-                Error::<T>::CannotHoldDeposit
-            );
-
-            // Hold the difference in deposit from the user
-            T::NativeBalance::hold(
-                &HoldReason::PaymentStreamDeposit.into(),
-                &user_account,
-                difference_in_deposit,
-            )?;
-        }
+        // Update the user's deposit based on the new amount provided
+        let new_deposit = new_amount_provided
+            .into()
+            .checked_mul(&current_price)
+            .ok_or(ArithmeticError::Overflow)?
+            .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
+            .ok_or(ArithmeticError::Overflow)?;
+        Self::update_user_deposit(&user_account, payment_stream.user_deposit, new_deposit)?;
 
         // Update the payment stream in the DynamicRatePaymentStreams mapping
         DynamicRatePaymentStreams::<T>::mutate(provider_id, user_account, |payment_stream| {
@@ -577,16 +490,9 @@ where
         RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
 
         // Release the deposit of this payment stream to the User
-        // TODO: The same as in the `update_dynamic_rate_payment_stream`: we should keep track of user deposits since the runtime constant `NewStreamDeposit`
-        // could be changed in a runtime upgrade and current price might change. This is a potential security issue.
         let deposit = DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
             .ok_or(Error::<T>::PaymentStreamNotFound)?
-            .amount_provided
-            .into()
-            .checked_mul(&current_price)
-            .ok_or(ArithmeticError::Overflow)?
-            .checked_mul(&T::BlockNumberToBalance::convert(T::NewStreamDeposit::get()))
-            .ok_or(ArithmeticError::Overflow)?;
+            .user_deposit;
         T::NativeBalance::release(
             &HoldReason::PaymentStreamDeposit.into(),
             &user_account,
@@ -729,6 +635,54 @@ where
         }
 
         Ok(total_amount_charged)
+    }
+
+    /// This function holds the logic that updates the deposit of a User based on the new deposit that should be held from them.
+    ///
+    /// It checks if the new deposit is greater or smaller than the old deposit and holds/releases the difference in deposit from the User accordingly.
+    pub fn update_user_deposit(
+        user_account: &T::AccountId,
+        old_deposit: BalanceOf<T>,
+        new_deposit: BalanceOf<T>,
+    ) -> DispatchResult {
+        if new_deposit < old_deposit {
+            // Calculate the difference in deposit (`(amount_provided - new_amount_provided) * current_price * NewStreamDeposit`)
+            let difference_in_deposit = old_deposit
+                .checked_sub(&new_deposit)
+                .ok_or(ArithmeticError::Underflow)?;
+
+            // Release the difference in deposit from the user
+            T::NativeBalance::release(
+                &HoldReason::PaymentStreamDeposit.into(),
+                &user_account,
+                difference_in_deposit,
+                Precision::Exact,
+            )?;
+        } else if new_deposit > old_deposit {
+            // Calculate the difference in deposit (`(new_amount_provided - amount_provided) * current_price * NewStreamDeposit`)
+            let difference_in_deposit = new_deposit
+                .checked_sub(&old_deposit)
+                .ok_or(ArithmeticError::Underflow)?;
+
+            // Check if we can hold the difference in deposit from the user
+            ensure!(
+                T::NativeBalance::can_hold(
+                    &HoldReason::PaymentStreamDeposit.into(),
+                    &user_account,
+                    difference_in_deposit
+                ),
+                Error::<T>::CannotHoldDeposit
+            );
+
+            // Hold the difference in deposit from the user
+            T::NativeBalance::hold(
+                &HoldReason::PaymentStreamDeposit.into(),
+                &user_account,
+                difference_in_deposit,
+            )?;
+        }
+
+        Ok(())
     }
 }
 
