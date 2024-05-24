@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::{FullCodec, HasCompact};
+use codec::{Encode, FullCodec, HasCompact};
 use frame_support::dispatch::DispatchResult;
 use frame_support::pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member};
 use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
@@ -19,6 +19,9 @@ impl<T: Debug> MaybeDebug for T {}
 pub trait MaybeDebug {}
 #[cfg(not(feature = "std"))]
 impl<T> MaybeDebug for T {}
+
+#[derive(Encode)]
+pub struct AsCompact<T: HasCompact>(#[codec(compact)] pub T);
 
 /// A trait to lookup registered Providers.
 ///

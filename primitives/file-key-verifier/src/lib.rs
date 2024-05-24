@@ -4,6 +4,7 @@ use codec::{Decode, Encode};
 use frame_support::sp_runtime::DispatchError;
 use num_bigint::BigUint;
 use scale_info::TypeInfo;
+use shp_traits::AsCompact;
 use sp_core::Hasher;
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
@@ -32,7 +33,7 @@ pub struct FileKeyProof {
     pub owner: Vec<u8>,
     pub location: Vec<u8>,
     pub size: u64,
-    pub fingerprint: Vec<u8>,
+    pub fingerprint: [u8; 32],
     pub proof: CompactProof,
 }
 
@@ -69,7 +70,7 @@ where
             &[
                 &proof.owner.encode(),
                 &proof.location.encode(),
-                &proof.size.encode(),
+                &AsCompact(proof.size).encode(),
                 &proof.fingerprint.encode(),
             ]
             .into_iter()
@@ -89,7 +90,8 @@ where
         // Check that the file key is equal to the root.
         if &file_key != expected_file_key {
             return Err(
-                "Root provided should be equal to the file key constructed from the proof.".into(),
+                "File key provided should be equal to the file key constructed from the proof."
+                    .into(),
             );
         };
 
@@ -135,7 +137,7 @@ where
 
             // Check that the chunk is in the proof.
             let chunk = trie
-                .get(&challenged_chunk.to_be_bytes())
+                .get(&AsCompact(challenged_chunk).encode())
                 .map_err(|_| "The proof is invalid. The challenge does not exist in the trie.")?;
 
             // The chunk should be Some(leaf) for the proof to be valid.

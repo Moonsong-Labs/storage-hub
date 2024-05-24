@@ -21,6 +21,7 @@ scale-info = { workspace = true }
 
 # Local
 storage-hub-traits = { workspace = true }
+shp-traits = { workspace = true }
 
 # Substrate
 sp-core = { workspace = true }
