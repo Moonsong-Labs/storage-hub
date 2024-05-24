@@ -16,7 +16,8 @@ mod tests;
 
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment
 /// is a Merkle Patricia Trie root hash and the response to a challenge is given
-/// by either the exact key or the next and previous keys in the trie.
+/// by taking the modulo of the challenged hash with the number of chunks in the file,
+/// and interpreting the result as a chunk index.
 pub struct FileKeyVerifier<
     T: TrieLayout,
     const H_LENGTH: usize,
@@ -115,7 +116,7 @@ where
 
         let trie = TrieDBBuilder::<T>::new(&memdb, &root).build();
 
-        // Initialise vector of proven challenges. We use a `BTreeSet` to ensure that the keys are unique.
+        // Initialise vector of proven challenges. We use a `BTreeSet` to ensure that the items are unique.
         let mut proven_challenges = BTreeSet::new();
         let mut challenges_iter = challenges.iter();
 
@@ -147,17 +148,8 @@ where
                 );
             }
 
-            // Convert the challenged chunk to a key (now that we know it is a proven key).
-            let challenged_chunk_bytes = challenged_chunk.to_be_bytes();
-            let proven_challenge: &[u8; H_LENGTH] = challenged_chunk_bytes
-                .as_slice()
-                .try_into()
-                .map_err(|_| "Failed to convert a challenged chunk (u64) to a fixed size array.")?;
-            let proven_challenge: Self::Challenge = proven_challenge.try_into().map_err(|_| {
-                "Failed to convert a challenged chunk as an array of bytes to a key."
-            })?;
-            // Add the challenge to the proven keys.
-            proven_challenges.insert(proven_challenge);
+            // Add the challenge to the proven challenges vector.
+            proven_challenges.insert(*challenge);
         }
 
         return Ok(Vec::from_iter(proven_challenges));
