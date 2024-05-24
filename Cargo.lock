@@ -12356,6 +12356,7 @@ dependencies = [
  "frame-system 28.0.0",
  "num-bigint",
  "parity-scale-codec",
+ "rand",
  "reference-trie",
  "scale-info",
  "serde",

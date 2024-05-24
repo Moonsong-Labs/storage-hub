@@ -33,8 +33,9 @@ frame-support = { workspace = true }
 
 [dev-dependencies]
 bincode = { workspace = true }
-serde = { workspace = true }
+rand = { workspace = true }
 reference-trie = { workspace = true }
+serde = { workspace = true }
 
 # Substrate
 sp-io = { workspace = true }

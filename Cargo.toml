@@ -39,6 +39,7 @@ num-bigint = { version = "0.4.3", default-features = false }
 parking_lot = "0.12.1"
 prost = "0.12"
 prost-build = "0.12.3"
+rand = "0.8.5"
 reference-trie = "0.29.1"
 scale-info = { version = "2.11.0", default-features = false, features = [
     "derive",
