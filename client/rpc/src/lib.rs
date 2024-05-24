@@ -74,8 +74,9 @@ where
         // Open file in the local file system.
         let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
 
-        // Build the [`FileDataTrie`] so we can write the file chunks into it.
+        // Instantiate an "empty" [`FileDataTrie`] so we can write the file chunks into it.
         let mut file_data_trie = <FL as FileStorage<T>>::FileDataTrie::default();
+        // A chunk id is simply an integer index.
         let mut chunk_id: u64 = 0;
 
         // Read file in chunks of [`FILE_CHUNK_SIZE`] into buffer then push buffer into a vector.
@@ -98,6 +99,7 @@ where
                 Ok(bytes_read) => {
                     debug!(target: LOG_TARGET, "Read {} bytes from file", bytes_read);
 
+                    // Build the actual [`FileDataTrie`] by inserting each chunk into it.
                     file_data_trie
                         .write_chunk(&chunk_id, &chunk)
                         .map_err(into_rpc_error)?;
@@ -113,6 +115,8 @@ where
         // Generate the necessary metadata so we can insert file into the File Storage.
         let root = file_data_trie.get_root();
         let fs_metadata = file.metadata().map_err(into_rpc_error)?;
+
+        // Build StorageHub's [`FileMetadata`]
         let file_metadata = FileMetadata {
             size: fs_metadata.len(),
             fingerprint: root.as_ref().into(),
@@ -124,7 +128,7 @@ where
         // Acquire FileStorage write lock.
         let mut file_storage_write_lock = self.file_storage.write().await;
 
-        // Finally Store file in File Storage.
+        // Finally store file in File Storage.
         file_storage_write_lock
             .insert_file_with_data(file_key, file_metadata.clone(), file_data_trie)
             .map_err(into_rpc_error)?;
