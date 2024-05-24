@@ -35,6 +35,7 @@ struct FileMetadata {
 /// Build a Merkle Patricia Trie simulating a file split in chunks.
 fn build_merkle_patricia_trie<T: TrieLayout>(
     random: bool,
+    file_size: u64,
 ) -> (MemoryDB<T::Hash>, HashT<T>, FileMetadata)
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; 32]>,
@@ -42,11 +43,11 @@ where
     let user_id = b"user_id";
     let bucket = b"bucket";
     let file_name = if random {
-        b"random_file".as_slice()
+        String::from("random_file") + &file_size.to_string()
     } else {
-        b"large_file".as_slice()
+        String::from("large_file") + &file_size.to_string()
     };
-    let file_size = FILE_SIZE;
+    let file_name = file_name.as_bytes();
 
     println!("Chunking file into 32 byte chunks and building Merkle Patricia Trie...");
 
@@ -62,52 +63,6 @@ where
     } else {
         create_test_file(&file_path, file_size)
     };
-    let (memdb, fingerprint) = merklise_file::<T>(&file_path);
-
-    let metadata = FileMetadata {
-        owner: user_id.to_vec(),
-        location: file_path.as_bytes().to_vec(),
-        size: file_size,
-        fingerprint: fingerprint
-            .as_ref()
-            .try_into()
-            .expect("slice with incorrect length"),
-    };
-
-    let file_key = T::Hash::hash(
-        &[
-            &metadata.owner.encode(),
-            &metadata.location.encode(),
-            &AsCompact(metadata.size).encode(),
-            &metadata.fingerprint.encode(),
-        ]
-        .into_iter()
-        .flatten()
-        .cloned()
-        .collect::<Vec<u8>>(),
-    );
-
-    (memdb, file_key, metadata)
-}
-
-/// Build a Merkle Patricia Trie with just one chunk.
-fn build_merkle_patricia_trie_one_key<T: TrieLayout>() -> (MemoryDB<T::Hash>, HashT<T>, FileMetadata)
-{
-    let user_id = b"user_id";
-    let bucket = b"bucket";
-    let file_name = b"tiny_file";
-    let file_size = CHUNK_SIZE;
-
-    println!("Chunking file into 32 byte chunks and building Merkle Patricia Trie...");
-
-    let file_path = format!(
-        "{}-{}-{}.txt",
-        String::from_utf8(user_id.to_vec()).unwrap(),
-        String::from_utf8(bucket.to_vec()).unwrap(),
-        String::from_utf8(file_name.to_vec()).unwrap()
-    );
-
-    create_test_file(&file_path, file_size);
     let (memdb, fingerprint) = merklise_file::<T>(&file_path);
 
     let metadata = FileMetadata {
@@ -233,7 +188,8 @@ fn generate_challenges<T: TrieLayout>(
 
 #[test]
 fn generate_trie_works() {
-    let (memdb, _file_key, metadata) = build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false);
+    let (memdb, _file_key, metadata) =
+        build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, FILE_SIZE);
     let root = metadata.fingerprint.try_into().unwrap();
 
     let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root).build();
@@ -258,7 +214,8 @@ fn generate_trie_works() {
 
 #[test]
 fn commitment_verifier_many_challenges_success() {
-    let (memdb, file_key, metadata) = build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false);
+    let (memdb, file_key, metadata) =
+        build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, FILE_SIZE);
     let root = metadata.fingerprint.try_into().unwrap();
 
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
@@ -321,7 +278,8 @@ fn commitment_verifier_many_challenges_success() {
 
 #[test]
 fn commitment_verifier_many_challenges_random_file_success() {
-    let (memdb, file_key, metadata) = build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(true);
+    let (memdb, file_key, metadata) =
+        build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(true, FILE_SIZE);
     let root = metadata.fingerprint.try_into().unwrap();
 
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
@@ -384,7 +342,8 @@ fn commitment_verifier_many_challenges_random_file_success() {
 
 #[test]
 fn commitment_verifier_many_challenges_keccak_success() {
-    let (memdb, file_key, metadata) = build_merkle_patricia_trie::<LayoutV1<Keccak256>>(false);
+    let (memdb, file_key, metadata) =
+        build_merkle_patricia_trie::<LayoutV1<Keccak256>>(false, FILE_SIZE);
     let root = metadata.fingerprint.try_into().unwrap();
 
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
@@ -447,7 +406,8 @@ fn commitment_verifier_many_challenges_keccak_success() {
 
 #[test]
 fn commitment_verifier_many_challenges_one_chunk_success() {
-    let (memdb, file_key, metadata) = build_merkle_patricia_trie_one_key::<LayoutV1<BlakeTwo256>>();
+    let (memdb, file_key, metadata) =
+        build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, CHUNK_SIZE);
     let root = metadata.fingerprint.try_into().unwrap();
 
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
