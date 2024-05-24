@@ -177,8 +177,8 @@ mod fixed_rate_streams {
                 let charlie_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(charlie).unwrap();
 
-                // Create a payment stream from Bob to Alice of `bob_initial_balance / 10` units per block
-                let rate: BalanceOf<Test> = bob_initial_balance / 10; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
+                // Create a payment stream from Bob to Alice of `bob_initial_balance / 20 + 1` units per block
+                let rate: BalanceOf<Test> = bob_initial_balance / 20 + 1; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
                         &alice_bsp_id,
@@ -260,6 +260,7 @@ mod fixed_rate_streams {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
                 let charlie: AccountId = 2;
+                let bob_initial_balance = NativeBalance::free_balance(&bob);
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
@@ -284,6 +285,13 @@ mod fixed_rate_streams {
                     ),
                 );
 
+                // Check that Bob's new balance is his initial balance minus the deposit
+                let new_stream_deposit_blocks_balance_typed =
+                    BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let bob_new_free_balance =
+                    bob_initial_balance - rate * new_stream_deposit_blocks_balance_typed;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_free_balance);
+
                 // Check how many streams Bob has
                 assert_eq!(
                     PaymentStreams::get_payment_streams_count_of_user(&bob),
@@ -300,6 +308,31 @@ mod fixed_rate_streams {
                     ),
                     DispatchError::Arithmetic(sp_runtime::ArithmeticError::Overflow)
                 );
+
+                // Check that Bob still has u32::MAX payment streams open
+                assert_eq!(
+                    PaymentStreams::get_payment_streams_count_of_user(&bob),
+                    u32::MAX
+                );
+
+                // Check that Bob has the payment stream from Bob to Alice open
+                assert_eq!(
+                    PaymentStreams::get_fixed_rate_payment_streams_of_user(&bob)[0],
+                    (
+                        alice_bsp_id,
+                        PaymentStreams::get_fixed_rate_payment_stream_info(&alice_bsp_id, &bob)
+                            .unwrap()
+                    )
+                );
+
+                // Check that the payment stream from Bob to Charlie was not created
+                assert!(matches!(
+                    PaymentStreams::get_fixed_rate_payment_stream_info(&charlie_bsp_id, &bob),
+                    Err(Error::<Test>::PaymentStreamNotFound)
+                ));
+
+                // Check that the deposit for Charlie's payment stream was not taken from Bob
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_free_balance);
             });
         }
     }
@@ -480,8 +513,8 @@ mod fixed_rate_streams {
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
-                // Create a payment stream from Bob to Alice of `bob_initial_balance / 10` units per block
-                let rate: BalanceOf<Test> = bob_initial_balance / 10; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
+                // Create a payment stream from Bob to Alice of `bob_initial_balance / 20 + 1` units per block
+                let rate: BalanceOf<Test> = bob_initial_balance / 20 + 1; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
                         &alice_bsp_id,
@@ -571,10 +604,12 @@ mod fixed_rate_streams {
                     )
                 );
 
-                // Check that Bob was charged 10 blocks at the old 10 units/block rate after the payment stream was updated
+                // Check that Bob's deposit was updated AND he was charged 10 blocks at the old 10 units/block rate after the payment stream was updated
+                let bob_balance_updated_deposit =
+                    bob_new_balance - (new_rate - rate) * new_stream_deposit_blocks_balance_typed;
                 assert_eq!(
                     NativeBalance::free_balance(&bob),
-                    bob_new_balance - 10 * rate
+                    bob_balance_updated_deposit - 10 * rate
                 );
                 System::assert_has_event(
                     Event::<Test>::PaymentStreamCharged {
@@ -722,8 +757,8 @@ mod fixed_rate_streams {
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
-                // Create a payment stream from Bob to Alice of `bob_initial_balance / 10` units per block
-                let rate: BalanceOf<Test> = bob_initial_balance / 10; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
+                // Create a payment stream from Bob to Alice of `bob_initial_balance / 20 + 1` units per block
+                let rate: BalanceOf<Test> = bob_initial_balance / 20 + 1; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
                         &alice_bsp_id,
@@ -1039,6 +1074,11 @@ mod fixed_rate_streams {
                     )
                 );
 
+                // Check that Bob's deposit has also been updated
+                let bob_new_balance =
+                    bob_new_balance - (new_rate - rate) * new_stream_deposit_blocks_balance_typed;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
                 assert_ok!(
@@ -1247,8 +1287,17 @@ mod fixed_rate_streams {
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
-                // Create a payment stream from Bob to Alice of u128::MAX - 1 units per block
-                let rate: BalanceOf<Test> = u128::MAX - 1;
+                // Mint Bob enough tokens to pay for the deposit
+                let maximum_amount_to_mint = u128::MAX - NativeBalance::total_issuance();
+                assert_ok!(NativeBalance::mint_into(&bob, maximum_amount_to_mint));
+                let bob_new_balance = NativeBalance::free_balance(&bob);
+                assert_eq!(
+                    bob_new_balance,
+                    bob_initial_balance + maximum_amount_to_mint
+                );
+
+                // Create a payment stream from Bob to Alice of bob_new_balance / (NewStreamDeposit + 1) units per block (because we hold `rate * NewStreamDeposit`)
+                let rate: BalanceOf<Test> = bob_new_balance / 11;
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
                         &alice_bsp_id,
@@ -1260,12 +1309,12 @@ mod fixed_rate_streams {
                 // Check the new free balance of Bob (after the new stream deposit)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
-                let bob_new_balance =
-                    bob_initial_balance - rate * new_stream_deposit_blocks_balance_typed;
-                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+                let bob_balance_after_deposit =
+                    bob_new_balance - rate * new_stream_deposit_blocks_balance_typed;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_balance_after_deposit);
 
-                // Set the last valid proof of the payment stream from Bob to Alice to 2 blocks ahead
-                run_to_block(System::block_number() + 2);
+                // Set the last valid proof of the payment stream from Bob to Alice to 1000 blocks ahead
+                run_to_block(System::block_number() + 1000);
                 assert_ok!(
                     <PaymentStreams as PaymentManager>::update_last_chargeable_block(
                         &alice_bsp_id,
@@ -1281,7 +1330,7 @@ mod fixed_rate_streams {
                 );
 
                 // Check that Bob's balance has not changed
-                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+                assert_eq!(NativeBalance::free_balance(&bob), bob_balance_after_deposit);
             });
         }
 
@@ -1303,8 +1352,8 @@ mod fixed_rate_streams {
                 let charlie_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(charlie).unwrap();
 
-                // Create a payment stream from Bob to Alice of `bob_initial_balance / 10` units per block
-                let rate: BalanceOf<Test> = bob_initial_balance / 10; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
+                // Create a payment stream from Bob to Alice of `bob_initial_balance / 20 + 1` units per block
+                let rate: BalanceOf<Test> = bob_initial_balance / 20 + 1; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
                         &alice_bsp_id,
@@ -1378,8 +1427,8 @@ mod fixed_rate_streams {
                 // Register Charlie as a BSP with 1000 units of data
                 register_account_as_bsp(charlie, 1000);
 
-                // Create a payment stream from Bob to Alice of `bob_initial_balance / 10` units per block
-                let rate: BalanceOf<Test> = bob_initial_balance / 10; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
+                // Create a payment stream from Bob to Alice of `bob_initial_balance / 20 + 1` units per block
+                let rate: BalanceOf<Test> = bob_initial_balance / 20 + 1; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
                         &alice_bsp_id,
@@ -1426,7 +1475,7 @@ mod fixed_rate_streams {
                 );
 
                 // Deposit enough funds to Bob's account
-                let deposit_amount = rate * 5;
+                let deposit_amount = rate * 10;
                 assert_ok!(NativeBalance::mint_into(&bob, deposit_amount));
 
                 // Try to charge the payment stream again
@@ -1435,7 +1484,7 @@ mod fixed_rate_streams {
                     bob
                 ));
 
-                // Check that Bob was charged 10 blocks at the (bob_initial_balance / 10) units/block rate
+                // Check that Bob was charged 10 blocks at the (bob_initial_balance / 20 + 1) units/block rate
                 assert_eq!(
                     NativeBalance::free_balance(&bob),
                     bob_new_balance + deposit_amount - 10 * rate

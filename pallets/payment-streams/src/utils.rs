@@ -99,6 +99,15 @@ where
             Error::<T>::CannotHoldDeposit
         );
 
+        // Check if adding one to the user's payment streams count would overflow
+        // NOTE: We check this BEFORE holding the deposit, as for some weird reason the `hold` function does NOT revert when the extrinsic fails !?!?
+        ensure!(
+            RegisteredUsers::<T>::get(user_account)
+                .checked_add(1)
+                .is_some(),
+            ArithmeticError::Overflow
+        );
+
         // Hold the deposit from the user
         T::NativeBalance::hold(
             &HoldReason::PaymentStreamDeposit.into(),
@@ -275,16 +284,6 @@ where
             });
         }
 
-        // Remove the payment stream from the FixedRatePaymentStreams mapping
-        FixedRatePaymentStreams::<T>::remove(provider_id, user_account);
-
-        // Decrease the user's payment streams count
-        let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
-        user_payment_streams_count = user_payment_streams_count
-            .checked_sub(1)
-            .ok_or(ArithmeticError::Underflow)?;
-        RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
-
         // Release the deposit of this payment stream to the User
         // TODO: The same as in the `update_fixed_rate_payment_stream`: we should keep track of user deposits since the runtime constant `NewStreamDeposit`
         // could be changed in a runtime upgrade. This is a potential security issue.
@@ -299,6 +298,16 @@ where
             deposit,
             Precision::Exact,
         )?;
+
+        // Remove the payment stream from the FixedRatePaymentStreams mapping
+        FixedRatePaymentStreams::<T>::remove(provider_id, user_account);
+
+        // Decrease the user's payment streams count
+        let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
+        user_payment_streams_count = user_payment_streams_count
+            .checked_sub(1)
+            .ok_or(ArithmeticError::Underflow)?;
+        RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
 
         Ok(())
     }
@@ -358,6 +367,15 @@ where
                 deposit
             ),
             Error::<T>::CannotHoldDeposit
+        );
+
+        // Check if adding one to the user's payment streams count would overflow
+        // NOTE: We check this BEFORE holding the deposit, as for some weird reason the `hold` function does NOT revert when the extrinsic fails !?!?
+        ensure!(
+            RegisteredUsers::<T>::get(user_account)
+                .checked_add(1)
+                .is_some(),
+            ArithmeticError::Overflow
         );
 
         // Hold the deposit from the User
@@ -663,6 +681,15 @@ where
                     ),
                     "Provider should exist and have a payment account if its ID exists.",
                     Error::<T>::ProviderInconsistencyError
+                );
+
+                // Check if the total amount charged would overflow
+                // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
+                ensure!(
+                    total_amount_charged
+                        .checked_add(&amount_to_charge)
+                        .is_some(),
+                    ArithmeticError::Overflow
                 );
 
                 // Charge the payment stream from the user's balance
