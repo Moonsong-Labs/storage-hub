@@ -1,35 +1,48 @@
 use std::{
-    fs::File,
+    fs::{create_dir_all, File},
     io::{Read, Write},
 };
 
 use codec::Encode;
+use num_bigint::BigUint;
 use rand::Rng;
-use serde::Serialize;
-use sp_trie::{MemoryDB, TrieDBMutBuilder, TrieLayout, TrieMut};
-use trie_db::Hasher;
+use shp_traits::AsCompact;
+use sp_runtime::traits::BlakeTwo256;
+use sp_trie::{
+    recorder::Recorder, LayoutV1, MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut,
+};
+use storage_hub_traits::CommitmentVerifier;
+use trie_db::{Hasher, Trie, TrieIterator};
+
+use crate::{FileKeyProof, FileKeyVerifier};
 
 /// The hash type of trie node keys
 type HashT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 
-const CHUNK_SIZE: usize = 2;
+const CHUNK_SIZE: u64 = 2;
 const FILES_BASE_PATH: &str = "./tmp/";
+const FILE_SIZE: u64 = 2u64.pow(11);
+const SIZE_TO_CHALLENGES: u64 = FILE_SIZE / 10;
 
-#[derive(Serialize, PartialEq, Debug)]
+#[derive(PartialEq, Debug)]
 struct FileMetadata {
     owner: Vec<u8>,
     location: Vec<u8>,
     size: u64,
-    /// The fingerprint will always be 32 bytes since we are using Keccak256, aka RefHasher.
     fingerprint: [u8; 32],
 }
 
 /// Build a Merkle Patricia Trie simulating a file split in chunks.
-pub fn build_merkle_patricia_trie<T: TrieLayout>() -> (MemoryDB<T::Hash>, HashT<T>, FileMetadata) {
+fn build_merkle_patricia_trie<T: TrieLayout>(
+    random: bool,
+) -> (MemoryDB<T::Hash>, HashT<T>, FileMetadata)
+where
+    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; 32]>,
+{
     let user_id = b"user_id";
     let bucket = b"bucket";
     let file_name = b"sample64b";
-    let file_size = 2u64.pow(100);
+    let file_size = FILE_SIZE;
 
     println!("Chunking file into 32 byte chunks and building Merkle Patricia Trie...");
 
@@ -40,7 +53,11 @@ pub fn build_merkle_patricia_trie<T: TrieLayout>() -> (MemoryDB<T::Hash>, HashT<
         String::from_utf8(file_name.to_vec()).unwrap()
     );
 
-    let file = create_test_file(&file_path, file_size as usize);
+    if random {
+        create_random_test_file(&file_path, file_size as u64)
+    } else {
+        create_test_file(&file_path, file_size as u64)
+    };
     let (memdb, fingerprint) = merklise_file::<T>(&file_path);
 
     let metadata = FileMetadata {
@@ -57,7 +74,7 @@ pub fn build_merkle_patricia_trie<T: TrieLayout>() -> (MemoryDB<T::Hash>, HashT<
         &[
             &metadata.owner.encode(),
             &metadata.location.encode(),
-            &metadata.size.encode(),
+            &AsCompact(metadata.size).encode(),
             &metadata.fingerprint.encode(),
         ]
         .into_iter()
@@ -70,8 +87,8 @@ pub fn build_merkle_patricia_trie<T: TrieLayout>() -> (MemoryDB<T::Hash>, HashT<
 }
 
 /// Build a Merkle Patricia Trie with just one chunk.
-pub fn build_merkle_patricia_trie_one_key<T: TrieLayout>(
-) -> (MemoryDB<T::Hash>, HashT<T>, FileMetadata) {
+fn build_merkle_patricia_trie_one_key<T: TrieLayout>() -> (MemoryDB<T::Hash>, HashT<T>, FileMetadata)
+{
     let user_id = b"user_id";
     let bucket = b"bucket";
     let file_name = b"sample64b";
@@ -86,7 +103,7 @@ pub fn build_merkle_patricia_trie_one_key<T: TrieLayout>(
         String::from_utf8(file_name.to_vec()).unwrap()
     );
 
-    let file = create_test_file(&file_path, CHUNK_SIZE);
+    create_test_file(&file_path, CHUNK_SIZE);
     let (memdb, fingerprint) = merklise_file::<T>(&file_path);
 
     let metadata = FileMetadata {
@@ -103,7 +120,7 @@ pub fn build_merkle_patricia_trie_one_key<T: TrieLayout>(
         &[
             &metadata.owner.encode(),
             &metadata.location.encode(),
-            &metadata.size.encode(),
+            &AsCompact(metadata.size).encode(),
             &metadata.fingerprint.encode(),
         ]
         .into_iter()
@@ -122,19 +139,19 @@ pub fn build_merkle_patricia_trie_one_key<T: TrieLayout>(
 pub fn merklise_file<T: TrieLayout>(file_path: &str) -> (MemoryDB<T::Hash>, HashT<T>) {
     let file_path = FILES_BASE_PATH.to_owned() + file_path;
     let mut file = std::fs::File::open(file_path).unwrap();
-    let mut buf = [0; CHUNK_SIZE];
+    let mut buf = [0; CHUNK_SIZE as usize];
     let mut chunks = Vec::new();
 
     // create list of key-value pairs consisting of chunk metadata and chunk data
+    let mut chunk_i = 0u64;
     loop {
         let n = file.read(&mut buf).unwrap();
         if n == 0 {
             break;
         }
 
-        let chunk_hash = T::Hash::hash(&buf);
-
-        chunks.push((chunk_hash, buf.to_vec()));
+        chunks.push((chunk_i, buf.to_vec()));
+        chunk_i += 1;
     }
 
     let mut memdb = MemoryDB::<T::Hash>::default();
@@ -142,15 +159,38 @@ pub fn merklise_file<T: TrieLayout>(file_path: &str) -> (MemoryDB<T::Hash>, Hash
     {
         let mut t = TrieDBMutBuilder::<T>::new(&mut memdb, &mut root).build();
         for (k, v) in &chunks {
-            t.insert(k.as_ref(), v).unwrap();
+            t.insert(&AsCompact(*k).encode(), v).unwrap();
         }
     }
 
     (memdb, root)
 }
 
-pub fn create_test_file(filename: &str, size: usize) -> File {
-    let mut file = File::create(filename).unwrap();
+/// Create a local file for testing, for a given size, and with a given file name.
+pub fn create_test_file(filename: &str, size: u64) -> File {
+    create_dir_all(FILES_BASE_PATH).unwrap();
+    let mut file = File::create(FILES_BASE_PATH.to_owned() + filename).unwrap();
+
+    // Generate random content
+    let mut i = 0;
+    let content: Vec<u8> = (0..size)
+        .map(|_| {
+            i = i % (u8::MAX - 1);
+            i += 1;
+            i
+        })
+        .collect();
+
+    file.write_all(&content).unwrap();
+
+    file
+}
+
+/// Create a local file for testing, for a given size, with a given file name,
+/// and with random content.
+pub fn create_random_test_file(filename: &str, size: u64) -> File {
+    create_dir_all(FILES_BASE_PATH).unwrap();
+    let mut file = File::create(FILES_BASE_PATH.to_owned() + filename).unwrap();
     let mut rng = rand::thread_rng();
 
     // Generate random content
@@ -159,4 +199,114 @@ pub fn create_test_file(filename: &str, size: usize) -> File {
     file.write_all(&content).unwrap();
 
     file
+}
+
+fn generate_challenges<T: TrieLayout>(
+    challenges_count: u64,
+    chunks_count: u64,
+) -> (Vec<HashT<T>>, Vec<Vec<u8>>) {
+    let mut challenges = Vec::new();
+    let mut chunks_challenged = Vec::new();
+
+    for i in 0..challenges_count {
+        // Generate challenge as a hash.
+        let hash_arg = "chunk".to_string() + i.to_string().as_str();
+        let challenge = T::Hash::hash(hash_arg.as_bytes());
+        challenges.push(challenge);
+
+        // Calculate the modulo of the challenge with the number of chunks in the file.
+        // The challenge is a big endian 32 byte array.
+        let challenged_chunk = BigUint::from_bytes_be(challenge.as_ref()) % chunks_count;
+        let challenged_chunk: u64 = challenged_chunk.try_into().expect(
+            "This is impossible. The modulo of a number with a u64 should always fit in a u64.",
+        );
+
+        chunks_challenged.push(AsCompact(challenged_chunk).encode());
+    }
+
+    (challenges, chunks_challenged)
+}
+
+#[test]
+fn generate_trie_works() {
+    let (memdb, _file_key, metadata) = build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false);
+    let root = metadata.fingerprint.try_into().unwrap();
+
+    let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root).build();
+
+    println!("Trie root: {:?}", trie.root());
+
+    // Count the number of leaves in the trie.
+    // This should be the same as the number of chunks in the file.
+    let mut leaves_count = 0;
+    let mut trie_iter = trie.iter().unwrap();
+    while let Some(_) = trie_iter.next() {
+        leaves_count += 1;
+    }
+    let mut chunks_count = FILE_SIZE / CHUNK_SIZE;
+    if FILE_SIZE % CHUNK_SIZE != 0 {
+        chunks_count += 1;
+    }
+    assert_eq!(leaves_count, chunks_count);
+
+    println!("Number of leaves: {:?}", leaves_count);
+}
+
+#[test]
+fn commitment_verifier_many_challenges_success() {
+    let (memdb, file_key, metadata) = build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false);
+    let root = metadata.fingerprint.try_into().unwrap();
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+    let mut chunks_count = FILE_SIZE / CHUNK_SIZE;
+    if FILE_SIZE % CHUNK_SIZE != 0 {
+        chunks_count += 1;
+    }
+    let (mut challenges, chunks_challenged) =
+        generate_challenges::<LayoutV1<BlakeTwo256>>(FILE_SIZE / SIZE_TO_CHALLENGES, chunks_count);
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        for challenged_chunk in chunks_challenged {
+            // Seek to the challenge key.
+            iter.seek(&challenged_chunk).unwrap();
+
+            // Read the leaf node.
+            iter.next();
+        }
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<BlakeTwo256>(root)
+        .expect("Failed to create compact proof from recorder");
+    let file_key_proof = FileKeyProof {
+        owner: metadata.owner.clone(),
+        location: metadata.location.clone(),
+        size: metadata.size,
+        fingerprint: metadata.fingerprint.clone(),
+        proof,
+    };
+
+    // Verify proof
+    let mut proven_challenges = FileKeyVerifier::<
+        LayoutV1<BlakeTwo256>,
+        { BlakeTwo256::LENGTH },
+        { CHUNK_SIZE },
+        { SIZE_TO_CHALLENGES },
+    >::verify_proof(&file_key, &challenges, &file_key_proof)
+    .expect("Failed to verify proof");
+
+    assert_eq!(proven_challenges.sort(), challenges.sort());
 }
