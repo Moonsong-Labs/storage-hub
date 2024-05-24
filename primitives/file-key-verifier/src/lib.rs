@@ -85,8 +85,6 @@ where
         if proof.size % SIZE_TO_CHALLENGES != 0 {
             chunks_to_check += 1;
         }
-        println!("Chunks to check: {:?}", chunks_to_check);
-        println!("Challenges len: {:?}", challenges.len());
         if challenges.len() != chunks_to_check as usize {
             return Err(
                 "Number of challenges does not match the number of chunks that should have been challenged for a file of this size.".into(),
