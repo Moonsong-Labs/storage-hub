@@ -61,7 +61,7 @@ use storage_hub_primitives::TrieVerifier;
 use storage_hub_traits::{CommitmentVerifier, MaybeDebug};
 use xcm::latest::prelude::BodyId;
 
-use crate::{ParachainInfo, FILE_CHUNK_SIZE};
+use crate::{ParachainInfo, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES};
 
 use self::currency::UNITS;
 
@@ -452,8 +452,12 @@ impl pallet_proofs_dealer::Config for Runtime {
     type MerkleHash = Hash;
     type MerkleHashing = BlakeTwo256;
     type ForestVerifier = TrieVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
-    type KeyVerifier =
-        FileKeyVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }, { FILE_CHUNK_SIZE }>;
+    type KeyVerifier = FileKeyVerifier<
+        LayoutV1<BlakeTwo256>,
+        { BlakeTwo256::LENGTH },
+        { FILE_CHUNK_SIZE },
+        { FILE_SIZE_TO_CHALLENGES },
+    >;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = RandomChallengesPerBlock;
     type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
