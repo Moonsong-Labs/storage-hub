@@ -123,7 +123,7 @@ where
         let mut proven_challenges = BTreeSet::new();
         let mut challenges_iter = challenges.iter();
 
-        // Iterate over the challenges compute the modulo of the challenged hashes with the number of chunks in the file,
+        // Iterate over the challenges, compute the modulo of the challenged hashes with the number of chunks in the file,
         // and check if the resulting leaf is in the proof.
         while let Some(challenge) = challenges_iter.next() {
             // Calculate the chunks of the file based on its size.
@@ -147,7 +147,7 @@ where
             // The chunk should be Some(leaf) for the proof to be valid.
             if chunk.is_none() {
                 return Err(
-                    "The proof is invalid. The challenge does not exist in the trie.".into(),
+                    "The proof is invalid. The challenged chunk was not found in the trie. This should not be possible, files should be merklised with chunks as the value of the leaves.".into(),
                 );
             }
 
