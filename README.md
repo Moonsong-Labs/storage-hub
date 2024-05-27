@@ -7,7 +7,7 @@
 
 ## Overview
 
-StorageHub is a storage-optimized parachain codebase designed to work with other Polkadot & Kusama parachains. It focuses on storing data efficiently and decentralizing access, while also enabling data to be accessed, used, and managed by other parachains. It will be possible for users to directly interact with the storage on the chain, but StorageHub also seeks to natively interoperate with existing parachains via XCM.
+StorageHub is a storage-optimized parachain codebase, designed to work with other Polkadot & Kusama parachains. It focuses on storing data efficiently and decentralizing access, while also enabling data to be accessed, used, and managed by other parachains. It will be possible for users to directly interact with the storage on the chain, but StorageHub also seeks to natively interoperate with existing parachains via XCM.
 
 ### Layout
 
