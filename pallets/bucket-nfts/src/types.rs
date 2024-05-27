@@ -7,11 +7,11 @@ use crate::Config;
 #[derive(MaxEncodedLen, TypeInfo, Encode, Decode, PartialEq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct ItemMetadata<T: Config> {
-    pub read_access_regex: BoundedVec<u8, T::StringLimit>,
+    pub read_access_regex: ReadAccessRegex<T>,
 }
 
 impl<T: Config> ItemMetadata<T> {
-    pub fn new(read_access_regex: BoundedVec<u8, T::StringLimit>) -> Self {
+    pub fn new(read_access_regex: ReadAccessRegex<T>) -> Self {
         Self { read_access_regex }
     }
 }
@@ -39,3 +39,5 @@ pub(crate) type AccountIdLookupSourceOf<T> =
 /// Type alias for the account ID target type.
 pub(crate) type AccountIdLookupTargetOf<T> =
     <<T as frame_system::Config>::Lookup as StaticLookup>::Target;
+
+pub(crate) type ReadAccessRegex<T> = BoundedVec<u8, <T as pallet_nfts::Config>::StringLimit>;

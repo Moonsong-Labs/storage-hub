@@ -20,7 +20,9 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use pallet_nfts::WeightInfo;
 
-    use crate::types::{AccountIdLookupSourceOf, AccountIdLookupTargetOf, BucketIdFor};
+    use crate::types::{
+        AccountIdLookupSourceOf, AccountIdLookupTargetOf, BucketIdFor, ReadAccessRegex,
+    };
 
     #[pallet::config]
     pub trait Config: frame_system::Config + pallet_nfts::Config {
@@ -66,8 +68,6 @@ pub mod pallet {
         BucketIsNotPrivate,
         /// Account is not the owner of the bucket.
         NotBucketOwner,
-        /// Item not found in the collection.
-        ItemNotFound,
     }
 
     #[pallet::call]
@@ -80,7 +80,7 @@ pub mod pallet {
             recipient: AccountIdLookupSourceOf<T>,
             bucket: BucketIdFor<T>,
             item_id: T::ItemId,
-            read_access_regex: BoundedVec<u8, T::StringLimit>,
+            read_access_regex: ReadAccessRegex<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -95,14 +95,14 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Update the read access for an item.
+        /// Update read access for an item.
         #[pallet::call_index(1)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn update_read_access(
             origin: OriginFor<T>,
             bucket: BucketIdFor<T>,
             item_id: T::ItemId,
-            read_access_regex: BoundedVec<u8, T::StringLimit>,
+            read_access_regex: ReadAccessRegex<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 

@@ -2,9 +2,10 @@ use codec::Encode;
 use frame_support::ensure;
 use frame_system::{pallet_prelude::OriginFor, RawOrigin};
 use sp_runtime::traits::StaticLookup;
-use sp_runtime::{BoundedVec, DispatchError};
+use sp_runtime::DispatchError;
 use storage_hub_traits::ReadProvidersInterface;
 
+use crate::types::ReadAccessRegex;
 use crate::{
     pallet,
     types::{AccountIdLookupSourceOf, AccountIdLookupTargetOf, BucketIdFor, ItemMetadata},
@@ -21,7 +22,7 @@ where
         recipient: AccountIdLookupSourceOf<T>,
         bucket: BucketIdFor<T>,
         item_id: T::ItemId,
-        read_access_regex: BoundedVec<u8, T::StringLimit>,
+        read_access_regex: ReadAccessRegex<T>,
     ) -> Result<AccountIdLookupTargetOf<T>, DispatchError> {
         // Convert the lookup source to a target account.
         let recipient_account = T::Lookup::lookup(recipient.clone())?;
@@ -31,6 +32,8 @@ where
             .ok_or(Error::<T>::BucketIsNotPrivate)?;
 
         // Check if the issuer is the owner of the bucket.
+        // This is a redundant check but primarily added for ergonomics.
+        // Transfering ownership of a collection is not exposed to the user and therefore the bucket owner is implicitly the collection owner.
         ensure!(
             T::Providers::is_bucket_owner(issuer, &bucket)?,
             Error::<T>::NotBucketOwner
@@ -60,20 +63,22 @@ where
         account: &T::AccountId,
         bucket: BucketIdFor<T>,
         item_id: T::ItemId,
-        read_access_regex: BoundedVec<u8, T::StringLimit>,
+        read_access_regex: ReadAccessRegex<T>,
     ) -> Result<(), DispatchError> {
         // Get the collection ID of the bucket.
         let collection_id = T::Providers::get_collection_id_of_bucket(&bucket)?
             .ok_or(Error::<T>::BucketIsNotPrivate)?;
 
         // Check if the issuer is the owner of the bucket.
+        // This is a redundant check but primarily added for ergonomics.
+        // Transfering ownership of a collection is not exposed to the user and therefore the bucket owner is implicitly the collection owner.
         ensure!(
             T::Providers::is_bucket_owner(account, &bucket)?,
             Error::<T>::NotBucketOwner
         );
 
-        // Check if the item exists.
-        pallet_nfts::Item::<T>::get(collection_id, item_id).ok_or(Error::<T>::ItemNotFound)?;
+        // We do not add any additional redundant checks already covered by the `burn` function from the `pallet-nfts` pallet.
+        // For example, we do not check if the item exists.
 
         // Set the read access regex for the item.
         pallet_nfts::Pallet::<T>::set_metadata(
@@ -98,8 +103,8 @@ where
         let collection_id = T::Providers::get_collection_id_of_bucket(&bucket)?
             .ok_or(Error::<T>::BucketIsNotPrivate)?;
 
-        // Check if the item exists.
-        pallet_nfts::Item::<T>::get(collection_id, item_id).ok_or(Error::<T>::ItemNotFound)?;
+        // We do not add any additional redundant checks already covered by the `burn` function from the `pallet-nfts` pallet.
+        // For example, we do not check if the account is the owner of the item.
 
         // Burn the item.
         pallet_nfts::Pallet::<T>::burn(Self::sign(account), collection_id, item_id)?;

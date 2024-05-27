@@ -218,7 +218,14 @@ mod update_read_access_tests {
             ));
 
             // Assert that the correct event was deposited
-            System::assert_last_event(Event::AccessShared { issuer, recipient }.into());
+            System::assert_last_event(
+                Event::ReadAccessUpdated {
+                    admin: issuer,
+                    bucket: bucket_id,
+                    item_id: 999,
+                }
+                .into(),
+            );
         });
     }
 
@@ -330,7 +337,7 @@ mod update_read_access_tests {
                     999,
                     BoundedVec::try_from(b"new_regex".to_vec()).unwrap()
                 ),
-                Error::<Test>::ItemNotFound
+                pallet_nfts::Error::<Test>::UnknownItem
             );
         });
     }
@@ -483,7 +490,7 @@ mod burn_tests {
             // Should fail since the item does not exist
             assert_noop!(
                 BucketNfts::burn(user_origin, bucket_id, 999),
-                Error::<Test>::ItemNotFound
+                pallet_nfts::Error::<Test>::UnknownItem
             );
         });
     }
