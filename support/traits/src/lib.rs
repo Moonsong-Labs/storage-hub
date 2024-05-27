@@ -121,6 +121,12 @@ pub trait ReadProvidersInterface: ProvidersInterface {
         who: &Self::Provider,
     ) -> Result<BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>, DispatchError>;
 
+    /// Check if account is the owner of a bucket.
+    fn is_bucket_owner(
+        who: &Self::AccountId,
+        bucket_id: &Self::BucketId,
+    ) -> Result<bool, DispatchError>;
+
     /// Get `collection_id` of a bucket if there is one.
     fn get_collection_id_of_bucket(
         bucket_id: &Self::BucketId,

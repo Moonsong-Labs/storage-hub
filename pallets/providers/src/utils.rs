@@ -918,6 +918,14 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         }
     }
 
+    fn is_bucket_owner(
+        who: &Self::AccountId,
+        bucket_id: &Self::BucketId,
+    ) -> Result<bool, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(&bucket.user_id == who)
+    }
+
     fn get_collection_id_of_bucket(
         bucket_id: &Self::BucketId,
     ) -> Result<Option<T::BucketNftCollectionId>, DispatchError> {

@@ -187,7 +187,7 @@ impl pallet_nfts::Config for Test {
     type ItemId = u128;
     type Currency = Balances;
     type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<Self::AccountId>>;
-    type ForceOrigin = frame_system::EnsureRoot<Self::AccountId>;
+    type ForceOrigin = frame_system::EnsureRoot<AccountId>;
     type Locker = ();
     type CollectionDeposit = ConstU128<2>;
     type ItemDeposit = ConstU128<1>;

@@ -18,6 +18,7 @@ mod benchmarking;
 pub mod pallet {
     use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
     use frame_system::pallet_prelude::*;
+    use pallet_nfts::WeightInfo;
 
     use crate::types::{AccountIdLookupSourceOf, AccountIdLookupTargetOf, BucketIdFor};
 
@@ -44,6 +45,18 @@ pub mod pallet {
             issuer: T::AccountId,
             recipient: AccountIdLookupTargetOf<T>,
         },
+        /// Notifies that the read access for an item has been updated.
+        ReadAccessUpdated {
+            admin: T::AccountId,
+            bucket: BucketIdFor<T>,
+            item_id: T::ItemId,
+        },
+        /// Notifies that an NFT has been burned.
+        NftBurned {
+            account: T::AccountId,
+            bucket: BucketIdFor<T>,
+            item_id: T::ItemId,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -51,6 +64,10 @@ pub mod pallet {
     pub enum Error<T> {
         /// Bucket is not private. Call `make_bucket_public` from the providers pallet to make it private.
         BucketIsNotPrivate,
+        /// Account is not the owner of the bucket.
+        NotBucketOwner,
+        /// Item not found in the collection.
+        ItemNotFound,
     }
 
     #[pallet::call]
@@ -73,6 +90,52 @@ pub mod pallet {
             Self::deposit_event(Event::AccessShared {
                 issuer: who,
                 recipient: recipient_account,
+            });
+
+            Ok(())
+        }
+
+        /// Update the read access for an item.
+        #[pallet::call_index(1)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn update_read_access(
+            origin: OriginFor<T>,
+            bucket: BucketIdFor<T>,
+            item_id: T::ItemId,
+            read_access_regex: BoundedVec<u8, T::StringLimit>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            Self::do_update_read_access(&who, bucket, item_id, read_access_regex)?;
+
+            // `who` is implicitly known as the admin of the collection otherwise the execution would have failed with a lack of permissions.
+            Self::deposit_event(Event::ReadAccessUpdated {
+                admin: who,
+                bucket,
+                item_id,
+            });
+
+            Ok(())
+        }
+
+        /// Burn an NFT from a collection.
+        ///
+        /// This function is a wrapper around the `burn` function from the `pallet-nfts` pallet.
+        #[pallet::call_index(2)]
+        #[pallet::weight(T::WeightInfo::burn())]
+        pub fn burn(
+            origin: OriginFor<T>,
+            bucket: BucketIdFor<T>,
+            item: T::ItemId,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            Self::do_burn(&who, bucket, item)?;
+
+            Self::deposit_event(Event::NftBurned {
+                account: who,
+                bucket,
+                item_id: item,
             });
 
             Ok(())

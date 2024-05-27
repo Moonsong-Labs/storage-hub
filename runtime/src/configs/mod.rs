@@ -349,6 +349,7 @@ impl pallet_nfts::Config for Runtime {
     type CollectionId = u32;
     type ItemId = u32;
     type Currency = Balances;
+    type CreateOrigin = AsEnsureOriginWithArg<EnsureSigned<AccountId>>;
     type ForceOrigin = frame_system::EnsureRoot<AccountId>;
     type CollectionDeposit = CollectionDeposit;
     type ItemDeposit = ItemDeposit;
@@ -369,7 +370,6 @@ impl pallet_nfts::Config for Runtime {
     type WeightInfo = pallet_nfts::weights::SubstrateWeight<Runtime>;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
-    type CreateOrigin = AsEnsureOriginWithArg<EnsureSigned<AccountId>>;
     type Locker = ();
 }
 
