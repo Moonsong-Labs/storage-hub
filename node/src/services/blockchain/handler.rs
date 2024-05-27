@@ -42,7 +42,7 @@ use sp_runtime::{
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 
-use crate::service::ParachainClient;
+use crate::{service::ParachainClient, services::blockchain::transaction::SubmittedTransaction};
 
 use crate::services::blockchain::{
     commands::BlockchainServiceCommand,
@@ -103,7 +103,9 @@ impl Actor for BlockchainService {
                     match self.send_extrinsic(call).await {
                         Ok(output) => {
                             debug!(target: LOG_TARGET, "Extrinsic sent successfully: {:?}", output);
-                            match callback.send(Ok((output.receiver, output.hash))) {
+                            match callback
+                                .send(Ok(SubmittedTransaction::new(output.receiver, output.hash)))
+                            {
                                 Ok(_) => {
                                     trace!(target: LOG_TARGET, "Receiver sent successfully");
                                 }
@@ -220,7 +222,7 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
     }
 
     async fn run(mut self) {
-        info!(target: LOG_TARGET, "FileTransferService starting up!");
+        info!(target: LOG_TARGET, "BlockchainService starting up!");
 
         // Import notification stream to be notified of new blocks.
         let notification_stream = self.actor.client.import_notification_stream();

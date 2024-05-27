@@ -8,22 +8,61 @@ use sp_trie::CompactProof;
 pub use storage_hub_runtime::FILE_CHUNK_SIZE;
 use trie_db::TrieLayout;
 
+// TODO: this is currently a placeholder in order to define Storage interface.
+/// This type mirrors the `FileLocation<T>` type from the runtime, which is a BoundedVec.
+type FileLocation = Vec<u8>;
 /// The hash type of trie node keys
 pub type HashT<T> = <T as TrieLayout>::Hash;
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 
-// TODO: this is currently a placeholder in order to define Storage interface.
-/// FileKey is the identifier for a file.
-/// Computed as the hash of the FileMetadata.
-pub type Key = Vec<u8>;
-
-// TODO: this is currently a placeholder in order to define Storage interface.
-/// This type mirrors the `FileLocation<T>` type from the runtime, which is a BoundedVec.
-type FileLocation = Vec<u8>;
-
 type Hash = [u8; 32];
 
-#[derive(Encode, Decode, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+/// FileKey is the identifier for a file.
+/// Computed as the hash of the FileMetadata.
+#[derive(
+    Encode, Decode, Clone, Copy, Debug, PartialEq, Eq, Default, Hash, Serialize, Deserialize,
+)]
+pub struct FileKey(Hash);
+
+impl From<Hash> for FileKey {
+    fn from(hash: Hash) -> Self {
+        Self(hash)
+    }
+}
+
+impl Into<Hash> for FileKey {
+    fn into(self) -> Hash {
+        self.0
+    }
+}
+
+impl From<&[u8]> for FileKey {
+    fn from(bytes: &[u8]) -> Self {
+        let mut hash = [0u8; 32];
+        hash.copy_from_slice(&bytes);
+        Self(hash)
+    }
+}
+
+impl AsRef<[u8]> for FileKey {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl From<&[u8; 32]> for FileKey {
+    fn from(bytes: &[u8; 32]) -> Self {
+        Self(*bytes)
+    }
+}
+
+impl AsRef<[u8; 32]> for FileKey {
+    fn as_ref(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+#[derive(Encode, Decode, Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Fingerprint(Hash);
 
 impl Fingerprint {
@@ -60,17 +99,17 @@ impl AsRef<[u8]> for Fingerprint {
 }
 
 // TODO: this is currently a placeholder in order to define Storage interface.
-/// Metadata contains information about a file.
+/// FileMetadata contains information about a file.
 /// Most importantly, the fingerprint which is the root Merkle hash of the file.
 #[derive(Encode, Decode, Clone, Debug, PartialEq, Eq)]
-pub struct Metadata {
+pub struct FileMetadata {
     pub owner: String,
     pub location: FileLocation,
     pub size: u64,
     pub fingerprint: Fingerprint,
 }
 
-impl Metadata {
+impl FileMetadata {
     pub fn new(owner: String, location: Vec<u8>, size: u64, fingerprint: Fingerprint) -> Self {
         Self {
             owner,
@@ -191,9 +230,16 @@ impl Into<CompactProof> for SerializableCompactProof {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FileProof {
     /// The file chunk (and id) that was proven.
-    pub proven: Leaf<ChunkId, Chunk>,
+    pub proven: Vec<Leaf<ChunkId, Chunk>>,
     /// The compact proof.
     pub proof: SerializableCompactProof,
     /// The root hash of the trie, also known as the fingerprint of the file.
     pub root: Fingerprint,
+}
+
+impl FileProof {
+    pub fn verify(&self) -> bool {
+        // TODO: implement this using the verifier from runtime after we have it.
+        true
+    }
 }

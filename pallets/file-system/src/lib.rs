@@ -464,8 +464,8 @@ pub mod pallet {
             origin: OriginFor<T>,
             location: FileLocation<T>,
             root: FileKey<T>,
-            forest_proof: ForestProof<T>,
-            key_proof: KeyProof<T>,
+            non_inclusion_forest_proof: ForestProof<T>,
+            added_file_key_proof: KeyProof<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -475,8 +475,8 @@ pub mod pallet {
                 who.clone(),
                 location.clone(),
                 root,
-                forest_proof.clone(),
-                key_proof.clone(),
+                non_inclusion_forest_proof.clone(),
+                added_file_key_proof.clone(),
             )?;
 
             // Emit event.

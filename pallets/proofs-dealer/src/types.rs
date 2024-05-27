@@ -65,15 +65,15 @@ impl<T: crate::Config> Debug for KeyProof<T> {
 pub type AccountIdFor<T> = <T as frame_system::Config>::AccountId;
 
 /// Syntactic sugar for the MerkleHash type used in the proofs pallet.
-pub type MerkleHashFor<T> = <T as crate::Config>::MerkleHash;
+pub type MerkleHashFor<T> = <T as crate::Config>::MerkleTrieHash;
 
 /// The type for keys that identify a file within a Merkle Patricia Forest.
 /// Syntactic sugar for the MerkleHash type used in the proofs pallet.
-pub type KeyFor<T> = <T as crate::Config>::MerkleHash;
+pub type KeyFor<T> = <T as crate::Config>::MerkleTrieHash;
 
 /// The type for a root of a Merkle Patricia Forest.
 /// Syntactic sugar for the MerkleHash type used in the proofs pallet.
-pub type ForestRootFor<T> = <T as crate::Config>::MerkleHash;
+pub type ForestRootFor<T> = <T as crate::Config>::MerkleTrieHash;
 
 /// Syntactic sugar for the RandomChallengesPerBlock type used in the proofs pallet.
 pub type RandomChallengesPerBlockFor<T> = <T as crate::Config>::RandomChallengesPerBlock;

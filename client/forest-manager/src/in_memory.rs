@@ -1,5 +1,5 @@
 use hash_db::Hasher;
-use shc_common::types::{HasherOutT, Metadata};
+use shc_common::types::{FileMetadata, HasherOutT};
 use sp_trie::{recorder::Recorder, MemoryDB, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::{Trie, TrieDBMutBuilder};
 
@@ -68,7 +68,8 @@ where
         })
     }
 
-    fn insert_metadata(&mut self, metadata: &Metadata) -> Result<HasherOutT<T>, ErrorT<T>> where {
+    fn insert_metadata(&mut self, metadata: &FileMetadata) -> Result<HasherOutT<T>, ErrorT<T>> where
+    {
         let file_key = metadata.key::<T::Hash>();
         if self.contains_file_key(&file_key)? {
             return Err(ForestStorageError::FileKeyAlreadyExists(file_key).into());

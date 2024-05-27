@@ -340,6 +340,19 @@ where
             &key_proof,
         )?;
 
+        // TODO: Generate challenges for the key proof properly.
+        let challenges = vec![];
+
+        // Check that the key proof is valid.
+        <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::verify_key_proof(
+            &file_key,
+            &challenges,
+            &key_proof,
+        )?;
+
+        // TODO: Check if this is the first file added to the BSP's Forest. If so, initialise
+        // TODO: last block proven by this BSP accordingly.
+
         // Remove storage request if we reached the required number of bsps.
         if file_metadata.bsps_confirmed == file_metadata.bsps_required {
             // Remove storage request metadata.
