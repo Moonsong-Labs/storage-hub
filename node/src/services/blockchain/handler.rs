@@ -346,6 +346,7 @@ impl BlockchainService {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
 
         // Get the nonce for the caller and increment it for the next transaction.
+        // TODO: Handle nonce overflow.
         let nonce = self.nonce_counter;
 
         // Construct the extrinsic.
