@@ -36,7 +36,7 @@ where
             Error::<T>::NotBucketOwner
         );
 
-        let origin = OriginFor::<T>::from(RawOrigin::Signed(issuer.clone()));
+        let origin = Self::sign(issuer);
 
         // Issue an item to the account.
         pallet_nfts::Pallet::<T>::mint(origin.clone(), collection_id, item_id, recipient, None)?;
@@ -75,10 +75,13 @@ where
         // Check if the item exists.
         pallet_nfts::Item::<T>::get(collection_id, item_id).ok_or(Error::<T>::ItemNotFound)?;
 
-        let origin = OriginFor::<T>::from(RawOrigin::Signed(account.clone()));
-
         // Set the read access regex for the item.
-        pallet_nfts::Pallet::<T>::set_metadata(origin, collection_id, item_id, read_access_regex)?;
+        pallet_nfts::Pallet::<T>::set_metadata(
+            Self::sign(account),
+            collection_id,
+            item_id,
+            read_access_regex,
+        )?;
 
         Ok(())
     }
