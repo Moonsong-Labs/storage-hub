@@ -920,12 +920,9 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
 
     fn get_collection_id_of_bucket(
         bucket_id: &Self::BucketId,
-    ) -> Option<Self::BucketNftCollectionId> {
-        if let Some(bucket) = Buckets::<T>::get(bucket_id) {
-            bucket.collection_id
-        } else {
-            None
-        }
+    ) -> Result<Option<T::BucketNftCollectionId>, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.collection_id)
     }
 
     fn derive_bucket_id(

@@ -577,3 +577,8 @@ impl Convert<Balance, BlockNumberFor<Runtime>> for SaturatingBalanceToBlockNumbe
         block_number.saturated_into()
     }
 }
+
+impl pallet_bucket_nfts::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Providers = Providers;
+}

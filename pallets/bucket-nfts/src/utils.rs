@@ -29,7 +29,7 @@ where
         let maybe_collection_id = T::Providers::get_collection_id_of_bucket(&bucket);
 
         // Collections only exist for private buckets.
-        let collection_id = maybe_collection_id.ok_or(Error::<T>::BucketIsNotPrivate)?;
+        let collection_id = maybe_collection_id?.ok_or(Error::<T>::BucketIsNotPrivate)?;
 
         let origin_issuer = OriginFor::<T>::from(RawOrigin::Signed(issuer.clone()));
 

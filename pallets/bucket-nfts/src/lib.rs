@@ -55,6 +55,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
+        /// Share access to files under a bucket with another account.
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn share_access(

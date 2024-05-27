@@ -257,6 +257,7 @@ construct_runtime!(
         FileSystem: pallet_file_system = 41,
         ProofsDealer: pallet_proofs_dealer = 42,
         Randomness: pallet_randomness = 43,
+        BucketNfts: pallet_bucket_nfts = 44,
 
         Nfts: pallet_nfts::{Pallet, Storage, Event<T>} = 50,
     }

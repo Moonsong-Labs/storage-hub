@@ -60,6 +60,34 @@ fn share_access_success() {
 }
 
 #[test]
+fn share_access_bucket_not_found_fail() {
+    new_test_ext().execute_with(|| {
+        let issuer = Keyring::Alice.to_account_id();
+        let issuer_origin = RuntimeOrigin::signed(issuer.clone());
+        let recipient = Keyring::Bob.to_account_id();
+        let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+
+        let bucket_id =
+            <<Test as crate::Config>::Providers as ReadProvidersInterface>::derive_bucket_id(
+                &issuer,
+                bucket_name,
+            );
+
+        // Dispatch a signed extrinsic.
+        assert_noop!(
+            BucketNfts::share_access(
+                issuer_origin,
+                recipient.clone(),
+                bucket_id,
+                999,
+                BoundedVec::try_from(b"*".to_vec()).unwrap()
+            ),
+            pallet_storage_providers::Error::<Test>::BucketNotFound
+        );
+    });
+}
+
+#[test]
 fn share_access_private_bucket_fail() {
     new_test_ext().execute_with(|| {
         let issuer = Keyring::Alice.to_account_id();

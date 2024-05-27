@@ -414,6 +414,8 @@ pub mod pallet {
         NoBucketId,
         /// Error thrown when a user has a SP ID assigned to it but the SP data does not exist in storage (Inconsistency error).
         SpRegisteredButDataNotFound,
+        /// Error thrown when a bucket ID is not found in storage.
+        BucketNotFound,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
