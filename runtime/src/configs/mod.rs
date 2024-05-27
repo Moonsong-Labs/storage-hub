@@ -65,8 +65,6 @@ use crate::{ParachainInfo, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES};
 
 use self::currency::UNITS;
 
-use self::currency::UNITS;
-
 // Local module imports
 use super::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},

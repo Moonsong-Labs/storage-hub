@@ -93,7 +93,7 @@ pub mod pallet {
             + FullCodec;
 
         /// The hashing system (algorithm) being used for the Merkle Patricia Forests (e.g. Blake2).
-        type MerkleTrieHashing: Hash<Output = Self::MerkleHash> + TypeInfo;
+        type MerkleTrieHashing: Hash<Output = Self::MerkleTrieHash> + TypeInfo;
 
         /// The type to convert a balance to a block number.
         type StakeToBlockNumber: Convert<BalanceFor<Self>, BlockNumberFor<Self>>;
