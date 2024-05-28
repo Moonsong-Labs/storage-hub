@@ -147,7 +147,7 @@ where
             // The chunk should be Some(leaf) for the proof to be valid.
             if chunk.is_none() {
                 return Err(
-                    "The proof is invalid. The challenged chunk was not found in the trie. This should not be possible, files should be merklised with chunks as the value of the leaves.".into(),
+                    "The proof is invalid. The challenged chunk was not found in the trie, possibly because the challenged chunk has an index higher than the amount of chunks in the file. This should not be possible, provided that the size of the file (and therefore number of chunks) is correct.".into(),
                 );
             }
 
