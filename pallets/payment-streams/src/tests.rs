@@ -2090,7 +2090,7 @@ mod dynamic_rate_streams {
         }
 
         #[test]
-        fn update_payment_stream_fails_if_new_rate_is_zero() {
+        fn update_payment_stream_fails_if_new_amount_is_zero() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
@@ -2129,7 +2129,7 @@ mod dynamic_rate_streams {
         }
 
         #[test]
-        fn update_payment_stream_fails_if_new_rate_is_equal_to_old_rate() {
+        fn update_payment_stream_fails_if_new_amount_is_equal_to_old_amount() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
@@ -2283,7 +2283,7 @@ mod dynamic_rate_streams {
         }
 
         #[test]
-        fn updated_payment_stream_charges_pending_blocks_with_old_rate() {
+        fn updated_payment_stream_charges_pending_blocks_with_old_amount() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
@@ -2730,8 +2730,8 @@ mod dynamic_rate_streams {
         }
 
         #[test]
-        fn charge_payment_streams_correctly_updates_last_chargeable_proof_to_last_chargeable_block()
-        {
+        fn charge_payment_streams_correctly_updates_last_charged_price_index_to_last_chargeable_one(
+        ) {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
@@ -2811,7 +2811,7 @@ mod dynamic_rate_streams {
         }
 
         #[test]
-        fn charge_payment_streams_correctly_uses_the_latest_rate() {
+        fn charge_payment_streams_correctly_uses_the_latest_amount() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
