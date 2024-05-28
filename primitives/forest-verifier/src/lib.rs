@@ -12,12 +12,9 @@ mod tests;
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment
 /// is a Merkle Patricia Trie root hash and the response to a challenge is given
 /// by either the exact key or the next and previous keys in the trie.
-pub struct ForestVerifier<T: TrieLayout, const H_LENGTH: usize>
+pub struct ForestVerifier<T: TrieLayout, const H_LENGTH: usize>(core::marker::PhantomData<T>)
 where
-    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
-{
-    pub _phantom: core::marker::PhantomData<T>,
-}
+    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>;
 
 /// Implement the `CommitmentVerifier` trait for the `ForestVerifier` struct.
 impl<T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for ForestVerifier<T, H_LENGTH>

@@ -30,11 +30,11 @@ pub struct FileKeyVerifier<
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, TypeInfo, Encode, Decode)]
-pub struct FileKeyProof {
+pub struct FileKeyProof<const H_LENGTH: usize> {
     pub owner: Vec<u8>,
     pub location: Vec<u8>,
     pub size: u64,
-    pub fingerprint: [u8; 32],
+    pub fingerprint: [u8; H_LENGTH],
     pub proof: CompactProof,
 }
 
@@ -48,7 +48,7 @@ impl<
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = FileKeyProof;
+    type Proof = FileKeyProof<H_LENGTH>;
     type Commitment = <T::Hash as sp_core::Hasher>::Out;
     type Challenge = <T::Hash as sp_core::Hasher>::Out;
 
@@ -100,11 +100,7 @@ where
         };
 
         // Convert the fingerprint from the proof to the output of the hasher.
-        let expected_root: &[u8; H_LENGTH] = proof
-            .fingerprint
-            .as_slice()
-            .try_into()
-            .map_err(|_| "Failed to convert fingerprint to a fixed size array.")?;
+        let expected_root: &[u8; H_LENGTH] = &proof.fingerprint;
         let expected_root: Self::Commitment = expected_root
             .try_into()
             .map_err(|_| "Failed to convert fingerprint to a hasher output.")?;
