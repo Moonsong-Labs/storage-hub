@@ -478,16 +478,6 @@ where
             });
         }
 
-        // Remove the payment stream from the DynamicRatePaymentStreams mapping
-        DynamicRatePaymentStreams::<T>::remove(provider_id, user_account);
-
-        // Decrease the user's payment streams count
-        let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
-        user_payment_streams_count = user_payment_streams_count
-            .checked_sub(1)
-            .ok_or(ArithmeticError::Underflow)?;
-        RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
-
         // Release the deposit of this payment stream to the User
         let deposit = DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
             .ok_or(Error::<T>::PaymentStreamNotFound)?
@@ -498,6 +488,16 @@ where
             deposit,
             Precision::Exact,
         )?;
+
+        // Remove the payment stream from the DynamicRatePaymentStreams mapping
+        DynamicRatePaymentStreams::<T>::remove(provider_id, user_account);
+
+        // Decrease the user's payment streams count
+        let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
+        user_payment_streams_count = user_payment_streams_count
+            .checked_sub(1)
+            .ok_or(ArithmeticError::Underflow)?;
+        RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
 
         Ok(())
     }
