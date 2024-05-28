@@ -284,7 +284,10 @@ where
         );
 
         // Check that the given amount provided is not 0
-        ensure!(amount_provided != Zero::zero(), Error::<T>::RateCantBeZero);
+        ensure!(
+            amount_provided != Zero::zero(),
+            Error::<T>::AmountProvidedCantBeZero
+        );
 
         // Check that a dynamic-rate payment stream between that Provider and User does not exist yet
         ensure!(
