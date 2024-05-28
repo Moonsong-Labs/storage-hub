@@ -19,6 +19,7 @@ pub mod pallet {
     use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
     use frame_system::pallet_prelude::*;
     use pallet_nfts::WeightInfo;
+    #[cfg(feature = "runtime-benchmarks")]
     use sp_core::H256;
 
     use crate::types::{
