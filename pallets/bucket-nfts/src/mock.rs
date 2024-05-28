@@ -237,6 +237,7 @@ impl pallet_storage_providers::Config for Test {
     type DepositPerData = ConstU128<2>;
     type Subscribers = MockedProvidersSubscriber;
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
+    type StringLimit = ConstU32<100>;
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
     type ProvidersRandomness = MockRandomness;
 }
