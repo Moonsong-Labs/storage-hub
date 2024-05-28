@@ -1,5 +1,5 @@
 import { MultiAddress } from "@polkadot-api/descriptors";
-import { accounts, getZombieClients, waitForChain } from "../util";
+import { accounts, getZombieClients, waitForChain, waitForRandomness } from "../util";
 import { Binary } from "polkadot-api";
 import { isEqual } from "lodash";
 
@@ -72,16 +72,16 @@ async function main() {
   // Settings Balances
   const {
     data: { free },
-  } = await storageApi.query.System.Account.getValue(accounts["sh-BSP"].sr25519.id);
+  } = await storageApi.query.System.Account.getValue(accounts.bsp.sr25519.id);
 
   if (free < 1_000_000_000_000n) {
     const setbalance = storageApi.tx.Balances.force_set_balance({
-      who: MultiAddress.Id(accounts["sh-BSP"].sr25519.id),
+      who: MultiAddress.Id(accounts.bsp.sr25519.id),
       new_free: 1000_000_000_000_000_000n,
     }).decodedCall;
 
     const setbalance2 = storageApi.tx.Balances.force_set_balance({
-      who: MultiAddress.Id(accounts["sh-collator"].sr25519.id),
+      who: MultiAddress.Id(accounts.collator.sr25519.id),
       new_free: 1000_000_000_000_000_000n,
     }).decodedCall;
 
@@ -103,7 +103,7 @@ async function main() {
     process.stdout.write("✅\n");
     const {
       data: { free },
-    } = await storageApi.query.System.Account.getValue(accounts["sh-BSP"].sr25519.id);
+    } = await storageApi.query.System.Account.getValue(accounts.bsp.sr25519.id);
 
     console.log(`BSP account balance reset by sudo, new free is ${free / 10n ** 12n} balance ✅`);
   } else {
@@ -114,21 +114,20 @@ async function main() {
   const buffer = Buffer.from(string, "utf8");
   const uint8Array = new Uint8Array(buffer);
 
-  process.stdout.write(`Requesting sign up for ${accounts["sh-BSP"].sr25519.id} ...`);
+  process.stdout.write(`Requesting sign up for ${accounts.bsp.sr25519.id} ...`);
   await storageApi.tx.Providers.request_bsp_sign_up({
     capacity: 5000000,
     multiaddresses: [new Binary(uint8Array)],
-  }).signAndSubmit(accounts["sh-BSP"].sr25519.signer); // troubleshoot why this is not working
+  }).signAndSubmit(accounts.bsp.sr25519.signer);
   process.stdout.write("✅\n");
 
-  console.log("Waiting for randomness (9 blocks)...");
-  await waitForChain(shClient, { blocks: 9, timeoutMs: 120_000 });
+  await waitForRandomness(storageApi);
 
   // Confirm sign up
-  process.stdout.write(`Confirming sign up for ${accounts["sh-BSP"].sr25519.id} ...`);
+  process.stdout.write(`Confirming sign up for ${accounts.bsp.sr25519.id} ...`);
   await storageApi.tx.Providers.confirm_sign_up({
-    provider_account: accounts["sh-BSP"].sr25519.id,
-  }).signAndSubmit(accounts["sh-BSP"].sr25519.signer);
+    provider_account: accounts.bsp.sr25519.id,
+  }).signAndSubmit(accounts.bsp.sr25519.signer);
   process.stdout.write("✅\n");
 
   // TODO: ERROR: Error thrown when a user tries to confirm a sign up that was not requested previously.
@@ -137,9 +136,9 @@ async function main() {
   const providers = await storageApi.query.Providers.BackupStorageProviders.getEntries();
 
   if (providers.length === 1) {
-    console.log("✅ Provider added correctly");
+    console.log("💫 Provider added correctly");
   } else {
-    console.error("❌ Provider not added correctly");
+    console.error("🪦 Provider not added correctly");
   }
 }
 

@@ -59,13 +59,15 @@ const people = [
     ecdsaKey: "0x1a02e99b89e0f7d3488d53ded5a3ef2cff6046543fc7f734206e3e842089e051",
   },
   {
-    name: "sh-BSP",
+    name: "bsp",
+    derivation: "//Sh-BSP",
     sr25519Key: "0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be",
     ed25519Key: "0x87ef5876327965c5ddbdcdaf401499eb10212d59127a7a15254a28e184c7ffe5",
     ecdsaKey: "0xe52db172b00ffb0262d0e2d62ba71fc474665f2893b0354524b6139fcddb2b82",
   },
   {
-    name: "sh-collator",
+    name: "collator",
+    derivation: "//Sh-collator",
     sr25519Key: "0x22f1bc662ad81472b29c61def94e2d90db4eedce4a591f0983d5c544c20a600f",
     ed25519Key: "0x7b8bcbc54e91736214824ed51f10d87a3761013ce0206de74856b424927332a9",
     ecdsaKey: "0xb498d51bc79cd1390bceaa9bf385a058160a3c5d7a1a9ea355a722a7801989ec",
@@ -93,9 +95,12 @@ const signEcdsa = (value: Uint8Array, priv: Uint8Array) => {
 };
 
 const accountEntries = people.map((person) => {
-  const keyringPair = keyring.addFromUri(
-    `//${person.name.charAt(0).toUpperCase() + person.name.slice(1)}`
-  );
+  const derivation =
+    person.name === "bsp" || person.name === "collator"
+      ? person.derivation
+      : `//${person.name.charAt(0).toUpperCase() + person.name.slice(1)}`;
+
+  const keyringPair = keyring.addFromUri(derivation);
 
   // Define the signer for ed25519
   const edPublicKey = ed25519.getPublicKey(fromHex(person.ed25519Key));
@@ -145,5 +150,10 @@ export const getSr25519Account = async (privateKey?: string) => {
   );
   const id = AccountId().dec(edPublicKey);
 
-  return { privateKey: stringKey, publicKey: edPublicKey, signer: ed25519Signer, id };
+  return {
+    privateKey: stringKey,
+    publicKey: edPublicKey,
+    signer: ed25519Signer,
+    id,
+  };
 };
