@@ -19,10 +19,22 @@ pub mod pallet {
     use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
     use frame_system::pallet_prelude::*;
     use pallet_nfts::WeightInfo;
+    use sp_core::H256;
 
     use crate::types::{
         AccountIdLookupSourceOf, AccountIdLookupTargetOf, BucketIdFor, ReadAccessRegex,
     };
+
+    #[cfg(feature = "runtime-benchmarks")]
+    pub trait BenchmarkHelper<BucketId> {
+        fn bucket(i: H256) -> BucketId;
+    }
+    #[cfg(feature = "runtime-benchmarks")]
+    impl<BucketId: From<H256>> BenchmarkHelper<BucketId> for () {
+        fn bucket(i: H256) -> BucketId {
+            i.into()
+        }
+    }
 
     #[pallet::config]
     pub trait Config: frame_system::Config + pallet_nfts::Config {
@@ -34,6 +46,10 @@ pub mod pallet {
             AccountId = Self::AccountId,
             BucketNftCollectionId = <Self as pallet_nfts::Config>::CollectionId,
         >;
+
+        /// Helper for benchmarking.
+        #[cfg(feature = "runtime-benchmarks")]
+        type Helper: BenchmarkHelper<BucketIdFor<Self>>;
     }
 
     #[pallet::pallet]

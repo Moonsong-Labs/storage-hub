@@ -265,6 +265,8 @@ impl Get<AccountId> for TreasuryAccount {
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
+    #[cfg(feature = "runtime-benchmarks")]
+	type Helper = ();
 }
 
 // Build genesis storage according to the mock runtime.
