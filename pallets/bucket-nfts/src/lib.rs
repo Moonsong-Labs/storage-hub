@@ -117,26 +117,5 @@ pub mod pallet {
 
             Ok(())
         }
-
-        /// Burn an item from a collection.
-        #[pallet::call_index(2)]
-        #[pallet::weight(T::WeightInfo::burn())]
-        pub fn burn(
-            origin: OriginFor<T>,
-            bucket: BucketIdFor<T>,
-            item: T::ItemId,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-
-            Self::do_burn(&who, bucket, item)?;
-
-            Self::deposit_event(Event::ItemBurned {
-                account: who,
-                bucket,
-                item_id: item,
-            });
-
-            Ok(())
-        }
     }
 }

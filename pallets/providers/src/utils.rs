@@ -963,7 +963,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
             .encode()
             .into_iter()
             .chain(bucket_name.encode().into_iter())
-            .collect::<Vec<u8>>();
+            .collect::<scale_info::prelude::vec::Vec<u8>>();
 
         <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)
     }

@@ -93,27 +93,6 @@ where
         Ok(())
     }
 
-    /// Burn an item from a collection.
-    ///
-    /// Only the owner of the item can burn it. If the owner of the bucket wishes to remove access from an account, they should use the `update_read_access` function.
-    pub(crate) fn do_burn(
-        account: &T::AccountId,
-        bucket: BucketIdFor<T>,
-        item_id: T::ItemId,
-    ) -> Result<(), DispatchError> {
-        // Get the collection ID of the bucket.
-        let collection_id = T::Providers::get_collection_id_of_bucket(&bucket)?
-            .ok_or(Error::<T>::BucketIsNotPrivate)?;
-
-        // We do not add any additional redundant checks already covered by the `burn` function from the `pallet-nfts` pallet.
-        // For example, we do not check if the account is the owner of the item.
-
-        // Burn the item.
-        pallet_nfts::Pallet::<T>::burn(Self::sign(account), collection_id, item_id)?;
-
-        Ok(())
-    }
-
     /// Helper function to create a signed `RuntimeOrigin(RawOrigin)`.
     fn sign(account: &T::AccountId) -> OriginFor<T> {
         OriginFor::<T>::from(RawOrigin::Signed(account.clone()))
