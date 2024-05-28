@@ -52,14 +52,18 @@ pub mod pallet {
         /// The type used to verify Merkle Patricia Forest proofs.
         /// This verifies proofs of keys belonging to the Merkle Patricia Forest.
         /// Something that implements the `CommitmentVerifier` trait.
-        type ForestVerifier: CommitmentVerifier<Key = KeyFor<Self>>;
+        /// The type of the challenge is a hash, and it is expected that a proof will provide the
+        /// exact hash if it exists in the forest, or the previous and next hashes if it does not.
+        type ForestVerifier: CommitmentVerifier<Commitment = KeyFor<Self>, Challenge = KeyFor<Self>>;
 
         /// The type used to verify the proof of a specific key within the Merkle Patricia Forest.
         /// While `ForestVerifier` verifies that some keys are in the Merkle Patricia Forest, this
         /// verifies specifically a proof for that key. For example, if the keys in the forest
         /// represent files, this would verify the proof for a specific file, and `ForestVerifier`
         /// would verify that the file is in the forest.
-        type KeyVerifier: CommitmentVerifier<Key = KeyFor<Self>>;
+        /// The type of the challenge is a [u8; 8] that actually represents a u64 number, which is
+        /// the index of the chunk being challenged.
+        type KeyVerifier: CommitmentVerifier<Commitment = KeyFor<Self>, Challenge = KeyFor<Self>>;
 
         /// Type to access the Balances Pallet.
         type NativeBalance: fungible::Inspect<Self::AccountId>

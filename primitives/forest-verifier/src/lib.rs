@@ -10,16 +10,14 @@ use trie_db::TrieIterator;
 mod tests;
 
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment
-/// is a Merkle Patricia Trie root hash.
-pub struct TrieVerifier<T: TrieLayout, const H_LENGTH: usize>
+/// is a Merkle Patricia Trie root hash and the response to a challenge is given
+/// by either the exact key or the next and previous keys in the trie.
+pub struct ForestVerifier<T: TrieLayout, const H_LENGTH: usize>(core::marker::PhantomData<T>)
 where
-    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
-{
-    pub _phantom: core::marker::PhantomData<T>,
-}
+    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>;
 
-/// Implement the `CommitmentVerifier` trait for the `TrieVerifier` struct.
-impl<T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for TrieVerifier<T, H_LENGTH>
+/// Implement the `CommitmentVerifier` trait for the `ForestVerifier` struct.
+impl<T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for ForestVerifier<T, H_LENGTH>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
@@ -29,7 +27,8 @@ where
 
     /// Verifies a proof against a root (i.e. commitment) and a set of challenges.
     ///
-    /// Assumes that the challenges are ordered in ascending numerical order, and not repeated.
+    /// Iterates over the challenges and checks if there is a pair of consecutive
+    /// leaves that match the challenge, or an exact leaf that matches the challenge.
     fn verify_proof(
         root: &Self::Commitment,
         challenges: &[Self::Challenge],

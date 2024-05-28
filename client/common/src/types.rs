@@ -5,15 +5,12 @@ use codec::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use sp_core::Hasher;
 use sp_trie::CompactProof;
+pub use storage_hub_runtime::FILE_CHUNK_SIZE;
 use trie_db::TrieLayout;
 
 // TODO: this is currently a placeholder in order to define Storage interface.
 /// This type mirrors the `FileLocation<T>` type from the runtime, which is a BoundedVec.
 type FileLocation = Vec<u8>;
-
-/// The file chunk size in bytes. This is the size of the leaf nodes in the Merkle tree.
-pub const FILE_CHUNK_SIZE: usize = 1024 * 1024;
-
 /// The hash type of trie node keys
 pub type HashT<T> = <T as TrieLayout>::Hash;
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;

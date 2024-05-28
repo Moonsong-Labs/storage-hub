@@ -46,6 +46,7 @@ use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
+use shp_file_key_verifier::FileKeyVerifier;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
@@ -57,10 +58,10 @@ use sp_trie::CompactProof;
 use sp_trie::LayoutV1;
 use sp_version::RuntimeVersion;
 use storage_hub_primitives::TrieVerifier;
-use storage_hub_traits::CommitmentVerifier;
+use storage_hub_traits::{CommitmentVerifier, MaybeDebug};
 use xcm::latest::prelude::BodyId;
 
-use crate::ParachainInfo;
+use crate::{ParachainInfo, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES};
 
 use self::currency::UNITS;
 
@@ -451,7 +452,12 @@ impl pallet_proofs_dealer::Config for Runtime {
     type MerkleTrieHash = Hash;
     type MerkleTrieHashing = BlakeTwo256;
     type ForestVerifier = TrieVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
-    type KeyVerifier = ProofTrieVerifier;
+    type KeyVerifier = FileKeyVerifier<
+        LayoutV1<BlakeTwo256>,
+        { BlakeTwo256::LENGTH },
+        { FILE_CHUNK_SIZE },
+        { FILE_SIZE_TO_CHALLENGES },
+    >;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = RandomChallengesPerBlock;
     type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
@@ -467,18 +473,24 @@ impl pallet_proofs_dealer::Config for Runtime {
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
 /// and `false` otherwise.
-pub struct ProofTrieVerifier;
+pub struct MockVerifier<C> {
+    _phantom: core::marker::PhantomData<C>,
+}
 
 /// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl CommitmentVerifier for ProofTrieVerifier {
+impl<C> CommitmentVerifier for MockVerifier<C>
+where
+    C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
+{
     type Proof = CompactProof;
-    type Key = H256;
+    type Commitment = H256;
+    type Challenge = C;
 
     fn verify_proof(
-        _root: &Self::Key,
-        challenges: &[Self::Key],
+        _root: &Self::Commitment,
+        challenges: &[Self::Challenge],
         proof: &CompactProof,
-    ) -> Result<Vec<Self::Key>, DispatchError> {
+    ) -> Result<Vec<Self::Challenge>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
             Ok(challenges.to_vec())
         } else {

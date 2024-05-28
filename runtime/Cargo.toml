@@ -32,6 +32,7 @@ pallet-randomness = { workspace = true }
 
 storage-hub-traits = { workspace = true }
 storage-hub-primitives = { workspace = true }
+shp-file-key-verifier = { workspace = true }
 
 # Substrate
 frame-support = { workspace = true }
