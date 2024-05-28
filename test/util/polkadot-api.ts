@@ -16,22 +16,22 @@ export const waitForRandomness = async (api: StorageHubApi, timeoutMs = 60_000) 
       }, timeoutMs);
 
       let valueCount = 0;
-      const subscription = api.query.Randomness.LatestOneEpochAgoRandomness.watchValue("best").subscribe(
-        (value) => {
-          valueCount++;
+      const subscription = api.query.Randomness.LatestOneEpochAgoRandomness.watchValue(
+        "best"
+      ).subscribe((value) => {
+        valueCount++;
 
-          if (!value) {
-            reject(new Error("Randomness value is undefined"));
-            return;
-          }
-
-          if (valueCount === 2) {
-            clearTimeout(timeout);
-            subscription.unsubscribe();
-            resolve(value[1]);
-          }
+        if (!value) {
+          reject(new Error("Randomness value is undefined"));
+          return;
         }
-      );
+
+        if (valueCount === 2) {
+          clearTimeout(timeout);
+          subscription.unsubscribe();
+          resolve(value[1]);
+        }
+      });
     });
   };
 

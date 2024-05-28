@@ -24,7 +24,7 @@ describe("Simple zombieTest", async () => {
 
     test("Check test accounts have balance", async () => {
       const promises = Object.entries(accounts)
-        .filter(([account, _]) => !account.includes("sh-"))
+        .filter(([account, _]) => !["bsp", "collator"].includes(account))
         .map(async ([account, signers]) => {
           const {
             data: { free },
