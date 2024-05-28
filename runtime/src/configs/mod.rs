@@ -596,5 +596,5 @@ impl pallet_bucket_nfts::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     #[cfg(feature = "runtime-benchmarks")]
-	type Helper = ();
+    type Helper = ();
 }

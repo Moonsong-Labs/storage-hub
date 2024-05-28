@@ -266,7 +266,7 @@ impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     #[cfg(feature = "runtime-benchmarks")]
-	type Helper = ();
+    type Helper = ();
 }
 
 // Build genesis storage according to the mock runtime.

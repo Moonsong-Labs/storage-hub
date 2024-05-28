@@ -4,9 +4,9 @@ use super::*;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::*;
 use frame_support::traits::fungible::Inspect;
-use sp_runtime::BoundedVec;
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
+use sp_runtime::BoundedVec;
 
 /// Structure that has the possible value propositions that a Main Storage Provider can offer (and the runtime is aware of)
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]

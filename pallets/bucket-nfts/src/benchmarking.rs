@@ -7,9 +7,9 @@ use crate::Pallet as BucketNfts;
 use frame_benchmarking::{benchmarks, impl_benchmark_test_suite, whitelisted_caller};
 use frame_system::RawOrigin;
 use pallet_nfts::BenchmarkHelper as NftsBenchmarkHelper;
+use sp_core::H256;
 use sp_runtime::traits::StaticLookup;
 use types::{BucketIdFor, ReadAccessRegex};
-use sp_core::H256;
 
 use crate::pallet::BenchmarkHelper as BucketNftsBenchmarkHelper;
 
