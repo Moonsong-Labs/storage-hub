@@ -320,14 +320,14 @@ where
 }
 
 impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
-    type Provider = ProviderFor<T>;
+    type ProviderId = ProviderFor<T>;
     type ForestProof = ForestVerifierProofFor<T>;
     type KeyProof = KeyVerifierProofFor<T>;
     type MerkleHash = T::MerkleTrieHash;
     type MerkleHashing = T::MerkleTrieHashing;
 
     fn verify_forest_proof(
-        who: &Self::Provider,
+        who: &Self::ProviderId,
         challenges: &[Self::MerkleHash],
         proof: &Self::ForestProof,
     ) -> Result<Vec<Self::MerkleHash>, DispatchError> {
