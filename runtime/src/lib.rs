@@ -268,7 +268,7 @@ construct_runtime!(
         Randomness: pallet_randomness = 43,
         BucketNfts: pallet_bucket_nfts = 44,
 
-        Nfts: pallet_nfts::{Pallet, Storage, Event<T>} = 50,
+        Nfts: pallet_nfts = 50,
     }
 );
 
