@@ -64,7 +64,7 @@ pub mod pallet {
     // Errors inform users that something went wrong.
     #[pallet::error]
     pub enum Error<T> {
-        /// Bucket is not private. Call `make_bucket_public` from the providers pallet to make it private.
+        /// Bucket is not private. Call `update_bucket_privacy` from the file system pallet to make it private.
         BucketIsNotPrivate,
         /// Account is not the owner of the bucket.
         NotBucketOwner,
@@ -72,7 +72,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// Share access to files under a bucket with another account.
+        /// Share access to files within a bucket with another account.
         #[pallet::call_index(0)]
         #[pallet::weight(T::WeightInfo::mint() + T::WeightInfo::set_metadata())]
         pub fn share_access(
@@ -119,8 +119,6 @@ pub mod pallet {
         }
 
         /// Burn an item from a collection.
-        ///
-        /// This function is a wrapper around the `burn` function from the `pallet-nfts` pallet.
         #[pallet::call_index(2)]
         #[pallet::weight(T::WeightInfo::burn())]
         pub fn burn(

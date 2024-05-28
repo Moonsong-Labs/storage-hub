@@ -14,10 +14,8 @@ benchmarks! {
         let account: T::AccountId = Default::default();
     }: _(RawOrigin::Signed(caller), account)
     verify {
-        // assert!(FileSystem::<T>::storage_requests(location).is_some());
+        // assert!(BucketNfts::<T>::share_access().is_some());
     }
-
-    // TODO: add benchmarking for `on_idle`
 }
 
 impl_benchmark_test_suite!(BucketNfts, crate::mock::new_test_ext(), crate::mock::Test);
