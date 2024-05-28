@@ -355,6 +355,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::min;
+
     use crate::error::ErrorT;
 
     use super::*;
@@ -542,18 +544,16 @@ mod tests {
         );
     }
 
-    // TODO: Fix this test
     #[test]
-    #[ignore = "double ended iterator has inconsistent behaviour"]
     fn test_generate_proof_challenge_before_first_leaf() {
         let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>().unwrap();
 
         let file_key1 = create_and_insert_metadata(&mut forest_storage, "Alice", vec![10], 200);
-        let _file_key2 = create_and_insert_metadata(&mut forest_storage, "Alice", vec![11], 200);
+        let file_key2 = create_and_insert_metadata(&mut forest_storage, "Alice", vec![11], 200);
 
-        let mut challenge = file_key1;
+        let mut challenge = min(file_key1, file_key2);
         let challenge_bytes = challenge.as_mut();
-        challenge_bytes[0] = challenge_bytes[0] - 1;
+        challenge_bytes[31] = challenge_bytes[31] - 1;
 
         let proof = forest_storage.generate_proof(vec![challenge]).unwrap();
 

@@ -1,9 +1,3 @@
-use std::{
-    fs::{create_dir_all, File},
-    io::{Read, Write},
-    sync::Once,
-};
-
 use codec::Encode;
 use num_bigint::BigUint;
 use rand::Rng;
@@ -23,14 +17,8 @@ use crate::{FileKeyProof, FileKeyVerifier};
 type HashT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 
 const CHUNK_SIZE: u64 = 2;
-const FILES_BASE_PATH: &str = "./tmp/";
 const FILE_SIZE: u64 = 2u64.pow(11);
 const SIZE_TO_CHALLENGES: u64 = FILE_SIZE / 10;
-
-/// This is to make sure that some code is only executed once.
-/// For example, when building the files for testing, we need to make sure that
-/// is only executed once.
-static INIT: Once = Once::new();
 
 #[derive(PartialEq, Debug)]
 struct FileMetadata {
@@ -59,19 +47,20 @@ where
 
     println!("Chunking file into 32 byte chunks and building Merkle Patricia Trie...");
 
+    let data = if random {
+        create_random_test_data(file_size)
+    } else {
+        create_sequential_test_data(file_size)
+    };
+
+    let (memdb, fingerprint) = merklise_data::<T>(&data);
+
     let file_path = format!(
         "{}-{}-{}.txt",
         String::from_utf8(user_id.to_vec()).unwrap(),
         String::from_utf8(bucket.to_vec()).unwrap(),
         String::from_utf8(file_name.to_vec()).unwrap()
     );
-
-    if random {
-        create_random_test_file(&file_path, file_size)
-    } else {
-        create_test_file(&file_path, file_size)
-    };
-    let (memdb, fingerprint) = merklise_file::<T>(&file_path);
 
     let metadata = FileMetadata {
         owner: user_id.to_vec(),
@@ -99,26 +88,32 @@ where
     (memdb, file_key, metadata)
 }
 
-/// Chunk a file into [`CHUNK_SIZE`] byte chunks and store them in a Merkle Patricia Trie.
+/// Chunk data into [`CHUNK_SIZE`] byte chunks and store them in a Merkle Patricia Trie.
 ///
 /// The trie is stored in a [`MemoryDB`] and the [`Root`] is returned.
-/// _It is assumed that the file is located in the same directory as the executable._
-pub fn merklise_file<T: TrieLayout>(file_path: &str) -> (MemoryDB<T::Hash>, HashT<T>) {
-    let file_path = FILES_BASE_PATH.to_owned() + file_path;
-    let mut file = std::fs::File::open(file_path).unwrap();
+pub fn merklise_data<T: TrieLayout>(data: &[u8]) -> (MemoryDB<T::Hash>, HashT<T>) {
     let mut buf = [0; CHUNK_SIZE as usize];
     let mut chunks = Vec::new();
 
     // create list of key-value pairs consisting of chunk metadata and chunk data
     let mut chunk_i = 0u64;
-    loop {
-        let n = file.read(&mut buf).unwrap();
-        if n == 0 {
-            break;
-        }
+    let mut offset = 0;
 
-        chunks.push((chunk_i, buf.to_vec()));
+    while offset < data.len() {
+        // Determine the end of the current chunk
+        let end = std::cmp::min(offset + CHUNK_SIZE as usize, data.len());
+
+        // Copy the current chunk from data into the buffer
+        buf[..end - offset].copy_from_slice(&data[offset..end]);
+
+        // Store the current chunk as a vector in the chunks vector
+        chunks.push((chunk_i, buf[..end - offset].to_vec()));
+
+        // Increment the chunk index
         chunk_i += 1;
+
+        // Move the offset forward by CHUNK_SIZE
+        offset += CHUNK_SIZE as usize;
     }
 
     let mut memdb = MemoryDB::<T::Hash>::default();
@@ -130,52 +125,29 @@ pub fn merklise_file<T: TrieLayout>(file_path: &str) -> (MemoryDB<T::Hash>, Hash
         }
     }
 
-    println!("File fingerprint (root): {:?}", root);
+    println!("Data fingerprint (root): {:?}", root);
 
     (memdb, root)
 }
 
-/// Create a local file for testing, for a given size, and with a given file name.
-pub fn create_test_file(filename: &str, size: u64) -> File {
-    // Write file only once.
-    INIT.call_once(|| {
-        create_dir_all(FILES_BASE_PATH).unwrap();
-        let mut file = File::create(FILES_BASE_PATH.to_owned() + filename).unwrap();
-
-        // Generate random content
-        let mut i = 0;
-        let content: Vec<u8> = (0..size)
-            .map(|_| {
-                i = i % (u8::MAX - 1);
-                i += 1;
-                i
-            })
-            .collect();
-
-        file.write_all(&content).unwrap();
-    });
-
-    // Open and return file.
-    File::open(FILES_BASE_PATH.to_owned() + filename).unwrap()
+/// Generate sequential test data of a given size.
+pub fn create_sequential_test_data(size: u64) -> Vec<u8> {
+    let mut i = 0u8;
+    let content: Vec<u8> = (0..size)
+        .map(|_| {
+            i = i % (u8::MAX - 1);
+            i += 1;
+            i
+        })
+        .collect();
+    content
 }
 
-/// Create a local file for testing, for a given size, with a given file name,
-/// and with random content.
-pub fn create_random_test_file(filename: &str, size: u64) -> File {
-    // Write file only once.
-    INIT.call_once(|| {
-        create_dir_all(FILES_BASE_PATH).unwrap();
-        let mut file = File::create(FILES_BASE_PATH.to_owned() + filename).unwrap();
-        let mut rng = rand::thread_rng();
-
-        // Generate random content
-        let content: Vec<u8> = (0..size).map(|_| rng.gen()).collect();
-
-        file.write_all(&content).unwrap();
-    });
-
-    // Open and return file.
-    File::open(FILES_BASE_PATH.to_owned() + filename).unwrap()
+/// Generate random test data of a given size.
+pub fn create_random_test_data(size: u64) -> Vec<u8> {
+    let mut rng = rand::thread_rng();
+    let content: Vec<u8> = (0..size).map(|_| rng.gen()).collect();
+    content
 }
 
 fn generate_challenges<T: TrieLayout>(
@@ -1146,5 +1118,83 @@ fn commitment_verifier_challenge_missing_from_proof_failure() {
             { SIZE_TO_CHALLENGES },
         >::verify_proof(&file_key, &challenges, &file_key_proof),
         Err("The proof is invalid. The challenge does not exist in the trie.".into())
+    );
+}
+
+#[test]
+fn commitment_verifier_challenge_with_none_value_failure() {
+    let (memdb, _file_key, metadata) =
+        build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, 2 * CHUNK_SIZE);
+    let root = metadata.fingerprint.try_into().unwrap();
+
+    let file_key = BlakeTwo256::hash(
+        &[
+            &metadata.owner.encode(),
+            &metadata.location.encode(),
+            &AsCompact(FILE_SIZE).encode(),
+            &metadata.fingerprint.encode(),
+        ]
+        .into_iter()
+        .flatten()
+        .cloned()
+        .collect::<Vec<u8>>(),
+    );
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+    let mut chunks_count = FILE_SIZE / CHUNK_SIZE;
+    if FILE_SIZE % CHUNK_SIZE != 0 {
+        chunks_count += 1;
+    }
+    let mut challenges_count = FILE_SIZE / SIZE_TO_CHALLENGES;
+    if FILE_SIZE % SIZE_TO_CHALLENGES != 0 {
+        challenges_count += 1;
+    }
+    let (challenges, chunks_challenged) =
+        generate_challenges::<LayoutV1<BlakeTwo256>>(challenges_count, chunks_count);
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        for challenged_chunk in chunks_challenged {
+            // Seek to the challenge key.
+            iter.seek(&challenged_chunk).unwrap();
+
+            // Read the leaf node.
+            iter.next();
+        }
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<BlakeTwo256>(root)
+        .expect("Failed to create compact proof from recorder");
+    // Using wrong file size (larger than it actually is)
+    let file_key_proof = FileKeyProof {
+        owner: metadata.owner.clone(),
+        location: metadata.location.clone(),
+        size: FILE_SIZE,
+        fingerprint: metadata.fingerprint.clone(),
+        proof,
+    };
+
+    // Verify proof
+    assert_eq!(
+        FileKeyVerifier::<
+            LayoutV1<BlakeTwo256>,
+            { BlakeTwo256::LENGTH },
+            { CHUNK_SIZE },
+            { SIZE_TO_CHALLENGES },
+        >::verify_proof(&file_key, &challenges, &file_key_proof),
+        Err("The proof is invalid. The challenged chunk was not found in the trie, possibly because the challenged chunk has an index higher than the amount of chunks in the file. This should not be possible, provided that the size of the file (and therefore number of chunks) is correct.".into())
     );
 }
