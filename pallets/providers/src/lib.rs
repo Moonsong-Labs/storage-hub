@@ -8,7 +8,7 @@
 //! the network and get rewarded for it.
 #![cfg_attr(not(feature = "std"), no_std)]
 
-mod types;
+pub mod types;
 mod utils;
 
 #[cfg(feature = "runtime-benchmarks")]
