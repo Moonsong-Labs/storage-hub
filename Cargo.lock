@@ -12331,6 +12331,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "shc-rpc"
+version = "0.1.0"
+dependencies = [
+ "common 0.1.0",
+ "file-manager",
+ "jsonrpsee",
+ "log",
+ "sp-runtime 31.0.1",
+ "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
+ "tokio",
+]
+
+[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14513,6 +14526,7 @@ dependencies = [
  "sc-utils",
  "serde",
  "serde_json",
+ "shc-rpc",
  "sp-api 26.0.0",
  "sp-block-builder",
  "sp-blockchain",

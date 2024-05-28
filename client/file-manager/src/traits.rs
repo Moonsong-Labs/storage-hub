@@ -69,7 +69,7 @@ pub trait FileDataTrie<T: TrieLayout> {
 
 /// Storage interface to be implemented by the storage providers.
 pub trait FileStorage<T: TrieLayout>: 'static {
-    type FileDataTrie: FileDataTrie<T> + Default;
+    type FileDataTrie: FileDataTrie<T> + Send + Sync + Default;
 
     /// Generate proof for a chunk of a file. If the file does not exists or any chunk is missing,
     /// no proof will be returned.
