@@ -956,12 +956,16 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     }
 
     fn derive_bucket_id(
-        issuer: &Self::AccountId,
+        owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::StringLimit>,
     ) -> Self::BucketId {
-        <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(
-            &scale_info::prelude::format!("{:?}/{:?}", issuer, bucket_name.as_slice()).as_bytes(),
-        )
+        let concat = owner
+            .encode()
+            .into_iter()
+            .chain(bucket_name.encode().into_iter())
+            .collect::<Vec<u8>>();
+
+        <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)
     }
 }
 
