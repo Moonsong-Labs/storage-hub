@@ -312,16 +312,6 @@ where
         challenges
     }
 
-    // TODO: Document.
-    fn verify_proof(
-        who: &ProviderFor<T>,
-        challenges: &[T::MerkleTrieHash],
-        proof: &Proof<T>,
-    ) -> DispatchResult {
-        // TODO
-        Ok(())
-    }
-
     /// Returns the default forest root.
     fn default_forest_root() -> ForestRootFor<T> {
         // TODO: Check that this returns the root for an empty forest and change if necessary.
@@ -363,7 +353,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         proof: &Self::KeyProof,
     ) -> Result<Vec<Self::MerkleHash>, DispatchError> {
         // Verify key proof.
-        KeyVerifierFor::<T>::verify_proof(key, challenges, proof)
+        KeyVerifierFor::<T>::verify_proof(key, &challenges, proof)
             .map_err(|_| Error::<T>::KeyProofVerificationFailed.into())
     }
 

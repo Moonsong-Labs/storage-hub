@@ -1,0 +1,49 @@
+[package]
+name = "shp-traits"
+description = "Support traits used in StorageHub"
+version = "0.1.0"
+homepage = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+codec = { workspace = true }
+scale-info = { workspace = true }
+
+# Frame
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+
+# Substrate
+sp-core = { workspace = true }
+sp-runtime = { workspace = true }
+
+[dev-dependencies]
+serde = { workspace = true }
+
+# Substrate
+sp-io = { workspace = true }
+
+[features]
+default = ["std"]
+runtime-benchmarks = [
+    "frame-support/runtime-benchmarks",
+    "sp-runtime/runtime-benchmarks",
+]
+std = [
+    "codec/std",
+    "frame-support/std",
+    "scale-info/std",
+    "sp-core/std",
+    "sp-io/std",
+    "sp-runtime/std",
+]
+try-runtime = ["frame-support/try-runtime", "sp-runtime/try-runtime"]

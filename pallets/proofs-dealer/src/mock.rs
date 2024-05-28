@@ -12,7 +12,7 @@ use sp_runtime::{
     BuildStorage, DispatchError, DispatchResult, SaturatedConversion,
 };
 use sp_trie::CompactProof;
-use storage_hub_traits::{CommitmentVerifier, SubscribeProvidersInterface};
+use storage_hub_traits::{CommitmentVerifier, MaybeDebug, SubscribeProvidersInterface};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -136,8 +136,8 @@ impl crate::Config for Test {
     type NativeBalance = Balances;
     type MerkleTrieHash = H256;
     type MerkleTrieHashing = BlakeTwo256;
-    type ForestVerifier = MockVerifier;
-    type KeyVerifier = MockVerifier;
+    type ForestVerifier = MockVerifier<H256>;
+    type KeyVerifier = MockVerifier<H256>;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
@@ -165,18 +165,24 @@ impl SubscribeProvidersInterface for MockedProvidersSubscriber {
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
 /// and `false` otherwise.
-pub struct MockVerifier;
+pub struct MockVerifier<C> {
+    _phantom: core::marker::PhantomData<C>,
+}
 
 /// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl CommitmentVerifier for MockVerifier {
+impl<C> CommitmentVerifier for MockVerifier<C>
+where
+    C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
+{
     type Proof = CompactProof;
-    type Key = H256;
+    type Commitment = H256;
+    type Challenge = C;
 
     fn verify_proof(
-        _root: &Self::Key,
-        challenges: &[Self::Key],
+        _root: &Self::Commitment,
+        challenges: &[Self::Challenge],
         proof: &CompactProof,
-    ) -> Result<Vec<Self::Key>, DispatchError> {
+    ) -> Result<Vec<Self::Challenge>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
             Ok(challenges.to_vec())
         } else {
