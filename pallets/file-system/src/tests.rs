@@ -9,12 +9,12 @@ use crate::{
 use frame_support::{
     assert_noop, assert_ok, dispatch::DispatchResultWithPostInfo, traits::Hooks, weights::Weight,
 };
+use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     traits::{BlakeTwo256, Get, Zero},
     AccountId32, BoundedVec, FixedU128,
 };
-use sp_core::{Hasher, ByteArray, H256};
 use storage_hub_traits::{ReadProvidersInterface, SubscribeProvidersInterface};
 
 mod create_bucket_tests {
@@ -31,16 +31,34 @@ mod create_bucket_tests {
 
             add_msp_to_provider_storage(&msp);
 
-            let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
 
             // Dispatch a signed extrinsic.
-            assert_ok!(FileSystem::create_bucket(origin, msp, name.clone(), private));
+            assert_ok!(FileSystem::create_bucket(
+                origin,
+                msp,
+                name.clone(),
+                private
+            ));
 
             // Check if collection was created
-            assert!(<Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id).unwrap().is_some());
+            assert!(
+                <Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
 
             // Assert that the correct event was deposited
-            System::assert_last_event(Event::NewBucket { who: owner, bucket_id, name, private }.into());
+            System::assert_last_event(
+                Event::NewBucket {
+                    who: owner,
+                    bucket_id,
+                    name,
+                    private,
+                }
+                .into(),
+            );
         });
     }
 
@@ -55,16 +73,34 @@ mod create_bucket_tests {
 
             add_msp_to_provider_storage(&msp);
 
-            let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
 
             // Dispatch a signed extrinsic.
-            assert_ok!(FileSystem::create_bucket(origin, msp, name.clone(), private));
+            assert_ok!(FileSystem::create_bucket(
+                origin,
+                msp,
+                name.clone(),
+                private
+            ));
 
             // Check that the bucket does not have a corresponding collection
-            assert!(<Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id).unwrap().is_none());
+            assert!(
+                <Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_none()
+            );
 
             // Assert that the correct event was deposited
-            System::assert_last_event(Event::NewBucket { who: owner, bucket_id, name, private }.into());
+            System::assert_last_event(
+                Event::NewBucket {
+                    who: owner,
+                    bucket_id,
+                    name,
+                    private,
+                }
+                .into(),
+            );
         });
     }
 
@@ -98,25 +134,54 @@ mod update_bucket_privacy_tests {
 
             add_msp_to_provider_storage(&msp);
 
-            let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
 
             // Dispatch a signed extrinsic.
-            assert_ok!(FileSystem::create_bucket(origin.clone(), msp, name.clone(), private));
+            assert_ok!(FileSystem::create_bucket(
+                origin.clone(),
+                msp,
+                name.clone(),
+                private
+            ));
 
             // Check if collection was created
-            assert!(<Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id).unwrap().is_some());
+            assert!(
+                <Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
 
             // Assert that the correct event was deposited
-            System::assert_last_event(Event::NewBucket { who: owner.clone(), bucket_id, name, private }.into());
+            System::assert_last_event(
+                Event::NewBucket {
+                    who: owner.clone(),
+                    bucket_id,
+                    name,
+                    private,
+                }
+                .into(),
+            );
 
             // Dispatch a signed extrinsic.
             assert_ok!(FileSystem::update_bucket_privacy(origin, bucket_id, false));
 
             // Check that the bucket still has a corresponding collection
-            assert!(<Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id).unwrap().is_some());
+            assert!(
+                <Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
 
             // Assert that the correct event was deposited
-            System::assert_last_event(Event::BucketPrivacyUpdated { who: owner, bucket_id, private: false }.into());
+            System::assert_last_event(
+                Event::BucketPrivacyUpdated {
+                    who: owner,
+                    bucket_id,
+                    private: false,
+                }
+                .into(),
+            );
         });
     }
 
@@ -130,7 +195,8 @@ mod update_bucket_privacy_tests {
 
             add_msp_to_provider_storage(&msp);
 
-            let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
 
             assert_noop!(
                 FileSystem::update_bucket_privacy(origin, bucket_id, false),
