@@ -1120,3 +1120,81 @@ fn commitment_verifier_challenge_missing_from_proof_failure() {
         Err("The proof is invalid. The challenge does not exist in the trie.".into())
     );
 }
+
+#[test]
+fn commitment_verifier_challenge_with_none_value_failure() {
+    let (memdb, _file_key, metadata) =
+        build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, 2 * CHUNK_SIZE);
+    let root = metadata.fingerprint.try_into().unwrap();
+
+    let file_key = BlakeTwo256::hash(
+        &[
+            &metadata.owner.encode(),
+            &metadata.location.encode(),
+            &AsCompact(FILE_SIZE).encode(),
+            &metadata.fingerprint.encode(),
+        ]
+        .into_iter()
+        .flatten()
+        .cloned()
+        .collect::<Vec<u8>>(),
+    );
+
+    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+    let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+    let mut chunks_count = FILE_SIZE / CHUNK_SIZE;
+    if FILE_SIZE % CHUNK_SIZE != 0 {
+        chunks_count += 1;
+    }
+    let mut challenges_count = FILE_SIZE / SIZE_TO_CHALLENGES;
+    if FILE_SIZE % SIZE_TO_CHALLENGES != 0 {
+        challenges_count += 1;
+    }
+    let (challenges, chunks_challenged) =
+        generate_challenges::<LayoutV1<BlakeTwo256>>(challenges_count, chunks_count);
+
+    {
+        // Creating trie inside of closure to drop it before generating proof.
+        let mut trie_recorder = recorder.as_trie_recorder(root);
+        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+            .with_recorder(&mut trie_recorder)
+            .build();
+
+        // Create an iterator over the leaf nodes.
+        let mut iter = trie.into_double_ended_iter().unwrap();
+
+        for challenged_chunk in chunks_challenged {
+            // Seek to the challenge key.
+            iter.seek(&challenged_chunk).unwrap();
+
+            // Read the leaf node.
+            iter.next();
+        }
+    }
+
+    // Generate proof
+    let proof = recorder
+        .drain_storage_proof()
+        .to_compact_proof::<BlakeTwo256>(root)
+        .expect("Failed to create compact proof from recorder");
+    // Using wrong file size (larger than it actually is)
+    let file_key_proof = FileKeyProof {
+        owner: metadata.owner.clone(),
+        location: metadata.location.clone(),
+        size: FILE_SIZE,
+        fingerprint: metadata.fingerprint.clone(),
+        proof,
+    };
+
+    // Verify proof
+    assert_eq!(
+        FileKeyVerifier::<
+            LayoutV1<BlakeTwo256>,
+            { BlakeTwo256::LENGTH },
+            { CHUNK_SIZE },
+            { SIZE_TO_CHALLENGES },
+        >::verify_proof(&file_key, &challenges, &file_key_proof),
+        Err("The proof is invalid. The challenged chunk was not found in the trie, possibly because the challenged chunk has an index higher than the amount of chunks in the file. This should not be possible, provided that the size of the file (and therefore number of chunks) is correct.".into())
+    );
+}
