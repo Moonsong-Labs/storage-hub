@@ -51,6 +51,7 @@ pub struct Bucket<T: Config> {
     pub root: MerklePatriciaRoot<T>,
     pub user_id: T::AccountId,
     pub msp_id: MainStorageProviderId<T>,
+    pub private: bool,
     pub collection_id: Option<T::BucketNftCollectionId>,
 }
 

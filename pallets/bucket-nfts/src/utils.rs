@@ -16,13 +16,13 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
-    /// Share access by issuing an item to the account for a given bucket.
+    /// Share access by issuing an item for a given bucket to the `recipient` account.
     pub(crate) fn do_share_access(
         issuer: &T::AccountId,
         recipient: AccountIdLookupSourceOf<T>,
         bucket: BucketIdFor<T>,
         item_id: T::ItemId,
-        read_access_regex: ReadAccessRegex<T>,
+        read_access_regex: Option<ReadAccessRegex<T>>,
     ) -> Result<AccountIdLookupTargetOf<T>, DispatchError> {
         // Convert the lookup source to a target account.
         let recipient_account = T::Lookup::lookup(recipient.clone())?;
@@ -33,7 +33,7 @@ where
 
         // Check if the issuer is the owner of the bucket.
         // This is a redundant check but primarily added for ergonomics.
-        // Transfering ownership of a collection is not exposed to the user and therefore the bucket owner is implicitly the collection owner.
+        // Transfering ownership of a collection is not exposed to the user, therefore the bucket owner is implicitly the collection owner.
         ensure!(
             T::Providers::is_bucket_owner(issuer, &bucket)?,
             Error::<T>::NotBucketOwner
@@ -63,7 +63,7 @@ where
         account: &T::AccountId,
         bucket: BucketIdFor<T>,
         item_id: T::ItemId,
-        read_access_regex: ReadAccessRegex<T>,
+        read_access_regex: Option<ReadAccessRegex<T>>,
     ) -> Result<(), DispatchError> {
         // Get the collection ID of the bucket.
         let collection_id = T::Providers::get_collection_id_of_bucket(&bucket)?
@@ -77,15 +77,17 @@ where
             Error::<T>::NotBucketOwner
         );
 
-        // We do not add any additional redundant checks already covered by the `burn` function from the `pallet-nfts` pallet.
+        // We do not add any additional redundant checks already covered by the `set_metadata` function from the `pallet-nfts` pallet.
         // For example, we do not check if the item exists.
+
+        let metadata = ItemMetadata::<T>::new(read_access_regex);
 
         // Set the read access regex for the item.
         pallet_nfts::Pallet::<T>::set_metadata(
             Self::sign(account),
             collection_id,
             item_id,
-            read_access_regex,
+            metadata.encode().try_into().unwrap(),
         )?;
 
         Ok(())
@@ -112,7 +114,7 @@ where
         Ok(())
     }
 
-    /// Helper function to create a signed `RawOrigin`.
+    /// Helper function to create a signed `RuntimeOrigin(RawOrigin)`.
     fn sign(account: &T::AccountId) -> OriginFor<T> {
         OriginFor::<T>::from(RawOrigin::Signed(account.clone()))
     }

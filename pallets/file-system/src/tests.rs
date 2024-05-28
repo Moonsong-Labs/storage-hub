@@ -9,12 +9,136 @@ use crate::{
 use frame_support::{
     assert_noop, assert_ok, dispatch::DispatchResultWithPostInfo, traits::Hooks, weights::Weight,
 };
-use sp_core::H256;
+use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
-    traits::{BlakeTwo256, Get, Hash, Zero},
+    traits::{BlakeTwo256, Get, Zero},
     AccountId32, BoundedVec, FixedU128,
 };
-use storage_hub_traits::SubscribeProvidersInterface;
+use sp_core::{Hasher, ByteArray, H256};
+use storage_hub_traits::{ReadProvidersInterface, SubscribeProvidersInterface};
+
+mod create_bucket_tests {
+    use super::*;
+
+    #[test]
+    fn create_private_bucket_success() {
+        new_test_ext().execute_with(|| {
+            let owner = AccountId32::new([1; 32]);
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let private = true;
+
+            add_msp_to_provider_storage(&msp);
+
+            let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::create_bucket(origin, msp, name.clone(), private));
+
+            // Check if collection was created
+            assert!(<Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id).unwrap().is_some());
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(Event::NewBucket { who: owner, bucket_id, name, private }.into());
+        });
+    }
+
+    #[test]
+    fn create_public_bucket_success() {
+        new_test_ext().execute_with(|| {
+            let owner = AccountId32::new([1; 32]);
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let private = false;
+
+            add_msp_to_provider_storage(&msp);
+
+            let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::create_bucket(origin, msp, name.clone(), private));
+
+            // Check that the bucket does not have a corresponding collection
+            assert!(<Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id).unwrap().is_none());
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(Event::NewBucket { who: owner, bucket_id, name, private }.into());
+        });
+    }
+
+    #[test]
+    fn create_bucket_msp_not_provider_fail() {
+        new_test_ext().execute_with(|| {
+            let owner = AccountId32::new([1; 32]);
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+
+            assert_noop!(
+                FileSystem::create_bucket(origin, msp, name, false),
+                Error::<Test>::NotAMsp
+            );
+        });
+    }
+}
+
+mod update_bucket_privacy_tests {
+    use super::*;
+
+    #[test]
+    fn update_bucket_privacy_success() {
+        new_test_ext().execute_with(|| {
+            let owner = AccountId32::new([1; 32]);
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let private = true;
+
+            add_msp_to_provider_storage(&msp);
+
+            let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::create_bucket(origin.clone(), msp, name.clone(), private));
+
+            // Check if collection was created
+            assert!(<Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id).unwrap().is_some());
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(Event::NewBucket { who: owner.clone(), bucket_id, name, private }.into());
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::update_bucket_privacy(origin, bucket_id, false));
+
+            // Check that the bucket still has a corresponding collection
+            assert!(<Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id).unwrap().is_some());
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(Event::BucketPrivacyUpdated { who: owner, bucket_id, private: false }.into());
+        });
+    }
+
+    #[test]
+    fn update_bucket_privacy_bucket_not_found_fail() {
+        new_test_ext().execute_with(|| {
+            let owner = AccountId32::new([1; 32]);
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+
+            add_msp_to_provider_storage(&msp);
+
+            let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            assert_noop!(
+                FileSystem::update_bucket_privacy(origin, bucket_id, false),
+                pallet_storage_providers::Error::<Test>::BucketNotFound
+            );
+        });
+    }
+}
 
 #[test]
 fn request_storage_success() {
@@ -1185,4 +1309,27 @@ fn create_sp_multiaddresses(
             .unwrap(),
     );
     multiaddresses
+}
+
+fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) {
+    let msp_hash = <<Test as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
+
+    let msp_info = pallet_storage_providers::types::MainStorageProvider {
+        buckets: BoundedVec::default(),
+        capacity: 100,
+        data_used: 0,
+        multiaddresses: BoundedVec::default(),
+        value_prop: pallet_storage_providers::types::ValueProposition {
+            identifier: pallet_storage_providers::types::ValuePropId::<Test>::default(),
+            data_limit: 100,
+            protocols: BoundedVec::default(),
+        },
+        last_capacity_change: frame_system::Pallet::<Test>::block_number(),
+    };
+
+    pallet_storage_providers::MainStorageProviders::<Test>::insert(msp_hash, msp_info);
+    pallet_storage_providers::AccountIdToMainStorageProviderId::<Test>::insert(
+        msp.clone(),
+        msp_hash,
+    );
 }

@@ -48,13 +48,13 @@ pub mod pallet {
             recipient: AccountIdLookupTargetOf<T>,
         },
         /// Notifies that the read access for an item has been updated.
-        ReadAccessUpdated {
+        ItemReadAccessUpdated {
             admin: T::AccountId,
             bucket: BucketIdFor<T>,
             item_id: T::ItemId,
         },
-        /// Notifies that an NFT has been burned.
-        NftBurned {
+        /// Notifies that an item has been burned.
+        ItemBurned {
             account: T::AccountId,
             bucket: BucketIdFor<T>,
             item_id: T::ItemId,
@@ -74,13 +74,13 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// Share access to files under a bucket with another account.
         #[pallet::call_index(0)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::mint() + T::WeightInfo::set_metadata())]
         pub fn share_access(
             origin: OriginFor<T>,
             recipient: AccountIdLookupSourceOf<T>,
             bucket: BucketIdFor<T>,
             item_id: T::ItemId,
-            read_access_regex: ReadAccessRegex<T>,
+            read_access_regex: Option<ReadAccessRegex<T>>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -97,19 +97,19 @@ pub mod pallet {
 
         /// Update read access for an item.
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::set_metadata())]
         pub fn update_read_access(
             origin: OriginFor<T>,
             bucket: BucketIdFor<T>,
             item_id: T::ItemId,
-            read_access_regex: ReadAccessRegex<T>,
+            read_access_regex: Option<ReadAccessRegex<T>>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
             Self::do_update_read_access(&who, bucket, item_id, read_access_regex)?;
 
             // `who` is implicitly known as the admin of the collection otherwise the execution would have failed with a lack of permissions.
-            Self::deposit_event(Event::ReadAccessUpdated {
+            Self::deposit_event(Event::ItemReadAccessUpdated {
                 admin: who,
                 bucket,
                 item_id,
@@ -118,7 +118,7 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Burn an NFT from a collection.
+        /// Burn an item from a collection.
         ///
         /// This function is a wrapper around the `burn` function from the `pallet-nfts` pallet.
         #[pallet::call_index(2)]
@@ -132,7 +132,7 @@ pub mod pallet {
 
             Self::do_burn(&who, bucket, item)?;
 
-            Self::deposit_event(Event::NftBurned {
+            Self::deposit_event(Event::ItemBurned {
                 account: who,
                 bucket,
                 item_id: item,

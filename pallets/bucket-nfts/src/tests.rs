@@ -6,6 +6,7 @@ use storage_hub_traits::ReadProvidersInterface;
 
 use crate::{
     mock::{new_test_ext, BucketNfts, FileSystem, RuntimeOrigin, System, Test},
+    types::{ItemMetadata, ReadAccessRegex},
     Error, Event,
 };
 
@@ -27,7 +28,7 @@ mod share_access_tests {
                 issuer_origin.clone(),
                 msp,
                 bucket_name.clone(),
-                pallet_file_system::types::BucketPrivacy::Private
+                true
             ));
 
             let bucket_id =
@@ -42,7 +43,7 @@ mod share_access_tests {
                 recipient.clone(),
                 bucket_id,
                 999,
-                BoundedVec::try_from(b"*".to_vec()).unwrap()
+                Some(basic_read_access_regex())
             ));
 
             // Assert that the item exists in the collection.
@@ -77,7 +78,7 @@ mod share_access_tests {
                 issuer_origin.clone(),
                 msp,
                 bucket_name.clone(),
-                pallet_file_system::types::BucketPrivacy::Private
+                true
             ));
 
             let bucket_id =
@@ -93,7 +94,7 @@ mod share_access_tests {
                     recipient.clone(),
                     bucket_id,
                     999,
-                    BoundedVec::try_from(b"*".to_vec()).unwrap()
+                    Some(basic_read_access_regex())
                 ),
                 Error::<Test>::NotBucketOwner
             );
@@ -121,7 +122,7 @@ mod share_access_tests {
                     recipient.clone(),
                     bucket_id,
                     999,
-                    BoundedVec::try_from(b"*".to_vec()).unwrap()
+                    Some(basic_read_access_regex())
                 ),
                 pallet_storage_providers::Error::<Test>::BucketNotFound
             );
@@ -144,7 +145,7 @@ mod share_access_tests {
                 issuer_origin.clone(),
                 msp,
                 bucket_name.clone(),
-                pallet_file_system::types::BucketPrivacy::Public
+                false
             ));
 
             let bucket_id =
@@ -160,7 +161,7 @@ mod share_access_tests {
                     recipient.clone(),
                     bucket_id,
                     0,
-                    BoundedVec::try_from(b"*".to_vec()).unwrap()
+                    Some(basic_read_access_regex())
                 ),
                 Error::<Test>::BucketIsNotPrivate
             );
@@ -186,7 +187,7 @@ mod update_read_access_tests {
                 issuer_origin.clone(),
                 msp,
                 bucket_name.clone(),
-                pallet_file_system::types::BucketPrivacy::Private
+                true
             ));
 
             let bucket_id =
@@ -195,13 +196,15 @@ mod update_read_access_tests {
                     bucket_name,
                 );
 
+            ItemMetadata::<Test>::new(None);
+
             // Share access to the bucket
             assert_ok!(BucketNfts::share_access(
                 issuer_origin.clone(),
                 recipient.clone(),
                 bucket_id,
                 999,
-                BoundedVec::try_from(b"*".to_vec()).unwrap()
+                Some(basic_read_access_regex())
             ));
 
             // Dispatch a signed extrinsic.
@@ -209,7 +212,7 @@ mod update_read_access_tests {
                 issuer_origin,
                 bucket_id,
                 999,
-                BoundedVec::try_from(b"new_regex".to_vec()).unwrap()
+                Some(basic_read_access_regex())
             ));
 
             // Assert that the item metadata exists.
@@ -219,7 +222,7 @@ mod update_read_access_tests {
 
             // Assert that the correct event was deposited
             System::assert_last_event(
-                Event::ReadAccessUpdated {
+                Event::ItemReadAccessUpdated {
                     admin: issuer,
                     bucket: bucket_id,
                     item_id: 999,
@@ -244,7 +247,7 @@ mod update_read_access_tests {
                 issuer_origin.clone(),
                 msp,
                 bucket_name.clone(),
-                pallet_file_system::types::BucketPrivacy::Private
+                true
             ));
 
             let bucket_id =
@@ -259,7 +262,7 @@ mod update_read_access_tests {
                 recipient.clone(),
                 bucket_id,
                 999,
-                BoundedVec::try_from(b"*".to_vec()).unwrap()
+                Some(basic_read_access_regex())
             ));
 
             // Should fail since the issuer is not the owner of the bucket
@@ -268,7 +271,7 @@ mod update_read_access_tests {
                     RuntimeOrigin::signed(Keyring::Bob.to_account_id()),
                     bucket_id,
                     999,
-                    BoundedVec::try_from(b"new_regex".to_vec()).unwrap()
+                    Some(basic_read_access_regex())
                 ),
                 Error::<Test>::NotBucketOwner
             );
@@ -294,12 +297,7 @@ mod update_read_access_tests {
                     issuer_origin,
                     bucket_id,
                     999,
-                    BoundedVec::try_from(
-                        b"
-                    new_regex"
-                            .to_vec()
-                    )
-                    .unwrap()
+                    Some(basic_read_access_regex())
                 ),
                 pallet_storage_providers::Error::<Test>::BucketNotFound
             );
@@ -320,7 +318,7 @@ mod update_read_access_tests {
                 issuer_origin.clone(),
                 msp,
                 bucket_name.clone(),
-                pallet_file_system::types::BucketPrivacy::Private
+                true
             ));
 
             let bucket_id =
@@ -335,7 +333,7 @@ mod update_read_access_tests {
                     issuer_origin,
                     bucket_id,
                     999,
-                    BoundedVec::try_from(b"new_regex".to_vec()).unwrap()
+                    Some(basic_read_access_regex())
                 ),
                 pallet_nfts::Error::<Test>::UnknownItem
             );
@@ -362,7 +360,7 @@ mod burn_tests {
                 issuer_origin.clone(),
                 msp,
                 bucket_name.clone(),
-                pallet_file_system::types::BucketPrivacy::Private
+                true
             ));
 
             let bucket_id =
@@ -377,7 +375,7 @@ mod burn_tests {
                 recipient.clone(),
                 bucket_id,
                 999,
-                BoundedVec::try_from(b"*".to_vec()).unwrap()
+                Some(basic_read_access_regex())
             ));
 
             // Dispatch a signed extrinsic.
@@ -412,7 +410,7 @@ mod burn_tests {
                 issuer_origin.clone(),
                 msp,
                 bucket_name.clone(),
-                pallet_file_system::types::BucketPrivacy::Private
+                true
             ));
 
             let bucket_id =
@@ -427,7 +425,7 @@ mod burn_tests {
                 recipient.clone(),
                 bucket_id,
                 999,
-                BoundedVec::try_from(b"*".to_vec()).unwrap()
+                Some(basic_read_access_regex())
             ));
 
             // Should fail since the issuer is not the owner of the bucket
@@ -478,7 +476,7 @@ mod burn_tests {
                 issuer_origin.clone(),
                 msp,
                 bucket_name.clone(),
-                pallet_file_system::types::BucketPrivacy::Private
+                true
             ));
 
             let bucket_id =
@@ -494,6 +492,10 @@ mod burn_tests {
             );
         });
     }
+}
+
+fn basic_read_access_regex() -> ReadAccessRegex<Test> {
+    BoundedVec::try_from(b"*".to_vec()).unwrap()
 }
 
 fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) {

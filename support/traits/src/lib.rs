@@ -179,6 +179,16 @@ pub trait MutateProvidersInterface: ProvidersInterface {
         msp_id: Self::Provider,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
+        privacy: bool,
+        collection_id: Option<Self::BucketNftCollectionId>,
+    ) -> DispatchResult;
+
+    /// Update bucket privacy settings
+    fn update_bucket_privacy(bucket_id: Self::BucketId, privacy: bool) -> DispatchResult;
+
+    /// Update bucket collection ID
+    fn update_bucket_collection_id(
+        bucket_id: Self::BucketId,
         collection_id: Option<Self::BucketNftCollectionId>,
     ) -> DispatchResult;
 

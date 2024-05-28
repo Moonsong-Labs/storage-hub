@@ -39,6 +39,7 @@ pallet-proofs-dealer = { workspace = true }
 
 # Substrate
 sp-io = { workspace = true }
+sp-keyring = { workspace = true }
 
 # Frame
 pallet-balances = { workspace = true, features = ["std"] }

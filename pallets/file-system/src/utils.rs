@@ -6,7 +6,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
-use sp_core::{Hasher, H256};
+use sp_core::Hasher;
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
@@ -17,7 +17,7 @@ use storage_hub_traits::{MutateProvidersInterface, ReadProvidersInterface};
 use crate::{
     pallet,
     types::{
-        BucketPrivacy, FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof,
+        BucketIdFor, FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof,
         MaxBspsPerStorageRequest, MultiAddresses, PeerIds, StorageData, StorageRequestBspsMetadata,
         StorageRequestMetadata, StringLimitFor,
     },
@@ -65,41 +65,61 @@ where
 {
     /// Create a bucket for a owner (user) under a given MSP account.
     pub(crate) fn do_create_bucket(
-        owner: T::AccountId,
+        sender: T::AccountId,
         msp_account_id: T::AccountId,
         name: BoundedVec<u8, StringLimitFor<T>>,
-        private: BucketPrivacy,
-    ) -> DispatchResult {
-        let config: CollectionConfigFor<T> = CollectionConfig {
-            settings: CollectionSettings::all_enabled(),
-            max_supply: None,
-            mint_settings: MintSettings {
-                mint_type: MintType::Issuer,
-                price: None,
-                start_block: None,
-                end_block: None,
-                default_item_settings: ItemSettings::all_enabled(),
-            },
-        };
-
-        // Create collection only if bucket is private
-        let maybe_collection_id = match private {
-            BucketPrivacy::Public => None,
-            BucketPrivacy::Private => Some(T::Nfts::create_collection(&owner, &owner, &config)?),
-        };
-
+        private: bool,
+    ) -> Result<BucketIdFor<T>, DispatchError> {
         let msp_provider_id = <<T as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::get_provider(msp_account_id.clone())
                 .ok_or(Error::<T>::NotAMsp)?;
 
-        let bucket_id_hash = <T as crate::Config>::Providers::derive_bucket_id(&owner, name);
-        let bucket_id_hash = H256::from_slice(&bucket_id_hash.as_ref());
+        // Create collection only if bucket is private
+        let maybe_collection_id = if private {
+            // The `owner` of the collection is also the admin of the collection since most operations require the sender to be the admin.
+            Self::create_collection(sender.clone())?
+        } else {
+            None
+        };
+
+        let bucket_id = <T as crate::Config>::Providers::derive_bucket_id(&sender, name);
 
         <T::Providers as MutateProvidersInterface>::add_bucket(
             msp_provider_id,
-            owner,
-            bucket_id_hash,
+            sender,
+            bucket_id,
+            private,
             maybe_collection_id,
         )?;
+
+        Ok(bucket_id)
+    }
+
+    /// Update the privacy of a bucket.
+    ///
+    /// *Callable only by the owner of the bucket.*
+    pub(crate) fn do_update_bucket_privacy(
+        sender: T::AccountId,
+        bucket_id: BucketIdFor<T>,
+        private: bool,
+    ) -> DispatchResult {
+        // Check that the sender is the owner of the bucket.
+        <T::Providers as ReadProvidersInterface>::is_bucket_owner(&sender, &bucket_id)?;
+
+        let maybe_collection_id = T::Providers::get_collection_id_of_bucket(&bucket_id)?;
+
+        // Create collection if bucket will become private and there is no corresponding collection.
+        if private && maybe_collection_id.is_none() {
+            let maybe_collection_id = Self::create_collection(sender)?;
+
+            // Update the collection id in the bucket.
+            <T::Providers as MutateProvidersInterface>::update_bucket_collection_id(
+                bucket_id,
+                maybe_collection_id,
+            )?;
+        }
+
+        // Update the privacy of the bucket.
+        <T::Providers as MutateProvidersInterface>::update_bucket_privacy(bucket_id, private)?;
 
         Ok(())
     }
@@ -110,7 +130,7 @@ where
     /// it is expected that storage providers that do have this file in storage already, will be able to send a
     /// transaction to the chain to add themselves as a data server for the storage request.
     pub(crate) fn do_request_storage(
-        owner: T::AccountId,
+        sender: T::AccountId,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
@@ -134,7 +154,7 @@ where
 
         let file_metadata = StorageRequestMetadata::<T> {
             requested_at: <frame_system::Pallet<T>>::block_number(),
-            owner,
+            owner: sender,
             fingerprint,
             size,
             user_peer_ids: user_peer_ids.unwrap_or_default(),
@@ -194,12 +214,12 @@ where
     /// Though, as the storage request remains open, the threshold increases over time based on the number of blocks since the storage request was issued. This is to
     /// ensure that the storage request is fulfilled by opening up the opportunity for more BSPs to volunteer.
     pub(crate) fn do_bsp_volunteer(
-        who: T::AccountId,
+        sender: T::AccountId,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
     ) -> Result<(MultiAddresses<T>, StorageData<T>, T::AccountId), DispatchError> {
         let bsp =
-            <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(who.clone())
+            <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
@@ -223,7 +243,7 @@ where
 
         // Check if the BSP is already volunteered for this storage request.
         ensure!(
-            !<StorageRequestBsps<T>>::contains_key(&location, &who),
+            !<StorageRequestBsps<T>>::contains_key(&location, &sender),
             Error::<T>::BspAlreadyVolunteered
         );
 
@@ -262,7 +282,7 @@ where
         // Add BSP to storage request metadata.
         <StorageRequestBsps<T>>::insert(
             &location,
-            &who,
+            &sender,
             StorageRequestBspsMetadata::<T> {
                 confirmed: false,
                 _phantom: Default::default(),
@@ -302,14 +322,14 @@ where
     /// incremented. If the number of `bsps_confirmed` reaches the number of `bsps_required`, the storage request is deleted. Finally the BSP's data
     /// used is incremented by the size of the file.
     pub(crate) fn do_bsp_confirm_storing(
-        who: T::AccountId,
+        sender: T::AccountId,
         location: FileLocation<T>,
         root: FileKey<T>,
         forest_proof: ForestProof<T>,
         key_proof: KeyProof<T>,
     ) -> DispatchResult {
         let bsp =
-            <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(who.clone())
+            <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
@@ -331,12 +351,12 @@ where
 
         // Check that the BSP has volunteered for the storage request.
         ensure!(
-            <StorageRequestBsps<T>>::contains_key(&location, &who),
+            <StorageRequestBsps<T>>::contains_key(&location, &sender),
             Error::<T>::BspNotVolunteered
         );
 
         let requests = expect_or_err!(
-            <StorageRequestBsps<T>>::get(&location, &who),
+            <StorageRequestBsps<T>>::get(&location, &sender),
             "BSP should exist since we checked it above",
             Error::<T>::ImpossibleFailedToGetValue
         );
@@ -415,7 +435,7 @@ where
             <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
 
             // Update bsp for storage request.
-            <StorageRequestBsps<T>>::mutate(&location, &who, |bsp| {
+            <StorageRequestBsps<T>>::mutate(&location, &sender, |bsp| {
                 if let Some(bsp) = bsp {
                     bsp.confirmed = true;
                 }
@@ -427,7 +447,7 @@ where
 
         // Add data to storage provider.
         <T::Providers as storage_hub_traits::MutateProvidersInterface>::increase_data_used(
-            &who,
+            &sender,
             file_metadata.size,
         )?;
 
@@ -443,7 +463,7 @@ where
     ///
     /// All BSPs that have volunteered to store the file are removed from the storage request and the storage request is deleted.
     pub(crate) fn do_revoke_storage_request(
-        who: T::AccountId,
+        sender: T::AccountId,
         location: FileLocation<T>,
         file_key: FileKey<T>,
     ) -> DispatchResult {
@@ -462,7 +482,7 @@ where
 
         // Check that the sender is the same as the one who requested the storage.
         ensure!(
-            file_metadata.owner == who,
+            file_metadata.owner == sender,
             Error::<T>::StorageRequestNotAuthorized
         );
 
@@ -528,7 +548,7 @@ where
     /// `can_serve`: A flag that indicates if the BSP can serve the file to other BSPs. If the BSP can serve the file, then
     /// they are added to the storage request as a data server.
     pub(crate) fn do_bsp_stop_storing(
-        who: T::AccountId,
+        sender: T::AccountId,
         _file_key: FileKey<T>,
         location: FileLocation<T>,
         owner: T::AccountId,
@@ -541,7 +561,7 @@ where
         // TODO: Check that the hash of all the metadata is equal to the `file_key` hash.
         match <StorageRequests<T>>::get(&location) {
             Some(mut metadata) => {
-                match <StorageRequestBsps<T>>::get(&location, &who) {
+                match <StorageRequestBsps<T>>::get(&location, &sender) {
                     // We hit scenario 1. The BSP is a volunteer and has confirmed storing the file.
                     // We need to decrement the number of bsps confirmed and volunteered and remove the BSP from the storage request.
                     Some(bsp) => {
@@ -558,7 +578,7 @@ where
                         metadata.bsps_volunteered =
                             metadata.bsps_volunteered.saturating_sub(1u32.into());
 
-                        <StorageRequestBsps<T>>::remove(&location, &who);
+                        <StorageRequestBsps<T>>::remove(&location, &sender);
                     }
                     // We hit scenario 2. There is an open storage request but the BSP is not a volunteer.
                     // We need to increment the number of bsps required.
@@ -581,7 +601,7 @@ where
                     Some(1u32.into()),
                     None,
                     if can_serve {
-                        BoundedVec::try_from(vec![who.clone()]).unwrap()
+                        BoundedVec::try_from(vec![sender.clone()]).unwrap()
                     } else {
                         BoundedVec::default()
                     },
@@ -594,13 +614,27 @@ where
         Ok(())
     }
 
+    /// Create a collection.
+    fn create_collection(owner: T::AccountId) -> Result<Option<T::NftCollectionId>, DispatchError> {
+        let config: CollectionConfigFor<T> = CollectionConfig {
+            settings: CollectionSettings::all_enabled(),
+            max_supply: None,
+            mint_settings: MintSettings {
+                mint_type: MintType::Issuer,
+                price: None,
+                start_block: None,
+                end_block: None,
+                default_item_settings: ItemSettings::all_enabled(),
+            },
+        };
+
+        Ok(Some(T::Nfts::create_collection(&owner, &owner, &config)?))
+    }
+
     /// Get the block number at which the storage request will expire.
     ///
     /// This will also update the [`CurrentExpirationBlock`] if the current expiration block pointer is lower then the [`crate::Config::StorageRequestTtl`].
-    pub(crate) fn next_expiration_insertion_block_number() -> BlockNumberFor<T>
-    where
-        T: pallet::Config,
-    {
+    pub(crate) fn next_expiration_insertion_block_number() -> BlockNumberFor<T> {
         let current_block_number = <frame_system::Pallet<T>>::block_number();
         let min_expiration_block = current_block_number + T::StorageRequestTtl::get().into();
 

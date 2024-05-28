@@ -827,11 +827,11 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
         Ok(())
     }
 
-    // Bucket specific functions:
     fn add_bucket(
         msp_id: MainStorageProviderId<T>,
         user_id: T::AccountId,
         bucket_id: BucketId<T>,
+        private: bool,
         collection_id: Option<T::BucketNftCollectionId>,
     ) -> DispatchResult {
         // TODO: Check that the bucket does not exist yet
@@ -840,10 +840,32 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
             root: MerklePatriciaRoot::<T>::default(),
             user_id,
             msp_id,
+            private,
             collection_id,
         };
         Buckets::<T>::insert(&bucket_id, &bucket);
         Ok(())
+    }
+
+    fn update_bucket_privacy(bucket_id: Self::BucketId, privacy: bool) -> DispatchResult {
+        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
+            let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+            bucket.private = privacy;
+
+            Ok(())
+        })
+    }
+
+    fn update_bucket_collection_id(
+        bucket_id: Self::BucketId,
+        collection_id: Option<Self::BucketNftCollectionId>,
+    ) -> DispatchResult {
+        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
+            let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+            bucket.collection_id = collection_id;
+
+            Ok(())
+        })
     }
 
     fn change_root_bucket(

@@ -138,3 +138,7 @@ pub(super) type CollectionConfigFor<T> =
 /// Alias for the `StringLimit` type used in the ReadProvidersInterface.
 pub(super) type StringLimitFor<T> =
     <<T as crate::Config>::Providers as storage_hub_traits::ReadProvidersInterface>::StringLimit;
+
+/// Type alias representing the type of `BucketId` used in `ProvidersInterface`.
+pub(crate) type BucketIdFor<T> =
+    <<T as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::BucketId;

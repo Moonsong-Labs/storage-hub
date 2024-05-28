@@ -7,11 +7,11 @@ use crate::Config;
 #[derive(MaxEncodedLen, TypeInfo, Encode, Decode, PartialEq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct ItemMetadata<T: Config> {
-    pub read_access_regex: ReadAccessRegex<T>,
+    pub read_access_regex: Option<ReadAccessRegex<T>>,
 }
 
 impl<T: Config> ItemMetadata<T> {
-    pub fn new(read_access_regex: ReadAccessRegex<T>) -> Self {
+    pub fn new(read_access_regex: Option<ReadAccessRegex<T>>) -> Self {
         Self { read_access_regex }
     }
 }

@@ -299,6 +299,19 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
+        /// Notifies that a new bucket has been created.
+        NewBucket {
+            who: T::AccountId,
+            bucket_id: BucketIdFor<T>,
+            name: BoundedVec<u8, StringLimitFor<T>>,
+            private: bool,
+        },
+        /// Notifies that a bucket's privacy has been updated.
+        BucketPrivacyUpdated {
+            who: T::AccountId,
+            bucket_id: BucketIdFor<T>,
+            private: bool,
+        },
         /// Notifies that a new file has been requested to be stored.
         NewStorageRequest {
             who: T::AccountId,
@@ -396,17 +409,44 @@ pub mod pallet {
             origin: OriginFor<T>,
             msp: T::AccountId,
             name: BoundedVec<u8, StringLimitFor<T>>,
-            privacy: BucketPrivacy,
+            private: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            Self::do_create_bucket(who, msp, name, privacy)?;
+            let bucket_id = Self::do_create_bucket(who.clone(), msp, name.clone(), private)?;
+
+            Self::deposit_event(Event::NewBucket {
+                who,
+                bucket_id,
+                name,
+                private,
+            });
+
+            Ok(())
+        }
+
+        #[pallet::call_index(1)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn update_bucket_privacy(
+            origin: OriginFor<T>,
+            bucket_id: BucketIdFor<T>,
+            private: bool,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            Self::do_update_bucket_privacy(who.clone(), bucket_id, private)?;
+
+            Self::deposit_event(Event::BucketPrivacyUpdated {
+                who,
+                bucket_id,
+                private,
+            });
 
             Ok(())
         }
 
         /// Issue a new storage request for a file
-        #[pallet::call_index(1)]
+        #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn issue_storage_request(
             origin: OriginFor<T>,
@@ -442,7 +482,7 @@ pub mod pallet {
         }
 
         /// Revoke storage request
-        #[pallet::call_index(2)]
+        #[pallet::call_index(3)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn revoke_storage_request(
             origin: OriginFor<T>,
