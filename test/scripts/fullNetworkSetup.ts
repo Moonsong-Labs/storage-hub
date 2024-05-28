@@ -33,7 +33,7 @@ const idealExecutorParams = [
 const { relayClient, relayApi, shClient, storageApi } = await getZombieClients({
   relayWs: "ws://127.0.0.1:31000",
   // relayWs: "wss://rococo-rpc.polkadot.io",
-  shWs: "ws://127.0.0.1:35000",
+  shWs: "ws://127.0.0.1:32000",
 });
 
 async function main() {

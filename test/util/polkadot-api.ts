@@ -16,7 +16,7 @@ export const waitForRandomness = async (api: StorageHubApi, timeoutMs = 60_000) 
       }, timeoutMs);
 
       let valueCount = 0;
-      const subscription = api.query.Randomness.LatestBabeRandomness.watchValue("best").subscribe(
+      const subscription = api.query.Randomness.LatestOneEpochAgoRandomness.watchValue("best").subscribe(
         (value) => {
           valueCount++;
 
