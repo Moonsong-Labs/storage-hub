@@ -1,9 +1,3 @@
-use std::{
-    fs::{create_dir_all, File},
-    io::{Read, Write},
-    sync::Once,
-};
-
 use codec::Encode;
 use num_bigint::BigUint;
 use rand::Rng;
@@ -23,14 +17,8 @@ use crate::{FileKeyProof, FileKeyVerifier};
 type HashT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 
 const CHUNK_SIZE: u64 = 2;
-const FILES_BASE_PATH: &str = "./tmp/";
 const FILE_SIZE: u64 = 2u64.pow(11);
 const SIZE_TO_CHALLENGES: u64 = FILE_SIZE / 10;
-
-/// This is to make sure that some code is only executed once.
-/// For example, when building the files for testing, we need to make sure that
-/// is only executed once.
-static INIT: Once = Once::new();
 
 #[derive(PartialEq, Debug)]
 struct FileMetadata {
@@ -59,19 +47,22 @@ where
 
     println!("Chunking file into 32 byte chunks and building Merkle Patricia Trie...");
 
+    
+
+    let data = if random {
+        create_random_test_data(file_size)
+    } else {
+        create_sequential_test_data(file_size)
+    };
+    
+    let (memdb, fingerprint) = merklise_data::<T>(&data);
+
     let file_path = format!(
         "{}-{}-{}.txt",
         String::from_utf8(user_id.to_vec()).unwrap(),
         String::from_utf8(bucket.to_vec()).unwrap(),
         String::from_utf8(file_name.to_vec()).unwrap()
     );
-
-    if random {
-        create_random_test_file(&file_path, file_size)
-    } else {
-        create_test_file(&file_path, file_size)
-    };
-    let (memdb, fingerprint) = merklise_file::<T>(&file_path);
 
     let metadata = FileMetadata {
         owner: user_id.to_vec(),
@@ -99,26 +90,32 @@ where
     (memdb, file_key, metadata)
 }
 
-/// Chunk a file into [`CHUNK_SIZE`] byte chunks and store them in a Merkle Patricia Trie.
+/// Chunk data into [`CHUNK_SIZE`] byte chunks and store them in a Merkle Patricia Trie.
 ///
 /// The trie is stored in a [`MemoryDB`] and the [`Root`] is returned.
-/// _It is assumed that the file is located in the same directory as the executable._
-pub fn merklise_file<T: TrieLayout>(file_path: &str) -> (MemoryDB<T::Hash>, HashT<T>) {
-    let file_path = FILES_BASE_PATH.to_owned() + file_path;
-    let mut file = std::fs::File::open(file_path).unwrap();
+pub fn merklise_data<T: TrieLayout>(data: &[u8]) -> (MemoryDB<T::Hash>, HashT<T>) {
     let mut buf = [0; CHUNK_SIZE as usize];
     let mut chunks = Vec::new();
 
     // create list of key-value pairs consisting of chunk metadata and chunk data
     let mut chunk_i = 0u64;
-    loop {
-        let n = file.read(&mut buf).unwrap();
-        if n == 0 {
-            break;
-        }
+    let mut offset = 0;
 
-        chunks.push((chunk_i, buf.to_vec()));
+    while offset < data.len() {
+        // Determine the end of the current chunk
+        let end = std::cmp::min(offset + CHUNK_SIZE as usize, data.len());
+        
+        // Copy the current chunk from data into the buffer
+        buf[..end - offset].copy_from_slice(&data[offset..end]);
+        
+        // Store the current chunk as a vector in the chunks vector
+        chunks.push((chunk_i, buf[..end - offset].to_vec()));
+        
+        // Increment the chunk index
         chunk_i += 1;
+        
+        // Move the offset forward by CHUNK_SIZE
+        offset += CHUNK_SIZE as usize;
     }
 
     let mut memdb = MemoryDB::<T::Hash>::default();
@@ -130,52 +127,29 @@ pub fn merklise_file<T: TrieLayout>(file_path: &str) -> (MemoryDB<T::Hash>, Hash
         }
     }
 
-    println!("File fingerprint (root): {:?}", root);
+    println!("Data fingerprint (root): {:?}", root);
 
     (memdb, root)
 }
 
-/// Create a local file for testing, for a given size, and with a given file name.
-pub fn create_test_file(filename: &str, size: u64) -> File {
-    // Write file only once.
-    INIT.call_once(|| {
-        create_dir_all(FILES_BASE_PATH).unwrap();
-        let mut file = File::create(FILES_BASE_PATH.to_owned() + filename).unwrap();
-
-        // Generate random content
-        let mut i = 0;
-        let content: Vec<u8> = (0..size)
-            .map(|_| {
-                i = i % (u8::MAX - 1);
-                i += 1;
-                i
-            })
-            .collect();
-
-        file.write_all(&content).unwrap();
-    });
-
-    // Open and return file.
-    File::open(FILES_BASE_PATH.to_owned() + filename).unwrap()
+/// Generate sequential test data of a given size.
+pub fn create_sequential_test_data(size: u64) -> Vec<u8> {
+    let mut i = 0u8;
+    let content: Vec<u8> = (0..size)
+        .map(|_| {
+            i = i % (u8::MAX - 1);
+            i += 1;
+            i
+        })
+        .collect();
+    content
 }
 
-/// Create a local file for testing, for a given size, with a given file name,
-/// and with random content.
-pub fn create_random_test_file(filename: &str, size: u64) -> File {
-    // Write file only once.
-    INIT.call_once(|| {
-        create_dir_all(FILES_BASE_PATH).unwrap();
-        let mut file = File::create(FILES_BASE_PATH.to_owned() + filename).unwrap();
-        let mut rng = rand::thread_rng();
-
-        // Generate random content
-        let content: Vec<u8> = (0..size).map(|_| rng.gen()).collect();
-
-        file.write_all(&content).unwrap();
-    });
-
-    // Open and return file.
-    File::open(FILES_BASE_PATH.to_owned() + filename).unwrap()
+/// Generate random test data of a given size.
+pub fn create_random_test_data(size: u64) -> Vec<u8> {
+    let mut rng = rand::thread_rng();
+    let content: Vec<u8> = (0..size).map(|_| rng.gen()).collect();
+    content
 }
 
 fn generate_challenges<T: TrieLayout>(
