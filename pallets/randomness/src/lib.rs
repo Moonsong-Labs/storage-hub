@@ -29,6 +29,7 @@ mod tests;
 pub trait GetBabeData<EpochIndex, Randomness> {
     fn get_epoch_index() -> EpochIndex;
     fn get_epoch_randomness() -> Randomness;
+    fn get_parent_randomness() -> Randomness;
 }
 
 #[pallet]
@@ -37,9 +38,8 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use frame_system::WeightInfo;
-    use scale_info::prelude::vec::Vec;
-    use session_keys_primitives::{InherentError, INHERENT_IDENTIFIER};
-    use sp_runtime::traits::{Hash, Saturating};
+    use shp_session_keys::{InherentError, INHERENT_IDENTIFIER};
+    use sp_runtime::traits::Saturating;
 
     #[pallet::pallet]
     pub struct Pallet<T>(PhantomData<T>);
@@ -61,16 +61,20 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(crate) fn deposit_event)]
     pub enum Event<T: Config> {
         /// Event emitted when a new random seed is available from the relay chain
-        NewRandomnessAvailable {
+        NewOneEpochAgoRandomnessAvailable {
             randomness_seed: T::Hash,
             from_epoch: u64,
             valid_until_block: BlockNumberFor<T>,
         },
     }
 
-    /// Latest random seed obtained from BABE and the latest block that it can process randomness requests from
+    /// Latest random seed obtained from the one epoch ago randomness from BABE, and the latest block that it can process randomness requests from
     #[pallet::storage]
-    pub type LatestBabeRandomness<T: Config> = StorageValue<_, (T::Hash, BlockNumberFor<T>)>;
+    pub type LatestOneEpochAgoRandomness<T: Config> = StorageValue<_, (T::Hash, BlockNumberFor<T>)>;
+
+    /// Latest random seed obtained from the parent block randomness from BABE, and the latest block that it can process randomness requests from
+    #[pallet::storage]
+    pub type LatestParentBlockRandomness<T: Config> = StorageValue<_, (T::Hash, BlockNumberFor<T>)>;
 
     /// Current relay epoch
     #[pallet::storage]
@@ -94,6 +98,16 @@ pub mod pallet {
             // Make sure this is included in the block as an inherent, unsigned
             ensure_none(origin)?;
 
+            // Update the randomness from the parent block
+            if let Some(parent_randomness) = T::BabeDataGetter::get_parent_randomness() {
+                let two_blocks: BlockNumberFor<T> = BlockNumberFor::<T>::default()
+                    + sp_runtime::traits::One::one()
+                    + sp_runtime::traits::One::one();
+                let latest_valid_block =
+                    frame_system::Pallet::<T>::block_number().saturating_sub(two_blocks);
+                LatestParentBlockRandomness::<T>::put((parent_randomness, latest_valid_block));
+            }
+
             // Get the last relay epoch index for which the randomness has been processed
             let last_relay_epoch_index = <RelayEpoch<T>>::get();
 
@@ -112,13 +126,13 @@ pub mod pallet {
                         .saturating_sub(sp_runtime::traits::One::one());
 
                     // Save it to be readily available for use
-                    LatestBabeRandomness::<T>::put((randomness, latest_valid_block));
+                    LatestOneEpochAgoRandomness::<T>::put((randomness, latest_valid_block));
 
                     // Update storage with the latest epoch for which randomness was processed for
                     <RelayEpoch<T>>::put(relay_epoch_index);
 
                     // Emit an event detailing that a new randomness is available
-                    Self::deposit_event(Event::NewRandomnessAvailable {
+                    Self::deposit_event(Event::NewOneEpochAgoRandomnessAvailable {
                         randomness_seed: randomness,
                         from_epoch: relay_epoch_index,
                         valid_until_block: latest_valid_block,
@@ -186,41 +200,16 @@ pub mod pallet {
         }
     }
 
-    // Randomness trait
-    impl<T: Config> frame_support::traits::Randomness<T::Hash, BlockNumberFor<T>> for Pallet<T> {
-        /// Uses the BABE randomness of this epoch to generate a random seed that can be used
-        /// for commitments from the last epoch. The provided `subject` MUST have been committed
-        /// AT LEAST during the last epoch for the result of this function to not be predictable
-        ///
-        /// The subject is a byte array that is hashed (to make it a fixed size) and then concatenated with
-        /// the latest BABE randomness. The result is then hashed again to provide the final randomness.
-        fn random(subject: &[u8]) -> (T::Hash, BlockNumberFor<T>) {
-            // If there's randomness available
-            if let Some((babe_randomness, latest_valid_block)) = LatestBabeRandomness::<T>::get() {
-                let hashed_subject = T::Hashing::hash(subject);
-                let mut digest = Vec::new();
-                // Concatenate the latest randomness with the hashed subject
-                digest.extend_from_slice(babe_randomness.as_ref());
-                digest.extend_from_slice(hashed_subject.as_ref());
-                // Hash it
-                let randomness = T::Hashing::hash(digest.as_slice());
-                // Return the randomness for this subject and the latest block for which this randomness is useful
-                // `subject` commitments done after `latest_valid_block` are predictable, and as such MUST be discarded
-                (randomness, latest_valid_block)
-            } else {
-                // If there's no randomness available, return an empty randomness that's invalid for every block
-                let randomness = T::Hash::default();
-                let latest_valid_block: BlockNumberFor<T> = sp_runtime::traits::Zero::zero();
-                (randomness, latest_valid_block)
-            }
-        }
-    }
-
     // Read-only functions
     impl<T: Config> Pallet<T> {
-        /// Get the latest BABE randomness seed and the latest block for which it's valid
+        /// Get the latest BABE randomness seed from one epoch ago and the latest block for which it's valid
         pub fn latest_babe_randomness() -> Option<(T::Hash, BlockNumberFor<T>)> {
-            LatestBabeRandomness::<T>::get()
+            LatestOneEpochAgoRandomness::<T>::get()
+        }
+
+        /// Get the latest parent block randomness seed and the latest block for which it's valid
+        pub fn latest_parent_block_randomness() -> Option<(T::Hash, BlockNumberFor<T>)> {
+            LatestParentBlockRandomness::<T>::get()
         }
 
         /// Get the latest relay epoch processed
@@ -231,6 +220,74 @@ pub mod pallet {
         /// Get the variable that's used to check if the mandatory BABE inherent was included in the block
         pub fn inherent_included() -> Option<()> {
             InherentIncluded::<T>::get()
+        }
+    }
+}
+
+use frame_support::traits::Randomness as RandomnessT;
+use frame_system::pallet_prelude::BlockNumberFor;
+use scale_info::prelude::vec::Vec;
+use sp_runtime::traits::Hash;
+pub struct RandomnessFromOneEpochAgo<T>(core::marker::PhantomData<T>);
+
+impl<T: Config> RandomnessT<T::Hash, BlockNumberFor<T>> for RandomnessFromOneEpochAgo<T> {
+    /// Uses the BABE randomness of this epoch to generate a random seed that can be used
+    /// for commitments from the last epoch. The provided `subject` MUST have been committed
+    /// AT LEAST during the last epoch for the result of this function to not be predictable
+    ///
+    /// The subject is a byte array that is hashed (to make it a fixed size) and then concatenated with
+    /// the latest BABE randomness. The result is then hashed again to provide the final randomness.
+    fn random(subject: &[u8]) -> (T::Hash, BlockNumberFor<T>) {
+        // If there's randomness available
+        if let Some((babe_randomness, latest_valid_block)) = LatestOneEpochAgoRandomness::<T>::get()
+        {
+            let hashed_subject = T::Hashing::hash(subject);
+            let mut digest = Vec::new();
+            // Concatenate the latest randomness with the hashed subject
+            digest.extend_from_slice(babe_randomness.as_ref());
+            digest.extend_from_slice(hashed_subject.as_ref());
+            // Hash it
+            let randomness = T::Hashing::hash(digest.as_slice());
+            // Return the randomness for this subject and the latest block for which this randomness is useful
+            // `subject` commitments done after `latest_valid_block` are predictable, and as such MUST be discarded
+            (randomness, latest_valid_block)
+        } else {
+            // If there's no randomness available, return an empty randomness that's invalid for every block
+            let randomness = T::Hash::default();
+            let latest_valid_block: BlockNumberFor<T> = sp_runtime::traits::Zero::zero();
+            (randomness, latest_valid_block)
+        }
+    }
+}
+pub struct ParentBlockRandomness<T>(core::marker::PhantomData<T>);
+
+impl<T: Config> RandomnessT<T::Hash, BlockNumberFor<T>> for ParentBlockRandomness<T> {
+    /// Uses the BABE randomness of two epochs ago in combination with the parent's block randomness
+    /// to generate a random seed that can be used for commitments from previous blocks. Take extreme
+    /// care, as the block producer can predict this randomness.
+    ///
+    /// The subject is a byte array that is hashed (to make it a fixed size) and then concatenated with
+    /// the latest parent block randomness. The result is then hashed again to provide the final randomness.
+    fn random(subject: &[u8]) -> (T::Hash, BlockNumberFor<T>) {
+        // If there's randomness available
+        if let Some((parent_block_randomness, latest_valid_block)) =
+            LatestParentBlockRandomness::<T>::get()
+        {
+            let hashed_subject = T::Hashing::hash(subject);
+            let mut digest = Vec::new();
+            // Concatenate the latest randomness with the hashed subject
+            digest.extend_from_slice(parent_block_randomness.as_ref());
+            digest.extend_from_slice(hashed_subject.as_ref());
+            // Hash it
+            let randomness = T::Hashing::hash(digest.as_slice());
+            // Return the randomness for this subject and the latest block for which this randomness is useful
+            // `subject` commitments done after `latest_valid_block` are predictable, and as such MUST be discarded
+            (randomness, latest_valid_block)
+        } else {
+            // If there's no randomness available, return an empty randomness that's invalid for every block
+            let randomness = T::Hash::default();
+            let latest_valid_block: BlockNumberFor<T> = sp_runtime::traits::Zero::zero();
+            (randomness, latest_valid_block)
         }
     }
 }

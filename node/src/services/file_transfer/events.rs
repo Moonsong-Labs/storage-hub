@@ -1,14 +1,36 @@
+use sc_network::PeerId;
+use shc_common::types::{ChunkId, FileKey, FileProof};
+
 use storage_hub_infra::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone)]
+pub struct RemoteUploadRequest {
+    pub peer: PeerId,
+    pub file_key: FileKey,
+    pub chunk_with_proof: FileProof,
+}
+
+impl EventBusMessage for RemoteUploadRequest {}
+
+#[derive(Clone)]
+pub struct RemoteDownloadRequest {
+    pub file_key: FileKey,
+    pub chunk_id: ChunkId,
+}
+
+impl EventBusMessage for RemoteDownloadRequest {}
+
+#[derive(Clone, Default)]
 pub struct FileTransferServiceEventBusProvider {
     remote_upload_request_event_bus: EventBus<RemoteUploadRequest>,
+    remote_download_request_event_bus: EventBus<RemoteDownloadRequest>,
 }
 
 impl FileTransferServiceEventBusProvider {
     pub fn new() -> Self {
         Self {
             remote_upload_request_event_bus: EventBus::new(),
+            remote_download_request_event_bus: EventBus::new(),
         }
     }
 }
@@ -19,9 +41,8 @@ impl ProvidesEventBus<RemoteUploadRequest> for FileTransferServiceEventBusProvid
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct RemoteUploadRequest {
-    pub location: String,
+impl ProvidesEventBus<RemoteDownloadRequest> for FileTransferServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<RemoteDownloadRequest> {
+        &self.remote_download_request_event_bus
+    }
 }
-
-impl EventBusMessage for RemoteUploadRequest {}

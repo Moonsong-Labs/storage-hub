@@ -90,6 +90,11 @@ impl crate::GetBabeData<u64, Option<H256>> for BabeDataGetter {
             &Self::get_epoch_index().to_le_bytes(),
         )))
     }
+    fn get_parent_randomness() -> Option<H256> {
+        Some(H256::from_slice(&blake2_256(
+            &Self::get_epoch_index().saturating_sub(1).to_le_bytes(),
+        )))
+    }
 }
 
 impl Config for Test {
@@ -105,10 +110,10 @@ macro_rules! assert_event_emitted {
         match &$event {
             e => {
                 assert!(
-                    crate::mock::events().iter().find(|x| *x == e).is_some(),
+                    $crate::mock::events().iter().find(|x| *x == e).is_some(),
                     "Event {:?} was not found in events: \n {:?}",
                     e,
-                    crate::mock::events()
+                    $crate::mock::events()
                 );
             }
         }

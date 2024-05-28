@@ -59,7 +59,7 @@ pub mod pallet {
     };
 
     // TODO: add conditional to check that block number does not exceed u64 type. It it does, the fixed point number that we convert to from a block
-    // number might be too loarge to fit into the threshold type.
+    // number might be too large to fit into the threshold type.
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -287,6 +287,8 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             multiaddresses: MultiAddresses<T>,
+            owner: T::AccountId,
+            size: StorageData<T>,
         },
         /// Notifies that a BSP confirmed storing a file.
         BspConfirmedStoring {
@@ -317,8 +319,6 @@ pub mod pallet {
         BspsRequiredCannotBeZero,
         /// BSPs required for storage request cannot exceed the maximum allowed.
         BspsRequiredExceedsMax,
-        /// BSP already volunteered to store the given file.
-        BspVolunteerFailed,
         /// Account is not a BSP.
         NotABsp,
         /// BSP has not volunteered to store the given file.
@@ -441,15 +441,17 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and register Storage Provider as BSP for file.
-            let multiaddresses =
+            let (multiaddresses, size, owner) =
                 Self::do_bsp_volunteer(who.clone(), location.clone(), fingerprint)?;
 
             // Emit new BSP volunteer event.
             Self::deposit_event(Event::AcceptedBspVolunteer {
                 who,
+                multiaddresses,
                 location,
                 fingerprint,
-                multiaddresses,
+                owner,
+                size,
             });
 
             Ok(())
@@ -462,13 +464,20 @@ pub mod pallet {
             origin: OriginFor<T>,
             location: FileLocation<T>,
             root: FileKey<T>,
-            proof: Proof<T>,
+            non_inclusion_forest_proof: ForestProof<T>,
+            added_file_key_proof: KeyProof<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
             // Perform validations and confirm storage.
-            Self::do_bsp_confirm_storing(who.clone(), location.clone(), root, proof.clone())?;
+            Self::do_bsp_confirm_storing(
+                who.clone(),
+                location.clone(),
+                root,
+                non_inclusion_forest_proof.clone(),
+                added_file_key_proof.clone(),
+            )?;
 
             // Emit event.
             Self::deposit_event(Event::BspConfirmedStoring { who, location });

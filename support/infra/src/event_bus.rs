@@ -1,6 +1,5 @@
 use anyhow::Result;
 use sc_tracing::tracing::warn;
-use std::fmt::Debug;
 use tokio::sync::broadcast;
 
 use crate::{
@@ -8,9 +7,9 @@ use crate::{
     constants::MAX_PENDING_EVENTS,
 };
 
-pub trait EventBusMessage: Debug + Clone + Send + 'static {}
+pub trait EventBusMessage: Clone + Send + 'static {}
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct EventBus<T: EventBusMessage> {
     sender: broadcast::Sender<T>,
 }
@@ -31,8 +30,8 @@ impl<T: EventBusMessage + Clone> EventBus<T> {
         // We log that there is no listener.
         match self.sender.send(event) {
             Ok(_) => {}
-            Err(error) => {
-                warn!("No listener for event: {:?}", error.0);
+            Err(_) => {
+                warn!("No listener for emitted event.");
             }
         }
     }
@@ -47,7 +46,7 @@ pub trait ProvidesEventBus<T: EventBusMessage> {
 }
 
 pub trait EventHandler<E: EventBusMessage>: Clone + Send + 'static {
-    fn handle_event(&self, event: E) -> impl std::future::Future<Output = Result<()>> + Send;
+    fn handle_event(&mut self, event: E) -> impl std::future::Future<Output = Result<()>> + Send;
 
     fn subscribe_to_provider<EP: ProvidesEventBus<E>>(
         self,
@@ -91,7 +90,7 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
 
     async fn run(&mut self) {
         while let Ok(event) = self.receiver.recv().await {
-            let cloned_event_handler = self.event_handler.clone();
+            let mut cloned_event_handler = self.event_handler.clone();
             self.spawner.spawn(async move {
                 match cloned_event_handler.handle_event(event).await {
                     Ok(_) => {}

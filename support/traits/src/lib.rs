@@ -6,10 +6,19 @@ use frame_support::pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Me
 use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
 use frame_support::traits::fungible;
 use frame_support::Parameter;
-use scale_info::prelude::fmt::Debug;
+use scale_info::prelude::{fmt::Debug, vec::Vec};
 use sp_core::Get;
-use sp_runtime::traits::AtLeast32BitUnsigned;
+use sp_runtime::traits::{AtLeast32BitUnsigned, Hash};
 use sp_runtime::{BoundedVec, DispatchError};
+
+#[cfg(feature = "std")]
+pub trait MaybeDebug: Debug {}
+#[cfg(feature = "std")]
+impl<T: Debug> MaybeDebug for T {}
+#[cfg(not(feature = "std"))]
+pub trait MaybeDebug {}
+#[cfg(not(feature = "std"))]
+impl<T> MaybeDebug for T {}
 
 /// A trait to lookup registered Providers.
 ///
@@ -186,15 +195,18 @@ pub trait SubscribeProvidersInterface {
 
 /// The interface for the ProofsDealer pallet.
 ///
-/// It is abstracted over the `Provider` type, `Proof` type and `MerkleHash` type.
+/// It is abstracted over the `Provider` type, `Proof` type, `ForestProof` type and `MerkleHash` type.
 /// It provides the functions to verify a proof, submit a new proof challenge and
 /// submit a new challenge with priority.
 pub trait ProofsDealerInterface {
     /// The type which represents a registered Provider.
     type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-    /// The type that represents the proof.
-    type Proof: Parameter + Member + Debug;
-    /// The type corresponding to the root of a registered Provider.
+    /// The type that represents a proof just for the Merkle Patricia Forest.
+    type ForestProof: Parameter + Member + Debug;
+    /// The type that represents a proof for an inner key (leaf) of the Merkle Patricia Forest.
+    type KeyProof: Parameter + Member + Debug;
+    /// The type corresponding to the root and keys in the Merkle Patricia Forest of a
+    /// registered Provider.
     type MerkleHash: Parameter
         + Member
         + MaybeSerializeDeserialize
@@ -209,13 +221,28 @@ pub trait ProofsDealerInterface {
         + AsMut<[u8]>
         + MaxEncodedLen
         + FullCodec;
+    /// The hashing system (algorithm) being used for the Merkle Patricia Forests (e.g. Blake2).
+    type MerkleHashing: Hash<Output = Self::MerkleHash>;
 
-    /// Verify a proof for a given Provider, who should have a given Root.
-    fn verify_proof(
+    /// Verify a proof just for the Merkle Patricia Forest, for a given Provider.
+    ///
+    /// This only verifies that something is included in the forest of the Provider. It is not a full
+    /// proof of the Provider's data.
+    fn verify_forest_proof(
         who: &Self::Provider,
-        root: &Self::MerkleHash,
-        proof: &Self::Proof,
-    ) -> DispatchResult;
+        challenges: &[Self::MerkleHash],
+        proof: &Self::ForestProof,
+    ) -> Result<Vec<Self::MerkleHash>, DispatchError>;
+
+    /// Verify a proof for a key within the Merkle Patricia Forest of a Provider.
+    ///
+    /// This only verifies a proof of the data at a specific key within the Provider's forest. It does
+    /// not verify if that key is included in the Merkle Patricia Forest of the Provider.
+    fn verify_key_proof(
+        key: &Self::MerkleHash,
+        challenges: &[Self::MerkleHash],
+        proof: &Self::KeyProof,
+    ) -> Result<Vec<Self::MerkleHash>, DispatchError>;
 
     /// Submit a new proof challenge.
     fn challenge(key_challenged: &Self::MerkleHash) -> DispatchResult;
@@ -226,18 +253,22 @@ pub trait ProofsDealerInterface {
 
 /// A trait to verify proofs based on commitments and challenges.
 ///
-/// It is abstracted over the `Proof` and `Key` type.
+/// It is abstracted over the `Proof`, `Commitment` and `Challenge` types.
 pub trait CommitmentVerifier {
     /// The type that represents the proof.
     type Proof: Parameter + Member + Debug;
-    /// The type that represents the commitment (e.g. a Merkle root) and the keys representing nodes
-    /// in a Merkle tree which are also passed as challenges.
-    type Key: Debug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
+    /// The type that represents the commitment (e.g. a Merkle root)
+    type Commitment: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
+    /// The type that represents the challenges which a proof is being verified against.
+    type Challenge: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
 
     /// Verify a proof based on a commitment and a set of challenges.
+    ///
+    /// The function returns a vector of keys that are verified by the proof, or an error if the proof
+    /// is invalid.
     fn verify_proof(
-        commitment: &Self::Key,
-        challenges: &[Self::Key],
+        commitment: &Self::Commitment,
+        challenges: &[Self::Challenge],
         proof: &Self::Proof,
-    ) -> DispatchResult;
+    ) -> Result<Vec<Self::Challenge>, DispatchError>;
 }

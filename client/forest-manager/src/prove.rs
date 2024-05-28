@@ -1,7 +1,11 @@
-use storage_hub_infra::types::{Leaf, Proven};
+use hash_db::Hasher;
+use shc_common::types::{HasherOutT, Leaf, Proven};
 use trie_db::{TrieIterator, TrieLayout};
 
-use crate::{traits::ForestStorage, types::ForestStorageErrors, utils::deserialize_value};
+use crate::{
+    error::{ErrorT, ForestStorageError},
+    utils::convert_raw_bytes_to_hasher_out,
+};
 
 /// Determines the presence and relationship of a challenged file key within a trie structure,
 /// by attempting to find leaves that are exact matches or close neighbors to the challenged key.
@@ -12,7 +16,7 @@ use crate::{traits::ForestStorage, types::ForestStorageErrors, utils::deserializ
 ///   will seek this key within the trie to determine relational nodes.
 ///
 /// # Returns
-/// This function returns an `Ok` wrapping an `Option<Proven<F::RawKey, F::Value>>` which:
+/// This function returns an `Ok` wrapping an `Proven<HasherOutT<T>, Metadata>` which:
 /// - `None` indicates that no relevant keys were found (unevaluable situation).
 /// - An instance of `Proven`, which depending on the located keys, could be:
 ///   1. An exact match.
@@ -23,145 +27,67 @@ use crate::{traits::ForestStorage, types::ForestStorageErrors, utils::deserializ
 /// # Errors
 /// This function can return an error in cases where it fails to read or seek within the trie,
 /// or when deserialization of a leaf's value fails.
-pub(crate) fn prove<T: TrieLayout, F: ForestStorage>(
+pub(crate) fn prove<T: TrieLayout>(
     trie: &trie_db::TrieDB<'_, '_, T>,
-    challenged_file_key: &F::LookupKey,
-) -> Result<Proven<F::RawKey, F::Value>, ForestStorageErrors> {
+    challenged_file_key: &<T::Hash as Hasher>::Out,
+) -> Result<Proven<HasherOutT<T>, ()>, ErrorT<T>>
+where
+    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
+{
     // Create an iterator over the leaf nodes.
     let mut iter = trie
         .into_double_ended_iter()
-        .map_err(|_| ForestStorageErrors::FailedToCreateTrieIterator)?;
+        .map_err(|_| ForestStorageError::FailedToCreateTrieIterator)?;
 
     // Position the iterator close to or on the challenged key.
-    iter.seek(challenged_file_key.as_ref())
-        .map_err(|_| ForestStorageErrors::FailedToSeek)?;
+    iter.seek(challenged_file_key.as_ref())?;
 
-    let next = iter
-        .next()
-        .transpose()
-        .map_err(|_| ForestStorageErrors::FailedToReadLeaf)?;
-    let prev = iter
-        .next_back()
-        .transpose()
-        .map_err(|_| ForestStorageErrors::FailedToReadLeaf)?;
+    let next = iter.next().transpose()?;
+    let prev = iter.next_back().transpose()?;
 
     match (prev, next) {
-        (_, Some((key, value))) if challenged_file_key.as_ref() == key => {
-            // Scenario 1: Exact match
-            Ok(Proven::new_exact_key(
-                key.into(),
-                deserialize_value(&value)?,
-            ))
-        }
-        (Some((prev_key, prev_value)), Some((next_key, next_value))) => {
-            // Scenario 2: Between two keys
-            let prev_leaf = Leaf {
-                key: prev_key.into(),
-                data: deserialize_value(&prev_value)?,
-            };
-            let next_leaf = Leaf {
-                key: next_key.into(),
-                data: deserialize_value(&next_value)?,
-            };
+        // Scenario 1: Exact match
+        (_, Some((key, _))) if challenged_file_key.as_ref() == key => Ok(Proven::new_exact_key(
+            convert_raw_bytes_to_hasher_out::<T>(key)?,
+            (),
+        )),
+        // Scenario 2: Between two keys
+        (Some((prev_key, _)), Some((next_key, _)))
+            if prev_key < challenged_file_key.as_ref().to_vec()
+                && next_key > challenged_file_key.as_ref().to_vec() =>
+        {
+            let prev_leaf = Leaf::new(convert_raw_bytes_to_hasher_out::<T>(prev_key)?, ());
+            let next_leaf = Leaf::new(convert_raw_bytes_to_hasher_out::<T>(next_key)?, ());
+
             Ok(Proven::new_neighbour_keys(Some(prev_leaf), Some(next_leaf))
-                .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
+                .map_err(|_| ForestStorageError::FailedToConstructProvenLeaves)?)
         }
-        (Some((key, value)), None) if *challenged_file_key.as_ref() > *key => {
-            // Scenario 3: After the last leaf
-            let leaf = Leaf {
-                key: key.into(),
-                data: deserialize_value(&value)?,
-            };
-            Ok(Proven::new_neighbour_keys(Some(leaf), None)
-                .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
-        }
-        (None, Some((key, value))) if *challenged_file_key.as_ref() < *key => {
-            // Scenario 4: Before the first leaf
-            let leaf = Leaf {
-                key: key.into(),
-                data: deserialize_value(&value)?,
-            };
+        // Scenario 3: Before the first leaf
+        (None, Some((key, _))) if *challenged_file_key.as_ref() < *key => {
+            let leaf = Leaf::new(convert_raw_bytes_to_hasher_out::<T>(key)?, ());
+
             Ok(Proven::new_neighbour_keys(None, Some(leaf))
-                .map_err(|_| ForestStorageErrors::FailedToConstructProvenLeaves)?)
+                .map_err(|_| ForestStorageError::FailedToConstructProvenLeaves)?)
         }
-        _ => Err(ForestStorageErrors::InvalidProvingScenario),
+        // Scenario 4: After the last leaf
+        (Some((key, _)), None) if *challenged_file_key.as_ref() > *key => {
+            let leaf = Leaf::new(convert_raw_bytes_to_hasher_out::<T>(key)?, ());
+
+            Ok(Proven::new_neighbour_keys(Some(leaf), None)
+                .map_err(|_| ForestStorageError::FailedToConstructProvenLeaves)?)
+        }
+        _ => Err(ForestStorageError::InvalidProvingScenario.into()),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::in_memory::InMemoryForestStorage;
-
-    use common::types::HashT;
+    use crate::test_utils::build_merkle_patricia_forest;
 
     use super::*;
     use reference_trie::RefHasher;
-    use sp_core::H256;
-    use sp_trie::{LayoutV1, MemoryDB};
-    use storage_hub_infra::types::Metadata;
-    use trie_db::{Hasher, TrieDBBuilder, TrieDBMutBuilder, TrieMut};
-
-    /// Build a Merkle Patricia Forest Trie.
-    ///
-    /// The trie is built from the ground up, by each file into 32 byte chunks and storing them in a trie.
-    /// Each trie is then inserted into a new merkle patricia trie, which comprises the merkle forest.
-    pub fn build_merkle_patricia_forest<T: TrieLayout>() -> (
-        MemoryDB<T::Hash>,
-        HashT<T>,
-        Vec<<<T as TrieLayout>::Hash as Hasher>::Out>,
-    ) {
-        let user_ids = vec![
-            b"01", b"02", b"03", b"04", b"05", b"06", b"07", b"08", b"09", b"10", b"11", b"12",
-            b"13", b"12", b"13", b"14", b"15", b"16", b"17", b"18", b"19", b"20", b"21", b"22",
-            b"23", b"24", b"25", b"26", b"27", b"28", b"29", b"30", b"31", b"32",
-        ];
-        let bucket = b"bucket";
-        let file_name = b"sample64b";
-
-        let mut file_leaves = Vec::new();
-
-        for user_id in user_ids {
-            let file_path = format!(
-                "{}-{}-{}.txt",
-                String::from_utf8(user_id.to_vec()).unwrap(),
-                String::from_utf8(bucket.to_vec()).unwrap(),
-                String::from_utf8(file_name.to_vec()).unwrap()
-            );
-
-            let fingerprint = H256::from_slice(&[0; 32]);
-
-            let metadata = Metadata {
-                owner: String::from("owner"),
-                location: file_path,
-                size: 0,
-                fingerprint,
-            };
-
-            let metadata = bincode::serialize(&metadata).unwrap();
-            let metadata_hash = T::Hash::hash(&metadata);
-
-            file_leaves.push((metadata_hash, metadata));
-        }
-
-        // Construct the Merkle Patricia Forest
-        let mut memdb = MemoryDB::<T::Hash>::default();
-        let mut root: HashT<T> = Default::default();
-
-        let mut file_keys = Vec::new();
-        {
-            let mut merkle_forest_trie = TrieDBMutBuilder::<T>::new(&mut memdb, &mut root).build();
-
-            // Insert file leaf and metadata into the Merkle Patricia Forest.
-            for file in &file_leaves {
-                merkle_forest_trie
-                    .insert(file.0.as_ref(), file.1.as_ref())
-                    .unwrap();
-
-                file_keys.push(file.0.clone());
-            }
-        }
-        (memdb, root, file_keys)
-    }
+    use sp_trie::LayoutV1;
+    use trie_db::TrieDBBuilder;
 
     #[test]
     fn test_prove_challenge_exact_key_match() {
@@ -171,10 +97,7 @@ mod tests {
 
         let challenge_key = keys[2];
 
-        let result = prove::<LayoutV1<RefHasher>, InMemoryForestStorage<LayoutV1<RefHasher>>>(
-            &trie,
-            &challenge_key,
-        );
+        let result = prove::<LayoutV1<RefHasher>>(&trie, &challenge_key);
         assert!(matches!(result, Ok(Proven::ExactKey(leaf)) if leaf.key.as_ref() == challenge_key));
     }
 
@@ -195,10 +118,7 @@ mod tests {
             .try_into()
             .expect("slice with incorrect length");
 
-        let result = prove::<LayoutV1<RefHasher>, InMemoryForestStorage<LayoutV1<RefHasher>>>(
-            &trie,
-            &challenge_key,
-        );
+        let result = prove::<LayoutV1<RefHasher>>(&trie, &challenge_key);
 
         assert!(
             matches!(result, Ok(Proven::NeighbourKeys((Some(leaf1), Some(leaf2)))) if leaf1.key.as_ref() < challenge_key.as_slice() && leaf2.key.as_ref() > challenge_key.as_slice())
@@ -219,10 +139,7 @@ mod tests {
             .try_into()
             .expect("slice with incorrect length");
 
-        let result = prove::<LayoutV1<RefHasher>, InMemoryForestStorage<LayoutV1<RefHasher>>>(
-            &trie,
-            &challenge_key,
-        );
+        let result = prove::<LayoutV1<RefHasher>>(&trie, &challenge_key);
 
         assert!(
             matches!(result, Ok(Proven::NeighbourKeys((Some(leaf), None))) if leaf.key.as_ref() == largest_key)
@@ -243,10 +160,7 @@ mod tests {
             .try_into()
             .expect("slice with incorrect length");
 
-        let result = prove::<LayoutV1<RefHasher>, InMemoryForestStorage<LayoutV1<RefHasher>>>(
-            &trie,
-            &challenge_key,
-        );
+        let result = prove::<LayoutV1<RefHasher>>(&trie, &challenge_key);
 
         assert!(
             matches!(result, Ok(Proven::NeighbourKeys((None, Some(leaf)))) if leaf.key.as_ref() == smallest_key)

@@ -54,6 +54,16 @@ pub enum ProviderType {
     Msp,
     /// Backup Storage Provider
     Bsp,
+    /// TODO: This is temporary. Remove it once we have implemented all the User related code.
+    User,
+}
+
+#[derive(ValueEnum, Clone, Debug)]
+pub enum StorageLayer {
+    /// RocksDB
+    RocksDB,
+    /// In Memory
+    Memory,
 }
 
 #[derive(Debug, Parser)]
@@ -72,6 +82,15 @@ pub struct ProviderConfigurations {
     )]
     pub provider_type: Option<ProviderType>,
 
+    /// Type of StorageHub provider.
+    #[clap(
+        long,
+        value_enum,
+        value_name = "STORAGE_LAYER",
+        default_value = "memory"
+    )]
+    pub storage_layer: Option<StorageLayer>,
+
     /// Fixed value to generate deterministic peer id.
     #[clap(long, value_name = "SEED_FILE", required_if_eq("provider", "true"))]
     pub seed_file: Option<String>,
@@ -85,6 +104,10 @@ impl ProviderConfigurations {
                 .clone()
                 .expect("Provider type is required"),
             seed_file: self.seed_file.clone().expect("Seed file is required"),
+            storage_layer: self
+                .storage_layer
+                .clone()
+                .expect("Storage layer is required"),
         }
     }
 }

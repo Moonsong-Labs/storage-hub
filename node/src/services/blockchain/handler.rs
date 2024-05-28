@@ -42,14 +42,14 @@ use sp_runtime::{
 use storage_hub_infra::actor::{Actor, ActorEventLoop};
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 
-use crate::{
-    service::ParachainClient,
-    services::blockchain::{events::NewStorageRequest, types::EventsVec},
-};
+use crate::{service::ParachainClient, services::blockchain::transaction::SubmittedTransaction};
 
-use super::{
-    commands::BlockchainServiceCommand, events::BlockchainServiceEventBusProvider,
-    types::Extrinsic, KEY_TYPE,
+use crate::services::blockchain::{
+    commands::BlockchainServiceCommand,
+    events::BlockchainServiceEventBusProvider,
+    types::Extrinsic,
+    KEY_TYPE,
+    {events::NewStorageRequest, types::EventsVec},
 };
 
 const LOG_TARGET: &str = "blockchain-service";
@@ -103,7 +103,9 @@ impl Actor for BlockchainService {
                     match self.send_extrinsic(call).await {
                         Ok(output) => {
                             debug!(target: LOG_TARGET, "Extrinsic sent successfully: {:?}", output);
-                            match callback.send(Ok((output.receiver, output.hash))) {
+                            match callback
+                                .send(Ok(SubmittedTransaction::new(output.receiver, output.hash)))
+                            {
                                 Ok(_) => {
                                     trace!(target: LOG_TARGET, "Receiver sent successfully");
                                 }
@@ -220,7 +222,7 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
     }
 
     async fn run(mut self) {
-        info!(target: LOG_TARGET, "FileTransferService starting up!");
+        info!(target: LOG_TARGET, "BlockchainService starting up!");
 
         // Import notification stream to be notified of new blocks.
         let notification_stream = self.actor.client.import_notification_stream();
@@ -308,7 +310,7 @@ impl BlockchainService {
                         ) => self.emit(NewStorageRequest {
                             who,
                             location,
-                            fingerprint,
+                            fingerprint: fingerprint.as_ref().into(),
                             size,
                             user_peer_ids: peer_ids,
                         }),
@@ -435,14 +437,7 @@ impl BlockchainService {
             ),
         );
 
-        // Getting signer public key.
-        let caller_pub_key = self.keystore.sr25519_public_keys(KEY_TYPE).pop().expect(
-            format!(
-                "There should be at least one sr25519 key in the keystore with key type '{:?}' ; qed",
-                KEY_TYPE
-            )
-            .as_str(),
-        );
+        let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
 
         // Sign the payload.
         let signature = raw_payload
@@ -459,6 +454,18 @@ impl BlockchainService {
             polkadot_primitives::Signature::Sr25519(signature.clone()),
             extra.clone(),
         )
+    }
+
+    // Getting signer public key.
+    pub fn caller_pub_key(keystore: KeystorePtr) -> sp_core::sr25519::Public {
+        let caller_pub_key = keystore.sr25519_public_keys(KEY_TYPE).pop().expect(
+            format!(
+                "There should be at least one sr25519 key in the keystore with key type '{:?}' ; qed",
+                KEY_TYPE
+            )
+            .as_str(),
+        );
+        caller_pub_key
     }
 
     /// Get an extrinsic from a block.

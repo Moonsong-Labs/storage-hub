@@ -1,10 +1,19 @@
+//! # Storage Providers Pallet
+//!
+//! This pallet provides the functionality to manage Main Storage Providers (MSPs)
+//! and Backup Storage Providers (BSPs) in a decentralized storage network.
+//!
+//! The functionality allows users to sign up and sign off as MSPs or BSPs and change
+//! their parameters. This is the way that users can offer their storage capacity to
+//! the network and get rewarded for it.
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub use pallet::*;
-use types::{BackupStorageProviderId, MainStorageProviderId};
-
-mod types;
+pub mod types;
 mod utils;
+
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
 
 #[cfg(test)]
 mod mock;
@@ -12,8 +21,13 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+use frame_system::pallet_prelude::BlockNumberFor;
+pub use pallet::*;
+pub use scale_info::Type;
+use types::{
+    BackupStorageProvider, BackupStorageProviderId, BalanceOf, BucketId, HashId,
+    MainStorageProviderId, MerklePatriciaRoot, StorageData, StorageProvider,
+};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -173,56 +187,104 @@ pub mod pallet {
     /// This is used for the two-step process of registering: when a user requests to register as a SP (either MSP or BSP),
     /// that request with the metadata and the deposit held is stored here. When the user confirms the sign up, the
     /// request is removed from this storage and the user is registered as a SP.
+    ///
+    /// This storage is updated in:
+    /// - [request_msp_sign_up](crate::dispatchables::request_msp_sign_up) and [request_bsp_sign_up](crate::dispatchables::request_bsp_sign_up), which add a new entry to the map.
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up) and [cancel_sign_up](crate::dispatchables::cancel_sign_up), which remove an existing entry from the map.
     #[pallet::storage]
     pub type SignUpRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, (StorageProvider<T>, BlockNumberFor<T>)>;
 
-    /// The mapping from an AccountId to a MainStorageProviderId
+    /// The mapping from an AccountId to a MainStorageProviderId.
     ///
-    /// This is used to get a Main Storage Provider's unique identifier to access its relevant data
+    /// This is used to get a Main Storage Provider's unique identifier needed to access its metadata.
+    ///
+    /// This storage is updated in:
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Main Storage Provider.
+    /// - [msp_sign_off](crate::dispatchables::msp_sign_off), which removes the corresponding entry from the map.
     #[pallet::storage]
     pub type AccountIdToMainStorageProviderId<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, MainStorageProviderId<T>>;
 
-    /// The mapping from a MainStorageProviderId to a MainStorageProvider
+    /// The mapping from a MainStorageProviderId to a MainStorageProvider.
     ///
-    /// This is used to get a Main Storage Provider's relevant data.
+    /// This is used to get a Main Storage Provider's metadata.
     /// It returns `None` if the Main Storage Provider ID does not correspond to any registered Main Storage Provider.
+    ///
+    /// This storage is updated in:
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Main Storage Provider.
+    /// - [msp_sign_off](crate::dispatchables::msp_sign_off), which removes the corresponding entry from the map.
+    /// - [change_capacity](crate::dispatchables::change_capacity), which changes the entry's `capacity`.
+    /// - [add_value_prop](crate::dispatchables::add_value_prop), which appends a new value proposition to the entry's existing `value_prop` bounded vector.
     #[pallet::storage]
     pub type MainStorageProviders<T: Config> =
         StorageMap<_, Blake2_128Concat, MainStorageProviderId<T>, MainStorageProvider<T>>;
 
-    /// The mapping from a BucketId to that bucket's metadata
+    /// The mapping from a BucketId to that bucket's metadata.
     ///
-    /// This is used to get a bucket's relevant data, such as root, user ID, and MSP ID.
+    /// This is used to get a bucket's metadata, such as root, user ID, and MSP ID.
     /// It returns `None` if the Bucket ID does not correspond to any registered bucket.
+    ///
+    /// This storage is updated in:
+    /// - [add_bucket](storage_hub_traits::MutateProvidersInterface::add_bucket), which adds a new entry to the map.
+    /// - [change_root_bucket](storage_hub_traits::MutateProvidersInterface::change_root_bucket), which changes the corresponding bucket's root.
+    /// - [remove_root_bucket](storage_hub_traits::MutateProvidersInterface::remove_root_bucket), which removes the entry of the corresponding bucket.
     #[pallet::storage]
     pub type Buckets<T: Config> = StorageMap<_, Blake2_128Concat, BucketId<T>, Bucket<T>>;
 
-    /// The mapping from an AccountId to a BackupStorageProviderId
+    /// The mapping from an AccountId to a BackupStorageProviderId.
     ///
-    /// This is used to get a Backup Storage Provider's unique identifier to access its relevant data
+    /// This is used to get a Backup Storage Provider's unique identifier needed to access its metadata.
+    ///
+    /// This storage is updated in:
+    ///
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Backup Storage Provider.
+    /// - [bsp_sign_off](crate::dispatchables::bsp_sign_off), which removes the corresponding entry from the map.
     #[pallet::storage]
     pub type AccountIdToBackupStorageProviderId<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, BackupStorageProviderId<T>>;
 
-    /// The mapping from a BackupStorageProviderId to a BackupStorageProvider
+    /// The mapping from a BackupStorageProviderId to a BackupStorageProvider.
     ///
-    /// This is used to get a Backup Storage Provider's relevant data.
+    /// This is used to get a Backup Storage Provider's metadata.
     /// It returns `None` if the Backup Storage Provider ID does not correspond to any registered Backup Storage Provider.
+    ///
+    /// This storage is updated in:
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds a new entry to the map if the account to confirm is a Backup Storage Provider.
+    /// - [bsp_sign_off](crate::dispatchables::bsp_sign_off), which removes the corresponding entry from the map.
+    /// - [change_capacity](crate::dispatchables::change_capacity), which changes the entry's `capacity`.
     #[pallet::storage]
     pub type BackupStorageProviders<T: Config> =
         StorageMap<_, Blake2_128Concat, BackupStorageProviderId<T>, BackupStorageProvider<T>>;
 
     /// The amount of Main Storage Providers that are currently registered in the runtime.
+    ///
+    /// This is used to keep track of the total amount of MSPs in the system.
+    ///
+    /// This storage is updated in:
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds one to this storage if the account to confirm is a Main Storage Provider.
+    /// - [msp_sign_off](crate::dispatchables::msp_sign_off), which subtracts one from this storage.
     #[pallet::storage]
     pub type MspCount<T: Config> = StorageValue<_, T::SpCount, ValueQuery>;
 
     /// The amount of Backup Storage Providers that are currently registered in the runtime.
+    ///
+    /// This is used to keep track of the total amount of BSPs in the system.
+    ///
+    /// This storage is updated in:
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds one to this storage if the account to confirm is a Backup Storage Provider.
+    /// - [bsp_sign_off](crate::dispatchables::bsp_sign_off), which subtracts one from this storage.
     #[pallet::storage]
     pub type BspCount<T: Config> = StorageValue<_, T::SpCount, ValueQuery>;
 
-    /// The total amount of storage capacity all BSPs have. Remember redundancy!
+    /// The total amount of storage capacity all BSPs have.
+    ///
+    /// This is used to keep track of the total amount of storage capacity all BSPs have in the system, which is also the
+    /// total amount of storage capacity that can be used by users if we factor in the replication factor.
+    ///
+    /// This storage is updated in:
+    /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds the capacity of the registered Storage Provider to this storage if the account to confirm is a Backup Storage Provider.
+    /// - [bsp_sign_off](crate::dispatchables::bsp_sign_off), which subtracts the capacity of the Backup Storage Provider to sign off from this storage.
     #[pallet::storage]
     pub type TotalBspsCapacity<T: Config> = StorageValue<_, StorageData<T>, ValueQuery>;
 
@@ -365,9 +427,22 @@ pub mod pallet {
     /// Dispatchables (extrinsics) exposed by this pallet
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// A dispatchable function that allows users to request to sign up as a Main Storage Provider.
+        /// Dispatchable extrinsic that allows users to request to sign up as a Main Storage Provider.
         ///
-        /// This extrinsic will:
+        /// The dispatch origin for this call must be Signed.
+        /// The origin must be the account that wants to sign up as a Main Storage Provider.
+        ///
+        /// Funds proportional to the capacity requested are reserved (held) from the account.
+        ///
+        /// Parameters:
+        /// - `capacity`: The total amount of data that the Main Storage Provider will be able to store.
+        /// - `multiaddresses`: The vector of multiaddresses that the signer wants to register (according to the
+        /// [Multiaddr spec](https://github.com/multiformats/multiaddr))
+        /// - `value_prop`: The value proposition that the signer will provide as a Main Storage Provider to
+        /// users and wants to register on-chain. It could be data limits, communication protocols to access the user's
+        /// data, and more.
+        ///
+        /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that, by registering this new MSP, we would not go over the MaxMsps limit
         /// 3. Check that the signer is not already registered as either a MSP or BSP
@@ -377,7 +452,8 @@ pub mod pallet {
         /// 7. Check that the signer has enough funds to pay the deposit
         /// 8. Hold the deposit from the signer
         /// 9. Update the Sign Up Requests storage to add the signer as requesting to sign up as a MSP
-        /// 10. Emit an event confirming that the sign up request as MSP has been successful
+        ///
+        /// Emits `MspRequestSignUpSuccess` event when successful.
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn request_msp_sign_up(
@@ -414,9 +490,19 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// A dispatchable function that allows users to sign up as a Backup Storage Provider.
+        /// Dispatchable extrinsic that allows users to sign up as a Backup Storage Provider.
         ///
-        /// This extrinsic will:
+        /// The dispatch origin for this call must be Signed.
+        /// The origin must be the account that wants to sign up as a Backup Storage Provider.
+        ///
+        /// Funds proportional to the capacity requested are reserved (held) from the account.
+        ///
+        /// Parameters:
+        /// - `capacity`: The total amount of data that the Backup Storage Provider will be able to store.
+        /// - `multiaddresses`: The vector of multiaddresses that the signer wants to register (according to the
+        /// [Multiaddr spec](https://github.com/multiformats/multiaddr))
+        ///
+        /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that, by adding this new BSP, we won't exceed the max amount of BSPs allowed
         /// 3. Check that the signer is not already registered as either a MSP or BSP
@@ -426,7 +512,8 @@ pub mod pallet {
         /// 7. Check that the signer has enough funds to pay the deposit
         /// 8. Hold the deposit from the signer
         /// 9. Update the Sign Up Requests storage to add the signer as requesting to sign up as a BSP
-        /// 10. Emit an event confirming that the sign up of the BSP has been successful
+        ///
+        /// Emits `BspRequestSignUpSuccess` event when successful.
         #[pallet::call_index(1)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn request_bsp_sign_up(
@@ -460,16 +547,25 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// A dispatchable function that allows users to confirm their sign up as a Storage Provider, either MSP or BSP.
+        /// Dispatchable extrinsic that allows users to confirm their sign up as a Storage Provider, either MSP or BSP.
         ///
-        /// This extrinsic will:
+        /// The dispatch origin for this call must be Signed.
+        /// The origin must be the account that requested to sign up as a Storage Provider, except when providing a
+        /// `provider_account` parameter, in which case the origin can be any account.
+        ///
+        /// Parameters:
+        /// - `provider_account`: The account that requested to sign up as a Storage Provider. If not provided, the signer
+        /// will be considered the account that requested to sign up.
+        ///
+        /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was signed
         /// 2. Check that the account received has requested to register as a SP
         /// 3. Check that by registering this SP we would not go over the MaxMsps or MaxBsps limit
         /// 4. Check that the current randomness is sufficiently fresh to be used as a salt for that request
         /// 5. Check that the request has not expired
         /// 6. Register the signer as a MSP or BSP with the data provided in the request
-        /// 7. Emit an event confirming that the sign up of the SP has been confirmed
+        ///
+        /// Emits `MspSignUpSuccess` or `BspSignUpSuccess` event when successful, depending on the type of sign up.
         ///
         /// Notes:
         /// - This extrinsic could be called by the user itself or by a third party
@@ -495,14 +591,18 @@ pub mod pallet {
             Ok(Pays::No.into())
         }
 
-        /// A dispatchable function that allows a user with a pending Sign Up Request to cancel it, getting the deposit back.
+        /// Dispatchable extrinsic that allows a user with a pending Sign Up Request to cancel it, getting the deposit back.
         ///
-        /// This extrinsic will:
+        /// The dispatch origin for this call must be Signed.
+        /// The origin must be the account that requested to sign up as a Storage Provider.
+        ///
+        /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that the signer has requested to sign up as a SP
         /// 3. Delete the request from the Sign Up Requests storage
         /// 4. Return the deposit to the signer
-        /// 5. Emit an event confirming that the cancellation of the sign up request has been successful
+        ///
+        /// Emits `SignUpRequestCanceled` event when successful.
         #[pallet::call_index(3)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn cancel_sign_up(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
@@ -518,16 +618,20 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// A dispatchable function that allows users to sign off as a Main Storage Provider.
+        /// Dispatchable extrinsic that allows users to sign off as a Main Storage Provider.
         ///
-        ///  This extrinsic should:
+        /// The dispatch origin for this call must be Signed.
+        /// The origin must be the account that wants to sign off as a Main Storage Provider.
+        ///
+        /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that the signer is registered as a MSP
         /// 3. Check that the MSP has no storage assigned to it (no buckets or data used by it)
         /// 4. Update the MSPs storage, removing the signer as an MSP
         /// 5. Return the deposit to the signer
         /// 6. Decrement the storage that holds total amount of MSPs currently in the system
-        /// 7. Emit an event confirming that the sign off of the MSP has been successful
+        ///
+        /// Emits `MspSignOffSuccess` event when successful.
         #[pallet::call_index(4)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn msp_sign_off(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
@@ -544,9 +648,12 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// A dispatchable function that allows users to sign off as a Backup Storage Provider.
+        /// Dispatchable extrinsic that allows users to sign off as a Backup Storage Provider.
         ///
-        /// This extrinsic will:
+        /// The dispatch origin for this call must be Signed.
+        /// The origin must be the account that wants to sign off as a Backup Storage Provider.
+        ///
+        /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that the signer is registered as a BSP
         /// 3. Check that the BSP has no storage assigned to it
@@ -554,7 +661,8 @@ pub mod pallet {
         /// 5. Update the total capacity of all BSPs, removing the capacity of the signer
         /// 6. Return the deposit to the signer
         /// 7. Decrement the storage that holds total amount of BSPs currently in the system
-        /// 8. Emit an event confirming that the sign off of the BSP has been successful
+        ///
+        /// Emits `BspSignOffSuccess` event when successful.
         #[pallet::call_index(5)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn bsp_sign_off(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
@@ -571,9 +679,15 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// A dispatchable function that allows users to change their amount of stored data
+        /// Dispatchable extrinsic that allows users to change their amount of stored data
         ///
-        /// This extrinsic will:
+        /// The dispatch origin for this call must be Signed.
+        /// The origin must be the account that wants to change its capacity.
+        ///
+        /// Parameters:
+        /// - `new_capacity`: The new total amount of data that the Storage Provider wants to be able to store.
+        ///
+        /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that the signer is registered as a SP
         /// 3. Check that enough time has passed since the last time the SP changed its capacity
@@ -587,7 +701,8 @@ pub mod pallet {
         /// 	b. If the new deposit is less than the current deposit, return the held difference to the signer
         /// 7. Update the SPs storage to change the total data
         /// 8. If user is a BSP, update the total capacity of the network (sum of all capacities of BSPs)
-        /// 9. Emit an event confirming that the change of the capacity has been successful
+        ///
+        /// Emits `CapacityChanged` event when successful.
         #[pallet::call_index(6)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn change_capacity(
@@ -613,15 +728,22 @@ pub mod pallet {
             Ok(().into())
         }
 
-        /// A dispatchable function only callable by an MSP that allows it to add a value proposition to its service
+        /// Dispatchable extrinsic only callable by an MSP that allows it to add a value proposition to its service
         ///
-        /// This extrinsic will:
+        /// The dispatch origin for this call must be Signed.
+        /// The origin must be the account that wants to add a value proposition.
+        ///
+        /// Parameters:
+        /// - `new_value_prop`: The value proposition that the MSP wants to add to its service.
+        ///
+        /// This extrinsic will perform the following checks and logic:
         /// 1. Check that the extrinsic was signed and get the signer.
         /// 2. Check that the signer is registered as a MSP
         /// 3. Check that the MSP has not reached the maximum amount of value propositions
         /// 4. Check that the value proposition is valid (size and any other relevant checks)
         /// 5. Update the MSPs storage to add the value proposition (with its identifier)
-        /// 6. Emit an event confirming that the addition of the value proposition has been successful
+        ///
+        /// Emits `ValuePropAdded` event when successful.
         #[pallet::call_index(7)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn add_value_prop(
@@ -635,14 +757,9 @@ pub mod pallet {
     }
 }
 
-use crate::types::{
-    BackupStorageProvider, BalanceOf, BucketId, HashId, MerklePatriciaRoot, StorageData,
-    StorageProvider,
-};
-use frame_system::pallet_prelude::BlockNumberFor;
 /// Helper functions (getters, setters, etc.) for this pallet
 impl<T: Config> Pallet<T> {
-    /// A helper function to get the information of a sign up request
+    /// A helper function to get the information of a sign up request of a user.
     pub fn get_sign_up_request(
         who: &T::AccountId,
     ) -> Result<(StorageProvider<T>, BlockNumberFor<T>), Error<T>> {
@@ -662,12 +779,12 @@ impl<T: Config> Pallet<T> {
         }
     }
 
-    /// A helper function to get the total capacity of all BSPs.
+    /// A helper function to get the total capacity of all BSPs which is the total capacity of the network.
     pub fn get_total_bsp_capacity() -> StorageData<T> {
         TotalBspsCapacity::<T>::get()
     }
 
-    /// A helper function to get the total data used by a Main Storage Provider
+    /// A helper function to get the total data used by a Main Storage Provider.
     pub fn get_used_storage_of_msp(
         who: &MainStorageProviderId<T>,
     ) -> Result<StorageData<T>, Error<T>> {
@@ -675,7 +792,7 @@ impl<T: Config> Pallet<T> {
         Ok(msp.data_used)
     }
 
-    /// A helper function to get the total data used by a Backup Storage Provider
+    /// A helper function to get the total data used by a Backup Storage Provider.
     pub fn get_used_storage_of_bsp(
         who: &BackupStorageProviderId<T>,
     ) -> Result<StorageData<T>, Error<T>> {
@@ -683,12 +800,12 @@ impl<T: Config> Pallet<T> {
         Ok(bsp.data_used)
     }
 
-    /// A helper function to get the total amount of BSPs that have registered
+    /// A helper function to get the total amount of Backup Storage Providers that have registered.
     pub fn get_bsp_count() -> T::SpCount {
         BspCount::<T>::get()
     }
 
-    /// A helper function to get the total amount of MSPs that have registered
+    /// A helper function to get the total amount of Main Storage Providers that have registered.
     pub fn get_msp_count() -> T::SpCount {
         MspCount::<T>::get()
     }
