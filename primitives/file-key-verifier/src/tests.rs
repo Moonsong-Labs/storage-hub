@@ -1,6 +1,7 @@
 use std::{
     fs::{create_dir_all, File},
     io::{Read, Write},
+    sync::Once,
 };
 
 use codec::Encode;
@@ -25,6 +26,11 @@ const CHUNK_SIZE: u64 = 2;
 const FILES_BASE_PATH: &str = "./tmp/";
 const FILE_SIZE: u64 = 2u64.pow(11);
 const SIZE_TO_CHALLENGES: u64 = FILE_SIZE / 10;
+
+/// This is to make sure that some code is only executed once.
+/// For example, when building the files for testing, we need to make sure that
+/// is only executed once.
+static INIT: Once = Once::new();
 
 #[derive(PartialEq, Debug)]
 struct FileMetadata {
@@ -131,37 +137,45 @@ pub fn merklise_file<T: TrieLayout>(file_path: &str) -> (MemoryDB<T::Hash>, Hash
 
 /// Create a local file for testing, for a given size, and with a given file name.
 pub fn create_test_file(filename: &str, size: u64) -> File {
-    create_dir_all(FILES_BASE_PATH).unwrap();
-    let mut file = File::create(FILES_BASE_PATH.to_owned() + filename).unwrap();
+    // Write file only once.
+    INIT.call_once(|| {
+        create_dir_all(FILES_BASE_PATH).unwrap();
+        let mut file = File::create(FILES_BASE_PATH.to_owned() + filename).unwrap();
 
-    // Generate random content
-    let mut i = 0;
-    let content: Vec<u8> = (0..size)
-        .map(|_| {
-            i = i % (u8::MAX - 1);
-            i += 1;
-            i
-        })
-        .collect();
+        // Generate random content
+        let mut i = 0;
+        let content: Vec<u8> = (0..size)
+            .map(|_| {
+                i = i % (u8::MAX - 1);
+                i += 1;
+                i
+            })
+            .collect();
 
-    file.write_all(&content).unwrap();
+        file.write_all(&content).unwrap();
+    });
 
-    file
+    // Open and return file.
+    File::open(FILES_BASE_PATH.to_owned() + filename).unwrap()
 }
 
 /// Create a local file for testing, for a given size, with a given file name,
 /// and with random content.
 pub fn create_random_test_file(filename: &str, size: u64) -> File {
-    create_dir_all(FILES_BASE_PATH).unwrap();
-    let mut file = File::create(FILES_BASE_PATH.to_owned() + filename).unwrap();
-    let mut rng = rand::thread_rng();
+    // Write file only once.
+    INIT.call_once(|| {
+        create_dir_all(FILES_BASE_PATH).unwrap();
+        let mut file = File::create(FILES_BASE_PATH.to_owned() + filename).unwrap();
+        let mut rng = rand::thread_rng();
 
-    // Generate random content
-    let content: Vec<u8> = (0..size).map(|_| rng.gen()).collect();
+        // Generate random content
+        let content: Vec<u8> = (0..size).map(|_| rng.gen()).collect();
 
-    file.write_all(&content).unwrap();
+        file.write_all(&content).unwrap();
+    });
 
-    file
+    // Open and return file.
+    File::open(FILES_BASE_PATH.to_owned() + filename).unwrap()
 }
 
 fn generate_challenges<T: TrieLayout>(
