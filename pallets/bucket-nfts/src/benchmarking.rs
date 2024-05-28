@@ -11,7 +11,6 @@ benchmarks! {
     share_access {
         let s in 0 .. 100;
         let caller: T::AccountId = whitelisted_caller();
-        let account: T::AccountId = Default::default();
     }: _(RawOrigin::Signed(caller), account)
     verify {
         // assert!(BucketNfts::<T>::share_access().is_some());
