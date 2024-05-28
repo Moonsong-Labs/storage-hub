@@ -47,14 +47,12 @@ where
 
     println!("Chunking file into 32 byte chunks and building Merkle Patricia Trie...");
 
-    
-
     let data = if random {
         create_random_test_data(file_size)
     } else {
         create_sequential_test_data(file_size)
     };
-    
+
     let (memdb, fingerprint) = merklise_data::<T>(&data);
 
     let file_path = format!(
@@ -104,16 +102,16 @@ pub fn merklise_data<T: TrieLayout>(data: &[u8]) -> (MemoryDB<T::Hash>, HashT<T>
     while offset < data.len() {
         // Determine the end of the current chunk
         let end = std::cmp::min(offset + CHUNK_SIZE as usize, data.len());
-        
+
         // Copy the current chunk from data into the buffer
         buf[..end - offset].copy_from_slice(&data[offset..end]);
-        
+
         // Store the current chunk as a vector in the chunks vector
         chunks.push((chunk_i, buf[..end - offset].to_vec()));
-        
+
         // Increment the chunk index
         chunk_i += 1;
-        
+
         // Move the offset forward by CHUNK_SIZE
         offset += CHUNK_SIZE as usize;
     }
