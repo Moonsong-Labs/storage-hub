@@ -87,11 +87,8 @@ where
         // If `ErrorKind::Interrupted` is found, the operation is simply retried, as per
         // https://doc.rust-lang.org/std/io/trait.Read.html#errors-1
         loop {
-            let mut chunk = Vec::with_capacity(FILE_CHUNK_SIZE);
-            let read_result = file
-                .by_ref()
-                .take(FILE_CHUNK_SIZE as u64)
-                .read_to_end(&mut chunk);
+            let mut chunk = Vec::with_capacity(FILE_CHUNK_SIZE as usize);
+            let read_result = file.by_ref().take(FILE_CHUNK_SIZE).read_to_end(&mut chunk);
             match read_result {
                 // Reached EOF, break loop.
                 Ok(0) => {
