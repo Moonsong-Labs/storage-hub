@@ -38,23 +38,32 @@ use frame_support::{
 };
 use frame_system::{
     limits::{BlockLength, BlockWeights},
+    pallet_prelude::BlockNumberFor,
     EnsureRoot,
 };
-use pallet_proofs_dealer::CompactProof;
 use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
+use shp_file_key_verifier::FileKeyVerifier;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{ConstU128, Get, H256};
-use sp_runtime::{AccountId32, DispatchError, FixedU128, Perbill};
+use sp_core::{ConstU128, Get, Hasher, H256};
+use sp_runtime::{
+    traits::{BlakeTwo256, Convert},
+    AccountId32, DispatchError, FixedU128, Perbill, SaturatedConversion,
+};
 use sp_std::vec::Vec;
+use sp_trie::CompactProof;
+use sp_trie::LayoutV1;
 use sp_version::RuntimeVersion;
-use storage_hub_traits::CommitmentVerifier;
+use storage_hub_primitives::TrieVerifier;
+use storage_hub_traits::{CommitmentVerifier, MaybeDebug};
 use xcm::latest::prelude::BodyId;
 
-use crate::ParachainInfo;
+use crate::{ParachainInfo, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES};
+
+use self::currency::UNITS;
 
 // Local module imports
 use super::{
@@ -68,6 +77,12 @@ use super::{
     UNINCLUDED_SEGMENT_CAPACITY, VERSION,
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
+
+pub mod currency {
+    use crate::Balance;
+
+    pub const UNITS: Balance = 1_000_000_000_000;
+}
 
 parameter_types! {
     pub const Version: RuntimeVersion = VERSION;
@@ -258,8 +273,8 @@ impl cumulus_pallet_xcmp_queue::Config for Runtime {
 }
 
 parameter_types! {
-    pub const Period: u32 = 6 * HOURS;
-    pub const Offset: u32 = 0;
+    pub const Period: BlockNumber = 6 * HOURS;
+    pub const Offset: BlockNumber = 0;
 }
 
 impl pallet_session::Config for Runtime {
@@ -419,36 +434,63 @@ impl Get<AccountId32> for TreasuryAccount {
     }
 }
 
+parameter_types! {
+    pub const RandomChallengesPerBlock: u32 = 10;
+    pub const MaxCustomChallengesPerBlock: u32 = 10;
+    pub const MaxProvidersChallengedPerBlock: u32 = 100;
+    pub const ChallengeHistoryLength: BlockNumber = 100;
+    pub const ChallengesQueueLength: u32 = 100;
+    pub const CheckpointChallengePeriod: u32 = 10;
+    pub const ChallengesFee: Balance = 1 * UNITS;
+    pub const StakeToChallengePeriod: Balance = 10 * UNITS;
+}
+
 impl pallet_proofs_dealer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
-    type MerkleHash = Hash;
-    type KeyVerifier = ProofTrieVerifier;
-    // type KeyVerifier = TrieVerifier<LayoutV1<RefHasher>>;
-    type MaxChallengesPerBlock = ConstU32<10>;
-    type MaxProvidersChallengedPerBlock = ConstU32<10>;
-    type ChallengeHistoryLength = ConstU32<10>;
-    type ChallengesQueueLength = ConstU32<10>;
-    type CheckpointChallengePeriod = ConstU32<10>;
-    type ChallengesFee = ConstU128<1_000_000>;
+    type MerkleTrieHash = Hash;
+    type MerkleTrieHashing = BlakeTwo256;
+    type ForestVerifier = TrieVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
+    type KeyVerifier = FileKeyVerifier<
+        LayoutV1<BlakeTwo256>,
+        { BlakeTwo256::LENGTH },
+        { FILE_CHUNK_SIZE },
+        { FILE_SIZE_TO_CHALLENGES },
+    >;
+    type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
+    type RandomChallengesPerBlock = RandomChallengesPerBlock;
+    type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
+    type MaxProvidersChallengedPerBlock = MaxProvidersChallengedPerBlock;
+    type ChallengeHistoryLength = ChallengeHistoryLength;
+    type ChallengesQueueLength = ChallengesQueueLength;
+    type CheckpointChallengePeriod = CheckpointChallengePeriod;
+    type ChallengesFee = ChallengesFee;
     type Treasury = TreasuryAccount;
+    type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
+    type StakeToChallengePeriod = StakeToChallengePeriod;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
 /// and `false` otherwise.
-pub struct ProofTrieVerifier;
+pub struct MockVerifier<C> {
+    _phantom: core::marker::PhantomData<C>,
+}
 
 /// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl CommitmentVerifier for ProofTrieVerifier {
+impl<C> CommitmentVerifier for MockVerifier<C>
+where
+    C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
+{
     type Proof = CompactProof;
-    type Key = H256;
+    type Commitment = H256;
+    type Challenge = C;
 
     fn verify_proof(
-        _root: &Self::Key,
-        challenges: &[Self::Key],
+        _root: &Self::Commitment,
+        challenges: &[Self::Challenge],
         proof: &CompactProof,
-    ) -> Result<Vec<Self::Key>, DispatchError> {
+    ) -> Result<Vec<Self::Challenge>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
             Ok(challenges.to_vec())
         } else {
@@ -484,4 +526,14 @@ impl pallet_file_system::Config for Runtime {
     type MaxDataServerMultiAddresses = ConstU32<10>;
     type StorageRequestTtl = ConstU32<40>;
     type MaxExpiredStorageRequests = ConstU32<100>;
+}
+
+// Converter from the Balance type to the BlockNumber type for math.
+// It performs a saturated conversion, so that the result is always a valid BlockNumber.
+pub struct SaturatingBalanceToBlockNumber;
+
+impl Convert<Balance, BlockNumberFor<Runtime>> for SaturatingBalanceToBlockNumber {
+    fn convert(block_number: Balance) -> BlockNumberFor<Runtime> {
+        block_number.saturated_into()
+    }
 }

@@ -1,6 +1,6 @@
 [package]
-name = "storage-hub-primitives"
-description = "Support primitives used in StorageHub"
+name = "shp-forest-verifier"
+description = "An implementation of CommitmentVerifier trait for verifying keys in a Merkle Patricia Forest, in which responses to challenges are either the exact key or the next and previous keys in the trie."
 version = "0.1.0"
 homepage = { workspace = true }
 license = { workspace = true }
