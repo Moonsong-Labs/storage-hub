@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod events;
 pub mod handler;
+pub mod transaction;
 pub mod types;
 
 use std::sync::Arc;
@@ -12,7 +13,7 @@ use storage_hub_infra::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 
 use crate::service::ParachainClient;
 
-use self::handler::BlockchainService;
+pub use self::handler::BlockchainService;
 
 pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"bcsv");
 

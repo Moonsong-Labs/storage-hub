@@ -1,8 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::sp_runtime::DispatchError;
-use sp_std::collections::btree_set::BTreeSet;
-use sp_std::vec::Vec;
+use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
 use storage_hub_traits::CommitmentVerifier;
 use trie_db::TrieIterator;
@@ -12,29 +11,30 @@ mod tests;
 
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment
 /// is a Merkle Patricia Trie root hash.
-pub struct TrieVerifier<T: TrieLayout>
+pub struct TrieVerifier<T: TrieLayout, const H_LENGTH: usize>
 where
-    <T::Hash as sp_core::Hasher>::Out: TryFrom<Vec<u8>>,
+    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
     pub _phantom: core::marker::PhantomData<T>,
 }
 
 /// Implement the `CommitmentVerifier` trait for the `TrieVerifier` struct.
-impl<T: TrieLayout> CommitmentVerifier for TrieVerifier<T>
+impl<T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for TrieVerifier<T, H_LENGTH>
 where
-    <T::Hash as sp_core::Hasher>::Out: TryFrom<Vec<u8>>,
+    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
     type Proof = CompactProof;
-    type Key = <T::Hash as sp_core::Hasher>::Out;
+    type Commitment = <T::Hash as sp_core::Hasher>::Out;
+    type Challenge = <T::Hash as sp_core::Hasher>::Out;
 
     /// Verifies a proof against a root (i.e. commitment) and a set of challenges.
     ///
     /// Assumes that the challenges are ordered in ascending numerical order, and not repeated.
     fn verify_proof(
-        root: &Self::Key,
-        challenges: &[Self::Key],
+        root: &Self::Commitment,
+        challenges: &[Self::Challenge],
         proof: &Self::Proof,
-    ) -> Result<Vec<Self::Key>, DispatchError> {
+    ) -> Result<Vec<Self::Challenge>, DispatchError> {
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
         let (memdb, root) = proof.to_memory_db(Some(root.into())).map_err(|_| {
             "Failed to convert proof to memory DB, root doesn't match with expected."
@@ -89,30 +89,18 @@ where
                 .transpose()
                 .map_err(|_| "Failed to get previous leaf.")?;
 
-            // We check before the loop if the iterator has at least one leaf.
-            // Therefore, if `prev_leaf` is `None` here, it means that the behaviour of the double ended iterator has changed.
-            // This is because of an inconsistency in the behaviour of the iterator. If there is no leaf lower than the challenge,
-            // the iterator will return the same for both `next()` and `next_back()`. This is why we check if `prev_leaf` is `None`,
-            // because it shouldn't be, even in that case.
-            if prev_leaf.is_none() {
-                #[cfg(test)]
-                unreachable!(
-                    "This should not happen. We check if the iterator has at least one leaf."
-                );
-
-                #[allow(unreachable_code)]
-                {
-                    return Err(
-                        "Unexpected double ended iterator behaviour: no previous leaf.".into(),
-                    );
-                }
-            }
-
             // Check if there is a valid combination of leaves which validate the proof given the challenged key.
             match (prev_leaf, next_leaf) {
                 // Scenario 1 (valid): `next_leaf` is the challenged leaf which is included in the proof.
                 // The challenge is the leaf itself (i.e. the challenge exists in the trie).
                 (_, Some((next_key, _))) if next_key == challenge.as_ref().to_vec() => {
+                    // Converting the key to a slice and then to a fixed size array.
+                    let next_key: &[u8; H_LENGTH] = next_key
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key to a fixed size array.")?;
+
+                    // Converting the fixed size array to the key type.
                     let next_key = next_key
                         .try_into()
                         .map_err(|_| "Failed to convert proven key.")?;
@@ -126,12 +114,26 @@ where
                     if prev_key < challenge.as_ref().to_vec()
                         && challenge.as_ref().to_vec() < next_key =>
                 {
+                    // Converting the key to a slice and then to a fixed size array.
+                    let prev_key: &[u8; H_LENGTH] = prev_key
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key to a fixed size array.")?;
+
+                    // Converting the fixed size array to the key type.
                     let prev_key = prev_key
                         .try_into()
                         .map_err(|_| "Failed to convert proven key.")?;
 
                     proven_keys.insert(prev_key);
 
+                    // Converting the key to a slice and then to a fixed size array.
+                    let next_key: &[u8; H_LENGTH] = next_key
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key to a fixed size array.")?;
+
+                    // Converting the fixed size array to the key type.
                     let next_key = next_key
                         .try_into()
                         .map_err(|_| "Failed to convert proven key.")?;
@@ -142,22 +144,34 @@ where
                 }
                 // Scenario 3 (valid): `next_leaf` is the first leaf since the next previous leaf is `None`.
                 // The challenge is before the first leaf (i.e. the challenge does not exist in the trie).
-                (Some((prev_key, _)), Some((next_key, _)))
-                    if prev_key == next_key && trie_de_iter.next_back().is_none() =>
-                {
-                    let prev_key = prev_key
+                (None, Some((next_key, _))) => {
+                    // Converting the key to a slice and then to a fixed size array.
+                    let next_key: &[u8; H_LENGTH] = next_key
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key to a fixed size array.")?;
+
+                    // Converting the fixed size array to the key type.
+                    let next_key = next_key
                         .try_into()
                         .map_err(|_| "Failed to convert proven key.")?;
 
-                    proven_keys.insert(prev_key);
+                    proven_keys.insert(next_key);
 
                     continue;
                 }
                 // Scenario 4 (valid): `prev_leaf` is the last leaf since `next_leaf` is `None`.
                 // The challenge is after the last leaf (i.e. the challenge does not exist in the trie).
                 (Some(prev_leaf), None) => {
-                    let prev_key = prev_leaf
+                    // Converting the key to a slice and then to a fixed size array.
+                    let prev_key: &[u8; H_LENGTH] = prev_leaf
                         .0
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| "Failed to convert proven key to a fixed size array.")?;
+
+                    // Converting the fixed size array to the key type.
+                    let prev_key = prev_key
                         .try_into()
                         .map_err(|_| "Failed to convert proven key.")?;
 
@@ -180,7 +194,7 @@ where
                 _ => {
                     #[cfg(test)]
                     unreachable!(
-                        "This should not happen. We check if the iterator has at least one leaf."
+                        "This should not happen. Unexpected scenario when iterating through proofs."
                     );
 
                     #[allow(unreachable_code)]

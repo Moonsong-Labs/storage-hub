@@ -1,0 +1,30 @@
+[package]
+name = "shc-rpc"
+description = "RPCs for the StorageHub client."
+version = "0.1.0"
+homepage = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+log = { workspace = true }
+jsonrpsee = { workspace = true }
+tokio = { workspace = true }
+
+# Substrate
+sp-runtime = { workspace = true }
+sp-trie = { workspace = true }
+
+# Local
+file-manager = { workspace =  true }
+shc-common = { workspace = true }
+
+[features]
+default = ["std"]
+std = [
+]
+
+[lints]
+workspace = true

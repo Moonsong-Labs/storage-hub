@@ -1,20 +1,19 @@
 use anyhow::Result;
 use prost::Message;
+use thiserror::Error;
+
 use sc_network::{Multiaddr, PeerId, ProtocolName, RequestFailure};
-use storage_hub_infra::{
-    actor::ActorHandle,
-    types::{ChunkId, FileProof, Key},
-};
 
-use crate::services::FileTransferService;
+use shc_common::types::{ChunkId, FileKey, FileProof};
+use storage_hub_infra::actor::ActorHandle;
 
-use super::schema;
+use super::{schema, FileTransferService};
 
 /// Messages understood by the FileTransfer service actor
 pub enum FileTransferServiceCommand {
     UploadRequest {
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
         chunk_with_proof: FileProof,
         callback: tokio::sync::oneshot::Sender<
             futures::channel::oneshot::Receiver<Result<(Vec<u8>, ProtocolName), RequestFailure>>,
@@ -22,7 +21,7 @@ pub enum FileTransferServiceCommand {
     },
     DownloadRequest {
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
         chunk_id: ChunkId,
         callback: tokio::sync::oneshot::Sender<
             futures::channel::oneshot::Receiver<Result<(Vec<u8>, ProtocolName), RequestFailure>>,
@@ -31,27 +30,36 @@ pub enum FileTransferServiceCommand {
     AddKnownAddress {
         peer_id: PeerId,
         multiaddress: Multiaddr,
-        // TODO: Add callback with some return type like Result<()> to know if the operation was successful.
+        callback: tokio::sync::oneshot::Sender<Result<(), RequestError>>,
     },
     RegisterNewFile {
         peer_id: PeerId,
-        file_key: Key,
-        // TODO: Add callback with some return type like Result<()> to know if the operation was successful.
+        file_key: FileKey,
+        callback: tokio::sync::oneshot::Sender<Result<(), RequestError>>,
     },
     UnregisterFile {
-        peer_id: PeerId,
-        file_key: Key,
-        // TODO: Add callback with some return type like Result<()> to know if the operation was successful.
+        file_key: FileKey,
+        callback: tokio::sync::oneshot::Sender<Result<(), RequestError>>,
     },
 }
 
+#[derive(Debug, Error)]
 pub enum RequestError {
     /// The request failed. More details are provided in the `RequestFailure`.
-    RequestFailure(RequestFailure),
+    #[error("Request failed: {0}")]
+    RequestFailure(#[from] RequestFailure),
     /// The response was not a valid protobuf message.
+    #[error("Failed to decode response: {0}")]
     DecodeError(prost::DecodeError),
     /// The response was decoded successfully, but it was not the expected response.
+    #[error("Unexpected response")]
     UnexpectedResponse,
+    /// File is already stored in for this Peer in the registry.
+    #[error("File already registered for peer")]
+    FileAlreadyRegisteredForPeer,
+    /// File not found in the registry.
+    #[error("File not found in registry")]
+    FileNotRegistered,
 }
 
 /// Allows our ActorHandle to implement
@@ -60,22 +68,30 @@ pub trait FileTransferServiceInterface {
     async fn upload_request(
         &self,
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
         data: FileProof,
     ) -> Result<schema::v1::provider::RemoteUploadDataResponse, RequestError>;
 
     async fn download_request(
         &self,
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
         chunk_id: ChunkId,
     ) -> Result<schema::v1::provider::RemoteDownloadDataResponse, RequestError>;
 
-    async fn add_known_address(&self, peer_id: PeerId, multiaddress: Multiaddr);
+    async fn add_known_address(
+        &self,
+        peer_id: PeerId,
+        multiaddress: Multiaddr,
+    ) -> Result<(), RequestError>;
 
-    async fn register_new_file(&self, peer_id: PeerId, file_key: Key);
+    async fn register_new_file_peer(
+        &self,
+        peer_id: PeerId,
+        file_key: FileKey,
+    ) -> Result<(), RequestError>;
 
-    async fn unregister_file(&self, peer_id: PeerId, file_key: Key);
+    async fn unregister_file(&self, file_key: FileKey) -> Result<(), RequestError>;
 }
 
 impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
@@ -84,7 +100,7 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
     async fn upload_request(
         &self,
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
         chunk_with_proof: FileProof,
     ) -> Result<schema::v1::provider::RemoteUploadDataResponse, RequestError> {
         let (callback, file_transfer_rx) = tokio::sync::oneshot::channel();
@@ -129,7 +145,7 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
     async fn download_request(
         &self,
         peer_id: PeerId,
-        file_key: Key,
+        file_key: FileKey,
         chunk_id: ChunkId,
     ) -> Result<schema::v1::provider::RemoteDownloadDataResponse, RequestError> {
         let (callback, file_transfer_rx) = tokio::sync::oneshot::channel();
@@ -171,30 +187,46 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
 
     /// Tell the FileTransferService to register a multiaddress as known for a specified PeerId.
     /// This returns as soon as the message has been dispatched (not processed) to the service.
-    // TODO: Make it return after the message is processed by the service with some Result<()>.
-    async fn add_known_address(&self, peer_id: PeerId, multiaddress: Multiaddr) {
+    async fn add_known_address(
+        &self,
+        peer_id: PeerId,
+        multiaddress: Multiaddr,
+    ) -> Result<(), RequestError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
         let command = FileTransferServiceCommand::AddKnownAddress {
             peer_id,
             multiaddress,
+            callback,
         };
         self.send(command).await;
+        rx.await.expect("Failed to add known multiaddress to peer")
     }
 
     /// Tell the FileTransferService to start listening for new upload requests from peer_id
     /// on file file_key.
     /// This returns as soon as the message has been dispatched (not processed) to the service.
-    // TODO: Make it return after the message is processed by the service with some Result<()>.
-    async fn register_new_file(&self, peer_id: PeerId, file_key: Key) {
-        let command = FileTransferServiceCommand::RegisterNewFile { peer_id, file_key };
+    async fn register_new_file_peer(
+        &self,
+        peer_id: PeerId,
+        file_key: FileKey,
+    ) -> Result<(), RequestError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let command = FileTransferServiceCommand::RegisterNewFile {
+            peer_id,
+            file_key,
+            callback,
+        };
         self.send(command).await;
+        rx.await.expect("Failed to register new file")
     }
 
     /// Tell the FileTransferService to no longer listen for upload requests from peer_id on file
     /// file_key.
     /// This returns as soon as the message has been dispatched (not processed) to the service.
-    // TODO: Make it return after the message is processed by the service with some Result<()>.
-    async fn unregister_file(&self, peer_id: PeerId, file_key: Key) {
-        let command = FileTransferServiceCommand::UnregisterFile { peer_id, file_key };
+    async fn unregister_file(&self, file_key: FileKey) -> Result<(), RequestError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let command = FileTransferServiceCommand::UnregisterFile { file_key, callback };
         self.send(command).await;
+        rx.await.expect("Failed to unregister file")
     }
 }

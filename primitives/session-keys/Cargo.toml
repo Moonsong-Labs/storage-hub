@@ -1,5 +1,5 @@
 [package]
-name = "session-keys-primitives"
+name = "shp-session-keys"
 description = "Primitives for session keys"
 version = "0.1.0"
 homepage = { workspace = true }

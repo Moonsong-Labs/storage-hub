@@ -528,8 +528,11 @@ fn bsp_confirm_storing_success() {
             bsp_signed.clone(),
             location.clone(),
             H256::zero(), // TODO construct a real proof
-            pallet_proofs_dealer::CompactProof {
-                encoded_nodes: vec![],
+            ForestProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            KeyProof {
+                encoded_nodes: vec![vec![0]],
             }
         ));
 
@@ -585,8 +588,11 @@ fn bsp_confirm_storing_storage_request_not_found_fail() {
                 bsp_signed.clone(),
                 location.clone(),
                 H256::zero(), // TODO construct a real proof
-                pallet_proofs_dealer::CompactProof {
-                    encoded_nodes: vec![],
+                ForestProof {
+                    encoded_nodes: vec![vec![0]],
+                },
+                KeyProof {
+                    encoded_nodes: vec![vec![0]],
                 }
             ),
             Error::<Test>::StorageRequestNotFound
@@ -626,8 +632,11 @@ fn bsp_confirm_storing_not_volunteered_fail() {
                 bsp_signed.clone(),
                 location.clone(),
                 H256::zero(), // TODO construct a real proof
-                pallet_proofs_dealer::CompactProof {
-                    encoded_nodes: vec![],
+                ForestProof {
+                    encoded_nodes: vec![vec![0]],
+                },
+                KeyProof {
+                    encoded_nodes: vec![vec![0]],
                 }
             ),
             Error::<Test>::BspNotVolunteered
@@ -674,8 +683,11 @@ fn bsp_already_confirmed_fail() {
             bsp_signed.clone(),
             location.clone(),
             H256::zero(), // TODO construct a real proof
-            pallet_proofs_dealer::CompactProof {
-                encoded_nodes: vec![],
+            ForestProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            KeyProof {
+                encoded_nodes: vec![vec![0]],
             }
         ));
 
@@ -684,8 +696,11 @@ fn bsp_already_confirmed_fail() {
                 bsp_signed.clone(),
                 location.clone(),
                 H256::zero(), // TODO construct a real proof
-                pallet_proofs_dealer::CompactProof {
-                    encoded_nodes: vec![],
+                ForestProof {
+                    encoded_nodes: vec![vec![0]],
+                },
+                KeyProof {
+                    encoded_nodes: vec![vec![0]],
                 }
             ),
             Error::<Test>::BspAlreadyConfirmed
@@ -725,8 +740,11 @@ fn bsp_actions_not_a_bsp_fail() {
                 bsp_signed.clone(),
                 location.clone(),
                 H256::zero(), // TODO construct a real proof
-                pallet_proofs_dealer::CompactProof {
-                    encoded_nodes: vec![],
+                ForestProof {
+                    encoded_nodes: vec![vec![0]],
+                },
+                KeyProof {
+                    encoded_nodes: vec![vec![0]],
                 }
             ),
             Error::<Test>::NotABsp
@@ -774,8 +792,11 @@ fn bsp_stop_storing_success() {
             bsp_signed.clone(),
             location.clone(),
             H256::zero(), // TODO construct a real proof
-            pallet_proofs_dealer::CompactProof {
-                encoded_nodes: vec![],
+            ForestProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            KeyProof {
+                encoded_nodes: vec![vec![0]],
             }
         ));
 
@@ -886,8 +907,11 @@ fn bsp_stop_storing_while_storage_request_open_success() {
             bsp_signed.clone(),
             location.clone(),
             H256::zero(),
-            pallet_proofs_dealer::CompactProof {
-                encoded_nodes: vec![],
+            ForestProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            KeyProof {
+                encoded_nodes: vec![vec![0]],
             }
         ));
 

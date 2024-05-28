@@ -8,11 +8,11 @@ use frame_support::{
 use frame_system as system;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage, DispatchError, DispatchResult,
+    traits::{BlakeTwo256, Convert, IdentityLookup},
+    BuildStorage, DispatchError, DispatchResult, SaturatedConversion,
 };
 use sp_trie::CompactProof;
-use storage_hub_traits::{CommitmentVerifier, SubscribeProvidersInterface};
+use storage_hub_traits::{CommitmentVerifier, MaybeDebug, SubscribeProvidersInterface};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -20,6 +20,8 @@ type Balance = u128;
 type AccountId = u64;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
+const UNITS: Balance = 1_000_000_000_000;
+const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumberFor<Test> = 3;
@@ -130,15 +132,21 @@ impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
-    type MerkleHash = H256;
-    type KeyVerifier = MockVerifier;
-    type MaxChallengesPerBlock = ConstU32<10>;
+    type MerkleTrieHash = H256;
+    type MerkleTrieHashing = BlakeTwo256;
+    type ForestVerifier = MockVerifier<H256>;
+    type KeyVerifier = MockVerifier<H256>;
+    type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
+    type RandomChallengesPerBlock = ConstU32<10>;
+    type MaxCustomChallengesPerBlock = ConstU32<10>;
     type MaxProvidersChallengedPerBlock = ConstU32<10>;
-    type ChallengeHistoryLength = ConstU32<10>;
+    type ChallengeHistoryLength = ConstU64<10>;
     type ChallengesQueueLength = ConstU32<10>;
     type CheckpointChallengePeriod = ConstU32<2>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = ConstU64<181222>;
+    type RandomnessProvider = MockRandomness;
+    type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
 }
 
 pub struct MockedProvidersSubscriber;
@@ -155,18 +163,24 @@ impl SubscribeProvidersInterface for MockedProvidersSubscriber {
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
 /// and `false` otherwise.
-pub struct MockVerifier;
+pub struct MockVerifier<C> {
+    _phantom: core::marker::PhantomData<C>,
+}
 
 /// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl CommitmentVerifier for MockVerifier {
+impl<C> CommitmentVerifier for MockVerifier<C>
+where
+    C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
+{
     type Proof = CompactProof;
-    type Key = H256;
+    type Commitment = H256;
+    type Challenge = C;
 
     fn verify_proof(
-        _root: &Self::Key,
-        challenges: &[Self::Key],
+        _root: &Self::Commitment,
+        challenges: &[Self::Challenge],
         proof: &CompactProof,
-    ) -> Result<Vec<Self::Key>, DispatchError> {
+    ) -> Result<Vec<Self::Challenge>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
             Ok(challenges.to_vec())
         } else {
@@ -181,4 +195,14 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         .build_storage()
         .unwrap()
         .into()
+}
+
+// Converter from the Balance type to the BlockNumber type for math.
+// It performs a saturated conversion, so that the result is always a valid BlockNumber.
+pub struct SaturatingBalanceToBlockNumber;
+
+impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
+    fn convert(block_number: Balance) -> BlockNumberFor<Test> {
+        block_number.saturated_into()
+    }
 }
