@@ -30,9 +30,11 @@ use sc_client_api::{
     BlockBackend, BlockImportNotification, BlockchainEvents, HeaderBackend, StorageKey,
     StorageProvider,
 };
+use sc_network::Multiaddr;
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{error, info};
 use serde_json::Number;
+use shc_common::types::Fingerprint;
 use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::{Keystore, KeystorePtr};
@@ -44,7 +46,10 @@ use storage_hub_infra::actor::{Actor, ActorEventLoop};
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
 
-use crate::{service::ParachainClient, services::blockchain::transaction::SubmittedTransaction};
+use crate::{
+    service::ParachainClient,
+    services::blockchain::{events::AcceptedBspVolunteer, transaction::SubmittedTransaction},
+};
 
 use crate::services::blockchain::{
     commands::BlockchainServiceCommand,
@@ -330,6 +335,41 @@ impl BlockchainService {
                             size,
                             user_peer_ids: peer_ids,
                         }),
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::AcceptedBspVolunteer {
+                                who,
+                                location,
+                                fingerprint,
+                                multiaddresses,
+                                owner,
+                                size,
+                            },
+                        ) => {
+                            // We try to convert the types coming from the runtime into our expected types.
+                            let fingerprint: Fingerprint = fingerprint.as_bytes().into();
+                            // In this case, the Multiaddresses come as a BoundedVec of BoundedVecs of bytes,
+                            // and we need to convert them. It only fails if the bytes do not represent a valid multiaddress.
+                            let multiaddresses: Vec<Multiaddr> = multiaddresses
+                                .into_iter()
+                                .map({
+                                    |bounded_vec| {
+                                        bounded_vec
+                                            .into_inner()
+                                            .try_into()
+                                            .expect("Malformed Multiaddress, this is a bug.")
+                                    }
+                                })
+                                .collect();
+
+                            self.emit(AcceptedBspVolunteer {
+                                who,
+                                location,
+                                fingerprint,
+                                multiaddresses,
+                                owner,
+                                size,
+                            })
+                        }
                         // Ignore all other events.
                         _ => {}
                     }
