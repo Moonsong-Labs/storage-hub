@@ -250,7 +250,7 @@ fn commitment_verifier_many_challenges_success() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: metadata.size,
-        fingerprint: metadata.fingerprint.clone(),
+        fingerprint: metadata.fingerprint,
         proof,
     };
 
@@ -314,7 +314,7 @@ fn commitment_verifier_many_challenges_random_file_success() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: metadata.size,
-        fingerprint: metadata.fingerprint.clone(),
+        fingerprint: metadata.fingerprint,
         proof,
     };
 
@@ -378,7 +378,7 @@ fn commitment_verifier_many_challenges_keccak_success() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: metadata.size,
-        fingerprint: metadata.fingerprint.clone(),
+        fingerprint: metadata.fingerprint,
         proof,
     };
 
@@ -444,7 +444,7 @@ fn commitment_verifier_many_challenges_one_chunk_success() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: metadata.size,
-        fingerprint: metadata.fingerprint.clone(),
+        fingerprint: metadata.fingerprint,
         proof,
     };
 
@@ -510,7 +510,7 @@ fn commitment_verifier_many_challenges_two_chunks_success() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: metadata.size,
-        fingerprint: metadata.fingerprint.clone(),
+        fingerprint: metadata.fingerprint,
         proof,
     };
 
@@ -571,7 +571,7 @@ fn commitment_verifier_no_challenges_failure() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: metadata.size,
-        fingerprint: metadata.fingerprint.clone(),
+        fingerprint: metadata.fingerprint,
         proof,
     };
 
@@ -635,7 +635,7 @@ fn commitment_verifier_wrong_number_of_challenges_failure() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: metadata.size,
-        fingerprint: metadata.fingerprint.clone(),
+        fingerprint: metadata.fingerprint,
         proof,
     };
 
@@ -699,7 +699,7 @@ fn commitment_verifier_wrong_file_key_failure() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: metadata.size,
-        fingerprint: metadata.fingerprint.clone(),
+        fingerprint: metadata.fingerprint,
         proof,
     };
 
@@ -776,7 +776,7 @@ fn commitment_verifier_wrong_file_key_encoding_as_bytes_failure() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: metadata.size,
-        fingerprint: metadata.fingerprint.clone(),
+        fingerprint: metadata.fingerprint,
         proof,
     };
 
@@ -853,7 +853,7 @@ fn commitment_verifier_wrong_file_key_no_compact_encoding_failure() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: metadata.size,
-        fingerprint: metadata.fingerprint.clone(),
+        fingerprint: metadata.fingerprint,
         proof,
     };
 
@@ -930,7 +930,7 @@ fn commitment_verifier_wrong_file_key_vec_fingerprint_failure() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: metadata.size,
-        fingerprint: metadata.fingerprint.clone(),
+        fingerprint: metadata.fingerprint,
         proof,
     };
 
@@ -983,7 +983,7 @@ fn commitment_verifier_empty_proof_failure() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: metadata.size,
-        fingerprint: metadata.fingerprint.clone(),
+        fingerprint: metadata.fingerprint,
         proof,
     };
 
@@ -1038,7 +1038,7 @@ fn commitment_verifier_empty_fingerprint_failure() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: metadata.size,
-        fingerprint: fingerprint.clone().into(),
+        fingerprint: fingerprint.into(),
         proof,
     };
 
@@ -1102,7 +1102,7 @@ fn commitment_verifier_challenge_missing_from_proof_failure() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: metadata.size,
-        fingerprint: metadata.fingerprint.clone(),
+        fingerprint: metadata.fingerprint,
         proof,
     };
 
@@ -1183,7 +1183,7 @@ fn commitment_verifier_challenge_with_none_value_failure() {
         owner: metadata.owner.clone(),
         location: metadata.location.clone(),
         size: FILE_SIZE,
-        fingerprint: metadata.fingerprint.clone(),
+        fingerprint: metadata.fingerprint,
         proof,
     };
 
