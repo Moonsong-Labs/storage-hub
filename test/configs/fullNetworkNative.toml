@@ -29,7 +29,6 @@ args = [
     "-lparachain=debug",
     "--provider",
     "--provider-type bsp",
-    "--seed-file ./Cargo.toml",
 ]
 
 [types.Header]
