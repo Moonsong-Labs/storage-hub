@@ -77,6 +77,13 @@ where
         // TODO: Check storage capacity of chosen MSP (when we support MSPs)
         // TODO: Return error if the file is already stored and overwrite is false.
 
+        if let Some(ref msp) = msp {
+            ensure!(
+                <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_msp(msp),
+                Error::<T>::NotAMsp
+            );
+        }
+
         let bsps_required = bsps_required.unwrap_or(TargetBspsRequired::<T>::get());
 
         if bsps_required.is_zero() {

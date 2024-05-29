@@ -321,6 +321,8 @@ pub mod pallet {
         BspsRequiredExceedsMax,
         /// Account is not a BSP.
         NotABsp,
+        /// Account is not a MSP.
+        NotAMsp,
         /// BSP has not volunteered to store the given file.
         BspNotVolunteered,
         /// BSP has not confirmed storing the given file.
