@@ -1,4 +1,4 @@
-import { createClient, type PolkadotClient, type TypedApi } from "polkadot-api";
+import { createClient, FixedSizeBinary, type PolkadotClient, type TypedApi } from "polkadot-api";
 import { WebSocketProvider } from "polkadot-api/ws-provider/node";
 import { relaychain, storagehub } from "@polkadot-api/descriptors";
 
@@ -9,7 +9,7 @@ type StorageHubApi = TypedApi<typeof storagehub>;
 export const waitForRandomness = async (api: StorageHubApi, timeoutMs = 60_000) => {
   process.stdout.write("Waiting for randomness...");
 
-  const waitForValueOrTimeout = (timeoutMs: number): Promise<number> => {
+  const waitForValueOrTimeout = (timeoutMs: number): Promise<[FixedSizeBinary<32>, number]> => {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error("Timeout"));
@@ -22,26 +22,27 @@ export const waitForRandomness = async (api: StorageHubApi, timeoutMs = 60_000) 
         valueCount++;
 
         if (!value) {
+          subscription.unsubscribe();
           reject(new Error("Randomness value is undefined"));
-          return;
         }
 
-        const [, blockHeight] = value;
-
         if (valueCount === 2) {
+          if (!value) {
+            throw new Error("Randomness value is undefined");
+          }
           clearTimeout(timeout);
           subscription.unsubscribe();
-          resolve(blockHeight);
+          resolve(value);
         }
       });
     });
   };
 
   try {
-    const blockHeight = await waitForValueOrTimeout(timeoutMs);
-    if (blockHeight) {
+    const [randomness, blockHeight] = await waitForValueOrTimeout(timeoutMs);
+    if (blockHeight && randomness) {
       process.stdout.write("✅\n");
-      return blockHeight;
+      return { blockHeight, randomness };
     }
     process.stdout.write("❌\n");
     console.error("Timeout reached without receiving a value.");
