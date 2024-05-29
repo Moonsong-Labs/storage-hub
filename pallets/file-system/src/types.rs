@@ -9,7 +9,6 @@ use crate::Config;
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct StorageRequestMetadata<T: Config> {
-    // TODO: Add MSP
     /// Block number at which the storage request was made.
     ///
     /// Used primarily for tracking the age of the request which is useful for
@@ -24,6 +23,10 @@ pub struct StorageRequestMetadata<T: Config> {
     /// SPs will use this to determine if they have enough space to store the data.
     /// This is also used to verify that the data sent by the user matches the size specified here.
     pub size: StorageData<T>,
+    /// MSP who is requested to store the data.
+    ///
+    /// This is optional in the event when a storage request is created solely to replicate data to other BSPs and an MSP is already storing the data.
+    pub msp: Option<T::AccountId>,
     /// Peer Ids of the user who requested the storage.
     ///
     /// SPs will expect a connection request to be initiated by the user with this Peer Id.
@@ -34,7 +37,6 @@ pub struct StorageRequestMetadata<T: Config> {
     /// SPs can prove and serve the data to be replicated to other BSPs without the user having this stored on their local machine.
     pub data_server_sps: BoundedVec<T::AccountId, MaxBspsPerStorageRequest<T>>, // TODO: Change the Maximum data servers to be the maximum SPs allowed
     /// Number of BSPs requested to store the data.
-    ///
     ///
     /// The storage request will be dropped/complete once all the minimum required BSPs have
     /// submitted a proof of storage after volunteering to store the data.

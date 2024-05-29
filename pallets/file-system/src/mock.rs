@@ -12,6 +12,7 @@ use sp_runtime::{
 use sp_trie::CompactProof;
 use storage_hub_traits::{CommitmentVerifier, MaybeDebug};
 use system::pallet_prelude::BlockNumberFor;
+use sp_keyring::sr25519::Keyring;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
@@ -258,13 +259,9 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 
     pallet_balances::GenesisConfig::<Test> {
         balances: vec![
-            (AccountId32::new([1; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([2; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([3; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([4; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([5; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([6; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([7; 32]), 1_000_000_000_000_000),
+            (Keyring::Alice.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Bob.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
         ],
     }
     .assimilate_storage(&mut t)

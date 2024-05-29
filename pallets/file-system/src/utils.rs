@@ -68,6 +68,7 @@ where
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
+        msp: Option<T::AccountId>,
         bsps_required: Option<T::StorageRequestBspsRequiredType>,
         user_peer_ids: Option<PeerIds<T>>,
         data_server_sps: BoundedVec<T::AccountId, MaxBspsPerStorageRequest<T>>,
@@ -91,6 +92,7 @@ where
             owner,
             fingerprint,
             size,
+            msp,
             user_peer_ids: user_peer_ids.unwrap_or_default(),
             data_server_sps,
             bsps_required,
@@ -532,6 +534,7 @@ where
                     location.clone(),
                     fingerprint,
                     size,
+                    None,
                     Some(1u32.into()),
                     None,
                     if can_serve {

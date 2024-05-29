@@ -376,6 +376,7 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
+            msp: T::AccountId,
             peer_ids: PeerIds<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
@@ -387,6 +388,7 @@ pub mod pallet {
                 location.clone(),
                 fingerprint,
                 size,
+                Some(msp),
                 None,
                 Some(peer_ids.clone()),
                 Default::default(),
