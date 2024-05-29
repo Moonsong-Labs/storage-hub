@@ -38,7 +38,6 @@ command = "../target/release/storage-hub-node"
 args = [
     "--no-hardware-benchmarks",
     "-lparachain=debug",
-    "--log bsp-volunteer-mock-task=debug",
     "--provider",
     "--provider-type bsp",
     "--seed-file ./Cargo.toml",

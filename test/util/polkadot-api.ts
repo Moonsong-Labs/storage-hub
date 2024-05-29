@@ -26,10 +26,12 @@ export const waitForRandomness = async (api: StorageHubApi, timeoutMs = 60_000) 
           return;
         }
 
+        const [, blockHeight] = value;
+
         if (valueCount === 2) {
           clearTimeout(timeout);
           subscription.unsubscribe();
-          resolve(value[1]);
+          resolve(blockHeight);
         }
       });
     });
