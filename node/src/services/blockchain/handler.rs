@@ -349,6 +349,7 @@ impl BlockchainService {
                             let fingerprint: Fingerprint = fingerprint.as_bytes().into();
                             // In this case, the Multiaddresses come as a BoundedVec of BoundedVecs of bytes,
                             // and we need to convert them. It only fails if the bytes do not represent a valid multiaddress.
+                            // TODO: We should make sure Multiaddresses are valid from inside the runtime.
                             let multiaddresses: Vec<Multiaddr> = multiaddresses
                                 .into_iter()
                                 .map({
@@ -356,7 +357,7 @@ impl BlockchainService {
                                         bounded_vec
                                             .into_inner()
                                             .try_into()
-                                            .expect("Malformed Multiaddress, this is a bug.")
+                                            .expect("Malformed Multiaddress.")
                                     }
                                 })
                                 .collect();
