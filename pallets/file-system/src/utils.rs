@@ -20,7 +20,7 @@ use crate::{
     StorageRequestExpirations, StorageRequests,
 };
 use crate::{
-    types::{FileKey, TargetBspsRequired},
+    types::{FileKey, ProviderFor, TargetBspsRequired},
     BspsAssignmentThreshold,
 };
 
@@ -68,7 +68,7 @@ where
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
-        msp: Option<T::AccountId>,
+        msp: Option<ProviderFor<T>>,
         bsps_required: Option<T::StorageRequestBspsRequiredType>,
         user_peer_ids: Option<PeerIds<T>>,
         data_server_sps: BoundedVec<T::AccountId, MaxBspsPerStorageRequest<T>>,

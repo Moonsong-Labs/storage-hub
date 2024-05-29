@@ -9,7 +9,7 @@ use crate::{
 use frame_support::{
     assert_noop, assert_ok, dispatch::DispatchResultWithPostInfo, traits::Hooks, weights::Weight,
 };
-use sp_core::H256;
+use sp_core::{ByteArray, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     traits::{BlakeTwo256, Get, Hash, Zero},
@@ -30,13 +30,15 @@ fn request_storage_success() {
         let peer_id = BoundedVec::try_from(vec![1]).unwrap();
         let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::issue_storage_request(
             user.clone(),
             location.clone(),
             fingerprint,
             size,
-            msp.clone(),
+            msp_id.clone(),
             peer_ids.clone(),
         ));
 
@@ -48,7 +50,7 @@ fn request_storage_success() {
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
-                msp: Some(msp),
+                msp: Some(msp_id),
                 user_peer_ids: peer_ids.clone(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
@@ -84,13 +86,15 @@ fn request_storage_expiration_clear_success() {
         let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let size = 4;
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::issue_storage_request(
             owner_signed.clone(),
             location.clone(),
             fingerprint,
             size,
-            msp.clone(),
+            msp_id.clone(),
             peer_ids.clone(),
         ));
 
@@ -102,7 +106,7 @@ fn request_storage_expiration_clear_success() {
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
-                msp: Some(msp),
+                msp: Some(msp_id),
                 user_peer_ids: peer_ids.clone(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
@@ -141,6 +145,8 @@ fn request_storage_expiration_current_block_increment_success() {
         let peer_id = BoundedVec::try_from(vec![1]).unwrap();
         let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         let mut expected_expiration_block_number: BlockNumber =
             FileSystem::next_expiration_insertion_block_number().into();
 
@@ -159,7 +165,7 @@ fn request_storage_expiration_current_block_increment_success() {
             location.clone(),
             fingerprint,
             4,
-            msp,
+            msp_id,
             peer_ids,
         ));
 
@@ -200,6 +206,8 @@ fn request_storage_clear_old_expirations_success() {
         let peer_id = BoundedVec::try_from(vec![1]).unwrap();
         let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         let expected_expiration_block_number: BlockNumber =
             FileSystem::next_expiration_insertion_block_number().into();
 
@@ -219,7 +227,7 @@ fn request_storage_clear_old_expirations_success() {
             location.clone(),
             fingerprint,
             4,
-            msp,
+            msp_id,
             peer_ids,
         ));
 
@@ -276,13 +284,15 @@ fn revoke_request_storage_success() {
         let fingerprint = BlakeTwo256::hash(&file_content);
         let file_key = H256::zero();
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::issue_storage_request(
             owner.clone(),
             location.clone(),
             fingerprint,
             4,
-            msp,
+            msp_id,
             Default::default()
         ));
 
@@ -331,13 +341,15 @@ fn revoke_storage_request_not_owner_fail() {
         let fingerprint = BlakeTwo256::hash(&file_content);
         let file_key = H256::zero();
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::issue_storage_request(
             owner.clone(),
             location.clone(),
             fingerprint,
             4,
-            msp,
+            msp_id,
             Default::default()
         ));
 
@@ -364,13 +376,15 @@ fn bsp_volunteer_success() {
         let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
             origin,
             location.clone(),
             fingerprint,
             4,
-            msp,
+            msp_id,
             peer_ids.clone(),
         ));
 
@@ -442,13 +456,15 @@ fn bsp_already_volunteered_failed() {
         let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
             owner_signed.clone(),
             location.clone(),
             fingerprint,
             size,
-            msp,
+            msp_id,
             peer_ids.clone(),
         ));
 
@@ -485,13 +501,15 @@ fn bsp_volunteer_above_threshold_high_fail() {
         let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
             owner_signed.clone(),
             location.clone(),
             fingerprint,
             size,
-            msp,
+            msp_id,
             peer_ids.clone(),
         ));
 
@@ -523,13 +541,15 @@ fn bsp_confirm_storing_success() {
         let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
             owner_signed.clone(),
             location.clone(),
             fingerprint,
             size,
-            msp.clone(),
+            msp_id.clone(),
             peer_ids.clone(),
         ));
 
@@ -564,7 +584,7 @@ fn bsp_confirm_storing_success() {
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
-                msp: Some(msp),
+                msp: Some(msp_id),
                 user_peer_ids: peer_ids.clone(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
@@ -637,13 +657,15 @@ fn bsp_confirm_storing_not_volunteered_fail() {
         let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
             owner_signed.clone(),
             location.clone(),
             fingerprint,
             size,
-            msp,
+            msp_id,
             peer_ids.clone(),
         ));
 
@@ -683,13 +705,15 @@ fn bsp_already_confirmed_fail() {
         let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
             owner_signed.clone(),
             location.clone(),
             fingerprint,
             size,
-            msp,
+            msp_id,
             peer_ids.clone(),
         ));
 
@@ -747,13 +771,15 @@ fn bsp_actions_not_a_bsp_fail() {
         let peer_id = BoundedVec::try_from(vec![1]).unwrap();
         let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
             RuntimeOrigin::signed(owner_account_id.clone()),
             location.clone(),
             fingerprint,
             size,
-            msp,
+            msp_id,
             peer_ids.clone(),
         ));
 
@@ -796,13 +822,15 @@ fn bsp_stop_storing_success() {
         let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
         let storage_amount: StorageData<Test> = 100;
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
             owner.clone(),
             location.clone(),
             fingerprint,
             size,
-            msp.clone(),
+            msp_id.clone(),
             peer_ids.clone(),
         ));
 
@@ -847,7 +875,7 @@ fn bsp_stop_storing_success() {
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
-                msp: Some(msp.clone()),
+                msp: Some(msp_id.clone()),
                 user_peer_ids: peer_ids.clone(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
@@ -880,7 +908,7 @@ fn bsp_stop_storing_success() {
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
-                msp: Some(msp),
+                msp: Some(msp_id),
                 user_peer_ids: peer_ids.clone(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
@@ -915,13 +943,15 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         let size = 4;
         let storage_amount: StorageData<Test> = 100;
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
             owner.clone(),
             location.clone(),
             H256::zero(),
             size,
-            msp.clone(),
+            msp_id.clone(),
             Default::default(),
         ));
 
@@ -972,7 +1002,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
                 owner: owner_account_id.clone(),
                 fingerprint: H256::zero(),
                 size,
-                msp: Some(msp),
+                msp: Some(msp_id),
                 user_peer_ids: Default::default(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
@@ -1008,13 +1038,15 @@ fn bsp_stop_storing_not_volunteered_success() {
         let fingerprint = H256::zero();
         let storage_amount: StorageData<Test> = 100;
 
+        let msp_id = add_msp_to_provider_storage(&msp);
+
         // Dispatch storage request.
         assert_ok!(FileSystem::issue_storage_request(
             owner.clone(),
             location.clone(),
             fingerprint,
             size,
-            msp.clone(),
+            msp_id.clone(),
             Default::default(),
         ));
 
@@ -1043,7 +1075,7 @@ fn bsp_stop_storing_not_volunteered_success() {
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
-                msp: Some(msp),
+                msp: Some(msp_id),
                 user_peer_ids: Default::default(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: current_bsps_required.checked_add(1).unwrap(),
@@ -1226,4 +1258,32 @@ fn create_sp_multiaddresses(
             .unwrap(),
     );
     multiaddresses
+}
+
+fn add_msp_to_provider_storage(
+    msp: &sp_runtime::AccountId32,
+) -> <<Test as frame_system::Config>::Hashing as sp_core::Hasher>::Out {
+    let msp_hash =
+        <<Test as frame_system::Config>::Hashing as sp_core::Hasher>::hash(msp.as_slice());
+
+    let msp_info = pallet_storage_providers::types::MainStorageProvider {
+        buckets: BoundedVec::default(),
+        capacity: 100,
+        data_used: 0,
+        multiaddresses: BoundedVec::default(),
+        value_prop: pallet_storage_providers::types::ValueProposition {
+            identifier: pallet_storage_providers::types::ValuePropId::<Test>::default(),
+            data_limit: 100,
+            protocols: BoundedVec::default(),
+        },
+        last_capacity_change: frame_system::Pallet::<Test>::block_number(),
+    };
+
+    pallet_storage_providers::MainStorageProviders::<Test>::insert(msp_hash, msp_info);
+    pallet_storage_providers::AccountIdToMainStorageProviderId::<Test>::insert(
+        msp.clone(),
+        msp_hash,
+    );
+
+    msp_hash
 }

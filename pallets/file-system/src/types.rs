@@ -2,6 +2,7 @@ use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::BoundedVec;
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
+use storage_hub_traits::ProvidersInterface;
 
 use crate::Config;
 
@@ -26,7 +27,7 @@ pub struct StorageRequestMetadata<T: Config> {
     /// MSP who is requested to store the data.
     ///
     /// This is optional in the event when a storage request is created solely to replicate data to other BSPs and an MSP is already storing the data.
-    pub msp: Option<T::AccountId>,
+    pub msp: Option<ProviderFor<T>>,
     /// Peer Ids of the user who requested the storage.
     ///
     /// SPs will expect a connection request to be initiated by the user with this Peer Id.
@@ -120,3 +121,6 @@ pub type MaxMultiAddresses<T> =
 
 /// Alias for a bounded vector of [`MultiAddress`].
 pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;
+
+/// Alias for the `Provider` type used in the ProvidersInterface.
+pub type ProviderFor<T> = <<T as crate::Config>::Providers as ProvidersInterface>::Provider;
