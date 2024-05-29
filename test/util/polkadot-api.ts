@@ -1,4 +1,9 @@
-import { createClient, FixedSizeBinary, type PolkadotClient, type TypedApi } from "polkadot-api";
+import {
+  createClient,
+  type FixedSizeBinary,
+  type PolkadotClient,
+  type TypedApi,
+} from "polkadot-api";
 import { WebSocketProvider } from "polkadot-api/ws-provider/node";
 import { relaychain, storagehub } from "@polkadot-api/descriptors";
 
