@@ -16,8 +16,9 @@ benchmarks! {
         let location: FileLocation<T> = Default::default();
         let fingerprint: Fingerprint<T> = Default::default();
         let size: StorageData<T> = Default::default();
+        let msp: T::AccountId = whitelisted_caller();
         let peer_ids: PeerIds<T> = Default::default();
-    }: _(RawOrigin::Signed(caller), location.clone(), fingerprint, size, peer_ids)
+    }: _(RawOrigin::Signed(caller), location.clone(), fingerprint, size, msp, peer_ids)
     verify {
         assert!(FileSystem::<T>::storage_requests(location).is_some());
     }

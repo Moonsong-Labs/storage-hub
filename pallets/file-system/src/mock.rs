@@ -5,6 +5,7 @@ use frame_support::{
 };
 use frame_system as system;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
+use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     traits::{BlakeTwo256, Bounded, Convert, IdentityLookup},
     AccountId32, BuildStorage, DispatchError, FixedU128, SaturatedConversion,
@@ -12,7 +13,6 @@ use sp_runtime::{
 use sp_trie::CompactProof;
 use storage_hub_traits::{CommitmentVerifier, MaybeDebug};
 use system::pallet_prelude::BlockNumberFor;
-use sp_keyring::sr25519::Keyring;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
