@@ -274,21 +274,12 @@ impl BlockchainService {
         rpc_handlers: Arc<RpcHandlers>,
         keystore: KeystorePtr,
     ) -> Self {
-        // Get best nonce (not pending) for one of the pub keys (in this case the last one)
-        // in our vector of keys in the Keystore.
-        let current_block_hash = client.chain_info().best_hash;
-        let pub_key = Self::caller_pub_key(keystore.clone());
-        let nonce = client
-            .runtime_api()
-            .account_nonce(current_block_hash, pub_key.into())
-            .expect("Fetching account nonce works; qed");
-
         Self {
             client,
             rpc_handlers,
             keystore,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
-            nonce_counter: nonce,
+            nonce_counter: 0,
         }
     }
 
@@ -299,10 +290,24 @@ impl BlockchainService {
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
-        debug!(target: LOG_TARGET, "Import notification: {}", notification.hash);
+        let block_hash: H256 = notification.hash;
+
+        debug!(target: LOG_TARGET, "Import notification: {}", block_hash);
+
+        // We query the [`BlockchainService`] account nonce at this height
+        // and update our internal counter if it's smaller than the result.
+        let pub_key = Self::caller_pub_key(self.keystore.clone());
+        let latest_nonce = self
+            .client
+            .runtime_api()
+            .account_nonce(block_hash, pub_key.into())
+            .expect("Fetching account nonce works; qed");
+        if latest_nonce > self.nonce_counter {
+            self.nonce_counter = latest_nonce
+        };
 
         // Get events from storage.
-        match self.get_events_storage_element(notification.hash) {
+        match self.get_events_storage_element(block_hash) {
             Ok(block_events) => {
                 // Process the events.
                 for ev in block_events {
@@ -379,6 +384,7 @@ impl BlockchainService {
             .get("error");
 
         if let Some(error) = error {
+            // TODO: Consider how to handle a low nonce error, and retry.
             return Err(anyhow::anyhow!("Error in RPC call: {}", error.to_string()));
         }
 
