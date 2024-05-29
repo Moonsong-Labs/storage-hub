@@ -1,15 +1,24 @@
 [relaychain]
 chain = "rococo-local"
 default_command = "tmp/polkadot"
+ws_port = 31000
 default_args = [
     "--no-hardware-benchmarks",
     "-lparachain=debug",
     "--database=paritydb",
 ]
 
-[[relaychain.node_groups]]
-count = 2
-name = "relay"
+[[relaychain.nodes]]
+name = "relay-0"
+validator = true
+ws_port = 31000
+add_to_bootnodes = true
+
+[[relaychain.nodes]]
+name = "relay-1"
+validator = true
+add_to_bootnodes = true
+
 
 [[parachains]]
 id = 2000
@@ -17,12 +26,14 @@ id = 2000
 [[parachains.collators]]
 command = "../target/release/storage-hub-node"
 name = "sh-collator"
+ws_port = 32000
 args = ["--no-hardware-benchmarks", "-lparachain=debug"]
 
 
 [[parachains.collators]]
 name = "sh-BSP"
 validator = false
+ws_port = 35000
 command = "../target/release/storage-hub-node"
 args = [
     "--no-hardware-benchmarks",
