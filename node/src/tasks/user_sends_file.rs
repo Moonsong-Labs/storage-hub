@@ -8,6 +8,7 @@ use shc_common::types::FileMetadata;
 
 use sc_network::PeerId;
 
+use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
 use storage_hub_infra::event_bus::EventHandler;
 
@@ -71,14 +72,14 @@ where
         );
 
         let file_metadata = FileMetadata {
-            owner: event.owner.to_string(),
+            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
             size: event.size.into(),
             location: event.location.into_inner(),
             fingerprint: event.fingerprint,
         };
 
-        let chunk_count = file_metadata.chunk_count();
-        let file_key = file_metadata.key::<T::Hash>();
+        let chunk_count = file_metadata.chunks_count();
+        let file_key = file_metadata.file_key::<T::Hash>();
 
         // Adds the multiaddresses of the BSP volunteering to store the file to the known addresses of the file transfer service.
         // This is required to establish a connection to the BSP.

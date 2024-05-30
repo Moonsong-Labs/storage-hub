@@ -1,21 +1,18 @@
 use std::fmt::Debug;
 
-use codec::decode_from_bytes;
 use codec::{Decode, Encode};
+use polkadot_primitives::BlakeTwo256;
 use serde::{Deserialize, Serialize};
 use sp_core::Hasher;
 use sp_trie::CompactProof;
-pub use storage_hub_runtime::FILE_CHUNK_SIZE;
+use storage_hub_runtime::Runtime;
+pub use storage_hub_runtime::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES};
+use storage_hub_traits::CommitmentVerifier;
 use trie_db::TrieLayout;
 
-// TODO: this is currently a placeholder in order to define Storage interface.
-/// This type mirrors the `FileLocation<T>` type from the runtime, which is a BoundedVec.
-type FileLocation = Vec<u8>;
 /// The hash type of trie node keys
 pub type HashT<T> = <T as TrieLayout>::Hash;
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
-
-type Hash = [u8; 32];
 
 /// FileKey is the identifier for a file.
 /// Computed as the hash of the FileMetadata.
@@ -62,96 +59,15 @@ impl AsRef<[u8; 32]> for FileKey {
     }
 }
 
-#[derive(Encode, Decode, Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub struct Fingerprint(Hash);
+pub type KeyVerifier = <Runtime as pallet_proofs_dealer::Config>::KeyVerifier;
+pub type FileKeyProof = <KeyVerifier as CommitmentVerifier>::Proof;
 
-impl Fingerprint {
-    /// Returns the hash of the fingerprint.
-    pub fn hash(&self) -> Hash {
-        self.0
-    }
-}
+pub const H_LENGTH: usize = BlakeTwo256::LENGTH;
 
-impl From<Hash> for Fingerprint {
-    fn from(hash: Hash) -> Self {
-        Self(hash)
-    }
-}
-
-impl Into<Hash> for Fingerprint {
-    fn into(self) -> Hash {
-        self.0
-    }
-}
-
-impl From<&[u8]> for Fingerprint {
-    fn from(bytes: &[u8]) -> Self {
-        let mut hash = [0u8; 32];
-        hash.copy_from_slice(&bytes);
-        Self(hash)
-    }
-}
-
-impl AsRef<[u8]> for Fingerprint {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-// TODO: this is currently a placeholder in order to define Storage interface.
-/// FileMetadata contains information about a file.
-/// Most importantly, the fingerprint which is the root Merkle hash of the file.
-#[derive(Encode, Decode, Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct FileMetadata {
-    pub owner: String,
-    pub location: FileLocation,
-    pub size: u64,
-    pub fingerprint: Fingerprint,
-}
-
-impl FileMetadata {
-    pub fn new(owner: String, location: Vec<u8>, size: u64, fingerprint: Fingerprint) -> Self {
-        Self {
-            owner,
-            location,
-            size,
-            fingerprint,
-        }
-    }
-
-    pub fn chunk_count(&self) -> u64 {
-        let full_chunks = self.size / (FILE_CHUNK_SIZE as u64);
-        if self.size % (FILE_CHUNK_SIZE as u64) > 0 {
-            return full_chunks + 1;
-        }
-        full_chunks
-    }
-
-    /// Generates a hash key from the file metadata using the provided [`Hasher`].
-    ///
-    /// The key is created by combining the [SCALE](https://wentelteefje.github.io/parity-scale-codec-page/) encoded representations of the file's
-    /// `owner`, `location`, `size`, and `fingerprint` hash. This order must be respected to ensure the same resultant hash is generated for the same metadata.
-    /// The encoded values are flattened into a single byte vector and finally hashed.
-    pub fn key<H: Hasher>(&self) -> H::Out {
-        H::hash(
-            &[
-                &self.owner.encode(),
-                &self.location.encode(),
-                &self.size.encode(),
-                &self.fingerprint.hash().encode(),
-            ]
-            .into_iter()
-            .flatten()
-            .cloned()
-            .collect::<Vec<u8>>(),
-        )
-    }
-
-    /// Decode metadata from the [SCALE](https://wentelteefje.github.io/parity-scale-codec-page/) encoded metadata bytes.
-    pub fn from_scale_encoded(bytes: Vec<u8>) -> Result<Self, codec::Error> {
-        decode_from_bytes(bytes.into())
-    }
-}
+pub type Hash = shp_file_key_verifier::Hash<H_LENGTH>;
+pub type Fingerprint = shp_file_key_verifier::Fingerprint<H_LENGTH>;
+pub type FileMetadata =
+    shp_file_key_verifier::FileMetadata<H_LENGTH, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES>;
 
 /// Typed u64 representing the index of a file [`Chunk`]. Indexed from 0.
 pub type ChunkId = u64;

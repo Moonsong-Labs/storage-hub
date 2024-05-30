@@ -4,8 +4,8 @@ use codec::{Decode, Encode};
 use frame_support::sp_runtime::DispatchError;
 use num_bigint::BigUint;
 use scale_info::TypeInfo;
+use serde::{Deserialize, Serialize};
 use shp_traits::AsCompact;
-use sp_core::Hasher;
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
 use storage_hub_traits::CommitmentVerifier;
@@ -29,13 +29,133 @@ pub struct FileKeyVerifier<
     pub _phantom: core::marker::PhantomData<T>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, TypeInfo, Encode, Decode)]
-pub struct FileKeyProof<const H_LENGTH: usize> {
+pub type Hash<const H_LENGTH: usize> = [u8; H_LENGTH];
+
+#[derive(Encode, Decode, Clone, Copy, Debug, PartialEq, Eq, TypeInfo)]
+pub struct Fingerprint<const H_LENGTH: usize>(Hash<H_LENGTH>);
+
+impl<const H_LENGTH: usize> Default for Fingerprint<H_LENGTH> {
+    fn default() -> Self {
+        Self([0u8; H_LENGTH])
+    }
+}
+
+impl<const H_LENGTH: usize> Serialize for Fingerprint<H_LENGTH> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        self.0.to_vec().serialize(serializer)
+    }
+}
+
+impl<'de, const H_LENGTH: usize> Deserialize<'de> for Fingerprint<H_LENGTH> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let vec = Vec::<u8>::deserialize(deserializer)?;
+        let mut hash = [0u8; H_LENGTH];
+        hash.copy_from_slice(&vec);
+        Ok(Self(hash))
+    }
+}
+
+impl<const H_LENGTH: usize> Fingerprint<H_LENGTH> {
+    /// Returns the hash of the fingerprint.
+    pub fn as_hash(&self) -> Hash<H_LENGTH> {
+        self.0
+    }
+}
+
+impl<const H_LENGTH: usize> From<Hash<H_LENGTH>> for Fingerprint<H_LENGTH> {
+    fn from(hash: Hash<H_LENGTH>) -> Self {
+        Self(hash)
+    }
+}
+
+impl<const H_LENGTH: usize> Into<Hash<H_LENGTH>> for Fingerprint<H_LENGTH> {
+    fn into(self) -> Hash<H_LENGTH> {
+        self.0
+    }
+}
+
+impl<const H_LENGTH: usize> From<&[u8]> for Fingerprint<H_LENGTH> {
+    fn from(bytes: &[u8]) -> Self {
+        let mut hash = [0u8; H_LENGTH];
+        hash.copy_from_slice(&bytes);
+        Self(hash)
+    }
+}
+
+impl<const H_LENGTH: usize> AsRef<[u8]> for Fingerprint<H_LENGTH> {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, TypeInfo, Encode, Decode, Serialize, Deserialize)]
+pub struct FileMetadata<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
+{
     pub owner: Vec<u8>,
     pub location: Vec<u8>,
+    #[codec(compact)]
     pub size: u64,
-    pub fingerprint: [u8; H_LENGTH],
+    pub fingerprint: Fingerprint<H_LENGTH>,
+}
+
+impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
+    FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
+{
+    pub fn new(
+        owner: Vec<u8>,
+        location: Vec<u8>,
+        size: u64,
+        fingerprint: Fingerprint<H_LENGTH>,
+    ) -> Self {
+        Self {
+            owner,
+            location,
+            size,
+            fingerprint,
+        }
+    }
+
+    pub fn file_key<T: sp_core::Hasher>(&self) -> T::Out {
+        T::hash(self.encode().as_slice())
+    }
+
+    pub fn chunks_to_check(&self) -> u64 {
+        self.size / SIZE_TO_CHALLENGES + (self.size % SIZE_TO_CHALLENGES != 0) as u64
+    }
+
+    pub fn chunks_count(&self) -> u64 {
+        self.size / CHUNK_SIZE + (self.size % CHUNK_SIZE != 0) as u64
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, TypeInfo, Encode, Decode)]
+pub struct FileKeyProof<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
+{
+    pub file_metadata: FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>,
     pub proof: CompactProof,
+}
+
+impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
+    FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
+{
+    pub fn new(
+        owner: Vec<u8>,
+        location: Vec<u8>,
+        size: u64,
+        fingerprint: Fingerprint<H_LENGTH>,
+        proof: CompactProof,
+    ) -> Self {
+        Self {
+            file_metadata: FileMetadata::new(owner, location, size, fingerprint),
+            proof,
+        }
+    }
 }
 
 /// Implement the `CommitmentVerifier` trait for the `FileKeyVerifier` struct.
@@ -48,7 +168,7 @@ impl<
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
-    type Proof = FileKeyProof<H_LENGTH>;
+    type Proof = FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>;
     type Commitment = <T::Hash as sp_core::Hasher>::Out;
     type Challenge = <T::Hash as sp_core::Hasher>::Out;
 
@@ -67,24 +187,10 @@ where
         }
 
         // Construct file key from the fields in the proof.
-        let file_key = T::Hash::hash(
-            &[
-                &proof.owner.encode(),
-                &proof.location.encode(),
-                &AsCompact(proof.size).encode(),
-                &proof.fingerprint.encode(),
-            ]
-            .into_iter()
-            .flatten()
-            .cloned()
-            .collect::<Vec<u8>>(),
-        );
+        let file_key = proof.file_metadata.file_key::<T::Hash>();
 
         // Check that the number of challenges is proportional to the size of the file.
-        let mut chunks_to_check = proof.size / SIZE_TO_CHALLENGES;
-        if proof.size % SIZE_TO_CHALLENGES != 0 {
-            chunks_to_check += 1;
-        }
+        let chunks_to_check = proof.file_metadata.chunks_to_check();
         if challenges.len() != chunks_to_check as usize {
             return Err(
                 "Number of challenges does not match the number of chunks that should have been challenged for a file of this size.".into(),
@@ -100,7 +206,7 @@ where
         };
 
         // Convert the fingerprint from the proof to the output of the hasher.
-        let expected_root: &[u8; H_LENGTH] = &proof.fingerprint;
+        let expected_root: &[u8; H_LENGTH] = &proof.file_metadata.fingerprint.into();
         let expected_root: Self::Commitment = expected_root
             .try_into()
             .map_err(|_| "Failed to convert fingerprint to a hasher output.")?;
@@ -123,10 +229,7 @@ where
         // and check if the resulting leaf is in the proof.
         while let Some(challenge) = challenges_iter.next() {
             // Calculate the chunks of the file based on its size.
-            let mut chunks = proof.size / CHUNK_SIZE;
-            if proof.size % CHUNK_SIZE != 0 {
-                chunks += 1;
-            }
+            let chunks = proof.file_metadata.chunks_count();
 
             // Calculate the modulo of the challenge with the number of chunks in the file.
             // The challenge is a big endian 32 byte array.
