@@ -145,7 +145,7 @@ These generated descriptors are used throughout the tests to interact with relay
 
 #### Weird error for `Incompatible runtime entry`
 
-Occaisionally you might see this error when trying to use the Polkadot-API typed interfaces to interact with a storageHub chain.
+Occasionally you might see this error when trying to use the Polkadot-API typed interfaces to interact with a storageHub chain.
 
 ```shell
 Waiting a maximum of 60 seconds for Local Testnet chain to be ready...✅
@@ -174,5 +174,5 @@ This is caused by the decorated API referring to a different version of the wasm
 > This can be fixed by running the following:
 >
 > 1. running a local network: `bun zombie:run:native`
-> 2. generating new metadata blob: `bun scalegen`
+> 2. in a separate terminal, generating new metadata blob: `bun scalegen`
 > 3. generating new types bundle: `bun typegen`
