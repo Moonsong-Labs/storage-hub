@@ -3,7 +3,7 @@
 use frame_support::sp_runtime::DispatchError;
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
-use storage_hub_traits::CommitmentVerifier;
+use shp_traits::CommitmentVerifier;
 use trie_db::TrieIterator;
 
 #[cfg(test)]

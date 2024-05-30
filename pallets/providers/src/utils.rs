@@ -13,7 +13,7 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_runtime::BoundedVec;
-use storage_hub_traits::{MutateProvidersInterface, ProvidersInterface, ReadProvidersInterface};
+use shp_traits::{MutateProvidersInterface, ProvidersInterface, ReadProvidersInterface};
 
 use crate::*;
 

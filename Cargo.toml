@@ -166,7 +166,6 @@ forest-manager = { path = "client/forest-manager", default-features = false }
 shc-common = { package = "common", path = "client/common", default-features = false }
 shc-rpc = { path = "client/rpc", default-features = false }
 
-storage-hub-traits = { path = "support/traits", default-features = false }
 storage-hub-infra = { path = "support/infra", default-features = false }
 storage-hub-runtime = { path = "runtime", default-features = false }
 

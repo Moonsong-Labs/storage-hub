@@ -14,7 +14,7 @@ use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, Convert, Hash, Zero},
     ArithmeticError, DispatchError, Saturating,
 };
-use storage_hub_traits::{CommitmentVerifier, ProofsDealerInterface, ProvidersInterface};
+use shp_traits::{CommitmentVerifier, ProofsDealerInterface, ProvidersInterface};
 
 use crate::{
     pallet,

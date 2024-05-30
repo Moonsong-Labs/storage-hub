@@ -392,7 +392,7 @@ fn proofs_dealer_trait_challenge_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Challenge using trait.
-        <ProofsDealer as storage_hub_traits::ProofsDealerInterface>::challenge(&file_key).unwrap();
+        <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge(&file_key).unwrap();
 
         // Check that the challenge is in the queue.
         let challenges_queue = crate::ChallengesQueue::<Test>::get();
@@ -412,13 +412,13 @@ fn proofs_dealer_trait_challenge_overflow_challenges_queue_fail() {
         for i in 0..queue_size {
             let file_key = BlakeTwo256::hash(&i.to_le_bytes());
             assert_ok!(
-                <ProofsDealer as storage_hub_traits::ProofsDealerInterface>::challenge(&file_key)
+                <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge(&file_key)
             );
         }
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            <ProofsDealer as storage_hub_traits::ProofsDealerInterface>::challenge(&file_key),
+            <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge(&file_key),
             crate::Error::<Test>::ChallengesQueueOverflow
         );
     });
@@ -431,7 +431,7 @@ fn proofs_dealer_trait_challenge_with_priority_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Challenge using trait.
-        <ProofsDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
+        <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
             &file_key,
         )
         .unwrap();
@@ -454,7 +454,7 @@ fn proofs_dealer_trait_challenge_with_priority_overflow_challenges_queue_fail() 
         for i in 0..queue_size {
             let file_key = BlakeTwo256::hash(&i.to_le_bytes());
             assert_ok!(
-                <ProofsDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
+                <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                     &file_key
                 )
             );
@@ -462,7 +462,7 @@ fn proofs_dealer_trait_challenge_with_priority_overflow_challenges_queue_fail() 
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            <ProofsDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(&file_key),
+            <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(&file_key),
             crate::Error::<Test>::PriorityChallengesQueueOverflow
         );
     });

@@ -12,7 +12,7 @@ use sp_runtime::{
     BuildStorage, DispatchError, DispatchResult, SaturatedConversion,
 };
 use sp_trie::CompactProof;
-use storage_hub_traits::{CommitmentVerifier, MaybeDebug, SubscribeProvidersInterface};
+use shp_traits::{CommitmentVerifier, MaybeDebug, SubscribeProvidersInterface};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;

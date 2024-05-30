@@ -6963,12 +6963,12 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serde",
+ "shp-traits",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io 30.0.0",
  "sp-runtime 31.0.1",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-traits",
 ]
 
 [[package]]
@@ -7294,12 +7294,12 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serde",
+ "shp-traits",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io 30.0.0",
  "sp-runtime 31.0.1",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-traits",
 ]
 
 [[package]]
@@ -7617,10 +7617,10 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serde",
+ "shp-traits",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io 30.0.0",
  "sp-runtime 31.0.1",
- "storage-hub-traits",
 ]
 
 [[package]]
@@ -12368,7 +12368,6 @@ dependencies = [
  "sp-runtime 31.0.1",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-traits",
  "trie-db 0.29.1",
 ]
 
@@ -12383,12 +12382,12 @@ dependencies = [
  "reference-trie",
  "scale-info",
  "serde",
+ "shp-traits",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io 30.0.0",
  "sp-runtime 31.0.1",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-traits",
  "trie-db 0.29.1",
 ]
 
@@ -14594,6 +14593,7 @@ dependencies = [
  "scale-info",
  "shp-file-key-verifier",
  "shp-forest-verifier",
+ "shp-traits",
  "smallvec",
  "sp-api 26.0.0",
  "sp-block-builder",
@@ -14612,22 +14612,7 @@ dependencies = [
  "staging-xcm 7.0.0",
  "staging-xcm-builder 7.0.0",
  "staging-xcm-executor 7.0.0",
- "storage-hub-traits",
  "substrate-wasm-builder",
-]
-
-[[package]]
-name = "storage-hub-traits"
-version = "0.1.0"
-dependencies = [
- "frame-support 28.0.0",
- "frame-system 28.0.0",
- "parity-scale-codec",
- "scale-info",
- "serde",
- "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
- "sp-io 30.0.0",
- "sp-runtime 31.0.1",
 ]
 
 [[package]]

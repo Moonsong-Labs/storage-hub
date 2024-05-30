@@ -11,7 +11,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
     BuildStorage, DispatchResult,
 };
-use storage_hub_traits::SubscribeProvidersInterface;
+use shp_traits::SubscribeProvidersInterface;
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;

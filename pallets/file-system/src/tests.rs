@@ -14,7 +14,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Get, Hash, Zero},
     AccountId32, BoundedVec, FixedU128,
 };
-use storage_hub_traits::SubscribeProvidersInterface;
+use shp_traits::SubscribeProvidersInterface;
 
 #[test]
 fn request_storage_success() {

@@ -14,8 +14,8 @@ use frame_support::traits::{
 };
 use frame_support::{assert_noop, assert_ok, dispatch::Pays, BoundedVec};
 use frame_system::pallet_prelude::BlockNumberFor;
-use storage_hub_traits::MutateProvidersInterface;
-use storage_hub_traits::ProvidersInterface;
+use shp_traits::MutateProvidersInterface;
+use shp_traits::ProvidersInterface;
 
 type NativeBalance = <Test as crate::Config>::NativeBalance;
 type AccountId = <Test as frame_system::Config>::AccountId;

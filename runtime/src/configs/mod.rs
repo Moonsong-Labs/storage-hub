@@ -48,6 +48,7 @@ use polkadot_runtime_common::{
 };
 use shp_file_key_verifier::FileKeyVerifier;
 use shp_forest_verifier::ForestVerifier;
+use shp_traits::{CommitmentVerifier, MaybeDebug};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
@@ -58,7 +59,6 @@ use sp_std::vec::Vec;
 use sp_trie::CompactProof;
 use sp_trie::LayoutV1;
 use sp_version::RuntimeVersion;
-use storage_hub_traits::{CommitmentVerifier, MaybeDebug};
 use xcm::latest::prelude::BodyId;
 
 use crate::{ParachainInfo, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES};
