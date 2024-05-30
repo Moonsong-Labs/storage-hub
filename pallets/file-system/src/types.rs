@@ -2,7 +2,7 @@ use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::BoundedVec;
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
-use storage_hub_traits::ProvidersInterface;
+use shp_traits::ProvidersInterface;
 
 use crate::Config;
 

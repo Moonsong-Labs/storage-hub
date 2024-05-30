@@ -79,7 +79,7 @@ where
 
         if let Some(ref msp) = msp {
             ensure!(
-                <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_msp(msp),
+                <T::Providers as shp_traits::ReadProvidersInterface>::is_msp(msp),
                 Error::<T>::NotAMsp
             );
         }
