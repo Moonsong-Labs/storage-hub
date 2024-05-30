@@ -44,7 +44,7 @@ mod create_bucket_tests {
 
             // Check if collection was created
             assert!(
-                <Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id)
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
                     .unwrap()
                     .is_some()
             );
@@ -87,7 +87,7 @@ mod create_bucket_tests {
 
             // Check that the bucket does not have a corresponding collection
             assert!(
-                <Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id)
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
                     .unwrap()
                     .is_none()
             );
@@ -149,7 +149,7 @@ mod update_bucket_privacy_tests {
 
             // Check if collection was created
             assert!(
-                <Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id)
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
                     .unwrap()
                     .is_some()
             );
@@ -171,7 +171,7 @@ mod update_bucket_privacy_tests {
 
             // Check that the bucket still has a corresponding collection
             assert!(
-                <Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id)
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
                     .unwrap()
                     .is_some()
             );
@@ -237,13 +237,13 @@ mod create_and_associate_collection_with_bucket_tests {
 
             // Check if collection was created
             assert!(
-                <Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id)
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
                     .unwrap()
                     .is_some()
             );
 
             let collection_id =
-                <Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id)
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
                     .unwrap()
                     .expect("Collection ID should exist");
 
@@ -253,7 +253,7 @@ mod create_and_associate_collection_with_bucket_tests {
 
             // Check if collection was associated with the bucket
             assert_ne!(
-                <Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id)
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
                     .unwrap()
                     .expect("Collection ID should exist"),
                 collection_id

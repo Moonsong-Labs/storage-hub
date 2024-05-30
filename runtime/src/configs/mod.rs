@@ -447,7 +447,7 @@ impl pallet_storage_providers::Config for Runtime {
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
     type ValuePropId = Hash;
-    type BucketNftCollectionId = <Self as pallet_nfts::Config>::CollectionId;
+    type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
@@ -553,8 +553,6 @@ impl pallet_file_system::Config for Runtime {
     type ProofDealer = ProofsDealer;
     type ThresholdType = ThresholdType;
     type Currency = Balances;
-    type NftCollectionId = <Self as pallet_nfts::Config>::CollectionId;
-    type NftId = <Self as pallet_nfts::Config>::ItemId;
     type Nfts = Nfts;
     type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
     type AssignmentThresholdAsymptote = ThresholdAsymptote;

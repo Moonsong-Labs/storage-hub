@@ -45,7 +45,7 @@ pub mod pallet {
         /// The trait for reading storage provider data.
         type Providers: storage_hub_traits::ReadProvidersInterface<
             AccountId = Self::AccountId,
-            BucketNftCollectionId = <Self as pallet_nfts::Config>::CollectionId,
+            ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId,
         >;
 
         /// Helper for benchmarking.

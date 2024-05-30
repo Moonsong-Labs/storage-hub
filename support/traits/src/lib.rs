@@ -78,7 +78,7 @@ pub trait ProvidersConfig {
         + MaxEncodedLen
         + FullCodec;
     /// The type of the Bucket NFT Collection ID.
-    type BucketNftCollectionId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
+    type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
 }
 
 /// A trait to lookup registered Providers, their Merkle Patricia Trie roots and their stake.
@@ -131,9 +131,9 @@ pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
     ) -> Result<bool, DispatchError>;
 
     /// Get `collection_id` of a bucket if there is one.
-    fn get_collection_id_of_bucket(
+    fn get_read_access_group_id_of_bucket(
         bucket_id: &Self::BucketId,
-    ) -> Result<Option<Self::BucketNftCollectionId>, DispatchError>;
+    ) -> Result<Option<Self::ReadAccessGroupId>, DispatchError>;
 
     /// Check if a bucket is private.
     fn is_bucket_private(bucket_id: &Self::BucketId) -> Result<bool, DispatchError>;
@@ -185,16 +185,16 @@ pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,
-        collection_id: Option<Self::BucketNftCollectionId>,
+        collection_id: Option<Self::ReadAccessGroupId>,
     ) -> DispatchResult;
 
     /// Update bucket privacy settings
     fn update_bucket_privacy(bucket_id: Self::BucketId, privacy: bool) -> DispatchResult;
 
     /// Update bucket collection ID
-    fn update_bucket_collection_id(
+    fn update_bucket_read_access_group_id(
         bucket_id: Self::BucketId,
-        maybe_collection_id: Option<Self::BucketNftCollectionId>,
+        maybe_collection_id: Option<Self::ReadAccessGroupId>,
     ) -> DispatchResult;
 
     /// Change the root of a bucket

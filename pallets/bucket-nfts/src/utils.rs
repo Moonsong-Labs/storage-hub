@@ -37,7 +37,7 @@ where
         // It is possible that the collection ID does not exist since users
         // can delete collections by calling the nfts pallet directly. Users
         // can call `create_and_associate_collection` from the file system pallet to fix this.
-        let collection_id = T::Providers::get_collection_id_of_bucket(&bucket)?
+        let collection_id = T::Providers::get_read_access_group_id_of_bucket(&bucket)?
             .ok_or(Error::<T>::NoCorrespondingCollection)?;
 
         let origin = Self::sign(issuer);
@@ -75,7 +75,7 @@ where
         // Get the collection ID of the bucket.
         // This should never fail because the file system pallet ensures that collections are created whenever a bucket is created with private access
         // or when a bucket is made private after being public.
-        let collection_id = T::Providers::get_collection_id_of_bucket(&bucket)?
+        let collection_id = T::Providers::get_read_access_group_id_of_bucket(&bucket)?
             .ok_or(Error::<T>::NoCorrespondingCollection)?;
 
         // We do not add any additional redundant checks already covered by the `set_metadata` function from the `pallet-nfts` pallet.

@@ -1,5 +1,8 @@
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{traits::Currency, BoundedVec};
+use frame_support::{
+    traits::{nonfungibles_v2::Inspect as NonFungiblesInspect, Currency},
+    BoundedVec,
+};
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::CollectionConfig;
 use scale_info::TypeInfo;
@@ -131,9 +134,14 @@ pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;
 type BalanceOf<T> =
     <<T as crate::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
+/// Alias for the `CollectionId` type used in the Nfts pallet.
+pub(super) type CollectionIdFor<T> = <<T as crate::Config>::Nfts as NonFungiblesInspect<
+    <T as frame_system::Config>::AccountId,
+>>::CollectionId;
+
 /// Alias for the `CollectionConfig` type used in the FileSystem pallet.
 pub(super) type CollectionConfigFor<T> =
-    CollectionConfig<BalanceOf<T>, BlockNumberFor<T>, <T as Config>::NftCollectionId>;
+    CollectionConfig<BalanceOf<T>, BlockNumberFor<T>, CollectionIdFor<T>>;
 
 /// Alias for the `BucketNameLimit` type used in the ReadProvidersInterface.
 pub(super) type BucketNameLimitFor<T> =

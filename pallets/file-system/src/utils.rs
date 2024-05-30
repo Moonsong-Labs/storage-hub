@@ -17,8 +17,8 @@ use storage_hub_traits::{MutateProvidersInterface, ReadProvidersInterface};
 use crate::{
     pallet,
     types::{
-        BucketIdFor, BucketNameLimitFor, FileKeyHasher, FileLocation, Fingerprint, ForestProof,
-        KeyProof, MaxBspsPerStorageRequest, MultiAddresses, PeerIds, StorageData,
+        BucketIdFor, BucketNameLimitFor, CollectionIdFor, FileKeyHasher, FileLocation, Fingerprint,
+        ForestProof, KeyProof, MaxBspsPerStorageRequest, MultiAddresses, PeerIds, StorageData,
         StorageRequestBspsMetadata, StorageRequestMetadata,
     },
     Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
@@ -69,7 +69,9 @@ where
         msp_account_id: T::AccountId,
         name: BoundedVec<u8, BucketNameLimitFor<T>>,
         private: bool,
-    ) -> Result<(BucketIdFor<T>, Option<T::NftCollectionId>), DispatchError> {
+    ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
+        // TODO: Hold user funds for the bucket creation.
+
         let msp_provider_id = <<T as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::get_provider(msp_account_id.clone())
                 .ok_or(Error::<T>::NotAMsp)?;
 
@@ -88,7 +90,7 @@ where
             sender,
             bucket_id,
             private,
-            maybe_collection_id,
+            maybe_collection_id.clone(),
         )?;
 
         Ok((bucket_id, maybe_collection_id))
@@ -101,27 +103,30 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
         private: bool,
-    ) -> Result<Option<T::NftCollectionId>, DispatchError> {
+    ) -> Result<Option<CollectionIdFor<T>>, DispatchError> {
         // Check that the sender is the owner of the bucket.
         <T::Providers as ReadProvidersInterface>::is_bucket_owner(&sender, &bucket_id)?;
 
-        let maybe_collection_id = T::Providers::get_collection_id_of_bucket(&bucket_id)?;
+        let maybe_collection_id = T::Providers::get_read_access_group_id_of_bucket(&bucket_id)?;
 
         // Create collection if bucket will become private and there is no corresponding collection.
         let collection_id = match (private, maybe_collection_id) {
+            // Create collection if the bucket will be private and there is no collection associated with it.
             (true, None) => {
                 // Create collection since the bucket will be private.
                 let new_collection_id = Self::create_collection(sender)?;
 
                 // Update the collection id in the bucket.
-                <T::Providers as MutateProvidersInterface>::update_bucket_collection_id(
+                <T::Providers as MutateProvidersInterface>::update_bucket_read_access_group_id(
                     bucket_id,
-                    Some(new_collection_id),
+                    Some(new_collection_id.clone()),
                 )?;
 
                 Some(new_collection_id)
             }
+            // Return the collection id if there is one associated with the bucket in any case (private or not).
             (_, Some(collection_id)) => Some(collection_id),
+            // Return None if the bucket will be public and there is no collection associated with it.
             (false, None) => None,
         };
 
@@ -142,7 +147,7 @@ where
     pub(crate) fn do_create_and_associate_collection_with_bucket(
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
-    ) -> Result<T::NftCollectionId, DispatchError> {
+    ) -> Result<CollectionIdFor<T>, DispatchError> {
         // Check if sender is the owner of the bucket.
         <T::Providers as ReadProvidersInterface>::is_bucket_owner(&sender, &bucket_id)?;
 
@@ -154,9 +159,9 @@ where
 
         let collection_id = Self::create_collection(sender)?;
 
-        <T::Providers as MutateProvidersInterface>::update_bucket_collection_id(
+        <T::Providers as MutateProvidersInterface>::update_bucket_read_access_group_id(
             bucket_id,
-            Some(collection_id),
+            Some(collection_id.clone()),
         )?;
 
         Ok(collection_id)
@@ -653,7 +658,7 @@ where
     }
 
     /// Create a collection.
-    fn create_collection(owner: T::AccountId) -> Result<T::NftCollectionId, DispatchError> {
+    fn create_collection(owner: T::AccountId) -> Result<CollectionIdFor<T>, DispatchError> {
         let config: CollectionConfigFor<T> = CollectionConfig {
             settings: CollectionSettings::all_enabled(),
             max_supply: None,

@@ -52,7 +52,7 @@ pub struct Bucket<T: Config> {
     pub user_id: T::AccountId,
     pub msp_id: MainStorageProviderId<T>,
     pub private: bool,
-    pub collection_id: Option<T::BucketNftCollectionId>,
+    pub read_access_group_id: Option<T::ReadAccessGroupId>,
 }
 
 /// Enum that represents a Storage Provider. It holds either a BackupStorageProvider or a MainStorageProvider,

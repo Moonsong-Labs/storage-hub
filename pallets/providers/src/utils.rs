@@ -834,15 +834,20 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
         user_id: T::AccountId,
         bucket_id: BucketId<T>,
         private: bool,
-        collection_id: Option<T::BucketNftCollectionId>,
+        read_access_group_id: Option<T::ReadAccessGroupId>,
     ) -> DispatchResult {
-        // TODO: Check that the bucket does not exist yet
+        // Check if bucket already exists
+        ensure!(
+            !Buckets::<T>::contains_key(&bucket_id),
+            Error::<T>::BucketAlreadyExists
+        );
+
         let bucket = Bucket {
             root: MerklePatriciaRoot::<T>::default(),
             user_id,
             msp_id,
             private,
-            collection_id,
+            read_access_group_id,
         };
         Buckets::<T>::insert(&bucket_id, &bucket);
         Ok(())
@@ -860,13 +865,13 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
         })
     }
 
-    fn update_bucket_collection_id(
+    fn update_bucket_read_access_group_id(
         bucket_id: <Self as ProvidersConfig>::BucketId,
-        maybe_collection_id: Option<<Self as ProvidersConfig>::BucketNftCollectionId>,
+        maybe_read_access_group_id: Option<<Self as ProvidersConfig>::ReadAccessGroupId>,
     ) -> DispatchResult {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
-            bucket.collection_id = maybe_collection_id;
+            bucket.read_access_group_id = maybe_read_access_group_id;
 
             Ok(())
         })
@@ -917,7 +922,7 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
 
 impl<T: pallet::Config> ProvidersConfig for pallet::Pallet<T> {
     type BucketId = BucketId<T>;
-    type BucketNftCollectionId = T::BucketNftCollectionId;
+    type ReadAccessGroupId = T::ReadAccessGroupId;
 }
 
 impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
@@ -964,11 +969,11 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         Ok(bucket.private)
     }
 
-    fn get_collection_id_of_bucket(
+    fn get_read_access_group_id_of_bucket(
         bucket_id: &<Self as ProvidersConfig>::BucketId,
-    ) -> Result<Option<<Self as ProvidersConfig>::BucketNftCollectionId>, DispatchError> {
+    ) -> Result<Option<<Self as ProvidersConfig>::ReadAccessGroupId>, DispatchError> {
         let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
-        Ok(bucket.collection_id)
+        Ok(bucket.read_access_group_id)
     }
 
     fn derive_bucket_id(

@@ -130,7 +130,7 @@ pub mod pallet {
         type Subscribers: SubscribeProvidersInterface;
 
         /// The type of the Bucket NFT Collection ID.
-        type BucketNftCollectionId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
+        type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
 
         /// The minimum amount that an account has to deposit to become a storage provider.
         #[pallet::constant]
@@ -415,6 +415,8 @@ pub mod pallet {
         SpRegisteredButDataNotFound,
         /// Error thrown when a bucket ID is not found in storage.
         BucketNotFound,
+        /// Error thrown when a bucket ID already exists in storage.
+        BucketAlreadyExists,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately

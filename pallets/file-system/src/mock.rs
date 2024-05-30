@@ -182,7 +182,7 @@ impl pallet_storage_providers::Config for Test {
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
-    type BucketNftCollectionId = <Self as pallet_nfts::Config>::CollectionId;
+    type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = ConstU32<100>;
@@ -272,8 +272,6 @@ impl crate::Config for Test {
     type StorageRequestBspsRequiredType = u32;
     type ThresholdType = ThresholdType;
     type Currency = Balances;
-    type NftCollectionId = <Self as pallet_nfts::Config>::CollectionId;
-    type NftId = <Self as pallet_nfts::Config>::ItemId;
     type Nfts = Nfts;
     type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
     type AssignmentThresholdAsymptote = ThresholdAsymptote;

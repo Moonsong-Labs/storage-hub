@@ -44,7 +44,7 @@ mod benchmarking;
 #[frame_support::pallet]
 pub mod pallet {
     use super::types::*;
-    use codec::{Codec, HasCompact};
+    use codec::HasCompact;
     use frame_support::{
         dispatch::DispatchResult,
         pallet_prelude::{ValueQuery, *},
@@ -61,7 +61,6 @@ pub mod pallet {
         traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
         FixedPointNumber,
     };
-    use sp_std::fmt::Display;
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -70,7 +69,7 @@ pub mod pallet {
 
         /// The trait for reading and mutating storage provider data.
         type Providers: storage_hub_traits::ReadProvidersInterface<AccountId = Self::AccountId>
-            + storage_hub_traits::MutateProvidersInterface<AccountId = Self::AccountId, BucketNftCollectionId = Self::NftCollectionId, MerklePatriciaRoot = <Self::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash>;
+            + storage_hub_traits::MutateProvidersInterface<AccountId = Self::AccountId, ReadAccessGroupId = CollectionIdFor<Self>, MerklePatriciaRoot = <Self::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash>;
 
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: storage_hub_traits::ProofsDealerInterface<
@@ -131,18 +130,9 @@ pub mod pallet {
         /// The currency mechanism, used for paying for reserves.
         type Currency: Currency<Self::AccountId>;
 
-        /// Identifier for the collection of NFT.
-        type NftCollectionId: Member + Parameter + MaxEncodedLen + Copy + Codec + Display;
-
-        /// The type used to identify an NFT within a collection.
-        type NftId: Member + Parameter + MaxEncodedLen + Copy + Display;
-
         /// Registry for minted NFTs.
-        type Nfts: NonFungiblesInspect<
-                Self::AccountId,
-                ItemId = Self::NftId,
-                CollectionId = Self::NftCollectionId,
-            > + Create<Self::AccountId, CollectionConfigFor<Self>>;
+        type Nfts: NonFungiblesInspect<Self::AccountId>
+            + Create<Self::AccountId, CollectionConfigFor<Self>>;
 
         /// The multiplier increases the threshold over time (blocks) which increases the
         /// likelihood of a BSP successfully volunteering to store a file.
@@ -296,21 +286,21 @@ pub mod pallet {
             who: T::AccountId,
             bucket_id: BucketIdFor<T>,
             name: BoundedVec<u8, BucketNameLimitFor<T>>,
-            collection_id: Option<T::NftCollectionId>,
+            collection_id: Option<CollectionIdFor<T>>,
             private: bool,
         },
         /// Notifies that a bucket's privacy has been updated.
         BucketPrivacyUpdated {
             who: T::AccountId,
             bucket_id: BucketIdFor<T>,
-            collection_id: Option<T::NftCollectionId>,
+            collection_id: Option<CollectionIdFor<T>>,
             private: bool,
         },
         /// Notifies that a new collection has been created and associated with a bucket.
         NewCollectionAndAssociation {
             who: T::AccountId,
             bucket_id: BucketIdFor<T>,
-            collection_id: T::NftCollectionId,
+            collection_id: CollectionIdFor<T>,
         },
         /// Notifies that a new file has been requested to be stored.
         NewStorageRequest {
