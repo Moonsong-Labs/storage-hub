@@ -5,6 +5,7 @@ use frame_support::{
 };
 use frame_system as system;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
+use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     traits::{BlakeTwo256, Bounded, Convert, IdentityLookup},
     AccountId32, BuildStorage, DispatchError, FixedU128, SaturatedConversion,
@@ -258,13 +259,9 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 
     pallet_balances::GenesisConfig::<Test> {
         balances: vec![
-            (AccountId32::new([1; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([2; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([3; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([4; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([5; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([6; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([7; 32]), 1_000_000_000_000_000),
+            (Keyring::Alice.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Bob.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
         ],
     }
     .assimilate_storage(&mut t)

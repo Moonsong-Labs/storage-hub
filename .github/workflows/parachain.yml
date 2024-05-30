@@ -196,6 +196,7 @@ jobs:
       - name: Setup
         run: |
           cd test
+          bun scalegen
           bun typegen
           bun zombie:setup:native
       - name: Run Zombienet Test!

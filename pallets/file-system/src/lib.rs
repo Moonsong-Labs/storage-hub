@@ -321,6 +321,8 @@ pub mod pallet {
         BspsRequiredExceedsMax,
         /// Account is not a BSP.
         NotABsp,
+        /// Account is not a MSP.
+        NotAMsp,
         /// BSP has not volunteered to store the given file.
         BspNotVolunteered,
         /// BSP has not confirmed storing the given file.
@@ -376,6 +378,7 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
+            msp_id: ProviderIdFor<T>,
             peer_ids: PeerIds<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
@@ -387,6 +390,7 @@ pub mod pallet {
                 location.clone(),
                 fingerprint,
                 size,
+                Some(msp_id),
                 None,
                 Some(peer_ids.clone()),
                 Default::default(),
