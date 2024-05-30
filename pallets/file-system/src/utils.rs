@@ -25,7 +25,7 @@ use crate::{
     StorageRequestExpirations, StorageRequests,
 };
 use crate::{
-    types::{CollectionConfigFor, FileKey, TargetBspsRequired},
+    types::{CollectionConfigFor, FileKey, ProviderIdFor, TargetBspsRequired},
     BspsAssignmentThreshold,
 };
 
@@ -177,6 +177,7 @@ where
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
+        msp: Option<ProviderIdFor<T>>,
         bsps_required: Option<T::StorageRequestBspsRequiredType>,
         user_peer_ids: Option<PeerIds<T>>,
         data_server_sps: BoundedVec<T::AccountId, MaxBspsPerStorageRequest<T>>,
@@ -184,6 +185,13 @@ where
         // TODO: Check user funds and lock them for the storage request.
         // TODO: Check storage capacity of chosen MSP (when we support MSPs)
         // TODO: Return error if the file is already stored and overwrite is false.
+
+        if let Some(ref msp) = msp {
+            ensure!(
+                <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_msp(msp),
+                Error::<T>::NotAMsp
+            );
+        }
 
         let bsps_required = bsps_required.unwrap_or(TargetBspsRequired::<T>::get());
 
@@ -200,6 +208,7 @@ where
             owner: sender,
             fingerprint,
             size,
+            msp,
             user_peer_ids: user_peer_ids.unwrap_or_default(),
             data_server_sps,
             bsps_required,
@@ -641,6 +650,7 @@ where
                     location.clone(),
                     fingerprint,
                     size,
+                    None,
                     Some(1u32.into()),
                     None,
                     if can_serve {
