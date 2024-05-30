@@ -30,7 +30,7 @@ impl<T: Config> core::fmt::Debug for ItemMetadata<T> {
 
 /// Type alias representing the type of `BucketId` used in `ProvidersInterface`.
 pub(crate) type BucketIdFor<T> =
-    <<T as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::BucketId;
+    <<T as crate::Config>::Providers as storage_hub_traits::ProvidersConfig>::BucketId;
 
 /// Type alias for the account ID source type.
 pub(crate) type AccountIdLookupSourceOf<T> =

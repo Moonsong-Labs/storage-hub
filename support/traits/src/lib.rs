@@ -45,6 +45,23 @@ pub trait ProvidersInterface {
         + AsMut<[u8]>
         + MaxEncodedLen
         + FullCodec;
+
+    /// Check if an account is a registered Provider.
+    fn is_provider(who: Self::Provider) -> bool;
+
+    /// Get Provider from AccountId, if it is a registered Provider.
+    fn get_provider(who: Self::AccountId) -> Option<Self::Provider>;
+
+    /// Get the root for a registered Provider.
+    fn get_root(who: Self::Provider) -> Option<Self::MerkleHash>;
+
+    /// Get the stake for a registered  Provider.
+    fn get_stake(
+        who: Self::Provider,
+    ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
+}
+
+pub trait ProvidersConfig {
     /// The type of ID that uniquely identifies a Merkle Trie Holder (BSPs/Buckets) from an AccountId
     type BucketId: Parameter
         + Member
@@ -62,24 +79,10 @@ pub trait ProvidersInterface {
         + FullCodec;
     /// The type of the Bucket NFT Collection ID.
     type BucketNftCollectionId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
-
-    /// Check if an account is a registered Provider.
-    fn is_provider(who: Self::Provider) -> bool;
-
-    /// Get Provider from AccountId, if it is a registered Provider.
-    fn get_provider(who: Self::AccountId) -> Option<Self::Provider>;
-
-    /// Get the root for a registered Provider.
-    fn get_root(who: Self::Provider) -> Option<Self::MerkleHash>;
-
-    /// Get the stake for a registered  Provider.
-    fn get_stake(
-        who: Self::Provider,
-    ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
 }
 
 /// A trait to lookup registered Providers, their Merkle Patricia Trie roots and their stake.
-pub trait ReadProvidersInterface: ProvidersInterface {
+pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
     /// Type that represents the total number of registered Storage Providers.
     type SpCount: Parameter
         + Member
@@ -140,7 +143,7 @@ pub trait ReadProvidersInterface: ProvidersInterface {
 }
 
 /// Interface to allow the File System pallet to modify the data used by the Storage Providers pallet.
-pub trait MutateProvidersInterface: ProvidersInterface {
+pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
     /// Data type for the measurement of storage size
     type StorageData: Parameter
         + Member
@@ -151,7 +154,6 @@ pub trait MutateProvidersInterface: ProvidersInterface {
         + Copy
         + MaxEncodedLen
         + HasCompact;
-
     /// The type of the Merkle Patricia Root of the storage trie for BSPs and MSPs' buckets (a hash).
     type MerklePatriciaRoot: Parameter
         + Member

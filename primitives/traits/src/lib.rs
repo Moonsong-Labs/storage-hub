@@ -4,7 +4,7 @@ use codec::{Encode, FullCodec, HasCompact};
 use frame_support::dispatch::DispatchResult;
 use frame_support::pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member};
 use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
-use frame_support::traits::fungible;
+use frame_support::traits::{fungible, Incrementable};
 use frame_support::Parameter;
 use scale_info::prelude::{fmt::Debug, vec::Vec};
 use sp_core::Get;
@@ -48,6 +48,7 @@ pub trait ProvidersInterface {
         + AsMut<[u8]>
         + MaxEncodedLen
         + FullCodec;
+
     /// Check if an account is a registered Provider.
     fn is_provider(who: Self::Provider) -> bool;
 
@@ -63,8 +64,28 @@ pub trait ProvidersInterface {
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
 }
 
+pub trait ProvidersConfig {
+    /// The type of ID that uniquely identifies a Merkle Trie Holder (BSPs/Buckets) from an AccountId
+    type BucketId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+    /// The type of the Bucket NFT Collection ID.
+    type BucketNftCollectionId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
+}
+
 /// A trait to lookup registered Providers, their Merkle Patricia Trie roots and their stake.
-pub trait ReadProvidersInterface: ProvidersInterface {
+pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
     /// Type that represents the total number of registered Storage Providers.
     type SpCount: Parameter
         + Member
@@ -77,7 +98,6 @@ pub trait ReadProvidersInterface: ProvidersInterface {
         + Debug
         + scale_info::TypeInfo
         + MaxEncodedLen;
-
     /// Type that represents the multiaddress of a Storage Provider.
     type MultiAddress: Parameter
         + MaybeSerializeDeserialize
@@ -88,7 +108,8 @@ pub trait ReadProvidersInterface: ProvidersInterface {
         + AsMut<[u8]>
         + MaxEncodedLen
         + FullCodec;
-
+    /// Type that represents the limit of a string.
+    type StringLimit: Get<u32>;
     /// Maximum number of multiaddresses a provider can have.
     type MaxNumberOfMultiAddresses: Get<u32>;
 
@@ -105,14 +126,27 @@ pub trait ReadProvidersInterface: ProvidersInterface {
     fn get_bsp_multiaddresses(
         who: &Self::Provider,
     ) -> Result<BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>, DispatchError>;
+
+    /// Check if account is the owner of a bucket.
+    fn is_bucket_owner(
+        who: &Self::AccountId,
+        bucket_id: &Self::BucketId,
+    ) -> Result<bool, DispatchError>;
+
+    /// Get `collection_id` of a bucket if there is one.
+    fn get_collection_id_of_bucket(
+        bucket_id: &Self::BucketId,
+    ) -> Result<Option<Self::BucketNftCollectionId>, DispatchError>;
+
+    /// Derive bucket Id from the owner and bucket name.
+    fn derive_bucket_id(
+        owner: &Self::AccountId,
+        bucket_name: BoundedVec<u8, Self::StringLimit>,
+    ) -> Self::BucketId;
 }
 
 /// Interface to allow the File System pallet to modify the data used by the Storage Providers pallet.
-pub trait MutateProvidersInterface {
-    /// The type which can be used to identify accounts.
-    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-    /// The type which represents a registered Provider.
-    type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
     /// Data type for the measurement of storage size
     type StorageData: Parameter
         + Member
@@ -123,21 +157,6 @@ pub trait MutateProvidersInterface {
         + Copy
         + MaxEncodedLen
         + HasCompact;
-    /// The type of ID that uniquely identifies a Merkle Trie Holder (BSPs/Buckets) from an AccountId
-    type BucketId: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Debug
-        + MaybeDisplay
-        + SimpleBitOps
-        + Ord
-        + Default
-        + Copy
-        + CheckEqual
-        + AsRef<[u8]>
-        + AsMut<[u8]>
-        + MaxEncodedLen
-        + FullCodec;
     /// The type of the Merkle Patricia Root of the storage trie for BSPs and MSPs' buckets (a hash).
     type MerklePatriciaRoot: Parameter
         + Member
@@ -165,7 +184,17 @@ pub trait MutateProvidersInterface {
         msp_id: Self::Provider,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
-        bucket_root: Self::MerklePatriciaRoot,
+        privacy: bool,
+        collection_id: Option<Self::BucketNftCollectionId>,
+    ) -> DispatchResult;
+
+    /// Update bucket privacy settings
+    fn update_bucket_privacy(bucket_id: Self::BucketId, privacy: bool) -> DispatchResult;
+
+    /// Update bucket collection ID
+    fn update_bucket_collection_id(
+        bucket_id: Self::BucketId,
+        collection_id: Option<Self::BucketNftCollectionId>,
     ) -> DispatchResult;
 
     /// Change the root of a bucket

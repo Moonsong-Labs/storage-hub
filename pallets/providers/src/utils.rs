@@ -13,7 +13,9 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_runtime::BoundedVec;
-use storage_hub_traits::{MutateProvidersInterface, ProvidersInterface, ReadProvidersInterface};
+use storage_hub_traits::{
+    MutateProvidersInterface, ProvidersConfig, ProvidersInterface, ReadProvidersInterface,
+};
 
 use crate::*;
 
@@ -847,7 +849,10 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
         Ok(())
     }
 
-    fn update_bucket_privacy(bucket_id: Self::BucketId, privacy: bool) -> DispatchResult {
+    fn update_bucket_privacy(
+        bucket_id: <Self as ProvidersConfig>::BucketId,
+        privacy: bool,
+    ) -> DispatchResult {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
             bucket.private = privacy;
@@ -857,8 +862,8 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
     }
 
     fn update_bucket_collection_id(
-        bucket_id: Self::BucketId,
-        collection_id: Option<Self::BucketNftCollectionId>,
+        bucket_id: <Self as ProvidersConfig>::BucketId,
+        collection_id: Option<<Self as ProvidersConfig>::BucketNftCollectionId>,
     ) -> DispatchResult {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
@@ -911,6 +916,11 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
     }
 }
 
+impl<T: pallet::Config> ProvidersConfig for pallet::Pallet<T> {
+    type BucketId = BucketId<T>;
+    type BucketNftCollectionId = T::BucketNftCollectionId;
+}
+
 impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     type SpCount = T::SpCount;
     type MultiAddress = MultiAddress<T>;
@@ -942,15 +952,15 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
 
     fn is_bucket_owner(
         who: &Self::AccountId,
-        bucket_id: &Self::BucketId,
+        bucket_id: &<Self as ProvidersConfig>::BucketId,
     ) -> Result<bool, DispatchError> {
         let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
         Ok(&bucket.user_id == who)
     }
 
     fn get_collection_id_of_bucket(
-        bucket_id: &Self::BucketId,
-    ) -> Result<Option<T::BucketNftCollectionId>, DispatchError> {
+        bucket_id: &<Self as ProvidersConfig>::BucketId,
+    ) -> Result<Option<<Self as ProvidersConfig>::BucketNftCollectionId>, DispatchError> {
         let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
         Ok(bucket.collection_id)
     }
@@ -958,7 +968,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     fn derive_bucket_id(
         owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::StringLimit>,
-    ) -> Self::BucketId {
+    ) -> <Self as ProvidersConfig>::BucketId {
         let concat = owner
             .encode()
             .into_iter()
@@ -974,8 +984,6 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
     type AccountId = T::AccountId;
     type Provider = HashId<T>;
     type MerkleHash = MerklePatriciaRoot<T>;
-    type BucketId = HashId<T>;
-    type BucketNftCollectionId = T::BucketNftCollectionId;
 
     // TODO: Refine, add checks and tests for all the logic in this implementation
     fn is_provider(who: Self::Provider) -> bool {
