@@ -837,7 +837,6 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
         collection_id: Option<T::BucketNftCollectionId>,
     ) -> DispatchResult {
         // TODO: Check that the bucket does not exist yet
-        // TODO: Get BucketId by hashing Bucket with salt, add it to the MSP vector of buckets
         let bucket = Bucket {
             root: MerklePatriciaRoot::<T>::default(),
             user_id,
@@ -863,11 +862,11 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
 
     fn update_bucket_collection_id(
         bucket_id: <Self as ProvidersConfig>::BucketId,
-        collection_id: Option<<Self as ProvidersConfig>::BucketNftCollectionId>,
+        maybe_collection_id: Option<<Self as ProvidersConfig>::BucketNftCollectionId>,
     ) -> DispatchResult {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
-            bucket.collection_id = collection_id;
+            bucket.collection_id = maybe_collection_id;
 
             Ok(())
         })
@@ -925,7 +924,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     type SpCount = T::SpCount;
     type MultiAddress = MultiAddress<T>;
     type MaxNumberOfMultiAddresses = T::MaxMultiAddressAmount;
-    type StringLimit = T::StringLimit;
+    type BucketNameLimit = T::BucketNameLimit;
 
     fn is_bsp(who: &Self::Provider) -> bool {
         BackupStorageProviders::<T>::contains_key(&who)
@@ -958,6 +957,13 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         Ok(&bucket.user_id == who)
     }
 
+    fn is_bucket_private(
+        bucket_id: &<Self as ProvidersConfig>::BucketId,
+    ) -> Result<bool, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.private)
+    }
+
     fn get_collection_id_of_bucket(
         bucket_id: &<Self as ProvidersConfig>::BucketId,
     ) -> Result<Option<<Self as ProvidersConfig>::BucketNftCollectionId>, DispatchError> {
@@ -967,7 +973,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
 
     fn derive_bucket_id(
         owner: &Self::AccountId,
-        bucket_name: BoundedVec<u8, Self::StringLimit>,
+        bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
     ) -> <Self as ProvidersConfig>::BucketId {
         let concat = owner
             .encode()

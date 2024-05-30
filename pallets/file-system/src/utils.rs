@@ -17,9 +17,9 @@ use storage_hub_traits::{MutateProvidersInterface, ReadProvidersInterface};
 use crate::{
     pallet,
     types::{
-        BucketIdFor, FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof,
-        MaxBspsPerStorageRequest, MultiAddresses, PeerIds, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StringLimitFor,
+        BucketIdFor, BucketNameLimitFor, FileKeyHasher, FileLocation, Fingerprint, ForestProof,
+        KeyProof, MaxBspsPerStorageRequest, MultiAddresses, PeerIds, StorageData,
+        StorageRequestBspsMetadata, StorageRequestMetadata,
     },
     Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
     StorageRequestExpirations, StorageRequests,
@@ -67,16 +67,16 @@ where
     pub(crate) fn do_create_bucket(
         sender: T::AccountId,
         msp_account_id: T::AccountId,
-        name: BoundedVec<u8, StringLimitFor<T>>,
+        name: BoundedVec<u8, BucketNameLimitFor<T>>,
         private: bool,
-    ) -> Result<BucketIdFor<T>, DispatchError> {
+    ) -> Result<(BucketIdFor<T>, Option<T::NftCollectionId>), DispatchError> {
         let msp_provider_id = <<T as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::get_provider(msp_account_id.clone())
                 .ok_or(Error::<T>::NotAMsp)?;
 
         // Create collection only if bucket is private
         let maybe_collection_id = if private {
             // The `owner` of the collection is also the admin of the collection since most operations require the sender to be the admin.
-            Self::create_collection(sender.clone())?
+            Some(Self::create_collection(sender.clone())?)
         } else {
             None
         };
@@ -91,7 +91,7 @@ where
             maybe_collection_id,
         )?;
 
-        Ok(bucket_id)
+        Ok((bucket_id, maybe_collection_id))
     }
 
     /// Update the privacy of a bucket.
@@ -101,27 +101,65 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
         private: bool,
-    ) -> DispatchResult {
+    ) -> Result<Option<T::NftCollectionId>, DispatchError> {
         // Check that the sender is the owner of the bucket.
         <T::Providers as ReadProvidersInterface>::is_bucket_owner(&sender, &bucket_id)?;
 
         let maybe_collection_id = T::Providers::get_collection_id_of_bucket(&bucket_id)?;
 
         // Create collection if bucket will become private and there is no corresponding collection.
-        if private && maybe_collection_id.is_none() {
-            let maybe_collection_id = Self::create_collection(sender)?;
+        let collection_id = match (private, maybe_collection_id) {
+            (true, None) => {
+                // Create collection since the bucket will be private.
+                let new_collection_id = Self::create_collection(sender)?;
 
-            // Update the collection id in the bucket.
-            <T::Providers as MutateProvidersInterface>::update_bucket_collection_id(
-                bucket_id,
-                maybe_collection_id,
-            )?;
-        }
+                // Update the collection id in the bucket.
+                <T::Providers as MutateProvidersInterface>::update_bucket_collection_id(
+                    bucket_id,
+                    Some(new_collection_id),
+                )?;
+
+                Some(new_collection_id)
+            }
+            (_, Some(collection_id)) => Some(collection_id),
+            (false, None) => None,
+        };
 
         // Update the privacy of the bucket.
         <T::Providers as MutateProvidersInterface>::update_bucket_privacy(bucket_id, private)?;
 
-        Ok(())
+        Ok(collection_id)
+    }
+
+    /// Create and associate collection with a bucket.
+    ///
+    /// *Callable only by the owner of the bucket. The bucket must be private.*
+    ///
+    /// It is possible to have a bucket that is private but does not have a collection associated with it. This can happen if
+    /// a user destroys the collection associated with the bucket by calling the nfts pallet directly.
+    ///
+    /// In any case, we will set a new collection the bucket even if there is an existing one associated with it.
+    pub(crate) fn do_create_and_associate_collection_with_bucket(
+        sender: T::AccountId,
+        bucket_id: BucketIdFor<T>,
+    ) -> Result<T::NftCollectionId, DispatchError> {
+        // Check if sender is the owner of the bucket.
+        <T::Providers as ReadProvidersInterface>::is_bucket_owner(&sender, &bucket_id)?;
+
+        // Check if the bucket is private.
+        ensure!(
+            <T::Providers as ReadProvidersInterface>::is_bucket_private(&bucket_id)?,
+            Error::<T>::BucketIsNotPrivate
+        );
+
+        let collection_id = Self::create_collection(sender)?;
+
+        <T::Providers as MutateProvidersInterface>::update_bucket_collection_id(
+            bucket_id,
+            Some(collection_id),
+        )?;
+
+        Ok(collection_id)
     }
 
     /// Request storage for a file.
@@ -615,7 +653,7 @@ where
     }
 
     /// Create a collection.
-    fn create_collection(owner: T::AccountId) -> Result<Option<T::NftCollectionId>, DispatchError> {
+    fn create_collection(owner: T::AccountId) -> Result<T::NftCollectionId, DispatchError> {
         let config: CollectionConfigFor<T> = CollectionConfig {
             settings: CollectionSettings::all_enabled(),
             max_supply: None,
@@ -628,7 +666,7 @@ where
             },
         };
 
-        Ok(Some(T::Nfts::create_collection(&owner, &owner, &config)?))
+        Ok(T::Nfts::create_collection(&owner, &owner, &config)?)
     }
 
     /// Get the block number at which the storage request will expire.

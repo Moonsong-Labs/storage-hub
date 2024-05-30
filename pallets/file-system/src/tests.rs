@@ -55,6 +55,7 @@ mod create_bucket_tests {
                     who: owner,
                     bucket_id,
                     name,
+                    collection_id: Some(0),
                     private,
                 }
                 .into(),
@@ -97,6 +98,7 @@ mod create_bucket_tests {
                     who: owner,
                     bucket_id,
                     name,
+                    collection_id: None,
                     private,
                 }
                 .into(),
@@ -158,6 +160,7 @@ mod update_bucket_privacy_tests {
                     who: owner.clone(),
                     bucket_id,
                     name,
+                    collection_id: Some(0),
                     private,
                 }
                 .into(),
@@ -178,6 +181,7 @@ mod update_bucket_privacy_tests {
                 Event::BucketPrivacyUpdated {
                     who: owner,
                     bucket_id,
+                    collection_id: Some(0),
                     private: false,
                 }
                 .into(),
@@ -201,6 +205,117 @@ mod update_bucket_privacy_tests {
             assert_noop!(
                 FileSystem::update_bucket_privacy(origin, bucket_id, false),
                 pallet_storage_providers::Error::<Test>::BucketNotFound
+            );
+        });
+    }
+}
+
+mod create_and_associate_collection_with_bucket_tests {
+    use super::*;
+
+    #[test]
+    fn create_and_associate_collection_with_bucket_success() {
+        new_test_ext().execute_with(|| {
+            let owner = AccountId32::new([1; 32]);
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let private = true;
+
+            add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::create_bucket(
+                origin.clone(),
+                msp,
+                name.clone(),
+                private
+            ));
+
+            // Check if collection was created
+            assert!(
+                <Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            let collection_id =
+                <Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .expect("Collection ID should exist");
+
+            assert_ok!(FileSystem::create_and_associate_collection_with_bucket(
+                origin, bucket_id
+            ));
+
+            // Check if collection was associated with the bucket
+            assert_ne!(
+                <Test as crate::Config>::Providers::get_collection_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .expect("Collection ID should exist"),
+                collection_id
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::NewCollectionAndAssociation {
+                    who: owner,
+                    bucket_id,
+                    collection_id: 1, // Collection ID should be incremented from 0
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn create_and_associate_collection_with_bucket_bucket_not_found_fail() {
+        new_test_ext().execute_with(|| {
+            let owner = AccountId32::new([1; 32]);
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+
+            add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            assert_noop!(
+                FileSystem::create_and_associate_collection_with_bucket(origin, bucket_id),
+                pallet_storage_providers::Error::<Test>::BucketNotFound
+            );
+        });
+    }
+
+    #[test]
+    fn create_and_associate_collection_with_bucket_bucket_not_private_fail() {
+        new_test_ext().execute_with(|| {
+            let owner = AccountId32::new([1; 32]);
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let private = false;
+
+            add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::create_bucket(
+                origin.clone(),
+                msp,
+                name.clone(),
+                private
+            ));
+
+            assert_noop!(
+                FileSystem::create_and_associate_collection_with_bucket(origin, bucket_id),
+                Error::<Test>::BucketIsNotPrivate
             );
         });
     }

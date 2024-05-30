@@ -138,6 +138,9 @@ pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
         bucket_id: &Self::BucketId,
     ) -> Result<Option<Self::BucketNftCollectionId>, DispatchError>;
 
+    /// Check if a bucket is private.
+    fn is_bucket_private(bucket_id: &Self::BucketId) -> Result<bool, DispatchError>;
+
     /// Derive bucket Id from the owner and bucket name.
     fn derive_bucket_id(
         owner: &Self::AccountId,
@@ -194,7 +197,7 @@ pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
     /// Update bucket collection ID
     fn update_bucket_collection_id(
         bucket_id: Self::BucketId,
-        collection_id: Option<Self::BucketNftCollectionId>,
+        maybe_collection_id: Option<Self::BucketNftCollectionId>,
     ) -> DispatchResult;
 
     /// Change the root of a bucket

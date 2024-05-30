@@ -28,7 +28,6 @@ mod xcm_config;
 // Substrate and Polkadot dependencies
 use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
 use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
-use currency::UNITS;
 use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
@@ -66,28 +65,19 @@ use storage_hub_primitives::TrieVerifier;
 use storage_hub_traits::{CommitmentVerifier, MaybeDebug};
 use xcm::latest::prelude::BodyId;
 
-use crate::{
-    Nfts, Signature, DAYS, UNIT, {ParachainInfo, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES},
-};
-
 // Local module imports
 use super::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Aura, Balance, Balances, Block, BlockNumber, CollatorSelection, FileSystem, Hash,
-    MessageQueue, Nonce, PalletInfo, ParachainSystem, ProofsDealer, Providers, Runtime,
+    MessageQueue, Nfts, Nonce, PalletInfo, ParachainSystem, ProofsDealer, Providers, Runtime,
     RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
-    Session, SessionKeys, System, WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO,
-    BLOCK_PROCESSING_VELOCITY, EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT,
+    Session, SessionKeys, Signature, System, WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO,
+    BLOCK_PROCESSING_VELOCITY, DAYS, EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT,
     MINUTES, NORMAL_DISPATCH_RATIO, RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION,
-    UNINCLUDED_SEGMENT_CAPACITY, VERSION,
+    UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
+    {ParachainInfo, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES},
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
-
-pub mod currency {
-    use crate::Balance;
-
-    pub const UNITS: Balance = 1_000_000_000_000;
-}
 
 parameter_types! {
     pub const Version: RuntimeVersion = VERSION;
@@ -464,7 +454,7 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
-    type StringLimit = ConstU32<100>;
+    type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
@@ -490,8 +480,8 @@ parameter_types! {
     pub const ChallengeHistoryLength: BlockNumber = 100;
     pub const ChallengesQueueLength: u32 = 100;
     pub const CheckpointChallengePeriod: u32 = 10;
-    pub const ChallengesFee: Balance = 1 * UNITS;
-    pub const StakeToChallengePeriod: Balance = 10 * UNITS;
+    pub const ChallengesFee: Balance = 1 * UNIT;
+    pub const StakeToChallengePeriod: Balance = 10 * UNIT;
 }
 
 impl pallet_proofs_dealer::Config for Runtime {
@@ -566,7 +556,6 @@ impl pallet_file_system::Config for Runtime {
     type NftCollectionId = <Self as pallet_nfts::Config>::CollectionId;
     type NftId = <Self as pallet_nfts::Config>::ItemId;
     type Nfts = Nfts;
-    type Hasher = BlakeTwo256;
     type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
     type AssignmentThresholdAsymptote = ThresholdAsymptote;
     type AssignmentThresholdMultiplier = ThresholdMultiplier;

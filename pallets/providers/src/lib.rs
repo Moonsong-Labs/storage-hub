@@ -40,8 +40,7 @@ pub mod pallet {
         sp_runtime::traits::{
             AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps,
         },
-        traits::fungible::*,
-        traits::Incrementable,
+        traits::{fungible::*, Incrementable},
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
@@ -171,9 +170,9 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBuckets: Get<u32>;
 
-        /// Type that represents the limit of a string.
+        /// Type that represents the byte limit of a bucket name.
         #[pallet::constant]
-        type StringLimit: Get<u32>;
+        type BucketNameLimit: Get<u32>;
 
         /// The maximum amount of blocks after which a sign up request expires so the randomness cannot be chosen
         #[pallet::constant]

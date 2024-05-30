@@ -135,9 +135,9 @@ type BalanceOf<T> =
 pub(super) type CollectionConfigFor<T> =
     CollectionConfig<BalanceOf<T>, BlockNumberFor<T>, <T as Config>::NftCollectionId>;
 
-/// Alias for the `StringLimit` type used in the ReadProvidersInterface.
-pub(super) type StringLimitFor<T> =
-    <<T as crate::Config>::Providers as storage_hub_traits::ReadProvidersInterface>::StringLimit;
+/// Alias for the `BucketNameLimit` type used in the ReadProvidersInterface.
+pub(super) type BucketNameLimitFor<T> =
+    <<T as crate::Config>::Providers as storage_hub_traits::ReadProvidersInterface>::BucketNameLimit;
 
 /// Type alias representing the type of `BucketId` used in `ProvidersInterface`.
 pub(crate) type BucketIdFor<T> =

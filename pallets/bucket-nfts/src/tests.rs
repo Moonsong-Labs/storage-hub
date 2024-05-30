@@ -64,7 +64,7 @@ mod share_access_tests {
     }
 
     #[test]
-    fn share_access_not_bucket_owner_fail() {
+    fn share_access_not_collection_owner_fail() {
         new_test_ext().execute_with(|| {
             let issuer = Keyring::Alice.to_account_id();
             let issuer_origin = RuntimeOrigin::signed(issuer.clone());
@@ -96,7 +96,7 @@ mod share_access_tests {
                     999,
                     Some(basic_read_access_regex())
                 ),
-                Error::<Test>::NotBucketOwner
+                pallet_nfts::Error::<Test>::NoPermission
             );
         });
     }
@@ -233,7 +233,7 @@ mod update_read_access_tests {
     }
 
     #[test]
-    fn update_read_access_not_bucket_owner_fail() {
+    fn update_read_access_not_collection_owner_fail() {
         new_test_ext().execute_with(|| {
             let issuer = Keyring::Alice.to_account_id();
             let issuer_origin = RuntimeOrigin::signed(issuer.clone());
@@ -273,7 +273,7 @@ mod update_read_access_tests {
                     999,
                     Some(basic_read_access_regex())
                 ),
-                Error::<Test>::NotBucketOwner
+                pallet_nfts::Error::<Test>::NoPermission
             );
         });
     }

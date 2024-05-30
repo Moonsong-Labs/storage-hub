@@ -189,7 +189,7 @@ impl pallet_storage_providers::Config for Test {
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
-    type StringLimit = ConstU32<100>;
+    type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
@@ -275,7 +275,6 @@ impl crate::Config for Test {
     type NftCollectionId = <Self as pallet_nfts::Config>::CollectionId;
     type NftId = <Self as pallet_nfts::Config>::ItemId;
     type Nfts = Nfts;
-    type Hasher = BlakeTwo256;
     type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
     type AssignmentThresholdAsymptote = ThresholdAsymptote;
     type AssignmentThresholdMultiplier = ThresholdMultiplier;

@@ -27,17 +27,18 @@ where
         // Convert the lookup source to a target account.
         let recipient_account = T::Lookup::lookup(recipient.clone())?;
 
-        // Get the collection ID of the bucket.
-        let collection_id = T::Providers::get_collection_id_of_bucket(&bucket)?
-            .ok_or(Error::<T>::BucketIsNotPrivate)?;
-
-        // Check if the issuer is the owner of the bucket.
-        // This is a redundant check but primarily added for ergonomics.
-        // Transfering ownership of a collection is not exposed to the user, therefore the bucket owner is implicitly the collection owner.
+        // Check if the bucket is private.
         ensure!(
-            T::Providers::is_bucket_owner(issuer, &bucket)?,
-            Error::<T>::NotBucketOwner
+            T::Providers::is_bucket_private(&bucket)?,
+            Error::<T>::BucketIsNotPrivate
         );
+
+        // Get the collection ID of the bucket.
+        // It is possible that the collection ID does not exist since users
+        // can delete collections by calling the nfts pallet directly. Users
+        // can call `create_and_associate_collection` from the file system pallet to fix this.
+        let collection_id = T::Providers::get_collection_id_of_bucket(&bucket)?
+            .ok_or(Error::<T>::NoCorrespondingCollection)?;
 
         let origin = Self::sign(issuer);
 
@@ -47,13 +48,13 @@ where
         // Create the metadata for the item.
         let metadata = ItemMetadata::<T>::new(read_access_regex);
 
+        let encoded_metadata = metadata
+            .encode()
+            .try_into()
+            .map_err(|_| Error::<T>::ConvertBytesToBoundedVec)?;
+
         // Set the read access regex for the item.
-        pallet_nfts::Pallet::<T>::set_metadata(
-            origin,
-            collection_id,
-            item_id,
-            metadata.encode().try_into().unwrap(),
-        )?;
+        pallet_nfts::Pallet::<T>::set_metadata(origin, collection_id, item_id, encoded_metadata)?;
 
         Ok(recipient_account)
     }
@@ -65,20 +66,20 @@ where
         item_id: T::ItemId,
         read_access_regex: Option<ReadAccessRegex<T>>,
     ) -> Result<(), DispatchError> {
-        // Get the collection ID of the bucket.
-        let collection_id = T::Providers::get_collection_id_of_bucket(&bucket)?
-            .ok_or(Error::<T>::BucketIsNotPrivate)?;
-
-        // Check if the issuer is the owner of the bucket.
-        // This is a redundant check but primarily added for ergonomics.
-        // Transfering ownership of a collection is not exposed to the user and therefore the bucket owner is implicitly the collection owner.
+        // Check if the bucket is private.
         ensure!(
-            T::Providers::is_bucket_owner(account, &bucket)?,
-            Error::<T>::NotBucketOwner
+            T::Providers::is_bucket_private(&bucket)?,
+            Error::<T>::BucketIsNotPrivate
         );
 
+        // Get the collection ID of the bucket.
+        // This should never fail because the file system pallet ensures that collections are created whenever a bucket is created with private access
+        // or when a bucket is made private after being public.
+        let collection_id = T::Providers::get_collection_id_of_bucket(&bucket)?
+            .ok_or(Error::<T>::NoCorrespondingCollection)?;
+
         // We do not add any additional redundant checks already covered by the `set_metadata` function from the `pallet-nfts` pallet.
-        // For example, we do not check if the item exists.
+        // For example, we do not check if the item exists or if the account is the owner of the collection.
 
         let metadata = ItemMetadata::<T>::new(read_access_regex);
 

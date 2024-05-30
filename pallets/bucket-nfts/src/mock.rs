@@ -163,7 +163,6 @@ impl pallet_file_system::Config for Test {
     type NftCollectionId = <Self as pallet_nfts::Config>::CollectionId;
     type NftId = <Self as pallet_nfts::Config>::ItemId;
     type Nfts = Nfts;
-    type Hasher = BlakeTwo256;
     type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
     type AssignmentThresholdAsymptote = ThresholdAsymptote;
     type AssignmentThresholdMultiplier = ThresholdMultiplier;
@@ -237,7 +236,7 @@ impl pallet_storage_providers::Config for Test {
     type DepositPerData = ConstU128<2>;
     type Subscribers = MockedProvidersSubscriber;
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
-    type StringLimit = ConstU32<100>;
+    type BucketNameLimit = ConstU32<100>;
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
     type ProvidersRandomness = MockRandomness;
 }

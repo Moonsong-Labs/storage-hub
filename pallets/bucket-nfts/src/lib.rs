@@ -59,7 +59,7 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// Notifies that a new file has been requested to be stored.
+        /// Notifies that access to a bucket has been shared with another account.
         AccessShared {
             issuer: T::AccountId,
             recipient: AccountIdLookupTargetOf<T>,
@@ -85,11 +85,17 @@ pub mod pallet {
         BucketIsNotPrivate,
         /// Account is not the owner of the bucket.
         NotBucketOwner,
+        /// No collection corresponding to the bucket. Call `update_bucket_privacy` from the file system pallet to make it private.
+        NoCorrespondingCollection,
+        /// Failed to convert bytes to `BoundedVec`
+        ConvertBytesToBoundedVec,
     }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// Share access to files within a bucket with another account.
+        ///
+        /// The `read_access_regex` parameter is optional and when set to `None` it means that the recipient will be denied access for any read request within the bucket.
         #[pallet::call_index(0)]
         #[pallet::weight(T::WeightInfo::mint() + T::WeightInfo::set_metadata())]
         pub fn share_access(
