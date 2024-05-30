@@ -4,13 +4,13 @@ use frame_support::{
     weights::{constants::RocksDbWeight, Weight},
 };
 use frame_system as system;
+use shp_traits::{CommitmentVerifier, MaybeDebug};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Bounded, Convert, IdentityLookup},
     AccountId32, BuildStorage, DispatchError, FixedU128, SaturatedConversion,
 };
 use sp_trie::CompactProof;
-use shp_traits::{CommitmentVerifier, MaybeDebug};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;

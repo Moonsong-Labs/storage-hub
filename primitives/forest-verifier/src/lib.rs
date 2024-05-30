@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::sp_runtime::DispatchError;
+use shp_traits::CommitmentVerifier;
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
-use shp_traits::CommitmentVerifier;
 use trie_db::TrieIterator;
 
 #[cfg(test)]

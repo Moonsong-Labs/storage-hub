@@ -5,10 +5,10 @@ use frame_support::sp_runtime::DispatchError;
 use num_bigint::BigUint;
 use scale_info::TypeInfo;
 use shp_traits::AsCompact;
+use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
-use shp_traits::CommitmentVerifier;
 use trie_db::Trie;
 
 #[cfg(test)]

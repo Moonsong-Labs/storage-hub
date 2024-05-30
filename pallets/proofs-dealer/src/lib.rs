@@ -29,8 +29,8 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
-    use sp_runtime::traits::Convert;
     use shp_traits::{CommitmentVerifier, ProvidersInterface};
+    use sp_runtime::traits::Convert;
     use types::{KeyFor, ProviderFor};
 
     use crate::types::*;

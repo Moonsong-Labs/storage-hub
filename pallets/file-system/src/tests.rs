@@ -9,12 +9,12 @@ use crate::{
 use frame_support::{
     assert_noop, assert_ok, dispatch::DispatchResultWithPostInfo, traits::Hooks, weights::Weight,
 };
+use shp_traits::SubscribeProvidersInterface;
 use sp_core::H256;
 use sp_runtime::{
     traits::{BlakeTwo256, Get, Hash, Zero},
     AccountId32, BoundedVec, FixedU128,
 };
-use shp_traits::SubscribeProvidersInterface;
 
 #[test]
 fn request_storage_success() {

@@ -10,11 +10,11 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::prelude::vec::Vec;
+use shp_traits::{CommitmentVerifier, ProofsDealerInterface, ProvidersInterface};
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, Convert, Hash, Zero},
     ArithmeticError, DispatchError, Saturating,
 };
-use shp_traits::{CommitmentVerifier, ProofsDealerInterface, ProvidersInterface};
 
 use crate::{
     pallet,

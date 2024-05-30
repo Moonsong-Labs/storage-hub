@@ -1,12 +1,12 @@
 use std::io::Read;
 
 use serde::Serialize;
+use shp_traits::CommitmentVerifier;
 use sp_runtime::traits::BlakeTwo256;
 use sp_trie::{
     recorder::Recorder, CompactProof, LayoutV1, MemoryDB, TrieDBBuilder, TrieDBMutBuilder,
     TrieLayout, TrieMut,
 };
-use shp_traits::CommitmentVerifier;
 use trie_db::{Hasher, TrieIterator};
 
 use crate::ForestVerifier;
