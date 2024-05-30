@@ -1,13 +1,13 @@
 use std::{path::Path, time::Duration};
 
 use anyhow::anyhow;
-use forest_manager::traits::ForestStorage;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shc_common::types::{FileKey, FileMetadata, HasherOutT};
+use shc_forest_manager::traits::ForestStorage;
 
-use file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_actors_framework::event_bus::EventHandler;
+use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use sp_trie::TrieLayout;
 use tokio::{fs::File, io::AsyncWriteExt};
 

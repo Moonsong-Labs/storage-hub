@@ -161,10 +161,10 @@ pallet-file-system = { path = "pallets/file-system", default-features = false }
 pallet-proofs-dealer = { path = "pallets/proofs-dealer", default-features = false }
 pallet-randomness = { path = "pallets/randomness", default-features = false }
 
-file-manager = { path = "client/file-manager", default-features = false }
-forest-manager = { path = "client/forest-manager", default-features = false }
 shc-actors-framework = { path = "client/actors-framework", default-features = false }
-shc-common = { package = "common", path = "client/common", default-features = false }
+shc-common = { path = "client/common", default-features = false }
+shc-file-manager = { path = "client/file-manager", default-features = false }
+shc-forest-manager = { path = "client/forest-manager", default-features = false }
 shc-rpc = { path = "client/rpc", default-features = false }
 
 storage-hub-runtime = { path = "runtime", default-features = false }

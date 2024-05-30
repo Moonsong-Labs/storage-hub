@@ -1,5 +1,5 @@
 [package]
-name = "common"
+name = "shc-common"
 version = "0.1.0"
 description = "Common types, traits and utilities shared by other client crates."
 homepage = { workspace = true }

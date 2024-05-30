@@ -1,5 +1,5 @@
 [package]
-name = "forest-manager"
+name = "shc-forest-manager"
 version = "0.1.0"
 description = ""
 homepage = { workspace = true }

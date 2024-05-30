@@ -8,11 +8,11 @@ use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
 
-use file_manager::{in_memory::InMemoryFileStorage, traits::FileStorage};
-use forest_manager::{
+use futures::{Stream, StreamExt};
+use shc_file_manager::{in_memory::InMemoryFileStorage, traits::FileStorage};
+use shc_forest_manager::{
     in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
 };
-use futures::{Stream, StreamExt};
 
 use polkadot_primitives::{BlakeTwo256, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;

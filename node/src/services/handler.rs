@@ -3,12 +3,12 @@ use sp_trie::TrieLayout;
 use std::{marker::PhantomData, sync::Arc};
 use tokio::sync::RwLock;
 
-use file_manager::traits::FileStorage;
-use forest_manager::traits::ForestStorage;
 use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::{EventBusListener, EventHandler},
 };
+use shc_file_manager::traits::FileStorage;
+use shc_forest_manager::traits::ForestStorage;
 
 use crate::{
     services::{blockchain::events::NewStorageRequest, file_transfer::events::RemoteUploadRequest},
