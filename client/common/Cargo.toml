@@ -24,5 +24,5 @@ trie-db = { workspace = true }
 sp-core = { workspace = true }
 sp-trie = { workspace = true, default-features = true }
 
-storage-hub-infra = { workspace = true }
 storage-hub-runtime = { workspace = true }
+shc-actors-framework = { workspace = true }

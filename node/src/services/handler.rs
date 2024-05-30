@@ -5,7 +5,7 @@ use tokio::sync::RwLock;
 
 use file_manager::traits::FileStorage;
 use forest_manager::traits::ForestStorage;
-use storage_hub_infra::{
+use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::{EventBusListener, EventHandler},
 };

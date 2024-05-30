@@ -8,8 +8,8 @@ use shc_common::types::FileMetadata;
 
 use sc_network::PeerId;
 
+use shc_actors_framework::event_bus::EventHandler;
 use sp_trie::TrieLayout;
-use storage_hub_infra::event_bus::EventHandler;
 
 const LOG_TARGET: &str = "user-sends-file-task";
 

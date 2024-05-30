@@ -9,7 +9,7 @@ homepage = "https://moonsonglabs.com/"
 panic = "unwind"
 
 [workspace]
-members = ["runtime", "pallets/*", "node", "client/*", "support/*", "primitives/*"]
+members = ["runtime", "pallets/*", "node", "client/*", "primitives/*"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -163,10 +163,10 @@ pallet-randomness = { path = "pallets/randomness", default-features = false }
 
 file-manager = { path = "client/file-manager", default-features = false }
 forest-manager = { path = "client/forest-manager", default-features = false }
+shc-actors-framework = { path = "client/actors-framework", default-features = false }
 shc-common = { package = "common", path = "client/common", default-features = false }
 shc-rpc = { path = "client/rpc", default-features = false }
 
-storage-hub-infra = { path = "support/infra", default-features = false }
 storage-hub-runtime = { path = "runtime", default-features = false }
 
 shp-session-keys = { path = "primitives/session-keys", default-features = false }

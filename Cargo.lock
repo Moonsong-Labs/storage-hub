@@ -1474,9 +1474,9 @@ dependencies = [
  "parity-scale-codec",
  "reference-trie",
  "serde",
+ "shc-actors-framework",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-infra",
  "storage-hub-runtime",
  "trie-db 0.29.1",
 ]
@@ -3201,9 +3201,9 @@ dependencies = [
  "bincode",
  "common 0.1.0",
  "reference-trie",
+ "shc-actors-framework",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-infra",
  "trie-db 0.29.1",
 ]
 
@@ -3301,11 +3301,11 @@ dependencies = [
  "log",
  "parity-scale-codec",
  "reference-trie",
+ "shc-actors-framework",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-runtime 31.0.1",
  "sp-state-machine 0.35.0",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-infra",
  "thiserror",
  "trie-db 0.29.1",
 ]
@@ -12331,6 +12331,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "shc-actors-framework"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "futures",
+ "sc-service",
+ "sc-tracing",
+ "sc-utils",
+ "serde",
+ "serde_json",
+ "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-runtime 31.0.1",
+ "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
+ "tokio",
+]
+
+[[package]]
 name = "shc-rpc"
 version = "0.1.0"
 dependencies = [
@@ -14441,24 +14459,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "storage-hub-infra"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bincode",
- "futures",
- "sc-service",
- "sc-tracing",
- "sc-utils",
- "serde",
- "serde_json",
- "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
- "sp-runtime 31.0.1",
- "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "tokio",
-]
-
-[[package]]
 name = "storage-hub-node"
 version = "0.1.0"
 dependencies = [
@@ -14525,6 +14525,7 @@ dependencies = [
  "sc-utils",
  "serde",
  "serde_json",
+ "shc-actors-framework",
  "shc-rpc",
  "sp-api 26.0.0",
  "sp-block-builder",
@@ -14538,7 +14539,6 @@ dependencies = [
  "sp-timestamp 26.0.0",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "staging-xcm 7.0.0",
- "storage-hub-infra",
  "storage-hub-runtime",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",

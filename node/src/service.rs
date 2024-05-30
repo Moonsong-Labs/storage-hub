@@ -16,11 +16,11 @@ use futures::{Stream, StreamExt};
 
 use polkadot_primitives::{BlakeTwo256, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
+use shc_actors_framework::actor::TaskSpawner;
 use shc_common::types::HasherOutT;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
 use sp_trie::{LayoutV1, TrieLayout};
-use storage_hub_infra::actor::TaskSpawner;
 // Local Runtime Types
 use storage_hub_runtime::{
     opaque::{Block, Hash},

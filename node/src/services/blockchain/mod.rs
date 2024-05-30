@@ -7,9 +7,9 @@ pub mod types;
 use std::sync::Arc;
 
 use sc_service::RpcHandlers;
+use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use sp_keystore::KeystorePtr;
 use sp_runtime::KeyTypeId;
-use storage_hub_infra::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 
 use crate::service::ParachainClient;
 

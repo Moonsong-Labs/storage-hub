@@ -31,9 +31,9 @@ tokio = { workspace = true }
 # Local
 pallet-file-system = { workspace = true }
 storage-hub-runtime = { workspace = true }
-storage-hub-infra = { workspace = true }
 file-manager = { workspace = true }
 forest-manager = { workspace = true }
+shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }
 shc-rpc = { workspace = true }
 

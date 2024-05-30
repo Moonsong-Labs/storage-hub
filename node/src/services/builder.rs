@@ -11,7 +11,7 @@ use file_manager::{in_memory::InMemoryFileStorage, traits::FileStorage};
 use forest_manager::{
     in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
 };
-use storage_hub_infra::actor::{ActorHandle, TaskSpawner};
+use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
 
 use crate::service::{ParachainClient, ParachainNetworkService};
 

@@ -3,8 +3,8 @@ use std::time::Duration;
 use file_manager::traits::FileStorage;
 use forest_manager::traits::ForestStorage;
 use log::*;
+use shc_actors_framework::event_bus::EventHandler;
 use sp_trie::TrieLayout;
-use storage_hub_infra::event_bus::EventHandler;
 
 use crate::services::{
     blockchain::{commands::BlockchainServiceInterface, events::NewStorageRequest},

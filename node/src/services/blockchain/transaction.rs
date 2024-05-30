@@ -5,8 +5,8 @@ use std::{
 
 use anyhow::anyhow;
 use log::*;
+use shc_actors_framework::actor::ActorHandle;
 use sp_core::H256;
-use storage_hub_infra::actor::ActorHandle;
 use tokio::sync::mpsc::Receiver;
 
 use crate::services::blockchain::{commands::BlockchainServiceInterface, types::ExtrinsicResult};

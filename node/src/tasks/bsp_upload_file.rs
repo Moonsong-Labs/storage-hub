@@ -7,8 +7,8 @@ use sc_tracing::tracing::*;
 use shc_common::types::{FileKey, FileMetadata, HasherOutT};
 
 use file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
+use shc_actors_framework::event_bus::EventHandler;
 use sp_trie::TrieLayout;
-use storage_hub_infra::event_bus::EventHandler;
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use crate::services::{
