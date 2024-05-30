@@ -9,7 +9,7 @@ homepage = "https://moonsonglabs.com/"
 panic = "unwind"
 
 [workspace]
-members = ["runtime", "pallets/*", "node", "client/*", "support/*", "primitives/*"]
+members = ["runtime", "pallets/*", "node", "client/*", "primitives/*"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -161,15 +161,13 @@ pallet-file-system = { path = "pallets/file-system", default-features = false }
 pallet-proofs-dealer = { path = "pallets/proofs-dealer", default-features = false }
 pallet-randomness = { path = "pallets/randomness", default-features = false }
 
-file-manager = { path = "client/file-manager", default-features = false }
-forest-manager = { path = "client/forest-manager", default-features = false }
-shc-common = { package = "common", path = "client/common", default-features = false }
+shc-actors-framework = { path = "client/actors-framework", default-features = false }
+shc-common = { path = "client/common", default-features = false }
+shc-file-manager = { path = "client/file-manager", default-features = false }
+shc-forest-manager = { path = "client/forest-manager", default-features = false }
 shc-rpc = { path = "client/rpc", default-features = false }
 
-storage-hub-traits = { path = "support/traits", default-features = false }
-storage-hub-infra = { path = "support/infra", default-features = false }
 storage-hub-runtime = { path = "runtime", default-features = false }
-storage-hub-primitives = { path = "support/primitives", default-features = false }
 
 shp-session-keys = { path = "primitives/session-keys", default-features = false }
 shp-file-key-verifier = { path = "primitives/file-key-verifier", default-features = false }

@@ -9,13 +9,13 @@ use crate::{
 use frame_support::{
     assert_noop, assert_ok, dispatch::DispatchResultWithPostInfo, traits::Hooks, weights::Weight,
 };
+use shp_traits::SubscribeProvidersInterface;
 use sp_core::{ByteArray, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     traits::{BlakeTwo256, Get, Hash, Zero},
     BoundedVec, FixedU128,
 };
-use storage_hub_traits::SubscribeProvidersInterface;
 
 #[test]
 fn request_storage_success() {

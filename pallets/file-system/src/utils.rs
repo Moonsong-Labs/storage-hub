@@ -3,12 +3,12 @@ use core::cmp::max;
 use codec::{Decode, Encode};
 use frame_support::{ensure, pallet_prelude::DispatchResult, traits::Get};
 use frame_system::pallet_prelude::BlockNumberFor;
+use shp_traits::ReadProvidersInterface;
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, Hash, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
 };
 use sp_std::{vec, vec::Vec};
-use storage_hub_traits::ReadProvidersInterface;
 
 use crate::{
     pallet,
@@ -79,7 +79,7 @@ where
 
         if let Some(ref msp) = msp {
             ensure!(
-                <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_msp(msp),
+                <T::Providers as shp_traits::ReadProvidersInterface>::is_msp(msp),
                 Error::<T>::NotAMsp
             );
         }
@@ -161,13 +161,12 @@ where
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
     ) -> Result<(MultiAddresses<T>, StorageData<T>, T::AccountId), DispatchError> {
-        let bsp =
-            <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(who.clone())
-                .ok_or(Error::<T>::NotABsp)?;
+        let bsp = <T::Providers as shp_traits::ProvidersInterface>::get_provider(who.clone())
+            .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
-            <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_bsp(&bsp),
+            <T::Providers as shp_traits::ReadProvidersInterface>::is_bsp(&bsp),
             Error::<T>::NotABsp
         );
 
@@ -271,13 +270,12 @@ where
         forest_proof: ForestProof<T>,
         key_proof: KeyProof<T>,
     ) -> DispatchResult {
-        let bsp =
-            <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(who.clone())
-                .ok_or(Error::<T>::NotABsp)?;
+        let bsp = <T::Providers as shp_traits::ProvidersInterface>::get_provider(who.clone())
+            .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
-            <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_bsp(&bsp),
+            <T::Providers as shp_traits::ReadProvidersInterface>::is_bsp(&bsp),
             Error::<T>::NotABsp
         );
 
@@ -333,7 +331,7 @@ where
         let challenges = vec![file_key];
 
         // Check that the forest proof is valid.
-        <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::verify_forest_proof(
+        <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
             &bsp,
             challenges.as_slice(),
             &forest_proof,
@@ -343,7 +341,7 @@ where
         let challenges = vec![];
 
         // Check that the key proof is valid.
-        <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::verify_key_proof(
+        <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
             &file_key,
             &challenges,
             &key_proof,
@@ -386,10 +384,10 @@ where
         }
 
         // Update root of bsp.
-        <T::Providers as storage_hub_traits::MutateProvidersInterface>::change_root_bsp(bsp, root)?;
+        <T::Providers as shp_traits::MutateProvidersInterface>::change_root_bsp(bsp, root)?;
 
         // Add data to storage provider.
-        <T::Providers as storage_hub_traits::MutateProvidersInterface>::increase_data_used(
+        <T::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
             &who,
             file_metadata.size,
         )?;
@@ -432,7 +430,7 @@ where
         // Check if there are already BSPs who have confirmed to store the file.
         if file_metadata.bsps_confirmed >= T::StorageRequestBspsRequiredType::zero() {
             // Issue a challenge to force the BSPs to update their storage root.
-            <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &file_key,
             )?;
         }
@@ -612,7 +610,7 @@ where
     }
 }
 
-impl<T: crate::Config> storage_hub_traits::SubscribeProvidersInterface for Pallet<T> {
+impl<T: crate::Config> shp_traits::SubscribeProvidersInterface for Pallet<T> {
     type Provider = T::AccountId;
 
     fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {

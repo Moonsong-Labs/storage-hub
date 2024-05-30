@@ -1469,21 +1469,6 @@ dependencies = [
 [[package]]
 name = "common"
 version = "0.1.0"
-dependencies = [
- "bincode",
- "parity-scale-codec",
- "reference-trie",
- "serde",
- "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
- "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-infra",
- "storage-hub-runtime",
- "trie-db 0.29.1",
-]
-
-[[package]]
-name = "common"
-version = "0.1.0"
 source = "git+https://github.com/w3f/ring-proof#b273d33f9981e2bb3375ab45faeb537f7ee35224"
 dependencies = [
  "ark-ec",
@@ -3195,19 +3180,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
 
 [[package]]
-name = "file-manager"
-version = "0.1.0"
-dependencies = [
- "bincode",
- "common 0.1.0",
- "reference-trie",
- "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
- "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-infra",
- "trie-db 0.29.1",
-]
-
-[[package]]
 name = "file-per-thread-logger"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3288,27 +3260,6 @@ name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
-
-[[package]]
-name = "forest-manager"
-version = "0.1.0"
-dependencies = [
- "bincode",
- "common 0.1.0",
- "hash-db",
- "kvdb",
- "kvdb-rocksdb",
- "log",
- "parity-scale-codec",
- "reference-trie",
- "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
- "sp-runtime 31.0.1",
- "sp-state-machine 0.35.0",
- "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-infra",
- "thiserror",
- "trie-db 0.29.1",
-]
 
 [[package]]
 name = "fork-tree"
@@ -6963,13 +6914,13 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serde",
+ "shp-traits",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io 30.0.0",
  "sp-keyring",
  "sp-runtime 31.0.1",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-traits",
 ]
 
 [[package]]
@@ -7295,12 +7246,12 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serde",
+ "shp-traits",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io 30.0.0",
  "sp-runtime 31.0.1",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-traits",
 ]
 
 [[package]]
@@ -7618,10 +7569,10 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "serde",
+ "shp-traits",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io 30.0.0",
  "sp-runtime 31.0.1",
- "storage-hub-traits",
 ]
 
 [[package]]
@@ -10359,7 +10310,7 @@ dependencies = [
  "ark-serialize",
  "ark-std",
  "blake2 0.10.6",
- "common 0.1.0 (git+https://github.com/w3f/ring-proof)",
+ "common",
  "fflonk",
  "merlin",
 ]
@@ -12332,13 +12283,80 @@ dependencies = [
 ]
 
 [[package]]
+name = "shc-actors-framework"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "futures",
+ "sc-service",
+ "sc-tracing",
+ "sc-utils",
+ "serde",
+ "serde_json",
+ "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-runtime 31.0.1",
+ "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
+ "tokio",
+]
+
+[[package]]
+name = "shc-common"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "parity-scale-codec",
+ "reference-trie",
+ "serde",
+ "shc-actors-framework",
+ "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
+ "storage-hub-runtime",
+ "trie-db 0.29.1",
+]
+
+[[package]]
+name = "shc-file-manager"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "reference-trie",
+ "shc-actors-framework",
+ "shc-common",
+ "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
+ "trie-db 0.29.1",
+]
+
+[[package]]
+name = "shc-forest-manager"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "hash-db",
+ "kvdb",
+ "kvdb-rocksdb",
+ "log",
+ "parity-scale-codec",
+ "reference-trie",
+ "shc-actors-framework",
+ "shc-common",
+ "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-runtime 31.0.1",
+ "sp-state-machine 0.35.0",
+ "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
+ "thiserror",
+ "trie-db 0.29.1",
+]
+
+[[package]]
 name = "shc-rpc"
 version = "0.1.0"
 dependencies = [
- "common 0.1.0",
- "file-manager",
  "jsonrpsee",
  "log",
+ "shc-common",
+ "shc-file-manager",
  "sp-runtime 31.0.1",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "tokio",
@@ -12369,7 +12387,6 @@ dependencies = [
  "sp-runtime 31.0.1",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-traits",
  "trie-db 0.29.1",
 ]
 
@@ -12384,12 +12401,12 @@ dependencies = [
  "reference-trie",
  "scale-info",
  "serde",
+ "shp-traits",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io 30.0.0",
  "sp-runtime 31.0.1",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-traits",
  "trie-db 0.29.1",
 ]
 
@@ -14443,24 +14460,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "storage-hub-infra"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bincode",
- "futures",
- "sc-service",
- "sc-tracing",
- "sc-utils",
- "serde",
- "serde_json",
- "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
- "sp-runtime 31.0.1",
- "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "tokio",
-]
-
-[[package]]
 name = "storage-hub-node"
 version = "0.1.0"
 dependencies = [
@@ -14471,7 +14470,6 @@ dependencies = [
  "bincode",
  "clap",
  "color-print",
- "common 0.1.0",
  "cumulus-client-cli",
  "cumulus-client-collator",
  "cumulus-client-consensus-aura",
@@ -14483,8 +14481,6 @@ dependencies = [
  "cumulus-primitives-parachain-inherent",
  "cumulus-primitives-storage-weight-reclaim",
  "cumulus-relay-chain-interface",
- "file-manager",
- "forest-manager",
  "frame-benchmarking 28.0.0",
  "frame-benchmarking-cli",
  "frame-support 28.0.0",
@@ -14527,6 +14523,10 @@ dependencies = [
  "sc-utils",
  "serde",
  "serde_json",
+ "shc-actors-framework",
+ "shc-common",
+ "shc-file-manager",
+ "shc-forest-manager",
  "shc-rpc",
  "sp-api 26.0.0",
  "sp-block-builder",
@@ -14540,33 +14540,12 @@ dependencies = [
  "sp-timestamp 26.0.0",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "staging-xcm 7.0.0",
- "storage-hub-infra",
  "storage-hub-runtime",
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
  "substrate-prometheus-endpoint",
  "thiserror",
  "tokio",
-]
-
-[[package]]
-name = "storage-hub-primitives"
-version = "0.1.0"
-dependencies = [
- "bincode",
- "frame-support 28.0.0",
- "frame-system 28.0.0",
- "parity-scale-codec",
- "reference-trie",
- "scale-info",
- "serde",
- "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
- "sp-io 30.0.0",
- "sp-runtime 31.0.1",
- "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
- "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
- "storage-hub-traits",
- "trie-db 0.29.1",
 ]
 
 [[package]]
@@ -14614,6 +14593,8 @@ dependencies = [
  "polkadot-runtime-constants",
  "scale-info",
  "shp-file-key-verifier",
+ "shp-forest-verifier",
+ "shp-traits",
  "smallvec",
  "sp-api 26.0.0",
  "sp-block-builder",
@@ -14632,23 +14613,7 @@ dependencies = [
  "staging-xcm 7.0.0",
  "staging-xcm-builder 7.0.0",
  "staging-xcm-executor 7.0.0",
- "storage-hub-primitives",
- "storage-hub-traits",
  "substrate-wasm-builder",
-]
-
-[[package]]
-name = "storage-hub-traits"
-version = "0.1.0"
-dependencies = [
- "frame-support 28.0.0",
- "frame-system 28.0.0",
- "parity-scale-codec",
- "scale-info",
- "serde",
- "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
- "sp-io 30.0.0",
- "sp-runtime 31.0.1",
 ]
 
 [[package]]

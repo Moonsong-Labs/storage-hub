@@ -28,7 +28,7 @@ sp-std = { workspace = true }
 sp-trie = { workspace = true }
 
 # Local
-storage-hub-traits = { workspace = true }
+shp-traits = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }

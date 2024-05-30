@@ -4,6 +4,7 @@ use frame_support::{
     weights::{constants::RocksDbWeight, Weight},
 };
 use frame_system as system;
+use shp_traits::{CommitmentVerifier, MaybeDebug};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
@@ -11,7 +12,6 @@ use sp_runtime::{
     AccountId32, BuildStorage, DispatchError, FixedU128, SaturatedConversion,
 };
 use sp_trie::CompactProof;
-use storage_hub_traits::{CommitmentVerifier, MaybeDebug};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -24,9 +24,9 @@ const UNITS: Balance = 1_000_000_000_000;
 const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
 
 pub type ForestProof =
-    <<Test as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::ForestProof;
+    <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::ForestProof;
 pub type KeyProof =
-    <<Test as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::KeyProof;
+    <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::KeyProof;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;

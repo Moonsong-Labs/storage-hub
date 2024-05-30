@@ -11,8 +11,8 @@ use shc_common::types::FILE_CHUNK_SIZE;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
 
-use file_manager::traits::FileDataTrie;
-use file_manager::traits::FileStorage;
+use shc_file_manager::traits::FileDataTrie;
+use shc_file_manager::traits::FileStorage;
 
 use log::debug;
 use log::error;
