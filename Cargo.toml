@@ -169,7 +169,6 @@ shc-rpc = { path = "client/rpc", default-features = false }
 storage-hub-traits = { path = "support/traits", default-features = false }
 storage-hub-infra = { path = "support/infra", default-features = false }
 storage-hub-runtime = { path = "runtime", default-features = false }
-storage-hub-primitives = { path = "support/primitives", default-features = false }
 
 shp-session-keys = { path = "primitives/session-keys", default-features = false }
 shp-file-key-verifier = { path = "primitives/file-key-verifier", default-features = false }
