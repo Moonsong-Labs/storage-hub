@@ -167,6 +167,51 @@ mod share_access_tests {
             );
         });
     }
+
+    #[test]
+    fn share_access_after_private_bucket_became_public_fail() {
+        new_test_ext().execute_with(|| {
+            let issuer = Keyring::Alice.to_account_id();
+            let issuer_origin = RuntimeOrigin::signed(issuer.clone());
+            let recipient = Keyring::Bob.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+            let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+
+            add_msp_to_provider_storage(&msp);
+
+            assert_ok!(FileSystem::create_bucket(
+                issuer_origin.clone(),
+                msp,
+                bucket_name.clone(),
+                true
+            ));
+
+            let bucket_id =
+                <<Test as crate::Config>::Providers as ReadProvidersInterface>::derive_bucket_id(
+                    &issuer,
+                    bucket_name,
+                );
+
+            // Make the bucket public
+            assert_ok!(FileSystem::update_bucket_privacy(
+                issuer_origin.clone(),
+                bucket_id,
+                false
+            ));
+
+            // Should fail since public buckets do not have a corresponding collection
+            assert_noop!(
+                BucketNfts::share_access(
+                    issuer_origin,
+                    recipient.clone(),
+                    bucket_id,
+                    0,
+                    Some(basic_read_access_regex())
+                ),
+                Error::<Test>::BucketIsNotPrivate
+            );
+        });
+    }
 }
 
 mod update_read_access_tests {
