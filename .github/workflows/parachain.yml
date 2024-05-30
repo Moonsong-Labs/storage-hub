@@ -190,14 +190,18 @@ jobs:
           chmod +x target/release/storage-hub-node
           cd test
           bun install
-          bun zombie:run:native &
+          bun zombie:run:full:native &
           
           sleep 60
-      - name: Run Tests
+      - name: Setup
         run: |
           cd test
           bun typegen
-          bun test
+          bun zombie:setup:native
+      - name: Run Zombienet Test!
+        run: |
+          cd test
+          bun test suites/zombie
 
 
   zombie_test:

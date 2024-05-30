@@ -4,9 +4,31 @@
 
 ### Runtime Tests
 
+> [!NOTE]  
+> TODO Add description here of what this test suite does and what it intends to cover
+
 ### Integration Tests
 
+> [!NOTE]  
+> TODO Add description here of what this test suite does and what it intends to cover
+
 ### End-To-End Tests
+
+> [!NOTE]  
+> TODO Add description here of what this test suite does and what it intends to cover
+
+```shell
+# in the /test directory
+bun i
+bun zombie:run:full:native
+```
+
+Wait for zombie network to start, and then:
+
+```sh
+bun zombie:setup:native
+bun zombie:test suites/zombie
+```
 
 ## Local Usage
 
