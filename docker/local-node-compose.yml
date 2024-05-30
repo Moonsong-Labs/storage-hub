@@ -5,9 +5,9 @@ services:
       - "9944:9944"
     command:
       [
-        "storage-hub-node",
         "--dev",
         "--unsafe-rpc-external",
         "--rpc-cors=all",
         "--no-hardware-benchmarks",
+        "--sealing=manual"
       ]
