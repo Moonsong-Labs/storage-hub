@@ -7,7 +7,10 @@ use crate::{
     Config, Error, Event, StorageRequestExpirations,
 };
 use frame_support::{
-    assert_noop, assert_ok, dispatch::DispatchResultWithPostInfo, traits::Hooks, weights::Weight,
+    assert_noop, assert_ok,
+    dispatch::DispatchResultWithPostInfo,
+    traits::{Hooks, OriginTrait},
+    weights::Weight,
 };
 use shp_traits::SubscribeProvidersInterface;
 use sp_core::{ByteArray, H256};
@@ -1235,6 +1238,7 @@ fn bsp_sign_up(
         bsp_signed.clone(),
         storage_amount,
         multiaddresses,
+        bsp_signed.clone().into_signer().unwrap()
     ));
 
     // Advance enough blocks for randomness to be valid
@@ -1277,6 +1281,7 @@ fn add_msp_to_provider_storage(
             protocols: BoundedVec::default(),
         },
         last_capacity_change: frame_system::Pallet::<Test>::block_number(),
+        payment_account: msp.clone(),
     };
 
     pallet_storage_providers::MainStorageProviders::<Test>::insert(msp_hash, msp_info);
