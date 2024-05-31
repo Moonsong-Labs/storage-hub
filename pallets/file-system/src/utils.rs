@@ -66,14 +66,17 @@ where
     /// Create a bucket for a owner (user) under a given MSP account.
     pub(crate) fn do_create_bucket(
         sender: T::AccountId,
-        msp_account_id: T::AccountId,
+        msp_id: ProviderIdFor<T>,
         name: BoundedVec<u8, BucketNameLimitFor<T>>,
         private: bool,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
         // TODO: Hold user funds for the bucket creation.
 
-        let msp_provider_id = <<T as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::get_provider(msp_account_id.clone())
-                .ok_or(Error::<T>::NotAMsp)?;
+        // Check if the MSP is indeed an MSP.
+        ensure!(
+            <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_msp(&msp_id),
+            Error::<T>::NotAMsp
+        );
 
         // Create collection only if bucket is private
         let maybe_collection_id = if private {
@@ -86,7 +89,7 @@ where
         let bucket_id = <T as crate::Config>::Providers::derive_bucket_id(&sender, name);
 
         <T::Providers as MutateProvidersInterface>::add_bucket(
-            msp_provider_id,
+            msp_id,
             sender,
             bucket_id,
             private,
@@ -180,7 +183,7 @@ where
         msp: Option<ProviderIdFor<T>>,
         bsps_required: Option<T::StorageRequestBspsRequiredType>,
         user_peer_ids: Option<PeerIds<T>>,
-        data_server_sps: BoundedVec<T::AccountId, MaxBspsPerStorageRequest<T>>,
+        data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>,
     ) -> DispatchResult {
         // TODO: Check user funds and lock them for the storage request.
         // TODO: Check storage capacity of chosen MSP (when we support MSPs)
@@ -269,14 +272,22 @@ where
         sender: T::AccountId,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
-    ) -> Result<(MultiAddresses<T>, StorageData<T>, T::AccountId), DispatchError> {
-        let bsp =
+    ) -> Result<
+        (
+            ProviderIdFor<T>,
+            MultiAddresses<T>,
+            StorageData<T>,
+            T::AccountId,
+        ),
+        DispatchError,
+    > {
+        let bsp_id =
             <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
-            <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_bsp(&bsp),
+            <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_bsp(&bsp_id),
             Error::<T>::NotABsp
         );
 
@@ -295,7 +306,7 @@ where
 
         // Check if the BSP is already volunteered for this storage request.
         ensure!(
-            !<StorageRequestBsps<T>>::contains_key(&location, &sender),
+            !<StorageRequestBsps<T>>::contains_key(&location, &bsp_id),
             Error::<T>::BspAlreadyVolunteered
         );
 
@@ -305,7 +316,8 @@ where
                 .as_ref()
                 .try_into()
                 .map_err(|_| Error::<T>::FailedToEncodeFingerprint)?,
-            &bsp.encode()
+            &bsp_id
+                .encode()
                 .try_into()
                 .map_err(|_| Error::<T>::FailedToEncodeBsp)?,
         )?;
@@ -334,7 +346,7 @@ where
         // Add BSP to storage request metadata.
         <StorageRequestBsps<T>>::insert(
             &location,
-            &sender,
+            &bsp_id,
             StorageRequestBspsMetadata::<T> {
                 confirmed: false,
                 _phantom: Default::default(),
@@ -356,11 +368,11 @@ where
 
         <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
 
-        let multiaddresses = T::Providers::get_bsp_multiaddresses(&bsp)?;
+        let multiaddresses = T::Providers::get_bsp_multiaddresses(&bsp_id)?;
         let size = file_metadata.size;
         let owner = file_metadata.owner;
 
-        Ok((multiaddresses, size, owner))
+        Ok((bsp_id, multiaddresses, size, owner))
     }
 
     /// Confirm storing a file.
@@ -379,14 +391,14 @@ where
         root: FileKey<T>,
         forest_proof: ForestProof<T>,
         key_proof: KeyProof<T>,
-    ) -> DispatchResult {
-        let bsp =
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
+        let bsp_id =
             <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
-            <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_bsp(&bsp),
+            <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_bsp(&bsp_id),
             Error::<T>::NotABsp
         );
 
@@ -403,12 +415,12 @@ where
 
         // Check that the BSP has volunteered for the storage request.
         ensure!(
-            <StorageRequestBsps<T>>::contains_key(&location, &sender),
+            <StorageRequestBsps<T>>::contains_key(&location, &bsp_id),
             Error::<T>::BspNotVolunteered
         );
 
         let requests = expect_or_err!(
-            <StorageRequestBsps<T>>::get(&location, &sender),
+            <StorageRequestBsps<T>>::get(&location, &bsp_id),
             "BSP should exist since we checked it above",
             Error::<T>::ImpossibleFailedToGetValue
         );
@@ -443,7 +455,7 @@ where
 
         // Check that the forest proof is valid.
         <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::verify_forest_proof(
-            &bsp,
+            &bsp_id,
             challenges.as_slice(),
             &forest_proof,
         )?;
@@ -487,7 +499,7 @@ where
             <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
 
             // Update bsp for storage request.
-            <StorageRequestBsps<T>>::mutate(&location, &sender, |bsp| {
+            <StorageRequestBsps<T>>::mutate(&location, &bsp_id, |bsp| {
                 if let Some(bsp) = bsp {
                     bsp.confirmed = true;
                 }
@@ -495,15 +507,18 @@ where
         }
 
         // Update root of bsp.
-        <T::Providers as storage_hub_traits::MutateProvidersInterface>::change_root_bsp(bsp, root)?;
+        <T::Providers as storage_hub_traits::MutateProvidersInterface>::change_root_bsp(
+            bsp_id.clone(),
+            root,
+        )?;
 
         // Add data to storage provider.
         <T::Providers as storage_hub_traits::MutateProvidersInterface>::increase_data_used(
-            &sender,
+            &bsp_id,
             file_metadata.size,
         )?;
 
-        Ok(())
+        Ok(bsp_id)
     }
 
     /// Revoke a storage request.
@@ -607,13 +622,22 @@ where
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         can_serve: bool,
-    ) -> DispatchResult {
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
+        let bsp_id = <T::Providers as storage_hub_traits::ProvidersInterface>::get_provider(sender)
+            .ok_or(Error::<T>::NotABsp)?;
+
+        // Check that the provider is indeed a BSP.
+        ensure!(
+            <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_bsp(&bsp_id),
+            Error::<T>::NotABsp
+        );
+
         // TODO: charge SP for this action.
         // TODO: Require & verify proof that the file key is indeed stored by the BSP.
         // TODO: Check that the hash of all the metadata is equal to the `file_key` hash.
         match <StorageRequests<T>>::get(&location) {
             Some(mut metadata) => {
-                match <StorageRequestBsps<T>>::get(&location, &sender) {
+                match <StorageRequestBsps<T>>::get(&location, &bsp_id) {
                     // We hit scenario 1. The BSP is a volunteer and has confirmed storing the file.
                     // We need to decrement the number of bsps confirmed and volunteered and remove the BSP from the storage request.
                     Some(bsp) => {
@@ -630,7 +654,7 @@ where
                         metadata.bsps_volunteered =
                             metadata.bsps_volunteered.saturating_sub(1u32.into());
 
-                        <StorageRequestBsps<T>>::remove(&location, &sender);
+                        <StorageRequestBsps<T>>::remove(&location, &bsp_id);
                     }
                     // We hit scenario 2. There is an open storage request but the BSP is not a volunteer.
                     // We need to increment the number of bsps required.
@@ -654,7 +678,7 @@ where
                     Some(1u32.into()),
                     None,
                     if can_serve {
-                        BoundedVec::try_from(vec![sender.clone()]).unwrap()
+                        BoundedVec::try_from(vec![bsp_id.clone()]).unwrap()
                     } else {
                         BoundedVec::default()
                     },
@@ -664,7 +688,7 @@ where
 
         // TODO: compute new root from proof and update the storage root of bsp.
 
-        Ok(())
+        Ok(bsp_id)
     }
 
     /// Create a collection.
@@ -736,7 +760,7 @@ where
 }
 
 impl<T: crate::Config> storage_hub_traits::SubscribeProvidersInterface for Pallet<T> {
-    type Provider = T::AccountId;
+    type Provider = ProviderIdFor<T>;
 
     fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
         // Adjust bsp assignment threshold by applying the decay function after removing the asymptote

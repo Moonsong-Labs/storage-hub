@@ -6,7 +6,7 @@ use storage_hub_traits::ReadProvidersInterface;
 
 use crate::{
     mock::{new_test_ext, BucketNfts, FileSystem, RuntimeOrigin, System, Test},
-    types::{ItemMetadata, ReadAccessRegex},
+    types::{ItemMetadata, ProviderIdFor, ReadAccessRegex},
     Error, Event,
 };
 
@@ -22,11 +22,11 @@ mod share_access_tests {
             let msp = Keyring::Charlie.to_account_id();
             let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-            add_msp_to_provider_storage(&msp);
+            let msp_id = add_msp_to_provider_storage(&msp);
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                msp,
+                msp_id,
                 bucket_name.clone(),
                 true
             ));
@@ -72,11 +72,11 @@ mod share_access_tests {
             let msp = Keyring::Charlie.to_account_id();
             let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-            add_msp_to_provider_storage(&msp);
+            let msp_id = add_msp_to_provider_storage(&msp);
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                msp,
+                msp_id,
                 bucket_name.clone(),
                 true
             ));
@@ -138,12 +138,12 @@ mod share_access_tests {
             let msp = Keyring::Charlie.to_account_id();
             let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-            add_msp_to_provider_storage(&msp);
+            let msp_id = add_msp_to_provider_storage(&msp);
 
             // Create a public bucket (no collection ID)
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                msp,
+                msp_id,
                 bucket_name.clone(),
                 false
             ));
@@ -177,11 +177,11 @@ mod share_access_tests {
             let msp = Keyring::Charlie.to_account_id();
             let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-            add_msp_to_provider_storage(&msp);
+            let msp_id = add_msp_to_provider_storage(&msp);
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                msp,
+                msp_id,
                 bucket_name.clone(),
                 true
             ));
@@ -226,11 +226,11 @@ mod update_read_access_tests {
             let msp = Keyring::Charlie.to_account_id();
             let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-            add_msp_to_provider_storage(&msp);
+            let msp_id = add_msp_to_provider_storage(&msp);
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                msp,
+                msp_id,
                 bucket_name.clone(),
                 true
             ));
@@ -286,11 +286,11 @@ mod update_read_access_tests {
             let msp = Keyring::Charlie.to_account_id();
             let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-            add_msp_to_provider_storage(&msp);
+            let msp_id = add_msp_to_provider_storage(&msp);
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                msp,
+                msp_id,
                 bucket_name.clone(),
                 true
             ));
@@ -357,11 +357,11 @@ mod update_read_access_tests {
             let msp = Keyring::Charlie.to_account_id();
             let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-            add_msp_to_provider_storage(&msp);
+            let msp_id = add_msp_to_provider_storage(&msp);
 
             assert_ok!(FileSystem::create_bucket(
                 issuer_origin.clone(),
-                msp,
+                msp_id,
                 bucket_name.clone(),
                 true
             ));
@@ -390,7 +390,7 @@ fn basic_read_access_regex() -> ReadAccessRegex<Test> {
     BoundedVec::try_from(b"*".to_vec()).unwrap()
 }
 
-fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) {
+fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<Test> {
     let msp_hash = <<Test as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
 
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
@@ -411,4 +411,6 @@ fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) {
         msp.clone(),
         msp_hash,
     );
+
+    msp_hash
 }

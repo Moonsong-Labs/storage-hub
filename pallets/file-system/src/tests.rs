@@ -1,8 +1,8 @@
 use crate::{
     mock::*,
     types::{
-        FileLocation, PeerIds, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
-        TargetBspsRequired, ProviderIdFor
+        FileLocation, PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
+        StorageRequestMetadata, TargetBspsRequired,
     },
     Config, Error, Event, StorageRequestExpirations,
 };
@@ -29,7 +29,7 @@ mod create_bucket_tests {
             let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
             let private = true;
 
-            add_msp_to_provider_storage(&msp);
+            let msp_id = add_msp_to_provider_storage(&msp);
 
             let bucket_id =
                 <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
@@ -37,7 +37,7 @@ mod create_bucket_tests {
             // Dispatch a signed extrinsic.
             assert_ok!(FileSystem::create_bucket(
                 origin,
-                msp,
+                msp_id,
                 name.clone(),
                 private
             ));
@@ -53,6 +53,7 @@ mod create_bucket_tests {
             System::assert_last_event(
                 Event::NewBucket {
                     who: owner,
+                    msp_id,
                     bucket_id,
                     name,
                     collection_id: Some(0),
@@ -72,7 +73,7 @@ mod create_bucket_tests {
             let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
             let private = false;
 
-            add_msp_to_provider_storage(&msp);
+            let msp_id = add_msp_to_provider_storage(&msp);
 
             let bucket_id =
                 <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
@@ -80,7 +81,7 @@ mod create_bucket_tests {
             // Dispatch a signed extrinsic.
             assert_ok!(FileSystem::create_bucket(
                 origin,
-                msp,
+                msp_id,
                 name.clone(),
                 private
             ));
@@ -96,6 +97,7 @@ mod create_bucket_tests {
             System::assert_last_event(
                 Event::NewBucket {
                     who: owner,
+                    msp_id,
                     bucket_id,
                     name,
                     collection_id: None,
@@ -115,7 +117,7 @@ mod create_bucket_tests {
             let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
             assert_noop!(
-                FileSystem::create_bucket(origin, msp, name, false),
+                FileSystem::create_bucket(origin, H256::from_slice(&msp.as_slice()), name, true),
                 Error::<Test>::NotAMsp
             );
         });
@@ -134,7 +136,7 @@ mod update_bucket_privacy_tests {
             let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
             let private = true;
 
-            add_msp_to_provider_storage(&msp);
+            let msp_id = add_msp_to_provider_storage(&msp);
 
             let bucket_id =
                 <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
@@ -142,7 +144,7 @@ mod update_bucket_privacy_tests {
             // Dispatch a signed extrinsic.
             assert_ok!(FileSystem::create_bucket(
                 origin.clone(),
-                msp,
+                msp_id,
                 name.clone(),
                 private
             ));
@@ -158,6 +160,7 @@ mod update_bucket_privacy_tests {
             System::assert_last_event(
                 Event::NewBucket {
                     who: owner.clone(),
+                    msp_id,
                     bucket_id,
                     name,
                     collection_id: Some(0),
@@ -222,7 +225,7 @@ mod create_and_associate_collection_with_bucket_tests {
             let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
             let private = true;
 
-            add_msp_to_provider_storage(&msp);
+            let msp_id = add_msp_to_provider_storage(&msp);
 
             let bucket_id =
                 <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
@@ -230,7 +233,7 @@ mod create_and_associate_collection_with_bucket_tests {
             // Dispatch a signed extrinsic.
             assert_ok!(FileSystem::create_bucket(
                 origin.clone(),
-                msp,
+                msp_id,
                 name.clone(),
                 private
             ));
@@ -300,7 +303,7 @@ mod create_and_associate_collection_with_bucket_tests {
             let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
             let private = false;
 
-            add_msp_to_provider_storage(&msp);
+            let msp_id = add_msp_to_provider_storage(&msp);
 
             let bucket_id =
                 <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
@@ -308,7 +311,7 @@ mod create_and_associate_collection_with_bucket_tests {
             // Dispatch a signed extrinsic.
             assert_ok!(FileSystem::create_bucket(
                 origin.clone(),
-                msp,
+                msp_id,
                 name.clone(),
                 private
             ));
@@ -693,7 +696,9 @@ fn bsp_volunteer_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+        let bsp_id = <<Test as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::get_provider(bsp_account_id).unwrap();
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
@@ -704,7 +709,7 @@ fn bsp_volunteer_success() {
 
         // Assert that the RequestStorageBsps has the correct value
         assert_eq!(
-            FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone())
+            FileSystem::storage_request_bsps(location.clone(), bsp_id)
                 .expect("BSP should exist in storage"),
             StorageRequestBspsMetadata::<Test> {
                 confirmed: false,
@@ -715,7 +720,7 @@ fn bsp_volunteer_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::AcceptedBspVolunteer {
-                who: bsp_account_id,
+                bsp_id,
                 location,
                 fingerprint,
                 multiaddresses: create_sp_multiaddresses(),
@@ -858,7 +863,9 @@ fn bsp_confirm_storing_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+        let bsp_id = <<Test as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::get_provider(bsp_account_id).unwrap();
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
@@ -899,7 +906,7 @@ fn bsp_confirm_storing_success() {
 
         // Assert that the RequestStorageBsps was updated
         assert_eq!(
-            FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone())
+            FileSystem::storage_request_bsps(location.clone(), bsp_id)
                 .expect("BSP should exist in storage"),
             StorageRequestBspsMetadata::<Test> {
                 confirmed: true,
@@ -910,7 +917,7 @@ fn bsp_confirm_storing_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspConfirmedStoring {
-                who: bsp_account_id,
+                bsp_id,
                 location,
             }
             .into(),
@@ -1139,7 +1146,9 @@ fn bsp_stop_storing_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+        let bsp_id = <<Test as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::get_provider(bsp_account_id).unwrap();
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
@@ -1163,7 +1172,7 @@ fn bsp_stop_storing_success() {
 
         // Assert that the RequestStorageBsps now contains the BSP under the location
         assert_eq!(
-            FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone())
+            FileSystem::storage_request_bsps(location.clone(), bsp_id)
                 .expect("BSP should exist in storage"),
             StorageRequestBspsMetadata::<Test> {
                 confirmed: true,
@@ -1201,7 +1210,7 @@ fn bsp_stop_storing_success() {
 
         // Assert that the RequestStorageBsps has the correct value
         assert!(
-            FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone()).is_none()
+            FileSystem::storage_request_bsps(location.clone(), bsp_id).is_none()
         );
 
         // Assert that the storage was updated
@@ -1224,7 +1233,7 @@ fn bsp_stop_storing_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
-                bsp: bsp_account_id,
+                bsp_id,
                 file_key,
                 owner: owner_account_id,
                 location,
@@ -1260,7 +1269,9 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+        let bsp_id = <<Test as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::get_provider(bsp_account_id).unwrap();
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
@@ -1295,7 +1306,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
 
         // Assert that the RequestStorageBsps has the correct value
         assert!(
-            FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone()).is_none()
+            FileSystem::storage_request_bsps(location.clone(), bsp_id).is_none()
         );
 
         // Assert that the storage was updated
@@ -1318,7 +1329,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
-                bsp: bsp_account_id,
+                bsp_id,
                 file_key,
                 owner: owner_account_id,
                 location,
@@ -1355,7 +1366,9 @@ fn bsp_stop_storing_not_volunteered_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+        let bsp_id = <<Test as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::get_provider(bsp_account_id).unwrap();
 
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
@@ -1391,7 +1404,7 @@ fn bsp_stop_storing_not_volunteered_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
-                bsp: bsp_account_id,
+                bsp_id,
                 file_key,
                 owner: owner_account_id,
                 location,
@@ -1412,6 +1425,11 @@ fn bsp_stop_storing_no_storage_request_success() {
         let size = 4;
         let fingerprint = H256::zero();
 
+        // Sign up account as a Backup Storage Provider
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
+
+        let bsp_id = <<Test as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::get_provider(bsp_account_id).unwrap();
+
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
             bsp_signed.clone(),
@@ -1427,7 +1445,7 @@ fn bsp_stop_storing_no_storage_request_success() {
         assert_eq!(
             FileSystem::storage_requests(location.clone()),
             Some(StorageRequestMetadata {
-                requested_at: 1,
+                requested_at: 5,
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
@@ -1443,7 +1461,7 @@ fn bsp_stop_storing_no_storage_request_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
-                bsp: bsp_account_id,
+                bsp_id,
                 file_key,
                 owner: owner_account_id,
                 location,
@@ -1475,7 +1493,7 @@ fn subscribe_bsp_sign_up_decreases_threshold_success() {
         let initial_threshold = compute_set_get_initial_threshold();
 
         // Simulate the threshold decrease due to a new BSP sign up
-        FileSystem::subscribe_bsp_sign_up(&Keyring::Bob.to_account_id())
+        FileSystem::subscribe_bsp_sign_up(&H256::from_slice(&[1; 32]))
             .expect("BSP sign up should be successful");
 
         let updated_threshold = FileSystem::bsps_assignment_threshold();
@@ -1494,7 +1512,7 @@ fn subscribe_bsp_sign_off_increases_threshold_success() {
         let initial_threshold = compute_set_get_initial_threshold();
 
         // Simulate the threshold increase due to a new BSP sign off
-        FileSystem::subscribe_bsp_sign_off(&Keyring::Bob.to_account_id())
+        FileSystem::subscribe_bsp_sign_off(&H256::from_slice(&[1; 32]))
             .expect("BSP sign off should be successful");
 
         let updated_threshold = FileSystem::bsps_assignment_threshold();
@@ -1515,7 +1533,7 @@ fn threshold_does_not_exceed_asymptote_success() {
         );
 
         // Simulate the threshold decrease due to a new BSP sign up
-        FileSystem::subscribe_bsp_sign_up(&Keyring::Bob.to_account_id())
+        FileSystem::subscribe_bsp_sign_up(&H256::from_slice(&[1; 32]))
             .expect("BSP sign up should be successful");
 
         // Verify that the threshold does is equal to the asymptote

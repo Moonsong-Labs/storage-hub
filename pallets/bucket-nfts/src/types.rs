@@ -40,4 +40,10 @@ pub(crate) type AccountIdLookupSourceOf<T> =
 pub(crate) type AccountIdLookupTargetOf<T> =
     <<T as frame_system::Config>::Lookup as StaticLookup>::Target;
 
+/// Type alias for the string limit of a read access regex.
 pub(crate) type ReadAccessRegex<T> = BoundedVec<u8, <T as pallet_nfts::Config>::StringLimit>;
+
+#[cfg(test)]
+/// Type alias for the `ProviderId` type used in `ProvidersInterface`.
+pub(crate) type ProviderIdFor<T> =
+    <<T as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::Provider;

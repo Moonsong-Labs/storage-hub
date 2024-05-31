@@ -793,36 +793,37 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
     type StorageData = T::StorageData;
     type MerklePatriciaRoot = T::MerklePatriciaRoot;
 
-    fn increase_data_used(who: &T::AccountId, delta: T::StorageData) -> DispatchResult {
-        // TODO: refine this logic, add checks
-        if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+    fn increase_data_used(provider_id: &Self::Provider, delta: T::StorageData) -> DispatchResult {
+        if MainStorageProviders::<T>::contains_key(&provider_id) {
             let mut msp =
-                MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+                MainStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
             msp.data_used = msp.data_used.saturating_add(delta);
-            MainStorageProviders::<T>::insert(&msp_id, msp);
-        } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            MainStorageProviders::<T>::insert(&provider_id, msp);
+        } else if BackupStorageProviders::<T>::contains_key(&provider_id) {
             let mut bsp =
-                BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
+                BackupStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
             bsp.data_used = bsp.data_used.saturating_add(delta);
-            BackupStorageProviders::<T>::insert(&bsp_id, bsp);
+            BackupStorageProviders::<T>::insert(&provider_id, bsp);
         } else {
             return Err(Error::<T>::NotRegistered.into());
         }
         Ok(())
     }
 
-    fn decrease_data_used(who: &Self::AccountId, delta: Self::StorageData) -> DispatchResult {
-        // TODO: refine this logic, add checks
-        if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+    fn decrease_data_used(
+        provider_id: &Self::Provider,
+        delta: Self::StorageData,
+    ) -> DispatchResult {
+        if MainStorageProviders::<T>::contains_key(&provider_id) {
             let mut msp =
-                MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+                MainStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
             msp.data_used = msp.data_used.saturating_sub(delta);
-            MainStorageProviders::<T>::insert(&msp_id, msp);
-        } else if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            MainStorageProviders::<T>::insert(&provider_id, msp);
+        } else if BackupStorageProviders::<T>::contains_key(&provider_id) {
             let mut bsp =
-                BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
+                BackupStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
             bsp.data_used = bsp.data_used.saturating_sub(delta);
-            BackupStorageProviders::<T>::insert(&bsp_id, bsp);
+            BackupStorageProviders::<T>::insert(&provider_id, bsp);
         } else {
             return Err(Error::<T>::NotRegistered.into());
         }
@@ -840,6 +841,12 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
         ensure!(
             !Buckets::<T>::contains_key(&bucket_id),
             Error::<T>::BucketAlreadyExists
+        );
+
+        // Check if the MSP exists
+        ensure!(
+            MainStorageProviders::<T>::contains_key(&msp_id),
+            Error::<T>::NotRegistered
         );
 
         let bucket = Bucket {

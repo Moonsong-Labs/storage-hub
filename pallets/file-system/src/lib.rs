@@ -206,7 +206,7 @@ pub mod pallet {
         Blake2_128Concat,
         FileLocation<T>,
         Blake2_128Concat,
-        T::AccountId,
+        ProviderIdFor<T>,
         StorageRequestBspsMetadata<T>,
         OptionQuery,
     >;
@@ -284,6 +284,7 @@ pub mod pallet {
         /// Notifies that a new bucket has been created.
         NewBucket {
             who: T::AccountId,
+            msp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
             name: BoundedVec<u8, BucketNameLimitFor<T>>,
             collection_id: Option<CollectionIdFor<T>>,
@@ -312,7 +313,7 @@ pub mod pallet {
         },
         /// Notifies that a BSP has been accepted to store a given file.
         AcceptedBspVolunteer {
-            who: T::AccountId,
+            bsp_id: ProviderIdFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             multiaddresses: MultiAddresses<T>,
@@ -321,7 +322,7 @@ pub mod pallet {
         },
         /// Notifies that a BSP confirmed storing a file.
         BspConfirmedStoring {
-            who: T::AccountId,
+            bsp_id: ProviderIdFor<T>,
             location: FileLocation<T>,
         },
         /// Notifies the expiration of a storage request.
@@ -330,7 +331,7 @@ pub mod pallet {
         StorageRequestRevoked { location: FileLocation<T> },
         /// Notifies that a BSP has stopped storing a file.
         BspStoppedStoring {
-            bsp: T::AccountId,
+            bsp_id: ProviderIdFor<T>,
             file_key: FileKey<T>,
             owner: T::AccountId,
             location: FileLocation<T>,
@@ -399,17 +400,18 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn create_bucket(
             origin: OriginFor<T>,
-            msp: T::AccountId,
+            msp_id: ProviderIdFor<T>,
             name: BoundedVec<u8, BucketNameLimitFor<T>>,
             private: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
             let (bucket_id, maybe_collection_id) =
-                Self::do_create_bucket(who.clone(), msp, name.clone(), private)?;
+                Self::do_create_bucket(who.clone(), msp_id.clone(), name.clone(), private)?;
 
             Self::deposit_event(Event::NewBucket {
                 who,
+                msp_id,
                 bucket_id,
                 name,
                 collection_id: maybe_collection_id,
@@ -537,12 +539,12 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and register Storage Provider as BSP for file.
-            let (multiaddresses, size, owner) =
+            let (bsp_id, multiaddresses, size, owner) =
                 Self::do_bsp_volunteer(who.clone(), location.clone(), fingerprint)?;
 
             // Emit new BSP volunteer event.
             Self::deposit_event(Event::AcceptedBspVolunteer {
-                who,
+                bsp_id,
                 multiaddresses,
                 location,
                 fingerprint,
@@ -567,7 +569,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and confirm storage.
-            Self::do_bsp_confirm_storing(
+            let bsp_id = Self::do_bsp_confirm_storing(
                 who.clone(),
                 location.clone(),
                 root,
@@ -576,7 +578,7 @@ pub mod pallet {
             )?;
 
             // Emit event.
-            Self::deposit_event(Event::BspConfirmedStoring { who, location });
+            Self::deposit_event(Event::BspConfirmedStoring { bsp_id, location });
 
             Ok(())
         }
@@ -603,7 +605,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and stop storing the file.
-            Self::do_bsp_stop_storing(
+            let bsp_id = Self::do_bsp_stop_storing(
                 who.clone(),
                 file_key,
                 location.clone(),
@@ -615,7 +617,7 @@ pub mod pallet {
 
             // Emit event.
             Self::deposit_event(Event::BspStoppedStoring {
-                bsp: who,
+                bsp_id,
                 file_key,
                 owner,
                 location,
