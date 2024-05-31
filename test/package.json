@@ -31,6 +31,8 @@
     "@noble/curves": "1.4.0",
     "@noble/hashes": "1.4.0",
     "@polkadot-api/descriptors": "^0.0.1",
+    "@polkadot/api": "11.2.1",
+    "@polkadot/api-augment": "^11.2.1",
     "@polkadot/keyring": "12.6.2",
     "@polkadot/wasm-crypto": "7.3.2",
     "@unique-nft/sr25519": "0.0.2",
@@ -39,7 +41,7 @@
     "expect": "29.7.0",
     "json-bigint": "^1.0.0",
     "lodash": "4.17.21",
-    "polkadot-api": "0.8.0",
+    "polkadot-api": "0.7.2",
     "testcontainers": "10.9.0",
     "tsx": "4.11.0"
   },

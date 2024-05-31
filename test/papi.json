@@ -6,5 +6,9 @@
   "storagehub": {
     "wsUrl": "ws://127.0.0.1:32000",
     "metadata": "storagehub.scale"
+  },
+  "dev_node": {
+    "wsUrl": "ws://localhost:32792",
+    "metadata": "dev_node.scale"
   }
 }
