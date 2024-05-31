@@ -6,7 +6,7 @@ use frame_support::pallet_prelude::*;
 use frame_support::traits::fungible::Inspect;
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
-use storage_hub_traits::ProvidersInterface;
+use shp_traits::ProvidersInterface;
 
 /// Structure that has the Fixed-Rate Payment Stream information
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]

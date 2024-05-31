@@ -35,7 +35,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, Saturating};
-    use storage_hub_traits::ProvidersInterface;
+    use shp_traits::ProvidersInterface;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]

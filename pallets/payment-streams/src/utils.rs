@@ -11,10 +11,10 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_runtime::traits::Convert;
-use storage_hub_traits::ProvidersInterface;
+use shp_traits::ProvidersInterface;
 
 use crate::*;
-use storage_hub_traits::{PaymentManager, PaymentStreamsInterface};
+use shp_traits::{PaymentManager, PaymentStreamsInterface};
 
 macro_rules! expect_or_err {
     // Handle Option type

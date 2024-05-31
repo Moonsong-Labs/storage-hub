@@ -8,9 +8,9 @@ use frame_support::{assert_ok, BoundedVec};
 use sp_core::H256;
 use sp_runtime::traits::Convert;
 use sp_runtime::DispatchError;
-use storage_hub_traits::PaymentManager;
-use storage_hub_traits::PaymentStreamsInterface;
-use storage_hub_traits::ProvidersInterface;
+use shp_traits::PaymentManager;
+use shp_traits::PaymentStreamsInterface;
+use shp_traits::ProvidersInterface;
 
 // `payment-streams` types:
 type NativeBalance = <Test as crate::Config>::NativeBalance;
