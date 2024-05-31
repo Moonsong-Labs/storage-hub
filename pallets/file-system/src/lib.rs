@@ -73,7 +73,7 @@ pub mod pallet {
 
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: shp_traits::ProofsDealerInterface<
-            Provider = <Self::Providers as shp_traits::ProvidersInterface>::Provider,
+            ProviderId = <Self::Providers as shp_traits::ProvidersInterface>::ProviderId,
         >;
 
         /// Type for identifying a file, generally a hash.

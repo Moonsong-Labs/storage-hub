@@ -49,4 +49,4 @@ pub(crate) type CollectionIdFor<T> = <T as pallet_nfts::Config>::CollectionId;
 #[cfg(test)]
 /// Type alias for the `ProviderId` type used in `ProvidersInterface`.
 pub(crate) type ProviderIdFor<T> =
-    <<T as crate::Config>::Providers as shp_traits::ProvidersInterface>::Provider;
+    <<T as crate::Config>::Providers as shp_traits::ProvidersInterface>::ProviderId;

@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::{Encode, FullCodec, HasCompact};
+use codec::{Decode, Encode, FullCodec, HasCompact};
 use frame_support::dispatch::DispatchResult;
 use frame_support::pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member};
 use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
@@ -8,7 +8,7 @@ use frame_support::traits::{fungible, Incrementable};
 use frame_support::Parameter;
 use scale_info::prelude::{fmt::Debug, vec::Vec};
 use sp_core::Get;
-use sp_runtime::traits::{AtLeast32BitUnsigned, Hash};
+use sp_runtime::traits::{AtLeast32BitUnsigned, Hash, Saturating};
 use sp_runtime::{BoundedVec, DispatchError};
 
 #[cfg(feature = "std")]
@@ -31,8 +31,14 @@ pub trait ProvidersInterface {
     type Balance: fungible::Inspect<Self::AccountId> + fungible::hold::Inspect<Self::AccountId>;
     /// The type which can be used to identify accounts.
     type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-    /// The type which represents a registered Provider.
-    type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a registered Provider's ID.
+    type ProviderId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + Ord
+        + MaxEncodedLen
+        + Copy;
     /// The type corresponding to the root of a registered Provider.
     type MerkleHash: Parameter
         + Member
@@ -50,17 +56,17 @@ pub trait ProvidersInterface {
         + FullCodec;
 
     /// Check if an account is a registered Provider.
-    fn is_provider(who: Self::Provider) -> bool;
+    fn is_provider(who: Self::ProviderId) -> bool;
 
-    /// Get Provider from AccountId, if it is a registered Provider.
-    fn get_provider(who: Self::AccountId) -> Option<Self::Provider>;
+    /// Get the ProviderId from AccountId, if it is a registered Provider.
+    fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId>;
 
     /// Get the root for a registered Provider.
-    fn get_root(who: Self::Provider) -> Option<Self::MerkleHash>;
+    fn get_root(who: Self::ProviderId) -> Option<Self::MerkleHash>;
 
     /// Get the stake for a registered  Provider.
     fn get_stake(
-        who: Self::Provider,
+        who: Self::ProviderId,
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
 }
 
@@ -114,17 +120,17 @@ pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
     type MaxNumberOfMultiAddresses: Get<u32>;
 
     /// Check if provider is a BSP.
-    fn is_bsp(who: &Self::Provider) -> bool;
+    fn is_bsp(who: &Self::ProviderId) -> bool;
 
     /// Check if provider is a MSP.
-    fn is_msp(who: &Self::Provider) -> bool;
+    fn is_msp(who: &Self::ProviderId) -> bool;
 
     /// Get number of registered BSPs.
     fn get_number_of_bsps() -> Self::SpCount;
 
     /// Get multiaddresses of a BSP.
     fn get_bsp_multiaddresses(
-        who: &Self::Provider,
+        who: &Self::ProviderId,
     ) -> Result<BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>, DispatchError>;
 
     /// Check if account is the owner of a bucket.
@@ -177,14 +183,14 @@ pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
         + FullCodec;
 
     /// Increase the used data of a Storage Provider (generic, MSP or BSP).
-    fn increase_data_used(who: &Self::Provider, delta: Self::StorageData) -> DispatchResult;
+    fn increase_data_used(who: &Self::ProviderId, delta: Self::StorageData) -> DispatchResult;
 
     /// Decrease the used data of a Storage Provider (generic, MSP or BSP).
-    fn decrease_data_used(who: &Self::Provider, delta: Self::StorageData) -> DispatchResult;
+    fn decrease_data_used(who: &Self::ProviderId, delta: Self::StorageData) -> DispatchResult;
 
     /// Add a new Bucket as a Provider
     fn add_bucket(
-        msp_id: Self::Provider,
+        msp_id: Self::ProviderId,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,
@@ -208,7 +214,7 @@ pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
 
     /// Change the root of a BSP
     fn change_root_bsp(
-        bsp_id: Self::Provider,
+        bsp_id: Self::ProviderId,
         new_root: Self::MerklePatriciaRoot,
     ) -> DispatchResult;
 
@@ -219,13 +225,13 @@ pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
 /// The interface to subscribe to updates on the Storage Providers pallet.
 pub trait SubscribeProvidersInterface {
     /// The type which represents a registered Provider.
-    type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    type ProviderId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
 
     /// Subscribe to the sign off of a BSP.
-    fn subscribe_bsp_sign_off(who: &Self::Provider) -> DispatchResult;
+    fn subscribe_bsp_sign_off(who: &Self::ProviderId) -> DispatchResult;
 
     /// Subscribe to the sign up of a BSP.
-    fn subscribe_bsp_sign_up(who: &Self::Provider) -> DispatchResult;
+    fn subscribe_bsp_sign_up(who: &Self::ProviderId) -> DispatchResult;
 }
 
 /// The interface for the ProofsDealer pallet.
@@ -235,7 +241,7 @@ pub trait SubscribeProvidersInterface {
 /// submit a new challenge with priority.
 pub trait ProofsDealerInterface {
     /// The type which represents a registered Provider.
-    type Provider: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    type ProviderId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
     /// The type that represents a proof just for the Merkle Patricia Forest.
     type ForestProof: Parameter + Member + Debug;
     /// The type that represents a proof for an inner key (leaf) of the Merkle Patricia Forest.
@@ -264,7 +270,7 @@ pub trait ProofsDealerInterface {
     /// This only verifies that something is included in the forest of the Provider. It is not a full
     /// proof of the Provider's data.
     fn verify_forest_proof(
-        who: &Self::Provider,
+        who: &Self::ProviderId,
         challenges: &[Self::MerkleHash],
         proof: &Self::ForestProof,
     ) -> Result<Vec<Self::MerkleHash>, DispatchError>;
@@ -314,4 +320,147 @@ pub trait InspectCollections {
 
     /// Check if a collection exists.
     fn collection_exists(collection_id: &Self::CollectionId) -> bool;
+}
+
+/// The interface of the Payment Streams pallet.
+///
+/// It is to be used by other pallets to interact with the Payment Streams pallet to create, update and delete payment streams.
+pub trait PaymentStreamsInterface {
+    /// The type which represents the balance of the runtime.
+    type Balance: fungible::Inspect<Self::AccountId>
+        + fungible::Mutate<Self::AccountId>
+        + fungible::hold::Inspect<Self::AccountId>
+        + fungible::hold::Mutate<Self::AccountId>;
+    /// The type which represents a User account identifier.
+    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a Provider identifier.
+    type ProviderId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + Ord
+        + MaxEncodedLen
+        + Copy;
+    /// The type which represents a block number.
+    type BlockNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a fixed-rate payment stream.
+    type FixedRatePaymentStream: Encode
+        + Decode
+        + Parameter
+        + Member
+        + Debug
+        + MaxEncodedLen
+        + PartialEq
+        + Clone;
+    /// The type which represents a dynamic-rate payment stream.
+    type DynamicRatePaymentStream: Encode
+        + Decode
+        + Parameter
+        + Member
+        + Debug
+        + MaxEncodedLen
+        + PartialEq
+        + Clone;
+    /// The type of the units that the Provider provides to the User (for example, for storage could be terabytes)
+    type Units: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Default
+        + MaybeDisplay
+        + AtLeast32BitUnsigned
+        + Saturating
+        + Copy
+        + MaxEncodedLen
+        + HasCompact
+        + Into<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
+
+    /// Create a new fixed-rate payment stream from a User to a Provider.
+    fn create_fixed_rate_payment_stream(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+        rate: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
+    ) -> DispatchResult;
+
+    /// Update the rate of an existing fixed-rate payment stream.
+    fn update_fixed_rate_payment_stream(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+        new_rate: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
+    ) -> DispatchResult;
+
+    /// Delete a fixed-rate payment stream.
+    fn delete_fixed_rate_payment_stream(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> DispatchResult;
+
+    /// Get the fixed-rate payment stream information between a User and a Provider
+    fn get_fixed_rate_payment_stream_info(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> Option<Self::FixedRatePaymentStream>;
+
+    /// Create a new dynamic-rate payment stream from a User to a Provider.
+    fn create_dynamic_rate_payment_stream(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+        amount_provided: &Self::Units,
+        current_price: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
+        current_accumulated_price_index: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
+    ) -> DispatchResult;
+
+    /// Update the amount provided of an existing dynamic-rate payment stream.
+    fn update_dynamic_rate_payment_stream(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+        new_amount_provided: &Self::Units,
+        current_price: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
+    ) -> DispatchResult;
+
+    /// Delete a dynamic-rate payment stream.
+    fn delete_dynamic_rate_payment_stream(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> DispatchResult;
+
+    /// Get the dynamic-rate payment stream information between a User and a Provider
+    fn get_dynamic_rate_payment_stream_info(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+    ) -> Option<Self::DynamicRatePaymentStream>;
+}
+
+/// The interface of a Payment Manager, which has to be made aware of the last block for which a charge of a payment can be made by a provider.
+/// Example: the Proofs Dealer pallet uses this interface to update the block when a Storage Provider last submitted a valid proof for the Payment Streams pallet.
+pub trait PaymentManager {
+    /// The type which represents the balance of the runtime.
+    type Balance: fungible::Inspect<Self::AccountId>;
+    /// The type which represents an account identifier.
+    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a provider identifier.
+    type ProviderId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + Ord
+        + MaxEncodedLen
+        + Copy;
+    /// The type which represents a block number.
+    type BlockNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+
+    /// Update the last valid block for which a charge of a payment can be made
+    fn update_last_chargeable_block(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+        new_last_chargeable_block: Self::BlockNumber,
+    ) -> DispatchResult;
+
+    /// Update the accumulated price index that can be used to calculate the amount to be charged
+    /// TODO: The way to avoid having to have this function is to only allow `update_last_chargeable_block` to use the current
+    /// block number (that way, the price index is readily available in the Payment Streams pallet). I'd rather not do that.
+    fn update_chargeable_price_index(
+        provider_id: &Self::ProviderId,
+        user_account: &Self::AccountId,
+        new_last_chargeable_price_index: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
+    ) -> DispatchResult;
 }

@@ -793,7 +793,7 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
     type StorageData = T::StorageData;
     type MerklePatriciaRoot = T::MerklePatriciaRoot;
 
-    fn increase_data_used(provider_id: &Self::Provider, delta: T::StorageData) -> DispatchResult {
+    fn increase_data_used(provider_id: &Self::ProviderId, delta: T::StorageData) -> DispatchResult {
         if MainStorageProviders::<T>::contains_key(&provider_id) {
             let mut msp =
                 MainStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
@@ -811,7 +811,7 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
     }
 
     fn decrease_data_used(
-        provider_id: &Self::Provider,
+        provider_id: &Self::ProviderId,
         delta: Self::StorageData,
     ) -> DispatchResult {
         if MainStorageProviders::<T>::contains_key(&provider_id) {
@@ -938,11 +938,11 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     type MaxNumberOfMultiAddresses = T::MaxMultiAddressAmount;
     type BucketNameLimit = T::BucketNameLimit;
 
-    fn is_bsp(who: &Self::Provider) -> bool {
+    fn is_bsp(who: &Self::ProviderId) -> bool {
         BackupStorageProviders::<T>::contains_key(&who)
     }
 
-    fn is_msp(who: &Self::Provider) -> bool {
+    fn is_msp(who: &Self::ProviderId) -> bool {
         MainStorageProviders::<T>::contains_key(&who)
     }
 
@@ -951,7 +951,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     }
 
     fn get_bsp_multiaddresses(
-        who: &Self::Provider,
+        who: &Self::ProviderId,
     ) -> Result<BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>, DispatchError>
     {
         if let Some(bsp) = BackupStorageProviders::<T>::get(who) {
@@ -1000,17 +1000,17 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
 impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
     type Balance = T::NativeBalance;
     type AccountId = T::AccountId;
-    type Provider = HashId<T>;
+    type ProviderId = HashId<T>;
     type MerkleHash = MerklePatriciaRoot<T>;
 
     // TODO: Refine, add checks and tests for all the logic in this implementation
-    fn is_provider(who: Self::Provider) -> bool {
+    fn is_provider(who: Self::ProviderId) -> bool {
         BackupStorageProviders::<T>::contains_key(&who)
             || MainStorageProviders::<T>::contains_key(&who)
             || Buckets::<T>::contains_key(&who)
     }
 
-    fn get_provider(who: Self::AccountId) -> Option<Self::Provider> {
+    fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId> {
         if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(&who) {
             Some(bsp_id)
         } else if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(&who) {
@@ -1020,7 +1020,7 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
         }
     }
 
-    fn get_root(who: Self::Provider) -> Option<Self::MerkleHash> {
+    fn get_root(who: Self::ProviderId) -> Option<Self::MerkleHash> {
         if let Some(bucket) = Buckets::<T>::get(&who) {
             Some(bucket.root)
         } else if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
@@ -1030,7 +1030,7 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
         }
     }
 
-    fn get_stake(who: Self::Provider) -> Option<BalanceOf<T>> {
+    fn get_stake(who: Self::ProviderId) -> Option<BalanceOf<T>> {
         // TODO: This is not the stake, this logic will be done later down the line
         if let Some(bucket) = Buckets::<T>::get(&who) {
             let _related_msp = MainStorageProviders::<T>::get(bucket.msp_id);

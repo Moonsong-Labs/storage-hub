@@ -154,5 +154,5 @@ pub(super) type BucketNameLimitFor<T> =
 pub(crate) type BucketIdFor<T> =
     <<T as crate::Config>::Providers as shp_traits::ProvidersConfig>::BucketId;
 
-/// Alias for the `Provider` type used in the ProvidersInterface.
-pub type ProviderIdFor<T> = <<T as crate::Config>::Providers as ProvidersInterface>::Provider;
+/// Alias for the `ProviderId` type used in the ProvidersInterface.
+pub type ProviderIdFor<T> = <<T as crate::Config>::Providers as ProvidersInterface>::ProviderId;

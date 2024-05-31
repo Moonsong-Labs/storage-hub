@@ -119,7 +119,7 @@ parameter_types! {
 
 pub struct MockProofsDealer;
 impl ProofsDealerInterface for MockProofsDealer {
-    type Provider = H256;
+    type ProviderId = H256;
     type ForestProof = u32;
     type KeyProof = u32;
     type MerkleHash = H256;
@@ -136,7 +136,7 @@ impl ProofsDealerInterface for MockProofsDealer {
     }
 
     fn verify_forest_proof(
-        _who: &Self::Provider,
+        _who: &Self::ProviderId,
         _challenges: &[Self::MerkleHash],
         _proof: &Self::ForestProof,
     ) -> Result<Vec<Self::MerkleHash>, sp_runtime::DispatchError> {
@@ -242,12 +242,12 @@ impl pallet_storage_providers::Config for Test {
 
 pub struct MockedProvidersSubscriber;
 impl SubscribeProvidersInterface for MockedProvidersSubscriber {
-    type Provider = u64;
+    type ProviderId = u64;
 
-    fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
+    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
         Ok(())
     }
-    fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
+    fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
         Ok(())
     }
 }

@@ -852,7 +852,7 @@ fn bsp_volunteer_success() {
         assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
         let bsp_id =
-            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
                 bsp_account_id,
             )
             .unwrap();
@@ -1023,7 +1023,7 @@ fn bsp_confirm_storing_success() {
         assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
         let bsp_id =
-            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
                 bsp_account_id,
             )
             .unwrap();
@@ -1304,7 +1304,7 @@ fn bsp_stop_storing_success() {
         assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
         let bsp_id =
-            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
                 bsp_account_id,
             )
             .unwrap();
@@ -1429,7 +1429,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
         let bsp_id =
-            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
                 bsp_account_id,
             )
             .unwrap();
@@ -1528,7 +1528,7 @@ fn bsp_stop_storing_not_volunteered_success() {
         assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
         let bsp_id =
-            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
                 bsp_account_id,
             )
             .unwrap();
@@ -1592,7 +1592,7 @@ fn bsp_stop_storing_no_storage_request_success() {
         assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
 
         let bsp_id =
-            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
                 bsp_account_id,
             )
             .unwrap();
