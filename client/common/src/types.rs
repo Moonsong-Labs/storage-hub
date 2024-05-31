@@ -58,6 +58,9 @@ impl AsRef<[u8; 32]> for FileKey {
     }
 }
 
+/// Following types are shared between the client and the runtime.
+/// They are defined as generic types in the runtime and made concrete using the runtime config
+/// here to be used by the node/client.
 pub type KeyVerifier = <Runtime as pallet_proofs_dealer::Config>::KeyVerifier;
 pub type FileKeyProof = <KeyVerifier as CommitmentVerifier>::Proof;
 
