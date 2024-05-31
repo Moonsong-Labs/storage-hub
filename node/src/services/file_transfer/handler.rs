@@ -36,8 +36,8 @@ use sc_network::{
     IfDisconnected, NetworkPeers, NetworkRequest, ProtocolName, ReputationChange,
 };
 use sc_tracing::tracing::{debug, error, info, warn};
+use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::FileKey;
-use storage_hub_infra::actor::{Actor, ActorEventLoop};
 
 use crate::{
     service::ParachainNetworkService, services::file_transfer::events::RemoteUploadRequest,

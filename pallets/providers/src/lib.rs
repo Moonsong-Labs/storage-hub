@@ -45,7 +45,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use storage_hub_traits::SubscribeProvidersInterface;
+    use shp_traits::SubscribeProvidersInterface;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -226,9 +226,9 @@ pub mod pallet {
     /// It returns `None` if the Bucket ID does not correspond to any registered bucket.
     ///
     /// This storage is updated in:
-    /// - [add_bucket](storage_hub_traits::MutateProvidersInterface::add_bucket), which adds a new entry to the map.
-    /// - [change_root_bucket](storage_hub_traits::MutateProvidersInterface::change_root_bucket), which changes the corresponding bucket's root.
-    /// - [remove_root_bucket](storage_hub_traits::MutateProvidersInterface::remove_root_bucket), which removes the entry of the corresponding bucket.
+    /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket), which adds a new entry to the map.
+    /// - [change_root_bucket](shp_traits::MutateProvidersInterface::change_root_bucket), which changes the corresponding bucket's root.
+    /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket), which removes the entry of the corresponding bucket.
     #[pallet::storage]
     pub type Buckets<T: Config> = StorageMap<_, Blake2_128Concat, BucketId<T>, Bucket<T>>;
 

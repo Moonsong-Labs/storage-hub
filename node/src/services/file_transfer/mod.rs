@@ -7,7 +7,7 @@ use crate::service::{ParachainClient, ParachainNetworkService};
 use sc_network::request_responses::IncomingRequest;
 use sc_network::{config::FullNetworkConfiguration, request_responses::ProtocolConfig};
 use sc_service::Configuration;
-use storage_hub_infra::actor::{ActorHandle, ActorSpawner, TaskSpawner};
+use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 
 pub use self::handler::FileTransferService;
 

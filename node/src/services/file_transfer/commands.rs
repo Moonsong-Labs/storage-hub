@@ -4,8 +4,8 @@ use thiserror::Error;
 
 use sc_network::{Multiaddr, PeerId, ProtocolName, RequestFailure};
 
+use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{ChunkId, FileKey, FileProof};
-use storage_hub_infra::actor::ActorHandle;
 
 use super::{schema, FileTransferService};
 
