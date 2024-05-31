@@ -3,11 +3,11 @@ use std::fmt::Debug;
 use codec::{Decode, Encode};
 use polkadot_primitives::BlakeTwo256;
 use serde::{Deserialize, Serialize};
+use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
 use sp_trie::CompactProof;
 use storage_hub_runtime::Runtime;
 pub use storage_hub_runtime::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES};
-use storage_hub_traits::CommitmentVerifier;
 use trie_db::TrieLayout;
 
 /// The hash type of trie node keys

@@ -67,12 +67,12 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         /// The trait for reading and mutating storage provider data.
-        type Providers: storage_hub_traits::ReadProvidersInterface<AccountId = Self::AccountId, Provider = <Self::Providers as storage_hub_traits::MutateProvidersInterface>::Provider>
-            + storage_hub_traits::MutateProvidersInterface<AccountId = Self::AccountId, MerklePatriciaRoot = <Self::ProofDealer as storage_hub_traits::ProofsDealerInterface>::MerkleHash>;
+        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId, Provider = <Self::Providers as shp_traits::MutateProvidersInterface>::Provider>
+            + shp_traits::MutateProvidersInterface<AccountId = Self::AccountId, MerklePatriciaRoot = <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash>;
 
         /// The trait for issuing challenges and verifying proofs.
-        type ProofDealer: storage_hub_traits::ProofsDealerInterface<
-            Provider = <Self::Providers as storage_hub_traits::ProvidersInterface>::Provider,
+        type ProofDealer: shp_traits::ProofsDealerInterface<
+            Provider = <Self::Providers as shp_traits::ProvidersInterface>::Provider,
         >;
 
         /// Type for identifying a file, generally a hash.
@@ -247,7 +247,7 @@ pub mod pallet {
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
             let total_bsps =
-                <T::Providers as storage_hub_traits::ReadProvidersInterface>::get_number_of_bsps()
+                <T::Providers as shp_traits::ReadProvidersInterface>::get_number_of_bsps()
                     .try_into()
                     .map_err(|_| Error::<T>::FailedTypeConversion)
                     .unwrap();
@@ -321,6 +321,8 @@ pub mod pallet {
         BspsRequiredExceedsMax,
         /// Account is not a BSP.
         NotABsp,
+        /// Account is not a MSP.
+        NotAMsp,
         /// BSP has not volunteered to store the given file.
         BspNotVolunteered,
         /// BSP has not confirmed storing the given file.
@@ -376,6 +378,7 @@ pub mod pallet {
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
+            msp_id: ProviderIdFor<T>,
             peer_ids: PeerIds<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
@@ -387,6 +390,7 @@ pub mod pallet {
                 location.clone(),
                 fingerprint,
                 size,
+                Some(msp_id),
                 None,
                 Some(peer_ids.clone()),
                 Default::default(),

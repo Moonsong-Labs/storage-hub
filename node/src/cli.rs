@@ -90,10 +90,6 @@ pub struct ProviderConfigurations {
         default_value = "memory"
     )]
     pub storage_layer: Option<StorageLayer>,
-
-    /// Fixed value to generate deterministic peer id.
-    #[clap(long, value_name = "SEED_FILE", required_if_eq("provider", "true"))]
-    pub seed_file: Option<String>,
 }
 
 impl ProviderConfigurations {
@@ -103,7 +99,6 @@ impl ProviderConfigurations {
                 .provider_type
                 .clone()
                 .expect("Provider type is required"),
-            seed_file: self.seed_file.clone().expect("Seed file is required"),
             storage_layer: self
                 .storage_layer
                 .clone()

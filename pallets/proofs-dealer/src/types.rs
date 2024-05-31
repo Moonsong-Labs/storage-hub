@@ -1,11 +1,11 @@
 use codec::{Decode, Encode};
 use frame_support::traits::fungible;
 use scale_info::TypeInfo;
+use shp_traits::{CommitmentVerifier, ProvidersInterface};
 use sp_std::{
     collections::btree_map::BTreeMap,
     fmt::{Debug, Formatter, Result},
 };
-use storage_hub_traits::{CommitmentVerifier, ProvidersInterface};
 
 /// Type that encapsulates the proof a Provider submits.
 ///

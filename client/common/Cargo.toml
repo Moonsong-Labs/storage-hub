@@ -1,5 +1,5 @@
 [package]
-name = "common"
+name = "shc-common"
 version = "0.1.0"
 description = "Common types, traits and utilities shared by other client crates."
 homepage = { workspace = true }
@@ -26,10 +26,10 @@ sp-trie = { workspace = true, default-features = true }
 
 polkadot-primitives = { workspace = true }
 
-storage-hub-infra = { workspace = true }
-storage-hub-runtime = { workspace = true }
-storage-hub-traits = { workspace = true }
-
-shp-file-key-verifier = { workspace = true }
-
 pallet-proofs-dealer = { workspace = true }
+
+storage-hub-runtime = { workspace = true }
+shp-file-key-verifier = { workspace = true, default-features = false }
+shp-forest-verifier = { workspace = true, default-features = false }
+shp-traits = { workspace = true }
+shc-actors-framework = { workspace = true }

@@ -4,13 +4,14 @@ use frame_support::{
     weights::{constants::RocksDbWeight, Weight},
 };
 use frame_system as system;
+use shp_traits::{CommitmentVerifier, MaybeDebug};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
+use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     traits::{BlakeTwo256, Bounded, Convert, IdentityLookup},
     AccountId32, BuildStorage, DispatchError, FixedU128, SaturatedConversion,
 };
 use sp_trie::CompactProof;
-use storage_hub_traits::{CommitmentVerifier, MaybeDebug};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -23,9 +24,9 @@ const UNITS: Balance = 1_000_000_000_000;
 const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
 
 pub type ForestProof =
-    <<Test as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::ForestProof;
+    <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::ForestProof;
 pub type KeyProof =
-    <<Test as crate::Config>::ProofDealer as storage_hub_traits::ProofsDealerInterface>::KeyProof;
+    <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::KeyProof;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;
@@ -258,13 +259,9 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 
     pallet_balances::GenesisConfig::<Test> {
         balances: vec![
-            (AccountId32::new([1; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([2; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([3; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([4; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([5; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([6; 32]), 1_000_000_000_000_000),
-            (AccountId32::new([7; 32]), 1_000_000_000_000_000),
+            (Keyring::Alice.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Bob.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
         ],
     }
     .assimilate_storage(&mut t)

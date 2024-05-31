@@ -5,12 +5,12 @@ pub mod bsp_upload_file;
 pub mod bsp_volunteer_mock;
 pub mod user_sends_file;
 
-use file_manager::traits::FileStorage;
-use forest_manager::traits::ForestStorage;
 use sc_tracing::tracing::info;
+use shc_actors_framework::event_bus::EventHandler;
 use shc_common::types::HasherOutT;
+use shc_file_manager::traits::FileStorage;
+use shc_forest_manager::traits::ForestStorage;
 use sp_trie::TrieLayout;
-use storage_hub_infra::event_bus::EventHandler;
 
 use crate::services::blockchain::events::{AcceptedBspVolunteer, NewStorageRequest};
 use crate::services::file_transfer::events::RemoteUploadRequest;

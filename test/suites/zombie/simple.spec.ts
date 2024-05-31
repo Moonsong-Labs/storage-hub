@@ -7,7 +7,7 @@ describe("Simple zombieTest", async () => {
     await getZombieClients();
 
   beforeAll(async () => {
-    await Promise.all([waitForChain(shClient), waitForChain(relayClient)]);
+    await Promise.all([waitForChain(relayClient), waitForChain(shClient)]);
   });
 
   describe("Relay", async () => {
@@ -23,17 +23,19 @@ describe("Simple zombieTest", async () => {
     });
 
     test("Check test accounts have balance", async () => {
-      const promises = Object.entries(accounts).map(async ([account, signers]) => {
-        const {
-          data: { free },
-        } = await relayApi.query.System.Account.getValue(signers.sr25519.id);
-        console.log(`✅ Account ${account} has ${free} balance`);
-        return { account, free: free.valueOf() };
-      });
+      const promises = Object.entries(accounts)
+        .filter(([account, _]) => !["bsp", "collator"].includes(account))
+        .map(async ([account, signers]) => {
+          const {
+            data: { free },
+          } = await relayApi.query.System.Account.getValue(signers.sr25519.id);
+          console.log(`✅ Account ${account} has ${free} balance`);
+          return { account, free: free.valueOf(), id: signers.sr25519.id };
+        });
 
       const failures = (await Promise.all(promises)).filter(({ free }) => free < 1n);
-      for (const { account } of failures) {
-        console.error(`❌ Account ${account} has no balance!`);
+      for (const { account, id } of failures) {
+        console.error(`❌ Account ${account} ${id}  has no balance!`);
       }
 
       expect(failures).toHaveLength(0);

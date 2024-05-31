@@ -4,9 +4,31 @@
 
 ### Runtime Tests
 
+> [!NOTE]  
+> TODO Add description here of what this test suite does and what it intends to cover
+
 ### Integration Tests
 
+> [!NOTE]  
+> TODO Add description here of what this test suite does and what it intends to cover
+
 ### End-To-End Tests
+
+> [!NOTE]  
+> TODO Add description here of what this test suite does and what it intends to cover
+
+```shell
+# in the /test directory
+bun i
+bun zombie:run:full:native
+```
+
+Wait for zombie network to start, and then:
+
+```sh
+bun zombie:setup:native
+bun zombie:test suites/zombie
+```
 
 ## Local Usage
 
@@ -116,3 +138,41 @@ bun typegen
 
 This will update the scale files, and create type interfaces from them into the `/typegen` directory.
 These generated descriptors are used throughout the tests to interact with relay and StorageHub chain.
+
+## Troubleshooting
+
+### Errors
+
+#### Weird error for `Incompatible runtime entry`
+
+Occasionally you might see this error when trying to use the Polkadot-API typed interfaces to interact with a storageHub chain.
+
+```shell
+Waiting a maximum of 60 seconds for Local Testnet chain to be ready...✅
+916 | var getFakeSignature = () => fakeSignature;
+917 | var createTxEntry = (pallet, name, assetChecksum, chainHead, broadcast, compatibilityHelper2) => {
+918 |   const { isCompatible, compatibleRuntime$ } = compatibilityHelper2(
+919 |     (ctx) => ctx.checksumBuilder.buildCall(pallet, name)
+920 |   );
+921 |   const checksumError = () => new Error(`Incompatible runtime entry Tx(${pallet}.${name})`);
+                                                                                                ^
+error: Incompatible runtime entry Tx(Sudo.sudo)
+      at checksumError (/home/runner/work/storage-hub/storage-hub/node_modules/polkadot-api/dist/index.mjs:921:91)
+      at /home/runner/work/storage-hub/storage-hub/node_modules/polkadot-api/dist/index.mjs:355:15
+      at /home/runner/work/storage-hub/storage-hub/node_modules/rxjs/dist/cjs/internal/operators/map.js:10:29
+      at /home/runner/work/storage-hub/storage-hub/node_modules/rxjs/dist/cjs/internal/operators/OperatorSubscriber.js:33:21
+      at /home/runner/work/storage-hub/storage-hub/node_modules/rxjs/dist/cjs/internal/Subscriber.js:51:13
+      at /home/runner/work/storage-hub/storage-hub/node_modules/rxjs/dist/cjs/internal/observable/combineLatest.js:51:29
+      at /home/runner/work/storage-hub/storage-hub/node_modules/rxjs/dist/cjs/internal/operators/OperatorSubscriber.js:33:21
+      at /home/runner/work/storage-hub/storage-hub/node_modules/rxjs/dist/cjs/internal/Subscriber.js:51:13
+      at /home/runner/work/storage-hub/storage-hub/node_modules/rxjs/dist/cjs/internal/observable/innerFrom.js:120:17
+```
+
+This is caused by the decorated API referring to a different version of the wasm runtime it was expecting.
+
+> [!TIP]  
+> This can be fixed by running the following:
+>
+> 1. running a local network: `bun zombie:run:native`
+> 2. in a separate terminal, generating new metadata blob: `bun scalegen`
+> 3. generating new types bundle: `bun typegen`

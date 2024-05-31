@@ -23,8 +23,6 @@ use crate::{
 pub struct ProviderOptions {
     /// Provider type.
     pub provider_type: ProviderType,
-    /// Seed to generate deterministic peer id.
-    pub seed_file: String,
     /// Storage layer.
     pub storage_layer: StorageLayer,
 }

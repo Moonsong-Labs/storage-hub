@@ -2,12 +2,16 @@ use codec::Encode;
 use num_bigint::BigUint;
 use rand::Rng;
 use shp_traits::AsCompact;
+<<<<<<< HEAD
+=======
+use shp_traits::CommitmentVerifier;
+use sp_core::H256;
+>>>>>>> main
 use sp_runtime::traits::{BlakeTwo256, Keccak256};
 use sp_trie::{
     recorder::Recorder, CompactProof, LayoutV1, MemoryDB, TrieDBBuilder, TrieDBMutBuilder,
     TrieLayout, TrieMut,
 };
-use storage_hub_traits::CommitmentVerifier;
 use trie_db::{Hasher, Trie, TrieIterator};
 
 use crate::{FileKeyProof, FileKeyVerifier, FileMetadata, Fingerprint};

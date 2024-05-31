@@ -32,13 +32,13 @@ tokio = { workspace = true }
 pallet-file-system = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 storage-hub-runtime = { workspace = true }
-storage-hub-infra = { workspace = true }
-file-manager = { workspace = true }
-forest-manager = { workspace = true }
+shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }
+shc-file-manager = { workspace = true }
+shc-forest-manager = { workspace = true }
 shc-rpc = { workspace = true }
 shp-file-key-verifier = { workspace = true }
-storage-hub-traits = { workspace = true }
+shp-traits = { workspace = true }
 
 clap = { workspace = true }
 log = { workspace = true }

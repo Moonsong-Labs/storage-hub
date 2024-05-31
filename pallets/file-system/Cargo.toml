@@ -28,7 +28,7 @@ sp-std = { workspace = true }
 sp-trie = { workspace = true }
 
 # Local
-storage-hub-traits = { workspace = true }
+shp-traits = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
@@ -38,6 +38,7 @@ pallet-proofs-dealer = { workspace = true }
 # Substrate
 sp-core = { workspace = true }
 sp-io = { workspace = true }
+sp-keyring = { workspace = true }
 
 # Frame
 pallet-balances = { workspace = true, features = ["std"] }

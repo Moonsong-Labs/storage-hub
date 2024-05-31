@@ -7,11 +7,11 @@
 
 use std::sync::Arc;
 
-use file_manager::traits::FileStorage;
 use sc_consensus_manual_seal::{
     rpc::{ManualSeal, ManualSealApiServer},
     EngineCommand,
 };
+use shc_file_manager::traits::FileStorage;
 use shc_rpc::FileStorageApiServer;
 use shc_rpc::FileStorageRpc;
 use sp_core::H256;

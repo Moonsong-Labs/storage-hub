@@ -33,14 +33,16 @@ use sc_client_api::{
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{error, info};
 use serde_json::Number;
+use shc_actors_framework::actor::{Actor, ActorEventLoop};
+use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{
     generic::{self, SignedPayload},
     SaturatedConversion,
 };
-use storage_hub_infra::actor::{Actor, ActorEventLoop};
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
+use substrate_frame_rpc_system::AccountNonceApi;
 
 use crate::{service::ParachainClient, services::blockchain::transaction::SubmittedTransaction};
 
@@ -290,10 +292,24 @@ impl BlockchainService {
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
-        debug!(target: LOG_TARGET, "Import notification: {}", notification.hash);
+        let block_hash: H256 = notification.hash;
+
+        debug!(target: LOG_TARGET, "Import notification: {}", block_hash);
+
+        // We query the [`BlockchainService`] account nonce at this height
+        // and update our internal counter if it's smaller than the result.
+        let pub_key = Self::caller_pub_key(self.keystore.clone());
+        let latest_nonce = self
+            .client
+            .runtime_api()
+            .account_nonce(block_hash, pub_key.into())
+            .expect("Fetching account nonce works; qed");
+        if latest_nonce > self.nonce_counter {
+            self.nonce_counter = latest_nonce
+        };
 
         // Get events from storage.
-        match self.get_events_storage_element(notification.hash) {
+        match self.get_events_storage_element(block_hash) {
             Ok(block_events) => {
                 // Process the events.
                 for ev in block_events {
@@ -337,10 +353,8 @@ impl BlockchainService {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
 
         // Get the nonce for the caller and increment it for the next transaction.
-        // TODO: Handle initialisation of nonce when node is restarted.
         // TODO: Handle nonce overflow.
         let nonce = self.nonce_counter;
-        self.nonce_counter += 1;
 
         // Construct the extrinsic.
         let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce);
@@ -372,8 +386,13 @@ impl BlockchainService {
             .get("error");
 
         if let Some(error) = error {
+            // TODO: Consider how to handle a low nonce error, and retry.
             return Err(anyhow::anyhow!("Error in RPC call: {}", error.to_string()));
         }
+
+        // Only update nonce after we are sure no errors
+        // occurred submitting the extrinsic.
+        self.nonce_counter += 1;
 
         Ok(RpcExtrinsicOutput {
             hash: id_hash,

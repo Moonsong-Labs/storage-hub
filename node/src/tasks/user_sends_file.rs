@@ -1,16 +1,14 @@
 use crate::services::file_transfer::commands::FileTransferServiceInterface;
 use crate::tasks::AcceptedBspVolunteer;
 use crate::tasks::StorageHubHandler;
-use file_manager::traits::FileStorage;
-use forest_manager::traits::ForestStorage;
 use log::{debug, error, info};
-use shc_common::types::FileMetadata;
-
 use sc_network::PeerId;
-
+use shc_actors_framework::event_bus::EventHandler;
+use shc_common::types::FileMetadata;
+use shc_file_manager::traits::FileStorage;
+use shc_forest_manager::traits::ForestStorage;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
-use storage_hub_infra::event_bus::EventHandler;
 
 const LOG_TARGET: &str = "user-sends-file-task";
 
