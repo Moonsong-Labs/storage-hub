@@ -125,6 +125,9 @@ pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
     /// Check if provider is a MSP.
     fn is_msp(who: &Self::ProviderId) -> bool;
 
+    /// Get the payment account of a registered Provider.
+    fn get_provider_payment_account(who: Self::ProviderId) -> Option<Self::AccountId>;
+
     /// Get number of registered BSPs.
     fn get_number_of_bsps() -> Self::SpCount;
 

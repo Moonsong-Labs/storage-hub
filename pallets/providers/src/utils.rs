@@ -784,6 +784,7 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
             multiaddresses: msp.multiaddresses,
             root: MerklePatriciaRoot::<T>::default(),
             last_capacity_change: msp.last_capacity_change,
+            payment_account: msp.payment_account,
         }
     }
 }
@@ -946,6 +947,16 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         MainStorageProviders::<T>::contains_key(&who)
     }
 
+    fn get_provider_payment_account(who: Self::ProviderId) -> Option<Self::AccountId> {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
+            Some(bsp.payment_account)
+        } else if let Some(msp) = MainStorageProviders::<T>::get(&who) {
+            Some(msp.payment_account)
+        } else {
+            None
+        }
+    }
+
     fn get_number_of_bsps() -> Self::SpCount {
         Self::get_bsp_count()
     }
@@ -1011,9 +1022,9 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
     }
 
     fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId> {
-        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(&who) {
+        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who.clone()) {
             Some(bsp_id)
-        } else if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(&who) {
+        } else if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             Some(msp_id)
         } else {
             None

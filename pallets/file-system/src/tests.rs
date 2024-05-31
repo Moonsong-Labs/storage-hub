@@ -9,7 +9,7 @@ use crate::{
 use frame_support::{
     assert_noop, assert_ok,
     dispatch::DispatchResultWithPostInfo,
-    traits::{nonfungibles_v2::Destroy, Hooks},
+    traits::{nonfungibles_v2::Destroy, Hooks, OriginTrait},
     weights::Weight,
 };
 use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface};
@@ -498,7 +498,7 @@ fn request_storage_success() {
             location.clone(),
             fingerprint,
             size,
-            msp_id.clone(),
+            msp_id,
             peer_ids.clone(),
         ));
 
@@ -554,7 +554,7 @@ fn request_storage_expiration_clear_success() {
             location.clone(),
             fingerprint,
             size,
-            msp_id.clone(),
+            msp_id,
             peer_ids.clone(),
         ));
 
@@ -1015,7 +1015,7 @@ fn bsp_confirm_storing_success() {
             location.clone(),
             fingerprint,
             size,
-            msp_id.clone(),
+            msp_id,
             peer_ids.clone(),
         ));
 
@@ -1296,7 +1296,7 @@ fn bsp_stop_storing_success() {
             location.clone(),
             fingerprint,
             size,
-            msp_id.clone(),
+            msp_id,
             peer_ids.clone(),
         ));
 
@@ -1347,7 +1347,7 @@ fn bsp_stop_storing_success() {
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
-                msp: Some(msp_id.clone()),
+                msp: Some(msp_id),
                 user_peer_ids: peer_ids.clone(),
                 data_server_sps: BoundedVec::default(),
                 bsps_required: TargetBspsRequired::<Test>::get(),
@@ -1421,7 +1421,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
             location.clone(),
             H256::zero(),
             size,
-            msp_id.clone(),
+            msp_id,
             Default::default(),
         ));
 
@@ -1520,7 +1520,7 @@ fn bsp_stop_storing_not_volunteered_success() {
             location.clone(),
             fingerprint,
             size,
-            msp_id.clone(),
+            msp_id,
             Default::default(),
         ));
 
@@ -1724,6 +1724,7 @@ fn bsp_sign_up(
         bsp_signed.clone(),
         storage_amount,
         multiaddresses,
+        bsp_signed.clone().into_signer().unwrap()
     ));
 
     // Advance enough blocks for randomness to be valid
@@ -1763,6 +1764,7 @@ fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<T
             protocols: BoundedVec::default(),
         },
         last_capacity_change: frame_system::Pallet::<Test>::block_number(),
+        payment_account: msp.clone(),
     };
 
     pallet_storage_providers::MainStorageProviders::<Test>::insert(msp_hash, msp_info);

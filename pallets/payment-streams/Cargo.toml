@@ -1,0 +1,67 @@
+[package]
+name = "pallet-payment-streams"
+description = "FRAME pallet that allows for the creation and management of payment streams."
+version = "0.1.0"
+homepage = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+codec = { workspace = true }
+scale-info = { workspace = true }
+
+# Local
+shp-traits = { workspace = true }
+
+# Substrate
+frame-benchmarking = { workspace = true, optional = true }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+
+sp-runtime = { workspace = true }
+
+[dev-dependencies]
+serde = { workspace = true }
+
+# Local
+pallet-storage-providers = { workspace = true }
+
+# Substrate
+sp-core = { workspace = true }
+sp-io = { workspace = true }
+
+# Frame
+pallet-balances = { workspace = true, features = ["std"] }
+pallet-nfts = { workspace = true }
+
+[features]
+default = ["std"]
+runtime-benchmarks = [
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
+]
+std = [
+	"codec/std",
+	"frame-benchmarking?/std",
+	"frame-support/std",
+	"frame-system/std",
+	"scale-info/std",
+	"sp-core/std",
+	"sp-io/std",
+	"sp-runtime/std",
+]
+try-runtime = [
+	"frame-support/try-runtime",
+	"frame-system/try-runtime",
+	"sp-runtime/try-runtime",
+]

@@ -504,7 +504,7 @@ where
 
         // Update root of bsp.
         <T::Providers as shp_traits::MutateProvidersInterface>::change_root_bsp(
-            bsp_id.clone(),
+            bsp_id,
             root,
         )?;
 
@@ -674,7 +674,7 @@ where
                     Some(1u32.into()),
                     None,
                     if can_serve {
-                        BoundedVec::try_from(vec![bsp_id.clone()]).unwrap()
+                        BoundedVec::try_from(vec![bsp_id]).unwrap()
                     } else {
                         BoundedVec::default()
                     },

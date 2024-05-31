@@ -95,7 +95,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Check the new free balance of Alice
@@ -138,6 +139,7 @@ mod sign_up {
                                 multiaddresses,
                                 value_prop,
                                 last_capacity_change: current_block,
+                                payment_account: alice
                             }),
                             current_block
                         )
@@ -191,7 +193,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Check the new free balance of Alice
@@ -285,7 +288,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Check the new free balance of Alice
@@ -398,7 +402,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Request sign up Bob as a Main Storage Provider
@@ -406,7 +411,8 @@ mod sign_up {
                         RuntimeOrigin::signed(bob),
                         storage_amount_bob,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        bob
                     ));
 
                     // Check the new free balance of Alice
@@ -486,7 +492,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Check that Alice's request to sign up as a Main Storage Provider exists and is the one we just created
@@ -499,7 +506,8 @@ mod sign_up {
                             data_used: 0,
                             multiaddresses: multiaddresses.clone(),
                             value_prop: value_prop.clone(),
-                            last_capacity_change: current_block
+                            last_capacity_change: current_block,
+                            payment_account: alice
                         })));
                     assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
 
@@ -568,6 +576,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
+                        alice
                     ));
 
                     // Check the new free balance of Alice
@@ -611,6 +620,7 @@ mod sign_up {
                                 data_used: 0,
                                 multiaddresses,
                                 last_capacity_change: current_block,
+                                payment_account: alice
                             }),
                             current_block
                         )
@@ -658,6 +668,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
+                        alice
                     ));
 
                     // Check the new free balance of Alice
@@ -760,6 +771,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
+                        alice
                     ));
 
                     // Check the new free balance of Alice
@@ -881,6 +893,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
+                        alice
                     ));
 
                     // Request sign up Bob as a Backup Storage Provider
@@ -888,6 +901,7 @@ mod sign_up {
                         RuntimeOrigin::signed(bob),
                         storage_amount_bob,
                         multiaddresses.clone(),
+                        bob
                     ));
 
                     // Check the new free balance of Alice
@@ -959,6 +973,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
+                        alice
                     ));
 
                     // Check that Alice's request to sign up as a Backup Storage Provider exists and is the one we just created
@@ -970,7 +985,8 @@ mod sign_up {
                             data_used: 0,
                             multiaddresses: multiaddresses.clone(),
                             root: Default::default(),
-                            last_capacity_change: current_block
+                            last_capacity_change: current_block,
+                            payment_account: alice
                         })));
                     assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
 
@@ -1063,7 +1079,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Request sign up Bob as a Backup Storage Provider
@@ -1071,6 +1088,7 @@ mod sign_up {
                         RuntimeOrigin::signed(bob),
                         storage_amount_bob,
                         multiaddresses.clone(),
+                        bob
                     ));
 
                     // Check the new free balance of Alice
@@ -1163,7 +1181,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Request sign up Bob as a Backup Storage Provider
@@ -1171,6 +1190,7 @@ mod sign_up {
                         RuntimeOrigin::signed(bob),
                         storage_amount_bob,
                         multiaddresses.clone(),
+                        bob
                     ));
 
                     // Advance enough blocks for randomness to be valid
@@ -1252,7 +1272,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Request sign up Bob as a Backup Storage Provider
@@ -1260,6 +1281,7 @@ mod sign_up {
                         RuntimeOrigin::signed(bob),
                         storage_amount_bob,
                         multiaddresses.clone(),
+                        bob
                     ));
 
                     // Advance enough blocks for randomness to be valid
@@ -1358,7 +1380,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Request sign up Bob as a Backup Storage Provider
@@ -1366,6 +1389,7 @@ mod sign_up {
                         RuntimeOrigin::signed(bob),
                         storage_amount_bob,
                         multiaddresses.clone(),
+                        bob
                     ));
 
                     // Advance enough blocks for randomness to be valid
@@ -1444,7 +1468,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Advance enough blocks for randomness to be valid
@@ -1542,14 +1567,16 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount_alice,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Request sign up Bob as a Backup Storage Provider
                     assert_ok!(StorageProviders::request_bsp_sign_up(
                         RuntimeOrigin::signed(bob),
                         storage_amount_bob,
-                        multiaddresses.clone()
+                        multiaddresses.clone(),
+                        bob
                     ));
 
                     // Check the new free balance of Alice
@@ -1680,7 +1707,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Check that Alice is not a Storage Provider
@@ -1739,7 +1767,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Check that Alice is not a Storage Provider
@@ -1797,7 +1826,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Try to request to sign up Alice as a Main Storage Provider
@@ -1806,7 +1836,8 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.clone()
+                            value_prop.clone(),
+                            alice
                         ),
                         Error::<Test>::SignUpRequestPending
                     );
@@ -1850,7 +1881,8 @@ mod sign_up {
                             RuntimeOrigin::signed(account_id),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.clone()
+                            value_prop.clone(),
+                            account_id
                         ));
                     }
 
@@ -1875,7 +1907,8 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.clone()
+                            value_prop.clone(),
+                            alice
                         ),
                         Error::<Test>::MaxMspsReached
                     );
@@ -1912,7 +1945,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Request to sign up the maximum amount of Main Storage Providers
@@ -1927,7 +1961,8 @@ mod sign_up {
                             RuntimeOrigin::signed(account_id),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.clone()
+                            value_prop.clone(),
+                            account_id
                         ));
                     }
 
@@ -1987,6 +2022,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
+                        alice
                     ));
 
                     // Check that Alice is not a Storage Provider
@@ -2040,6 +2076,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
+                        alice
                     ));
 
                     // Check that Alice is not a Storage Provider
@@ -2092,6 +2129,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
+                        alice
                     ));
 
                     // Try to request to sign up Alice as a Backup Storage Provider
@@ -2100,6 +2138,7 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
+                            alice
                         ),
                         Error::<Test>::SignUpRequestPending
                     );
@@ -2138,6 +2177,7 @@ mod sign_up {
                             RuntimeOrigin::signed(account_id),
                             storage_amount,
                             multiaddresses.clone(),
+                            account_id
                         ));
                     }
 
@@ -2162,6 +2202,7 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
+                            alice
                         ),
                         Error::<Test>::MaxBspsReached
                     );
@@ -2193,6 +2234,7 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
+                        alice
                     ));
 
                     // Request to sign up the maximum amount of Backup Storage Providers
@@ -2207,6 +2249,7 @@ mod sign_up {
                             RuntimeOrigin::signed(account_id),
                             storage_amount,
                             multiaddresses.clone(),
+                            account_id
                         ));
                     }
 
@@ -2271,7 +2314,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Advance blocks but not enough for randomness to be valid
@@ -2337,7 +2381,8 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             alice_msp.capacity,
                             alice_msp.multiaddresses.clone(),
-                            alice_msp.value_prop.clone()
+                            alice_msp.value_prop.clone(),
+                            alice
                         ),
                         Error::<Test>::AlreadyRegistered
                     );
@@ -2348,6 +2393,7 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             alice_msp.capacity,
                             alice_msp.multiaddresses.clone(),
+                            alice
                         ),
                         Error::<Test>::AlreadyRegistered
                     );
@@ -2362,7 +2408,8 @@ mod sign_up {
                                 identifier: ValuePropId::<Test>::default(),
                                 data_limit: 10,
                                 protocols: BoundedVec::new(),
-                            }
+                            },
+                            bob
                         ),
                         Error::<Test>::AlreadyRegistered
                     );
@@ -2373,6 +2420,7 @@ mod sign_up {
                             RuntimeOrigin::signed(bob),
                             bob_bsp.capacity,
                             bob_bsp.multiaddresses.clone(),
+                            bob
                         ),
                         Error::<Test>::AlreadyRegistered
                     );
@@ -2410,7 +2458,8 @@ mod sign_up {
                         RuntimeOrigin::signed(alice),
                         storage_amount,
                         multiaddresses.clone(),
-                        value_prop.clone()
+                        value_prop.clone(),
+                        alice
                     ));
 
                     // Request to sign up Bob as a Backup Storage Provider
@@ -2418,6 +2467,7 @@ mod sign_up {
                         RuntimeOrigin::signed(bob),
                         storage_amount,
                         multiaddresses.clone(),
+                        bob
                     ));
 
                     // Try to request to sign up Alice as a Backup Storage Provider
@@ -2426,6 +2476,7 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
+                            alice
                         ),
                         Error::<Test>::SignUpRequestPending
                     );
@@ -2436,7 +2487,8 @@ mod sign_up {
                             RuntimeOrigin::signed(bob),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.clone()
+                            value_prop.clone(),
+                            bob
                         ),
                         Error::<Test>::SignUpRequestPending
                     );
@@ -2474,7 +2526,8 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.clone()
+                            value_prop.clone(),
+                            alice
                         ),
                         Error::<Test>::StorageTooLow
                     );
@@ -2485,6 +2538,7 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
+                            alice
                         ),
                         Error::<Test>::StorageTooLow
                     );
@@ -2522,7 +2576,8 @@ mod sign_up {
                             RuntimeOrigin::signed(helen),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.clone()
+                            value_prop.clone(),
+                            helen
                         ),
                         Error::<Test>::NotEnoughBalance
                     );
@@ -2533,6 +2588,7 @@ mod sign_up {
                             RuntimeOrigin::signed(helen),
                             storage_amount,
                             multiaddresses.clone(),
+                            helen
                         ),
                         Error::<Test>::NotEnoughBalance
                     );
@@ -2563,7 +2619,8 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
-                            value_prop.clone()
+                            value_prop.clone(),
+                            alice
                         ),
                         Error::<Test>::NoMultiAddress
                     );
@@ -2574,6 +2631,7 @@ mod sign_up {
                             RuntimeOrigin::signed(alice),
                             storage_amount,
                             multiaddresses.clone(),
+                            alice
                         ),
                         Error::<Test>::NoMultiAddress
                     );
@@ -3944,7 +4002,8 @@ fn register_account_as_msp(
         RuntimeOrigin::signed(account),
         storage_amount,
         multiaddresses.clone(),
-        value_prop.clone()
+        value_prop.clone(),
+        account
     ));
 
     // Check that the request sign up event was emitted
@@ -3988,6 +4047,7 @@ fn register_account_as_msp(
             multiaddresses,
             value_prop,
             last_capacity_change: frame_system::Pallet::<Test>::block_number(),
+            payment_account: account,
         },
     )
 }
@@ -4026,6 +4086,7 @@ fn register_account_as_bsp(
         RuntimeOrigin::signed(account),
         storage_amount,
         multiaddresses.clone(),
+        account
     ));
 
     // Check that the request sign up event was emitted
@@ -4066,6 +4127,7 @@ fn register_account_as_bsp(
             multiaddresses,
             root: Default::default(),
             last_capacity_change: frame_system::Pallet::<Test>::block_number(),
+            payment_account: account,
         },
     )
 }

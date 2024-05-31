@@ -412,7 +412,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             let (bucket_id, maybe_collection_id) =
-                Self::do_create_bucket(who.clone(), msp_id.clone(), name.clone(), private)?;
+                Self::do_create_bucket(who.clone(), msp_id, name.clone(), private)?;
 
             Self::deposit_event(Event::NewBucket {
                 who,

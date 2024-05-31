@@ -105,7 +105,7 @@ where
 
         // Check if submitter is a registered Provider.
         ensure!(
-            ProvidersPalletFor::<T>::is_provider(submitter.clone()),
+            ProvidersPalletFor::<T>::is_provider(*submitter),
             Error::<T>::NotProvider
         );
 
@@ -119,7 +119,7 @@ where
         // Get root for submitter.
         // If a submitter is a registered Provider, it must have a root, so this shouldn't happen.
         // However, since the implementation of that is not up to this pallet, we need to check.
-        let root = ProvidersPalletFor::<T>::get_root(submitter.clone())
+        let root = ProvidersPalletFor::<T>::get_root(*submitter)
             .ok_or(Error::<T>::ProviderRootNotFound)?;
 
         // Check if root is non-zero.
@@ -129,7 +129,7 @@ where
 
         // Get last block for which the submitter submitted a proof.
         let last_block_proven =
-            match LastBlockProviderSubmittedProofFor::<T>::get(submitter.clone()) {
+            match LastBlockProviderSubmittedProofFor::<T>::get(*submitter) {
                 Some(block) => block,
                 None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
             };
@@ -137,7 +137,7 @@ where
         // Get stake for submitter.
         // If a submitter is a registered Provider, it must have a stake, so this shouldn't happen.
         // However, since the implementation of that is not up to this pallet, we need to check.
-        let stake = ProvidersPalletFor::<T>::get_stake(submitter.clone())
+        let stake = ProvidersPalletFor::<T>::get_stake(*submitter)
             .ok_or(Error::<T>::ProviderStakeNotFound)?;
 
         // Check that the stake is non-zero.
@@ -333,13 +333,13 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     ) -> Result<Vec<Self::MerkleHash>, DispatchError> {
         // Check if submitter is a registered Provider.
         ensure!(
-            ProvidersPalletFor::<T>::is_provider(who.clone()),
+            ProvidersPalletFor::<T>::is_provider(*who),
             Error::<T>::NotProvider
         );
 
         // Get root for submitter.
         // If a submitter is a registered Provider, it must have a root.
-        let root = ProvidersPalletFor::<T>::get_root(who.clone())
+        let root = ProvidersPalletFor::<T>::get_root(*who)
             .ok_or(Error::<T>::ProviderRootNotFound)?;
 
         // Verify forest proof.

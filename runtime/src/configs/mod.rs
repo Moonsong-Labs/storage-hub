@@ -465,6 +465,29 @@ impl pallet_storage_providers::Config for Runtime {
     type MinBlocksBetweenCapacityChanges = ConstU32<10>;
 }
 
+parameter_types! {
+    pub const PaymentStreamHoldReason: RuntimeHoldReason = RuntimeHoldReason::PaymentStreams(pallet_payment_streams::HoldReason::PaymentStreamDeposit);
+}
+
+// Converter from the BlockNumber type to the Balance type for math
+pub struct BlockNumberToBalance;
+
+impl Convert<BlockNumber, Balance> for BlockNumberToBalance {
+    fn convert(block_number: BlockNumber) -> Balance {
+        block_number.into() // In this converter we assume that the block number type is smaller in size than the balance type
+    }
+}
+
+impl pallet_payment_streams::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type NativeBalance = Balances;
+    type ProvidersPallet = Providers;
+    type RuntimeHoldReason = RuntimeHoldReason;
+    type NewStreamDeposit = ConstU32<10>; // Amount of blocks that the deposit of a new stream should be able to pay for
+    type Units = u32; // Storage unit
+    type BlockNumberToBalance = BlockNumberToBalance;
+}
+
 // TODO: remove this and replace with pallet treasury
 pub struct TreasuryAccount;
 impl Get<AccountId32> for TreasuryAccount {

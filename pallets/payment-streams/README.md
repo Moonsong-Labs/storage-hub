@@ -1,0 +1,11 @@
+# Payment Streams pallet
+
+A pallet to manage payment streams between Providers and Users.
+Other pallets can use the implemented interfaces/traits (`PaymentStreamsInterface` interface and `PaymentManager` trait) to create, update, delete and manage payment streams.
+Payment streams can be of two types:
+
+- Fixed rate stream: This one holds the last charged block, the last chargeable block and the rate (the rate holds the information about the amount of units are being provided to the User by the Provider). They are intended to be used when the Provider has some sort of contract with the User in which it agrees to provide its services for a fixed price per block. The rate can be updated, which is useful for example if the terms between the Provider and the User change. The amount charged is equal to: `rate * (last_chargeable_block - last_charged_block)`.
+An example of a fixed rate stream is a Main Storage Provider charging a User for the storage space it uses in its storage system: If the contract between the MSP and User stipulates that the User will be charged 1 token per unit of data per block and the User is storing 100 units with this MSP, then the rate would be equal to 100 tokens per block. If the User has been storing data for 10 blocks, then the amount charged would be 1000 tokens.
+
+- Dynamic rate stream: This one holds the price index at the time of the last charge, the price index at the time of the last chargeable block and the amount of units. They are intended to be used when the price the Provider charges is not directly negotiated with the User, but it is based on a common changing price that gets accumulated over time in the price index storage of this pallet. The amount charged is equal to: `amount_of_units * (price_index_at_last_chargeable_block - price_index_at_last_charge)`.
+An example of a dynamic rate stream is a Backup Storage Provider charging a User for the storage space it uses in its storage system: If the price index at the time of the last charge was 100 and the price index at the time of the last chargeable block (when the BSP last provided a valid proof for a file of the User) is 110 and the User is storing 100 units with this BSP, then the amount charged would be 1000 tokens.

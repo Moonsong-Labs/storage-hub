@@ -162,6 +162,7 @@ pallet-file-system = { path = "pallets/file-system", default-features = false }
 pallet-proofs-dealer = { path = "pallets/proofs-dealer", default-features = false }
 pallet-randomness = { path = "pallets/randomness", default-features = false }
 pallet-bucket-nfts = { path = "pallets/bucket-nfts", default-features = false }
+pallet-payment-streams = { path = "pallets/payment-streams", default-features = false }
 
 shc-actors-framework = { path = "client/actors-framework", default-features = false }
 shc-common = { path = "client/common", default-features = false }

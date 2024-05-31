@@ -7274,6 +7274,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-payment-streams"
+version = "0.1.0"
+dependencies = [
+ "frame-benchmarking 28.0.0",
+ "frame-support 28.0.0",
+ "frame-system 28.0.0",
+ "pallet-balances 28.0.0",
+ "pallet-nfts",
+ "pallet-storage-providers",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "shp-traits",
+ "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-io 30.0.0",
+ "sp-runtime 31.0.1",
+]
+
+[[package]]
 name = "pallet-preimage"
 version = "28.0.0"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0#3c3d6fceb82372a3019b37117aa453d564b212de"
@@ -14643,6 +14662,7 @@ dependencies = [
  "pallet-file-system",
  "pallet-message-queue 31.0.0",
  "pallet-nfts",
+ "pallet-payment-streams",
  "pallet-proofs-dealer",
  "pallet-randomness",
  "pallet-session 28.0.0",
