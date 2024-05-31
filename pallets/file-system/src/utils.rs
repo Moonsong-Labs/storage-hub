@@ -277,8 +277,9 @@ where
         ),
         DispatchError,
     > {
-        let bsp_id = <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
-            .ok_or(Error::<T>::NotABsp)?;
+        let bsp_id =
+            <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
+                .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
@@ -387,8 +388,9 @@ where
         forest_proof: ForestProof<T>,
         key_proof: KeyProof<T>,
     ) -> Result<ProviderIdFor<T>, DispatchError> {
-        let bsp_id = <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
-            .ok_or(Error::<T>::NotABsp)?;
+        let bsp_id =
+            <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
+                .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
