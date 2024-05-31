@@ -445,6 +445,8 @@ parameter_types! {
     pub const StakeToChallengePeriod: Balance = 10 * UNITS;
 }
 
+pub const H_LENGTH: usize = BlakeTwo256::LENGTH;
+
 impl pallet_proofs_dealer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
@@ -454,7 +456,7 @@ impl pallet_proofs_dealer::Config for Runtime {
     type ForestVerifier = ForestVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type KeyVerifier = FileKeyVerifier<
         LayoutV1<BlakeTwo256>,
-        { BlakeTwo256::LENGTH },
+        { H_LENGTH },
         { FILE_CHUNK_SIZE },
         { FILE_SIZE_TO_CHALLENGES },
     >;

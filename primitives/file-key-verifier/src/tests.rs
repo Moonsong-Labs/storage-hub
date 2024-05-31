@@ -2,11 +2,7 @@ use codec::Encode;
 use num_bigint::BigUint;
 use rand::Rng;
 use shp_traits::AsCompact;
-<<<<<<< HEAD
-=======
 use shp_traits::CommitmentVerifier;
-use sp_core::H256;
->>>>>>> main
 use sp_runtime::traits::{BlakeTwo256, Keccak256};
 use sp_trie::{
     recorder::Recorder, CompactProof, LayoutV1, MemoryDB, TrieDBBuilder, TrieDBMutBuilder,

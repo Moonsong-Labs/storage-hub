@@ -1,13 +1,12 @@
 use std::fmt::Debug;
 
 use codec::{Decode, Encode};
-use polkadot_primitives::BlakeTwo256;
 use serde::{Deserialize, Serialize};
 use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
 use sp_trie::CompactProof;
 use storage_hub_runtime::Runtime;
-pub use storage_hub_runtime::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES};
+pub use storage_hub_runtime::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
 use trie_db::TrieLayout;
 
 /// The hash type of trie node keys
@@ -61,8 +60,6 @@ impl AsRef<[u8; 32]> for FileKey {
 
 pub type KeyVerifier = <Runtime as pallet_proofs_dealer::Config>::KeyVerifier;
 pub type FileKeyProof = <KeyVerifier as CommitmentVerifier>::Proof;
-
-pub const H_LENGTH: usize = BlakeTwo256::LENGTH;
 
 pub type Hash = shp_file_key_verifier::Hash<H_LENGTH>;
 pub type Fingerprint = shp_file_key_verifier::Fingerprint<H_LENGTH>;
