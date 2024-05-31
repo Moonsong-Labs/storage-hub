@@ -700,7 +700,7 @@ where
             },
         };
 
-        Ok(T::Nfts::create_collection(&owner, &owner, &config)?)
+        T::Nfts::create_collection(&owner, &owner, &config)
     }
 
     /// Get the block number at which the storage request will expire.
