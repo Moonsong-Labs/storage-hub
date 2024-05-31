@@ -307,3 +307,11 @@ pub trait CommitmentVerifier {
         proof: &Self::Proof,
     ) -> Result<Vec<Self::Challenge>, DispatchError>;
 }
+
+/// Interface used by the file system pallet in order to read storage from NFTs pallet (avoiding tigth coupling).
+pub trait InspectCollections {
+    type CollectionId;
+
+    /// Check if a collection exists.
+    fn collection_exists(collection_id: &Self::CollectionId) -> bool;
+}

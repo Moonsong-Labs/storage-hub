@@ -43,6 +43,9 @@ pub(crate) type AccountIdLookupTargetOf<T> =
 /// Type alias for the string limit of a read access regex.
 pub(crate) type ReadAccessRegex<T> = BoundedVec<u8, <T as pallet_nfts::Config>::StringLimit>;
 
+/// Type alias for the `CollectionId` type used in the Nfts pallet.
+pub(crate) type CollectionIdFor<T> = <T as pallet_nfts::Config>::CollectionId;
+
 #[cfg(test)]
 /// Type alias for the `ProviderId` type used in `ProvidersInterface`.
 pub(crate) type ProviderIdFor<T> =

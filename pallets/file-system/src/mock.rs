@@ -82,6 +82,7 @@ construct_runtime!(
         FileSystem: crate::{Pallet, Call, Storage, Event<T>},
         Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>, HoldReason},
         ProofsDealer: pallet_proofs_dealer::{Pallet, Call, Storage, Event<T>},
+        BucketNfts: pallet_bucket_nfts::{Pallet, Call, Storage, Event<T>},
         Nfts: pallet_nfts::{Pallet, Call, Storage, Event<T>},
     }
 );
@@ -257,6 +258,13 @@ where
     }
 }
 
+impl pallet_bucket_nfts::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type Providers = Providers;
+    #[cfg(feature = "runtime-benchmarks")]
+    type Helper = ();
+}
+
 pub(crate) type ThresholdType = FixedU128;
 
 parameter_types! {
@@ -274,6 +282,7 @@ impl crate::Config for Test {
     type ThresholdType = ThresholdType;
     type Currency = Balances;
     type Nfts = Nfts;
+    type CollectionInspector = BucketNfts;
     type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
     type AssignmentThresholdAsymptote = ThresholdAsymptote;
     type AssignmentThresholdMultiplier = ThresholdMultiplier;

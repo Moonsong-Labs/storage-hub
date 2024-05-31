@@ -6945,6 +6945,7 @@ dependencies = [
  "frame-support 28.0.0",
  "frame-system 28.0.0",
  "pallet-balances 28.0.0",
+ "pallet-bucket-nfts",
  "pallet-nfts",
  "pallet-proofs-dealer",
  "pallet-storage-providers",

@@ -161,6 +161,7 @@ impl pallet_file_system::Config for Test {
     type ThresholdType = ThresholdType;
     type Currency = Balances;
     type Nfts = Nfts;
+    type CollectionInspector = BucketNfts;
     type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
     type AssignmentThresholdAsymptote = ThresholdAsymptote;
     type AssignmentThresholdMultiplier = ThresholdMultiplier;

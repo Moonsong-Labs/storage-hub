@@ -8,7 +8,10 @@ use sp_runtime::DispatchError;
 use crate::types::ReadAccessRegex;
 use crate::{
     pallet,
-    types::{AccountIdLookupSourceOf, AccountIdLookupTargetOf, BucketIdFor, ItemMetadata},
+    types::{
+        AccountIdLookupSourceOf, AccountIdLookupTargetOf, BucketIdFor, CollectionIdFor,
+        ItemMetadata,
+    },
     Error, Pallet,
 };
 
@@ -97,5 +100,13 @@ where
     /// Helper function to create a signed `RuntimeOrigin(RawOrigin)`.
     fn sign(account: &T::AccountId) -> OriginFor<T> {
         OriginFor::<T>::from(RawOrigin::Signed(account.clone()))
+    }
+}
+
+impl<T: pallet::Config> shp_traits::InspectCollections for Pallet<T> {
+    type CollectionId = CollectionIdFor<T>;
+
+    fn collection_exists(collection_id: &Self::CollectionId) -> bool {
+        pallet_nfts::Collection::<T>::contains_key(collection_id)
     }
 }

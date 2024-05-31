@@ -7,7 +7,10 @@ use crate::{
     Config, Error, Event, StorageRequestExpirations,
 };
 use frame_support::{
-    assert_noop, assert_ok, dispatch::DispatchResultWithPostInfo, traits::Hooks, weights::Weight,
+    assert_noop, assert_ok,
+    dispatch::DispatchResultWithPostInfo,
+    traits::{nonfungibles_v2::Destroy, Hooks},
+    weights::Weight,
 };
 use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface};
 use sp_core::{ByteArray, Hasher, H256};
@@ -211,6 +214,185 @@ mod update_bucket_privacy_tests {
             );
         });
     }
+
+    #[test]
+    fn update_bucket_privacy_collection_remains_after_many_privacy_updates_success() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let private = true;
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::create_bucket(
+                origin.clone(),
+                msp_id,
+                name.clone(),
+                private
+            ));
+
+            // Check if collection was created
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::NewBucket {
+                    who: owner.clone(),
+                    msp_id,
+                    bucket_id,
+                    name,
+                    collection_id: Some(0),
+                    private,
+                }
+                .into(),
+            );
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::update_bucket_privacy(
+                origin.clone(),
+                bucket_id,
+                false
+            ));
+
+            // Check that the bucket still has a corresponding collection
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::BucketPrivacyUpdated {
+                    who: owner.clone(),
+                    bucket_id,
+                    collection_id: Some(0),
+                    private: false,
+                }
+                .into(),
+            );
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::update_bucket_privacy(origin, bucket_id, true));
+
+            // Check that the bucket still has a corresponding collection
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::BucketPrivacyUpdated {
+                    who: owner,
+                    bucket_id,
+                    collection_id: Some(0),
+                    private: true,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn update_bucket_privacy_delete_collection_before_going_from_public_to_private_success() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let private = true;
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::create_bucket(
+                origin.clone(),
+                msp_id,
+                name.clone(),
+                private
+            ));
+
+            // Check that the bucket does not have a corresponding collection
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::NewBucket {
+                    who: owner.clone(),
+                    msp_id,
+                    bucket_id,
+                    name,
+                    collection_id: Some(0),
+                    private,
+                }
+                .into(),
+            );
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::update_bucket_privacy(
+                origin.clone(),
+                bucket_id,
+                false
+            ));
+
+            // Check that the bucket still has a corresponding collection
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            let collection_id =
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .expect("Collection ID should exist");
+
+            let w = Nfts::get_destroy_witness(&collection_id).unwrap();
+
+            // Delete collection before going from public to private bucket
+            assert_ok!(Nfts::destroy(origin.clone(), collection_id, w));
+
+            // Update bucket privacy from public to private
+            assert_ok!(FileSystem::update_bucket_privacy(origin, bucket_id, true));
+
+            // Check that the bucket still has a corresponding collection
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            // Assert that the correct event was deposited and that a new collection with index 1 has been created
+            System::assert_last_event(
+                Event::BucketPrivacyUpdated {
+                    who: owner,
+                    bucket_id,
+                    collection_id: Some(1),
+                    private: true,
+                }
+                .into(),
+            );
+        });
+    }
 }
 
 mod create_and_associate_collection_with_bucket_tests {
@@ -290,35 +472,6 @@ mod create_and_associate_collection_with_bucket_tests {
             assert_noop!(
                 FileSystem::create_and_associate_collection_with_bucket(origin, bucket_id),
                 pallet_storage_providers::Error::<Test>::BucketNotFound
-            );
-        });
-    }
-
-    #[test]
-    fn create_and_associate_collection_with_bucket_bucket_not_private_fail() {
-        new_test_ext().execute_with(|| {
-            let owner = Keyring::Alice.to_account_id();
-            let origin = RuntimeOrigin::signed(owner.clone());
-            let msp = Keyring::Charlie.to_account_id();
-            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-            let private = false;
-
-            let msp_id = add_msp_to_provider_storage(&msp);
-
-            let bucket_id =
-                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
-
-            // Dispatch a signed extrinsic.
-            assert_ok!(FileSystem::create_bucket(
-                origin.clone(),
-                msp_id,
-                name.clone(),
-                private
-            ));
-
-            assert_noop!(
-                FileSystem::create_and_associate_collection_with_bucket(origin, bucket_id),
-                Error::<Test>::BucketIsNotPrivate
             );
         });
     }

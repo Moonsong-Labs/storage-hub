@@ -101,40 +101,42 @@ where
 
     /// Update the privacy of a bucket.
     ///
-    /// *Callable only by the owner of the bucket.*
+    /// This function allows the owner of a bucket to update its privacy setting.
+    /// If the bucket is set to private and no collection exists,
+    /// a new collection will be created. If the bucket is set to public and
+    /// an associated collection exists, the collection remains but the privacy setting is updated to public.
+    /// If the bucket has an associated collection and it does not exist in storage, a new collection will be created.
     pub(crate) fn do_update_bucket_privacy(
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
         private: bool,
     ) -> Result<Option<CollectionIdFor<T>>, DispatchError> {
-        // Check that the sender is the owner of the bucket.
-        <T::Providers as ReadProvidersInterface>::is_bucket_owner(&sender, &bucket_id)?;
+        // Ensure the sender is the owner of the bucket.
+        T::Providers::is_bucket_owner(&sender, &bucket_id)?;
 
+        // Retrieve the collection ID associated with the bucket, if any.
         let maybe_collection_id = T::Providers::get_read_access_group_id_of_bucket(&bucket_id)?;
 
-        // Create collection if bucket will become private and there is no corresponding collection.
+        // Determine the appropriate collection ID based on the new privacy setting.
         let collection_id = match (private, maybe_collection_id) {
-            // Create collection if the bucket will be private and there is no collection associated with it.
+            // Create a new collection if the bucket will be private and no collection exists.
             (true, None) => {
-                // Create collection since the bucket will be private.
-                let new_collection_id = Self::create_collection(sender)?;
-
-                // Update the collection id in the bucket.
-                <T::Providers as MutateProvidersInterface>::update_bucket_read_access_group_id(
-                    bucket_id,
-                    Some(new_collection_id.clone()),
-                )?;
-
-                Some(new_collection_id)
+                Some(Self::do_create_and_associate_collection_with_bucket(sender.clone(), bucket_id)?)
             }
-            // Return the collection id if there is one associated with the bucket in any case (private or not).
-            (_, Some(collection_id)) => Some(collection_id),
-            // Return None if the bucket will be public and there is no collection associated with it.
+            // Handle case where the bucket has an existing collection.
+            (_, Some(current_collection_id))
+                if !<T::CollectionInspector as shp_traits::InspectCollections>::collection_exists(&current_collection_id) =>
+            {
+                Some(Self::do_create_and_associate_collection_with_bucket(sender.clone(), bucket_id)?)
+            }
+            // Use the existing collection ID if it exists.
+            (_, Some(current_collection_id)) => Some(current_collection_id),
+            // No collection needed if the bucket is public and no collection exists.
             (false, None) => None,
         };
 
-        // Update the privacy of the bucket.
-        <T::Providers as MutateProvidersInterface>::update_bucket_privacy(bucket_id, private)?;
+        // Update the privacy setting of the bucket.
+        T::Providers::update_bucket_privacy(bucket_id, private)?;
 
         Ok(collection_id)
     }
@@ -153,12 +155,6 @@ where
     ) -> Result<CollectionIdFor<T>, DispatchError> {
         // Check if sender is the owner of the bucket.
         <T::Providers as ReadProvidersInterface>::is_bucket_owner(&sender, &bucket_id)?;
-
-        // Check if the bucket is private.
-        ensure!(
-            <T::Providers as ReadProvidersInterface>::is_bucket_private(&bucket_id)?,
-            Error::<T>::BucketIsNotPrivate
-        );
 
         let collection_id = Self::create_collection(sender)?;
 
@@ -691,6 +687,7 @@ where
 
     /// Create a collection.
     fn create_collection(owner: T::AccountId) -> Result<CollectionIdFor<T>, DispatchError> {
+        // TODO: Parametrize the collection settings.
         let config: CollectionConfigFor<T> = CollectionConfig {
             settings: CollectionSettings::all_enabled(),
             max_supply: None,

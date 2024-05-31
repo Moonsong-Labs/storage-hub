@@ -68,13 +68,13 @@ use xcm::latest::prelude::BodyId;
 // Local module imports
 use super::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
-    AccountId, Aura, Balance, Balances, Block, BlockNumber, CollatorSelection, FileSystem, Hash,
-    MessageQueue, Nfts, Nonce, PalletInfo, ParachainSystem, ProofsDealer, Providers, Runtime,
-    RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
-    Session, SessionKeys, Signature, System, WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO,
-    BLOCK_PROCESSING_VELOCITY, DAYS, EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT,
-    MINUTES, NORMAL_DISPATCH_RATIO, RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION,
-    UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
+    AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection,
+    FileSystem, Hash, MessageQueue, Nfts, Nonce, PalletInfo, ParachainSystem, ProofsDealer,
+    Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason,
+    RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System, WeightToFee, XcmpQueue,
+    AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS, EXISTENTIAL_DEPOSIT, HOURS,
+    MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
+    RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
     {ParachainInfo, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES},
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
@@ -556,6 +556,7 @@ impl pallet_file_system::Config for Runtime {
     type ThresholdType = ThresholdType;
     type Currency = Balances;
     type Nfts = Nfts;
+    type CollectionInspector = BucketNfts;
     type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
     type AssignmentThresholdAsymptote = ThresholdAsymptote;
     type AssignmentThresholdMultiplier = ThresholdMultiplier;

@@ -134,6 +134,11 @@ pub mod pallet {
         type Nfts: NonFungiblesInspect<Self::AccountId>
             + Create<Self::AccountId, CollectionConfigFor<Self>>;
 
+        /// Collection inspector
+        type CollectionInspector: shp_traits::InspectCollections<
+            CollectionId = CollectionIdFor<Self>,
+        >;
+
         /// The multiplier increases the threshold over time (blocks) which increases the
         /// likelihood of a BSP successfully volunteering to store a file.
         #[pallet::constant]
