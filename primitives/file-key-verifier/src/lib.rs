@@ -29,6 +29,7 @@ pub struct FileKeyVerifier<
     pub _phantom: core::marker::PhantomData<T>,
 }
 
+/// A hash type of arbitrary length `H_LENGTH`.
 pub type Hash<const H_LENGTH: usize> = [u8; H_LENGTH];
 
 #[derive(Encode, Decode, Clone, Copy, Debug, PartialEq, Eq, TypeInfo)]
