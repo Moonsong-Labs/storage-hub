@@ -118,6 +118,7 @@ async function main() {
   await storageApi.tx.Providers.request_bsp_sign_up({
     capacity: 5000000,
     multiaddresses: [new Binary(uint8Array)],
+    payment_account: accounts.bsp.sr25519.id,
   }).signAndSubmit(accounts.bsp.sr25519.signer);
   process.stdout.write("✅\n");
 
