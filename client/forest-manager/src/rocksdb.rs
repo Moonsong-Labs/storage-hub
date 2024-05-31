@@ -305,7 +305,7 @@ where
     }
 
     fn insert_metadata(&mut self, metadata: &FileMetadata) -> Result<HasherOutT<T>, ErrorT<T>> {
-        let file_key = metadata.key::<T::Hash>();
+        let file_key = metadata.file_key::<T::Hash>();
 
         if self.contains_file_key(&file_key)? {
             return Err(ForestStorageError::FileKeyAlreadyExists(file_key).into());
@@ -425,9 +425,9 @@ mod tests {
     }
 
     // Reused function to create metadata with variable parameters.
-    fn create_metadata(owner: &str, location: Vec<u8>, size: u64) -> FileMetadata {
+    fn create_metadata(owner: Vec<u8>, location: Vec<u8>, size: u64) -> FileMetadata {
         FileMetadata {
-            owner: owner.to_string(),
+            owner,
             location,
             size,
             fingerprint: Fingerprint::default(),
@@ -437,7 +437,7 @@ mod tests {
     /// Reusable function to create metadata, insert it into the storage and return the lookup key and metadata.
     fn create_and_insert_metadata<T>(
         forest_storage: &mut RocksDBForestStorage<T>,
-        owner: &str,
+        owner: Vec<u8>,
         location: Vec<u8>,
         size: u64,
     ) -> HasherOutT<T>
@@ -469,7 +469,12 @@ mod tests {
     fn test_write_read() {
         let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>().unwrap();
 
-        let file_key = create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
+        let file_key = create_and_insert_metadata(
+            &mut forest_storage,
+            "Bob".as_bytes().to_vec(),
+            vec![7, 8, 9],
+            200,
+        );
 
         assert!(forest_storage.contains_file_key(&file_key).unwrap());
     }
@@ -478,7 +483,12 @@ mod tests {
     fn test_remove_existing_file_key() {
         let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>().unwrap();
 
-        let file_key = create_and_insert_metadata(&mut forest_storage, "Bob", vec![7, 8, 9], 200);
+        let file_key = create_and_insert_metadata(
+            &mut forest_storage,
+            "Bob".as_bytes().to_vec(),
+            vec![7, 8, 9],
+            200,
+        );
 
         assert!(forest_storage.delete_file_key(&file_key).is_ok());
         assert!(!forest_storage.contains_file_key(&file_key).unwrap());
@@ -496,7 +506,12 @@ mod tests {
 
         let mut keys = Vec::new();
         for i in 0..50 {
-            let file_key = create_and_insert_metadata(&mut forest_storage, "Alice", vec![i], 200);
+            let file_key = create_and_insert_metadata(
+                &mut forest_storage,
+                "Alice".as_bytes().to_vec(),
+                vec![i],
+                200,
+            );
             keys.push(file_key);
         }
 
@@ -516,7 +531,12 @@ mod tests {
 
         let mut keys = Vec::new();
         for i in 0..50 {
-            let file_key = create_and_insert_metadata(&mut forest_storage, "Alice", vec![i], 200);
+            let file_key = create_and_insert_metadata(
+                &mut forest_storage,
+                "Alice".as_bytes().to_vec(),
+                vec![i],
+                200,
+            );
             keys.push(file_key);
         }
 
@@ -548,18 +568,36 @@ mod tests {
     fn test_generate_proof_challenge_before_first_leaf() {
         let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>().unwrap();
 
-        let file_key1 = create_and_insert_metadata(&mut forest_storage, "Alice", vec![10], 200);
-        let file_key2 = create_and_insert_metadata(&mut forest_storage, "Alice", vec![11], 200);
+        let file_key1 = create_and_insert_metadata(
+            &mut forest_storage,
+            "Alice".as_bytes().to_vec(),
+            vec![10],
+            200,
+        );
+        let file_key2 = create_and_insert_metadata(
+            &mut forest_storage,
+            "Alice".as_bytes().to_vec(),
+            vec![11],
+            200,
+        );
 
-        let mut challenge = min(file_key1, file_key2);
-        let challenge_bytes = challenge.as_mut();
+        let smallest_key_challenge = min(file_key1, file_key2);
+        let mut challenge_bytes: H256 = smallest_key_challenge.clone();
+        let challenge_bytes = challenge_bytes.as_mut();
         challenge_bytes[31] = challenge_bytes[31] - 1;
+
+        let challenge = H256::from_slice(challenge_bytes.as_ref());
 
         let proof = forest_storage.generate_proof(vec![challenge]).unwrap();
 
+        let proven = proof
+            .proven
+            .first()
+            .expect("Proven leaves should have proven 1 challenge");
+
         assert_eq!(proof.proven.len(), 1);
         assert!(
-            matches!(proof.proven.first().expect("Proven leaves should have proven 1 challenge"), Proven::NeighbourKeys((None, Some(leaf))) if leaf.key.as_ref() == file_key1.as_bytes())
+            matches!(proven, Proven::NeighbourKeys((None, Some(leaf))) if leaf.key.as_ref() == smallest_key_challenge.as_bytes())
         );
     }
 
@@ -569,7 +607,12 @@ mod tests {
 
         let mut keys = Vec::new();
         for i in 0..50 {
-            let file_key = create_and_insert_metadata(&mut forest_storage, "Alice", vec![i], 200);
+            let file_key = create_and_insert_metadata(
+                &mut forest_storage,
+                "Alice".as_bytes().to_vec(),
+                vec![i],
+                200,
+            );
             keys.push(file_key);
         }
 
@@ -592,7 +635,12 @@ mod tests {
 
         let mut keys = Vec::new();
         for i in 0..50 {
-            let file_key = create_and_insert_metadata(&mut forest_storage, "Alice", vec![i], 200);
+            let file_key = create_and_insert_metadata(
+                &mut forest_storage,
+                "Alice".as_bytes().to_vec(),
+                vec![i],
+                200,
+            );
             keys.push(file_key);
         }
 
