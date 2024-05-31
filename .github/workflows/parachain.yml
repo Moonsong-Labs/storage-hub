@@ -202,7 +202,7 @@ jobs:
       - name: Run Zombienet Test!
         run: |
           cd test
-          bun test suites/zombie
+          bun test:full-e2e
 
 
   zombie_test:

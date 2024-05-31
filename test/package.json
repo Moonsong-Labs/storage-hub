@@ -18,7 +18,8 @@
     "zombie:test:native": "bun run scripts/downloadPolkadot.ts 1.9.0  && bun zombienet test --provider native configs/simpleNative.zndsl",
     "zombie:test:local": "SH_IMAGE=storage-hub:local bun zombienet test configs/simple.zndsl",
     "zombie:test:latest": "SH_IMAGE=docker.io/moonsonglabs/storage-hub:latest bun zombienet test configs/simple.zndsl",
-    "test": "bun test"
+    "test:full-e2e": "bun test suites/zombie",
+    "test:node": "bun test suites/solo-node"
   },
   "keywords": [],
   "author": "",
