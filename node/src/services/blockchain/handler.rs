@@ -30,21 +30,26 @@ use sc_client_api::{
     BlockBackend, BlockImportNotification, BlockchainEvents, HeaderBackend, StorageKey,
     StorageProvider,
 };
+use sc_network::Multiaddr;
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{error, info};
 use serde_json::Number;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
+use shc_common::types::Fingerprint;
 use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{
     generic::{self, SignedPayload},
-    SaturatedConversion,
+    AccountId32, SaturatedConversion,
 };
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
 
-use crate::{service::ParachainClient, services::blockchain::transaction::SubmittedTransaction};
+use crate::{
+    service::ParachainClient,
+    services::blockchain::{events::AcceptedBspVolunteer, transaction::SubmittedTransaction},
+};
 
 use crate::services::blockchain::{
     commands::BlockchainServiceCommand,
@@ -330,6 +335,43 @@ impl BlockchainService {
                             size,
                             user_peer_ids: peer_ids,
                         }),
+                        // A BSP will only process this event if itself triggered it.
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::AcceptedBspVolunteer {
+                                who,
+                                location,
+                                fingerprint,
+                                multiaddresses,
+                                owner,
+                                size,
+                            },
+                        ) if who
+                            == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) =>
+                        {
+                            // We try to convert the types coming from the runtime into our expected types.
+                            let fingerprint: Fingerprint = fingerprint.as_bytes().into();
+                            // Here the Multiaddresses come as a BoundedVec of BoundedVecs of bytes,
+                            // and we need to convert them. Returns if any of the provided multiaddresses are invalid.
+                            let mut multiaddress_vec: Vec<Multiaddr> = Vec::new();
+                            for raw_multiaddr in multiaddresses.into_iter() {
+                                let result = Multiaddr::try_from(raw_multiaddr.into_inner());
+                                if let Ok(multiaddr) = result {
+                                    multiaddress_vec.push(multiaddr);
+                                } else {
+                                    error!(target: LOG_TARGET, "Malformed Multiaddress in AcceptedBspVolunteer event. bsp: {:?}, file owner: {:?}, file fingerprint: {:?}", who, owner, fingerprint);
+                                    return;
+                                }
+                            }
+
+                            self.emit(AcceptedBspVolunteer {
+                                who,
+                                location,
+                                fingerprint,
+                                multiaddresses: multiaddress_vec,
+                                owner,
+                                size,
+                            })
+                        }
                         // Ignore all other events.
                         _ => {}
                     }

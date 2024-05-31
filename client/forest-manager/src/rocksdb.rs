@@ -582,11 +582,11 @@ mod tests {
         );
 
         let smallest_key_challenge = min(file_key1, file_key2);
-        let mut challenge_bytes: H256 = smallest_key_challenge.clone();
+        let mut challenge_bytes: H256 = smallest_key_challenge;
         let challenge_bytes = challenge_bytes.as_mut();
         challenge_bytes[31] = challenge_bytes[31] - 1;
 
-        let challenge = H256::from_slice(challenge_bytes.as_ref());
+        let challenge = H256::from_slice(challenge_bytes);
 
         let proof = forest_storage.generate_proof(vec![challenge]).unwrap();
 
