@@ -1,5 +1,5 @@
 [package]
-name = "forest-manager"
+name = "shc-forest-manager"
 version = "0.1.0"
 description = ""
 homepage = { workspace = true }
@@ -30,5 +30,5 @@ sp-core = { workspace = true }
 sp-trie = { workspace = true, default-features = true }
 sp-runtime = { workspace = true }
 
+shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }
-storage-hub-infra = { workspace = true }

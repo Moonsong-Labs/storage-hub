@@ -31,9 +31,9 @@ pallet-proofs-dealer = { workspace = true }
 pallet-randomness = { workspace = true }
 pallet-payment-streams = { workspace = true }
 
-storage-hub-traits = { workspace = true }
-storage-hub-primitives = { workspace = true }
 shp-file-key-verifier = { workspace = true }
+shp-forest-verifier = { workspace = true }
+shp-traits = { workspace = true }
 
 # Substrate
 frame-support = { workspace = true }
@@ -132,6 +132,7 @@ std = [
 	"polkadot-parachain-primitives/std",
 	"polkadot-runtime-common/std",
 	"scale-info/std",
+	"shp-traits/std",
 	"sp-api/std",
 	"sp-block-builder/std",
 	"sp-consensus-aura/std",
@@ -144,8 +145,6 @@ std = [
 	"sp-std/std",
 	"sp-transaction-pool/std",
 	"sp-version/std",
-	"storage-hub-traits/std",
-	"storage-hub-primitives/std",
 	"substrate-wasm-builder",
 	"runtime-constants/std",
 	"xcm-builder/std",

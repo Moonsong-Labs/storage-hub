@@ -1,7 +1,7 @@
 use sc_network::Multiaddr;
+use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::Fingerprint;
 use sp_runtime::AccountId32;
-use storage_hub_infra::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 
 type StorageData = pallet_file_system::types::StorageData<storage_hub_runtime::Runtime>;
 type FileLocation = pallet_file_system::types::FileLocation<storage_hub_runtime::Runtime>;

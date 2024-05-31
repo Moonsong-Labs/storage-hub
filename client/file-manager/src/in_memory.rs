@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use shc_common::types::{Chunk, ChunkId, FileMetadata, FileProof, HasherOutT, Leaf};
+use shc_common::types::{Chunk, ChunkId, FileMetadata, FileProof, HasherOutT, Leaf, H_LENGTH};
 
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::TrieDBMutBuilder;
@@ -119,12 +119,18 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
     }
 }
 
-pub struct InMemoryFileStorage<T: TrieLayout + 'static> {
+pub struct InMemoryFileStorage<T: TrieLayout + 'static>
+where
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+{
     pub metadata: HashMap<HasherOutT<T>, FileMetadata>,
     pub file_data: HashMap<HasherOutT<T>, InMemoryFileDataTrie<T>>,
 }
 
-impl<T: TrieLayout> InMemoryFileStorage<T> {
+impl<T: TrieLayout> InMemoryFileStorage<T>
+where
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+{
     pub fn new() -> Self {
         Self {
             metadata: HashMap::new(),
@@ -133,7 +139,10 @@ impl<T: TrieLayout> InMemoryFileStorage<T> {
     }
 }
 
-impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
+impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T>
+where
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+{
     type FileDataTrie = InMemoryFileDataTrie<T>;
 
     fn generate_proof(
@@ -154,11 +163,17 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
             .as_str(),
         );
 
-        if metadata.chunk_count() != file_data.stored_chunks_count() {
+        if metadata.chunks_count() != file_data.stored_chunks_count() {
             return Err(FileStorageError::IncompleteFile);
         }
 
-        if metadata.fingerprint != file_data.root.as_ref().into() {
+        if metadata.fingerprint
+            != file_data
+                .root
+                .as_ref()
+                .try_into()
+                .expect("Hasher output mismatch!")
+        {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 
@@ -263,7 +278,7 @@ impl<T: TrieLayout + 'static> FileStorage<T> for InMemoryFileStorage<T> {
         );
 
         // Check if we have all the chunks for the file.
-        if metadata.chunk_count() != file_data.stored_chunks_count() {
+        if metadata.chunks_count() != file_data.stored_chunks_count() {
             return Ok(FileStorageWriteOutcome::FileIncomplete);
         }
 

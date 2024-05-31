@@ -1,6 +1,6 @@
 [package]
-name = "storage-hub-infra"
-description = "Various infrastructure utils used in StorageHub"
+name = "shc-actors-framework"
+description = "The definitions for the actors framework used in StorageHub"
 version = "0.1.0"
 homepage = { workspace = true }
 license = { workspace = true }

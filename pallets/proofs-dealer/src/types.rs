@@ -1,11 +1,11 @@
 use codec::{Decode, Encode};
 use frame_support::traits::fungible;
 use scale_info::TypeInfo;
+use shp_traits::{CommitmentVerifier, ProvidersInterface};
 use sp_std::{
     collections::btree_map::BTreeMap,
     fmt::{Debug, Formatter, Result},
 };
-use storage_hub_traits::{CommitmentVerifier, ProvidersInterface};
 
 /// Type that encapsulates the proof a Provider submits.
 ///
@@ -103,7 +103,7 @@ pub type TreasuryAccountFor<T> = <T as crate::Config>::Treasury;
 /// Syntactic sugar for the Providers type used in the proofs pallet.
 pub type ProvidersPalletFor<T> = <T as crate::Config>::ProvidersPallet;
 
-/// Syntactic sugar for the ProviderId type used in the proofs pallet.
+/// Syntactic sugar for the Provider ID type used in the proofs pallet.
 pub type ProviderFor<T> = <<T as crate::Config>::ProvidersPallet as ProvidersInterface>::ProviderId;
 
 /// Syntactic sugar for the ForestVerifier type used in the proofs pallet.

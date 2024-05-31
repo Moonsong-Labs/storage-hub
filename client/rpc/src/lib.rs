@@ -11,8 +11,8 @@ use shc_common::types::FILE_CHUNK_SIZE;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
 
-use file_manager::traits::FileDataTrie;
-use file_manager::traits::FileStorage;
+use shc_file_manager::traits::FileDataTrie;
+use shc_file_manager::traits::FileStorage;
 
 use log::debug;
 use log::error;
@@ -120,10 +120,10 @@ where
         let file_metadata = FileMetadata {
             size: fs_metadata.len(),
             fingerprint: root.as_ref().into(),
-            owner: owner.to_string(),
+            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&owner).to_vec(),
             location: location.clone().into(),
         };
-        let file_key = file_metadata.key::<T::Hash>();
+        let file_key = file_metadata.file_key::<T::Hash>();
 
         // Acquire FileStorage write lock.
         let mut file_storage_write_lock = self.file_storage.write().await;

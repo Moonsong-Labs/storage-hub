@@ -42,8 +42,8 @@ pub enum ForestStorageError<H> {
     FailedToInsertFileKey(H),
     #[error("Expecting root to be in storage")]
     ExpectingRootToBeInStorage,
-    #[error("Failed to parse root")]
-    FailedToParseRoot,
+    #[error("Failed to parse key")]
+    FailedToParseKey,
     #[error("Failed to read storage")]
     FailedToReadStorage,
     #[error("Failed to write to storage")]
