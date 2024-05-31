@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde_json::Number;
+use shc_actors_framework::actor::ActorHandle;
 use sp_core::H256;
-use storage_hub_infra::actor::ActorHandle;
 
 use super::{
     handler::BlockchainService,

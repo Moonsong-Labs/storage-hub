@@ -16,8 +16,7 @@ use frame_support::{
     },
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-use storage_hub_traits::ProvidersInterface;
-use storage_hub_traits::{MutateProvidersInterface, ReadProvidersInterface};
+use shp_traits::{ProvidersInterface, ReadProvidersInterface, MutateProvidersInterface};
 
 type NativeBalance = <Test as crate::Config>::NativeBalance;
 type AccountId = <Test as frame_system::Config>::AccountId;

@@ -18,8 +18,8 @@ sp-runtime = { workspace = true }
 sp-trie = { workspace = true }
 
 # Local
-file-manager = { workspace =  true }
 shc-common = { workspace = true }
+shc-file-manager = { workspace =  true }
 
 [features]
 default = ["std"]

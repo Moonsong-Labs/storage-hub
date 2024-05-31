@@ -27,13 +27,13 @@ pub fn build_merkle_patricia_forest<T: TrieLayout>(
         file_path.append(&mut file_name.to_vec());
 
         let metadata = FileMetadata {
-            owner: String::from("owner"),
+            owner: "owner".as_bytes().to_vec(),
             location: file_path,
             size: 0,
             fingerprint: Fingerprint::default(),
         };
 
-        file_leaves.push((metadata.key::<HashT<T>>(), metadata.encode()));
+        file_leaves.push((metadata.file_key::<HashT<T>>(), metadata.encode()));
     }
     // Construct the Merkle Patricia Forest
     let mut memdb = MemoryDB::<T::Hash>::default();

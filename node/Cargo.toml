@@ -30,17 +30,20 @@ tokio = { workspace = true }
 
 # Local
 pallet-file-system = { workspace = true }
+pallet-proofs-dealer = { workspace = true }
 storage-hub-runtime = { workspace = true }
-storage-hub-infra = { workspace = true }
-file-manager = { workspace = true }
-forest-manager = { workspace = true }
+shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }
+shc-file-manager = { workspace = true }
+shc-forest-manager = { workspace = true }
 shc-rpc = { workspace = true }
+shp-file-key-verifier = { workspace = true }
+shp-traits = { workspace = true }
 
 clap = { workspace = true }
 log = { workspace = true }
 codec = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, default-features = true }
 jsonrpsee = { workspace = true }
 futures = { workspace = true }
 reference-trie = { workspace = true }

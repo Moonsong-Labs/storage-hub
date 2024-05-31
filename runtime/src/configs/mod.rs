@@ -51,6 +51,8 @@ use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use shp_file_key_verifier::FileKeyVerifier;
+use shp_forest_verifier::ForestVerifier;
+use shp_traits::{CommitmentVerifier, MaybeDebug};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
@@ -61,8 +63,6 @@ use sp_std::vec::Vec;
 use sp_trie::CompactProof;
 use sp_trie::LayoutV1;
 use sp_version::RuntimeVersion;
-use storage_hub_primitives::TrieVerifier;
-use storage_hub_traits::{CommitmentVerifier, MaybeDebug};
 use xcm::latest::prelude::BodyId;
 
 // Local module imports
@@ -484,16 +484,18 @@ parameter_types! {
     pub const StakeToChallengePeriod: Balance = 10 * UNIT;
 }
 
+pub const H_LENGTH: usize = BlakeTwo256::LENGTH;
+
 impl pallet_proofs_dealer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
     type NativeBalance = Balances;
     type MerkleTrieHash = Hash;
     type MerkleTrieHashing = BlakeTwo256;
-    type ForestVerifier = TrieVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
+    type ForestVerifier = ForestVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type KeyVerifier = FileKeyVerifier<
         LayoutV1<BlakeTwo256>,
-        { BlakeTwo256::LENGTH },
+        { H_LENGTH },
         { FILE_CHUNK_SIZE },
         { FILE_SIZE_TO_CHALLENGES },
     >;

@@ -7,12 +7,12 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use sp_core::Hasher;
+use shp_traits::{MutateProvidersInterface, ReadProvidersInterface};
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
 };
 use sp_std::{vec, vec::Vec};
-use storage_hub_traits::{MutateProvidersInterface, ReadProvidersInterface};
 
 use crate::{
     pallet,
@@ -191,7 +191,7 @@ where
 
         if let Some(ref msp) = msp {
             ensure!(
-                <T::Providers as storage_hub_traits::ReadProvidersInterface>::is_msp(msp),
+                <T::Providers as shp_traits::ReadProvidersInterface>::is_msp(msp),
                 Error::<T>::NotAMsp
             );
         }
@@ -464,7 +464,7 @@ where
         let challenges = vec![];
 
         // Check that the key proof is valid.
-        <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::verify_key_proof(
+        <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
             &file_key,
             &challenges,
             &key_proof,
@@ -556,7 +556,7 @@ where
         // Check if there are already BSPs who have confirmed to store the file.
         if file_metadata.bsps_confirmed >= T::StorageRequestBspsRequiredType::zero() {
             // Issue a challenge to force the BSPs to update their storage root.
-            <T::ProofDealer as storage_hub_traits::ProofsDealerInterface>::challenge_with_priority(
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &file_key,
             )?;
         }
