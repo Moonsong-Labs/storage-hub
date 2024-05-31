@@ -128,11 +128,10 @@ where
         ensure!(root == Self::default_forest_root(), Error::<T>::ZeroRoot);
 
         // Get last block for which the submitter submitted a proof.
-        let last_block_proven =
-            match LastBlockProviderSubmittedProofFor::<T>::get(*submitter) {
-                Some(block) => block,
-                None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
-            };
+        let last_block_proven = match LastBlockProviderSubmittedProofFor::<T>::get(*submitter) {
+            Some(block) => block,
+            None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
+        };
 
         // Get stake for submitter.
         // If a submitter is a registered Provider, it must have a stake, so this shouldn't happen.
@@ -339,8 +338,8 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
         // Get root for submitter.
         // If a submitter is a registered Provider, it must have a root.
-        let root = ProvidersPalletFor::<T>::get_root(*who)
-            .ok_or(Error::<T>::ProviderRootNotFound)?;
+        let root =
+            ProvidersPalletFor::<T>::get_root(*who).ok_or(Error::<T>::ProviderRootNotFound)?;
 
         // Verify forest proof.
         ForestVerifierFor::<T>::verify_proof(&root, challenges, proof)

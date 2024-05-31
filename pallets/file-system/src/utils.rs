@@ -503,10 +503,7 @@ where
         }
 
         // Update root of bsp.
-        <T::Providers as shp_traits::MutateProvidersInterface>::change_root_bsp(
-            bsp_id,
-            root,
-        )?;
+        <T::Providers as shp_traits::MutateProvidersInterface>::change_root_bsp(bsp_id, root)?;
 
         // Add data to storage provider.
         <T::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
