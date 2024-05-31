@@ -39,7 +39,7 @@ pub mod pallet {
         sp_runtime::traits::{
             AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps,
         },
-        traits::fungible::*,
+        traits::{fungible::*, Incrementable},
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
@@ -128,6 +128,9 @@ pub mod pallet {
         /// Subscribers to important updates
         type Subscribers: SubscribeProvidersInterface;
 
+        /// The type of the Bucket NFT Collection ID.
+        type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
+
         /// The minimum amount that an account has to deposit to become a storage provider.
         #[pallet::constant]
         type SpMinDeposit: Get<BalanceOf<Self>>;
@@ -165,6 +168,10 @@ pub mod pallet {
         /// The maximum amount of Buckets that a MSP can have.
         #[pallet::constant]
         type MaxBuckets: Get<u32>;
+
+        /// Type that represents the byte limit of a bucket name.
+        #[pallet::constant]
+        type BucketNameLimit: Get<u32>;
 
         /// The maximum amount of blocks after which a sign up request expires so the randomness cannot be chosen
         #[pallet::constant]
@@ -405,6 +412,10 @@ pub mod pallet {
         NoBucketId,
         /// Error thrown when a user has a SP ID assigned to it but the SP data does not exist in storage (Inconsistency error).
         SpRegisteredButDataNotFound,
+        /// Error thrown when a bucket ID is not found in storage.
+        BucketNotFound,
+        /// Error thrown when a bucket ID already exists in storage.
+        BucketAlreadyExists,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately

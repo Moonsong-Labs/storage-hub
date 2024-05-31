@@ -70,7 +70,7 @@ where
         );
 
         let file_metadata = FileMetadata {
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),
             size: event.size.into(),
             location: event.location.into_inner(),
             fingerprint: event.fingerprint,

@@ -850,7 +850,7 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         Self::do_create_dynamic_rate_payment_stream(
             provider_id,
             user_account,
-            amount_provided.clone(),
+            *amount_provided,
             current_price,
             current_accumulated_price_index,
         )?;
@@ -876,7 +876,7 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         Self::do_update_dynamic_rate_payment_stream(
             &provider_id,
             &user_account,
-            new_amount_provided.clone(),
+            *new_amount_provided,
             current_price,
         )?;
 
