@@ -108,8 +108,8 @@ pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
         + AsMut<[u8]>
         + MaxEncodedLen
         + FullCodec;
-    /// Type that represents the limit of a string.
-    type StringLimit: Get<u32>;
+    /// Type that represents the byte limit of a bucket name.
+    type BucketNameLimit: Get<u32>;
     /// Maximum number of multiaddresses a provider can have.
     type MaxNumberOfMultiAddresses: Get<u32>;
 
@@ -144,7 +144,7 @@ pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
     /// Derive bucket Id from the owner and bucket name.
     fn derive_bucket_id(
         owner: &Self::AccountId,
-        bucket_name: BoundedVec<u8, Self::StringLimit>,
+        bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
     ) -> Self::BucketId;
 }
 
@@ -177,10 +177,10 @@ pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
         + FullCodec;
 
     /// Increase the used data of a Storage Provider (generic, MSP or BSP).
-    fn increase_data_used(who: &Self::AccountId, delta: Self::StorageData) -> DispatchResult;
+    fn increase_data_used(who: &Self::Provider, delta: Self::StorageData) -> DispatchResult;
 
     /// Decrease the used data of a Storage Provider (generic, MSP or BSP).
-    fn decrease_data_used(who: &Self::AccountId, delta: Self::StorageData) -> DispatchResult;
+    fn decrease_data_used(who: &Self::Provider, delta: Self::StorageData) -> DispatchResult;
 
     /// Add a new Bucket as a Provider
     fn add_bucket(
