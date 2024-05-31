@@ -151,12 +151,12 @@ impl crate::Config for Test {
 
 pub struct MockedProvidersSubscriber;
 impl SubscribeProvidersInterface for MockedProvidersSubscriber {
-    type Provider = u64;
+    type ProviderId = u64;
 
-    fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
+    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
         Ok(())
     }
-    fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
+    fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
         Ok(())
     }
 }

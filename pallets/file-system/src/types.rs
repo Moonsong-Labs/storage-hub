@@ -122,5 +122,5 @@ pub type MaxMultiAddresses<T> =
 /// Alias for a bounded vector of [`MultiAddress`].
 pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;
 
-/// Alias for the `Provider` type used in the ProvidersInterface.
-pub type ProviderIdFor<T> = <<T as crate::Config>::Providers as ProvidersInterface>::Provider;
+/// Alias for the `ProviderId` type used in the ProvidersInterface.
+pub type ProviderIdFor<T> = <<T as crate::Config>::Providers as ProvidersInterface>::ProviderId;

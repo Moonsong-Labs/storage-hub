@@ -161,7 +161,7 @@ where
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
     ) -> Result<(MultiAddresses<T>, StorageData<T>, T::AccountId), DispatchError> {
-        let bsp = <T::Providers as shp_traits::ProvidersInterface>::get_provider(who.clone())
+        let bsp = <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(who.clone())
             .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
@@ -270,7 +270,7 @@ where
         forest_proof: ForestProof<T>,
         key_proof: KeyProof<T>,
     ) -> DispatchResult {
-        let bsp = <T::Providers as shp_traits::ProvidersInterface>::get_provider(who.clone())
+        let bsp = <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(who.clone())
             .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
@@ -611,9 +611,9 @@ where
 }
 
 impl<T: crate::Config> shp_traits::SubscribeProvidersInterface for Pallet<T> {
-    type Provider = T::AccountId;
+    type ProviderId = T::AccountId;
 
-    fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
+    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
         // Adjust bsp assignment threshold by applying the decay function after removing the asymptote
         let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
         let base_threshold =
@@ -629,7 +629,7 @@ impl<T: crate::Config> shp_traits::SubscribeProvidersInterface for Pallet<T> {
         Ok(())
     }
 
-    fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
+    fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
         // Adjust bsp assignment threshold by applying the inverse of the decay function after removing the asymptote
         let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
         let base_threshold =
