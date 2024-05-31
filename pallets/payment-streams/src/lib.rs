@@ -34,8 +34,8 @@ pub mod pallet {
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
-    use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, Saturating};
     use shp_traits::ProvidersInterface;
+    use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, Saturating};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]

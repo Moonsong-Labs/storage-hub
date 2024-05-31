@@ -5,12 +5,12 @@ use frame_support::pallet_prelude::Weight;
 use frame_support::traits::fungible::Mutate;
 use frame_support::traits::{Get, OnFinalize, OnIdle, OnInitialize};
 use frame_support::{assert_ok, BoundedVec};
-use sp_core::H256;
-use sp_runtime::traits::Convert;
-use sp_runtime::DispatchError;
 use shp_traits::PaymentManager;
 use shp_traits::PaymentStreamsInterface;
 use shp_traits::ProvidersInterface;
+use sp_core::H256;
+use sp_runtime::traits::Convert;
+use sp_runtime::DispatchError;
 
 // `payment-streams` types:
 type NativeBalance = <Test as crate::Config>::NativeBalance;

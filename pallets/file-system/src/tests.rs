@@ -1281,7 +1281,7 @@ fn add_msp_to_provider_storage(
             protocols: BoundedVec::default(),
         },
         last_capacity_change: frame_system::Pallet::<Test>::block_number(),
-		payment_account: msp.clone(),
+        payment_account: msp.clone(),
     };
 
     pallet_storage_providers::MainStorageProviders::<Test>::insert(msp_hash, msp_info);

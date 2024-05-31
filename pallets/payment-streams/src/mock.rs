@@ -5,13 +5,13 @@ use frame_support::{
     weights::constants::RocksDbWeight,
 };
 use frame_system as system;
+use shp_traits::SubscribeProvidersInterface;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256};
 use sp_runtime::traits::Convert;
 use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
     BuildStorage, DispatchResult,
 };
-use shp_traits::SubscribeProvidersInterface;
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
