@@ -148,11 +148,11 @@ pub(super) type CollectionConfigFor<T> =
 
 /// Alias for the `BucketNameLimit` type used in the ReadProvidersInterface.
 pub(super) type BucketNameLimitFor<T> =
-    <<T as crate::Config>::Providers as storage_hub_traits::ReadProvidersInterface>::BucketNameLimit;
+    <<T as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::BucketNameLimit;
 
 /// Type alias representing the type of `BucketId` used in `ProvidersInterface`.
 pub(crate) type BucketIdFor<T> =
-    <<T as crate::Config>::Providers as storage_hub_traits::ProvidersConfig>::BucketId;
+    <<T as crate::Config>::Providers as shp_traits::ProvidersConfig>::BucketId;
 
 /// Alias for the `Provider` type used in the ProvidersInterface.
 pub type ProviderIdFor<T> = <<T as crate::Config>::Providers as ProvidersInterface>::Provider;

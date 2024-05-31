@@ -30,7 +30,7 @@ impl<T: Config> core::fmt::Debug for ItemMetadata<T> {
 
 /// Type alias representing the type of `BucketId` used in `ProvidersInterface`.
 pub(crate) type BucketIdFor<T> =
-    <<T as crate::Config>::Providers as storage_hub_traits::ProvidersConfig>::BucketId;
+    <<T as crate::Config>::Providers as shp_traits::ProvidersConfig>::BucketId;
 
 /// Type alias for the account ID source type.
 pub(crate) type AccountIdLookupSourceOf<T> =
@@ -46,4 +46,4 @@ pub(crate) type ReadAccessRegex<T> = BoundedVec<u8, <T as pallet_nfts::Config>::
 #[cfg(test)]
 /// Type alias for the `ProviderId` type used in `ProvidersInterface`.
 pub(crate) type ProviderIdFor<T> =
-    <<T as crate::Config>::Providers as storage_hub_traits::ProvidersInterface>::Provider;
+    <<T as crate::Config>::Providers as shp_traits::ProvidersInterface>::Provider;

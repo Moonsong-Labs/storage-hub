@@ -43,7 +43,7 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         /// The trait for reading storage provider data.
-        type Providers: storage_hub_traits::ReadProvidersInterface<
+        type Providers: shp_traits::ReadProvidersInterface<
             AccountId = Self::AccountId,
             ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId,
         >;

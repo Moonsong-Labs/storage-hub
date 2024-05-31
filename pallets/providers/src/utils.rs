@@ -12,7 +12,6 @@ use frame_support::traits::{
     Get, Randomness,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-use shp_traits::{MutateProvidersInterface, ProvidersInterface, ReadProvidersInterface};
 use sp_runtime::BoundedVec;
 use shp_traits::{
     MutateProvidersInterface, ProvidersConfig, ProvidersInterface, ReadProvidersInterface,

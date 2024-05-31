@@ -11,7 +11,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, IdentifyAccount, IdentityLookup, Verify},
     BuildStorage, DispatchResult, FixedU128, MultiSignature, SaturatedConversion,
 };
-use storage_hub_traits::{ProofsDealerInterface, SubscribeProvidersInterface};
+use shp_traits::{ProofsDealerInterface, SubscribeProvidersInterface};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;

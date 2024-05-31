@@ -68,7 +68,7 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         /// The trait for reading and mutating storage provider data.
-        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId, Provider = <Self::Providers as shp_traits::MutateProvidersInterface>::Provider>
+        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId>
             + shp_traits::MutateProvidersInterface<AccountId = Self::AccountId, ReadAccessGroupId = CollectionIdFor<Self>, MerklePatriciaRoot = <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash>;
 
         /// The trait for issuing challenges and verifying proofs.

@@ -3,7 +3,7 @@ use frame_support::ensure;
 use frame_system::{pallet_prelude::OriginFor, RawOrigin};
 use sp_runtime::traits::StaticLookup;
 use sp_runtime::DispatchError;
-use storage_hub_traits::ReadProvidersInterface;
+use shp_traits::ReadProvidersInterface;
 
 use crate::types::ReadAccessRegex;
 use crate::{

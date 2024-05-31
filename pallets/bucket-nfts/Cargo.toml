@@ -29,7 +29,7 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 
 # Local
-storage-hub-traits = { workspace = true }
+shp-traits = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }

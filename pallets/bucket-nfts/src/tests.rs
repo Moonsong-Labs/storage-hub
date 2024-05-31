@@ -2,7 +2,7 @@ use frame_support::{assert_noop, assert_ok};
 use sp_core::{ByteArray, Hasher};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::BoundedVec;
-use storage_hub_traits::ReadProvidersInterface;
+use shp_traits::ReadProvidersInterface;
 
 use crate::{
     mock::{new_test_ext, BucketNfts, FileSystem, RuntimeOrigin, System, Test},
