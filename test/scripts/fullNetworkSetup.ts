@@ -1,7 +1,7 @@
 import { MultiAddress } from "@polkadot-api/descriptors";
 import { accounts, getZombieClients, waitForChain, waitForRandomness } from "../util";
 import { Binary } from "polkadot-api";
-import { isEqual } from "lodash";
+import _ from "lodash";
 
 const idealExecutorParams = [
   {
@@ -43,7 +43,7 @@ async function main() {
 
   const { executor_params } = await relayApi.query.Configuration.ActiveConfig.getValue();
 
-  if (isEqual(executor_params, idealExecutorParams)) {
+  if (_.isEqual(executor_params, idealExecutorParams)) {
     console.log("Executor parameters are already set to ideal values ✅");
   } else {
     // Increasing times for the relay chain

@@ -76,7 +76,29 @@ jobs:
         with:
           cache: false
       - uses: rui314/setup-mold@v1
-      - uses: oven-sh/setup-bun@v1
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          version: 9
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
       - uses: arduino/setup-protoc@v3
       - name: Build All
         # TODO: Make this only build the parachain node project
@@ -147,7 +169,29 @@ jobs:
   #       working-directory: test
   #   steps:
   #     - uses: actions/checkout@v4
-  #     - uses: oven-sh/setup-bun@v1
+      # - name: Install Node.js
+      #   uses: actions/setup-node@v4
+      #   with:
+      #     node-version: 22
+
+      # - uses: pnpm/action-setup@v4
+      #   name: Install pnpm
+      #   with:
+      #     version: 9
+      #     run_install: false
+
+      # - name: Get pnpm store directory
+      #   shell: bash
+      #   run: |
+      #     echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      # - uses: actions/cache@v4
+      #   name: Setup pnpm cache
+      #   with:
+      #     path: ${{ env.STORE_PATH }}
+      #     key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-pnpm-store-
   #     - name: Pull Docker image
   #       run: docker pull moonsonglabs/storage-hub:${{ needs.setup.outputs.image-tag }}
   #     - name: Start local k8 cluster
@@ -159,8 +203,8 @@ jobs:
   #         memory: 12000
   #     - name: Run Zombienet Test!
   #       run: |
-  #         bun install
-  #         bun zombienet test configs/simple.zndsl
+  #         pnpm  install
+  #         pnpm  zombienet test configs/simple.zndsl
 
 
   network_test:
@@ -170,7 +214,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          version: 9
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
         if: needs.setup.outputs.node_changed == 'true'
@@ -189,20 +255,20 @@ jobs:
         run: |
           chmod +x target/release/storage-hub-node
           cd test
-          bun install
-          bun zombie:run:full:native &
+          pnpm  install
+          pnpm  zombie:run:full:native &
           
           sleep 60
       - name: Setup
         run: |
           cd test
-          bun scalegen
-          bun typegen
-          bun zombie:setup:native
+          pnpm  scalegen
+          pnpm  typegen
+          pnpm  zombie:setup:native
       - name: Run Zombienet Test!
         run: |
           cd test
-          bun test:full-e2e
+          pnpm  test:full-e2e
 
 
   zombie_test:
@@ -212,7 +278,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          version: 9
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
         if: needs.setup.outputs.node_changed == 'true'
@@ -231,6 +319,6 @@ jobs:
         run: |
           chmod +x target/release/storage-hub-node
           cd test
-          bun install
-          bun run scripts/downloadPolkadot.ts 1.8.0
-          bun zombienet test --provider native configs/simpleNative.zndsl
+          pnpm  install
+          pnpm  tsx scripts/downloadPolkadot.ts 1.8.0
+          pnpm  zombienet test --provider native configs/simpleNative.zndsl

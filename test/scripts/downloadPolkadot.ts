@@ -37,7 +37,7 @@ async function main() {
 function getVersionArg() {
   const args = process.argv.slice(2);
   if (args.length === 0) {
-    throw new Error("No version provided. Usage: bun scripts/downloadPolkadot.ts <version>");
+    throw new Error("No version provided. Usage: pnpm tsx scripts/downloadPolkadot.ts <version>");
   }
   return args[0];
 }

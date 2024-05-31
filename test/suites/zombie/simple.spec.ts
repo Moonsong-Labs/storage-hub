@@ -1,4 +1,5 @@
-import { test, describe, expect, beforeAll } from "bun:test";
+import { test, describe, before, after } from "node:test";
+import { expect } from "expect";
 import { MultiAddress } from "@polkadot-api/descriptors";
 import { accounts, getSr25519Account, getZombieClients, waitForChain } from "../../util";
 
@@ -6,8 +7,13 @@ describe("Simple zombieTest", async () => {
   const { relayApi, relayClient, relayRT, shClient, storageApi, storageRT } =
     await getZombieClients();
 
-  beforeAll(async () => {
+  before(async () => {
     await Promise.all([waitForChain(relayClient), waitForChain(shClient)]);
+  });
+
+  after(() => {
+    relayClient.destroy();
+    shClient.destroy();
   });
 
   describe("Relay", async () => {
@@ -41,27 +47,23 @@ describe("Simple zombieTest", async () => {
       expect(failures).toHaveLength(0);
     });
 
-    test(
-      "Send bal transfer on relaychain",
-      async () => {
-        const amount = 1_000_000_000n;
-        const { id: randomId } = await getSr25519Account();
-        console.log(`Sending balance to ${randomId}`);
+    test("Send bal transfer on relaychain", { timeout: 60_000 }, async () => {
+      const amount = 1_000_000_000n;
+      const { id: randomId } = await getSr25519Account();
+      console.log(`Sending balance to ${randomId}`);
 
-        await relayApi.tx.Balances.transfer_allow_death({
-          dest: MultiAddress.Id(randomId),
-          value: amount,
-        }).signAndSubmit(accounts.alice.sr25519.signer);
+      await relayApi.tx.Balances.transfer_allow_death({
+        dest: MultiAddress.Id(randomId),
+        value: amount,
+      }).signAndSubmit(accounts.alice.sr25519.signer);
 
-        const {
-          data: { free: balAfter },
-        } = await relayApi.query.System.Account.getValue(randomId);
+      const {
+        data: { free: balAfter },
+      } = await relayApi.query.System.Account.getValue(randomId);
 
-        expect(balAfter).toBe(amount);
-        console.log(`✅ Account ${randomId} has ${balAfter} balance`);
-      },
-      { timeout: 60_000 }
-    );
+      expect(balAfter).toBe(amount);
+      console.log(`✅ Account ${randomId} has ${balAfter} balance`);
+    });
   });
 
   describe("StorageHub", async () => {
@@ -88,26 +90,22 @@ describe("Simple zombieTest", async () => {
       expect(failures).toHaveLength(0);
     });
 
-    test(
-      "Send bal transfer on storagehub",
-      async () => {
-        const amount = 1_000_000_000n;
-        const { id: randomId } = await getSr25519Account();
-        console.log(`Sending balance to ${randomId}`);
+    test("Send bal transfer on storagehub", { timeout: 120_000 }, async () => {
+      const amount = 1_000_000_000n;
+      const { id: randomId } = await getSr25519Account();
+      console.log(`Sending balance to ${randomId}`);
 
-        await storageApi.tx.Balances.transfer_allow_death({
-          dest: MultiAddress.Id(randomId),
-          value: amount,
-        }).signAndSubmit(accounts.alice.sr25519.signer);
+      await storageApi.tx.Balances.transfer_allow_death({
+        dest: MultiAddress.Id(randomId),
+        value: amount,
+      }).signAndSubmit(accounts.alice.sr25519.signer);
 
-        const {
-          data: { free: balAfter },
-        } = await storageApi.query.System.Account.getValue(randomId);
+      const {
+        data: { free: balAfter },
+      } = await storageApi.query.System.Account.getValue(randomId);
 
-        expect(balAfter).toBe(amount);
-        console.log(`✅ Account ${randomId} has ${balAfter} balance`);
-      },
-      { timeout: 120_000 }
-    );
+      expect(balAfter).toBe(amount);
+      console.log(`✅ Account ${randomId} has ${balAfter} balance`);
+    });
   });
 });

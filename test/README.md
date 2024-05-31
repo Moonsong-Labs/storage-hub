@@ -19,26 +19,26 @@
 
 ```shell
 # in the /test directory
-bun i
-bun zombie:run:full:native
-```
+pnpm i
+pnpm zombie:run:full:native
+```f
 
 Wait for zombie network to start, and then:
 
 ```sh
-bun zombie:setup:native
-bun zombie:test suites/zombie
+pnpm zombie:setup:native
+pnpm zombie:test suites/zombie
 ```
 
 ## Local Usage
 
 ### Pre-requisites
 
-#### Bun
+#### pnpm
 
-[Bun](https://bun.sh) is used in this project as the Javascript runtime to execute tests in. To install it you can follow the official instructions at: [https://bun.sh/docs/installation](https://bun.sh/docs/installation)
+[pnpm](https://pnpm.io/) is used in this project as the Javascript package manager to install dependencies. To install it you can follow the official instructions at: [https://pnpm.io/installation](https://pnpm.io/installation)
 
-The quickest way is via their script: `curl -fsSL https://bun.sh/install | bash`
+The quickest way is via their script: `curl -fsSL https://get.pnpm.io/install.sh | sh -`
 
 #### Kubernetes
 
@@ -60,7 +60,7 @@ _In `test/` directory:_
 Run:
 
 ```sh
-bun docker:build
+pnpm docker:build
 ```
 
 to create a local Docker image `storage-hub:local`.
@@ -82,32 +82,32 @@ docker compose -f docker/latest-node-compose.yml up -d
 > [!NOTE]  
 > Please ensure the rust project is built first e.g. `cargo build --release`
 
-In `/test` run: `bun install` to install zombienet
+In `/test` run: `pnpm install` to install zombienet
 
 ### Running Standard Tests
 
 ```sh
-bun test
+pnpm test
 ```
 
 ### Running ZombieNet Tests
 
 ```sh
-bun zombie:test:native
+pnpm zombie:test:native
 ```
 
 ### Spawning ZombieNet Native
 
 > [!TIP]  
 > Polkadot binaries are required to run a zombienet network.
-> For Linux you can run the script: `bun scripts/downloadPolkadot.ts <version>`
+> For Linux you can run the script: `pnpm tsx scripts/downloadPolkadot.ts <version>`
 > For macOS you will have to [compile from source](https://github.com/paritytech/polkadot-sdk/tree/master/polkadot#build-from-source).
 
 To launch a non-ephemeral ZombieNetwork by executing the following in: `/test` directory:
 
 ```sh
-bun install
-bun zombie:run:native
+pnpm install
+pnpm zombie:run:native
 ```
 
 From here you should see in the terminal, the different nodes being spun up. When the network is fully launched, you should see something like this:
@@ -126,14 +126,14 @@ This repo uses Parity's [polkadot-api](https://github.com/polkadot-api/polkadot-
 To generate new type interfaces run the following in `/test`:
 
 ```sh
-bun zombie:run:native
+pnpm zombie:run:native
 ```
 
 In another terminal window in `/test`:
 
 ```sh
-bun scalegen
-bun typegen
+pnpm scalegen
+pnpm typegen
 ```
 
 This will update the scale files, and create type interfaces from them into the `/typegen` directory.
@@ -173,6 +173,6 @@ This is caused by the decorated API referring to a different version of the wasm
 > [!TIP]  
 > This can be fixed by running the following:
 >
-> 1. running a local network: `bun zombie:run:native`
-> 2. in a separate terminal, generating new metadata blob: `bun scalegen`
-> 3. generating new types bundle: `bun typegen`
+> 1. running a local network: `pnpm zombie:run:native`
+> 2. in a separate terminal, generating new metadata blob: `pnpm scalegen`
+> 3. generating new types bundle: `pnpm typegen`

@@ -7,15 +7,11 @@
   "type": "module",
   "workspaces": ["test"],
   "scripts": {
-    "fmt": "biome format .",
-    "fmt:fix": "biome format . --write",
-    "lint": "biome lint ."
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@types/bun": "1.1.0",
     "typescript": "5.4.5"
   },
   "devDependencies": {

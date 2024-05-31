@@ -1,5 +1,4 @@
 import type { PolkadotSigner, SS58String } from "polkadot-api";
-import { fromHex } from "@polkadot-api/utils";
 import { ed25519 } from "@noble/curves/ed25519";
 import { sha256 } from "@noble/hashes/sha256";
 import { Keyring } from "@polkadot/keyring";
@@ -8,7 +7,7 @@ import { blake2b } from "@noble/hashes/blake2b";
 import { secp256k1 } from "@noble/curves/secp256k1";
 import { getPolkadotSigner } from "polkadot-api/signer";
 import { AccountId } from "polkadot-api";
-import { toHex } from "polkadot-api/utils";
+import { fromHex, toHex } from "polkadot-api/utils";
 
 // These Keys have been generated via subkey util from polkadot-sdk
 // e.g.:
