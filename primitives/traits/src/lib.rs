@@ -60,9 +60,6 @@ pub trait ProvidersInterface {
     /// Get the ProviderId from AccountId, if it is a registered Provider.
     fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId>;
 
-    /// Get the payment account of a registered Provider.
-    fn get_provider_payment_account(who: Self::ProviderId) -> Option<Self::AccountId>;
-
     /// Get the root for a registered Provider.
     fn get_root(who: Self::ProviderId) -> Option<Self::MerkleHash>;
 
@@ -106,6 +103,9 @@ pub trait ReadProvidersInterface: ProvidersInterface {
 
     /// Check if provider is a MSP.
     fn is_msp(who: &Self::ProviderId) -> bool;
+
+    /// Get the payment account of a registered Provider.
+    fn get_provider_payment_account(who: Self::ProviderId) -> Option<Self::AccountId>;
 
     /// Get number of registered BSPs.
     fn get_number_of_bsps() -> Self::SpCount;

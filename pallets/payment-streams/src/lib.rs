@@ -34,7 +34,7 @@ pub mod pallet {
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
-    use shp_traits::ProvidersInterface;
+    use shp_traits::{ProvidersInterface, ReadProvidersInterface};
     use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, Saturating};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -50,7 +50,8 @@ pub mod pallet {
             + hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>;
 
         /// The trait for reading provider data.
-        type ProvidersPallet: ProvidersInterface<AccountId = Self::AccountId>;
+        type ProvidersPallet: ProvidersInterface<AccountId = Self::AccountId>
+            + ReadProvidersInterface<AccountId = Self::AccountId>;
 
         /// The overarching hold reason
         type RuntimeHoldReason: From<HoldReason>;

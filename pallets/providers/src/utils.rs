@@ -905,6 +905,16 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         MainStorageProviders::<T>::contains_key(&who)
     }
 
+    fn get_provider_payment_account(who: Self::ProviderId) -> Option<Self::AccountId> {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
+            Some(bsp.payment_account)
+        } else if let Some(msp) = MainStorageProviders::<T>::get(&who) {
+            Some(msp.payment_account)
+        } else {
+            None
+        }
+    }
+
     fn get_number_of_bsps() -> Self::SpCount {
         Self::get_bsp_count()
     }
@@ -939,16 +949,6 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
             Some(bsp_id)
         } else if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             Some(msp_id)
-        } else {
-            None
-        }
-    }
-
-    fn get_provider_payment_account(who: Self::ProviderId) -> Option<Self::AccountId> {
-        if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
-            Some(bsp.payment_account)
-        } else if let Some(msp) = MainStorageProviders::<T>::get(&who) {
-            Some(msp.payment_account)
         } else {
             None
         }

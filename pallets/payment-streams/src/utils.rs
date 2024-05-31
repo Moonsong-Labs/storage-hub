@@ -10,11 +10,12 @@ use frame_support::traits::{
     Get,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-use shp_traits::ProvidersInterface;
+use shp_traits::{
+    PaymentManager, PaymentStreamsInterface, ProvidersInterface, ReadProvidersInterface,
+};
 use sp_runtime::traits::Convert;
 
 use crate::*;
-use shp_traits::{PaymentManager, PaymentStreamsInterface};
 
 macro_rules! expect_or_err {
     // Handle Option type
@@ -584,7 +585,7 @@ where
 
                 // Get the payment account of the SP
                 let provider_payment_account = expect_or_err!(
-                    <T::ProvidersPallet as ProvidersInterface>::get_provider_payment_account(
+                    <T::ProvidersPallet as ReadProvidersInterface>::get_provider_payment_account(
                         *provider_id
                     ),
                     "Provider should exist and have a payment account if its ID exists.",
@@ -667,7 +668,7 @@ where
 
                 // Get the payment account of the SP
                 let provider_payment_account = expect_or_err!(
-                    <T::ProvidersPallet as ProvidersInterface>::get_provider_payment_account(
+                    <T::ProvidersPallet as ReadProvidersInterface>::get_provider_payment_account(
                         *provider_id
                     ),
                     "Provider should exist and have a payment account if its ID exists.",
