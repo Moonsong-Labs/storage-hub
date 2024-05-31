@@ -1,7 +1,7 @@
 import { test, describe, before, after } from "node:test";
 import { expect } from "expect";
 import { MultiAddress } from "@polkadot-api/descriptors";
-import { accounts, getSr25519Account, getZombieClients, waitForChain } from "../../util";
+import { accounts, getEd25519Account, getZombieClients, waitForChain } from "../../util";
 
 describe("Simple zombieTest", async () => {
   const { relayApi, relayClient, relayRT, shClient, storageApi, storageRT } =
@@ -49,7 +49,7 @@ describe("Simple zombieTest", async () => {
 
     test("Send bal transfer on relaychain", { timeout: 60_000 }, async () => {
       const amount = 1_000_000_000n;
-      const { id: randomId } = await getSr25519Account();
+      const { id: randomId } = await getEd25519Account();
       console.log(`Sending balance to ${randomId}`);
 
       await relayApi.tx.Balances.transfer_allow_death({
@@ -92,7 +92,7 @@ describe("Simple zombieTest", async () => {
 
     test("Send bal transfer on storagehub", { timeout: 120_000 }, async () => {
       const amount = 1_000_000_000n;
-      const { id: randomId } = await getSr25519Account();
+      const { id: randomId } = await getEd25519Account();
       console.log(`Sending balance to ${randomId}`);
 
       await storageApi.tx.Balances.transfer_allow_death({

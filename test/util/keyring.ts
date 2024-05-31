@@ -1,4 +1,5 @@
 import type { PolkadotSigner, SS58String } from "polkadot-api";
+import {randomBytes} from "node:crypto"
 import { ed25519 } from "@noble/curves/ed25519";
 import { sha256 } from "@noble/hashes/sha256";
 import { Keyring } from "@polkadot/keyring";
@@ -140,8 +141,8 @@ const accounts: Record<PeopleNames, AccountType> = Object.fromEntries(accountEnt
 
 export { accounts };
 
-export const getSr25519Account = async (privateKey?: string) => {
-  const stringKey = privateKey || toHex(sha256(performance.now().toString()));
+export const getEd25519Account = async (privateKey?: string) => {
+  const stringKey = privateKey || toHex(randomBytes(32));
 
   const edPublicKey = ed25519.getPublicKey(fromHex(stringKey));
   const ed25519Signer = getPolkadotSigner(edPublicKey, "Ed25519", async (input) =>
