@@ -5,13 +5,13 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
+use shp_traits::{ProofsDealerInterface, SubscribeProvidersInterface};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, IdentifyAccount, IdentityLookup, Verify},
     BuildStorage, DispatchResult, FixedU128, MultiSignature, SaturatedConversion,
 };
-use shp_traits::{ProofsDealerInterface, SubscribeProvidersInterface};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;

@@ -9,13 +9,13 @@ use crate::{
 use frame_support::{
     assert_noop, assert_ok, dispatch::DispatchResultWithPostInfo, traits::Hooks, weights::Weight,
 };
+use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface};
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     traits::{BlakeTwo256, Get, Zero},
     BoundedVec, FixedU128,
 };
-use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface};
 
 mod create_bucket_tests {
     use super::*;
@@ -698,7 +698,11 @@ fn bsp_volunteer_success() {
         // Sign up account as a Backup Storage Provider
         assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-        let bsp_id = <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(bsp_account_id).unwrap();
+        let bsp_id =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(
+                bsp_account_id,
+            )
+            .unwrap();
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
@@ -865,7 +869,11 @@ fn bsp_confirm_storing_success() {
         // Sign up account as a Backup Storage Provider
         assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-        let bsp_id = <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(bsp_account_id).unwrap();
+        let bsp_id =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(
+                bsp_account_id,
+            )
+            .unwrap();
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
@@ -915,13 +923,7 @@ fn bsp_confirm_storing_success() {
         );
 
         // Assert that the correct event was deposited
-        System::assert_last_event(
-            Event::BspConfirmedStoring {
-                bsp_id,
-                location,
-            }
-            .into(),
-        );
+        System::assert_last_event(Event::BspConfirmedStoring { bsp_id, location }.into());
     });
 }
 
@@ -1148,7 +1150,11 @@ fn bsp_stop_storing_success() {
         // Sign up account as a Backup Storage Provider
         assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-        let bsp_id = <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(bsp_account_id).unwrap();
+        let bsp_id =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(
+                bsp_account_id,
+            )
+            .unwrap();
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
@@ -1209,9 +1215,7 @@ fn bsp_stop_storing_success() {
         ));
 
         // Assert that the RequestStorageBsps has the correct value
-        assert!(
-            FileSystem::storage_request_bsps(location.clone(), bsp_id).is_none()
-        );
+        assert!(FileSystem::storage_request_bsps(location.clone(), bsp_id).is_none());
 
         // Assert that the storage was updated
         assert_eq!(
@@ -1271,7 +1275,11 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         // Sign up account as a Backup Storage Provider
         assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-        let bsp_id = <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(bsp_account_id).unwrap();
+        let bsp_id =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(
+                bsp_account_id,
+            )
+            .unwrap();
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
@@ -1305,9 +1313,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         ));
 
         // Assert that the RequestStorageBsps has the correct value
-        assert!(
-            FileSystem::storage_request_bsps(location.clone(), bsp_id).is_none()
-        );
+        assert!(FileSystem::storage_request_bsps(location.clone(), bsp_id).is_none());
 
         // Assert that the storage was updated
         assert_eq!(
@@ -1368,7 +1374,11 @@ fn bsp_stop_storing_not_volunteered_success() {
         // Sign up account as a Backup Storage Provider
         assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-        let bsp_id = <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(bsp_account_id).unwrap();
+        let bsp_id =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(
+                bsp_account_id,
+            )
+            .unwrap();
 
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
@@ -1428,7 +1438,11 @@ fn bsp_stop_storing_no_storage_request_success() {
         // Sign up account as a Backup Storage Provider
         assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
 
-        let bsp_id = <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(bsp_account_id).unwrap();
+        let bsp_id =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider(
+                bsp_account_id,
+            )
+            .unwrap();
 
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(

@@ -6,8 +6,8 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
-use sp_core::Hasher;
 use shp_traits::{MutateProvidersInterface, ReadProvidersInterface};
+use sp_core::Hasher;
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
@@ -281,9 +281,8 @@ where
         ),
         DispatchError,
     > {
-        let bsp_id =
-            <T::Providers as shp_traits::ProvidersInterface>::get_provider(sender.clone())
-                .ok_or(Error::<T>::NotABsp)?;
+        let bsp_id = <T::Providers as shp_traits::ProvidersInterface>::get_provider(sender.clone())
+            .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
@@ -392,9 +391,8 @@ where
         forest_proof: ForestProof<T>,
         key_proof: KeyProof<T>,
     ) -> Result<ProviderIdFor<T>, DispatchError> {
-        let bsp_id =
-            <T::Providers as shp_traits::ProvidersInterface>::get_provider(sender.clone())
-                .ok_or(Error::<T>::NotABsp)?;
+        let bsp_id = <T::Providers as shp_traits::ProvidersInterface>::get_provider(sender.clone())
+            .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(

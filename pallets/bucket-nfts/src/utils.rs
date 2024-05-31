@@ -1,9 +1,9 @@
 use codec::Encode;
 use frame_support::ensure;
 use frame_system::{pallet_prelude::OriginFor, RawOrigin};
+use shp_traits::ReadProvidersInterface;
 use sp_runtime::traits::StaticLookup;
 use sp_runtime::DispatchError;
-use shp_traits::ReadProvidersInterface;
 
 use crate::types::ReadAccessRegex;
 use crate::{
