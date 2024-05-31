@@ -32,6 +32,9 @@ pub struct FileKeyVerifier<
 /// A hash type of arbitrary length `H_LENGTH`.
 pub type Hash<const H_LENGTH: usize> = [u8; H_LENGTH];
 
+/// A fingerprint is something that uniquely identifies a file by its content.
+/// In the context of this verifier, a fingerprint is the root hash of a Merkle Patricia Trie
+/// of the merklised file.
 #[derive(Encode, Decode, Clone, Copy, Debug, PartialEq, Eq, TypeInfo)]
 pub struct Fingerprint<const H_LENGTH: usize>(Hash<H_LENGTH>);
 
