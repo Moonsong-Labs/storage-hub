@@ -73,7 +73,7 @@ where
     /// - `ChallengesQueueOverflow`: If the challenges queue is full.
     pub fn do_challenge(who: &AccountIdFor<T>, key: &KeyFor<T>) -> DispatchResult {
         // Check if sender is a registered Provider.
-        if ProvidersPalletFor::<T>::get_provider(who.clone()).is_none() {
+        if ProvidersPalletFor::<T>::get_provider_id(who.clone()).is_none() {
             // Charge a fee for the challenge if it is not.
             BalancePalletFor::<T>::transfer(
                 &who,
@@ -105,7 +105,7 @@ where
 
         // Check if submitter is a registered Provider.
         ensure!(
-            ProvidersPalletFor::<T>::is_provider(submitter.clone()),
+            ProvidersPalletFor::<T>::is_provider(*submitter),
             Error::<T>::NotProvider
         );
 
@@ -119,7 +119,7 @@ where
         // Get root for submitter.
         // If a submitter is a registered Provider, it must have a root, so this shouldn't happen.
         // However, since the implementation of that is not up to this pallet, we need to check.
-        let root = ProvidersPalletFor::<T>::get_root(submitter.clone())
+        let root = ProvidersPalletFor::<T>::get_root(*submitter)
             .ok_or(Error::<T>::ProviderRootNotFound)?;
 
         // Check if root is non-zero.
@@ -128,16 +128,15 @@ where
         ensure!(root == Self::default_forest_root(), Error::<T>::ZeroRoot);
 
         // Get last block for which the submitter submitted a proof.
-        let last_block_proven =
-            match LastBlockProviderSubmittedProofFor::<T>::get(submitter.clone()) {
-                Some(block) => block,
-                None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
-            };
+        let last_block_proven = match LastBlockProviderSubmittedProofFor::<T>::get(*submitter) {
+            Some(block) => block,
+            None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
+        };
 
         // Get stake for submitter.
         // If a submitter is a registered Provider, it must have a stake, so this shouldn't happen.
         // However, since the implementation of that is not up to this pallet, we need to check.
-        let stake = ProvidersPalletFor::<T>::get_stake(submitter.clone())
+        let stake = ProvidersPalletFor::<T>::get_stake(*submitter)
             .ok_or(Error::<T>::ProviderStakeNotFound)?;
 
         // Check that the stake is non-zero.
@@ -320,27 +319,27 @@ where
 }
 
 impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
-    type Provider = ProviderFor<T>;
+    type ProviderId = ProviderFor<T>;
     type ForestProof = ForestVerifierProofFor<T>;
     type KeyProof = KeyVerifierProofFor<T>;
     type MerkleHash = T::MerkleTrieHash;
     type MerkleHashing = T::MerkleTrieHashing;
 
     fn verify_forest_proof(
-        who: &Self::Provider,
+        who: &Self::ProviderId,
         challenges: &[Self::MerkleHash],
         proof: &Self::ForestProof,
     ) -> Result<Vec<Self::MerkleHash>, DispatchError> {
         // Check if submitter is a registered Provider.
         ensure!(
-            ProvidersPalletFor::<T>::is_provider(who.clone()),
+            ProvidersPalletFor::<T>::is_provider(*who),
             Error::<T>::NotProvider
         );
 
         // Get root for submitter.
         // If a submitter is a registered Provider, it must have a root.
-        let root = ProvidersPalletFor::<T>::get_root(who.clone())
-            .ok_or(Error::<T>::ProviderRootNotFound)?;
+        let root =
+            ProvidersPalletFor::<T>::get_root(*who).ok_or(Error::<T>::ProviderRootNotFound)?;
 
         // Verify forest proof.
         ForestVerifierFor::<T>::verify_proof(&root, challenges, proof)

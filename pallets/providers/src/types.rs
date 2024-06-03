@@ -4,9 +4,9 @@ use super::*;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::*;
 use frame_support::traits::fungible::Inspect;
-use frame_support::BoundedVec;
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
+use sp_runtime::BoundedVec;
 
 /// Structure that has the possible value propositions that a Main Storage Provider can offer (and the runtime is aware of)
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
@@ -29,6 +29,7 @@ pub struct MainStorageProvider<T: Config> {
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub value_prop: ValueProposition<T>,
     pub last_capacity_change: BlockNumberFor<T>,
+    pub payment_account: T::AccountId,
 }
 
 /// Structure that represents a Backup Storage Provider. It holds the total data that the BSP is able to store, the amount of data that it is storing,
@@ -41,6 +42,7 @@ pub struct BackupStorageProvider<T: Config> {
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub root: MerklePatriciaRoot<T>,
     pub last_capacity_change: BlockNumberFor<T>,
+    pub payment_account: T::AccountId,
 }
 
 /// Structure that represents a Bucket. It holds the root of the Merkle Patricia Trie, the User ID that owns the bucket,
@@ -51,6 +53,8 @@ pub struct Bucket<T: Config> {
     pub root: MerklePatriciaRoot<T>,
     pub user_id: T::AccountId,
     pub msp_id: MainStorageProviderId<T>,
+    pub private: bool,
+    pub read_access_group_id: Option<T::ReadAccessGroupId>,
 }
 
 /// Enum that represents a Storage Provider. It holds either a BackupStorageProvider or a MainStorageProvider,

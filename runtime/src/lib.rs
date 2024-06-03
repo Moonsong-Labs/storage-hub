@@ -46,6 +46,9 @@ pub use sp_runtime::BuildStorage;
 
 use weights::ExtrinsicBaseWeight;
 
+/// Export H_LENGTH for the clients to use.
+pub use configs::H_LENGTH;
+
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
 
@@ -266,6 +269,11 @@ construct_runtime!(
         FileSystem: pallet_file_system = 41,
         ProofsDealer: pallet_proofs_dealer = 42,
         Randomness: pallet_randomness = 43,
+        PaymentStreams: pallet_payment_streams = 44,
+        BucketNfts: pallet_bucket_nfts = 45,
+
+        // Miscellaneous
+        Nfts: pallet_nfts = 50,
     }
 );
 

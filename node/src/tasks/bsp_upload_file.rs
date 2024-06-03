@@ -3,13 +3,14 @@ use std::{path::Path, time::Duration};
 use anyhow::anyhow;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use shc_common::types::{FileKey, FileMetadata, HasherOutT};
-use shc_forest_manager::traits::ForestStorage;
-
-use shc_actors_framework::event_bus::EventHandler;
-use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
+use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
 use tokio::{fs::File, io::AsyncWriteExt};
+
+use shc_actors_framework::event_bus::EventHandler;
+use shc_common::types::{FileKey, FileMetadata, HasherOutT};
+use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
+use shc_forest_manager::traits::ForestStorage;
 
 use crate::services::{
     blockchain::{commands::BlockchainServiceInterface, events::NewStorageRequest},
@@ -215,7 +216,7 @@ where
 
         // Construct file metadata.
         let metadata = FileMetadata {
-            owner: event.who.to_string(),
+            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
             size: event.size as u64,
             fingerprint: event.fingerprint,
             location: event.location.to_vec(),
@@ -223,7 +224,7 @@ where
 
         // Get the file key.
         let file_key: FileKey = metadata
-            .key::<<T as TrieLayout>::Hash>()
+            .file_key::<<T as TrieLayout>::Hash>()
             .as_ref()
             .try_into()?;
 
@@ -326,7 +327,7 @@ where
             .expect("Failed to open file for writing.");
 
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        for chunk_id in 0..metadata.chunk_count() {
+        for chunk_id in 0..metadata.chunks_count() {
             let chunk = read_file_storage
                 .get_chunk(&file_key, &chunk_id)
                 .expect("Chunk not found in storage.");

@@ -103,8 +103,8 @@ pub type TreasuryAccountFor<T> = <T as crate::Config>::Treasury;
 /// Syntactic sugar for the Providers type used in the proofs pallet.
 pub type ProvidersPalletFor<T> = <T as crate::Config>::ProvidersPallet;
 
-/// Syntactic sugar for the Provider type used in the proofs pallet.
-pub type ProviderFor<T> = <<T as crate::Config>::ProvidersPallet as ProvidersInterface>::Provider;
+/// Syntactic sugar for the Provider ID type used in the proofs pallet.
+pub type ProviderFor<T> = <<T as crate::Config>::ProvidersPallet as ProvidersInterface>::ProviderId;
 
 /// Syntactic sugar for the ForestVerifier type used in the proofs pallet.
 pub type ForestVerifierFor<T> = <T as crate::Config>::ForestVerifier;

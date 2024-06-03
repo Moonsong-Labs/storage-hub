@@ -70,7 +70,7 @@ where
 
     fn insert_metadata(&mut self, metadata: &FileMetadata) -> Result<HasherOutT<T>, ErrorT<T>> where
     {
-        let file_key = metadata.key::<T::Hash>();
+        let file_key = metadata.file_key::<T::Hash>();
         if self.contains_file_key(&file_key)? {
             return Err(ForestStorageError::FileKeyAlreadyExists(file_key).into());
         }

@@ -1,6 +1,6 @@
 [package]
-name = "pallet-file-system"
-description = "Pallet exposing storage related actions actors can execute within StorageHub."
+name = "pallet-bucket-nfts"
+description = "Pallet for managing non-fungible tokens (NFTs) in a bucket."
 version = "0.1.0"
 homepage = { workspace = true }
 license = { workspace = true }
@@ -27,16 +27,16 @@ pallet-nfts = { workspace = true }
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
-sp-trie = { workspace = true }
 
 # Local
 shp-traits = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
-pallet-bucket-nfts = { workspace = true }
-pallet-storage-providers = { workspace = true }
+
+pallet-file-system = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
+pallet-storage-providers = { workspace = true }
 
 # Substrate
 sp-io = { workspace = true }
@@ -51,9 +51,9 @@ runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"frame-support/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
+	"pallet-file-system/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
-	"pallet-bucket-nfts/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
 std = [
@@ -61,20 +61,19 @@ std = [
 	"frame-benchmarking?/std",
 	"frame-support/std",
 	"frame-system/std",
+	"pallet-file-system/std",
 	"pallet-proofs-dealer/std",
 	"pallet-storage-providers/std",
-	"pallet-bucket-nfts/std",
 	"scale-info/std",
 	"sp-core/std",
 	"sp-io/std",
 	"sp-runtime/std",
-	"sp-trie/std",
 ]
 try-runtime = [
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
+	"pallet-file-system/try-runtime",
 	"pallet-proofs-dealer/try-runtime",
 	"pallet-storage-providers/try-runtime",
-	"pallet-bucket-nfts/try-runtime",
 	"sp-runtime/try-runtime",
 ]

@@ -1,14 +1,16 @@
-use crate as pallet_storage_providers;
-use codec::Encode;
+use crate as pallet_payment_streams;
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
-    traits::{Everything, Randomness},
+    traits::{AsEnsureOriginWithArg, Everything, Randomness},
     weights::constants::RocksDbWeight,
 };
 use frame_system as system;
+use pallet_nfts::PalletFeatures;
 use shp_traits::SubscribeProvidersInterface;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256};
+use sp_runtime::traits::Convert;
 use sp_runtime::{
+    testing::TestSignature,
     traits::{BlakeTwo256, IdentityLookup},
     BuildStorage, DispatchResult,
 };
@@ -16,6 +18,10 @@ use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
+type StorageUnit = u32;
+// type Signature = MultiSignature;
+// type AccountPublic = <Signature as Verify>::Signer;
+type AccountId = u64;
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
@@ -42,13 +48,6 @@ impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
     }
 }
 
-/// This function is used to test the randomness of the providers pallet.
-pub fn test_randomness_output(
-    who: &<Test as frame_system::Config>::AccountId,
-) -> (<Test as frame_system::Config>::Hash, BlockNumberFor<Test>) {
-    <Test as pallet_storage_providers::Config>::ProvidersRandomness::random(who.encode().as_ref())
-}
-
 // Configure a mock runtime to test the pallet.
 construct_runtime!(
     pub enum Test
@@ -56,13 +55,14 @@ construct_runtime!(
         System: frame_system,
         Balances: pallet_balances,
         StorageProviders: pallet_storage_providers,
+        PaymentStreams: pallet_payment_streams,
+        Nfts: pallet_nfts
     }
 );
 
 parameter_types! {
     pub const BlockHashCount: u64 = 250;
     pub const SS58Prefix: u8 = 42;
-    pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::StorageProviders(pallet_storage_providers::HoldReason::StorageProviderDeposit);
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -76,7 +76,7 @@ impl system::Config for Test {
     type Nonce = u64;
     type Hash = H256;
     type Hashing = BlakeTwo256;
-    type AccountId = u64;
+    type AccountId = AccountId;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Block = Block;
     type RuntimeEvent = RuntimeEvent;
@@ -108,15 +108,18 @@ impl pallet_balances::Config for Test {
     type MaxFreezes = ConstU32<10>;
 }
 
-impl crate::Config for Test {
+parameter_types! {
+    pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::StorageProviders(pallet_storage_providers::HoldReason::StorageProviderDeposit);
+}
+impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageData = u32;
+    type StorageData = StorageUnit;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
-    type ReadAccessGroupId = u32;
+    type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
@@ -125,12 +128,69 @@ impl crate::Config for Test {
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
-    type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
     type Subscribers = MockedProvidersSubscriber;
     type ProvidersRandomness = MockRandomness;
+    type BucketNameLimit = ConstU32<100>;
+}
+
+parameter_types! {
+    pub storage Features: PalletFeatures = PalletFeatures::all_enabled();
+}
+
+impl pallet_nfts::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type CollectionId = u128;
+    type ItemId = u128;
+    type Currency = Balances;
+    type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<Self::AccountId>>;
+    type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+    type Locker = ();
+    type CollectionDeposit = ConstU128<2>;
+    type ItemDeposit = ConstU128<1>;
+    type MetadataDepositBase = ConstU128<1>;
+    type AttributeDepositBase = ConstU128<1>;
+    type DepositPerByte = ConstU128<1>;
+    type StringLimit = ConstU32<50>;
+    type KeyLimit = ConstU32<50>;
+    type ValueLimit = ConstU32<50>;
+    type ApprovalsLimit = ConstU32<10>;
+    type ItemAttributesApprovalsLimit = ConstU32<2>;
+    type MaxTips = ConstU32<10>;
+    type MaxDeadlineDuration = ConstU64<10000>;
+    type MaxAttributesPerCall = ConstU32<2>;
+    type Features = Features;
+    type OffchainSignature = TestSignature;
+    type OffchainPublic = <TestSignature as sp_runtime::traits::Verify>::Signer;
+    type WeightInfo = ();
+    pallet_nfts::runtime_benchmarks_enabled! {
+        type Helper = ();
+    }
+}
+
+parameter_types! {
+    pub const PaymentStreamHoldReason: RuntimeHoldReason = RuntimeHoldReason::PaymentStreams(pallet_payment_streams::HoldReason::PaymentStreamDeposit);
+}
+
+// Converter from the BlockNumber type to the Balance type for math
+pub struct BlockNumberToBalance;
+
+impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
+    fn convert(block_number: BlockNumberFor<Test>) -> Balance {
+        block_number.into() // In this converter we assume that the block number type is smaller in size than the balance type
+    }
+}
+
+impl crate::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type NativeBalance = Balances;
+    type ProvidersPallet = StorageProviders;
+    type RuntimeHoldReason = RuntimeHoldReason;
+    type Units = StorageUnit;
+    type NewStreamDeposit = ConstU64<10>;
+    type BlockNumberToBalance = BlockNumberToBalance;
 }
 
 // Build genesis storage according to the mock runtime.

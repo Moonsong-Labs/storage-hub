@@ -1,7 +1,7 @@
 use async_channel::Receiver;
 use sc_network::{config::IncomingRequest, ProtocolName};
 use sc_service::RpcHandlers;
-use shc_common::types::HasherOutT;
+use shc_common::types::{HasherOutT, H_LENGTH};
 use sp_keystore::KeystorePtr;
 use sp_trie::TrieLayout;
 use std::{marker::PhantomData, sync::Arc};
@@ -38,7 +38,7 @@ where
     T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     pub fn new(task_spawner: TaskSpawner) -> Self {
         Self {
@@ -155,7 +155,7 @@ impl<T> StorageLayerBuilder
     for StorageHubBuilder<T, InMemoryFileStorage<T>, InMemoryForestStorage<T>>
 where
     T: TrieLayout + Send + Sync,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn setup_storage_layer(&mut self) -> &mut Self {
         self.with_file_storage(Arc::new(RwLock::new(InMemoryFileStorage::<T>::new())))
@@ -168,7 +168,7 @@ impl<T> StorageLayerBuilder
     for StorageHubBuilder<T, InMemoryFileStorage<T>, RocksDBForestStorage<T>>
 where
     T: TrieLayout + Send + Sync,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn setup_storage_layer(&mut self) -> &mut Self {
         let provider_pub_key = self

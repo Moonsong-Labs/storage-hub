@@ -49,6 +49,10 @@ pub mod pallet {
         dispatch::DispatchResult,
         pallet_prelude::{ValueQuery, *},
         sp_runtime::traits::{AtLeast32Bit, CheckEqual, MaybeDisplay, SimpleBitOps},
+        traits::{
+            nonfungibles_v2::{Create, Inspect as NonFungiblesInspect},
+            Currency,
+        },
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
@@ -58,21 +62,18 @@ pub mod pallet {
         FixedPointNumber,
     };
 
-    // TODO: add conditional to check that block number does not exceed u64 type. It it does, the fixed point number that we convert to from a block
-    // number might be too large to fit into the threshold type.
-
     #[pallet::config]
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         /// The trait for reading and mutating storage provider data.
-        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId, Provider = <Self::Providers as shp_traits::MutateProvidersInterface>::Provider>
-            + shp_traits::MutateProvidersInterface<AccountId = Self::AccountId, MerklePatriciaRoot = <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash>;
+        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId>
+            + shp_traits::MutateProvidersInterface<AccountId = Self::AccountId, ReadAccessGroupId = CollectionIdFor<Self>, MerklePatriciaRoot = <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash>;
 
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: shp_traits::ProofsDealerInterface<
-            Provider = <Self::Providers as shp_traits::ProvidersInterface>::Provider,
+            ProviderId = <Self::Providers as shp_traits::ProvidersInterface>::ProviderId,
         >;
 
         /// Type for identifying a file, generally a hash.
@@ -125,6 +126,18 @@ pub mod pallet {
             + PartialOrd
             + FixedPointNumber
             + EnsureFrom<u128>;
+
+        /// The currency mechanism, used for paying for reserves.
+        type Currency: Currency<Self::AccountId>;
+
+        /// Registry for minted NFTs.
+        type Nfts: NonFungiblesInspect<Self::AccountId>
+            + Create<Self::AccountId, CollectionConfigFor<Self>>;
+
+        /// Collection inspector
+        type CollectionInspector: shp_traits::InspectCollections<
+            CollectionId = CollectionIdFor<Self>,
+        >;
 
         /// The multiplier increases the threshold over time (blocks) which increases the
         /// likelihood of a BSP successfully volunteering to store a file.
@@ -198,7 +211,7 @@ pub mod pallet {
         Blake2_128Concat,
         FileLocation<T>,
         Blake2_128Concat,
-        T::AccountId,
+        ProviderIdFor<T>,
         StorageRequestBspsMetadata<T>,
         OptionQuery,
     >;
@@ -273,6 +286,28 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
+        /// Notifies that a new bucket has been created.
+        NewBucket {
+            who: T::AccountId,
+            msp_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
+            name: BoundedVec<u8, BucketNameLimitFor<T>>,
+            collection_id: Option<CollectionIdFor<T>>,
+            private: bool,
+        },
+        /// Notifies that a bucket's privacy has been updated.
+        BucketPrivacyUpdated {
+            who: T::AccountId,
+            bucket_id: BucketIdFor<T>,
+            collection_id: Option<CollectionIdFor<T>>,
+            private: bool,
+        },
+        /// Notifies that a new collection has been created and associated with a bucket.
+        NewCollectionAndAssociation {
+            who: T::AccountId,
+            bucket_id: BucketIdFor<T>,
+            collection_id: CollectionIdFor<T>,
+        },
         /// Notifies that a new file has been requested to be stored.
         NewStorageRequest {
             who: T::AccountId,
@@ -283,7 +318,7 @@ pub mod pallet {
         },
         /// Notifies that a BSP has been accepted to store a given file.
         AcceptedBspVolunteer {
-            who: T::AccountId,
+            bsp_id: ProviderIdFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             multiaddresses: MultiAddresses<T>,
@@ -292,7 +327,7 @@ pub mod pallet {
         },
         /// Notifies that a BSP confirmed storing a file.
         BspConfirmedStoring {
-            who: T::AccountId,
+            bsp_id: ProviderIdFor<T>,
             location: FileLocation<T>,
         },
         /// Notifies the expiration of a storage request.
@@ -301,7 +336,7 @@ pub mod pallet {
         StorageRequestRevoked { location: FileLocation<T> },
         /// Notifies that a BSP has stopped storing a file.
         BspStoppedStoring {
-            bsp: T::AccountId,
+            bsp_id: ProviderIdFor<T>,
             file_key: FileKey<T>,
             owner: T::AccountId,
             location: FileLocation<T>,
@@ -360,18 +395,82 @@ pub mod pallet {
         DividedByZero,
         /// Failed to get value when just checked it existed.
         ImpossibleFailedToGetValue,
+        /// Bucket is not private. Call `update_bucket_privacy` to make it private.
+        BucketIsNotPrivate,
     }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn create_bucket(_origin: OriginFor<T>) -> DispatchResult {
-            todo!()
+        pub fn create_bucket(
+            origin: OriginFor<T>,
+            msp_id: ProviderIdFor<T>,
+            name: BoundedVec<u8, BucketNameLimitFor<T>>,
+            private: bool,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let (bucket_id, maybe_collection_id) =
+                Self::do_create_bucket(who.clone(), msp_id, name.clone(), private)?;
+
+            Self::deposit_event(Event::NewBucket {
+                who,
+                msp_id,
+                bucket_id,
+                name,
+                collection_id: maybe_collection_id,
+                private,
+            });
+
+            Ok(())
+        }
+
+        #[pallet::call_index(1)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn update_bucket_privacy(
+            origin: OriginFor<T>,
+            bucket_id: BucketIdFor<T>,
+            private: bool,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let maybe_collection_id =
+                Self::do_update_bucket_privacy(who.clone(), bucket_id, private)?;
+
+            Self::deposit_event(Event::BucketPrivacyUpdated {
+                who,
+                bucket_id,
+                private,
+                collection_id: maybe_collection_id,
+            });
+
+            Ok(())
+        }
+
+        /// Create and associate a collection with a bucket.
+        #[pallet::call_index(2)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn create_and_associate_collection_with_bucket(
+            origin: OriginFor<T>,
+            bucket_id: BucketIdFor<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let collection_id =
+                Self::do_create_and_associate_collection_with_bucket(who.clone(), bucket_id)?;
+
+            Self::deposit_event(Event::NewCollectionAndAssociation {
+                who,
+                bucket_id,
+                collection_id,
+            });
+
+            Ok(())
         }
 
         /// Issue a new storage request for a file
-        #[pallet::call_index(1)]
+        #[pallet::call_index(3)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn issue_storage_request(
             origin: OriginFor<T>,
@@ -409,7 +508,7 @@ pub mod pallet {
         }
 
         /// Revoke storage request
-        #[pallet::call_index(2)]
+        #[pallet::call_index(4)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn revoke_storage_request(
             origin: OriginFor<T>,
@@ -434,7 +533,7 @@ pub mod pallet {
         /// so a BSP is strongly advised to check beforehand. Another reason for failure is
         /// if the maximum number of BSPs has been reached. A successful assignment as BSP means
         /// that some of the collateral tokens of that MSP are frozen.
-        #[pallet::call_index(4)]
+        #[pallet::call_index(5)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_volunteer(
             origin: OriginFor<T>,
@@ -445,12 +544,12 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and register Storage Provider as BSP for file.
-            let (multiaddresses, size, owner) =
+            let (bsp_id, multiaddresses, size, owner) =
                 Self::do_bsp_volunteer(who.clone(), location.clone(), fingerprint)?;
 
             // Emit new BSP volunteer event.
             Self::deposit_event(Event::AcceptedBspVolunteer {
-                who,
+                bsp_id,
                 multiaddresses,
                 location,
                 fingerprint,
@@ -462,7 +561,7 @@ pub mod pallet {
         }
 
         /// Used by a BSP to confirm they are storing data of a storage request.
-        #[pallet::call_index(5)]
+        #[pallet::call_index(6)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_confirm_storing(
             origin: OriginFor<T>,
@@ -475,7 +574,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and confirm storage.
-            Self::do_bsp_confirm_storing(
+            let bsp_id = Self::do_bsp_confirm_storing(
                 who.clone(),
                 location.clone(),
                 root,
@@ -484,7 +583,7 @@ pub mod pallet {
             )?;
 
             // Emit event.
-            Self::deposit_event(Event::BspConfirmedStoring { who, location });
+            Self::deposit_event(Event::BspConfirmedStoring { bsp_id, location });
 
             Ok(())
         }
@@ -497,7 +596,7 @@ pub mod pallet {
         /// the BSP gets the data it needs is up to it, but one example could be the assigned MSP.
         /// This metadata is necessary since it is needed to reconstruct the leaf node key in the storage
         /// provider's Merkle Forest.
-        #[pallet::call_index(6)]
+        #[pallet::call_index(7)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_stop_storing(
             origin: OriginFor<T>,
@@ -511,7 +610,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and stop storing the file.
-            Self::do_bsp_stop_storing(
+            let bsp_id = Self::do_bsp_stop_storing(
                 who.clone(),
                 file_key,
                 location.clone(),
@@ -523,7 +622,7 @@ pub mod pallet {
 
             // Emit event.
             Self::deposit_event(Event::BspStoppedStoring {
-                bsp: who,
+                bsp_id,
                 file_key,
                 owner,
                 location,

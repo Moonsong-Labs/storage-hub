@@ -1,6 +1,10 @@
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::BoundedVec;
+use frame_support::{
+    traits::{nonfungibles_v2::Inspect as NonFungiblesInspect, Currency},
+    BoundedVec,
+};
 use frame_system::pallet_prelude::BlockNumberFor;
+use pallet_nfts::CollectionConfig;
 use scale_info::TypeInfo;
 use shp_traits::ProvidersInterface;
 
@@ -36,7 +40,7 @@ pub struct StorageRequestMetadata<T: Config> {
     ///
     /// This is useful when a BSP stops serving data and automatically creates a new storage request with no user multiaddresses, since
     /// SPs can prove and serve the data to be replicated to other BSPs without the user having this stored on their local machine.
-    pub data_server_sps: BoundedVec<T::AccountId, MaxBspsPerStorageRequest<T>>, // TODO: Change the Maximum data servers to be the maximum SPs allowed
+    pub data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>, // TODO: Change the Maximum data servers to be the maximum SPs allowed
     /// Number of BSPs requested to store the data.
     ///
     /// The storage request will be dropped/complete once all the minimum required BSPs have
@@ -62,6 +66,13 @@ pub struct StorageRequestBspsMetadata<T: Config> {
     /// This is normally when the BSP submits a proof of storage to the `pallet-proofs-dealer-trie`.
     pub confirmed: bool,
     pub _phantom: core::marker::PhantomData<T>,
+}
+
+/// Bucket privacy settings.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+pub enum BucketPrivacy {
+    Public,
+    Private,
 }
 
 /// Alias for the `MerkleHash` type used in the ProofsDealerInterface.
@@ -122,5 +133,26 @@ pub type MaxMultiAddresses<T> =
 /// Alias for a bounded vector of [`MultiAddress`].
 pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;
 
-/// Alias for the `Provider` type used in the ProvidersInterface.
-pub type ProviderIdFor<T> = <<T as crate::Config>::Providers as ProvidersInterface>::Provider;
+/// Alias for the `Balance` type used in the FileSystem pallet.
+type BalanceOf<T> =
+    <<T as crate::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+
+/// Alias for the `CollectionId` type used in the Nfts pallet.
+pub(super) type CollectionIdFor<T> = <<T as crate::Config>::Nfts as NonFungiblesInspect<
+    <T as frame_system::Config>::AccountId,
+>>::CollectionId;
+
+/// Alias for the `CollectionConfig` type used in the FileSystem pallet.
+pub(super) type CollectionConfigFor<T> =
+    CollectionConfig<BalanceOf<T>, BlockNumberFor<T>, CollectionIdFor<T>>;
+
+/// Alias for the `BucketNameLimit` type used in the ReadProvidersInterface.
+pub(super) type BucketNameLimitFor<T> =
+    <<T as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::BucketNameLimit;
+
+/// Type alias representing the type of `BucketId` used in `ProvidersInterface`.
+pub(crate) type BucketIdFor<T> =
+    <<T as crate::Config>::Providers as shp_traits::ProvidersConfig>::BucketId;
+
+/// Alias for the `ProviderId` type used in the ProvidersInterface.
+pub type ProviderIdFor<T> = <<T as crate::Config>::Providers as ProvidersInterface>::ProviderId;

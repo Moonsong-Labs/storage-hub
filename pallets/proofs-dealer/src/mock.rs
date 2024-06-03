@@ -114,12 +114,14 @@ impl pallet_storage_providers::Config for Test {
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
+    type ReadAccessGroupId = u32;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
+    type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
@@ -151,12 +153,12 @@ impl crate::Config for Test {
 
 pub struct MockedProvidersSubscriber;
 impl SubscribeProvidersInterface for MockedProvidersSubscriber {
-    type Provider = u64;
+    type ProviderId = u64;
 
-    fn subscribe_bsp_sign_up(_who: &Self::Provider) -> DispatchResult {
+    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
         Ok(())
     }
-    fn subscribe_bsp_sign_off(_who: &Self::Provider) -> DispatchResult {
+    fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
         Ok(())
     }
 }

@@ -6,7 +6,6 @@
 //! The functionality allows users to sign up and sign off as MSPs or BSPs and change
 //! their parameters. This is the way that users can offer their storage capacity to
 //! the network and get rewarded for it.
-
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub mod types;
@@ -40,7 +39,7 @@ pub mod pallet {
         sp_runtime::traits::{
             AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps,
         },
-        traits::fungible::*,
+        traits::{fungible::*, Incrementable},
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
@@ -129,6 +128,9 @@ pub mod pallet {
         /// Subscribers to important updates
         type Subscribers: SubscribeProvidersInterface;
 
+        /// The type of the Bucket NFT Collection ID.
+        type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
+
         /// The minimum amount that an account has to deposit to become a storage provider.
         #[pallet::constant]
         type SpMinDeposit: Get<BalanceOf<Self>>;
@@ -166,6 +168,10 @@ pub mod pallet {
         /// The maximum amount of Buckets that a MSP can have.
         #[pallet::constant]
         type MaxBuckets: Get<u32>;
+
+        /// Type that represents the byte limit of a bucket name.
+        #[pallet::constant]
+        type BucketNameLimit: Get<u32>;
 
         /// The maximum amount of blocks after which a sign up request expires so the randomness cannot be chosen
         #[pallet::constant]
@@ -406,6 +412,10 @@ pub mod pallet {
         NoBucketId,
         /// Error thrown when a user has a SP ID assigned to it but the SP data does not exist in storage (Inconsistency error).
         SpRegisteredButDataNotFound,
+        /// Error thrown when a bucket ID is not found in storage.
+        BucketNotFound,
+        /// Error thrown when a bucket ID already exists in storage.
+        BucketAlreadyExists,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -416,7 +426,8 @@ pub mod pallet {
     pub enum HoldReason {
         /// Deposit that a Storage Provider has to pay to be registered as such
         StorageProviderDeposit,
-        // TODO: Only for testing, remove this for production
+        // Only for testing, another unrelated hold reason
+        #[cfg(test)]
         AnotherUnrelatedHold,
     }
 
@@ -461,6 +472,7 @@ pub mod pallet {
             capacity: StorageData<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             value_prop: ValueProposition<T>,
+            payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -473,6 +485,7 @@ pub mod pallet {
                 multiaddresses: multiaddresses.clone(),
                 value_prop: value_prop.clone(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
+                payment_account,
             };
 
             // Sign up the new MSP (if possible), updating storage
@@ -520,6 +533,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             capacity: StorageData<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -531,6 +545,7 @@ pub mod pallet {
                 multiaddresses: multiaddresses.clone(),
                 root: MerklePatriciaRoot::<T>::default(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
+                payment_account,
             };
 
             // Sign up the new BSP (if possible), updating storage
