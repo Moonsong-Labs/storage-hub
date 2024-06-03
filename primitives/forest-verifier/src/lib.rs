@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::sp_runtime::DispatchError;
-use shp_traits::CommitmentVerifier;
+use shp_traits::{CommitmentVerifier, Mutation, RootProofMutator};
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
-use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
+use sp_trie::{CompactProof, MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
 use trie_db::TrieIterator;
 
 #[cfg(test)]
@@ -33,7 +33,7 @@ where
         root: &Self::Commitment,
         challenges: &[Self::Challenge],
         proof: &Self::Proof,
-    ) -> Result<Vec<Self::Challenge>, DispatchError> {
+    ) -> Result<Vec<Self::Commitment>, DispatchError> {
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
         let (memdb, root) = proof.to_memory_db(Some(root.into())).map_err(|_| {
             "Failed to convert proof to memory DB, root doesn't match with expected."
@@ -205,5 +205,63 @@ where
         }
 
         return Ok(Vec::from_iter(proven_keys));
+    }
+}
+
+/// Implement the `RootProofMutator` trait for the `ForestVerifier` struct.
+impl<T: TrieLayout, const H_LENGTH: usize> RootProofMutator<T::Hash> for ForestVerifier<T, H_LENGTH>
+where
+    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
+{
+    type Proof = CompactProof;
+    type Commitment = <T::Hash as sp_core::Hasher>::Out;
+    type Challenge = <T::Hash as sp_core::Hasher>::Out;
+
+    fn mutate_root(
+        commitment: &Self::Commitment,
+        mutations: &[Mutation<Self::Challenge>],
+        proof: &Self::Proof,
+    ) -> Result<(MemoryDB<T::Hash>, Self::Commitment), DispatchError> {
+        // Check if the mutations are empty
+        if mutations.is_empty() {
+            return Err("No mutations provided.".into());
+        }
+
+        // Check if the commitment is empty
+        if commitment.as_ref().is_empty() {
+            return Err("Commitment is empty.".into());
+        }
+
+        // Convert compact proof to `sp_trie::StorageProof` in order to access the trie nodes.
+        // TODO: Understand why `CompactProof` cannot be used directly to construct memdb and modify a partial trie. (it fails with error IncompleteDatabase)
+        let (storage_proof, mut root) = proof
+            .to_storage_proof::<T::Hash>(Some(commitment.into()))
+            .map_err(|_| {
+                "Failed to convert proof to memory DB, root doesn't match with expected."
+            })?;
+
+        let mut memdb = storage_proof.to_memory_db();
+
+        let mut trie = TrieDBMutBuilder::<T>::new(&mut memdb, &mut root).build();
+
+        // Apply mutations to the trie
+        for mutation in mutations.iter() {
+            match mutation {
+                Mutation::Add(key) => {
+                    trie.insert(key.as_ref(), &[])
+                        .map_err(|_| "Failed to insert key into trie.")?;
+                }
+                Mutation::Remove(key) => {
+                    trie.remove(key.as_ref())
+                        .map_err(|_| "Failed to remove key from trie.")?;
+                }
+            }
+        }
+
+        let new_root = *trie.root();
+
+        drop(trie);
+
+        Ok((memdb, new_root))
     }
 }

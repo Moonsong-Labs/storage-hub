@@ -316,6 +316,28 @@ pub trait CommitmentVerifier {
         proof: &Self::Proof,
     ) -> Result<Vec<Self::Challenge>, DispatchError>;
 }
+/// Enum representing the type of mutation (addition or removal of a key).
+pub enum Mutation<Challenge> {
+    Add(Challenge),
+    Remove(Challenge),
+}
+
+/// A trait to mutate proofs based on commitments and challenges.
+pub trait RootProofMutator<H: sp_core::Hasher> {
+    /// The type that represents the proof.
+    type Proof: Parameter + Member + Debug;
+    /// The type that represents the commitment (e.g. a Merkle root)
+    type Commitment: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
+    /// The type that represents the challenges which a proof is being verified against.
+    type Challenge: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
+
+    /// Mutate the root of the partial trie by removing or adding keys to and returning the computed root.
+    fn mutate_root(
+        commitment: &Self::Commitment,
+        mutations: &[Mutation<Self::Challenge>],
+        proof: &Self::Proof,
+    ) -> Result<(sp_trie::MemoryDB<H>, Self::Commitment), DispatchError>;
+}
 
 /// Interface used by the file system pallet in order to read storage from NFTs pallet (avoiding tigth coupling).
 pub trait InspectCollections {

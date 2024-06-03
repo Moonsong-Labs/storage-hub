@@ -25,6 +25,7 @@ frame-system = { workspace = true }
 # Substrate
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
+sp-trie = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
