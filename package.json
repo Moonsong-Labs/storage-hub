@@ -5,8 +5,13 @@
   "main": "index.js",
   "private": true,
   "type": "module",
-  "workspaces": ["test"],
+  "workspaces": [
+    "test"
+  ],
   "scripts": {
+    "lint": "pnpm -r lint",
+    "fmt": "pnpm -r fmt",
+    "fmt:fix": "pnpm -r fmt:fix"
   },
   "keywords": [],
   "author": "",
