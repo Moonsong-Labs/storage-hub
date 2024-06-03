@@ -1,0 +1,147 @@
+import "@polkadot/api-augment/kusama";
+import { ApiPromise, WsProvider } from "@polkadot/api";
+import type { SubmittableExtrinsic } from "@polkadot/api/types";
+import type { ISubmittableResult } from "@polkadot/types/types";
+import type { KeyringPair } from "@polkadot/keyring/types";
+import { alice } from "./pjsKeyring";
+
+export const getZombieClients = async (options: {
+  relayWs?: string;
+  shWs?: string;
+}) => {
+  const relayWsProvider = new WsProvider(options.relayWs);
+  const relayApi = await ApiPromise.create({ provider: relayWsProvider });
+  const shWsProvider = new WsProvider(options.shWs);
+  const shApi = await ApiPromise.create({ provider: shWsProvider });
+
+  return {
+    [Symbol.asyncDispose]: async () => {
+      await relayApi.disconnect();
+      await shApi.disconnect();
+    },
+    relayApi,
+    storageApi: shApi,
+  };
+};
+
+export const waitForChain = async (
+  api: ApiPromise,
+  options?: {
+    timeoutMs?: number;
+    blocks?: number;
+  }
+) => {
+  const startTime = performance.now();
+
+  process.stdout.write(
+    `Waiting a maximum of ${
+      options?.timeoutMs || 60_000 / 1000
+    } seconds for ${await api.rpc.system.chain()} chain to be ready...`
+  );
+  const startingHeight = (await api.rpc.chain.getHeader()).number.toNumber();
+
+  for (;;) {
+    try {
+      const blockHeight = (await api.rpc.chain.getHeader()).number.toNumber();
+      if (blockHeight - startingHeight > (options?.blocks || 0)) {
+        process.stdout.write("✅\n");
+        break;
+      }
+    } catch (e) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    if (performance.now() - startTime > (options?.timeoutMs || 60_000)) {
+      throw new Error("Timeout waiting for chain to be ready");
+    }
+  }
+};
+
+export const waitForRandomness = async (api: ApiPromise, timeoutMs = 60_000) => {
+  process.stdout.write("Waiting for randomness...");
+
+  const waitForValueOrTimeout = (timeoutMs: number) => {
+    // biome-ignore lint/suspicious/noAsyncPromiseExecutor: <explanation>
+    return new Promise(async (resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Timeout"));
+      }, timeoutMs);
+
+      let valueCount = 0;
+      // @ts-expect-error - ApiAugment not ready yet for SH
+      const unsub = await api.query.randomness.latestOneEpochAgoRandomness(
+        // @ts-expect-error - ApiAugment not ready yet for SH
+        (data) => {
+          valueCount++;
+          if (!data) {
+            // @ts-expect-error - ApiAugment not ready yet for SH
+            unsub();
+            reject(new Error("Randomness value is undefined"));
+          }
+          if (valueCount === 2) {
+            if (!data) {
+              throw new Error("Randomness value is undefined");
+            }
+            clearTimeout(timeout);
+            // @ts-expect-error - ApiAugment not ready yet for SH
+            unsub();
+            resolve(data);
+          }
+        }
+      );
+    });
+  };
+
+  try {
+    const result = await waitForValueOrTimeout(timeoutMs);
+    if (result) {
+      process.stdout.write("✅\n");
+      return result;
+    }
+    process.stdout.write("❌\n");
+    console.error("Timeout reached without receiving a value.");
+  } catch (error) {
+    process.stdout.write("❌\n");
+    console.error("An error occurred:", error);
+  }
+};
+
+export const sendTransaction = async (
+  call: SubmittableExtrinsic<"promise", ISubmittableResult>,
+  options?: { nonce?: number; signer?: KeyringPair }
+) => {
+  // biome-ignore lint/suspicious/noAsyncPromiseExecutor: <explanation>
+  return new Promise(async (resolve, reject) => {
+    const unsub = await call.signAndSend(
+      options?.signer || alice,
+      { nonce: options?.nonce || -1 },
+      (result) => {
+        switch (result.status.type) {
+          case "Finalized": {
+            unsub();
+            resolve(result);
+            break;
+          }
+
+          case "Dropped": {
+            unsub();
+            reject("Transaction dropped");
+            break;
+          }
+
+          // case "Invalid": {
+          //   unsub()
+          //   reject("Invalid transaction")
+          //   break
+          // }
+
+          case "Usurped": {
+            unsub();
+            reject("Transaction was usurped");
+            break;
+          }
+        }
+      }
+    );
+  });
+};

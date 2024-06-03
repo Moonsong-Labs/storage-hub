@@ -48,9 +48,7 @@ describe("Balances Pallet: Basic", () => {
     expect(balBefore.toBigInt()).toBe(0n);
 
     console.log(`Sending balance to ${randomId}`);
-    await api.tx.balances
-      .transferAllowDeath(randomId, amount)
-      .signAndSend(alice);
+    await api.tx.balances.transferAllowDeath(randomId, amount).signAndSend(alice);
 
     await api.createBlock();
 
@@ -63,8 +61,7 @@ describe("Balances Pallet: Basic", () => {
   it("Can display total issuance", { only: true }, async () => {
     const accountEntries = await api.query.system.account.entries();
     const balancesTotal = accountEntries.reduce(
-      (acc, [, { data }]) =>
-        acc + data.free.toBigInt() + data.reserved.toBigInt(),
+      (acc, [, { data }]) => acc + data.free.toBigInt() + data.reserved.toBigInt(),
       0n
     );
     const totalSupply = await api.query.balances.totalIssuance();
@@ -107,17 +104,16 @@ describe("Balances Pallet: Basic", () => {
     const randomAccount = await createSr25519Account();
     const amount = 10n * UNIT;
 
-    await api.tx.balances
-      .transferAllowDeath(randomAccount.address, amount)
-      .signAndSend(alice);
+    await api.tx.balances.transferAllowDeath(randomAccount.address, amount).signAndSend(alice);
     await api.createBlock();
 
-
-    const {data:{free:balAvail}} = await api.query.system.account(randomAccount.address)
-    console.log(balAvail.toHuman())
+    const {
+      data: { free: balAvail },
+    } = await api.query.system.account(randomAccount.address);
+    console.log(balAvail.toHuman());
 
     await api.tx.balances
-      .transferAllowDeath(alice.address, balAvail.toBigInt() - ROUGH_TRANSFER_FEE-  10000n)
+      .transferAllowDeath(alice.address, balAvail.toBigInt() - ROUGH_TRANSFER_FEE - 10000n)
       .signAndSend(randomAccount);
     await api.createBlock();
 
@@ -128,14 +124,12 @@ describe("Balances Pallet: Basic", () => {
     expect(randBal.toBigInt()).toBe(0n);
   });
 
-  it ("SetBalance fails when called without sudo", {only:true}, async () => {
+  it("SetBalance fails when called without sudo", { only: true }, async () => {
     const {
       data: { free: balBefore },
     } = await api.query.system.account(bob.address);
 
-    await api.tx.balances
-      .forceSetBalance(bob.address, 1337n)
-      .signAndSend(alice);
+    await api.tx.balances.forceSetBalance(bob.address, 1337n).signAndSend(alice);
     await api.createBlock();
 
     const {

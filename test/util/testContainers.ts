@@ -1,10 +1,6 @@
 import "@polkadot/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
-import {
-  GenericContainer,
-  Wait,
-  type StartedTestContainer,
-} from "testcontainers";
+import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
 import { createBlock } from "./blocks";
 export { ApiPromise } from "@polkadot/api";
 export type { StartedTestContainer } from "testcontainers";
@@ -18,9 +14,9 @@ export type ExtendedApiPromise = ApiPromise & {
   createBlock: () => ReturnType<typeof createBlock>;
 };
 
-export type TestOptions ={
-    keepOpen?: boolean
-}
+export type TestOptions = {
+  keepOpen?: boolean;
+};
 
 export const devnodeSetup = async (options: TestOptions): Promise<TestApis> => {
   process.stdout.write("Starting container... ");

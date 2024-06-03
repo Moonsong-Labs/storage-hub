@@ -1,9 +1,5 @@
 import { spawn, execSync, spawnSync } from "node:child_process";
-import {
-  GenericContainer,
-  type StartedTestContainer,
-  Wait,
-} from "testcontainers";
+import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
 
 let container: StartedTestContainer;
 
@@ -25,9 +21,7 @@ async function main() {
     .start();
   process.stdout.write("✅\n");
 
-  const connectString = `ws://${container.getHost()}:${container.getMappedPort(
-    9944
-  )}`;
+  const connectString = `ws://${container.getHost()}:${container.getMappedPort(9944)}`;
 
   console.log(`Connecting APIs at ${connectString}... `);
   // run scalegen

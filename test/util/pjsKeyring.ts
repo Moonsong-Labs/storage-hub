@@ -21,6 +21,12 @@ export const ferdie = keyring.addFromUri("//Ferdie", {
   name: "Ferdie default",
 });
 
+export const bsp = keyring.addFromUri("//Sh-BSP", { name: "Sh-BSP" });
+
+export const collator = keyring.addFromUri("//Sh-collator", {
+  name: "Sh-collator",
+});
+
 export const createSr25519Account = async (privateKey?: string) => {
   const rand = `0x${randomBytes(32).toString("hex")}`;
   console.log("random", rand);

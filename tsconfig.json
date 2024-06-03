@@ -23,6 +23,8 @@
 		// Some stricter flags
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
-		"noPropertyAccessFromIndexSignature": true
+		"noPropertyAccessFromIndexSignature": true,
+
+		"downlevelIteration": true // Ensure async iteration is supported
 	}
 }

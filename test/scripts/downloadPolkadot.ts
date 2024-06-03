@@ -21,9 +21,9 @@ async function main() {
       const blob = await fetch(downloadUri);
       const arrayBuffer = await blob.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
-      
+
       fs.writeFileSync(writePath, buffer);
-      
+
       fs.chmod(writePath, 0o755, (err) => {
         if (err) {
           throw err;
