@@ -601,7 +601,7 @@ where
 
                         // If we don't increment the timestamp, we will hit a para slot and relay slot mismatch.
                         timestamp += storage_hub_runtime::SLOT_DURATION;
- 
+
 						let relay_slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
 							timestamp.into(),
 							slot_duration,
