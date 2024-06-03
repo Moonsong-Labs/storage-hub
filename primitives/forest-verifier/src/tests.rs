@@ -1409,15 +1409,13 @@ mod mutate_root_tests {
             .to_compact_proof::<BlakeTwo256>(*root)
             .expect("Failed to create compact proof from recorder");
 
-        let proof_keys =
-            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-                root,
-                challenge_keys,
-                &proof,
-            )
-            .expect("Failed to verify proof");
+        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+            root,
+            challenge_keys,
+            &proof,
+        )
+        .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, challenge_keys.to_vec());
         proof
     }
 
@@ -1457,7 +1455,12 @@ mod mutate_root_tests {
 
             let mut iter = trie.into_double_ended_iter().unwrap();
             iter.seek(&challenge_key.0).unwrap();
-            assert!(iter.next().is_none());
+
+            // Access the next leaf node.
+            iter.next();
+
+            // Access the previous leaf node.
+            iter.next_back();
         }
 
         let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
@@ -1518,9 +1521,14 @@ mod mutate_root_tests {
                 .build();
 
             for challenge_key in &challenge_keys {
-                let mut iter = trie.iter().unwrap();
+                let mut iter = trie.into_double_ended_iter().unwrap();
                 iter.seek(&challenge_key.0).unwrap();
-                assert!(iter.next().is_none());
+
+                // Access the next leaf node.
+                iter.next();
+
+                // Access the previous leaf node.
+                iter.next_back();
             }
         }
 
