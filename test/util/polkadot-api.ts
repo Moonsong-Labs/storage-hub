@@ -6,7 +6,7 @@ import {
   type TypedApi,
 } from "polkadot-api";
 import { WebSocketProvider } from "polkadot-api/ws-provider/node";
-import { relaychain, storagehub } from "@polkadot-api/descriptors";
+// import { relaychain, storagehub } from "@polkadot-api/descriptors";
 
 export type TypesBundle = typeof storagehub | typeof relaychain;
 

@@ -36,6 +36,9 @@ importers:
       '@polkadot/keyring':
         specifier: 12.6.2
         version: 12.6.2(@polkadot/util-crypto@12.6.2(@polkadot/util@12.6.2))(@polkadot/util@12.6.2)
+      '@polkadot/util-crypto':
+        specifier: 12.6.2
+        version: 12.6.2(@polkadot/util@12.6.2)
       '@polkadot/wasm-crypto':
         specifier: 7.3.2
         version: 7.3.2(@polkadot/util@12.6.2)(@polkadot/x-randomvalues@12.6.2(@polkadot/util@12.6.2)(@polkadot/wasm-util@7.3.2(@polkadot/util@12.6.2)))

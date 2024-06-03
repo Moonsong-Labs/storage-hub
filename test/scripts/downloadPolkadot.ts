@@ -19,11 +19,16 @@ async function main() {
       const downloadUri = `${ghRoot}polkadot-v${version}/${binary}`;
       console.log(`💾 Downloading ${binary} from ${downloadUri}`);
       const blob = await fetch(downloadUri);
-      await Bun.write(writePath, blob);
+      const arrayBuffer = await blob.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      
+      fs.writeFileSync(writePath, buffer);
+      
       fs.chmod(writePath, 0o755, (err) => {
         if (err) {
           throw err;
         }
+        console.log(`File permissions set for ${writePath}`);
       });
     }
   } catch (error) {
