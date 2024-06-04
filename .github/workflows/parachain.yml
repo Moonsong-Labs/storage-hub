@@ -266,6 +266,7 @@ jobs:
       - name: Run Zombienet Test!
         run: |
           cd test
+          pnpm update-types
           pnpm test:full
 
 
@@ -374,4 +375,5 @@ jobs:
       - name: Run Dev Node Tests
         run: |
           cd test
+          pnpm update-types
           pnpm test:node

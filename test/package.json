@@ -5,6 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "update-types":"pushd ../api-augment && pnpm generate:all && pnpm build; popd",
     "fmt": "biome format .",
     "fmt:fix": "biome format . --write",
     "lint": "biome lint .",
