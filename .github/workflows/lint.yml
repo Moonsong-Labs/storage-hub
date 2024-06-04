@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-pnpm@v1
+      - uses: ./.github/workflow-templates/setup-pnpm
       - run: pnpm install
       - run: pnpm fmt
 
@@ -55,6 +55,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-pnpm@v1
+      - uses: ./.github/workflow-templates/setup-pnpm
       - run: pnpm install
       - run: pnpm lint

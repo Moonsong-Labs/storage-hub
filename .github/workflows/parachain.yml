@@ -76,7 +76,7 @@ jobs:
         with:
           cache: false
       - uses: rui314/setup-mold@v1
-      - uses: ./.github/actions/setup-pnpm@v1
+      - uses: ./.github/workflow-templates/setup-pnpm
       - uses: arduino/setup-protoc@v3
       - name: Build All
         # TODO: Make this only build the parachain node project
@@ -147,7 +147,7 @@ jobs:
   #       working-directory: test
   #   steps:
   #     - uses: actions/checkout@v4
-  # - uses: ./.github/actions/setup-pnpm@v1
+  # - uses: ./.github/workflow-templates/setup-pnpm
   #     - name: Pull Docker image
   #       run: docker pull moonsonglabs/storage-hub:${{ needs.setup.outputs.image-tag }}
   #     - name: Start local k8 cluster
@@ -170,7 +170,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-pnpm@v1
+      - uses: ./.github/workflow-templates/setup-pnpm
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
         if: needs.setup.outputs.node_changed == 'true'
@@ -211,7 +211,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-pnpm@v1
+      - uses: ./.github/workflow-templates/setup-pnpm
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
         if: needs.setup.outputs.node_changed == 'true'
@@ -241,7 +241,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-pnpm@v1
+      - uses: ./.github/workflow-templates/setup-pnpm
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
         if: needs.setup.outputs.node_changed == 'true'
