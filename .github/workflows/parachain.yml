@@ -262,11 +262,11 @@ jobs:
       - name: Setup
         run: |
           cd test
-          pnpm  zombie:setup:native
+          pnpm zombie:setup:native
       - name: Run Zombienet Test!
         run: |
           cd test
-          pnpm  test:full-e2e
+          pnpm test:full
 
 
   zombie_test:

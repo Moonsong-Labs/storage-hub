@@ -4,12 +4,14 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "scrape": "pnpm tsx scripts/scrapeMetadata.ts",
     "fmt": "biome format .",
     "fmt:fix": "biome format . --write",
     "lint": "biome lint .",
+    "tsc": "tsc --noEmit --pretty",
     "build": "pnpm generate:defs && pnpm generate:meta",
-    "generate:defs": "polkadot-types-from-defs --package @storagehub/api-augment/interfaces  --input ./src/interfaces --endpoint ./storagehub.json",
-    "generate:meta": "polkadot-types-from-chain --package @storagehub/api-augment/interfaces  --input ./src/interfaces --endpoint ./storagehub.json"
+    "generate:defs": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-defs.mjs --package @storagehub/api-augment/interfaces  --input ./src/interfaces --endpoint ./storagehub.json",
+    "generate:meta": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-chain.mjs --package @storagehub/api-augment/interfaces  --input ./src/interfaces --endpoint ./storagehub.json"
   },
   "keywords": [],
   "author": "",
