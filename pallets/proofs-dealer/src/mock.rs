@@ -8,7 +8,8 @@ use frame_support::{
 use frame_system as system;
 use shp_forest_verifier::ForestVerifier;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, Mutation, ProofDeltaApplier, SubscribeProvidersInterface,
+    ChallengeKeyInclusion, CommitmentVerifier, MaybeDebug, Mutation, ProofDeltaApplier,
+    SubscribeProvidersInterface,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
@@ -183,11 +184,11 @@ where
 
     fn verify_proof(
         _root: &Self::Commitment,
-        challenges: &[Self::Challenge],
+        challenges: &[(Self::Challenge, Option<ChallengeKeyInclusion>)],
         proof: &CompactProof,
     ) -> Result<Vec<Self::Challenge>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            Ok(challenges.to_vec())
+            Ok(challenges.iter().map(|(c, _)| *c).collect())
         } else {
             Err("Proof is empty".into())
         }

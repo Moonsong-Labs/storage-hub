@@ -5,8 +5,9 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
-use shp_forest_verifier::ForestVerifier;
-use shp_traits::{CommitmentVerifier, MaybeDebug, Mutation, ProofDeltaApplier};
+use shp_traits::{
+    ChallengeKeyInclusion, CommitmentVerifier, MaybeDebug, Mutation, ProofDeltaApplier,
+};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
@@ -248,11 +249,11 @@ where
 
     fn verify_proof(
         _root: &Self::Commitment,
-        challenges: &[Self::Challenge],
+        challenges: &[(Self::Challenge, Option<ChallengeKeyInclusion>)],
         proof: &CompactProof,
     ) -> Result<Vec<Self::Challenge>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            Ok(challenges.to_vec())
+            Ok(challenges.iter().map(|(c, _)| *c).collect())
         } else {
             Err("Proof is empty".into())
         }
@@ -270,11 +271,11 @@ where
 
     fn apply_delta(
         root: &Self::Commitment,
-        mutations: &[Mutation<Self::Challenge>],
-        proof: &Self::Proof,
+        _mutations: &[Mutation<Self::Challenge>],
+        _proof: &Self::Proof,
     ) -> Result<(MemoryDB<T::Hash>, Self::Commitment), DispatchError> {
-        // Just use the main implementation used by the runtime
-        ForestVerifier::<T, H_LENGTH>::apply_delta(root, mutations, proof)
+        // Just return the root as is with no mutations
+        Ok((MemoryDB::<T::Hash>::default(), *root))
     }
 }
 

@@ -6,7 +6,9 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
-use shp_traits::{MutateProvidersInterface, ReadProvidersInterface};
+use shp_traits::{
+    ChallengeKeyInclusion, MutateProvidersInterface, Mutation, ReadProvidersInterface,
+};
 use sp_core::Hasher;
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
@@ -385,8 +387,8 @@ where
         sender: T::AccountId,
         location: FileLocation<T>,
         root: FileKey<T>,
-        forest_proof: ForestProof<T>,
-        key_proof: KeyProof<T>,
+        non_inclusion_forest_proof: ForestProof<T>,
+        added_file_key_proof: KeyProof<T>,
     ) -> Result<ProviderIdFor<T>, DispatchError> {
         let bsp_id =
             <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
@@ -447,13 +449,12 @@ where
 
         // TODO: Initialise challenges properly constructing the key for this particular file.
         let file_key = FileKeyHasher::<T>::hash(&location.encode());
-        let challenges = vec![file_key];
 
-        // Check that the forest proof is valid.
+        // Check that the forest proof is valid and that the file key is not included in the forest.
         <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
             &bsp_id,
-            challenges.as_slice(),
-            &forest_proof,
+            &[(file_key, Some(ChallengeKeyInclusion::NotIncluded))],
+            &non_inclusion_forest_proof,
         )?;
 
         // TODO: Generate challenges for the key proof properly.
@@ -463,7 +464,7 @@ where
         <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
             &file_key,
             &challenges,
-            &key_proof,
+            &added_file_key_proof,
         )?;
 
         // TODO: Check if this is the first file added to the BSP's Forest. If so, initialise
@@ -502,8 +503,15 @@ where
             });
         }
 
-        // Update root of bsp.
-        <T::Providers as shp_traits::MutateProvidersInterface>::change_root_bsp(bsp_id, root)?;
+        // Compute new root after inserting new file key in forest partial trie.
+        let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
+            &root,
+            &[Mutation::Add(file_key)],
+            &non_inclusion_forest_proof,
+        )?;
+
+        // Update root of BSP.
+        <T::Providers as shp_traits::MutateProvidersInterface>::change_root_bsp(bsp_id, new_root)?;
 
         // Add data to storage provider.
         <T::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
@@ -601,20 +609,21 @@ where
     ///
     /// *This function does not give BSPs the possibility to remove themselves from being a __volunteer__ of a storage request.*
     ///
-    /// A proof of storing the file is required to record the new root of the BSPs merkle patricia trie. First we validate the proof
-    /// and ensure the `file_key` is indeed part of the merkle patricia trie. Then finally we re-compute the new merkle patricia trie root
-    /// without the `file_key` and update the root of the BSP.
+    /// A proof of inclusion is required to record the new root of the BSPs merkle patricia trie. First we validate the proof
+    /// and ensure the `file_key` is indeed part of the merkle patricia trie. Then finally compute the new merkle patricia trie root
+    /// by removing the `file_key` and update the root of the BSP.
     ///
     /// `can_serve`: A flag that indicates if the BSP can serve the file to other BSPs. If the BSP can serve the file, then
     /// they are added to the storage request as a data server.
     pub(crate) fn do_bsp_stop_storing(
         sender: T::AccountId,
-        _file_key: FileKey<T>,
+        file_key: FileKey<T>,
         location: FileLocation<T>,
         owner: T::AccountId,
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         can_serve: bool,
+        inclusion_forest_proof: ForestProof<T>,
     ) -> Result<ProviderIdFor<T>, DispatchError> {
         let bsp_id = <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender)
             .ok_or(Error::<T>::NotABsp)?;
@@ -626,7 +635,6 @@ where
         );
 
         // TODO: charge SP for this action.
-        // TODO: Require & verify proof that the file key is indeed stored by the BSP.
         // TODO: Check that the hash of all the metadata is equal to the `file_key` hash.
         match <StorageRequests<T>>::get(&location) {
             Some(mut metadata) => {
@@ -679,7 +687,29 @@ where
             }
         };
 
-        // TODO: compute new root from proof and update the storage root of bsp.
+        // Verify the proof of inclusion.
+        <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+            &bsp_id,
+            &[(file_key, Some(ChallengeKeyInclusion::Included))],
+            &inclusion_forest_proof,
+        )?;
+
+        // Get the current root of the BSP.
+        let root = <T::Providers as shp_traits::ProvidersInterface>::get_root(bsp_id)
+            .ok_or(Error::<T>::ProviderRootNotFound)?;
+
+        // Compute new root after removing file key from forest partial trie.
+        let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
+            &root,
+            &[Mutation::Remove(file_key)],
+            &inclusion_forest_proof,
+        )?;
+
+        // Update root of BSP.
+        <T::Providers as shp_traits::MutateProvidersInterface>::change_root_bsp(bsp_id, new_root)?;
+
+        // Decrease data used by the BSP.
+        <T::Providers as shp_traits::MutateProvidersInterface>::decrease_data_used(&bsp_id, size)?;
 
         Ok(bsp_id)
     }
@@ -704,7 +734,7 @@ where
 
     /// Get the block number at which the storage request will expire.
     ///
-    /// This will also update the [`CurrentExpirationBlock`] if the current expiration block pointer is lower then the [`crate::Config::StorageRequestTtl`].
+    /// This will also update the [`NextAvailableExpirationInsertionBlock`] if the current expiration block pointer is lower then the [`crate::Config::StorageRequestTtl`].
     pub(crate) fn next_expiration_insertion_block_number() -> BlockNumberFor<T> {
         let current_block_number = <frame_system::Pallet<T>>::block_number();
         let min_expiration_block = current_block_number + T::StorageRequestTtl::get().into();

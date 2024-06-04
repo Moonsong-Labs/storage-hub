@@ -52,7 +52,7 @@ use polkadot_runtime_common::{
 };
 use shp_file_key_verifier::FileKeyVerifier;
 use shp_forest_verifier::ForestVerifier;
-use shp_traits::{CommitmentVerifier, MaybeDebug};
+use shp_traits::{ChallengeKeyInclusion, CommitmentVerifier, MaybeDebug};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
@@ -552,11 +552,11 @@ where
 
     fn verify_proof(
         _root: &Self::Commitment,
-        challenges: &[Self::Challenge],
+        challenges: &[(Self::Challenge, Option<ChallengeKeyInclusion>)],
         proof: &CompactProof,
     ) -> Result<Vec<Self::Challenge>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            Ok(challenges.to_vec())
+            Ok(challenges.iter().map(|(c, _)| *c).collect())
         } else {
             Err("Proof is empty".into())
         }

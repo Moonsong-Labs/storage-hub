@@ -1364,7 +1364,10 @@ fn bsp_stop_storing_success() {
             owner_account_id.clone(),
             fingerprint,
             size,
-            false
+            false,
+            ForestProof {
+                encoded_nodes: vec![vec![0]],
+            },
         ));
 
         // Assert that the RequestStorageBsps has the correct value
@@ -1462,7 +1465,10 @@ fn bsp_stop_storing_while_storage_request_open_success() {
             owner_account_id.clone(),
             H256::zero(),
             size,
-            false
+            false,
+            ForestProof {
+                encoded_nodes: vec![vec![0]],
+            },
         ));
 
         // Assert that the RequestStorageBsps has the correct value
@@ -1541,7 +1547,10 @@ fn bsp_stop_storing_not_volunteered_success() {
             owner_account_id.clone(),
             fingerprint,
             size,
-            false
+            false,
+            ForestProof {
+                encoded_nodes: vec![vec![0]],
+            },
         ));
 
         let current_bsps_required: <Test as Config>::StorageRequestBspsRequiredType =
@@ -1605,7 +1614,10 @@ fn bsp_stop_storing_no_storage_request_success() {
             owner_account_id.clone(),
             fingerprint,
             size,
-            false
+            false,
+            ForestProof {
+                encoded_nodes: vec![vec![0]],
+            },
         ));
 
         // Assert that the storage request was created with one bsps_required

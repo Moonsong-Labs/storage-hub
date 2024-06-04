@@ -5,7 +5,7 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
-use shp_traits::{ProofsDealerInterface, SubscribeProvidersInterface};
+use shp_traits::{ChallengeKeyInclusion, ProofsDealerInterface, SubscribeProvidersInterface};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
@@ -137,7 +137,7 @@ impl ProofsDealerInterface for MockProofsDealer {
 
     fn verify_forest_proof(
         _who: &Self::ProviderId,
-        _challenges: &[Self::MerkleHash],
+        _challenges: &[(Self::MerkleHash, Option<ChallengeKeyInclusion>)],
         _proof: &Self::ForestProof,
     ) -> Result<Vec<Self::MerkleHash>, sp_runtime::DispatchError> {
         Ok(vec![])
@@ -145,10 +145,18 @@ impl ProofsDealerInterface for MockProofsDealer {
 
     fn verify_key_proof(
         _key: &Self::MerkleHash,
-        _challenges: &[Self::MerkleHash],
+        _challenges: &[(Self::MerkleHash, Option<ChallengeKeyInclusion>)],
         _proof: &Self::KeyProof,
     ) -> Result<Vec<Self::MerkleHash>, sp_runtime::DispatchError> {
         Ok(vec![])
+    }
+
+    fn apply_delta(
+        _commitment: &Self::MerkleHash,
+        _mutations: &[shp_traits::Mutation<Self::MerkleHash>],
+        _proof: &Self::ForestProof,
+    ) -> Result<Self::MerkleHash, sp_runtime::DispatchError> {
+        Ok(H256::default())
     }
 }
 

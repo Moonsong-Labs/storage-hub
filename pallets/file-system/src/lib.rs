@@ -74,6 +74,7 @@ pub mod pallet {
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: shp_traits::ProofsDealerInterface<
             ProviderId = <Self::Providers as shp_traits::ProvidersInterface>::ProviderId,
+            MerkleHash = <Self::Providers as shp_traits::ProvidersInterface>::MerkleHash,
         >;
 
         /// Type for identifying a file, generally a hash.
@@ -397,6 +398,8 @@ pub mod pallet {
         ImpossibleFailedToGetValue,
         /// Bucket is not private. Call `update_bucket_privacy` to make it private.
         BucketIsNotPrivate,
+        /// Root of the provider not found.
+        ProviderRootNotFound,
     }
 
     #[pallet::call]
@@ -606,6 +609,7 @@ pub mod pallet {
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
             can_serve: bool,
+            inclusion_forest_proof: ForestProof<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -618,6 +622,7 @@ pub mod pallet {
                 fingerprint,
                 size,
                 can_serve,
+                inclusion_forest_proof,
             )?;
 
             // Emit event.

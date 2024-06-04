@@ -7,6 +7,7 @@ use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
 use frame_support::traits::{fungible, Incrementable};
 use frame_support::Parameter;
 use scale_info::prelude::{fmt::Debug, vec::Vec};
+use scale_info::TypeInfo;
 use sp_core::Get;
 use sp_runtime::traits::{AtLeast32BitUnsigned, Hash, Saturating};
 use sp_runtime::{BoundedVec, DispatchError};
@@ -274,7 +275,7 @@ pub trait ProofsDealerInterface {
     /// proof of the Provider's data.
     fn verify_forest_proof(
         who: &Self::ProviderId,
-        challenges: &[Self::MerkleHash],
+        challenges: &[(Self::MerkleHash, Option<ChallengeKeyInclusion>)],
         proof: &Self::ForestProof,
     ) -> Result<Vec<Self::MerkleHash>, DispatchError>;
 
@@ -284,7 +285,7 @@ pub trait ProofsDealerInterface {
     /// not verify if that key is included in the Merkle Patricia Forest of the Provider.
     fn verify_key_proof(
         key: &Self::MerkleHash,
-        challenges: &[Self::MerkleHash],
+        challenges: &[(Self::MerkleHash, Option<ChallengeKeyInclusion>)],
         proof: &Self::KeyProof,
     ) -> Result<Vec<Self::MerkleHash>, DispatchError>;
 
@@ -293,6 +294,22 @@ pub trait ProofsDealerInterface {
 
     /// Submit a new challenge with priority.
     fn challenge_with_priority(key_challenged: &Self::MerkleHash) -> DispatchResult;
+
+    /// Apply delta to the partial trie based on the proof and the commitment.
+    ///
+    /// The new root is returned.
+    fn apply_delta(
+        commitment: &Self::MerkleHash,
+        mutations: &[Mutation<Self::MerkleHash>],
+        proof: &Self::ForestProof,
+    ) -> Result<Self::MerkleHash, DispatchError>;
+}
+
+/// Declares challenge key inclusion type for a given proof and commitment.
+#[derive(Encode, Decode, TypeInfo, MaxEncodedLen, PartialEq, PartialOrd, Eq, Ord, Clone, Debug)]
+pub enum ChallengeKeyInclusion {
+    Included,
+    NotIncluded,
 }
 
 /// A trait to verify proofs based on commitments and challenges.
@@ -312,7 +329,7 @@ pub trait CommitmentVerifier {
     /// is invalid.
     fn verify_proof(
         commitment: &Self::Commitment,
-        challenges: &[Self::Challenge],
+        challenges: &[(Self::Challenge, Option<ChallengeKeyInclusion>)],
         proof: &Self::Proof,
     ) -> Result<Vec<Self::Challenge>, DispatchError>;
 }

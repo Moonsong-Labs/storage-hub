@@ -516,7 +516,7 @@ fn submit_proof_success() {
         let mut key_proofs = BTreeMap::new();
         for challenge in challenges {
             key_proofs.insert(
-                challenge,
+                challenge.0,
                 KeyProof::<Test> {
                     proof: CompactProof {
                         encoded_nodes: vec![vec![0]],
@@ -599,7 +599,7 @@ fn submit_proof_submitted_by_not_a_provider_success() {
         let mut key_proofs = BTreeMap::new();
         for challenge in challenges {
             key_proofs.insert(
-                challenge,
+                challenge.0,
                 KeyProof::<Test> {
                     proof: CompactProof {
                         encoded_nodes: vec![vec![0]],
@@ -683,8 +683,8 @@ fn submit_proof_with_checkpoint_challenges_success() {
 
         // Make up custom challenges.
         let custom_challenges = BoundedVec::try_from(vec![
-            BlakeTwo256::hash(b"custom_challenge_1"),
-            BlakeTwo256::hash(b"custom_challenge_2"),
+            (BlakeTwo256::hash(b"custom_challenge_1"), None),
+            (BlakeTwo256::hash(b"custom_challenge_2"), None),
         ])
         .unwrap();
 
@@ -695,13 +695,13 @@ fn submit_proof_with_checkpoint_challenges_success() {
         );
 
         // Add custom challenges to the challenges vector.
-        challenges.extend(custom_challenges.iter());
+        challenges.extend(custom_challenges.iter().cloned());
 
         // Creating a vec of empty key proofs for each challenge, to fail verification.
         let mut key_proofs = BTreeMap::new();
         for challenge in challenges {
             key_proofs.insert(
-                challenge,
+                challenge.0,
                 KeyProof::<Test> {
                     proof: CompactProof {
                         encoded_nodes: vec![vec![0]],
@@ -1371,8 +1371,8 @@ fn submit_proof_out_checkpoint_challenges_fail() {
 
         // Make up custom challenges.
         let custom_challenges = BoundedVec::try_from(vec![
-            BlakeTwo256::hash(b"custom_challenge_1"),
-            BlakeTwo256::hash(b"custom_challenge_2"),
+            (BlakeTwo256::hash(b"custom_challenge_1"), None),
+            (BlakeTwo256::hash(b"custom_challenge_2"), None),
         ])
         .unwrap();
 
@@ -1386,7 +1386,7 @@ fn submit_proof_out_checkpoint_challenges_fail() {
         let mut key_proofs = BTreeMap::new();
         for challenge in challenges {
             key_proofs.insert(
-                challenge,
+                challenge.0,
                 KeyProof::<Test> {
                     proof: CompactProof {
                         encoded_nodes: vec![vec![0]],
@@ -1471,7 +1471,7 @@ fn submit_proof_key_proof_verification_fail() {
         let mut key_proofs = BTreeMap::new();
         for challenge in challenges {
             key_proofs.insert(
-                challenge,
+                challenge.0,
                 KeyProof::<Test> {
                     proof: CompactProof {
                         encoded_nodes: vec![],

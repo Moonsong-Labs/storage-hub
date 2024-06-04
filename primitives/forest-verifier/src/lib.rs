@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::sp_runtime::DispatchError;
-use shp_traits::{CommitmentVerifier, Mutation, ProofDeltaApplier};
+use shp_traits::{ChallengeKeyInclusion, CommitmentVerifier, Mutation, ProofDeltaApplier};
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 use sp_trie::{CompactProof, MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
 use trie_db::TrieIterator;
@@ -29,9 +29,14 @@ where
     ///
     /// Iterates over the challenges and checks if there is a pair of consecutive
     /// leaves that match the challenge, or an exact leaf that matches the challenge.
+    ///
+    /// Callers could optionally provide for each challenge a `ChallengeKeyInclusion` which
+    /// indicates whether the challenge is expected to be included in the proof or not. In some cases it
+    /// is not possible to determine if a challenge should be included in the proof or not, in which case
+    /// the `ChallengeKeyInclusion` should be `None`.
     fn verify_proof(
         root: &Self::Commitment,
-        challenges: &[Self::Challenge],
+        challenges: &[(Self::Challenge, Option<ChallengeKeyInclusion>)],
         proof: &Self::Proof,
     ) -> Result<Vec<Self::Commitment>, DispatchError> {
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
@@ -71,7 +76,7 @@ where
 
         // Iterate over the challenges and check if there is a pair of consecutive
         // leaves that match the challenge, or an exact leaf that matches the challenge.
-        while let Some(challenge) = challenges_iter.next() {
+        while let Some((challenge, expected_inclusion)) = challenges_iter.next() {
             trie_de_iter
                 .seek(challenge.as_ref())
                 .map_err(|_| "Failed to seek challenged key.")?;
@@ -93,6 +98,12 @@ where
                 // Scenario 1 (valid): `next_leaf` is the challenged leaf which is included in the proof.
                 // The challenge is the leaf itself (i.e. the challenge exists in the trie).
                 (_, Some((next_key, _))) if next_key == challenge.as_ref().to_vec() => {
+                    if let Some(ChallengeKeyInclusion::NotIncluded) = expected_inclusion {
+                        return Err(
+                            "Challenge key is not expected to be included in the proof.".into()
+                        );
+                    }
+
                     // Converting the key to a slice and then to a fixed size array.
                     let next_key: &[u8; H_LENGTH] = next_key
                         .as_slice()
@@ -113,6 +124,10 @@ where
                     if prev_key < challenge.as_ref().to_vec()
                         && challenge.as_ref().to_vec() < next_key =>
                 {
+                    if let Some(ChallengeKeyInclusion::Included) = expected_inclusion {
+                        return Err("Challenge key is expected to be included in the proof.".into());
+                    }
+
                     // Converting the key to a slice and then to a fixed size array.
                     let prev_key: &[u8; H_LENGTH] = prev_key
                         .as_slice()
@@ -144,6 +159,10 @@ where
                 // Scenario 3 (valid): `next_leaf` is the first leaf since the next previous leaf is `None`.
                 // The challenge is before the first leaf (i.e. the challenge does not exist in the trie).
                 (None, Some((next_key, _))) => {
+                    if let Some(ChallengeKeyInclusion::Included) = expected_inclusion {
+                        return Err("Challenge key is expected to be included in the proof.".into());
+                    }
+
                     // Converting the key to a slice and then to a fixed size array.
                     let next_key: &[u8; H_LENGTH] = next_key
                         .as_slice()
@@ -162,6 +181,10 @@ where
                 // Scenario 4 (valid): `prev_leaf` is the last leaf since `next_leaf` is `None`.
                 // The challenge is after the last leaf (i.e. the challenge does not exist in the trie).
                 (Some(prev_leaf), None) => {
+                    if let Some(ChallengeKeyInclusion::Included) = expected_inclusion {
+                        return Err("Challenge key is expected to be included in the proof.".into());
+                    }
+
                     // Converting the key to a slice and then to a fixed size array.
                     let prev_key: &[u8; H_LENGTH] = prev_leaf
                         .0

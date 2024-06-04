@@ -10,7 +10,10 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::prelude::vec::Vec;
-use shp_traits::{CommitmentVerifier, ProofsDealerInterface, ProvidersInterface};
+use shp_traits::{
+    ChallengeKeyInclusion, CommitmentVerifier, ProofDeltaApplier, ProofsDealerInterface,
+    ProvidersInterface,
+};
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, Convert, Hash, Zero},
     ArithmeticError, DispatchError, Saturating,
@@ -291,7 +294,7 @@ where
         seed: T::MerkleTrieHash,
         provider_id: &ProviderFor<T>,
         count: u32,
-    ) -> Vec<T::MerkleTrieHash> {
+    ) -> Vec<(T::MerkleTrieHash, Option<ChallengeKeyInclusion>)> {
         let mut challenges = Vec::new();
 
         for i in 0..count {
@@ -305,7 +308,8 @@ where
                 .concat(),
             );
 
-            challenges.push(challenge.into());
+            // The challenge inclusion type is None since we are generating random challenges and don't expect proofs of inclusion or non-inclusion.
+            challenges.push((challenge.into(), None));
         }
 
         challenges
@@ -327,7 +331,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
     fn verify_forest_proof(
         who: &Self::ProviderId,
-        challenges: &[Self::MerkleHash],
+        challenges: &[(Self::MerkleHash, Option<ChallengeKeyInclusion>)],
         proof: &Self::ForestProof,
     ) -> Result<Vec<Self::MerkleHash>, DispatchError> {
         // Check if submitter is a registered Provider.
@@ -348,7 +352,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
     fn verify_key_proof(
         key: &Self::MerkleHash,
-        challenges: &[Self::MerkleHash],
+        challenges: &[(Self::MerkleHash, Option<ChallengeKeyInclusion>)],
         proof: &Self::KeyProof,
     ) -> Result<Vec<Self::MerkleHash>, DispatchError> {
         // Verify key proof.
@@ -362,5 +366,19 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
     fn challenge_with_priority(key_challenged: &Self::MerkleHash) -> DispatchResult {
         Self::enqueue_challenge_with_priority(key_challenged)
+    }
+
+    fn apply_delta(
+        commitment: &Self::MerkleHash,
+        mutations: &[shp_traits::Mutation<Self::MerkleHash>],
+        proof: &Self::ForestProof,
+    ) -> Result<Self::MerkleHash, DispatchError> {
+        Ok(
+            <T::ForestVerifier as ProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
+                commitment, mutations, proof,
+            )
+            .map_err(|_| Error::<T>::DeltaApplicationFailed)?
+            .1,
+        )
     }
 }
