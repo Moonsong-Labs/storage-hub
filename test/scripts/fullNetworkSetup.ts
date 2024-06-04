@@ -15,23 +15,21 @@ const idealExecutorParams = [
   { pvfExecTimeout: ["Approval", 15000] },
 ];
 
-await using resources = await getZombieClients({
-  relayWs: "ws://127.0.0.1:31000",
-  // relayWs: "wss://rococo-rpc.polkadot.io",
-  shWs: "ws://127.0.0.1:32000",
-});
-
 async function main() {
-  const { storageApi, relayApi } = resources;
+  await using resources = await getZombieClients({
+    relayWs: "ws://127.0.0.1:31000",
+    // relayWs: "wss://rococo-rpc.polkadot.io",
+    shWs: "ws://127.0.0.1:32000",
+  });
 
-  await waitForChain(relayApi);
+  await waitForChain(resources.relayApi);
 
   // Check if executor parameters are set
-  const { executorParams } = (await relayApi.query.configuration.activeConfig()).toJSON();
+  const { executorParams } = (await resources.relayApi.query.configuration.activeConfig()).toJSON();
   if (_.isEqual(executorParams, idealExecutorParams)) {
     console.log("Executor parameters are already set to ideal values ✅");
   } else {
-    const setConfig = relayApi.tx.configuration.setExecutorParams([
+    const setConfig = resources.relayApi.tx.configuration.setExecutorParams([
       // @ts-expect-error - ApiAugment not ready yet for SH
       { maxMemoryPages: 8192 },
       // @ts-expect-error - ApiAugment not ready yet for SH
@@ -42,32 +40,35 @@ async function main() {
 
     // Setting Async Config
     process.stdout.write("Setting Executor Parameters config for relay chain... ");
-    await sendTransaction(relayApi.tx.sudo.sudo(setConfig));
+    await sendTransaction(resources.relayApi.tx.sudo.sudo(setConfig));
     process.stdout.write("✅\n");
   }
 
-  await waitForChain(storageApi);
+  await waitForChain(resources.storageApi);
 
   // Settings Balances
   const {
     data: { free },
-  } = await storageApi.query.system.account(bsp.address);
+  } = await resources.storageApi.query.system.account(bsp.address);
 
   if (free.toBigInt() < 1_000_000_000_000n) {
-    const setBal = storageApi.tx.balances.forceSetBalance(bsp.address, 1000_000_000_000_000_000n);
-    const setBal2 = storageApi.tx.balances.forceSetBalance(
+    const setBal = resources.storageApi.tx.balances.forceSetBalance(
+      bsp.address,
+      1000_000_000_000_000_000n
+    );
+    const setBal2 = resources.storageApi.tx.balances.forceSetBalance(
       collator.address,
       1000_000_000_000_000_000n
     );
 
     process.stdout.write("Using sudo to increase BSP account balance... ");
 
-    const { nonce } = await storageApi.query.system.account(alice.address);
+    const { nonce } = await resources.storageApi.query.system.account(alice.address);
 
-    const tx1 = sendTransaction(storageApi.tx.sudo.sudo(setBal), {
+    const tx1 = sendTransaction(resources.storageApi.tx.sudo.sudo(setBal), {
       nonce: nonce.toNumber(),
     });
-    const tx2 = sendTransaction(storageApi.tx.sudo.sudo(setBal2), {
+    const tx2 = sendTransaction(resources.storageApi.tx.sudo.sudo(setBal2), {
       nonce: nonce.toNumber() + 1,
     });
 
@@ -76,7 +77,7 @@ async function main() {
     process.stdout.write("✅\n");
     const {
       data: { free },
-    } = await storageApi.query.system.account(bsp.address);
+    } = await resources.storageApi.query.system.account(bsp.address);
 
     console.log(
       `BSP account balance reset by sudo, new free is ${free.toBigInt() / 10n ** 12n} balance ✅`
@@ -93,19 +94,19 @@ async function main() {
   process.stdout.write(`Requesting sign up for ${bsp.address} ...`);
   await sendTransaction(
     // @ts-expect-error - ApiAugment not ready yet for SH
-    storageApi.tx.providers.requestBspSignUp(5000000, [uint8Array], bsp.address),
+    resources.storageApi.tx.providers.requestBspSignUp(5000000, [uint8Array], bsp.address),
     {
       signer: bsp,
     }
   );
   process.stdout.write("✅\n");
 
-  await waitForRandomness(storageApi);
+  await waitForRandomness(resources.storageApi);
 
   // Confirm sign up
   process.stdout.write(`Confirming sign up for ${bsp.address} ...`);
   // @ts-expect-error - ApiAugment not ready yet for SH
-  await sendTransaction(storageApi.tx.providers.confirmSignUp(bsp.address), {
+  await sendTransaction(resources.storageApi.tx.providers.confirmSignUp(bsp.address), {
     signer: bsp,
   });
   process.stdout.write("✅\n");
@@ -114,7 +115,7 @@ async function main() {
 
   // Confirm providers added
   // @ts-expect-error - ApiAugment not ready yet for SH
-  const providers = await storageApi.query.providers.backupStorageProviders.entries();
+  const providers = await resources.storageApi.query.providers.backupStorageProviders.entries();
 
   if (providers.length === 1) {
     console.log("💫 Provider added correctly");
@@ -123,11 +124,4 @@ async function main() {
   }
 }
 
-main().finally(() => {
-  try {
-    resources.storageApi.disconnect();
-    resources.relayApi.disconnect();
-  } catch (e) {
-    // ignore
-  }
-});
+main();

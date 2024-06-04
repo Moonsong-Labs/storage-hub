@@ -1,0 +1,23 @@
+{
+  "name": "@storagehub/api-augment",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "fmt": "biome format .",
+    "fmt:fix": "biome format . --write",
+    "lint": "biome lint .",
+    "build": "pnpm generate:defs && pnpm generate:meta",
+    "generate:defs": "polkadot-types-from-defs --package @storagehub/api-augment/interfaces  --input ./src/interfaces --endpoint ./storagehub.json",
+    "generate:meta": "polkadot-types-from-chain --package @storagehub/api-augment/interfaces  --input ./src/interfaces --endpoint ./storagehub.json"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@polkadot/api": "11.2.1",
+    "@polkadot/typegen": "11.2.1",
+    "tsx": "4.11.0",
+    "typescript": "5.4.5"
+  }
+}
