@@ -317,6 +317,7 @@ pub trait CommitmentVerifier {
     ) -> Result<Vec<Self::Challenge>, DispatchError>;
 }
 /// Enum representing the type of mutation (addition or removal of a key).
+#[derive(Clone)]
 pub enum Mutation<Challenge> {
     Add(Challenge),
     Remove(Challenge),

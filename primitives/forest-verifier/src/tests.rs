@@ -1398,6 +1398,39 @@ mod mutate_root_tests {
         (memdb, root, leaf_keys, recorder)
     }
 
+    fn apply_delta(
+        mut memdb: MemoryDB<BlakeTwo256>,
+        mut root: H256,
+        mutations: Vec<Mutation<H256>>,
+    ) -> H256 {
+        let new_root = {
+            let mut trie =
+                TrieDBMutBuilder::<LayoutV1<BlakeTwo256>>::new(&mut memdb, &mut root).build();
+
+            for mutation in mutations.clone() {
+                match mutation {
+                    Mutation::Add(key) => {
+                        trie.insert(&key.0, &[]).unwrap();
+                    }
+                    Mutation::Remove(key) => {
+                        trie.remove(&key.0).unwrap();
+                    }
+                }
+            }
+
+            *trie.root()
+        };
+
+        for mutation in mutations {
+            match mutation {
+                Mutation::Add(key) => assert_key_in_trie(&memdb, &new_root, &key),
+                Mutation::Remove(key) => assert_key_not_in_trie(&memdb, &new_root, &key),
+            }
+        }
+
+        new_root
+    }
+
     fn generate_proof_and_verify(
         recorder: &mut Recorder<BlakeTwo256>,
         root: &H256,
@@ -1446,6 +1479,9 @@ mod mutate_root_tests {
         let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 
         let challenge_key = generate_unique_key(&leaf_keys);
+        let mutations: Vec<Mutation<H256>> = vec![Mutation::Add(challenge_key)];
+
+        let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
 
         {
             let mut trie_recorder = recorder.as_trie_recorder(root);
@@ -1465,21 +1501,25 @@ mod mutate_root_tests {
 
         let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
 
-        let mutations: Vec<Mutation<H256>> = vec![Mutation::Add(challenge_key)];
         let (memdb, new_root) =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::mutate_root(
                 &root, &mutations, &proof,
             )
             .expect("Failed to mutate root");
 
-        assert_ne!(new_root, root);
         assert_key_in_trie(&memdb, &new_root, &challenge_key);
+
+        assert_eq!(new_root, expected_root);
     }
 
     #[test]
     fn mutate_root_remove_key_success() {
         let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
+
         let challenge_key = *leaf_keys.first().unwrap();
+        let mutations: Vec<Mutation<H256>> = vec![Mutation::Remove(challenge_key)];
+
+        let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
 
         {
             let mut trie_recorder = recorder.as_trie_recorder(root);
@@ -1494,15 +1534,15 @@ mod mutate_root_tests {
 
         let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
 
-        let mutations: Vec<Mutation<H256>> = vec![Mutation::Remove(challenge_key)];
         let (memdb, new_root) =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::mutate_root(
                 &root, &mutations, &proof,
             )
             .expect("Failed to mutate root");
 
-        assert_ne!(new_root, root);
         assert_key_not_in_trie(&memdb, &new_root, &challenge_key);
+
+        assert_eq!(new_root, expected_root);
     }
 
     #[test]
@@ -1513,6 +1553,13 @@ mod mutate_root_tests {
         for _ in 0..3 {
             challenge_keys.push(generate_unique_key(&leaf_keys));
         }
+
+        let mutations: Vec<Mutation<H256>> = challenge_keys
+            .iter()
+            .map(|key| Mutation::Add(*key))
+            .collect();
+
+        let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
 
         {
             let mut trie_recorder = recorder.as_trie_recorder(root);
@@ -1534,26 +1581,30 @@ mod mutate_root_tests {
 
         let proof = generate_proof_and_verify(&mut recorder, &root, &challenge_keys);
 
-        let mutations: Vec<Mutation<H256>> = challenge_keys
-            .iter()
-            .map(|key| Mutation::Add(*key))
-            .collect();
         let (memdb, new_root) =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::mutate_root(
                 &root, &mutations, &proof,
             )
             .expect("Failed to mutate root");
 
-        assert_ne!(new_root, root);
         for challenge_key in &challenge_keys {
             assert_key_in_trie(&memdb, &new_root, challenge_key);
         }
+
+        assert_eq!(new_root, expected_root);
     }
 
     #[test]
     fn mutate_root_remove_multiple_keys_success() {
         let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
+
         let challenge_keys = leaf_keys.iter().take(3).cloned().collect::<Vec<_>>();
+        let mutations: Vec<Mutation<H256>> = challenge_keys
+            .iter()
+            .map(|key| Mutation::Remove(*key))
+            .collect();
+
+        let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
 
         {
             let mut trie_recorder = recorder.as_trie_recorder(root);
@@ -1570,19 +1621,16 @@ mod mutate_root_tests {
 
         let proof = generate_proof_and_verify(&mut recorder, &root, &challenge_keys);
 
-        let mutations: Vec<Mutation<H256>> = challenge_keys
-            .iter()
-            .map(|key| Mutation::Remove(*key))
-            .collect();
         let (memdb, new_root) =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::mutate_root(
                 &root, &mutations, &proof,
             )
             .expect("Failed to mutate root");
 
-        assert_ne!(new_root, root);
         for challenge_key in &challenge_keys {
             assert_key_not_in_trie(&memdb, &new_root, challenge_key);
         }
+
+        assert_eq!(new_root, expected_root);
     }
 }
