@@ -15,13 +15,13 @@ const idealExecutorParams = [
   { pvfExecTimeout: ["Approval", 15000] },
 ];
 
-async function main() {
-  await using resources = await getZombieClients({
-    relayWs: "ws://127.0.0.1:31000",
-    // relayWs: "wss://rococo-rpc.polkadot.io",
-    shWs: "ws://127.0.0.1:32000",
-  });
+await using resources = await getZombieClients({
+  relayWs: "ws://127.0.0.1:31000",
+  // relayWs: "wss://rococo-rpc.polkadot.io",
+  shWs: "ws://127.0.0.1:32000",
+});
 
+async function main() {
   const { storageApi, relayApi } = resources;
 
   await waitForChain(relayApi);
@@ -64,8 +64,12 @@ async function main() {
 
     const { nonce } = await storageApi.query.system.account(alice.address);
 
-    const tx1 = sendTransaction(storageApi.tx.sudo.sudo(setBal), { nonce: nonce.toNumber() });
-    const tx2 = sendTransaction(storageApi.tx.sudo.sudo(setBal2), { nonce: nonce.toNumber() + 1 });
+    const tx1 = sendTransaction(storageApi.tx.sudo.sudo(setBal), {
+      nonce: nonce.toNumber(),
+    });
+    const tx2 = sendTransaction(storageApi.tx.sudo.sudo(setBal2), {
+      nonce: nonce.toNumber() + 1,
+    });
 
     await Promise.all([tx1, tx2]);
 
@@ -87,10 +91,13 @@ async function main() {
   const uint8Array = new Uint8Array(buffer);
 
   process.stdout.write(`Requesting sign up for ${bsp.address} ...`);
-  // @ts-expect-error - ApiAugment not ready yet for SH
-  await sendTransaction(storageApi.tx.providers.requestBspSignUp(5000000, [uint8Array]), {
-    signer: bsp,
-  });
+  await sendTransaction(
+    // @ts-expect-error - ApiAugment not ready yet for SH
+    storageApi.tx.providers.requestBspSignUp(5000000, [uint8Array], bsp.address),
+    {
+      signer: bsp,
+    }
+  );
   process.stdout.write("✅\n");
 
   await waitForRandomness(storageApi);
@@ -98,7 +105,9 @@ async function main() {
   // Confirm sign up
   process.stdout.write(`Confirming sign up for ${bsp.address} ...`);
   // @ts-expect-error - ApiAugment not ready yet for SH
-  await sendTransaction(storageApi.tx.providers.confirmSignUp(bsp.address), { signer: bsp });
+  await sendTransaction(storageApi.tx.providers.confirmSignUp(bsp.address), {
+    signer: bsp,
+  });
   process.stdout.write("✅\n");
 
   // TODO: ERROR: Error thrown when a user tries to confirm a sign up that was not requested previously.
@@ -114,4 +123,11 @@ async function main() {
   }
 }
 
-main();
+main().finally(() => {
+  try {
+    resources.storageApi.disconnect();
+    resources.relayApi.disconnect();
+  } catch (e) {
+    // ignore
+  }
+});
