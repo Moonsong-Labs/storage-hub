@@ -3,7 +3,7 @@
 		"incremental": true,
 
 		// Enable latest features
-		"lib": ["ESNext"],
+		"lib": ["ESNext", "ESNext.Disposable"],
 		"target": "ESNext",
 		"module": "ESNext",
 		"moduleDetection": "force",

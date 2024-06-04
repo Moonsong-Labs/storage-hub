@@ -8,7 +8,7 @@
     "node": "21.x.x"
   },
   "scripts": {
-    "update-types":"cd ../api-augment && pnpm generate:all && pnpm build; cd ../test",
+    "update-types": "cd ../api-augment && pnpm generate:all && pnpm build; cd ../test",
     "fmt": "biome format .",
     "fmt:fix": "biome format . --write",
     "lint": "biome lint .",
@@ -26,7 +26,8 @@
     "zombie:test:local": "SH_IMAGE=storage-hub:local pnpm zombienet test configs/simple.zndsl",
     "zombie:test:latest": "SH_IMAGE=docker.io/moonsonglabs/storage-hub:latest pnpm zombienet test configs/simple.zndsl",
     "test:full": "node --no-deprecation --import tsx --test ./suites/zombie/**.spec.ts",
-    "test:node": "node --no-deprecation --import tsx --test --test-concurrency 4 ./suites/solo-node/**/**.spec.ts"
+    "test:node": "node --no-deprecation --import tsx --test --test-concurrency 4 ./suites/solo-node/**/**.spec.ts",
+    "test:node:single": "node --no-deprecation --import tsx --test-only ./suites/solo-node/**/**.spec.ts"
   },
   "keywords": [],
   "author": "",

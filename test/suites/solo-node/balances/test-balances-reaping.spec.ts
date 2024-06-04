@@ -2,31 +2,28 @@ import { expect } from "expect";
 import { after, before, describe, it } from "node:test";
 import {
   alice,
-  type StartedTestContainer,
   createSr25519Account,
-  devnodeSetup,
   UNIT,
   eve,
   ferdie,
   type ExtendedApiPromise,
   ROUGH_TRANSFER_FEE,
+  DevTestContext,
 } from "../../../util";
 
-describe("Balances Pallet: Reaping", () => {
-  let container: StartedTestContainer;
+describe("Balances Pallet: Reaping", { only: true }, async () => {
+  await using context = new DevTestContext({
+    // printLogs: true,
+    keepOpen: true,
+  });
   let api: ExtendedApiPromise;
 
   before(async () => {
-    const { extendedApi, runningContainer } = await devnodeSetup({
-      // keepOpen: true,
-    });
-    api = extendedApi;
-    container = runningContainer;
+    api = await context.initialize();
   });
 
   after(async () => {
-    await api.disconnect();
-    await container.stop();
+    await context.dispose();
   });
 
   it("Can transfer full balance to another account with reap", async () => {
@@ -60,7 +57,7 @@ describe("Balances Pallet: Reaping", () => {
     expect(randomBal.toBigInt()).toBeGreaterThan(0n);
   });
 
-  it("Bal below ED kills account", async () => {
+  it("Bal below ED kills account", async (t) => {
     const randomAccount = await createSr25519Account();
     const amount = 10n * UNIT;
 

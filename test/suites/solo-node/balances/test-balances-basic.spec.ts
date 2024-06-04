@@ -2,30 +2,23 @@ import { expect } from "expect";
 import { after, before, describe, it } from "node:test";
 import {
   alice,
-  type StartedTestContainer,
   createSr25519Account,
-  devnodeSetup,
   UNIT,
   type ExtendedApiPromise,
   bob,
+  DevTestContext,
 } from "../../../util";
 
-describe("Balances Pallet: Basic", () => {
-  let container: StartedTestContainer;
+describe("Balances Pallet: Basic", {}, async () => {
+  await using context = new DevTestContext({});
   let api: ExtendedApiPromise;
 
   before(async () => {
-    const { extendedApi, runningContainer } = await devnodeSetup({
-      // keepOpen: true,
-    });
-    api = extendedApi;
-    container = runningContainer;
+    api = await context.initialize();
   });
 
-  // TODO: Clear this up automatically
   after(async () => {
-    await api.disconnect();
-    await container.stop();
+    await context.dispose();
   });
 
   it("Can query balance", async () => {
@@ -55,7 +48,7 @@ describe("Balances Pallet: Basic", () => {
     expect(balAfter.toBigInt()).toBe(amount);
   });
 
-  it("Can display total issuance", { only: true }, async () => {
+  it("Can display total issuance", async () => {
     const accountEntries = await api.query.system.account.entries();
     const balancesTotal = accountEntries.reduce(
       (acc, [, { data }]) => acc + data.free.toBigInt() + data.reserved.toBigInt(),
@@ -66,7 +59,7 @@ describe("Balances Pallet: Basic", () => {
     expect(balancesTotal).toBe(totalSupply.toBigInt());
   });
 
-  it("SetBalance fails when called without sudo", { only: true }, async () => {
+  it("SetBalance fails when called without sudo", async () => {
     const { address: randomId } = await createSr25519Account();
     const {
       data: { free: balBefore },
@@ -82,7 +75,7 @@ describe("Balances Pallet: Basic", () => {
     expect(balBefore.sub(balAfter).toNumber()).toBe(0);
   });
 
-  it("SetBalance passes when called with sudo", { only: true }, async () => {
+  it("SetBalance passes when called with sudo", async () => {
     const { address: randomId } = await createSr25519Account();
 
     const call = api.tx.balances.forceSetBalance(randomId, UNIT);
