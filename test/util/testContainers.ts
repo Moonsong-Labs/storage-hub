@@ -1,4 +1,4 @@
-import "@polkadot/api-augment";
+import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import { GenericContainer, Wait, type StartedTestContainer } from "testcontainers";
 import { createBlock } from "./blocks";

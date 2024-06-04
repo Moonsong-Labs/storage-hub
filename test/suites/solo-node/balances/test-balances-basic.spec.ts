@@ -19,7 +19,7 @@ describe("Balances Pallet: Basic", () => {
 
   before(async () => {
     const { extendedApi, runningContainer } = await devnodeSetup({
-      keepOpen: true,
+      // keepOpen: true,
     });
     api = extendedApi;
     container = runningContainer;
@@ -41,7 +41,6 @@ describe("Balances Pallet: Basic", () => {
   it("Can send balance to another account", async () => {
     const { address: randomId } = await createSr25519Account();
     const amount = 10n * UNIT;
-
     const {
       data: { free: balBefore },
     } = await api.query.system.account(randomId);

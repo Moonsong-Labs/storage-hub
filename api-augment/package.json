@@ -2,23 +2,36 @@
   "name": "@storagehub/api-augment",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "scripts": {
     "scrape": "pnpm tsx scripts/scrapeMetadata.ts",
     "fmt": "biome format .",
     "fmt:fix": "biome format . --write",
     "lint": "biome lint .",
     "tsc": "tsc --noEmit --pretty",
-    "build": "pnpm generate:defs && pnpm generate:meta",
+    "build": "tsc -b --verbose",
+    "generate:all": "pnpm generate:defs && pnpm generate:meta",
     "generate:defs": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-defs.mjs --package @storagehub/api-augment/interfaces  --input ./src/interfaces --endpoint ./storagehub.json",
-    "generate:meta": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-chain.mjs --package @storagehub/api-augment/interfaces  --input ./src/interfaces --endpoint ./storagehub.json"
+    "generate:meta": "pnpm tsx node_modules/@polkadot/typegen/scripts/polkadot-types-from-chain.mjs --package @storagehub/api-augment/interfaces --endpoint ./storagehub.json --output ./src/interfaces"
   },
   "keywords": [],
   "author": "",
+  "module": "./dist/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "module": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
   "license": "ISC",
   "dependencies": {
     "@polkadot/api": "11.2.1",
+    "@polkadot/api-base": "11.2.1",
+    "@polkadot/rpc-core": "11.2.1",
     "@polkadot/typegen": "11.2.1",
+    "@polkadot/types": "^11.2.1",
+    "@polkadot/types-codec": "11.2.1",
     "tsx": "4.11.0",
     "typescript": "5.4.5"
   }

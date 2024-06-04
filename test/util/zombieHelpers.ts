@@ -1,14 +1,21 @@
 import "@polkadot/api-augment/kusama";
+import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import { alice } from "./pjsKeyring";
 
+export type ZombieClients = Promise<{
+  [Symbol.asyncDispose]: () => Promise<void>;
+  relayApi: ApiPromise;
+  storageApi: ApiPromise;
+}>;
+
 export const getZombieClients = async (options: {
   relayWs?: string;
   shWs?: string;
-}) => {
+}): ZombieClients => {
   const relayWsProvider = new WsProvider(options.relayWs);
   const relayApi = await ApiPromise.create({ provider: relayWsProvider });
   const shWsProvider = new WsProvider(options.shWs);
@@ -61,34 +68,27 @@ export const waitForRandomness = async (api: ApiPromise, timeoutMs = 60_000) => 
   process.stdout.write("Waiting for randomness...");
 
   const waitForValueOrTimeout = (timeoutMs: number) => {
-    // biome-ignore lint/suspicious/noAsyncPromiseExecutor: <explanation>
     return new Promise(async (resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error("Timeout"));
       }, timeoutMs);
 
       let valueCount = 0;
-      // @ts-expect-error - ApiAugment not ready yet for SH
-      const unsub = await api.query.randomness.latestOneEpochAgoRandomness(
-        // @ts-expect-error - ApiAugment not ready yet for SH
-        (data) => {
-          valueCount++;
-          if (!data) {
-            // @ts-expect-error - ApiAugment not ready yet for SH
-            unsub();
-            reject(new Error("Randomness value is undefined"));
-          }
-          if (valueCount === 2) {
-            if (!data) {
-              throw new Error("Randomness value is undefined");
-            }
-            clearTimeout(timeout);
-            // @ts-expect-error - ApiAugment not ready yet for SH
-            unsub();
-            resolve(data);
-          }
+      const unsub = await api.query.randomness.latestOneEpochAgoRandomness((data) => {
+        valueCount++;
+        if (!data) {
+          unsub();
+          reject(new Error("Randomness value is undefined"));
         }
-      );
+        if (valueCount === 2) {
+          if (!data) {
+            throw new Error("Randomness value is undefined");
+          }
+          clearTimeout(timeout);
+          unsub();
+          resolve(data);
+        }
+      });
     });
   };
 
@@ -110,7 +110,6 @@ export const sendTransaction = async (
   call: SubmittableExtrinsic<"promise", ISubmittableResult>,
   options?: { nonce?: number; signer?: KeyringPair }
 ) => {
-  // biome-ignore lint/suspicious/noAsyncPromiseExecutor: <explanation>
   return new Promise(async (resolve, reject) => {
     const unsub = await call.signAndSend(
       options?.signer || alice,

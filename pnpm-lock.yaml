@@ -21,7 +21,19 @@ importers:
       '@polkadot/api':
         specifier: 11.2.1
         version: 11.2.1
+      '@polkadot/api-base':
+        specifier: 11.2.1
+        version: 11.2.1
+      '@polkadot/rpc-core':
+        specifier: 11.2.1
+        version: 11.2.1
       '@polkadot/typegen':
+        specifier: 11.2.1
+        version: 11.2.1
+      '@polkadot/types':
+        specifier: ^11.2.1
+        version: 11.2.1
+      '@polkadot/types-codec':
         specifier: 11.2.1
         version: 11.2.1
       tsx:
@@ -57,6 +69,9 @@ importers:
       '@polkadot/wasm-crypto':
         specifier: 7.3.2
         version: 7.3.2(@polkadot/util@12.6.2)(@polkadot/x-randomvalues@12.6.2(@polkadot/util@12.6.2)(@polkadot/wasm-util@7.3.2(@polkadot/util@12.6.2)))
+      '@storagehub/api-augment':
+        specifier: link:../api-augment
+        version: link:../api-augment
       '@unique-nft/sr25519':
         specifier: 0.0.2
         version: 0.0.2
