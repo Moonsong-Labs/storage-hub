@@ -196,11 +196,11 @@ jobs:
       - name: Setup
         run: |
           cd test
+          pnpm update-types
           pnpm zombie:setup:native
       - name: Run Zombienet Test!
         run: |
           cd test
-          pnpm update-types
           pnpm test:full
 
 
