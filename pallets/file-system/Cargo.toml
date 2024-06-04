@@ -37,6 +37,7 @@ serde = { workspace = true }
 pallet-bucket-nfts = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
+shp-forest-verifier = { workspace = true }
 
 # Substrate
 sp-io = { workspace = true }

@@ -324,7 +324,7 @@ pub enum Mutation<Challenge> {
 }
 
 /// A trait to mutate proofs based on commitments and challenges.
-pub trait RootProofMutator<H: sp_core::Hasher> {
+pub trait ProofDeltaApplier<H: sp_core::Hasher> {
     /// The type that represents the proof.
     type Proof: Parameter + Member + Debug;
     /// The type that represents the commitment (e.g. a Merkle root)
@@ -333,7 +333,7 @@ pub trait RootProofMutator<H: sp_core::Hasher> {
     type Challenge: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
 
     /// Mutate the root of the partial trie by removing or adding keys to and returning the computed root.
-    fn mutate_root(
+    fn apply_delta(
         commitment: &Self::Commitment,
         mutations: &[Mutation<Self::Challenge>],
         proof: &Self::Proof,

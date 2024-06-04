@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::sp_runtime::DispatchError;
-use shp_traits::{CommitmentVerifier, Mutation, RootProofMutator};
+use shp_traits::{CommitmentVerifier, Mutation, ProofDeltaApplier};
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 use sp_trie::{CompactProof, MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
 use trie_db::TrieIterator;
@@ -208,8 +208,8 @@ where
     }
 }
 
-/// Implement the `RootProofMutator` trait for the `ForestVerifier` struct.
-impl<T: TrieLayout, const H_LENGTH: usize> RootProofMutator<T::Hash> for ForestVerifier<T, H_LENGTH>
+impl<T: TrieLayout, const H_LENGTH: usize> ProofDeltaApplier<T::Hash>
+    for ForestVerifier<T, H_LENGTH>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
@@ -217,7 +217,7 @@ where
     type Commitment = <T::Hash as sp_core::Hasher>::Out;
     type Challenge = <T::Hash as sp_core::Hasher>::Out;
 
-    fn mutate_root(
+    fn apply_delta(
         commitment: &Self::Commitment,
         mutations: &[Mutation<Self::Challenge>],
         proof: &Self::Proof,

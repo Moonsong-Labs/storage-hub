@@ -6,13 +6,16 @@ use frame_support::{
     weights::constants::RocksDbWeight,
 };
 use frame_system as system;
-use shp_traits::{CommitmentVerifier, MaybeDebug, SubscribeProvidersInterface};
-use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256};
+use shp_forest_verifier::ForestVerifier;
+use shp_traits::{
+    CommitmentVerifier, MaybeDebug, Mutation, ProofDeltaApplier, SubscribeProvidersInterface,
+};
+use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, IdentityLookup},
     BuildStorage, DispatchError, DispatchResult, SaturatedConversion,
 };
-use sp_trie::CompactProof;
+use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieLayout};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -136,8 +139,8 @@ impl crate::Config for Test {
     type NativeBalance = Balances;
     type MerkleTrieHash = H256;
     type MerkleTrieHashing = BlakeTwo256;
-    type ForestVerifier = MockVerifier<H256>;
-    type KeyVerifier = MockVerifier<H256>;
+    type ForestVerifier = MockVerifier<H256, LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
+    type KeyVerifier = MockVerifier<H256, LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
@@ -165,12 +168,12 @@ impl SubscribeProvidersInterface for MockedProvidersSubscriber {
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
 /// and `false` otherwise.
-pub struct MockVerifier<C> {
-    _phantom: core::marker::PhantomData<C>,
+pub struct MockVerifier<C, T: TrieLayout, const H_LENGTH: usize> {
+    _phantom: core::marker::PhantomData<(C, T)>,
 }
 
-/// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl<C> CommitmentVerifier for MockVerifier<C>
+/// Implement the `TrieVerifier` trait for the `MockForestManager` struct.
+impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifier<C, T, H_LENGTH>
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
@@ -188,6 +191,25 @@ where
         } else {
             Err("Proof is empty".into())
         }
+    }
+}
+
+impl<C, T: TrieLayout, const H_LENGTH: usize> ProofDeltaApplier<T::Hash>
+    for MockVerifier<C, T, H_LENGTH>
+where
+    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
+{
+    type Proof = CompactProof;
+    type Commitment = <T::Hash as sp_core::Hasher>::Out;
+    type Challenge = <T::Hash as sp_core::Hasher>::Out;
+
+    fn apply_delta(
+        root: &Self::Commitment,
+        mutations: &[Mutation<Self::Challenge>],
+        proof: &Self::Proof,
+    ) -> Result<(MemoryDB<T::Hash>, Self::Commitment), DispatchError> {
+        // Just use the main implementation used by the runtime
+        ForestVerifier::<T, H_LENGTH>::apply_delta(root, mutations, proof)
     }
 }
 

@@ -29,7 +29,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
-    use shp_traits::{CommitmentVerifier, ProvidersInterface};
+    use shp_traits::{CommitmentVerifier, ProofDeltaApplier, ProvidersInterface};
     use sp_runtime::traits::Convert;
     use types::{KeyFor, ProviderFor};
 
@@ -54,7 +54,8 @@ pub mod pallet {
         /// Something that implements the `CommitmentVerifier` trait.
         /// The type of the challenge is a hash, and it is expected that a proof will provide the
         /// exact hash if it exists in the forest, or the previous and next hashes if it does not.
-        type ForestVerifier: CommitmentVerifier<Commitment = KeyFor<Self>, Challenge = KeyFor<Self>>;
+        type ForestVerifier: CommitmentVerifier<Commitment = KeyFor<Self>, Challenge = KeyFor<Self>>
+            + ProofDeltaApplier<Self::MerkleTrieHashing>;
 
         /// The type used to verify the proof of a specific key within the Merkle Patricia Forest.
         /// While `ForestVerifier` verifies that some keys are in the Merkle Patricia Forest, this

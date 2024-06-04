@@ -1,7 +1,7 @@
 use std::io::Read;
 
 use serde::Serialize;
-use shp_traits::{CommitmentVerifier, Mutation, RootProofMutator};
+use shp_traits::{CommitmentVerifier, Mutation, ProofDeltaApplier};
 use sp_runtime::traits::BlakeTwo256;
 use sp_trie::{
     recorder::Recorder, CompactProof, LayoutV1, MemoryDB, Trie, TrieDBBuilder, TrieDBMutBuilder,
@@ -1502,7 +1502,7 @@ mod mutate_root_tests {
         let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
 
         let (memdb, new_root) =
-            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::mutate_root(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
                 &root, &mutations, &proof,
             )
             .expect("Failed to mutate root");
@@ -1535,7 +1535,7 @@ mod mutate_root_tests {
         let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
 
         let (memdb, new_root) =
-            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::mutate_root(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
                 &root, &mutations, &proof,
             )
             .expect("Failed to mutate root");
@@ -1582,7 +1582,7 @@ mod mutate_root_tests {
         let proof = generate_proof_and_verify(&mut recorder, &root, &challenge_keys);
 
         let (memdb, new_root) =
-            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::mutate_root(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
                 &root, &mutations, &proof,
             )
             .expect("Failed to mutate root");
@@ -1622,7 +1622,7 @@ mod mutate_root_tests {
         let proof = generate_proof_and_verify(&mut recorder, &root, &challenge_keys);
 
         let (memdb, new_root) =
-            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::mutate_root(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
                 &root, &mutations, &proof,
             )
             .expect("Failed to mutate root");
