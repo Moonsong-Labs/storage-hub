@@ -240,7 +240,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -275,5 +275,5 @@ jobs:
                --test-reporter-destination=stdout   \
                --test-reporter=spec                 \
                --test-reporter-destination=stdout   \
-               --test-shard=${{ matrix.shard }}/2   \
+               --test-shard=${{ matrix.shard }}/4   \
                ./suites/solo-node/**/**.test.ts
