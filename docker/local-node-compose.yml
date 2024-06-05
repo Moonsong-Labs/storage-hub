@@ -1,6 +1,7 @@
 services:
   storage-hub-node:
     image: storage-hub:local
+    platform: linux/amd64
     ports:
       - "9944:9944"
     command:

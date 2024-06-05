@@ -1,16 +1,23 @@
 # StorageHub Testing
 
-## Types
+## Testing Types
 
-### Runtime Tests
-
-> [!NOTE]  
-> TODO Add description here of what this test suite does and what it intends to cover
-
-### Integration Tests
+### Dev Node Test
 
 > [!NOTE]  
 > TODO Add description here of what this test suite does and what it intends to cover
+
+#### 1. Build Docker Image
+
+```sh
+pnpm docker:build
+```
+
+#### 2. Run Test Suite
+
+```sh
+pnpm test:node
+```
 
 ### End-To-End Tests
 
@@ -68,8 +75,11 @@ to create a local Docker image `storage-hub:local`.
 #### Running Local built via Docker
 
 ```sh
-docker compose -f docker/local-node-compose.yml up -d
+pnpm docker:start
 ```
+
+> [!TIP]  
+> Likewise you can stop with `pnpm docker:stop`
 
 #### Running Latest built via Docker
 
@@ -83,12 +93,6 @@ docker compose -f docker/latest-node-compose.yml up -d
 > Please ensure the rust project is built first e.g. `cargo build --release`
 
 In `/test` run: `pnpm install` to install zombienet
-
-### Running Standard Tests
-
-```sh
-pnpm test
-```
 
 ### Running ZombieNet Tests
 
@@ -126,18 +130,9 @@ This repo uses Parity's [polkadot-api](https://github.com/polkadot-api/polkadot-
 To generate new type interfaces run the following in `/test`:
 
 ```sh
-pnpm zombie:run:native
+pnpm update-types
 ```
 
-In another terminal window in `/test`:
-
-```sh
-pnpm scalegen
-pnpm typegen
-```
-
-This will update the scale files, and create type interfaces from them into the `/typegen` directory.
-These generated descriptors are used throughout the tests to interact with relay and StorageHub chain.
 
 ## Troubleshooting
 

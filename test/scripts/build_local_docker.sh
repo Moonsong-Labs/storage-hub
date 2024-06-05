@@ -16,23 +16,33 @@ export DOCKER_DEFAULT_PLATFORM=linux/amd64
 
 pushd ../
 
-if [ ! -f "target/release/storage-hub-node" ]; then
-    echo "No node found, are you sure you've built it?"
+if ! cargo install --list | grep -q cargo-zigbuild; then
+    cargo install cargo-zigbuild --locked
+fi
+
+if ! rustup target list --installed | grep -q x86_64-unknown-linux-gnu; then
+    rustup target add x86_64-unknown-linux-gnu
+fi
+
+cargo zigbuild --target x86_64-unknown-linux-gnu --release
+
+if [ ! -f "target/x86_64-unknown-linux-gnu/release/storage-hub-node" ]; then
+    echo "No node found, something must have gone wrong."
     popd
     exit 1
 fi
 
-if ! file target/release/storage-hub-node | grep -q "x86-64"; then
-    echo "The binary is not for x86 architecture."
+if ! file target/x86_64-unknown-linux-gnu/release/storage-hub-node | grep -q "x86-64"; then
+    echo "The binary is not for x86 architecture, something must have gone wrong."
     popd
     exit 1
 fi
 
 mkdir -p build
 
-cp target/release/storage-hub-node build/
+cp target/x86_64-unknown-linux-gnu/release/storage-hub-node build/
 
-if ! docker build -t storage-hub:local -f docker/storage-hub-node.Dockerfile .; then
+if ! docker build -t storage-hub:local -f docker/storage-hub-node.Dockerfile --load .; then
     echo "Docker build failed."
     popd
     exit 1
