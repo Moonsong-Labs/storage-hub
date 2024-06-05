@@ -38,7 +38,7 @@ where
         root: &Self::Commitment,
         challenges: &[(Self::Challenge, Option<ChallengeKeyInclusion>)],
         proof: &Self::Proof,
-    ) -> Result<Vec<Self::Commitment>, DispatchError> {
+    ) -> Result<Vec<Self::Challenge>, DispatchError> {
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
         let (memdb, root) = proof.to_memory_db(Some(root.into())).map_err(|_| {
             "Failed to convert proof to memory DB, root doesn't match with expected."
