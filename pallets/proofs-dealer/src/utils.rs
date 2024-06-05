@@ -377,7 +377,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             <T::ForestVerifier as ProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
                 commitment, mutations, proof,
             )
-            .map_err(|_| Error::<T>::DeltaApplicationFailed)?
+            .map_err(|_| Error::<T>::FailedToApplyDelta)?
             .1,
         )
     }

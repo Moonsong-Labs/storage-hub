@@ -450,7 +450,7 @@ where
         // TODO: Initialise challenges properly constructing the key for this particular file.
         let file_key = FileKeyHasher::<T>::hash(&location.encode());
 
-        // Check that the forest proof is valid and that the file key is not included in the forest.
+        // Verify the proof of non-inclusion.
         <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
             &bsp_id,
             &[(file_key, Some(ChallengeKeyInclusion::NotIncluded))],

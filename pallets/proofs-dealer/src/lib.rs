@@ -346,7 +346,7 @@ pub mod pallet {
         KeyProofVerificationFailed,
 
         /// Failed to apply delta to the forest proof partial trie.
-        DeltaApplicationFailed,
+        FailedToApplyDelta,
     }
 
     #[pallet::call]

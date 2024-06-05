@@ -340,7 +340,7 @@ pub enum Mutation<Challenge> {
     Remove(Challenge),
 }
 
-/// A trait to mutate proofs based on commitments and challenges.
+/// A trait to apply mutations (delta) to a partial trie based on a proof and a commitment.
 pub trait ProofDeltaApplier<H: sp_core::Hasher> {
     /// The type that represents the proof.
     type Proof: Parameter + Member + Debug;
@@ -349,7 +349,7 @@ pub trait ProofDeltaApplier<H: sp_core::Hasher> {
     /// The type that represents the challenges which a proof is being verified against.
     type Challenge: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
 
-    /// Mutate the root of the partial trie by removing or adding keys to and returning the computed root.
+    /// Apply mutations (delta) to a partial trie based on a proof and a commitment.
     fn apply_delta(
         commitment: &Self::Commitment,
         mutations: &[Mutation<Self::Challenge>],
