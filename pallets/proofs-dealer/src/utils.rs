@@ -74,7 +74,11 @@ where
     /// Failures:
     /// - `FeeChargeFailed`: If the fee transfer to the treasury account fails.
     /// - `ChallengesQueueOverflow`: If the challenges queue is full.
-    pub fn do_challenge(who: &AccountIdFor<T>, key: &KeyFor<T>) -> DispatchResult {
+    pub fn do_challenge(
+        who: &AccountIdFor<T>,
+        key: &KeyFor<T>,
+        inclusion: ChallengeKeyInclusion,
+    ) -> DispatchResult {
         // Check if sender is a registered Provider.
         if ProvidersPalletFor::<T>::get_provider_id(who.clone()).is_none() {
             // Charge a fee for the challenge if it is not.
@@ -88,7 +92,7 @@ where
         }
 
         // Enqueue challenge.
-        Self::enqueue_challenge(key)
+        Self::enqueue_challenge(key, inclusion)
     }
 
     /// Submit proof.
@@ -240,20 +244,23 @@ where
 
     /// Add challenge to ChallengesQueue.
     ///
+    /// Keys that are challenged manually are not random and therefore the key inclusion should be specifed.
+    /// The challenges generated randomly from a seed do not have a specified inclusion type.
+    ///
     /// Check if challenge is already queued. If it is, just return. Otherwise, add the challenge
     /// to the queue.
-    fn enqueue_challenge(key: &KeyFor<T>) -> DispatchResult {
+    fn enqueue_challenge(key: &KeyFor<T>, inclusion: ChallengeKeyInclusion) -> DispatchResult {
         // Get challenges queue from storage.
         let mut challenges_queue = ChallengesQueue::<T>::get();
 
         // Check if challenge is already queued. If it is, just return.
-        if challenges_queue.contains(key) {
+        if challenges_queue.contains(&(*key, inclusion.clone())) {
             return Ok(());
         }
 
         // Add challenge to queue.
         challenges_queue
-            .try_push(*key)
+            .try_push((*key, inclusion))
             .map_err(|_| Error::<T>::ChallengesQueueOverflow)?;
 
         // Set challenges queue in storage.
@@ -262,22 +269,28 @@ where
         Ok(())
     }
 
-    /// Add challenge to PriorityChallengesQueue.
+    /// Add challenge to `PriorityChallengesQueue`.
+    ///
+    /// Keys that are challenged manually are not random and therefore the key inclusion should be specifed.
+    /// The challenges generated randomly from a seed do not have a specified inclusion type.
     ///
     /// Check if challenge is already queued. If it is, just return. Otherwise, add the challenge
     /// to the queue.
-    fn enqueue_challenge_with_priority(key: &KeyFor<T>) -> DispatchResult {
+    fn enqueue_challenge_with_priority(
+        key: &KeyFor<T>,
+        inclusion: ChallengeKeyInclusion,
+    ) -> DispatchResult {
         // Get priority challenges queue from storage.
         let mut priority_challenges_queue = PriorityChallengesQueue::<T>::get();
 
         // Check if challenge is already queued. If it is, just return.
-        if priority_challenges_queue.contains(key) {
+        if priority_challenges_queue.contains(&(*key, inclusion.clone())) {
             return Ok(());
         }
 
         // Add challenge to queue.
         priority_challenges_queue
-            .try_push(*key)
+            .try_push((*key, inclusion))
             .map_err(|_| Error::<T>::PriorityChallengesQueueOverflow)?;
 
         // Set priority challenges queue in storage.
@@ -360,12 +373,18 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             .map_err(|_| Error::<T>::KeyProofVerificationFailed.into())
     }
 
-    fn challenge(key_challenged: &Self::MerkleHash) -> DispatchResult {
-        Self::enqueue_challenge(key_challenged)
+    fn challenge(
+        key_challenged: &Self::MerkleHash,
+        inclusion: ChallengeKeyInclusion,
+    ) -> DispatchResult {
+        Self::enqueue_challenge(key_challenged, inclusion)
     }
 
-    fn challenge_with_priority(key_challenged: &Self::MerkleHash) -> DispatchResult {
-        Self::enqueue_challenge_with_priority(key_challenged)
+    fn challenge_with_priority(
+        key_challenged: &Self::MerkleHash,
+        inclusion: ChallengeKeyInclusion,
+    ) -> DispatchResult {
+        Self::enqueue_challenge_with_priority(key_challenged, inclusion)
     }
 
     fn apply_delta(

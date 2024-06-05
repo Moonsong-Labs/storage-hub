@@ -559,6 +559,7 @@ where
             // Issue a challenge to force the BSPs to update their storage root.
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &file_key,
+                ChallengeKeyInclusion::NotIncluded,
             )?;
         }
 

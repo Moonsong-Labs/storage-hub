@@ -290,10 +290,16 @@ pub trait ProofsDealerInterface {
     ) -> Result<Vec<Self::MerkleHash>, DispatchError>;
 
     /// Submit a new proof challenge.
-    fn challenge(key_challenged: &Self::MerkleHash) -> DispatchResult;
+    fn challenge(
+        key_challenged: &Self::MerkleHash,
+        inclusion: ChallengeKeyInclusion,
+    ) -> DispatchResult;
 
     /// Submit a new challenge with priority.
-    fn challenge_with_priority(key_challenged: &Self::MerkleHash) -> DispatchResult;
+    fn challenge_with_priority(
+        key_challenged: &Self::MerkleHash,
+        inclusion: ChallengeKeyInclusion,
+    ) -> DispatchResult;
 
     /// Apply delta to the partial trie based on the proof and the commitment.
     ///

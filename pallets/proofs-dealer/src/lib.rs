@@ -227,8 +227,11 @@ pub mod pallet {
     /// is required, but using a `VecDeque` would be more efficient as this is a FIFO queue.
     #[pallet::storage]
     #[pallet::getter(fn challenges_queue)]
-    pub type ChallengesQueue<T: Config> =
-        StorageValue<_, BoundedVec<KeyFor<T>, ChallengesQueueLengthFor<T>>, ValueQuery>;
+    pub type ChallengesQueue<T: Config> = StorageValue<
+        _,
+        BoundedVec<(KeyFor<T>, ChallengeKeyInclusion), ChallengesQueueLengthFor<T>>,
+        ValueQuery,
+    >;
 
     /// A priority queue of file keys that have been challenged manually.
     ///
@@ -242,8 +245,11 @@ pub mod pallet {
     /// is required, but using a `VecDeque` would be more efficient as this is a FIFO queue.
     #[pallet::storage]
     #[pallet::getter(fn priority_challenges_queue)]
-    pub type PriorityChallengesQueue<T: Config> =
-        StorageValue<_, BoundedVec<KeyFor<T>, ChallengesQueueLengthFor<T>>, ValueQuery>;
+    pub type PriorityChallengesQueue<T: Config> = StorageValue<
+        _,
+        BoundedVec<(KeyFor<T>, ChallengeKeyInclusion), ChallengesQueueLengthFor<T>>,
+        ValueQuery,
+    >;
 
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
@@ -361,11 +367,15 @@ pub mod pallet {
         /// TODO: Consider checking also if there was a request to change MSP.
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn challenge(origin: OriginFor<T>, key: KeyFor<T>) -> DispatchResultWithPostInfo {
+        pub fn challenge(
+            origin: OriginFor<T>,
+            key: KeyFor<T>,
+            inclusion: ChallengeKeyInclusion,
+        ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
-            Self::do_challenge(&who, &key)?;
+            Self::do_challenge(&who, &key, inclusion)?;
 
             // Emit event.
             Self::deposit_event(Event::NewChallenge {

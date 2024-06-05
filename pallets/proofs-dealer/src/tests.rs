@@ -9,6 +9,7 @@ use crate::{
     LastCheckpointBlock,
 };
 use frame_support::{assert_noop, assert_ok, traits::fungible::Mutate};
+use shp_traits::ChallengeKeyInclusion;
 use sp_core::{Get, Hasher};
 use sp_runtime::BoundedVec;
 use sp_runtime::{traits::BlakeTwo256, DispatchError};
@@ -40,7 +41,11 @@ fn challenge_submit_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(
+            RuntimeOrigin::signed(1),
+            file_key,
+            ChallengeKeyInclusion::Included
+        ));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -61,7 +66,10 @@ fn challenge_submit_succeed() {
         // Check that the challenge is in the queue.
         let challenges_queue = crate::ChallengesQueue::<Test>::get();
         assert_eq!(challenges_queue.len(), 1);
-        assert_eq!(challenges_queue[0], file_key);
+        assert_eq!(
+            challenges_queue[0],
+            (file_key, ChallengeKeyInclusion::Included)
+        );
     });
 }
 
@@ -91,7 +99,8 @@ fn challenge_submit_twice_succeed() {
         // Dispatch challenge extrinsic twice.
         assert_ok!(ProofsDealer::challenge(
             RuntimeOrigin::signed(1),
-            file_key_1
+            file_key_1,
+            ChallengeKeyInclusion::Included
         ));
 
         // Check that the event is emitted.
@@ -105,7 +114,8 @@ fn challenge_submit_twice_succeed() {
 
         assert_ok!(ProofsDealer::challenge(
             RuntimeOrigin::signed(2),
-            file_key_2
+            file_key_2,
+            ChallengeKeyInclusion::Included
         ));
 
         // Check that the event is emitted.
@@ -131,8 +141,14 @@ fn challenge_submit_twice_succeed() {
         // Check that the challenge is in the queue.
         let challenges_queue = crate::ChallengesQueue::<Test>::get();
         assert_eq!(challenges_queue.len(), 2);
-        assert_eq!(challenges_queue[0], file_key_1);
-        assert_eq!(challenges_queue[1], file_key_2);
+        assert_eq!(
+            challenges_queue[0],
+            (file_key_1, ChallengeKeyInclusion::Included)
+        );
+        assert_eq!(
+            challenges_queue[1],
+            (file_key_2, ChallengeKeyInclusion::Included)
+        );
     });
 }
 
@@ -154,8 +170,16 @@ fn challenge_submit_existing_challenge_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic twice.
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(
+            RuntimeOrigin::signed(1),
+            file_key,
+            ChallengeKeyInclusion::Included
+        ));
+        assert_ok!(ProofsDealer::challenge(
+            RuntimeOrigin::signed(1),
+            file_key,
+            ChallengeKeyInclusion::Included
+        ));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -176,7 +200,10 @@ fn challenge_submit_existing_challenge_succeed() {
         // Check that the challenge is in the queue.
         let challenges_queue = crate::ChallengesQueue::<Test>::get();
         assert_eq!(challenges_queue.len(), 1);
-        assert_eq!(challenges_queue[0], file_key);
+        assert_eq!(
+            challenges_queue[0],
+            (file_key, ChallengeKeyInclusion::Included)
+        );
     });
 }
 
@@ -198,7 +225,11 @@ fn challenge_submit_in_two_rounds_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic twice.
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(
+            RuntimeOrigin::signed(1),
+            file_key,
+            ChallengeKeyInclusion::Included
+        ));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -219,7 +250,10 @@ fn challenge_submit_in_two_rounds_succeed() {
         // Check that the challenge is in the queue.
         let challenges_queue = crate::ChallengesQueue::<Test>::get();
         assert_eq!(challenges_queue.len(), 1);
-        assert_eq!(challenges_queue[0], file_key);
+        assert_eq!(
+            challenges_queue[0],
+            (file_key, ChallengeKeyInclusion::Included)
+        );
 
         // Advance `CheckpointChallengePeriod` blocks.
         let challenge_period: u32 = <Test as crate::Config>::CheckpointChallengePeriod::get();
@@ -227,7 +261,11 @@ fn challenge_submit_in_two_rounds_succeed() {
 
         // Dispatch challenge extrinsic twice.
         let file_key = BlakeTwo256::hash(b"file_key_2");
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(
+            RuntimeOrigin::signed(1),
+            file_key,
+            ChallengeKeyInclusion::Included
+        ));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -283,7 +321,11 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(
+            RuntimeOrigin::signed(1),
+            file_key,
+            ChallengeKeyInclusion::Included
+        ));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -297,7 +339,10 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
         // Check that the challenge is in the queue.
         let challenges_queue = crate::ChallengesQueue::<Test>::get();
         assert_eq!(challenges_queue.len(), 1);
-        assert_eq!(challenges_queue[0], file_key);
+        assert_eq!(
+            challenges_queue[0],
+            (file_key, ChallengeKeyInclusion::Included)
+        );
     });
 }
 
@@ -312,7 +357,11 @@ fn challenge_wrong_origin_fail() {
 
         // Dispatch challenge extrinsic with wrong origin.
         assert_noop!(
-            ProofsDealer::challenge(RuntimeOrigin::none(), file_key),
+            ProofsDealer::challenge(
+                RuntimeOrigin::none(),
+                file_key,
+                ChallengeKeyInclusion::Included
+            ),
             DispatchError::BadOrigin
         );
     });
@@ -332,7 +381,11 @@ fn challenge_submit_by_regular_user_with_no_funds_fail() {
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key),
+            ProofsDealer::challenge(
+                RuntimeOrigin::signed(1),
+                file_key,
+                ChallengeKeyInclusion::Included
+            ),
             crate::Error::<Test>::FeeChargeFailed
         );
     });
@@ -359,12 +412,20 @@ fn challenge_overflow_challenges_queue_fail() {
         let queue_size: u32 = <Test as crate::Config>::ChallengesQueueLength::get();
         for i in 0..queue_size {
             let file_key = BlakeTwo256::hash(&i.to_le_bytes());
-            assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+            assert_ok!(ProofsDealer::challenge(
+                RuntimeOrigin::signed(1),
+                file_key,
+                ChallengeKeyInclusion::Included
+            ));
         }
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key),
+            ProofsDealer::challenge(
+                RuntimeOrigin::signed(1),
+                file_key,
+                ChallengeKeyInclusion::Included
+            ),
             crate::Error::<Test>::ChallengesQueueOverflow
         );
     });
@@ -393,12 +454,19 @@ fn proofs_dealer_trait_challenge_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Challenge using trait.
-        <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge(&file_key).unwrap();
+        <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge(
+            &file_key,
+            ChallengeKeyInclusion::Included,
+        )
+        .unwrap();
 
         // Check that the challenge is in the queue.
         let challenges_queue = crate::ChallengesQueue::<Test>::get();
         assert_eq!(challenges_queue.len(), 1);
-        assert_eq!(challenges_queue[0], file_key);
+        assert_eq!(
+            challenges_queue[0],
+            (file_key, ChallengeKeyInclusion::Included)
+        );
     });
 }
 
@@ -412,12 +480,20 @@ fn proofs_dealer_trait_challenge_overflow_challenges_queue_fail() {
         let queue_size: u32 = <Test as crate::Config>::ChallengesQueueLength::get();
         for i in 0..queue_size {
             let file_key = BlakeTwo256::hash(&i.to_le_bytes());
-            assert_ok!(<ProofsDealer as shp_traits::ProofsDealerInterface>::challenge(&file_key));
+            assert_ok!(
+                <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge(
+                    &file_key,
+                    ChallengeKeyInclusion::Included
+                )
+            );
         }
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge(&file_key),
+            <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge(
+                &file_key,
+                ChallengeKeyInclusion::Included
+            ),
             crate::Error::<Test>::ChallengesQueueOverflow
         );
     });
@@ -430,13 +506,19 @@ fn proofs_dealer_trait_challenge_with_priority_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Challenge using trait.
-        <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(&file_key)
-            .unwrap();
+        <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
+            &file_key,
+            ChallengeKeyInclusion::Included,
+        )
+        .unwrap();
 
         // Check that the challenge is in the queue.
         let priority_challenges_queue = crate::PriorityChallengesQueue::<Test>::get();
         assert_eq!(priority_challenges_queue.len(), 1);
-        assert_eq!(priority_challenges_queue[0], file_key);
+        assert_eq!(
+            priority_challenges_queue[0],
+            (file_key, ChallengeKeyInclusion::Included)
+        );
     });
 }
 
@@ -452,14 +534,18 @@ fn proofs_dealer_trait_challenge_with_priority_overflow_challenges_queue_fail() 
             let file_key = BlakeTwo256::hash(&i.to_le_bytes());
             assert_ok!(
                 <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                    &file_key
+                    &file_key,
+                    ChallengeKeyInclusion::Included
                 )
             );
         }
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(&file_key),
+            <ProofsDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
+                &file_key,
+                ChallengeKeyInclusion::Included
+            ),
             crate::Error::<Test>::PriorityChallengesQueueOverflow
         );
     });

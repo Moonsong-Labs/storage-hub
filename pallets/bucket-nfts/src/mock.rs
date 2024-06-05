@@ -125,12 +125,16 @@ impl ProofsDealerInterface for MockProofsDealer {
     type MerkleHash = H256;
     type MerkleHashing = BlakeTwo256;
 
-    fn challenge(_key_challenged: &Self::MerkleHash) -> frame_support::dispatch::DispatchResult {
+    fn challenge(
+        _key_challenged: &Self::MerkleHash,
+        _inclusion: ChallengeKeyInclusion,
+    ) -> frame_support::dispatch::DispatchResult {
         Ok(())
     }
 
     fn challenge_with_priority(
         _key_challenged: &Self::MerkleHash,
+        _inclusion: ChallengeKeyInclusion,
     ) -> frame_support::dispatch::DispatchResult {
         Ok(())
     }
