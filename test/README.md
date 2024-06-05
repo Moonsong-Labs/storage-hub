@@ -2,6 +2,9 @@
 
 ## Testing Types
 
+> [!IMPORTANT]  
+> `zig` is a pre-requisite for crossbuilding the node. Instructions to install can be found [here](https://ziglang.org/learn/getting-started/).
+
 ### Dev Node Test
 
 > [!NOTE]  

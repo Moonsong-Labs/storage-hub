@@ -6,8 +6,8 @@ import { GenericContainer, Wait, type StartedTestContainer } from "testcontainer
 import { createBlock } from "./blocks";
 export { ApiPromise } from "@polkadot/api";
 export type { StartedTestContainer } from "testcontainers";
-import dotenv from 'dotenv'
-dotenv.config()
+import dotenv from "dotenv";
+dotenv.config();
 
 export class DevTestContext implements AsyncDisposable {
   private _api?: ExtendedApiPromise;

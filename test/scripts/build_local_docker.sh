@@ -14,33 +14,56 @@
 
 export DOCKER_DEFAULT_PLATFORM=linux/amd64
 
+
 pushd ../
 
-if ! cargo install --list | grep -q cargo-zigbuild; then
-    cargo install cargo-zigbuild --locked
+ARCH=$(uname -m)
+OS=$(uname -s)
+
+## BUILD NODE BINARY
+
+if [[ "$ARCH" == "arm64" && "$OS" == "Darwin" ]]; then
+    if ! command -v zig &> /dev/null; then
+        echo "Zig is not installed. Please install Zig to proceed."
+        echo "Instructions to install can be found here: https://ziglang.org/learn/getting-started/"
+        popd
+        exit 1
+    fi
+
+    if ! cargo install --list | grep -q cargo-zigbuild; then
+        cargo install cargo-zigbuild --locked
+    fi
+
+    if ! rustup target list --installed | grep -q x86_64-unknown-linux-gnu; then
+        rustup target add x86_64-unknown-linux-gnu
+    fi
+
+    cargo zigbuild --target x86_64-unknown-linux-gnu --release
+
+    BINARY_PATH="target/x86_64-unknown-linux-gnu/release/storage-hub-node"
+else
+    cargo build --release
+    BINARY_PATH="target/release/storage-hub-node"
 fi
 
-if ! rustup target list --installed | grep -q x86_64-unknown-linux-gnu; then
-    rustup target add x86_64-unknown-linux-gnu
-fi
+## CHECK BINARY
 
-cargo zigbuild --target x86_64-unknown-linux-gnu --release
-
-if [ ! -f "target/x86_64-unknown-linux-gnu/release/storage-hub-node" ]; then
+if [ ! -f "$BINARY_PATH" ]; then
     echo "No node found, something must have gone wrong."
     popd
     exit 1
 fi
 
-if ! file target/x86_64-unknown-linux-gnu/release/storage-hub-node | grep -q "x86-64"; then
+if ! file "$BINARY_PATH" | grep -q "x86-64"; then
     echo "The binary is not for x86 architecture, something must have gone wrong."
     popd
     exit 1
 fi
 
+## BUILD DOCKER IMAGE
 mkdir -p build
 
-cp target/x86_64-unknown-linux-gnu/release/storage-hub-node build/
+cp "$BINARY_PATH" build/
 
 if ! docker build -t storage-hub:local -f docker/storage-hub-node.Dockerfile --load .; then
     echo "Docker build failed."
