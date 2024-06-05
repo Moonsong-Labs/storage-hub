@@ -17,9 +17,9 @@ export const getZombieClients = async (options: {
   shWs?: string;
 }): ZombieClients => {
   const relayWsProvider = new WsProvider(options.relayWs);
-  const relayApi = await ApiPromise.create({ provider: relayWsProvider });
+  const relayApi = await ApiPromise.create({ provider: relayWsProvider, noInitWarn: true });
   const shWsProvider = new WsProvider(options.shWs);
-  const shApi = await ApiPromise.create({ provider: shWsProvider });
+  const shApi = await ApiPromise.create({ provider: shWsProvider, noInitWarn: true });
 
   return {
     [Symbol.asyncDispose]: async () => {

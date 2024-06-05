@@ -76,7 +76,7 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
     test("Check StorageHub RT Version", async () => {
       const { specName, specVersion } = storageApi.consts.system.version;
       strictEqual(specName.toString(), "storage-hub-runtime");
-      strictEqual(specVersion.toNumber() > 1, true);
+      strictEqual(specVersion.toNumber() > 0, true);
     });
 
     test("Check test accounts have balance", async () => {

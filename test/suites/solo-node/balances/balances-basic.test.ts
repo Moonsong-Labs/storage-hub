@@ -27,7 +27,6 @@ describe("Balances Pallet: Basic", {}, async () => {
     } = await api.query.system.account(alice.address);
     console.log("Alice balance: ", free.toHuman());
     strictEqual(free.toBigInt() > 0n, true);
-    strictEqual(false, false);
   });
 
   it("Can send balance to another account", async () => {
