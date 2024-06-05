@@ -162,7 +162,6 @@ jobs:
   #         pnpm  install
   #         pnpm  zombienet test configs/simple.zndsl
 
-
   network_test:
     needs: [build_image, setup]
     if: always()
@@ -191,7 +190,7 @@ jobs:
           cd test
           pnpm  install
           pnpm  zombie:run:full:native &
-          
+
           sleep 60
       - name: Setup
         run: |
@@ -202,7 +201,6 @@ jobs:
         run: |
           cd test
           pnpm test:full
-
 
   zombie_test:
     needs: [build_image, setup]
@@ -239,6 +237,10 @@ jobs:
     if: always()
     name: "Run Dev Node Tests"
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -266,4 +268,12 @@ jobs:
         run: |
           cd test
           pnpm update-types
-          pnpm test:node
+
+          node --import tsx                         \
+               --test                               \
+               --test-reporter=@reporters/github    \
+               --test-reporter-destination=stdout   \
+               --test-reporter=spec                 \
+               --test-reporter-destination=stdout   \
+               --test-shard=${{ matrix.shard }}/2   \
+               ./suites/solo-node/**/**.test.ts
