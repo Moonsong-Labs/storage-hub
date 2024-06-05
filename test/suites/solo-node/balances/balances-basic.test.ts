@@ -1,4 +1,3 @@
-import { expect } from "expect";
 import { after, before, describe, it } from "node:test";
 import {
   alice,
@@ -8,6 +7,7 @@ import {
   bob,
   DevTestContext,
 } from "../../../util";
+import { strictEqual } from "node:assert";
 
 describe("Balances Pallet: Basic", {}, async () => {
   const context = new DevTestContext({});
@@ -26,7 +26,7 @@ describe("Balances Pallet: Basic", {}, async () => {
       data: { free },
     } = await api.query.system.account(alice.address);
     console.log("Alice balance: ", free.toHuman());
-    expect(free.toBigInt()).toBeGreaterThan(0n);
+    strictEqual(free.toBigInt() > 0n, true);
   });
 
   it("Can send balance to another account", async () => {
@@ -35,7 +35,7 @@ describe("Balances Pallet: Basic", {}, async () => {
     const {
       data: { free: balBefore },
     } = await api.query.system.account(randomId);
-    expect(balBefore.toBigInt()).toBe(0n);
+    strictEqual(balBefore.toBigInt(), 0n);
 
     console.log(`Sending balance to ${randomId}`);
     await api.tx.balances.transferAllowDeath(randomId, amount).signAndSend(alice);
@@ -45,7 +45,7 @@ describe("Balances Pallet: Basic", {}, async () => {
     const {
       data: { free: balAfter },
     } = await api.query.system.account(randomId);
-    expect(balAfter.toBigInt()).toBe(amount);
+    strictEqual(balAfter.toBigInt(), amount);
   });
 
   it("Can display total issuance", async () => {
@@ -56,7 +56,7 @@ describe("Balances Pallet: Basic", {}, async () => {
     );
     const totalSupply = await api.query.balances.totalIssuance();
 
-    expect(balancesTotal).toBe(totalSupply.toBigInt());
+    strictEqual(balancesTotal, totalSupply.toBigInt());
   });
 
   it("SetBalance fails when called without sudo", async () => {
@@ -72,7 +72,7 @@ describe("Balances Pallet: Basic", {}, async () => {
       data: { free: balAfter },
     } = await api.query.system.account(randomId);
 
-    expect(balBefore.sub(balAfter).toNumber()).toBe(0);
+    strictEqual(balBefore.sub(balAfter).toNumber(), 0);
   });
 
   it("SetBalance passes when called with sudo", async () => {
@@ -86,6 +86,6 @@ describe("Balances Pallet: Basic", {}, async () => {
       data: { free: balAfter },
     } = await api.query.system.account(randomId);
 
-    expect(balAfter.toBigInt()).toBe(UNIT);
+    strictEqual(balAfter.toBigInt(), UNIT);
   });
 });

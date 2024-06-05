@@ -1,5 +1,4 @@
 import { test, describe, after } from "node:test";
-import { expect } from "expect";
 import {
   alice,
   bob,
@@ -13,6 +12,7 @@ import {
   getZombieClients,
   sendTransaction,
 } from "../../util";
+import { strictEqual } from "node:assert";
 
 describe("Full Network Suite", { concurrency: 2 }, async () => {
   const { relayApi, storageApi } = await getZombieClients({
@@ -28,13 +28,13 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
   describe("Relay Tests", async () => {
     test("Check RelayChain RT Version", async () => {
       const { specName, specVersion } = relayApi.consts.system.version;
-      expect(specName.toString()).toBe("rococo");
-      expect(specVersion.toNumber()).toBeGreaterThanOrEqual(1008000);
+      strictEqual(specName.toString(), "rococo");
+      strictEqual(specVersion.toNumber(), 1008000);
     });
 
     test("Check sr25519 keyring is correct", async () => {
-      expect(alice.address).toBe("5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY");
-      expect(bob.address).toBe("5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty");
+      strictEqual(alice.address, "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY");
+      strictEqual(bob.address, "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty");
     });
 
     test("Check test accounts have balance", async () => {
@@ -53,7 +53,7 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
         console.error(`❌ Account ${address} ${name}  has no balance!`);
       }
 
-      expect(failures).toHaveLength(0);
+      strictEqual(failures.length, 0);
     });
 
     test("Send bal transfer on relaychain", { timeout: 60_000 }, async () => {
@@ -67,7 +67,7 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
         data: { free: balAfter },
       } = await relayApi.query.system.account(randomId);
 
-      expect(balAfter.toBigInt()).toBe(amount);
+      strictEqual(balAfter.toBigInt(), amount);
       console.log(`✅ Account ${randomId} has ${balAfter} balance`);
     });
   });
@@ -75,8 +75,8 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
   describe("StorageHub", async () => {
     test("Check StorageHub RT Version", async () => {
       const { specName, specVersion } = storageApi.consts.system.version;
-      expect(specName.toString()).toBe("storage-hub-runtime");
-      expect(specVersion.toNumber()).toBeGreaterThanOrEqual(1);
+      strictEqual(specName.toString(), "storage-hub-runtime");
+      strictEqual(specVersion.toNumber() > 1, true);
     });
 
     test("Check test accounts have balance", async () => {
@@ -97,7 +97,7 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
         console.error(`❌ Account ${address} ${name}  has no balance!`);
       }
 
-      expect(failures).toHaveLength(0);
+      strictEqual(failures.length, 0);
     });
 
     test("Send bal transfer on storagehub", { timeout: 120_000 }, async () => {
@@ -111,7 +111,7 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
         data: { free: balAfter },
       } = await storageApi.query.system.account(randomId);
 
-      expect(balAfter.toBigInt()).toBe(amount);
+      strictEqual(balAfter.toBigInt(), amount);
       console.log(`✅ Account ${randomId} has ${balAfter} balance`);
     });
   });

@@ -1,4 +1,4 @@
-import { expect } from "expect";
+import { strictEqual } from "node:assert";
 import { after, before, describe, it } from "node:test";
 import {
   alice,
@@ -35,12 +35,12 @@ describe("Balances Pallet: Reaping", { only: true }, async () => {
     const {
       data: { free: eveBal },
     } = await api.query.system.account(eve.address);
-    expect(eveBal.toBigInt()).toBe(0n);
+    strictEqual(eveBal.toBigInt(), 0n);
 
     const {
       data: { free: randomBal },
     } = await api.query.system.account(randomId);
-    expect(randomBal.toBigInt()).toBeGreaterThan(0n);
+    strictEqual(randomBal.toBigInt() > 0n, true);
   });
 
   it("Can transfer full balance to another account without reap", async () => {
@@ -50,12 +50,12 @@ describe("Balances Pallet: Reaping", { only: true }, async () => {
     const {
       data: { free: ferdieBal },
     } = await api.query.system.account(ferdie.address);
-    expect(ferdieBal.toBigInt()).toBeGreaterThan(0n);
+    strictEqual(ferdieBal.toBigInt() > 0n, true);
 
     const {
       data: { free: randomBal },
     } = await api.query.system.account(randomId);
-    expect(randomBal.toBigInt()).toBeGreaterThan(0n);
+    strictEqual(randomBal.toBigInt() > 0n, true);
   });
 
   it("Bal below ED kills account", async (t) => {
@@ -79,6 +79,6 @@ describe("Balances Pallet: Reaping", { only: true }, async () => {
       data: { free: randBal },
     } = await api.query.system.account(randomAccount.address);
 
-    expect(randBal.toBigInt()).toBe(0n);
+    strictEqual(randBal.toBigInt(), 0n);
   });
 });
