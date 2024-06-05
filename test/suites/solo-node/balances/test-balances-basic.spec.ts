@@ -10,7 +10,7 @@ import {
 } from "../../../util";
 
 describe("Balances Pallet: Basic", {}, async () => {
-  await using context = new DevTestContext({});
+  const context = new DevTestContext({});
   let api: ExtendedApiPromise;
 
   before(async () => {

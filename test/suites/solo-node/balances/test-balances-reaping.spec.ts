@@ -11,10 +11,11 @@ import {
   DevTestContext,
 } from "../../../util";
 
+// TODO: Figure out why only isn't working here
 describe("Balances Pallet: Reaping", { only: true }, async () => {
-  await using context = new DevTestContext({
+  const context = new DevTestContext({
     // printLogs: true,
-    keepOpen: true,
+    // keepOpen: true,
   });
   let api: ExtendedApiPromise;
 
@@ -26,7 +27,7 @@ describe("Balances Pallet: Reaping", { only: true }, async () => {
     await context.dispose();
   });
 
-  it("Can transfer full balance to another account with reap", async () => {
+  it("Can transfer full balance to another account with reap", { only: true }, async () => {
     const { address: randomId } = await createSr25519Account();
     await api.tx.balances.transferAll(randomId, false).signAndSend(eve);
     await api.createBlock();

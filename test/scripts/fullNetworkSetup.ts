@@ -29,14 +29,8 @@ async function main() {
   if (_.isEqual(executorParams, idealExecutorParams)) {
     console.log("Executor parameters are already set to ideal values ✅");
   } else {
-    const setConfig = resources.relayApi.tx.configuration.setExecutorParams([
-      // @ts-expect-error - ApiAugment not ready yet for SH
-      { maxMemoryPages: 8192 },
-      // @ts-expect-error - ApiAugment not ready yet for SH
-      { pvfExecTimeout: ["Backing", 2500] },
-      // @ts-expect-error - ApiAugment not ready yet for SH
-      { pvfExecTimeout: ["Approval", 15000] },
-    ]);
+    // @ts-expect-error - ApiAugment issue
+    const setConfig = resources.relayApi.tx.configuration.setExecutorParams(idealExecutorParams);
 
     // Setting Async Config
     process.stdout.write("Setting Executor Parameters config for relay chain... ");
@@ -93,7 +87,6 @@ async function main() {
 
   process.stdout.write(`Requesting sign up for ${bsp.address} ...`);
   await sendTransaction(
-    // @ts-expect-error - ApiAugment not ready yet for SH
     resources.storageApi.tx.providers.requestBspSignUp(5000000, [uint8Array], bsp.address),
     {
       signer: bsp,
@@ -105,16 +98,12 @@ async function main() {
 
   // Confirm sign up
   process.stdout.write(`Confirming sign up for ${bsp.address} ...`);
-  // @ts-expect-error - ApiAugment not ready yet for SH
   await sendTransaction(resources.storageApi.tx.providers.confirmSignUp(bsp.address), {
     signer: bsp,
   });
   process.stdout.write("✅\n");
 
-  // TODO: ERROR: Error thrown when a user tries to confirm a sign up that was not requested previously.
-
   // Confirm providers added
-  // @ts-expect-error - ApiAugment not ready yet for SH
   const providers = await resources.storageApi.query.providers.backupStorageProviders.entries();
 
   if (providers.length === 1) {

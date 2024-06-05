@@ -33,8 +33,8 @@ export class DevTestContext implements AsyncDisposable {
       );
       return;
     }
-    await this.api.disconnect();
-    await this.container.stop();
+    this.api.disconnect();
+    this.container.stop();
     this.#disposed = true;
   }
 
@@ -62,6 +62,7 @@ export class DevTestContext implements AsyncDisposable {
     return this._container;
   }
 
+  // This doesnt work nicely with describe() blocks interact with test runners
   async [Symbol.asyncDispose]() {
     if (this.#disposed || !this.#initialized) {
       return;
@@ -121,6 +122,9 @@ export const devnodeSetup = async (options?: TestOptions): Promise<TestApis> => 
   )}`;
   process.stdout.write(`Connecting APIs at ${connectString}... `);
   const connectedApi = await ApiPromise.create({
+    isPedantic: false,
+    throwOnConnect: true,
+    noInitWarn: true,
     provider: new WsProvider(connectString),
   });
   process.stdout.write("✅\n");
