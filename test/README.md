@@ -1,22 +1,46 @@
 # StorageHub Testing
 
-## Testing Types
+## Pre-requisites
 
-> [!IMPORTANT]  
-> `zig` is a pre-requisite for crossbuilding the node. Instructions to install can be found [here](https://ziglang.org/learn/getting-started/).
+### pnpm
+
+[pnpm](https://pnpm.io/) is used in this project as the Javascript package manager to install dependencies. To install it you can follow the official instructions at: [https://pnpm.io/installation](https://pnpm.io/installation)
+
+The quickest way is via their script: `curl -fsSL https://get.pnpm.io/install.sh | sh -`
+
+## Testing Types
 
 ### Dev Node Test
 
-> [!NOTE]  
-> TODO Add description here of what this test suite does and what it intends to cover
+The `storage-hub` node is run in a docker container in dev mode, so that it can be isolated and parallelized across multiple threads & runners. The purpose of this suite is verify functionality of both the RPC and runtime.
 
-#### 1. Build Docker Image
+> [!IMPORTANT]  
+> Provider functionality is not covered here, only how the system chain behaves.
+
+#### 1. Build Node
+
+##### Linux
+
+```sh
+cargo build --release
+```
+
+##### MacOS
+
+> [!IMPORTANT]  
+> If you are running this on a Mac, `zig` is a pre-requisite for crossbuilding the node. Instructions to install can be found [here](https://ziglang.org/learn/getting-started/).
+
+```sh
+pnpm crossbuild:mac
+```
+
+#### 2. Build Docker Image
 
 ```sh
 pnpm docker:build
 ```
 
-#### 2. Run Test Suite
+#### 3. Run Test Suite
 
 ```sh
 pnpm test:node
@@ -25,83 +49,45 @@ pnpm test:node
 ### End-To-End Tests
 
 > [!NOTE]  
-> TODO Add description here of what this test suite does and what it intends to cover
+> Please ensure the rust project is built first e.g. `cargo build --release`. 
+> This is required as currently we only support native binaries.
+
+In `/test` run: `pnpm install` to install zombienet
+
+#### 1. Run Network
 
 ```shell
 # in the /test directory
 pnpm i
 pnpm zombie:run:full:native
-```f
+```
 
 Wait for zombie network to start, and then:
 
-```sh
+
+#### 2. Run Setup & Tests
+
+```shell
+pnpm update-types
 pnpm zombie:setup:native
 pnpm zombie:test suites/zombie
 ```
 
-## Local Usage
+### ZombieNet 
 
-### Pre-requisites
-
-#### pnpm
-
-[pnpm](https://pnpm.io/) is used in this project as the Javascript package manager to install dependencies. To install it you can follow the official instructions at: [https://pnpm.io/installation](https://pnpm.io/installation)
-
-The quickest way is via their script: `curl -fsSL https://get.pnpm.io/install.sh | sh -`
-
-#### Kubernetes
-
-> [!IMPORTANT]  
-> Currently storage-hub on k8 is having issues due to how we are generating chain specs, you can skip directly to [Spawning ZombieNet Native](#spawning-zombienet-native)
-
-For simplicity, we can use minikube to be a local [kubernetes](https://kubernetes.io/) cluster.
-
-Visit their [docs](https://minikube.sigs.k8s.io/docs/) for a guide on GettingStarted, but once installed can be started with:
-
-```sh
-minikube start
-```
-
-#### Creating Local Docker Image
-
-_In `test/` directory:_
-
-Run:
-
-```sh
-pnpm docker:build
-```
-
-to create a local Docker image `storage-hub:local`.
-
-#### Running Local built via Docker
-
-```sh
-pnpm docker:start
-```
-
-> [!TIP]  
-> Likewise you can stop with `pnpm docker:stop`
-
-#### Running Latest built via Docker
-
-```sh
-docker compose -f docker/latest-node-compose.yml up -d
-```
-
-#### Zombienet
-
-> [!NOTE]  
-> Please ensure the rust project is built first e.g. `cargo build --release`
-
-In `/test` run: `pnpm install` to install zombienet
-
-### Running ZombieNet Tests
+This is the networking testing suite for topology and network stability. It is a suite of tests that run on a network of nodes, and is used to verify the network's stability and the nodes' ability to communicate with each other.
 
 ```sh
 pnpm zombie:test:native
 ```
+
+## Launching Networks
+
+### Spawning Local DevNode
+
+- Native launch: `../target/release/storage-hub --dev`
+- Docker launch (local): `pnpm docker:start` / `pnpm docker:stop`
+- Docker launch (latest): `pnpm docker:start:latest` / `pnpm docker:stop:latest`
 
 ### Spawning ZombieNet Native
 
@@ -127,7 +113,7 @@ From here you can interact via the websockets exposed in the direct links, in th
 - Bob (relay): `37613`
 - Collator (storage-hub): `45615`
 
-### Generating new Type Interfaces
+## Generating new Type Interfaces
 
 This repo uses Parity's [polkadot-api](https://github.com/polkadot-api/polkadot-api) AKA PAPI.
 To generate new type interfaces run the following in `/test`:
@@ -135,6 +121,9 @@ To generate new type interfaces run the following in `/test`:
 ```sh
 pnpm update-types
 ```
+
+> [!IMPORTANT]  
+> This requires that you have a built network bin at `target/release`. If you are on mac and have cross built onto x86, you will need to rebuild in native again (sorry, WIP).
 
 
 ## Troubleshooting
