@@ -6,7 +6,8 @@ use codec::Encode;
 use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
-    traits::{fungible::Mutate, tokens::Preservation, Get},
+    traits::{fungible::Mutate, tokens::Preservation, Get, Randomness},
+    weights::WeightMeter,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::prelude::vec::Vec;
@@ -22,10 +23,11 @@ use crate::{
         AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor, ChallengesFeeFor,
         ForestRootFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor, KeyVerifierFor,
         KeyVerifierProofFor, Proof, ProviderFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
-        StakeToChallengePeriodFor, TreasuryAccountFor,
+        RandomnessProviderFor, StakeToChallengePeriodFor, TreasuryAccountFor,
     },
-    BlockToChallengesSeed, BlockToCheckpointChallenges, ChallengesQueue, Error,
-    LastBlockProviderSubmittedProofFor, LastCheckpointBlock, Pallet, PriorityChallengesQueue,
+    ChallengesQueue, ChallengesTicker, Error, LastCheckpointTick,
+    LastTickProviderSubmittedProofFor, Pallet, PriorityChallengesQueue, TickToChallengesSeed,
+    TickToCheckpointChallenges,
 };
 
 macro_rules! expect_or_err {
@@ -92,11 +94,11 @@ where
     ///
     /// For a given `submitter`, verify the `proof` submitted. The proof is verified by checking
     /// the forest proof and each key proof.
-    /// Relies on the `ProvidersPallet` to get the root for the submitter, the last block for which
+    /// Relies on the `ProvidersPallet` to get the root for the submitter, the last tick for which
     /// the submitter submitted a proof and the stake for the submitter. With that information, it
-    /// computes the next block for which the submitter should be submitting a proof. It then gets
-    /// the seed for that block and generates the challenges from the seed. It also checks if there
-    /// has been a Checkpoint Challenge block in between the last block proven and the current block.
+    /// computes the next tick for which the submitter should be submitting a proof. It then gets
+    /// the seed for that tick and generates the challenges from the seed. It also checks if there
+    /// has been a Checkpoint Challenge block in between the last tick proven and the current tick.
     /// If there has been, the Provider should have included proofs for the challenges in that block.
     /// It then verifies the forest proof and each key proof, using the `ForestVerifier` and `KeyVerifier`.
     pub fn do_submit_proof(submitter: &ProviderFor<T>, proof: &Proof<T>) -> DispatchResult {
@@ -127,12 +129,12 @@ where
         // submitting any proofs.
         ensure!(root == Self::default_forest_root(), Error::<T>::ZeroRoot);
 
-        // Get last block for which the submitter submitted a proof.
-        let last_block_proven =
-            match LastBlockProviderSubmittedProofFor::<T>::get(submitter.clone()) {
-                Some(block) => block,
-                None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
-            };
+        // Get last tick for which the submitter submitted a proof.
+        let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(submitter.clone())
+        {
+            Some(tick) => tick,
+            None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
+        };
 
         // Get stake for submitter.
         // If a submitter is a registered Provider, it must have a stake, so this shouldn't happen.
@@ -143,32 +145,32 @@ where
         // Check that the stake is non-zero.
         ensure!(stake > BalanceFor::<T>::zero(), Error::<T>::ZeroStake);
 
-        // Compute the next block for which the submitter should be submitting a proof.
-        let challenges_block = last_block_proven
+        // Compute the next tick for which the submitter should be submitting a proof.
+        let challenges_tick = last_tick_proven
             .checked_add(&Self::stake_to_challenge_period(stake)?)
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
-        // Check that the challenges block is lower than the current block.
+        // Check that the challenges tick is lower than the current tick.
         ensure!(
-            challenges_block < frame_system::Pallet::<T>::block_number(),
-            Error::<T>::ChallengesBlockNotReached
+            challenges_tick < ChallengesTicker::<T>::get(),
+            Error::<T>::ChallengesTickNotReached
         );
 
-        // Check that the challenges block is greater than current block minus `ChallengeHistoryLength`,
-        // i.e. that the challenges block is within the blocks this pallet keeps track of.
+        // Check that the challenges tick is greater than current tick minus `ChallengeHistoryLength`,
+        // i.e. that the challenges tick is within the ticks this pallet keeps track of.
         expect_or_err!(
-            challenges_block
-                > frame_system::Pallet::<T>::block_number()
+            challenges_tick
+                > ChallengesTicker::<T>::get()
                     .saturating_sub(ChallengeHistoryLengthFor::<T>::get()),
-            "Challenges block is too old, beyond the history this pallet keeps track of. This should not be possible.",
-            Error::<T>::ChallengesBlockTooOld,
+            "Challenges tick is too old, beyond the history this pallet keeps track of. This should not be possible.",
+            Error::<T>::ChallengesTickTooOld,
             bool
         );
 
-        // Get seed for challenges block.
+        // Get seed for challenges tick.
         let seed = expect_or_err!(
-            BlockToChallengesSeed::<T>::get(challenges_block),
-            "Seed for challenges block not found, when checked it should be within history.",
+            TickToChallengesSeed::<T>::get(challenges_tick),
+            "Seed for challenges tick not found, when checked it should be within history.",
             Error::<T>::SeedNotFound
         );
 
@@ -179,15 +181,15 @@ where
             RandomChallengesPerBlockFor::<T>::get(),
         );
 
-        // Check if there's been a Checkpoint Challenge block in between the last block proven and
-        // the current block. If there has been, the Provider should have included proofs for the
-        // challenges in that block.
-        let last_checkpoint_block = LastCheckpointBlock::<T>::get();
-        if last_block_proven < last_checkpoint_block {
+        // Check if there's been a Checkpoint Challenge tick in between the last tick proven and
+        // the tick for which the proof is being submitted. If there has been, the Provider should
+        // have included proofs for those checkpoint challenges.
+        let last_checkpoint_tick = LastCheckpointTick::<T>::get();
+        if last_tick_proven <= last_checkpoint_tick && last_checkpoint_tick < challenges_tick {
             // Add challenges from the Checkpoint Challenge block.
             let checkpoint_challenges =
                 expect_or_err!(
-                    BlockToCheckpointChallenges::<T>::get(last_checkpoint_block),
+                    TickToCheckpointChallenges::<T>::get(last_checkpoint_tick),
                     "Checkpoint challenges not found, when dereferencing in last registered checkpoint challenge block.",
                     Error::<T>::CheckpointChallengesNotFound
                 );
@@ -215,13 +217,31 @@ where
                 .map_err(|_| Error::<T>::KeyProofVerificationFailed)?;
         }
 
+        // TODO: Update LastTickProviderSubmittedProofFor.
+        // TODO: Update ChallengeTickToChallengedProviders.
+
         Ok(())
     }
 
-    // TODO: Document and add proper parameters.
-    pub fn do_new_challenges_round() -> DispatchResult {
-        // TODO
-        unimplemented!()
+    // TODO: Document.
+    pub fn do_new_challenges_round(n: BlockNumberFor<T>, weight: &mut WeightMeter) {
+        // TODO: Benchmark computational weight cost of this hook.
+        // TODO: Specify read-write weight of this hook.
+
+        // TODO: Consider checkpoint challenge rounds.
+        // TODO: Check if providers failed to submit a proof.
+        // TODO: Clean up `TickToChallengesSeed` and `ChallengeTickToChallengedProviders` storage.
+
+        // Increment the challenges ticker.
+        let mut challenges_ticker = ChallengesTicker::<T>::get();
+        challenges_ticker.saturating_inc();
+        ChallengesTicker::<T>::set(challenges_ticker);
+
+        // Store random seed for this tick.
+        let seed = RandomnessProviderFor::<T>::random(challenges_ticker.encode().as_ref());
+
+        // Calculate if this is a checkpoint challenge round.
+        let last_checkpoint_tick = LastCheckpointTick::<T>::get();
     }
 
     /// Convert stake to challenge period.

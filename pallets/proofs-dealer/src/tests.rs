@@ -5,8 +5,8 @@ use crate::pallet::Event;
 use crate::types::{ChallengeHistoryLengthFor, KeyProof, RandomChallengesPerBlockFor};
 use crate::{mock::*, types::Proof};
 use crate::{
-    BlockToChallengesSeed, BlockToCheckpointChallenges, LastBlockProviderSubmittedProofFor,
-    LastCheckpointBlock,
+    LastCheckpointTick, LastTickProviderSubmittedProofFor, TickToChallengesSeed,
+    TickToCheckpointChallenges,
 };
 use frame_support::{assert_noop, assert_ok, traits::fungible::Mutate};
 use sp_core::{Get, Hasher};
@@ -498,12 +498,12 @@ fn submit_proof_success() {
         );
 
         // Set Provider's last submitted proof block.
-        LastBlockProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
         println!("Block number: {:?}", System::block_number());
-        BlockToChallengesSeed::<Test>::insert(System::block_number(), seed);
+        TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
         let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
@@ -581,12 +581,12 @@ fn submit_proof_submitted_by_not_a_provider_success() {
         );
 
         // Set Provider's last submitted proof block.
-        LastBlockProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
         println!("Block number: {:?}", System::block_number());
-        BlockToChallengesSeed::<Test>::insert(System::block_number(), seed);
+        TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
         let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
@@ -663,12 +663,12 @@ fn submit_proof_with_checkpoint_challenges_success() {
         );
 
         // Set Provider's last submitted proof block.
-        LastBlockProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
         println!("Block number: {:?}", System::block_number());
-        BlockToChallengesSeed::<Test>::insert(System::block_number(), seed);
+        TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
         let mut challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
@@ -679,7 +679,7 @@ fn submit_proof_with_checkpoint_challenges_success() {
 
         // Set last checkpoint challenge block.
         let checkpoint_challenge_block = System::block_number() + 1;
-        LastCheckpointBlock::<Test>::set(checkpoint_challenge_block);
+        LastCheckpointTick::<Test>::set(checkpoint_challenge_block);
 
         // Make up custom challenges.
         let custom_challenges = BoundedVec::try_from(vec![
@@ -689,7 +689,7 @@ fn submit_proof_with_checkpoint_challenges_success() {
         .unwrap();
 
         // Set custom challenges in checkpoint block.
-        BlockToCheckpointChallenges::<Test>::insert(
+        TickToCheckpointChallenges::<Test>::insert(
             checkpoint_challenge_block,
             custom_challenges.clone(),
         );
@@ -954,12 +954,12 @@ fn submit_proof_challenges_block_not_reached_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastBlockProviderSubmittedProofFor::<Test>::insert(&provider_id, 1);
+        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, 1);
 
         // Dispatch challenge extrinsic.
         assert_noop!(
             ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
-            crate::Error::<Test>::ChallengesBlockNotReached
+            crate::Error::<Test>::ChallengesTickNotReached
         );
     });
 }
@@ -1019,7 +1019,7 @@ fn submit_proof_challenges_block_too_old_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastBlockProviderSubmittedProofFor::<Test>::insert(&provider_id, 1);
+        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, 1);
 
         // Advance more than `ChallengeHistoryLength` blocks.
         let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
@@ -1085,7 +1085,7 @@ fn submit_proof_seed_not_found_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastBlockProviderSubmittedProofFor::<Test>::insert(&provider_id, 1);
+        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, 1);
 
         // Advance less than `ChallengeHistoryLength` blocks.
         let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
@@ -1151,16 +1151,16 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastBlockProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
         println!("Block number: {:?}", System::block_number());
-        BlockToChallengesSeed::<Test>::insert(System::block_number(), seed);
+        TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
         // Set last checkpoint challenge block.
         let checkpoint_challenge_block = System::block_number() + 1;
-        LastCheckpointBlock::<Test>::set(checkpoint_challenge_block);
+        LastCheckpointTick::<Test>::set(checkpoint_challenge_block);
 
         // Advance less than `ChallengeHistoryLength` blocks.
         let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
@@ -1224,12 +1224,12 @@ fn submit_proof_forest_proof_verification_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastBlockProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
         println!("Block number: {:?}", System::block_number());
-        BlockToChallengesSeed::<Test>::insert(System::block_number(), seed);
+        TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
         // Advance less than `ChallengeHistoryLength` blocks.
         let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
@@ -1296,12 +1296,12 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastBlockProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
         println!("Block number: {:?}", System::block_number());
-        BlockToChallengesSeed::<Test>::insert(System::block_number(), seed);
+        TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
         // Advance less than `ChallengeHistoryLength` blocks.
         let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
@@ -1351,12 +1351,12 @@ fn submit_proof_out_checkpoint_challenges_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastBlockProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
         println!("Block number: {:?}", System::block_number());
-        BlockToChallengesSeed::<Test>::insert(System::block_number(), seed);
+        TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
         let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
@@ -1367,7 +1367,7 @@ fn submit_proof_out_checkpoint_challenges_fail() {
 
         // Set last checkpoint challenge block.
         let checkpoint_challenge_block = System::block_number() + 1;
-        LastCheckpointBlock::<Test>::set(checkpoint_challenge_block);
+        LastCheckpointTick::<Test>::set(checkpoint_challenge_block);
 
         // Make up custom challenges.
         let custom_challenges = BoundedVec::try_from(vec![
@@ -1377,7 +1377,7 @@ fn submit_proof_out_checkpoint_challenges_fail() {
         .unwrap();
 
         // Set custom challenges in checkpoint block.
-        BlockToCheckpointChallenges::<Test>::insert(
+        TickToCheckpointChallenges::<Test>::insert(
             checkpoint_challenge_block,
             custom_challenges.clone(),
         );
@@ -1453,12 +1453,12 @@ fn submit_proof_key_proof_verification_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastBlockProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
         println!("Block number: {:?}", System::block_number());
-        BlockToChallengesSeed::<Test>::insert(System::block_number(), seed);
+        TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
         let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
