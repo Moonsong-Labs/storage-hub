@@ -107,7 +107,7 @@ pub fn merklise_data<T: TrieLayout>(data: &[u8]) -> (MemoryDB<T::Hash>, HashT<T>
     {
         let mut t = TrieDBMutBuilder::<T>::new(&mut memdb, &mut root).build();
         for (k, v) in &chunks {
-            t.insert(&AsCompact(*k).encode(), v).unwrap();
+            t.insert(&ChunkId::new(*k).as_trie_key(), v).unwrap();
         }
     }
 

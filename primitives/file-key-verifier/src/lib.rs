@@ -203,13 +203,13 @@ where
             // Calculate the modulo of the challenge with the number of chunks in the file.
             // The challenge is a big endian 32 byte array.
             let challenged_chunk = BigUint::from_bytes_be(challenge.as_ref()) % chunks;
-            let challenged_chunk: u64 = challenged_chunk.try_into().map_err(|_| {
+            let challenged_chunk: ChunkId = ChunkId::new(challenged_chunk.try_into().map_err(|_| {
                 "This is impossible. The modulo of a number with a u64 should always fit in a u64."
-            })?;
+            })?);
 
             // Check that the chunk is in the proof.
             let chunk = trie
-                .get(&AsCompact(challenged_chunk).encode())
+                .get(&challenged_chunk.as_trie_key())
                 .map_err(|_| "The proof is invalid. The challenge does not exist in the trie.")?;
 
             // The chunk should be Some(leaf) for the proof to be valid.
