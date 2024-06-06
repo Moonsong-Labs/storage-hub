@@ -1,5 +1,5 @@
 use sc_network::PeerId;
-use shc_common::types::{ChunkId, FileKey, FileProof};
+use shc_common::types::{ChunkId, FileKey, FileKeyProof};
 
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 
@@ -7,7 +7,7 @@ use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBu
 pub struct RemoteUploadRequest {
     pub peer: PeerId,
     pub file_key: FileKey,
-    pub chunk_with_proof: FileProof,
+    pub file_key_proof: FileKeyProof,
 }
 
 impl EventBusMessage for RemoteUploadRequest {}

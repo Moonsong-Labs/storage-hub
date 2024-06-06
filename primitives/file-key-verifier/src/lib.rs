@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::{Decode, Encode};
+use codec::{Compact, Decode, Encode};
+use core::fmt::Debug;
 use frame_support::sp_runtime::DispatchError;
 use num_bigint::BigUint;
 use scale_info::TypeInfo;
@@ -27,11 +28,30 @@ pub struct FileKeyVerifier<
 {
     pub _phantom: core::marker::PhantomData<T>,
 }
+
 #[derive(Clone, Debug, PartialEq, Eq, TypeInfo, Encode, Decode)]
 pub struct FileKeyProof<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
 {
     pub file_metadata: FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>,
     pub proof: CompactProof,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProvenFileKeyError {
+    /// The fingerprint from FileMetadata can not be converted to the output of the trie's hasher.
+    FingerprintAndTrieHashMismatch,
+    /// The root hash of the trie does not match the expected root hash.
+    TrieAndExpectedRootMismatch,
+    /// Trie internal error: failed to get trie key iterator.
+    FailedToGetTrieKeyIterator,
+    /// Trie internal error: failed to get trie key from the iterator.
+    FailedToGetTrieKey,
+    /// Trie internal error: failed to get trie value.
+    FailedToGetTrieValue,
+    /// Internal error: the key is not found in the trie.
+    KeyNotFoundInTrie,
+    /// Internal error: failed to convert trie key to ChunkId.
+    ChunkIdFromKeyError(ChunkIdError),
 }
 
 impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
@@ -48,6 +68,62 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
             file_metadata: FileMetadata::new(owner, location, size, fingerprint),
             proof,
         }
+    }
+
+    pub fn verify<T: TrieLayout>(&self) -> bool
+    where
+        <T::Hash as sp_core::Hasher>::Out: TryFrom<[u8; H_LENGTH]>,
+    {
+        // Convert the fingerprint from the proof to the output of the hasher.
+        let expected_root: [u8; H_LENGTH] = self.file_metadata.fingerprint.into();
+        let expected_root: <T::Hash as sp_core::Hasher>::Out = match expected_root.try_into() {
+            Ok(hash) => hash,
+            Err(_) => return false,
+        };
+
+        // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
+        self.proof
+            .to_memory_db::<<T as TrieLayout>::Hash>(Some(&expected_root))
+            .map_err(|_| "Failed to convert proof to memory DB, root doesn't match with expected.")
+            .is_ok()
+    }
+
+    pub fn proven<T: TrieLayout>(&self) -> Result<Vec<Leaf<ChunkId, Chunk>>, ProvenFileKeyError>
+    where
+        <T::Hash as sp_core::Hasher>::Out: TryFrom<[u8; H_LENGTH]>,
+    {
+        // Convert the fingerprint from the proof to the output of the hasher.
+        let expected_root: &[u8; H_LENGTH] = &self.file_metadata.fingerprint.into();
+        let expected_root: <T::Hash as sp_core::Hasher>::Out = (*expected_root)
+            .try_into()
+            .map_err(|_| ProvenFileKeyError::FingerprintAndTrieHashMismatch)?;
+
+        // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
+        let (memdb, root) = self
+            .proof
+            .to_memory_db::<<T as TrieLayout>::Hash>(Some(&expected_root))
+            .map_err(|_| ProvenFileKeyError::TrieAndExpectedRootMismatch)?;
+
+        let trie = TrieDBBuilder::<T>::new(&memdb, &root).build();
+
+        let mut proven = Vec::new();
+
+        for key in trie
+            .key_iter()
+            .map_err(|_| ProvenFileKeyError::FailedToGetTrieKeyIterator)?
+            .into_iter()
+        {
+            let key = key.map_err(|_| ProvenFileKeyError::FailedToGetTrieKey)?;
+            let chunk_id = ChunkId::from_trie_key(&key)
+                .map_err(|e| ProvenFileKeyError::ChunkIdFromKeyError(e))?;
+            let chunk = trie
+                .get(&key)
+                .map_err(|_| ProvenFileKeyError::FailedToGetTrieValue)?
+                .ok_or_else(|| ProvenFileKeyError::KeyNotFoundInTrie)?;
+            proven.push(Leaf::new(chunk_id, chunk));
+        }
+
+        Ok(proven)
     }
 }
 
@@ -216,6 +292,96 @@ impl<const H_LENGTH: usize> From<&[u8]> for Fingerprint<H_LENGTH> {
 
 impl<const H_LENGTH: usize> AsRef<[u8]> for Fingerprint<H_LENGTH> {
     fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+/// Typed u64 representing the index of a file [`Chunk`]. Indexed from 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TypeInfo, Encode, Decode)]
+pub struct ChunkId(u64);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChunkIdError {
+    InvalidChunkId,
+}
+
+impl ChunkId {
+    pub fn new(id: u64) -> Self {
+        Self(id)
+    }
+
+    pub fn as_u64(&self) -> u64 {
+        self.0
+    }
+
+    pub fn as_trie_key(&self) -> Vec<u8> {
+        AsCompact(self.0).encode()
+    }
+
+    pub fn from_trie_key(key: &Vec<u8>) -> Result<Self, ChunkIdError> {
+        let id = Compact::<u64>::decode(&mut &key[..])
+            .map_err(|_| ChunkIdError::InvalidChunkId)?
+            .0;
+        Ok(Self(id))
+    }
+}
+
+// TODO: this is currently a placeholder in order to define Storage interface.
+/// Typed chunk of a file. This is what is stored in the leaf of the stored Merkle tree.
+pub type Chunk = Vec<u8>;
+
+/// A leaf in the in a trie.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Leaf<K, D: Debug> {
+    pub key: K,
+    pub data: D,
+}
+
+impl<K, D: Debug> Leaf<K, D> {
+    pub fn new(key: K, data: D) -> Self {
+        Self { key, data }
+    }
+}
+
+/// FileKey is the identifier for a file.
+/// Computed as the hash of the SCALE-encoded FileMetadata.
+#[derive(Encode, Decode, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FileKey<const H_LENGTH: usize>(Hash<H_LENGTH>);
+
+impl<const H_LENGTH: usize> From<Hash<H_LENGTH>> for FileKey<H_LENGTH> {
+    fn from(hash: Hash<H_LENGTH>) -> Self {
+        Self(hash)
+    }
+}
+
+impl<const H_LENGTH: usize> Into<Hash<H_LENGTH>> for FileKey<H_LENGTH> {
+    fn into(self) -> Hash<H_LENGTH> {
+        self.0
+    }
+}
+
+impl<const H_LENGTH: usize> From<&[u8]> for FileKey<H_LENGTH> {
+    fn from(bytes: &[u8]) -> Self {
+        let mut hash = [0u8; H_LENGTH];
+        hash.copy_from_slice(&bytes);
+        Self(hash)
+    }
+}
+
+impl<const H_LENGTH: usize> AsRef<[u8]> for FileKey<H_LENGTH> {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl<const H_LENGTH: usize> From<&[u8; H_LENGTH]> for FileKey<H_LENGTH> {
+    fn from(bytes: &[u8; H_LENGTH]) -> Self {
+        Self(*bytes)
+    }
+}
+
+impl<const H_LENGTH: usize> AsRef<[u8; H_LENGTH]> for FileKey<H_LENGTH> {
+    fn as_ref(&self) -> &[u8; H_LENGTH] {
         &self.0
     }
 }

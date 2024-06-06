@@ -15,6 +15,7 @@ publish = false
 workspace = true
 
 [dependencies]
+codec = { workspace = true }
 bincode = { workspace = true }
 reference-trie = { workspace = true }
 trie-db = { workspace = true }
@@ -22,5 +23,6 @@ trie-db = { workspace = true }
 sp-core = { workspace = true }
 sp-trie = { workspace = true, default-features = true }
 
+shp-traits = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }

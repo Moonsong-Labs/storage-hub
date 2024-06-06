@@ -3,8 +3,10 @@ use std::{path::Path, time::Duration};
 use anyhow::anyhow;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
+use shp_file_key_verifier::ChunkId;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
+use storage_hub_runtime::H_LENGTH;
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use shc_actors_framework::event_bus::EventHandler;
@@ -114,24 +116,28 @@ where
     T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    <T::Hash as sp_core::Hasher>::Out: TryFrom<[u8; H_LENGTH]>,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         let file_key: HasherOutT<T> = TryFrom::try_from(*event.file_key.as_ref())
             .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
 
         let proven = event
-            .chunk_with_proof
-            .proven
-            .first()
-            .ok_or_else(|| anyhow::anyhow!("Proven should contain one element; qed"))?;
+            .file_key_proof
+            .proven::<T>()
+            .map_err(|e| anyhow::anyhow!("Failed to get proven file key chunks: {:?}", e))?;
 
-        if !event.chunk_with_proof.verify() {
+        if proven.len() != 1 {
+            return Err(anyhow::anyhow!("Expected exactly one proven chunk."));
+        }
+        let proven = proven[0].clone();
+
+        if !event.file_key_proof.verify::<T>() {
             // Unvolunteer the file.
             self.unvolunteer_file(file_key).await?;
 
             return Err(anyhow::anyhow!(format!(
-                "Received invalid proof for chunk: {} (file: {:?}))",
+                "Received invalid proof for chunk: {:?} (file: {:?}))",
                 proven.key, event.file_key
             )));
         }
@@ -151,7 +157,7 @@ where
                 FileStorageWriteError::FileChunkAlreadyExists => {
                     warn!(
                         target: LOG_TARGET,
-                        "Received duplicate chunk with key: {}",
+                        "Received duplicate chunk with key: {:?}",
                         proven.key
                     );
 
@@ -171,7 +177,7 @@ where
                     self.unvolunteer_file(file_key).await?;
 
                     return Err(anyhow::anyhow!(format!(
-                        "Internal trie read/write error {:?}:{}",
+                        "Internal trie read/write error {:?}:{:?}",
                         event.file_key, proven.key
                     )));
                 }
@@ -300,21 +306,22 @@ where
         // Release the file storage read lock as soon as possible.
         drop(read_file_storage);
 
-        // Save [`FileMetadata`] of the newly stored file in the forest storage.
-        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
-        let file_key = write_forest_storage
-            .insert_metadata(&metadata)
-            .expect("Failed to insert metadata.");
-        // Since we are done writing but need to generate a proof we choose to downgrade the lock to
-        // a read lock.
-        let read_forest_storage = write_forest_storage.downgrade();
+        // Get a read lock on the forest storage to generate a proof for the file.
+        let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
         let _forest_proof = read_forest_storage
-            .generate_proof(vec![file_key])
+            .generate_proof(vec![*file_key])
             .expect("Failed to generate forest proof.");
         // Release the forest storage read lock.
         drop(read_forest_storage);
 
         // TODO: send the proof for the new file to the runtime
+
+        // TODO: make this a response to the blockchain event for confirm BSP file storage.
+        // Save [`FileMetadata`] of the newly stored file in the forest storage.
+        // let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
+        // let file_key = write_forest_storage
+        //     .insert_metadata(&metadata)
+        //     .expect("Failed to insert metadata.");
 
         // TODO: move this under an RPC call
         let file_path = Path::new("./storage/").join(
@@ -329,7 +336,7 @@ where
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         for chunk_id in 0..metadata.chunks_count() {
             let chunk = read_file_storage
-                .get_chunk(&file_key, &chunk_id)
+                .get_chunk(&file_key, &ChunkId::new(chunk_id))
                 .expect("Chunk not found in storage.");
             file.write_all(&chunk)
                 .await

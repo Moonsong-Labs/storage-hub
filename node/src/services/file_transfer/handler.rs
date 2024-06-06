@@ -27,6 +27,7 @@ use std::{
     sync::Arc,
 };
 
+use codec::{Decode, Encode};
 use futures::prelude::*;
 use futures::stream::select;
 use libp2p_identity::PeerId;
@@ -37,7 +38,8 @@ use sc_network::{
 };
 use sc_tracing::tracing::{debug, error, info, warn};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::FileKey;
+use shc_common::types::{FileKey, FileKeyProof};
+use shp_file_key_verifier::ChunkId;
 
 use crate::{
     service::ParachainNetworkService, services::file_transfer::events::RemoteUploadRequest,
@@ -81,15 +83,13 @@ impl Actor for FileTransferService {
                 FileTransferServiceCommand::UploadRequest {
                     peer_id,
                     file_key,
-                    chunk_with_proof,
+                    file_key_proof,
                     callback,
                 } => {
                     let request = schema::v1::provider::request::Request::RemoteUploadDataRequest(
                         schema::v1::provider::RemoteUploadDataRequest {
-                            file_key: bincode::serialize(&file_key)
-                                .expect("Failed to serialize file key."),
-                            file_chunk_with_proof: bincode::serialize(&chunk_with_proof)
-                                .expect("Failed to serialize file chunk proof."),
+                            file_key: file_key.encode(),
+                            file_key_proof: file_key_proof.encode(),
                         },
                     );
 
@@ -123,9 +123,8 @@ impl Actor for FileTransferService {
                 } => {
                     let request = schema::v1::provider::request::Request::RemoteDownloadDataRequest(
                         schema::v1::provider::RemoteDownloadDataRequest {
-                            file_key: bincode::serialize(&file_key)
-                                .expect("Failed to serialize file key."),
-                            file_chunk_id: chunk_id,
+                            file_key: file_key.encode(),
+                            file_chunk_id: chunk_id.as_u64(),
                         },
                     );
 
@@ -306,7 +305,7 @@ impl FileTransferService {
 
         match &request.request {
             Some(schema::v1::provider::request::Request::RemoteUploadDataRequest(r)) => {
-                let file_key = match bincode::deserialize(&r.file_key) {
+                let file_key = match FileKey::decode(&mut r.file_key.as_slice()) {
                     Ok(file_key) => file_key,
                     Err(e) => {
                         error!(
@@ -321,7 +320,7 @@ impl FileTransferService {
                         return;
                     }
                 };
-                let chunk_with_proof = match bincode::deserialize(&r.file_chunk_with_proof) {
+                let file_key_proof = match FileKeyProof::decode(&mut r.file_key_proof.as_slice()) {
                     Ok(chunk_with_proof) => chunk_with_proof,
                     Err(e) => {
                         error!(
@@ -342,7 +341,7 @@ impl FileTransferService {
                     self.emit(RemoteUploadRequest {
                         peer,
                         file_key,
-                        chunk_with_proof,
+                        file_key_proof,
                     });
 
                     let response =
@@ -375,7 +374,7 @@ impl FileTransferService {
             }
             Some(schema::v1::provider::request::Request::RemoteDownloadDataRequest(r)) => {
                 // TODO: Respond to the pending_response with some criteria of what is a valid download request.
-                let file_key = match bincode::deserialize(&r.file_key) {
+                let file_key = match FileKey::decode(&mut r.file_key.as_slice()) {
                     Ok(file_key) => file_key,
                     Err(e) => {
                         error!(
@@ -390,7 +389,7 @@ impl FileTransferService {
                         return;
                     }
                 };
-                let chunk_id = r.file_chunk_id;
+                let chunk_id = ChunkId::new(r.file_chunk_id);
                 // TODO: A request id and mapping to the pending_response is required to respond to
                 // the download request from upper layers.
                 self.emit(RemoteDownloadRequest { file_key, chunk_id });

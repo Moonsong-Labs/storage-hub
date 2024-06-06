@@ -7,6 +7,7 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_common::types::FileMetadata;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
+use shp_file_key_verifier::ChunkId;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
 
@@ -114,7 +115,7 @@ where
                     .file_storage
                     .read()
                     .await
-                    .generate_proof(&file_key, &vec![chunk_id])
+                    .generate_proof(&file_key, &vec![ChunkId::new(chunk_id)])
                     .expect("File is not in storage, or proof does not exist.");
 
                 let upload_response = self

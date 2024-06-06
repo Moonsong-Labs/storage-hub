@@ -6,6 +6,7 @@ use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
 use jsonrpsee::types::ErrorObjectOwned;
 
+use shc_common::types::ChunkId;
 use shc_common::types::FileMetadata;
 use shc_common::types::FILE_CHUNK_SIZE;
 use sp_runtime::AccountId32;
@@ -101,7 +102,7 @@ where
 
                     // Build the actual [`FileDataTrie`] by inserting each chunk into it.
                     file_data_trie
-                        .write_chunk(&chunk_id, &chunk)
+                        .write_chunk(&ChunkId::new(chunk_id), &chunk)
                         .map_err(into_rpc_error)?;
                     chunk_id += 1;
                 }
