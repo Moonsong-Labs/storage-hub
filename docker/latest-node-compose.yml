@@ -1,6 +1,7 @@
 services:
   storage-hub-node:
     image: moonsonglabs/storage-hub:latest
+    platform: linux/amd64
     ports:
       - "9944:9944"
     command:
