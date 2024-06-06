@@ -14,7 +14,6 @@
 
 export DOCKER_DEFAULT_PLATFORM=linux/amd64
 
-
 pushd ../
 
 ARCH=$(uname -m)
@@ -23,26 +22,8 @@ OS=$(uname -s)
 ## BUILD NODE BINARY
 
 if [[ "$ARCH" == "arm64" && "$OS" == "Darwin" ]]; then
-    if ! command -v zig &> /dev/null; then
-        echo "Zig is not installed. Please install Zig to proceed."
-        echo "Instructions to install can be found here: https://ziglang.org/learn/getting-started/"
-        popd
-        exit 1
-    fi
-
-    if ! cargo install --list | grep -q cargo-zigbuild; then
-        cargo install cargo-zigbuild --locked
-    fi
-
-    if ! rustup target list --installed | grep -q x86_64-unknown-linux-gnu; then
-        rustup target add x86_64-unknown-linux-gnu
-    fi
-
-    cargo zigbuild --target x86_64-unknown-linux-gnu --release
-
     BINARY_PATH="target/x86_64-unknown-linux-gnu/release/storage-hub-node"
 else
-    cargo build --release
     BINARY_PATH="target/release/storage-hub-node"
 fi
 
