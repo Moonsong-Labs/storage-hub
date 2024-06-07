@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use codec::{Decode, Encode};
-pub use shp_file_key_verifier::{Chunk, ChunkId, Leaf};
+pub use shp_file_key_verifier::types::{Chunk, ChunkId, Leaf};
 use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
 use sp_trie::CompactProof;
@@ -19,11 +19,11 @@ pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 pub type FileKeyVerifier = <Runtime as pallet_proofs_dealer::Config>::KeyVerifier;
 pub type FileKeyProof = <FileKeyVerifier as CommitmentVerifier>::Proof;
 
-pub type Hash = shp_file_key_verifier::Hash<H_LENGTH>;
-pub type Fingerprint = shp_file_key_verifier::Fingerprint<H_LENGTH>;
+pub type Hash = shp_file_key_verifier::types::Hash<H_LENGTH>;
+pub type Fingerprint = shp_file_key_verifier::types::Fingerprint<H_LENGTH>;
 pub type FileMetadata =
-    shp_file_key_verifier::FileMetadata<H_LENGTH, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES>;
-pub type FileKey = shp_file_key_verifier::FileKey<H_LENGTH>;
+    shp_file_key_verifier::types::FileMetadata<H_LENGTH, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES>;
+pub type FileKey = shp_file_key_verifier::types::FileKey<H_LENGTH>;
 
 /// Proving either the exact key or the neighbour keys of the challenged key.
 pub enum Proven<K, D: Debug> {

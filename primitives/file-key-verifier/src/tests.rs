@@ -10,8 +10,10 @@ use sp_trie::{
 };
 use trie_db::{Hasher, Trie, TrieIterator};
 
+use crate::types::FileMetadata;
+use crate::types::Fingerprint;
 use crate::ChunkId;
-use crate::{FileKeyProof, FileKeyVerifier, FileMetadata, Fingerprint};
+use crate::{FileKeyProof, FileKeyVerifier};
 
 /// The hash type of trie node keys
 type HashT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;

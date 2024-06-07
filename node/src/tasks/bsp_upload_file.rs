@@ -3,7 +3,7 @@ use std::{path::Path, time::Duration};
 use anyhow::anyhow;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use shp_file_key_verifier::ChunkId;
+use shp_file_key_verifier::types::ChunkId;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
 use storage_hub_runtime::H_LENGTH;
@@ -122,25 +122,30 @@ where
         let file_key: HasherOutT<T> = TryFrom::try_from(*event.file_key.as_ref())
             .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
 
-        let proven = event
-            .file_key_proof
-            .proven::<T>()
-            .map_err(|e| anyhow::anyhow!("Failed to get proven file key chunks: {:?}", e))?;
+        let proven = match event.file_key_proof.proven::<T>() {
+            Ok(proven) => {
+                if proven.len() != 1 {
+                    Err(anyhow::anyhow!("Expected exactly one proven chunk."))
+                } else {
+                    Ok(proven[0].clone())
+                }
+            }
+            Err(e) => Err(anyhow::anyhow!(
+                "Failed to verify and get proven file key chunks: {:?}",
+                e
+            )),
+        };
 
-        if proven.len() != 1 {
-            return Err(anyhow::anyhow!("Expected exactly one proven chunk."));
-        }
-        let proven = proven[0].clone();
+        let proven = match proven {
+            Ok(proven) => proven,
+            Err(e) => {
+                warn!(target: LOG_TARGET, "{}", e);
 
-        if !event.file_key_proof.verify::<T>() {
-            // Unvolunteer the file.
-            self.unvolunteer_file(file_key).await?;
-
-            return Err(anyhow::anyhow!(format!(
-                "Received invalid proof for chunk: {:?} (file: {:?}))",
-                proven.key, event.file_key
-            )));
-        }
+                // Unvolunteer the file.
+                self.unvolunteer_file(file_key).await?;
+                return Err(e);
+            }
+        };
 
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
         let write_chunk_result =
@@ -271,6 +276,8 @@ where
     }
 
     async fn unvolunteer_file(&self, file_key: HasherOutT<T>) -> anyhow::Result<()> {
+        warn!(target: LOG_TARGET, "Unvolunteering file {:?}", file_key);
+
         // Unregister the file from the file transfer service.
         // The error is ignored, as the file might already be unregistered.
         let _ = self
