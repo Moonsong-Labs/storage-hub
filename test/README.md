@@ -73,7 +73,7 @@ pnpm zombie:setup:native
 pnpm zombie:test suites/zombie
 ```
 
-### ZombieNet 
+### ZombieNet
 
 This is the networking testing suite for topology and network stability. It is a suite of tests that run on a network of nodes, and is used to verify the network's stability and the nodes' ability to communicate with each other.
 
@@ -121,10 +121,6 @@ To generate new type interfaces run the following in `/test`:
 ```sh
 pnpm update-types
 ```
-
-> [!IMPORTANT]  
-> This requires that you have a built network bin at `target/release`. If you are on mac and have cross built onto x86, you will need to rebuild in native again (sorry, WIP).
-
 
 ## Troubleshooting
 
