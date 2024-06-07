@@ -45,13 +45,7 @@ async function main() {
     throw new Error("File not found");
   }
 
-  nodeProcess = spawn(nodePath, [
-    "--dev",
-    "--no-hardware-benchmarks",
-    "--no-telemetry",
-    "--no-prometheus",
-    "--rpc-cors=all",
-  ]);
+  nodeProcess = spawn("docker", ["compose", "-f=../docker/local-node-compose.yml", "up"]);
 
   const onProcessExit = () => {
     nodeProcess?.kill();

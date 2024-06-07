@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@types/node':
+        specifier: 20.14.2
+        version: 20.14.2
       typescript:
         specifier: 5.4.5
         version: 5.4.5
@@ -36,9 +39,6 @@ importers:
       '@polkadot/types-codec':
         specifier: 11.2.1
         version: 11.2.1
-      '@types/node':
-        specifier: 20.12.13
-        version: 20.12.13
       tsx:
         specifier: 4.11.0
         version: 4.11.0
@@ -688,6 +688,9 @@ packages:
 
   '@types/node@20.12.13':
     resolution: {integrity: sha512-gBGeanV41c1L171rR7wjbMiEpEI/l5XFQdLLfhr/REwpgDy/4U8y89+i8kRiLzDyZdOkXh+cRaTetUnCYutoXA==}
+
+  '@types/node@20.14.2':
+    resolution: {integrity: sha512-xyu6WAMVwv6AKFLB+e/7ySZVr/0zLCzOa7rSpq6jNwpqOrUbcACDWC+53d4n2QHOnDou0fbIsg8wZu/sxrnI4Q==}
 
   '@types/ssh2-streams@0.1.12':
     resolution: {integrity: sha512-Sy8tpEmCce4Tq0oSOYdfqaBpA3hDM8SoxoFh5vzFsu2oL+znzGz8oVWW7xb4K920yYMUY+PIG31qZnFMfPWNCg==}
@@ -2599,17 +2602,17 @@ snapshots:
 
   '@types/bn.js@5.1.5':
     dependencies:
-      '@types/node': 20.12.13
+      '@types/node': 20.14.2
 
   '@types/docker-modem@3.0.6':
     dependencies:
-      '@types/node': 20.12.13
+      '@types/node': 20.14.2
       '@types/ssh2': 1.15.0
 
   '@types/dockerode@3.3.29':
     dependencies:
       '@types/docker-modem': 3.0.6
-      '@types/node': 20.12.13
+      '@types/node': 20.14.2
       '@types/ssh2': 1.15.0
 
   '@types/inquirer@9.0.7':
@@ -2631,13 +2634,17 @@ snapshots:
     dependencies:
       undici-types: 5.26.5
 
+  '@types/node@20.14.2':
+    dependencies:
+      undici-types: 5.26.5
+
   '@types/ssh2-streams@0.1.12':
     dependencies:
-      '@types/node': 20.12.13
+      '@types/node': 20.14.2
 
   '@types/ssh2@0.5.52':
     dependencies:
-      '@types/node': 20.12.13
+      '@types/node': 20.14.2
       '@types/ssh2-streams': 0.1.12
 
   '@types/ssh2@1.15.0':
@@ -2646,7 +2653,7 @@ snapshots:
 
   '@types/through@0.0.33':
     dependencies:
-      '@types/node': 20.12.13
+      '@types/node': 20.14.2
 
   '@unique-nft/sr25519@0.0.2':
     dependencies:
@@ -3659,7 +3666,7 @@ snapshots:
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.0
       '@types/long': 4.0.2
-      '@types/node': 20.12.13
+      '@types/node': 20.14.2
       long: 4.0.0
 
   psl@1.9.0: {}
