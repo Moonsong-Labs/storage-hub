@@ -1,6 +1,6 @@
 [package]
-name = "pallet-payment-streams"
-description = "FRAME pallet that allows for the creation and management of payment streams."
+name = "pallet-bucket-nfts"
+description = "Pallet for managing non-fungible tokens (NFTs) in a bucket."
 version = "0.1.0"
 homepage = { workspace = true }
 license = { workspace = true }
@@ -18,29 +18,32 @@ targets = ["x86_64-unknown-linux-gnu"]
 codec = { workspace = true }
 scale-info = { workspace = true }
 
-# Local
-shp-traits = { workspace = true }
-
 # Substrate
 frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 
+pallet-nfts = { workspace = true }
+sp-core = { workspace = true }
 sp-runtime = { workspace = true }
+sp-std = { workspace = true }
+
+# Local
+shp-traits = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
 
-# Local
+pallet-file-system = { workspace = true }
+pallet-proofs-dealer = { workspace = true }
 pallet-storage-providers = { workspace = true }
 
 # Substrate
-sp-core = { workspace = true }
 sp-io = { workspace = true }
+sp-keyring = { workspace = true }
 
 # Frame
 pallet-balances = { workspace = true, features = ["std"] }
-pallet-nfts = { workspace = true }
 
 [features]
 default = ["std"]
@@ -48,6 +51,9 @@ runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"frame-support/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
+	"pallet-file-system/runtime-benchmarks",
+	"pallet-proofs-dealer/runtime-benchmarks",
+	"pallet-storage-providers/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
 std = [
@@ -55,6 +61,9 @@ std = [
 	"frame-benchmarking?/std",
 	"frame-support/std",
 	"frame-system/std",
+	"pallet-file-system/std",
+	"pallet-proofs-dealer/std",
+	"pallet-storage-providers/std",
 	"scale-info/std",
 	"sp-core/std",
 	"sp-io/std",
@@ -63,5 +72,8 @@ std = [
 try-runtime = [
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
+	"pallet-file-system/try-runtime",
+	"pallet-proofs-dealer/try-runtime",
+	"pallet-storage-providers/try-runtime",
 	"sp-runtime/try-runtime",
 ]

@@ -1,17 +1,17 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::{Decode, Encode};
 use frame_support::sp_runtime::DispatchError;
 use num_bigint::BigUint;
-use scale_info::TypeInfo;
-use serde::{Deserialize, Serialize};
-use shp_traits::{AsCompact, CommitmentVerifier};
+use shp_traits::CommitmentVerifier;
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
-use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
+use sp_trie::{TrieDBBuilder, TrieLayout};
 use trie_db::Trie;
+use types::{ChunkId, FileKeyProof};
 
 #[cfg(test)]
 mod tests;
+
+pub mod types;
 
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment
 /// is a Merkle Patricia Trie root hash and the response to a challenge is given
@@ -26,29 +26,6 @@ pub struct FileKeyVerifier<
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
     pub _phantom: core::marker::PhantomData<T>,
-}
-#[derive(Clone, Debug, PartialEq, Eq, TypeInfo, Encode, Decode)]
-pub struct FileKeyProof<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
-{
-    pub file_metadata: FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>,
-    pub proof: CompactProof,
-}
-
-impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
-    FileKeyProof<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
-{
-    pub fn new(
-        owner: Vec<u8>,
-        location: Vec<u8>,
-        size: u64,
-        fingerprint: Fingerprint<H_LENGTH>,
-        proof: CompactProof,
-    ) -> Self {
-        Self {
-            file_metadata: FileMetadata::new(owner, location, size, fingerprint),
-            proof,
-        }
-    }
 }
 
 /// Implement the `CommitmentVerifier` trait for the `FileKeyVerifier` struct.
@@ -127,13 +104,13 @@ where
             // Calculate the modulo of the challenge with the number of chunks in the file.
             // The challenge is a big endian 32 byte array.
             let challenged_chunk = BigUint::from_bytes_be(challenge.as_ref()) % chunks;
-            let challenged_chunk: u64 = challenged_chunk.try_into().map_err(|_| {
+            let challenged_chunk: ChunkId = ChunkId::new(challenged_chunk.try_into().map_err(|_| {
                 "This is impossible. The modulo of a number with a u64 should always fit in a u64."
-            })?;
+            })?);
 
             // Check that the chunk is in the proof.
             let chunk = trie
-                .get(&AsCompact(challenged_chunk).encode())
+                .get(&challenged_chunk.as_trie_key())
                 .map_err(|_| "The proof is invalid. The challenge does not exist in the trie.")?;
 
             // The chunk should be Some(leaf) for the proof to be valid.
@@ -148,114 +125,5 @@ where
         }
 
         return Ok(Vec::from_iter(proven_challenges));
-    }
-}
-
-/// A hash type of arbitrary length `H_LENGTH`.
-pub type Hash<const H_LENGTH: usize> = [u8; H_LENGTH];
-
-/// A fingerprint is something that uniquely identifies a file by its content.
-/// In the context of this verifier, a fingerprint is the root hash of a Merkle Patricia Trie
-/// of the merklised file.
-#[derive(Encode, Decode, Clone, Copy, Debug, PartialEq, Eq, TypeInfo)]
-pub struct Fingerprint<const H_LENGTH: usize>(Hash<H_LENGTH>);
-
-impl<const H_LENGTH: usize> Default for Fingerprint<H_LENGTH> {
-    fn default() -> Self {
-        Self([0u8; H_LENGTH])
-    }
-}
-
-impl<const H_LENGTH: usize> Serialize for Fingerprint<H_LENGTH> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        self.0.to_vec().serialize(serializer)
-    }
-}
-
-impl<'de, const H_LENGTH: usize> Deserialize<'de> for Fingerprint<H_LENGTH> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::de::Deserializer<'de>,
-    {
-        let vec = Vec::<u8>::deserialize(deserializer)?;
-        let mut hash = [0u8; H_LENGTH];
-        hash.copy_from_slice(&vec);
-        Ok(Self(hash))
-    }
-}
-
-impl<const H_LENGTH: usize> Fingerprint<H_LENGTH> {
-    /// Returns the hash of the fingerprint.
-    pub fn as_hash(&self) -> Hash<H_LENGTH> {
-        self.0
-    }
-}
-
-impl<const H_LENGTH: usize> From<Hash<H_LENGTH>> for Fingerprint<H_LENGTH> {
-    fn from(hash: Hash<H_LENGTH>) -> Self {
-        Self(hash)
-    }
-}
-
-impl<const H_LENGTH: usize> Into<Hash<H_LENGTH>> for Fingerprint<H_LENGTH> {
-    fn into(self) -> Hash<H_LENGTH> {
-        self.0
-    }
-}
-
-impl<const H_LENGTH: usize> From<&[u8]> for Fingerprint<H_LENGTH> {
-    fn from(bytes: &[u8]) -> Self {
-        let mut hash = [0u8; H_LENGTH];
-        hash.copy_from_slice(&bytes);
-        Self(hash)
-    }
-}
-
-impl<const H_LENGTH: usize> AsRef<[u8]> for Fingerprint<H_LENGTH> {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, TypeInfo, Encode, Decode, Serialize, Deserialize)]
-pub struct FileMetadata<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
-{
-    pub owner: Vec<u8>,
-    pub location: Vec<u8>,
-    #[codec(compact)]
-    pub size: u64,
-    pub fingerprint: Fingerprint<H_LENGTH>,
-}
-
-impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
-    FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
-{
-    pub fn new(
-        owner: Vec<u8>,
-        location: Vec<u8>,
-        size: u64,
-        fingerprint: Fingerprint<H_LENGTH>,
-    ) -> Self {
-        Self {
-            owner,
-            location,
-            size,
-            fingerprint,
-        }
-    }
-
-    pub fn file_key<T: sp_core::Hasher>(&self) -> T::Out {
-        T::hash(self.encode().as_slice())
-    }
-
-    pub fn chunks_to_check(&self) -> u64 {
-        self.size / SIZE_TO_CHALLENGES + (self.size % SIZE_TO_CHALLENGES != 0) as u64
-    }
-
-    pub fn chunks_count(&self) -> u64 {
-        self.size / CHUNK_SIZE + (self.size % CHUNK_SIZE != 0) as u64
     }
 }

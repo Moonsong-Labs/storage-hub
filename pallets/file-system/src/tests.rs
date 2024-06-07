@@ -1,24 +1,481 @@
 use crate::{
     mock::*,
     types::{
-        FileLocation, PeerIds, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
-        TargetBspsRequired,
+        FileLocation, PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
+        StorageRequestMetadata, TargetBspsRequired,
     },
     Config, Error, Event, StorageRequestExpirations,
 };
 use frame_support::{
     assert_noop, assert_ok,
     dispatch::DispatchResultWithPostInfo,
-    traits::{Hooks, OriginTrait},
+    traits::{nonfungibles_v2::Destroy, Hooks, OriginTrait},
     weights::Weight,
 };
-use shp_traits::SubscribeProvidersInterface;
-use sp_core::{ByteArray, H256};
+use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface};
+use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
-    traits::{BlakeTwo256, Get, Hash, Zero},
+    traits::{BlakeTwo256, Get, Zero},
     BoundedVec, FixedU128,
 };
+
+mod create_bucket_tests {
+    use super::*;
+
+    #[test]
+    fn create_private_bucket_success() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let private = true;
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::create_bucket(
+                origin,
+                msp_id,
+                name.clone(),
+                private
+            ));
+
+            // Check if collection was created
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::NewBucket {
+                    who: owner,
+                    msp_id,
+                    bucket_id,
+                    name,
+                    collection_id: Some(0),
+                    private,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn create_public_bucket_success() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let private = false;
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::create_bucket(
+                origin,
+                msp_id,
+                name.clone(),
+                private
+            ));
+
+            // Check that the bucket does not have a corresponding collection
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_none()
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::NewBucket {
+                    who: owner,
+                    msp_id,
+                    bucket_id,
+                    name,
+                    collection_id: None,
+                    private,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn create_bucket_msp_not_provider_fail() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+
+            assert_noop!(
+                FileSystem::create_bucket(origin, H256::from_slice(&msp.as_slice()), name, true),
+                Error::<Test>::NotAMsp
+            );
+        });
+    }
+}
+
+mod update_bucket_privacy_tests {
+    use super::*;
+
+    #[test]
+    fn update_bucket_privacy_success() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let private = true;
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::create_bucket(
+                origin.clone(),
+                msp_id,
+                name.clone(),
+                private
+            ));
+
+            // Check if collection was created
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::NewBucket {
+                    who: owner.clone(),
+                    msp_id,
+                    bucket_id,
+                    name,
+                    collection_id: Some(0),
+                    private,
+                }
+                .into(),
+            );
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::update_bucket_privacy(origin, bucket_id, false));
+
+            // Check that the bucket still has a corresponding collection
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::BucketPrivacyUpdated {
+                    who: owner,
+                    bucket_id,
+                    collection_id: Some(0),
+                    private: false,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn update_bucket_privacy_bucket_not_found_fail() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+
+            add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            assert_noop!(
+                FileSystem::update_bucket_privacy(origin, bucket_id, false),
+                pallet_storage_providers::Error::<Test>::BucketNotFound
+            );
+        });
+    }
+
+    #[test]
+    fn update_bucket_privacy_collection_remains_after_many_privacy_updates_success() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let private = true;
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::create_bucket(
+                origin.clone(),
+                msp_id,
+                name.clone(),
+                private
+            ));
+
+            // Check if collection was created
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::NewBucket {
+                    who: owner.clone(),
+                    msp_id,
+                    bucket_id,
+                    name,
+                    collection_id: Some(0),
+                    private,
+                }
+                .into(),
+            );
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::update_bucket_privacy(
+                origin.clone(),
+                bucket_id,
+                false
+            ));
+
+            // Check that the bucket still has a corresponding collection
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::BucketPrivacyUpdated {
+                    who: owner.clone(),
+                    bucket_id,
+                    collection_id: Some(0),
+                    private: false,
+                }
+                .into(),
+            );
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::update_bucket_privacy(origin, bucket_id, true));
+
+            // Check that the bucket still has a corresponding collection
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::BucketPrivacyUpdated {
+                    who: owner,
+                    bucket_id,
+                    collection_id: Some(0),
+                    private: true,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn update_bucket_privacy_delete_collection_before_going_from_public_to_private_success() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let private = true;
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::create_bucket(
+                origin.clone(),
+                msp_id,
+                name.clone(),
+                private
+            ));
+
+            // Check that the bucket does not have a corresponding collection
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::NewBucket {
+                    who: owner.clone(),
+                    msp_id,
+                    bucket_id,
+                    name,
+                    collection_id: Some(0),
+                    private,
+                }
+                .into(),
+            );
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::update_bucket_privacy(
+                origin.clone(),
+                bucket_id,
+                false
+            ));
+
+            // Check that the bucket still has a corresponding collection
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            let collection_id =
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .expect("Collection ID should exist");
+
+            let w = Nfts::get_destroy_witness(&collection_id).unwrap();
+
+            // Delete collection before going from public to private bucket
+            assert_ok!(Nfts::destroy(origin.clone(), collection_id, w));
+
+            // Update bucket privacy from public to private
+            assert_ok!(FileSystem::update_bucket_privacy(origin, bucket_id, true));
+
+            // Check that the bucket still has a corresponding collection
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            // Assert that the correct event was deposited and that a new collection with index 1 has been created
+            System::assert_last_event(
+                Event::BucketPrivacyUpdated {
+                    who: owner,
+                    bucket_id,
+                    collection_id: Some(1),
+                    private: true,
+                }
+                .into(),
+            );
+        });
+    }
+}
+
+mod create_and_associate_collection_with_bucket_tests {
+    use super::*;
+
+    #[test]
+    fn create_and_associate_collection_with_bucket_success() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let private = true;
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            // Dispatch a signed extrinsic.
+            assert_ok!(FileSystem::create_bucket(
+                origin.clone(),
+                msp_id,
+                name.clone(),
+                private
+            ));
+
+            // Check if collection was created
+            assert!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .is_some()
+            );
+
+            let collection_id =
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .expect("Collection ID should exist");
+
+            assert_ok!(FileSystem::create_and_associate_collection_with_bucket(
+                origin, bucket_id
+            ));
+
+            // Check if collection was associated with the bucket
+            assert_ne!(
+                <Test as crate::Config>::Providers::get_read_access_group_id_of_bucket(&bucket_id)
+                    .unwrap()
+                    .expect("Collection ID should exist"),
+                collection_id
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::NewCollectionAndAssociation {
+                    who: owner,
+                    bucket_id,
+                    collection_id: 1, // Collection ID should be incremented from 0
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn create_and_associate_collection_with_bucket_bucket_not_found_fail() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+
+            add_msp_to_provider_storage(&msp);
+
+            let bucket_id =
+                <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+
+            assert_noop!(
+                FileSystem::create_and_associate_collection_with_bucket(origin, bucket_id),
+                pallet_storage_providers::Error::<Test>::BucketNotFound
+            );
+        });
+    }
+}
 
 #[test]
 fn request_storage_success() {
@@ -392,7 +849,13 @@ fn bsp_volunteer_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+        let bsp_id =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                bsp_account_id,
+            )
+            .unwrap();
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
@@ -403,7 +866,7 @@ fn bsp_volunteer_success() {
 
         // Assert that the RequestStorageBsps has the correct value
         assert_eq!(
-            FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone())
+            FileSystem::storage_request_bsps(location.clone(), bsp_id)
                 .expect("BSP should exist in storage"),
             StorageRequestBspsMetadata::<Test> {
                 confirmed: false,
@@ -414,7 +877,7 @@ fn bsp_volunteer_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::AcceptedBspVolunteer {
-                who: bsp_account_id,
+                bsp_id,
                 location,
                 fingerprint,
                 multiaddresses: create_sp_multiaddresses(),
@@ -557,7 +1020,13 @@ fn bsp_confirm_storing_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+        let bsp_id =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                bsp_account_id,
+            )
+            .unwrap();
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
@@ -598,7 +1067,7 @@ fn bsp_confirm_storing_success() {
 
         // Assert that the RequestStorageBsps was updated
         assert_eq!(
-            FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone())
+            FileSystem::storage_request_bsps(location.clone(), bsp_id)
                 .expect("BSP should exist in storage"),
             StorageRequestBspsMetadata::<Test> {
                 confirmed: true,
@@ -607,13 +1076,7 @@ fn bsp_confirm_storing_success() {
         );
 
         // Assert that the correct event was deposited
-        System::assert_last_event(
-            Event::BspConfirmedStoring {
-                who: bsp_account_id,
-                location,
-            }
-            .into(),
-        );
+        System::assert_last_event(Event::BspConfirmedStoring { bsp_id, location }.into());
     });
 }
 
@@ -838,7 +1301,13 @@ fn bsp_stop_storing_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+        let bsp_id =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                bsp_account_id,
+            )
+            .unwrap();
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
@@ -862,7 +1331,7 @@ fn bsp_stop_storing_success() {
 
         // Assert that the RequestStorageBsps now contains the BSP under the location
         assert_eq!(
-            FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone())
+            FileSystem::storage_request_bsps(location.clone(), bsp_id)
                 .expect("BSP should exist in storage"),
             StorageRequestBspsMetadata::<Test> {
                 confirmed: true,
@@ -899,9 +1368,7 @@ fn bsp_stop_storing_success() {
         ));
 
         // Assert that the RequestStorageBsps has the correct value
-        assert!(
-            FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone()).is_none()
-        );
+        assert!(FileSystem::storage_request_bsps(location.clone(), bsp_id).is_none());
 
         // Assert that the storage was updated
         assert_eq!(
@@ -923,7 +1390,7 @@ fn bsp_stop_storing_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
-                bsp: bsp_account_id,
+                bsp_id,
                 file_key,
                 owner: owner_account_id,
                 location,
@@ -959,7 +1426,13 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+        let bsp_id =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                bsp_account_id,
+            )
+            .unwrap();
 
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(
@@ -993,9 +1466,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         ));
 
         // Assert that the RequestStorageBsps has the correct value
-        assert!(
-            FileSystem::storage_request_bsps(location.clone(), bsp_account_id.clone()).is_none()
-        );
+        assert!(FileSystem::storage_request_bsps(location.clone(), bsp_id).is_none());
 
         // Assert that the storage was updated
         assert_eq!(
@@ -1017,7 +1488,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
-                bsp: bsp_account_id,
+                bsp_id,
                 file_key,
                 owner: owner_account_id,
                 location,
@@ -1054,7 +1525,13 @@ fn bsp_stop_storing_not_volunteered_success() {
         ));
 
         // Sign up account as a Backup Storage Provider
-        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+        let bsp_id =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                bsp_account_id,
+            )
+            .unwrap();
 
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
@@ -1090,7 +1567,7 @@ fn bsp_stop_storing_not_volunteered_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
-                bsp: bsp_account_id,
+                bsp_id,
                 file_key,
                 owner: owner_account_id,
                 location,
@@ -1111,6 +1588,15 @@ fn bsp_stop_storing_no_storage_request_success() {
         let size = 4;
         let fingerprint = H256::zero();
 
+        // Sign up account as a Backup Storage Provider
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
+
+        let bsp_id =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                bsp_account_id,
+            )
+            .unwrap();
+
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
             bsp_signed.clone(),
@@ -1126,7 +1612,7 @@ fn bsp_stop_storing_no_storage_request_success() {
         assert_eq!(
             FileSystem::storage_requests(location.clone()),
             Some(StorageRequestMetadata {
-                requested_at: 1,
+                requested_at: 5,
                 owner: owner_account_id.clone(),
                 fingerprint,
                 size,
@@ -1142,7 +1628,7 @@ fn bsp_stop_storing_no_storage_request_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
-                bsp: bsp_account_id,
+                bsp_id,
                 file_key,
                 owner: owner_account_id,
                 location,
@@ -1174,7 +1660,7 @@ fn subscribe_bsp_sign_up_decreases_threshold_success() {
         let initial_threshold = compute_set_get_initial_threshold();
 
         // Simulate the threshold decrease due to a new BSP sign up
-        FileSystem::subscribe_bsp_sign_up(&Keyring::Bob.to_account_id())
+        FileSystem::subscribe_bsp_sign_up(&H256::from_slice(&[1; 32]))
             .expect("BSP sign up should be successful");
 
         let updated_threshold = FileSystem::bsps_assignment_threshold();
@@ -1193,7 +1679,7 @@ fn subscribe_bsp_sign_off_increases_threshold_success() {
         let initial_threshold = compute_set_get_initial_threshold();
 
         // Simulate the threshold increase due to a new BSP sign off
-        FileSystem::subscribe_bsp_sign_off(&Keyring::Bob.to_account_id())
+        FileSystem::subscribe_bsp_sign_off(&H256::from_slice(&[1; 32]))
             .expect("BSP sign off should be successful");
 
         let updated_threshold = FileSystem::bsps_assignment_threshold();
@@ -1214,7 +1700,7 @@ fn threshold_does_not_exceed_asymptote_success() {
         );
 
         // Simulate the threshold decrease due to a new BSP sign up
-        FileSystem::subscribe_bsp_sign_up(&Keyring::Bob.to_account_id())
+        FileSystem::subscribe_bsp_sign_up(&H256::from_slice(&[1; 32]))
             .expect("BSP sign up should be successful");
 
         // Verify that the threshold does is equal to the asymptote
@@ -1264,11 +1750,8 @@ fn create_sp_multiaddresses(
     multiaddresses
 }
 
-fn add_msp_to_provider_storage(
-    msp: &sp_runtime::AccountId32,
-) -> <<Test as frame_system::Config>::Hashing as sp_core::Hasher>::Out {
-    let msp_hash =
-        <<Test as frame_system::Config>::Hashing as sp_core::Hasher>::hash(msp.as_slice());
+fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<Test> {
+    let msp_hash = <<Test as frame_system::Config>::Hashing as Hasher>::hash(msp.as_slice());
 
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
         buckets: BoundedVec::default(),

@@ -270,6 +270,10 @@ construct_runtime!(
         ProofsDealer: pallet_proofs_dealer = 42,
         Randomness: pallet_randomness = 43,
         PaymentStreams: pallet_payment_streams = 44,
+        BucketNfts: pallet_bucket_nfts = 45,
+
+        // Miscellaneous
+        Nfts: pallet_nfts = 50,
     }
 );
 

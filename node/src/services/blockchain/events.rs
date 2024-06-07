@@ -1,6 +1,7 @@
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::Fingerprint;
+use sp_core::H256;
 use sp_runtime::AccountId32;
 
 type StorageData = pallet_file_system::types::StorageData<storage_hub_runtime::Runtime>;
@@ -37,7 +38,7 @@ impl EventBusMessage for NewStorageRequest {}
 // TODO: use proper types
 #[derive(Debug, Clone)]
 pub struct AcceptedBspVolunteer {
-    pub who: AccountId32,
+    pub bsp_id: H256,
     pub location: FileLocation,
     pub fingerprint: Fingerprint,
     pub multiaddresses: Vec<Multiaddr>,

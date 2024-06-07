@@ -7,15 +7,16 @@ use crate::{
     Error, Event,
 };
 
-use frame_support::pallet_prelude::Weight;
-use frame_support::traits::{
-    fungible::{InspectHold, Mutate},
-    Get, OnFinalize, OnIdle, OnInitialize,
-};
 use frame_support::{assert_noop, assert_ok, dispatch::Pays, BoundedVec};
+use frame_support::{
+    pallet_prelude::Weight,
+    traits::{
+        fungible::{InspectHold, Mutate},
+        Get, OnFinalize, OnIdle, OnInitialize,
+    },
+};
 use frame_system::pallet_prelude::BlockNumberFor;
-use shp_traits::MutateProvidersInterface;
-use shp_traits::ProvidersInterface;
+use shp_traits::{MutateProvidersInterface, ProvidersInterface, ReadProvidersInterface};
 
 type NativeBalance = <Test as crate::Config>::NativeBalance;
 type AccountId = <Test as frame_system::Config>::AccountId;
@@ -2829,7 +2830,7 @@ mod sign_off {
             fn msp_sign_off_fails_when_it_still_has_used_storage() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
-                    let alice: AccountId = 0;
+                    let alice = 0;
                     let storage_amount: StorageData<Test> = 100;
                     let (deposit_amount, _alice_msp) =
                         register_account_as_msp(alice, storage_amount);
@@ -2854,10 +2855,14 @@ mod sign_off {
                         0
                     );
 
+                    let alice_msp_id =
+                        crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
                     // Add used storage to Alice (simulating that she has accepted to store a file)
                     assert_ok!(
                         <StorageProviders as MutateProvidersInterface>::increase_data_used(
-                            &alice, 10
+                            &alice_msp_id,
+                            10
                         )
                     );
 
@@ -2931,7 +2936,8 @@ mod sign_off {
                     // Add used storage to Alice (simulating that she has accepted to store a file)
                     assert_ok!(
                         <StorageProviders as MutateProvidersInterface>::increase_data_used(
-                            &alice, 10
+                            &alice_sp_id,
+                            10
                         )
                     );
 
@@ -3554,13 +3560,17 @@ mod change_capacity {
                     let alice: AccountId = 0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let decreased_storage_amount: StorageData<Test> = 50;
-                    let (_old_deposit_amount, _alice_msp) =
+                    let (_old_deposit_amount, _alice_sp_id) =
                         register_account_as_msp(alice, old_storage_amount);
+
+                    let alice_msp_id =
+                        crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                     // Change used storage to be more than the new capacity
                     assert_ok!(
                         <StorageProviders as MutateProvidersInterface>::increase_data_used(
-                            &alice, 60
+                            &alice_msp_id,
+                            60
                         )
                     );
 
@@ -3811,7 +3821,7 @@ mod change_capacity {
                     let alice: AccountId = 0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let decreased_storage_amount: StorageData<Test> = 50;
-                    let (_old_deposit_amount, _alice_bsp) =
+                    let (_old_deposit_amount, _alice_bsp_id) =
                         register_account_as_bsp(alice, old_storage_amount);
 
                     // Check the total capacity of the network (BSPs)
@@ -3820,10 +3830,14 @@ mod change_capacity {
                         old_storage_amount
                     );
 
+                    let alice_bsp_id =
+                        crate::AccountIdToBackupStorageProviderId::<Test>::get(&alice).unwrap();
+
                     // Change used storage to be more than the new capacity
                     assert_ok!(
                         <StorageProviders as MutateProvidersInterface>::increase_data_used(
-                            &alice, 60
+                            &alice_bsp_id,
+                            60
                         )
                     );
 
@@ -3903,6 +3917,46 @@ mod change_capacity {
                     );
                 });
             }
+        }
+    }
+}
+
+mod change_bucket {
+    use super::*;
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn change_bucket_fails_when_bucket_id_already_exists() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = 1;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice
+                assert_ok!(StorageProviders::add_bucket(
+                    msp_id,
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None
+                ));
+
+                // Try to change the bucket for Alice with the same bucket id
+                assert_noop!(
+                    StorageProviders::add_bucket(msp_id, bucket_owner, bucket_id, false, None),
+                    Error::<Test>::BucketAlreadyExists
+                );
+            });
         }
     }
 }

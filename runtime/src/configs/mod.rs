@@ -32,15 +32,19 @@ use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
     parameter_types,
-    traits::{ConstBool, ConstU32, ConstU64, ConstU8, EitherOfDiverse, TransformOrigin},
+    traits::{
+        AsEnsureOriginWithArg, ConstBool, ConstU32, ConstU64, ConstU8, EitherOfDiverse,
+        TransformOrigin,
+    },
     weights::{ConstantMultiplier, Weight},
     PalletId,
 };
 use frame_system::{
     limits::{BlockLength, BlockWeights},
     pallet_prelude::BlockNumberFor,
-    EnsureRoot,
+    EnsureRoot, EnsureSigned,
 };
+use pallet_nfts::PalletFeatures;
 use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
@@ -52,7 +56,7 @@ use shp_traits::{CommitmentVerifier, MaybeDebug};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, Convert},
+    traits::{BlakeTwo256, Convert, Verify},
     AccountId32, DispatchError, FixedU128, Perbill, SaturatedConversion,
 };
 use sp_std::vec::Vec;
@@ -61,28 +65,19 @@ use sp_trie::LayoutV1;
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
 
-use crate::{ParachainInfo, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES};
-
-use self::currency::UNITS;
-
 // Local module imports
 use super::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
-    AccountId, Aura, Balance, Balances, Block, BlockNumber, CollatorSelection, FileSystem, Hash,
-    MessageQueue, Nonce, PalletInfo, ParachainSystem, ProofsDealer, Providers, Runtime,
-    RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
-    Session, SessionKeys, System, WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO,
-    BLOCK_PROCESSING_VELOCITY, EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT,
-    MINUTES, NORMAL_DISPATCH_RATIO, RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION,
-    UNINCLUDED_SEGMENT_CAPACITY, VERSION,
+    AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection,
+    FileSystem, Hash, MessageQueue, Nfts, Nonce, PalletInfo, ParachainSystem, ProofsDealer,
+    Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason,
+    RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System, WeightToFee, XcmpQueue,
+    AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS, EXISTENTIAL_DEPOSIT, HOURS,
+    MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
+    RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
+    {ParachainInfo, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES},
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
-
-pub mod currency {
-    use crate::Balance;
-
-    pub const UNITS: Balance = 1_000_000_000_000;
-}
 
 parameter_types! {
     pub const Version: RuntimeVersion = VERSION;
@@ -329,6 +324,48 @@ impl pallet_collator_selection::Config for Runtime {
     type WeightInfo = ();
 }
 
+parameter_types! {
+    pub Features: PalletFeatures = PalletFeatures::all_enabled();
+    pub const MaxAttributesPerCall: u32 = 10;
+    pub const CollectionDeposit: Balance = 100 * UNIT;
+    pub const ItemDeposit: Balance = 1 * UNIT;
+    pub const ApprovalsLimit: u32 = 20;
+    pub const ItemAttributesApprovalsLimit: u32 = 20;
+    pub const MaxTips: u32 = 10;
+    pub const MaxDeadlineDuration: BlockNumber = 12 * 30 * DAYS;
+    pub const MetadataDepositBase: Balance = 10 * UNIT;
+    pub const MetadataDepositPerByte: Balance = 1 * UNIT;
+}
+
+impl pallet_nfts::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type CollectionId = u32;
+    type ItemId = u32;
+    type Currency = Balances;
+    type CreateOrigin = AsEnsureOriginWithArg<EnsureSigned<AccountId>>;
+    type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+    type CollectionDeposit = CollectionDeposit;
+    type ItemDeposit = ItemDeposit;
+    type MetadataDepositBase = MetadataDepositBase;
+    type AttributeDepositBase = MetadataDepositBase;
+    type DepositPerByte = MetadataDepositPerByte;
+    type StringLimit = ConstU32<256>;
+    type KeyLimit = ConstU32<64>;
+    type ValueLimit = ConstU32<256>;
+    type ApprovalsLimit = ApprovalsLimit;
+    type ItemAttributesApprovalsLimit = ItemAttributesApprovalsLimit;
+    type MaxTips = MaxTips;
+    type MaxDeadlineDuration = MaxDeadlineDuration;
+    type MaxAttributesPerCall = MaxAttributesPerCall;
+    type Features = Features;
+    type OffchainSignature = Signature;
+    type OffchainPublic = <Signature as Verify>::Signer;
+    type WeightInfo = pallet_nfts::weights::SubstrateWeight<Runtime>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type Helper = ();
+    type Locker = ();
+}
+
 /// Only callable after `set_validation_data` is called which forms this proof the same way
 fn relay_chain_state_proof() -> RelayChainStateProof {
     let relay_storage_root = ParachainSystem::validation_data()
@@ -410,12 +447,14 @@ impl pallet_storage_providers::Config for Runtime {
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
     type ValuePropId = Hash;
+    type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
+    type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
@@ -464,8 +503,8 @@ parameter_types! {
     pub const ChallengeHistoryLength: BlockNumber = 100;
     pub const ChallengesQueueLength: u32 = 100;
     pub const CheckpointChallengePeriod: u32 = 10;
-    pub const ChallengesFee: Balance = 1 * UNITS;
-    pub const StakeToChallengePeriod: Balance = 10 * UNITS;
+    pub const ChallengesFee: Balance = 1 * UNIT;
+    pub const StakeToChallengePeriod: Balance = 10 * UNIT;
 }
 
 pub const H_LENGTH: usize = BlakeTwo256::LENGTH;
@@ -538,6 +577,9 @@ impl pallet_file_system::Config for Runtime {
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type ThresholdType = ThresholdType;
+    type Currency = Balances;
+    type Nfts = Nfts;
+    type CollectionInspector = BucketNfts;
     type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
     type AssignmentThresholdAsymptote = ThresholdAsymptote;
     type AssignmentThresholdMultiplier = ThresholdMultiplier;
@@ -561,4 +603,11 @@ impl Convert<Balance, BlockNumberFor<Runtime>> for SaturatingBalanceToBlockNumbe
     fn convert(block_number: Balance) -> BlockNumberFor<Runtime> {
         block_number.saturated_into()
     }
+}
+
+impl pallet_bucket_nfts::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Providers = Providers;
+    #[cfg(feature = "runtime-benchmarks")]
+    type Helper = ();
 }

@@ -335,17 +335,17 @@ impl BlockchainService {
                             size,
                             user_peer_ids: peer_ids,
                         }),
-                        // A BSP will only process this event if itself triggered it.
+                        // This event should only be of any use if a node is run by as a user.
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::AcceptedBspVolunteer {
-                                who,
+                                bsp_id,
                                 location,
                                 fingerprint,
                                 multiaddresses,
                                 owner,
                                 size,
                             },
-                        ) if who
+                        ) if owner
                             == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) =>
                         {
                             // We try to convert the types coming from the runtime into our expected types.
@@ -358,13 +358,13 @@ impl BlockchainService {
                                 if let Ok(multiaddr) = result {
                                     multiaddress_vec.push(multiaddr);
                                 } else {
-                                    error!(target: LOG_TARGET, "Malformed Multiaddress in AcceptedBspVolunteer event. bsp: {:?}, file owner: {:?}, file fingerprint: {:?}", who, owner, fingerprint);
+                                    error!(target: LOG_TARGET, "Malformed Multiaddress in AcceptedBspVolunteer event. bsp: {:?}, file owner: {:?}, file fingerprint: {:?}", bsp_id, owner, fingerprint);
                                     return;
                                 }
                             }
 
                             self.emit(AcceptedBspVolunteer {
-                                who,
+                                bsp_id,
                                 location,
                                 fingerprint,
                                 multiaddresses: multiaddress_vec,

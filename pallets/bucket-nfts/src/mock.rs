@@ -1,18 +1,17 @@
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
-    traits::{AsEnsureOriginWithArg, Everything, Hooks, Randomness},
-    weights::{constants::RocksDbWeight, Weight},
+    traits::{AsEnsureOriginWithArg, Everything, Randomness},
+    weights::constants::RocksDbWeight,
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
-use shp_traits::{CommitmentVerifier, MaybeDebug};
+use shp_traits::{ProofsDealerInterface, SubscribeProvidersInterface};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
-    traits::{BlakeTwo256, Bounded, Convert, IdentifyAccount, IdentityLookup, Verify},
-    BuildStorage, DispatchError, FixedU128, MultiSignature, SaturatedConversion,
+    traits::{BlakeTwo256, Convert, IdentifyAccount, IdentityLookup, Verify},
+    BuildStorage, DispatchResult, FixedU128, MultiSignature, SaturatedConversion,
 };
-use sp_trie::CompactProof;
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -23,13 +22,6 @@ type AccountPublic = <Signature as Verify>::Signer;
 type AccountId = <AccountPublic as IdentifyAccount>::AccountId;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10;
-const UNITS: Balance = 1_000_000_000_000;
-const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
-
-pub type ForestProof =
-    <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::ForestProof;
-pub type KeyProof =
-    <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::KeyProof;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;
@@ -55,35 +47,16 @@ impl Randomness<H256, BlockNumber> for MockRandomness {
     }
 }
 
-/// Rolls to the desired block. Returns the number of blocks played.
-pub(crate) fn roll_to(n: BlockNumber) -> BlockNumber {
-    let mut num_blocks = 0;
-    let mut block = System::block_number();
-    while block < n {
-        block = roll_one_block();
-        num_blocks += 1;
-    }
-    num_blocks
-}
-
-// Rolls forward one block. Returns the new block number.
-fn roll_one_block() -> BlockNumber {
-    System::set_block_number(System::block_number() + 1);
-    FileSystem::on_idle(System::block_number(), Weight::MAX);
-    System::block_number()
-}
-
 // Configure a mock runtime to test the pallet.
 construct_runtime!(
     pub enum Test
     {
         System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-        FileSystem: crate::{Pallet, Call, Storage, Event<T>},
         Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>, HoldReason},
-        ProofsDealer: pallet_proofs_dealer::{Pallet, Call, Storage, Event<T>},
-        BucketNfts: pallet_bucket_nfts::{Pallet, Call, Storage, Event<T>},
+        BucketNfts: crate::{Pallet, Call, Storage, Event<T>},
         Nfts: pallet_nfts::{Pallet, Call, Storage, Event<T>},
+        FileSystem: pallet_file_system::{Pallet, Call, Storage, Event<T>},
     }
 );
 
@@ -134,6 +107,72 @@ impl pallet_balances::Config for Test {
     type RuntimeFreezeReason = RuntimeFreezeReason;
     type FreezeIdentifier = ();
     type MaxFreezes = ConstU32<10>;
+}
+
+pub(crate) type ThresholdType = FixedU128;
+
+parameter_types! {
+    pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
+    pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
+    pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
+}
+
+pub struct MockProofsDealer;
+impl ProofsDealerInterface for MockProofsDealer {
+    type ProviderId = H256;
+    type ForestProof = u32;
+    type KeyProof = u32;
+    type MerkleHash = H256;
+    type MerkleHashing = BlakeTwo256;
+
+    fn challenge(_key_challenged: &Self::MerkleHash) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+
+    fn challenge_with_priority(
+        _key_challenged: &Self::MerkleHash,
+    ) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+
+    fn verify_forest_proof(
+        _who: &Self::ProviderId,
+        _challenges: &[Self::MerkleHash],
+        _proof: &Self::ForestProof,
+    ) -> Result<Vec<Self::MerkleHash>, sp_runtime::DispatchError> {
+        Ok(vec![])
+    }
+
+    fn verify_key_proof(
+        _key: &Self::MerkleHash,
+        _challenges: &[Self::MerkleHash],
+        _proof: &Self::KeyProof,
+    ) -> Result<Vec<Self::MerkleHash>, sp_runtime::DispatchError> {
+        Ok(vec![])
+    }
+}
+
+impl pallet_file_system::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type Providers = Providers;
+    type ProofDealer = MockProofsDealer;
+    type Fingerprint = H256;
+    type StorageRequestBspsRequiredType = u32;
+    type ThresholdType = ThresholdType;
+    type Currency = Balances;
+    type Nfts = Nfts;
+    type CollectionInspector = BucketNfts;
+    type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
+    type AssignmentThresholdAsymptote = ThresholdAsymptote;
+    type AssignmentThresholdMultiplier = ThresholdMultiplier;
+    type TargetBspsRequired = ConstU32<3>;
+    type MaxBspsPerStorageRequest = ConstU32<5>;
+    type MaxPeerIdSize = ConstU32<100>;
+    type MaxNumberOfPeerIds = MaxNumberOfPeerIds;
+    type MaxDataServerMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
+    type MaxFilePathSize = ConstU32<512u32>;
+    type StorageRequestTtl = ConstU32<40u32>;
+    type MaxExpiredStorageRequests = ConstU32<100u32>;
 }
 
 parameter_types! {
@@ -191,14 +230,26 @@ impl pallet_storage_providers::Config for Test {
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
-    type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
-    type Subscribers = FileSystem;
+    type Subscribers = MockedProvidersSubscriber;
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
+    type BucketNameLimit = ConstU32<100>;
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
     type ProvidersRandomness = MockRandomness;
+}
+
+pub struct MockedProvidersSubscriber;
+impl SubscribeProvidersInterface for MockedProvidersSubscriber {
+    type ProviderId = u64;
+
+    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
+        Ok(())
+    }
+    fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
+        Ok(())
+    }
 }
 
 // TODO: remove this and replace with pallet treasury
@@ -209,91 +260,11 @@ impl Get<AccountId> for TreasuryAccount {
     }
 }
 
-impl pallet_proofs_dealer::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
-    type ProvidersPallet = Providers;
-    type NativeBalance = Balances;
-    type MerkleTrieHash = H256;
-    type MerkleTrieHashing = BlakeTwo256;
-    type ForestVerifier = MockVerifier<H256>;
-    type KeyVerifier = MockVerifier<H256>;
-    type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
-    type RandomChallengesPerBlock = ConstU32<10>;
-    type MaxCustomChallengesPerBlock = ConstU32<10>;
-    type MaxProvidersChallengedPerBlock = ConstU32<10>;
-    type ChallengeHistoryLength = ConstU64<10>;
-    type ChallengesQueueLength = ConstU32<10>;
-    type CheckpointChallengePeriod = ConstU32<10>;
-    type ChallengesFee = ConstU128<1_000_000>;
-    type Treasury = TreasuryAccount;
-    type RandomnessProvider = MockRandomness;
-    type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
-}
-
-/// Structure to mock a verifier that returns `true` when `proof` is not empty
-/// and `false` otherwise.
-pub struct MockVerifier<C> {
-    _phantom: core::marker::PhantomData<C>,
-}
-
-/// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl<C> CommitmentVerifier for MockVerifier<C>
-where
-    C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
-{
-    type Proof = CompactProof;
-    type Commitment = H256;
-    type Challenge = C;
-
-    fn verify_proof(
-        _root: &Self::Commitment,
-        challenges: &[Self::Challenge],
-        proof: &CompactProof,
-    ) -> Result<Vec<Self::Challenge>, DispatchError> {
-        if proof.encoded_nodes.len() > 0 {
-            Ok(challenges.to_vec())
-        } else {
-            Err("Proof is empty".into())
-        }
-    }
-}
-
-impl pallet_bucket_nfts::Config for Test {
+impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
-}
-
-pub(crate) type ThresholdType = FixedU128;
-
-parameter_types! {
-    pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
-    pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
-    pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
-}
-
-impl crate::Config for Test {
-    type RuntimeEvent = RuntimeEvent;
-    type Providers = Providers;
-    type ProofDealer = ProofsDealer;
-    type Fingerprint = H256;
-    type StorageRequestBspsRequiredType = u32;
-    type ThresholdType = ThresholdType;
-    type Currency = Balances;
-    type Nfts = Nfts;
-    type CollectionInspector = BucketNfts;
-    type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
-    type AssignmentThresholdAsymptote = ThresholdAsymptote;
-    type AssignmentThresholdMultiplier = ThresholdMultiplier;
-    type TargetBspsRequired = ConstU32<3>;
-    type MaxBspsPerStorageRequest = ConstU32<5>;
-    type MaxPeerIdSize = ConstU32<100>;
-    type MaxNumberOfPeerIds = MaxNumberOfPeerIds;
-    type MaxDataServerMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
-    type MaxFilePathSize = ConstU32<512u32>;
-    type StorageRequestTtl = ConstU32<40u32>;
-    type MaxExpiredStorageRequests = ConstU32<100u32>;
 }
 
 // Build genesis storage according to the mock runtime.
@@ -301,12 +272,6 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut t = system::GenesisConfig::<Test>::default()
         .build_storage()
         .unwrap();
-
-    crate::GenesisConfig::<Test> {
-        bsp_assignment_threshold: FixedU128::max_value(),
-    }
-    .assimilate_storage(&mut t)
-    .unwrap();
 
     pallet_balances::GenesisConfig::<Test> {
         balances: vec![
@@ -321,13 +286,6 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut ext = sp_io::TestExternalities::new(t);
     ext.execute_with(|| System::set_block_number(1));
     ext
-}
-
-pub(crate) fn compute_set_get_initial_threshold() -> ThresholdType {
-    let initial_threshold = FileSystem::compute_asymptotic_threshold_point(1)
-        .expect("Initial threshold should be computable");
-    crate::BspsAssignmentThreshold::<Test>::put(initial_threshold);
-    initial_threshold
 }
 
 // Converter from the Balance type to the BlockNumber type for math.

@@ -39,7 +39,7 @@ pub mod pallet {
         sp_runtime::traits::{
             AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps,
         },
-        traits::fungible::*,
+        traits::{fungible::*, Incrementable},
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
@@ -128,6 +128,9 @@ pub mod pallet {
         /// Subscribers to important updates
         type Subscribers: SubscribeProvidersInterface;
 
+        /// The type of the Bucket NFT Collection ID.
+        type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
+
         /// The minimum amount that an account has to deposit to become a storage provider.
         #[pallet::constant]
         type SpMinDeposit: Get<BalanceOf<Self>>;
@@ -165,6 +168,10 @@ pub mod pallet {
         /// The maximum amount of Buckets that a MSP can have.
         #[pallet::constant]
         type MaxBuckets: Get<u32>;
+
+        /// Type that represents the byte limit of a bucket name.
+        #[pallet::constant]
+        type BucketNameLimit: Get<u32>;
 
         /// The maximum amount of blocks after which a sign up request expires so the randomness cannot be chosen
         #[pallet::constant]
@@ -405,6 +412,10 @@ pub mod pallet {
         NoBucketId,
         /// Error thrown when a user has a SP ID assigned to it but the SP data does not exist in storage (Inconsistency error).
         SpRegisteredButDataNotFound,
+        /// Error thrown when a bucket ID is not found in storage.
+        BucketNotFound,
+        /// Error thrown when a bucket ID already exists in storage.
+        BucketAlreadyExists,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -538,7 +549,7 @@ pub mod pallet {
             };
 
             // Sign up the new BSP (if possible), updating storage
-            Self::do_request_bsp_sign_up(&who, bsp_info)?;
+            Self::do_request_bsp_sign_up(&who, &bsp_info)?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::BspRequestSignUpSuccess {
@@ -756,6 +767,140 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             // TODO: implement this
 
+            Ok(().into())
+        }
+
+        /// Dispatchable extrinsic that allows to forcefully and automatically sing up a Main Storage Provider.
+        ///
+        /// The dispatch origin for this call must be Root.
+        /// The `who` parameter is the account that wants to sign up as a Main Storage Provider.
+        ///
+        /// Funds proportional to the capacity requested are reserved (held) from the account passed as the `who` parameter.
+        ///
+        /// Parameters:
+        /// - `who`: The account that wants to sign up as a Main Storage Provider.
+        /// - `msp_id`: The Main Storage Provider ID that the account passed as the `who` parameter is requesting to sign up as.
+        /// - `capacity`: The total amount of data that the Main Storage Provider will be able to store.
+        /// - `multiaddresses`: The vector of multiaddresses that the signer wants to register (according to the
+        /// [Multiaddr spec](https://github.com/multiformats/multiaddr))
+        /// - `value_prop`: The value proposition that the signer will provide as a Main Storage Provider to
+        /// users and wants to register on-chain. It could be data limits, communication protocols to access the user's
+        /// data, and more.
+        ///
+        /// This extrinsic will perform the steps of:
+        /// 1. [request_msp_sign_up](crate::dispatchables::request_msp_sign_up)
+        /// 2. [confirm_sign_up](crate::dispatchables::confirm_sign_up)
+        ///
+        /// Emits `MspRequestSignUpSuccess` and `MspSignUpSuccess` events when successful.
+        #[pallet::call_index(8)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn force_msp_sign_up(
+            origin: OriginFor<T>,
+            who: T::AccountId,
+            msp_id: MainStorageProviderId<T>,
+            capacity: StorageData<T>,
+            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            value_prop: ValueProposition<T>,
+            payment_account: T::AccountId,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was sent with root origin.
+            ensure_root(origin)?;
+
+            // Set up a structure with the information of the new MSP
+            let msp_info = MainStorageProvider {
+                buckets: BoundedVec::default(),
+                capacity,
+                data_used: StorageData::<T>::default(),
+                multiaddresses: multiaddresses.clone(),
+                value_prop: value_prop.clone(),
+                last_capacity_change: frame_system::Pallet::<T>::block_number(),
+                payment_account,
+            };
+
+            // Sign up the new MSP (if possible), updating storage
+            Self::do_request_msp_sign_up(&who, &msp_info)?;
+
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::MspRequestSignUpSuccess {
+                who: who.clone(),
+                multiaddresses,
+                capacity,
+                value_prop,
+            });
+
+            // Confirm the sign up of the account as a Main Storage Provider with the given ID
+            Self::do_msp_sign_up(
+                &who,
+                msp_id,
+                &msp_info,
+                frame_system::Pallet::<T>::block_number(),
+            )?;
+
+            // Return a successful DispatchResultWithPostInfo
+            Ok(().into())
+        }
+
+        /// Dispatchable extrinsic that allows to forcefully and automatically sing up a Backup Storage Provider.
+        ///
+        /// The dispatch origin for this call must be Root.
+        /// The `who` parameter is the account that wants to sign up as a Backup Storage Provider.
+        ///
+        /// Funds proportional to the capacity requested are reserved (held) from the account passed as the `who` parameter.
+        ///
+        /// Parameters:
+        /// - `who`: The account that wants to sign up as a Backup Storage Provider.
+        /// - `bsp_id`: The Backup Storage Provider ID that the account passed as the `who` parameter is requesting to sign up as.
+        /// - `capacity`: The total amount of data that the Backup Storage Provider will be able to store.
+        /// - `multiaddresses`: The vector of multiaddresses that the signer wants to register (according to the
+        /// [Multiaddr spec](https://github.com/multiformats/multiaddr))
+        ///
+        /// This extrinsic will perform the steps of:
+        /// 1. [request_bsp_sign_up](crate::dispatchables::request_bsp_sign_up)
+        /// 2. [confirm_sign_up](crate::dispatchables::confirm_sign_up)
+        ///
+        /// Emits `BspRequestSignUpSuccess` and `BspSignUpSuccess` events when successful.
+        #[pallet::call_index(9)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn force_bsp_sign_up(
+            origin: OriginFor<T>,
+            who: T::AccountId,
+            bsp_id: BackupStorageProviderId<T>,
+            capacity: StorageData<T>,
+            multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
+            payment_account: T::AccountId,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was sent with root origin.
+            ensure_root(origin)?;
+
+            // Set up a structure with the information of the new BSP
+            let bsp_info = BackupStorageProvider {
+                capacity,
+                data_used: StorageData::<T>::default(),
+                multiaddresses: multiaddresses.clone(),
+                root: MerklePatriciaRoot::<T>::default(),
+                last_capacity_change: frame_system::Pallet::<T>::block_number(),
+                payment_account,
+            };
+
+            // Sign up the new BSP (if possible), updating storage
+            Self::do_request_bsp_sign_up(&who, &bsp_info)?;
+
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::BspRequestSignUpSuccess {
+                who: who.clone(),
+                multiaddresses,
+                capacity,
+            });
+
+            // Confirm the sign up of the account as a Backup Storage Provider with the given ID
+            Self::do_bsp_sign_up(
+                &who,
+                bsp_id,
+                &bsp_info,
+                frame_system::Pallet::<T>::block_number(),
+            )?;
+
+            // Return a successful DispatchResultWithPostInfo
             Ok(().into())
         }
     }
