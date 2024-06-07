@@ -149,7 +149,7 @@ where
     /// and, if so, stores the request in the SignUpRequests mapping
     pub fn do_request_bsp_sign_up(
         who: &T::AccountId,
-        bsp_info: BackupStorageProvider<T>,
+        bsp_info: &BackupStorageProvider<T>,
     ) -> DispatchResult {
         // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
 
@@ -265,13 +265,24 @@ where
         let (sp, request_block) =
             SignUpRequests::<T>::get(who).ok_or(Error::<T>::SignUpNotRequested)?;
 
+        // Get the ProviderId by using the AccountId as the seed for a random generator
+        let (sp_id, block_number_when_random) =
+            T::ProvidersRandomness::random(who.encode().as_ref());
+
+        // Check that the maximum block number after which the randomness is invalid is greater than or equal to the block number when the
+        // request was made to ensure that the randomness was not known when the request was made
+        ensure!(
+            block_number_when_random >= request_block,
+            Error::<T>::RandomnessNotValidYet
+        );
+
         // Check what type of Storage Provider the signer is trying to sign up as and dispatch the corresponding logic
         match sp {
             StorageProvider::MainStorageProvider(msp_info) => {
-                Self::do_msp_sign_up(who, &msp_info, request_block)?;
+                Self::do_msp_sign_up(who, sp_id, &msp_info, request_block)?;
             }
             StorageProvider::BackupStorageProvider(bsp_info) => {
-                Self::do_bsp_sign_up(who, &bsp_info, request_block)?;
+                Self::do_bsp_sign_up(who, sp_id, &bsp_info, request_block)?;
             }
         }
 
@@ -283,6 +294,7 @@ where
     /// and removes the sign up request from the SignUpRequests mapping
     pub fn do_msp_sign_up(
         who: &T::AccountId,
+        msp_id: MainStorageProviderId<T>,
         msp_info: &MainStorageProvider<T>,
         request_block: BlockNumberFor<T>,
     ) -> DispatchResult {
@@ -302,17 +314,6 @@ where
             frame_system::Pallet::<T>::block_number()
                 < request_block + T::MaxBlocksForRandomness::get(),
             Error::<T>::SignUpRequestExpired
-        );
-
-        // Get the MainStorageProviderId by using the AccountId as the seed for a random generator
-        let (msp_id, block_number_when_random) =
-            T::ProvidersRandomness::random(who.encode().as_ref());
-
-        // Check that the maximum block number after which the randomness is invalid is greater than or equal to the block number when the
-        // request was made to ensure that the randomness was not known when the request was made
-        ensure!(
-            block_number_when_random >= request_block,
-            Error::<T>::RandomnessNotValidYet
         );
 
         // Insert the MainStorageProviderId into the mapping
@@ -344,6 +345,7 @@ where
     /// from the SignUpRequests mapping
     pub fn do_bsp_sign_up(
         who: &T::AccountId,
+        bsp_id: BackupStorageProviderId<T>,
         bsp_info: &BackupStorageProvider<T>,
         request_block: BlockNumberFor<T>,
     ) -> DispatchResult {
@@ -363,17 +365,6 @@ where
             frame_system::Pallet::<T>::block_number()
                 < request_block + T::MaxBlocksForRandomness::get(),
             Error::<T>::SignUpRequestExpired
-        );
-
-        // Get the BackupStorageProviderId by using the AccountId as the seed for a random generator
-        let (bsp_id, block_number_when_random) =
-            T::ProvidersRandomness::random(who.encode().as_ref());
-
-        // Check that the maximum block number after which the randomness is invalid is greater than or equal to the block number when the
-        // request was made to ensure that the randomness was not known when the request was made
-        ensure!(
-            block_number_when_random >= request_block,
-            Error::<T>::RandomnessNotValidYet
         );
 
         // Insert the BackupStorageProviderId into the mapping
