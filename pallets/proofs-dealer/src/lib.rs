@@ -128,6 +128,10 @@ pub mod pallet {
         /// `PriorityChallengesQueue` in the `BlockToChallenges` StorageMap. These checkpoint challenge
         /// rounds have to be answered by ALL Providers, and this is enforced by the `submit_proof`
         /// extrinsic.
+        ///
+        /// WARNING: This period needs to be equal or larger than the challenge period of the smallest
+        /// Provider in the network. If the smallest Provider has a challenge period of 10 ticks (blocks),
+        /// then the checkpoint challenge period needs to be at least 10 ticks.
         #[pallet::constant]
         type CheckpointChallengePeriod: Get<u32>;
 
@@ -161,7 +165,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn tick_to_challenges)]
     pub type TickToChallengesSeed<T: Config> =
-        StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, MerkleHashFor<T>>;
+        StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, RandomnessOutputFor<T>>;
 
     /// A mapping from challenges tick to a vector of custom challenged file keys for that block.
     ///
@@ -264,6 +268,18 @@ pub mod pallet {
         ProofAccepted {
             provider: ProviderFor<T>,
             proof: Proof<T>,
+        },
+
+        /// A new challenge seed was generated.
+        NewChallengeSeed {
+            challenges_ticker: BlockNumberFor<T>,
+            seed: RandomnessOutputFor<T>,
+        },
+
+        /// A new checkpoint challenge was generated.
+        NewCheckpointChallenge {
+            challenges_ticker: BlockNumberFor<T>,
+            challenges: BoundedVec<KeyFor<T>, MaxCustomChallengesPerBlockFor<T>>,
         },
     }
 

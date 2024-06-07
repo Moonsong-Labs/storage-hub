@@ -10,22 +10,23 @@ use frame_support::{
     weights::WeightMeter,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-use scale_info::prelude::vec::Vec;
 use shp_traits::{CommitmentVerifier, ProofsDealerInterface, ProvidersInterface};
 use sp_runtime::{
-    traits::{CheckedAdd, CheckedDiv, Convert, Hash, Zero},
-    ArithmeticError, DispatchError, Saturating,
+    traits::{CheckedAdd, CheckedDiv, CheckedSub, Convert, Hash, Zero},
+    ArithmeticError, BoundedVec, DispatchError, Saturating,
 };
+use sp_std::{collections::vec_deque::VecDeque, vec::Vec};
 
 use crate::{
     pallet,
     types::{
         AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor, ChallengesFeeFor,
-        ForestRootFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor, KeyVerifierFor,
-        KeyVerifierProofFor, Proof, ProviderFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
+        ChallengesQueueLengthFor, ForestRootFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor,
+        KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor, Proof, ProviderFor,
+        ProvidersPalletFor, RandomChallengesPerBlockFor, RandomnessOutputFor,
         RandomnessProviderFor, StakeToChallengePeriodFor, TreasuryAccountFor,
     },
-    ChallengesQueue, ChallengesTicker, Error, LastCheckpointTick,
+    ChallengesQueue, ChallengesTicker, Error, Event, LastCheckpointTick,
     LastTickProviderSubmittedProofFor, Pallet, PriorityChallengesQueue, TickToChallengesSeed,
     TickToCheckpointChallenges,
 };
@@ -230,7 +231,7 @@ where
 
         // TODO: Consider checkpoint challenge rounds.
         // TODO: Check if providers failed to submit a proof.
-        // TODO: Clean up `TickToChallengesSeed` and `ChallengeTickToChallengedProviders` storage.
+        // TODO: Clean up `TickToChallengesSeed`, `TickToCheckpointChallenges` and `ChallengeTickToChallengedProviders` storage.
 
         // Increment the challenges ticker.
         let mut challenges_ticker = ChallengesTicker::<T>::get();
@@ -238,10 +239,127 @@ where
         ChallengesTicker::<T>::set(challenges_ticker);
 
         // Store random seed for this tick.
-        let seed = RandomnessProviderFor::<T>::random(challenges_ticker.encode().as_ref());
+        let (seed, _) = RandomnessProviderFor::<T>::random(challenges_ticker.encode().as_ref());
+        TickToChallengesSeed::<T>::insert(challenges_ticker, seed);
+
+        // Remove the oldest challenge seed stored, to clean up the storage.
+        let tick_to_remove = challenges_ticker.checked_sub(&ChallengeHistoryLengthFor::<T>::get());
+        if let Some(tick_to_remove) = tick_to_remove {
+            TickToChallengesSeed::<T>::remove(tick_to_remove);
+        }
+
+        // Emit new challenge seed event.
+        Self::deposit_event(Event::NewChallengeSeed {
+            challenges_ticker,
+            seed,
+        });
 
         // Calculate if this is a checkpoint challenge round.
         let last_checkpoint_tick = LastCheckpointTick::<T>::get();
+        // This hook does not return an error, and it cannot fail, that's why we use `saturating_add`.
+        let next_checkpoint_tick =
+            last_checkpoint_tick.saturating_add(T::CheckpointChallengePeriod::get().into());
+        if challenges_ticker == next_checkpoint_tick {
+            // This is a checkpoint challenge round, so we also generate new checkpoint challenges.
+            Self::do_new_checkpoint_challenge_round(challenges_ticker, weight);
+        }
+    }
+
+    // TODO: Document.
+    fn do_new_checkpoint_challenge_round(
+        current_tick: BlockNumberFor<T>,
+        weight: &mut WeightMeter,
+    ) {
+        // TODO: Specify read-write weight of this hook.
+
+        let mut new_checkpoint_challenges: BoundedVec<
+            KeyFor<T>,
+            MaxCustomChallengesPerBlockFor<T>,
+        > = BoundedVec::new();
+
+        // Fill up this round's checkpoint challenges with challenges in the `PriorityChallengesQueue`.
+        // It gets filled up until the max number of custom challenges for a block is reached, or until
+        // there are no more challenges in the `PriorityChallengesQueue`.
+        let original_priority_challenges_queue = PriorityChallengesQueue::<T>::get();
+        let mut priority_challenges_queue =
+            VecDeque::from(original_priority_challenges_queue.to_vec());
+
+        while !new_checkpoint_challenges.is_full() && !priority_challenges_queue.is_empty() {
+            let challenge = match priority_challenges_queue.pop_front() {
+                Some(challenge) => challenge,
+                // This should not happen, as we check that priority_challenges_queue is not empty
+                // in the while condition above, but we add this to be safe.
+                None => break,
+            };
+
+            if new_checkpoint_challenges.try_push(challenge).is_err() {
+                // This should not happen, as we check that new_checkpoint_challenges is not full
+                // in the while condition above, but we add this to be safe.
+                break;
+            }
+        }
+
+        // Convert priority_challenges_queue back to a bounded vector.
+        let new_priority_challenges_queue: BoundedVec<KeyFor<T>, ChallengesQueueLengthFor<T>> =
+            match Vec::from(priority_challenges_queue).try_into() {
+                Ok(new_priority_challenges_queue) => new_priority_challenges_queue,
+                // This should not happen, as `priority_challenges_queue` would now have equal or less elements
+                // than what was originally in `PriorityChallengesQueue`, but we add this to be safe.
+                // In here we care that no priority challenges are ever lost.
+                Err(_) => original_priority_challenges_queue,
+            };
+
+        // Reset the priority challenges queue with the leftovers.
+        PriorityChallengesQueue::<T>::set(new_priority_challenges_queue);
+
+        // Fill up this round's checkpoint challenges with challenges in the `ChallengesQueue`.
+        // It gets filled up until the max number of custom challenges for a block is reached, or until
+        // there are no more challenges in the `ChallengesQueue`.
+        let mut challenges_queue = VecDeque::from(ChallengesQueue::<T>::get().to_vec());
+
+        while !new_checkpoint_challenges.is_full() && !challenges_queue.is_empty() {
+            let challenge = match challenges_queue.pop_front() {
+                Some(challenge) => challenge,
+                // This should not happen, as we check that challenges_queue is not empty
+                // in the while condition above, but we add this to be safe.
+                None => break,
+            };
+
+            if new_checkpoint_challenges.try_push(challenge).is_err() {
+                // This should not happen, as we check that new_checkpoint_challenges is not full
+                // in the while condition above, but we add this to be safe.
+                break;
+            }
+        }
+
+        // Convert challenges_queue back to a bounded vector.
+        let new_challenges_queue: BoundedVec<KeyFor<T>, ChallengesQueueLengthFor<T>> =
+            match Vec::from(challenges_queue).try_into() {
+                Ok(new_challenges_queue) => new_challenges_queue,
+                // This should not happen, as `challenges_queue` would now have equal or less elements
+                // than what was originally in `ChallengesQueue`, but we add this to be safe.
+                // Here we accept if some challenges are lost, since they're not priority challenges.
+                Err(_) => BoundedVec::new(),
+            };
+
+        // Reset the challenges queue with the leftovers.
+        ChallengesQueue::<T>::set(new_challenges_queue);
+
+        // Store the new checkpoint challenges.
+        TickToCheckpointChallenges::<T>::set(current_tick, Some(new_checkpoint_challenges.clone()));
+
+        // Remove the last checkpoint challenge from storage to clean up.
+        let last_checkpoint_tick = LastCheckpointTick::<T>::get();
+        TickToCheckpointChallenges::<T>::remove(last_checkpoint_tick);
+
+        // Set this tick as the last checkpoint tick.
+        LastCheckpointTick::<T>::set(current_tick);
+
+        // Emit new checkpoint challenge event.
+        Self::deposit_event(Event::NewCheckpointChallenge {
+            challenges_ticker: current_tick,
+            challenges: new_checkpoint_challenges,
+        });
     }
 
     /// Convert stake to challenge period.
@@ -309,7 +427,7 @@ where
     /// Generate a number of challenges from a seed and a Provider's ID.
     /// Challenges are generated by hashing the seed, the Provider's ID and an index.
     pub(crate) fn generate_challenges_from_seed(
-        seed: T::MerkleTrieHash,
+        seed: RandomnessOutputFor<T>,
         provider_id: &ProviderFor<T>,
         count: u32,
     ) -> Vec<T::MerkleTrieHash> {
