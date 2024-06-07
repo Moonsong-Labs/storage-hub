@@ -126,7 +126,8 @@ export const devnodeSetup = async (options?: TestOptions): Promise<TestApis> => 
   const connectedApi = await ApiPromise.create({
     isPedantic: false,
     throwOnConnect: true,
-    noInitWarn: true,
+    // noInitWarn: true,
+    rpc: {},
     provider: new WsProvider(connectString),
   });
   process.stdout.write("✅\n");
