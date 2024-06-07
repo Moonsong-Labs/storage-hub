@@ -3,33 +3,27 @@
 
 // import type lookup before we augment - in some environments
 // this is required to allow for ambient/previous definitions
-import "@polkadot/api-base/types/consts";
+import '@polkadot/api-base/types/consts';
 
-import type { ApiTypes, AugmentedConst } from "@polkadot/api-base/types";
-import type { Option, u128, u16, u32, u64, u8 } from "@polkadot/types-codec";
-import type { Codec } from "@polkadot/types-codec/types";
-import type { AccountId32 } from "@polkadot/types/interfaces/runtime";
-import type {
-  FrameSystemLimitsBlockLength,
-  FrameSystemLimitsBlockWeights,
-  SpVersionRuntimeVersion,
-  SpWeightsRuntimeDbWeight,
-  SpWeightsWeightV2Weight,
-} from "@polkadot/types/lookup";
+import type { ApiTypes, AugmentedConst } from '@polkadot/api-base/types';
+import type { Option, u128, u16, u32, u64, u8 } from '@polkadot/types-codec';
+import type { Codec } from '@polkadot/types-codec/types';
+import type { AccountId32 } from '@polkadot/types/interfaces/runtime';
+import type { FrameSystemLimitsBlockLength, FrameSystemLimitsBlockWeights, SpVersionRuntimeVersion, SpWeightsRuntimeDbWeight, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
 
 export type __AugmentedConst<ApiType extends ApiTypes> = AugmentedConst<ApiType>;
 
-declare module "@polkadot/api-base/types/consts" {
+declare module '@polkadot/api-base/types/consts' {
   interface AugmentedConsts<ApiType extends ApiTypes> {
     balances: {
       /**
        * The minimum amount required to keep an account open. MUST BE GREATER THAN ZERO!
-       *
+       * 
        * If you *really* need it to be zero, you can enable the feature `insecure_zero_ed` for
        * this pallet. However, you do so at your own risk: this will open up a major DoS vector.
        * In case you have multiple sources of provider references, you may also get unexpected
        * behaviour if you set this to zero.
-       *
+       * 
        * Bottom line: Do yourself a favour and make it at least one!
        **/
       existentialDeposit: u128 & AugmentedConst<ApiType>;
@@ -67,7 +61,7 @@ declare module "@polkadot/api-base/types/consts" {
       assignmentThresholdMultiplier: u128 & AugmentedConst<ApiType>;
       /**
        * Maximum number of BSPs that can store a file.
-       *
+       * 
        * This is used to limit the number of BSPs storing a file and claiming rewards for it.
        * If this number is to high, then the reward for storing a file might be to diluted and pointless to store.
        **/
@@ -98,7 +92,7 @@ declare module "@polkadot/api-base/types/consts" {
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
        * Minimum number of BSPs required to store a file.
-       *
+       * 
        * This is also used as a default value if the BSPs required are not specified when creating a storage request.
        **/
       targetBspsRequired: u32 & AugmentedConst<ApiType>;
@@ -110,7 +104,7 @@ declare module "@polkadot/api-base/types/consts" {
     messageQueue: {
       /**
        * The size of the page; this implies the maximum message size which can be sent.
-       *
+       * 
        * A good value depends on the expected message sizes, their weights, the weight that is
        * available for processing them and the maximal needed message size. The maximal message
        * size is slightly lower than this as defined by [`MaxMessageLenOf`].
@@ -125,7 +119,7 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * The amount of weight (if any) which should be provided to the message queue for
        * servicing enqueued items.
-       *
+       * 
        * This may be legitimately `None` in the case that you will call
        * `ServiceQueues::service_queues` manually.
        **/
@@ -352,7 +346,7 @@ declare module "@polkadot/api-base/types/consts" {
       dbWeight: SpWeightsRuntimeDbWeight & AugmentedConst<ApiType>;
       /**
        * The designated SS58 prefix of this chain.
-       *
+       * 
        * This replaces the "ss58Format" property declared in the chain spec. Reason is
        * that the runtime should know about the prefix in order to make use of it as
        * an identifier of the chain.
@@ -370,7 +364,7 @@ declare module "@polkadot/api-base/types/consts" {
     timestamp: {
       /**
        * The minimum period between blocks.
-       *
+       * 
        * Be aware that this is different to the *expected* period that the block production
        * apparatus provides. Your chosen consensus system will generally work with this to
        * determine a sensible block time. For example, in the Aura pallet it will be double this
@@ -386,21 +380,21 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * A fee multiplier for `Operational` extrinsics to compute "virtual tip" to boost their
        * `priority`
-       *
+       * 
        * This value is multiplied by the `final_fee` to obtain a "virtual tip" that is later
        * added to a tip component in regular `priority` calculations.
        * It means that a `Normal` transaction can front-run a similarly-sized `Operational`
        * extrinsic (with no tip), by including a tip value greater than the virtual tip.
-       *
+       * 
        * ```rust,ignore
        * // For `Normal`
        * let priority = priority_calc(tip);
-       *
+       * 
        * // For `Operational`
        * let virtual_tip = (inclusion_fee + tip) * OperationalFeeMultiplier;
        * let priority = priority_calc(tip + virtual_tip);
        * ```
-       *
+       * 
        * Note that since we use `final_fee` the multiplier applies also to the regular `tip`
        * sent with the transaction. So, not only does the transaction get a priority bump based
        * on the `inclusion_fee`, but we also amplify the impact of tips applied to `Operational`
@@ -415,7 +409,7 @@ declare module "@polkadot/api-base/types/consts" {
     xcmpQueue: {
       /**
        * The maximum number of inbound XCMP channels that can be suspended simultaneously.
-       *
+       * 
        * Any further channel suspensions will fail and messages may get dropped without further
        * notice. Choosing a high value (1000) is okay; the trade-off that is described in
        * [`InboundXcmpSuspended`] still applies at that scale.

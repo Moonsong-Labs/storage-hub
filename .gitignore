@@ -28,4 +28,4 @@ runtimes/
 
 .idea/
 
-**/dist/*
+test/dist/*
