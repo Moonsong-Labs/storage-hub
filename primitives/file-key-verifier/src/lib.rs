@@ -5,7 +5,7 @@ use frame_support::sp_runtime::DispatchError;
 use num_bigint::BigUint;
 use scale_info::TypeInfo;
 use serde::{Deserialize, Serialize};
-use shp_traits::{AsCompact, ChallengeKeyInclusion, CommitmentVerifier};
+use shp_traits::{AsCompact, CommitmentVerifier};
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
 use trie_db::Trie;
@@ -71,9 +71,9 @@ where
     /// and checks if the resulting leaf is in the proof.
     fn verify_proof(
         expected_file_key: &Self::Commitment,
-        challenges: &[(Self::Challenge, Option<ChallengeKeyInclusion>)],
+        challenges: &[Self::Challenge],
         proof: &Self::Proof,
-    ) -> Result<Vec<Self::Challenge>, DispatchError> {
+    ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
         // Check that `challenges` is not empty.
         if challenges.is_empty() {
             return Err("No challenges provided.".into());
@@ -126,7 +126,7 @@ where
 
             // Calculate the modulo of the challenge with the number of chunks in the file.
             // The challenge is a big endian 32 byte array.
-            let challenged_chunk = BigUint::from_bytes_be(challenge.0.as_ref()) % chunks;
+            let challenged_chunk = BigUint::from_bytes_be(challenge.as_ref()) % chunks;
             let challenged_chunk: u64 = challenged_chunk.try_into().map_err(|_| {
                 "This is impossible. The modulo of a number with a u64 should always fit in a u64."
             })?;
@@ -144,10 +144,10 @@ where
             }
 
             // Add the challenge to the proven challenges vector.
-            proven_challenges.insert(challenge.0);
+            proven_challenges.insert(*challenge);
         }
 
-        return Ok(Vec::from_iter(proven_challenges));
+        return Ok(proven_challenges);
     }
 }
 

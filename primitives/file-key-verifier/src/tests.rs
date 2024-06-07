@@ -2,7 +2,6 @@ use codec::Encode;
 use num_bigint::BigUint;
 use rand::Rng;
 use shp_traits::AsCompact;
-use shp_traits::ChallengeKeyInclusion;
 use shp_traits::CommitmentVerifier;
 use sp_runtime::traits::{BlakeTwo256, Keccak256};
 use sp_trie::{
@@ -139,7 +138,7 @@ pub fn create_random_test_data(size: u64) -> Vec<u8> {
 fn generate_challenges<T: TrieLayout>(
     challenges_count: u64,
     chunks_count: u64,
-) -> (Vec<(HashT<T>, Option<ChallengeKeyInclusion>)>, Vec<Vec<u8>>) {
+) -> (Vec<HashT<T>>, Vec<Vec<u8>>) {
     let mut challenges = Vec::new();
     let mut chunks_challenged = Vec::new();
 
@@ -147,7 +146,7 @@ fn generate_challenges<T: TrieLayout>(
         // Generate challenge as a hash.
         let hash_arg = "chunk".to_string() + i.to_string().as_str();
         let challenge = T::Hash::hash(hash_arg.as_bytes());
-        challenges.push((challenge, None));
+        challenges.push(challenge);
 
         // Calculate the modulo of the challenge with the number of chunks in the file.
         // The challenge is a big endian 32 byte array.
@@ -233,7 +232,7 @@ fn commitment_verifier_many_challenges_success() {
     };
 
     // Verify proof
-    let mut proven_challenges = FileKeyVerifier::<
+    let proven_challenges = FileKeyVerifier::<
         LayoutV1<BlakeTwo256>,
         { BlakeTwo256::LENGTH },
         { CHUNK_SIZE },
@@ -241,7 +240,10 @@ fn commitment_verifier_many_challenges_success() {
     >::verify_proof(&file_key, &challenges, &file_key_proof)
     .expect("Failed to verify proof");
 
-    assert_eq!(proven_challenges.sort(), challenges.sort());
+    assert_eq!(
+        proven_challenges.into_iter().collect::<Vec<_>>().sort(),
+        challenges.sort()
+    );
 }
 
 #[test]
@@ -289,7 +291,7 @@ fn commitment_verifier_many_challenges_random_file_success() {
     };
 
     // Verify proof
-    let mut proven_challenges = FileKeyVerifier::<
+    let proven_challenges = FileKeyVerifier::<
         LayoutV1<BlakeTwo256>,
         { BlakeTwo256::LENGTH },
         { CHUNK_SIZE },
@@ -297,7 +299,10 @@ fn commitment_verifier_many_challenges_random_file_success() {
     >::verify_proof(&file_key, &challenges, &file_key_proof)
     .expect("Failed to verify proof");
 
-    assert_eq!(proven_challenges.sort(), challenges.sort());
+    assert_eq!(
+        proven_challenges.into_iter().collect::<Vec<_>>().sort(),
+        challenges.sort()
+    );
 }
 
 #[test]
@@ -345,7 +350,7 @@ fn commitment_verifier_many_challenges_keccak_success() {
     };
 
     // Verify proof
-    let mut proven_challenges = FileKeyVerifier::<
+    let proven_challenges = FileKeyVerifier::<
         LayoutV1<Keccak256>,
         H_LENGTH,
         CHUNK_SIZE,
@@ -353,7 +358,10 @@ fn commitment_verifier_many_challenges_keccak_success() {
     >::verify_proof(&file_key, &challenges, &file_key_proof)
     .expect("Failed to verify proof");
 
-    assert_eq!(proven_challenges.sort(), challenges.sort());
+    assert_eq!(
+        proven_challenges.into_iter().collect::<Vec<_>>().sort(),
+        challenges.sort()
+    );
 }
 
 #[test]
@@ -402,7 +410,7 @@ fn commitment_verifier_many_challenges_one_chunk_success() {
     };
 
     // Verify proof
-    let mut proven_challenges = FileKeyVerifier::<
+    let proven_challenges = FileKeyVerifier::<
         LayoutV1<BlakeTwo256>,
         H_LENGTH,
         CHUNK_SIZE,
@@ -410,7 +418,10 @@ fn commitment_verifier_many_challenges_one_chunk_success() {
     >::verify_proof(&file_key, &challenges, &file_key_proof)
     .expect("Failed to verify proof");
 
-    assert_eq!(proven_challenges.sort(), challenges.sort());
+    assert_eq!(
+        proven_challenges.into_iter().collect::<Vec<_>>().sort(),
+        challenges.sort()
+    );
 }
 
 #[test]
@@ -459,7 +470,7 @@ fn commitment_verifier_many_challenges_two_chunks_success() {
     };
 
     // Verify proof
-    let mut proven_challenges = FileKeyVerifier::<
+    let proven_challenges = FileKeyVerifier::<
         LayoutV1<BlakeTwo256>,
         H_LENGTH,
         CHUNK_SIZE,
@@ -467,7 +478,10 @@ fn commitment_verifier_many_challenges_two_chunks_success() {
     >::verify_proof(&file_key, &challenges, &file_key_proof)
     .expect("Failed to verify proof");
 
-    assert_eq!(proven_challenges.sort(), challenges.sort());
+    assert_eq!(
+        proven_challenges.into_iter().collect::<Vec<_>>().sort(),
+        challenges.sort()
+    );
 }
 
 #[test]
@@ -966,7 +980,7 @@ fn commitment_verifier_challenge_missing_from_proof_failure() {
     };
 
     // Change one challenge so that the proof is invalid.
-    challenges[0] = (BlakeTwo256::hash("invalid_challenge".as_bytes()), None);
+    challenges[0] = BlakeTwo256::hash("invalid_challenge".as_bytes());
 
     // Verify proof
     assert_eq!(

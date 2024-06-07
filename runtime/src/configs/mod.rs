@@ -52,14 +52,14 @@ use polkadot_runtime_common::{
 };
 use shp_file_key_verifier::FileKeyVerifier;
 use shp_forest_verifier::ForestVerifier;
-use shp_traits::{ChallengeKeyInclusion, CommitmentVerifier, MaybeDebug};
+use shp_traits::{CommitmentVerifier, MaybeDebug};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, Verify},
     AccountId32, DispatchError, FixedU128, Perbill, SaturatedConversion,
 };
-use sp_std::vec::Vec;
+use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::CompactProof;
 use sp_trie::LayoutV1;
 use sp_version::RuntimeVersion;
@@ -552,11 +552,11 @@ where
 
     fn verify_proof(
         _root: &Self::Commitment,
-        challenges: &[(Self::Challenge, Option<ChallengeKeyInclusion>)],
+        challenges: &[Self::Challenge],
         proof: &CompactProof,
-    ) -> Result<Vec<Self::Challenge>, DispatchError> {
+    ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            Ok(challenges.iter().map(|(c, _)| *c).collect())
+            Ok(challenges.iter().cloned().collect())
         } else {
             Err("Proof is empty".into())
         }

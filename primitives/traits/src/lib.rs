@@ -6,11 +6,12 @@ use frame_support::pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Me
 use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
 use frame_support::traits::{fungible, Incrementable};
 use frame_support::Parameter;
-use scale_info::prelude::{fmt::Debug, vec::Vec};
+use scale_info::prelude::fmt::Debug;
 use scale_info::TypeInfo;
 use sp_core::Get;
 use sp_runtime::traits::{AtLeast32BitUnsigned, Hash, Saturating};
 use sp_runtime::{BoundedVec, DispatchError};
+use sp_std::collections::btree_set::BTreeSet;
 
 #[cfg(feature = "std")]
 pub trait MaybeDebug: Debug {}
@@ -275,9 +276,9 @@ pub trait ProofsDealerInterface {
     /// proof of the Provider's data.
     fn verify_forest_proof(
         who: &Self::ProviderId,
-        challenges: &[(Self::MerkleHash, Option<ChallengeKeyInclusion>)],
+        challenges: &[Self::MerkleHash],
         proof: &Self::ForestProof,
-    ) -> Result<Vec<Self::MerkleHash>, DispatchError>;
+    ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError>;
 
     /// Verify a proof for a key within the Merkle Patricia Forest of a Provider.
     ///
@@ -285,37 +286,27 @@ pub trait ProofsDealerInterface {
     /// not verify if that key is included in the Merkle Patricia Forest of the Provider.
     fn verify_key_proof(
         key: &Self::MerkleHash,
-        challenges: &[(Self::MerkleHash, Option<ChallengeKeyInclusion>)],
+        challenges: &[Self::MerkleHash],
         proof: &Self::KeyProof,
-    ) -> Result<Vec<Self::MerkleHash>, DispatchError>;
+    ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError>;
 
     /// Submit a new proof challenge.
-    fn challenge(
-        key_challenged: &Self::MerkleHash,
-        inclusion: ChallengeKeyInclusion,
-    ) -> DispatchResult;
+    fn challenge(key_challenged: &Self::MerkleHash) -> DispatchResult;
 
     /// Submit a new challenge with priority.
     fn challenge_with_priority(
         key_challenged: &Self::MerkleHash,
-        inclusion: ChallengeKeyInclusion,
+        mutation: Option<Mutation>,
     ) -> DispatchResult;
 
-    /// Apply delta to the partial trie based on the proof and the commitment.
+    /// Apply delta (mutations) to the partial trie based on the proof and the commitment.
     ///
     /// The new root is returned.
     fn apply_delta(
         commitment: &Self::MerkleHash,
-        mutations: &[Mutation<Self::MerkleHash>],
+        mutations: &[(Self::MerkleHash, Mutation)],
         proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, DispatchError>;
-}
-
-/// Declares challenge key inclusion type for a given proof and commitment.
-#[derive(Encode, Decode, TypeInfo, MaxEncodedLen, PartialEq, PartialOrd, Eq, Ord, Clone, Debug)]
-pub enum ChallengeKeyInclusion {
-    Included,
-    NotIncluded,
 }
 
 /// A trait to verify proofs based on commitments and challenges.
@@ -335,32 +326,33 @@ pub trait CommitmentVerifier {
     /// is invalid.
     fn verify_proof(
         commitment: &Self::Commitment,
-        challenges: &[(Self::Challenge, Option<ChallengeKeyInclusion>)],
+        challenges: &[Self::Challenge],
         proof: &Self::Proof,
-    ) -> Result<Vec<Self::Challenge>, DispatchError>;
+    ) -> Result<BTreeSet<Self::Challenge>, DispatchError>;
 }
+
 /// Enum representing the type of mutation (addition or removal of a key).
-#[derive(Clone)]
-pub enum Mutation<Challenge> {
-    Add(Challenge),
-    Remove(Challenge),
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug)]
+pub enum Mutation {
+    Add,
+    Remove,
 }
 
 /// A trait to apply mutations (delta) to a partial trie based on a proof and a commitment.
 pub trait ProofDeltaApplier<H: sp_core::Hasher> {
     /// The type that represents the proof.
     type Proof: Parameter + Member + Debug;
-    /// The type that represents the commitment (e.g. a Merkle root)
-    type Commitment: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
-    /// The type that represents the challenges which a proof is being verified against.
-    type Challenge: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
+    /// The type that represents the keys (e.g. a Merkle root, node keys, etc.)
+    type Key: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
 
     /// Apply mutations (delta) to a partial trie based on a proof and a commitment.
+    ///
+    /// Returns the new root computed after applying the mutations.
     fn apply_delta(
-        commitment: &Self::Commitment,
-        mutations: &[Mutation<Self::Challenge>],
+        root: &Self::Key,
+        mutations: &[(Self::Key, Mutation)],
         proof: &Self::Proof,
-    ) -> Result<(sp_trie::MemoryDB<H>, Self::Commitment), DispatchError>;
+    ) -> Result<(sp_trie::MemoryDB<H>, Self::Key), DispatchError>;
 }
 
 /// Interface used by the file system pallet in order to read storage from NFTs pallet (avoiding tigth coupling).

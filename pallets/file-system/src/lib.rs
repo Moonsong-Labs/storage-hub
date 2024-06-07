@@ -400,6 +400,10 @@ pub mod pallet {
         BucketIsNotPrivate,
         /// Root of the provider not found.
         ProviderRootNotFound,
+        /// Failed to verify proof: required to provide a proof of non-inclusion.
+        ExpectedNonInclusionProof,
+        /// Failed to verify proof: required to provide a proof of inclusion.
+        ExpectedInclusionProof,
     }
 
     #[pallet::call]

@@ -3,6 +3,7 @@ use std::io::Read;
 use serde::Serialize;
 use shp_traits::{CommitmentVerifier, Mutation, ProofDeltaApplier};
 use sp_runtime::traits::BlakeTwo256;
+use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{
     recorder::Recorder, CompactProof, LayoutV1, MemoryDB, Trie, TrieDBBuilder, TrieDBMutBuilder,
     TrieLayout, TrieMut,
@@ -224,8 +225,6 @@ pub fn merklise_file<T: TrieLayout>(file_path: &str) -> (MemoryDB<T::Hash>, Hash
 }
 
 mod verify_proof_tests {
-    use shp_traits::ChallengeKeyInclusion;
-
     use super::*;
 
     #[test]
@@ -264,12 +263,12 @@ mod verify_proof_tests {
         let proof_keys =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &[(*challenge_key, None)],
+                &[*challenge_key],
                 &proof,
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, vec![*challenge_key]);
+        assert_eq!(proof_keys, BTreeSet::from_iter(vec![*challenge_key]));
     }
 
     #[test]
@@ -321,12 +320,15 @@ mod verify_proof_tests {
         let proof_keys =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &[(challenge_key, None)],
+                &[challenge_key],
                 &proof,
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, vec![leaf_keys[0], leaf_keys[1]]);
+        assert_eq!(
+            proof_keys,
+            BTreeSet::from_iter(vec![leaf_keys[0], leaf_keys[1]])
+        );
     }
 
     #[test]
@@ -375,12 +377,12 @@ mod verify_proof_tests {
         let proof_keys =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &[(challenge_key, None)],
+                &[challenge_key],
                 &proof,
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, vec![leaf_keys[0]]);
+        assert_eq!(proof_keys, BTreeSet::from_iter(vec![leaf_keys[0]]));
     }
 
     #[test]
@@ -393,7 +395,7 @@ mod verify_proof_tests {
         let largest_key = leaf_keys
             .iter()
             .max()
-            .map(|key| (*key, None::<ChallengeKeyInclusion>))
+            .map(|key| (*key, None::<Mutation>))
             .unwrap();
 
         // Challenge key is the largest key with the most significant bit incremented by 1.
@@ -435,12 +437,12 @@ mod verify_proof_tests {
         let proof_keys =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &[(challenge_key, None)],
+                &[challenge_key],
                 &proof,
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, vec![largest_key.0]);
+        assert_eq!(proof_keys, BTreeSet::from_iter(vec![largest_key.0]));
     }
 
     #[test]
@@ -452,8 +454,6 @@ mod verify_proof_tests {
 
         let challenge_keys = [leaf_keys[0], leaf_keys[1], leaf_keys[2]];
 
-        let challenge_keys = challenge_keys.map(|key| (key, None));
-
         {
             // Creating trie inside of closure to drop it before generating proof.
             let mut trie_recorder = recorder.as_trie_recorder(root);
@@ -466,7 +466,7 @@ mod verify_proof_tests {
 
             for challenge_key in &challenge_keys {
                 // Seek to the challenge key.
-                iter.seek(&challenge_key.0 .0).unwrap();
+                iter.seek(&challenge_key.0).unwrap();
 
                 // Access the next leaf node.
                 iter.next();
@@ -488,7 +488,10 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, challenge_keys.map(|(key, _)| key));
+        assert_eq!(
+            proof_keys,
+            BTreeSet::from_iter(challenge_keys.iter().cloned())
+        );
     }
 
     #[test]
@@ -498,13 +501,11 @@ mod verify_proof_tests {
         // This recorder is used to record accessed keys in the trie and later generate a proof for them.
         let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
-        let challenge_keys = [leaf_keys[0], leaf_keys[1], leaf_keys[2]];
-
-        let mut challenge_keys = challenge_keys.map(|key| (key, None));
+        let mut challenge_keys = [leaf_keys[0], leaf_keys[1], leaf_keys[2]];
 
         // Increment the most significant bit of every challenge key by 1.
         for key in &mut challenge_keys {
-            key.0 .0[0] += 1;
+            key.0[0] += 1;
         }
 
         {
@@ -519,7 +520,7 @@ mod verify_proof_tests {
 
             for challenge_key in &challenge_keys {
                 // Seek to the challenge key.
-                iter.seek(&challenge_key.0 .0).unwrap();
+                iter.seek(&challenge_key.0).unwrap();
 
                 // Access the next leaf node.
                 iter.next();
@@ -546,7 +547,7 @@ mod verify_proof_tests {
 
         assert_eq!(
             proof_keys,
-            [leaf_keys[0], leaf_keys[1], leaf_keys[2], leaf_keys[3]]
+            BTreeSet::from_iter([leaf_keys[0], leaf_keys[1], leaf_keys[2], leaf_keys[3]])
         );
     }
 
@@ -557,13 +558,11 @@ mod verify_proof_tests {
         // This recorder is used to record accessed keys in the trie and later generate a proof for them.
         let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
-        let challenge_keys = [leaf_keys[0], leaf_keys[1], leaf_keys[2]];
-
-        let mut challenge_keys = challenge_keys.map(|key| (key, None));
+        let mut challenge_keys = [leaf_keys[0], leaf_keys[1], leaf_keys[2]];
 
         // Decrement the most significant bit of every challenge key by 1.
         for key in &mut challenge_keys {
-            key.0 .0[0] -= 1;
+            key.0[0] -= 1;
         }
 
         {
@@ -578,70 +577,7 @@ mod verify_proof_tests {
 
             for challenge_key in &challenge_keys {
                 // Seek to the challenge key.
-                iter.seek(&challenge_key.0 .0).unwrap();
-
-                // Access the next leaf node.
-                iter.next();
-
-                // Access the previous leaf node.
-                iter.next_back();
-            }
-        }
-
-        // Generate proof
-        let proof = recorder
-            .drain_storage_proof()
-            .to_compact_proof::<BlakeTwo256>(root)
-            .expect("Failed to create compact proof from recorder");
-
-        // Verify proof
-        let proof_keys =
-            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-                &root,
-                &challenge_keys,
-                &proof,
-            )
-            .expect("Failed to verify proof");
-
-        assert_eq!(proof_keys, [leaf_keys[0], leaf_keys[1], leaf_keys[2]]);
-    }
-
-    #[test]
-    fn commitment_verifier_multiple_in_between_challenge_keys_and_one_after_last_key_success() {
-        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-        let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-        let largest_key = leaf_keys.iter().max().unwrap();
-        let challenge_keys = [
-            leaf_keys[0],
-            leaf_keys[1],
-            leaf_keys[2],
-            leaf_keys[3],
-            *largest_key,
-        ];
-
-        let mut challenge_keys = challenge_keys.map(|key| (key, None));
-
-        // Increment the least significant byte of every challenge key by 1.
-        for key in &mut challenge_keys {
-            key.0 .0[31] += 1;
-        }
-
-        {
-            // Creating trie inside of closure to drop it before generating proof.
-            let mut trie_recorder = recorder.as_trie_recorder(root);
-            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-                .with_recorder(&mut trie_recorder)
-                .build();
-
-            // Create an iterator over the leaf nodes.
-            let mut iter = trie.into_double_ended_iter().unwrap();
-
-            for challenge_key in &challenge_keys {
-                // Seek to the challenge key.
-                iter.seek(&challenge_key.0 .0).unwrap();
+                iter.seek(&challenge_key.0).unwrap();
 
                 // Access the next leaf node.
                 iter.next();
@@ -668,14 +604,78 @@ mod verify_proof_tests {
 
         assert_eq!(
             proof_keys,
-            [
+            BTreeSet::from_iter([leaf_keys[0], leaf_keys[1], leaf_keys[2]])
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_multiple_in_between_challenge_keys_and_one_after_last_key_success() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        let largest_key = leaf_keys.iter().max().unwrap();
+        let mut challenge_keys = [
+            leaf_keys[0],
+            leaf_keys[1],
+            leaf_keys[2],
+            leaf_keys[3],
+            *largest_key,
+        ];
+
+        // Increment the least significant byte of every challenge key by 1.
+        for key in &mut challenge_keys {
+            key.0[31] += 1;
+        }
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            for challenge_key in &challenge_keys {
+                // Seek to the challenge key.
+                iter.seek(&challenge_key.0).unwrap();
+
+                // Access the next leaf node.
+                iter.next();
+
+                // Access the previous leaf node.
+                iter.next_back();
+            }
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        // Verify proof
+        let proof_keys =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &challenge_keys,
+                &proof,
+            )
+            .expect("Failed to verify proof");
+
+        assert_eq!(
+            proof_keys,
+            BTreeSet::from_iter([
                 leaf_keys[0],
                 leaf_keys[1],
                 leaf_keys[2],
                 leaf_keys[3],
                 leaf_keys[4],
                 *largest_key
-            ]
+            ])
         );
     }
 
@@ -687,15 +687,13 @@ mod verify_proof_tests {
         // This recorder is used to record accessed keys in the trie and later generate a proof for them.
         let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
-        let challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
-
-        let mut challenge_keys = challenge_keys.map(|key| (key, None));
+        let mut challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
 
         // Decrement the most significant bit of every challenge key by 1.
         let mut i = 0;
         for key in &mut challenge_keys {
             i += 2;
-            key.0 .0[0] -= i;
+            key.0[0] -= i;
         }
 
         {
@@ -710,7 +708,7 @@ mod verify_proof_tests {
 
             for challenge_key in &challenge_keys {
                 // Seek to the challenge key.
-                iter.seek(&challenge_key.0 .0).unwrap();
+                iter.seek(&challenge_key.0).unwrap();
 
                 // Access the next leaf node.
                 iter.next();
@@ -735,7 +733,7 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, [leaf_keys[0]]);
+        assert_eq!(proof_keys, BTreeSet::from_iter([leaf_keys[0]]));
     }
 
     #[test]
@@ -746,15 +744,13 @@ mod verify_proof_tests {
         // This recorder is used to record accessed keys in the trie and later generate a proof for them.
         let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
-        let challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
-
-        let mut challenge_keys = challenge_keys.map(|key| (key, None));
+        let mut challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
 
         // Decrement the most significant bit of every challenge key by 1.
         let mut i = 0;
         for key in &mut challenge_keys {
             i += 2;
-            key.0 .0[0] += i;
+            key.0[0] += i;
         }
 
         {
@@ -769,7 +765,7 @@ mod verify_proof_tests {
 
             for challenge_key in &challenge_keys {
                 // Seek to the challenge key.
-                iter.seek(&challenge_key.0 .0).unwrap();
+                iter.seek(&challenge_key.0).unwrap();
 
                 // Access the next leaf node.
                 iter.next();
@@ -794,7 +790,7 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, [leaf_keys[0]]);
+        assert_eq!(proof_keys, BTreeSet::from_iter([leaf_keys[0]]));
     }
 
     #[test]
@@ -805,14 +801,12 @@ mod verify_proof_tests {
         // This recorder is used to record accessed keys in the trie and later generate a proof for them.
         let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
-        let challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
-
-        let mut challenge_keys = challenge_keys.map(|key| (key, None));
+        let mut challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
 
         // Decrement most significant byte of second challenge key by 1.
-        challenge_keys[1].0 .0[0] -= 1;
+        challenge_keys[1].0[0] -= 1;
         // Increment most significant byte of third challenge key by 1.
-        challenge_keys[2].0 .0[0] += 1;
+        challenge_keys[2].0[0] += 1;
 
         {
             // Creating trie inside of closure to drop it before generating proof.
@@ -826,7 +820,7 @@ mod verify_proof_tests {
 
             for challenge_key in &challenge_keys {
                 // Seek to the challenge key.
-                iter.seek(&challenge_key.0 .0).unwrap();
+                iter.seek(&challenge_key.0).unwrap();
 
                 // Access the next leaf node.
                 iter.next();
@@ -851,7 +845,7 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, [leaf_keys[0]]);
+        assert_eq!(proof_keys, BTreeSet::from_iter([leaf_keys[0]]));
     }
 
     #[test]
@@ -861,10 +855,10 @@ mod verify_proof_tests {
         // This recorder is used to record accessed keys in the trie and later generate a proof for them.
         let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
-        let mut challenge_keys = [(leaf_keys[1], None)];
+        let mut challenge_keys = [leaf_keys[1]];
 
         // Decrement the least significant byte of the challenge key by 1.
-        challenge_keys[0].0 .0[31] -= 1;
+        challenge_keys[0].0[31] -= 1;
 
         {
             // Creating trie inside of closure to drop it before generating proof.
@@ -878,7 +872,7 @@ mod verify_proof_tests {
 
             for challenge_key in &challenge_keys {
                 // Seek to the challenge key.
-                iter.seek(&challenge_key.0 .0).unwrap();
+                iter.seek(&challenge_key.0).unwrap();
 
                 // Access the next leaf node.
                 iter.next();
@@ -903,7 +897,10 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, [leaf_keys[0], leaf_keys[1],]);
+        assert_eq!(
+            proof_keys,
+            BTreeSet::from_iter([leaf_keys[0], leaf_keys[1],])
+        );
     }
 
     #[test]
@@ -913,10 +910,10 @@ mod verify_proof_tests {
         // This recorder is used to record accessed keys in the trie and later generate a proof for them.
         let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
-        let mut challenge_keys = [(leaf_keys[0], None)];
+        let mut challenge_keys = [leaf_keys[0]];
 
         // Increment the least significant byte of the challenge key by 1.
-        challenge_keys[0].0 .0[31] += 1;
+        challenge_keys[0].0[31] += 1;
 
         {
             // Creating trie inside of closure to drop it before generating proof.
@@ -930,7 +927,7 @@ mod verify_proof_tests {
 
             for challenge_key in &challenge_keys {
                 // Seek to the challenge key.
-                iter.seek(&challenge_key.0 .0).unwrap();
+                iter.seek(&challenge_key.0).unwrap();
 
                 // Access the next leaf node.
                 iter.next();
@@ -955,7 +952,10 @@ mod verify_proof_tests {
             )
             .expect("Failed to verify proof");
 
-        assert_eq!(proof_keys, [leaf_keys[0], leaf_keys[1],]);
+        assert_eq!(
+            proof_keys,
+            BTreeSet::from_iter([leaf_keys[0], leaf_keys[1],])
+        );
     }
 
     #[test]
@@ -975,7 +975,7 @@ mod verify_proof_tests {
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &empty_root,
-                &[(*challenge_key, None)],
+                &[*challenge_key],
                 &empty_proof
             ),
             Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
@@ -1017,7 +1017,7 @@ mod verify_proof_tests {
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &invalid_root,
-                &[(*challenge_key, None)],
+                &[*challenge_key],
                 &proof
             ),
             Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
@@ -1060,7 +1060,7 @@ mod verify_proof_tests {
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &[(*challenge_key, None)],
+                &[*challenge_key],
                 &proof
             ),
             Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
@@ -1097,7 +1097,7 @@ mod verify_proof_tests {
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &[(*challenge_key, None)],
+                &[*challenge_key],
                 &proof
             ),
             Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
@@ -1171,7 +1171,7 @@ mod verify_proof_tests {
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &[(*challenge_key, None)],
+                &[*challenge_key],
                 &proof
             ),
             Err("Failed to seek challenged key.".into())
@@ -1212,7 +1212,7 @@ mod verify_proof_tests {
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &[(*challenge_key, None)],
+                &[*challenge_key],
                 &proof
             ),
             Err("Failed to seek challenged key.".into())
@@ -1261,7 +1261,7 @@ mod verify_proof_tests {
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &[(challenge_key, None)],
+                &[challenge_key],
                 &proof
             ),
             Err("Failed to seek challenged key.".into())
@@ -1303,7 +1303,7 @@ mod verify_proof_tests {
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &[(challenge_key, None)],
+                &[challenge_key],
                 &proof
             ),
             Err("Failed to get next leaf.".into())
@@ -1345,7 +1345,7 @@ mod verify_proof_tests {
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &[(challenge_key, None)],
+                &[challenge_key],
                 &proof
             ),
             Err("Failed to get previous leaf.".into())
@@ -1395,7 +1395,7 @@ mod verify_proof_tests {
         assert_eq!(
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
                 &root,
-                &[(challenge_key, None)],
+                &[challenge_key],
                 &proof
             ),
             Err("Failed to get next leaf.".into())
@@ -1405,7 +1405,6 @@ mod verify_proof_tests {
 
 mod mutate_root_tests {
     use super::*;
-    use shp_traits::ChallengeKeyInclusion;
     use sp_core::H256;
 
     fn setup_trie_and_recorder() -> (
@@ -1422,7 +1421,7 @@ mod mutate_root_tests {
     fn apply_delta(
         mut memdb: MemoryDB<BlakeTwo256>,
         mut root: H256,
-        mutations: Vec<Mutation<H256>>,
+        mutations: Vec<(H256, Mutation)>,
     ) -> H256 {
         let new_root = {
             let mut trie =
@@ -1430,10 +1429,10 @@ mod mutate_root_tests {
 
             for mutation in mutations.clone() {
                 match mutation {
-                    Mutation::Add(key) => {
+                    (key, Mutation::Add) => {
                         trie.insert(&key.0, &[]).unwrap();
                     }
-                    Mutation::Remove(key) => {
+                    (key, Mutation::Remove) => {
                         trie.remove(&key.0).unwrap();
                     }
                 }
@@ -1444,8 +1443,8 @@ mod mutate_root_tests {
 
         for mutation in mutations {
             match mutation {
-                Mutation::Add(key) => assert_key_in_trie(&memdb, &new_root, &key),
-                Mutation::Remove(key) => assert_key_not_in_trie(&memdb, &new_root, &key),
+                (key, Mutation::Add) => assert_key_in_trie(&memdb, &new_root, &key),
+                (key, Mutation::Remove) => assert_key_not_in_trie(&memdb, &new_root, &key),
             }
         }
 
@@ -1455,7 +1454,7 @@ mod mutate_root_tests {
     fn generate_proof_and_verify(
         recorder: &mut Recorder<BlakeTwo256>,
         root: &H256,
-        challenge_keys: &[(H256, Option<ChallengeKeyInclusion>)],
+        challenge_keys: &[H256],
     ) -> CompactProof {
         let proof = recorder
             .clone()
@@ -1500,7 +1499,7 @@ mod mutate_root_tests {
         let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 
         let challenge_key = generate_unique_key(&leaf_keys);
-        let mutations: Vec<Mutation<H256>> = vec![Mutation::Add(challenge_key)];
+        let mutations: Vec<(H256, Mutation)> = vec![(challenge_key, Mutation::Add)];
 
         let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
 
@@ -1520,7 +1519,7 @@ mod mutate_root_tests {
             iter.next_back();
         }
 
-        let proof = generate_proof_and_verify(&mut recorder, &root, &[(challenge_key, None)]);
+        let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
 
         let (memdb, new_root) =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
@@ -1538,7 +1537,7 @@ mod mutate_root_tests {
         let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 
         let challenge_key = *leaf_keys.first().unwrap();
-        let mutations: Vec<Mutation<H256>> = vec![Mutation::Remove(challenge_key)];
+        let mutations: Vec<(H256, Mutation)> = vec![(challenge_key, Mutation::Remove)];
 
         let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
 
@@ -1553,7 +1552,7 @@ mod mutate_root_tests {
             assert_eq!(iter.next().unwrap().unwrap().0, challenge_key.0);
         }
 
-        let proof = generate_proof_and_verify(&mut recorder, &root, &[(challenge_key, None)]);
+        let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
 
         let (memdb, new_root) =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
@@ -1572,12 +1571,12 @@ mod mutate_root_tests {
 
         let mut challenge_keys = vec![];
         for _ in 0..3 {
-            challenge_keys.push((generate_unique_key(&leaf_keys), None));
+            challenge_keys.push(generate_unique_key(&leaf_keys));
         }
 
-        let mutations: Vec<Mutation<H256>> = challenge_keys
+        let mutations: Vec<(H256, Mutation)> = challenge_keys
             .iter()
-            .map(|key| Mutation::Add(key.0))
+            .map(|key| (*key, Mutation::Add))
             .collect();
 
         let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
@@ -1590,7 +1589,7 @@ mod mutate_root_tests {
 
             for challenge_key in &challenge_keys {
                 let mut iter = trie.into_double_ended_iter().unwrap();
-                iter.seek(&challenge_key.0 .0).unwrap();
+                iter.seek(challenge_key.0.as_slice()).unwrap();
 
                 // Access the next leaf node.
                 iter.next();
@@ -1609,7 +1608,7 @@ mod mutate_root_tests {
             .expect("Failed to mutate root");
 
         for challenge_key in &challenge_keys {
-            assert_key_in_trie(&memdb, &new_root, &challenge_key.0);
+            assert_key_in_trie(&memdb, &new_root, &challenge_key);
         }
 
         assert_eq!(new_root, expected_root);
@@ -1619,14 +1618,10 @@ mod mutate_root_tests {
     fn mutate_root_remove_multiple_keys_success() {
         let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 
-        let challenge_keys = leaf_keys
+        let challenge_keys = leaf_keys.into_iter().take(3).collect::<Vec<H256>>();
+        let mutations: Vec<(H256, Mutation)> = challenge_keys
             .iter()
-            .take(3)
-            .map(|key| (*key, None))
-            .collect::<Vec<(H256, Option<ChallengeKeyInclusion>)>>();
-        let mutations: Vec<Mutation<H256>> = challenge_keys
-            .iter()
-            .map(|key| Mutation::Remove(key.0))
+            .map(|key| (*key, Mutation::Remove))
             .collect();
 
         let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
@@ -1639,8 +1634,8 @@ mod mutate_root_tests {
 
             for challenge_key in &challenge_keys {
                 let mut iter = trie.iter().unwrap();
-                iter.seek(&challenge_key.0 .0).unwrap();
-                assert_eq!(iter.next().unwrap().unwrap().0, challenge_key.0 .0);
+                iter.seek(&challenge_key.0).unwrap();
+                assert_eq!(iter.next().unwrap().unwrap().0, challenge_key.0);
             }
         }
 
@@ -1653,7 +1648,7 @@ mod mutate_root_tests {
             .expect("Failed to mutate root");
 
         for challenge_key in &challenge_keys {
-            assert_key_not_in_trie(&memdb, &new_root, &challenge_key.0);
+            assert_key_not_in_trie(&memdb, &new_root, &challenge_key);
         }
 
         assert_eq!(new_root, expected_root);

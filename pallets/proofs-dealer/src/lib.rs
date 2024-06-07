@@ -29,9 +29,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
-    use shp_traits::{
-        ChallengeKeyInclusion, CommitmentVerifier, ProofDeltaApplier, ProvidersInterface,
-    };
+    use shp_traits::{CommitmentVerifier, Mutation, ProofDeltaApplier, ProvidersInterface};
     use sp_runtime::traits::Convert;
     use types::{KeyFor, ProviderFor};
 
@@ -46,10 +44,13 @@ pub mod pallet {
         /// The Providers pallet.
         /// To check if whoever submits a proof is a registered Provider.
         type ProvidersPallet: ProvidersInterface<
-            AccountId = Self::AccountId,
-            MerkleHash = Self::MerkleTrieHash,
-            Balance = Self::NativeBalance,
-        >;
+                AccountId = Self::AccountId,
+                MerkleHash = Self::MerkleTrieHash,
+                Balance = Self::NativeBalance,
+            > + shp_traits::MutateProvidersInterface<
+                AccountId = Self::AccountId,
+                MerklePatriciaRoot = Self::MerkleTrieHash,
+            >;
 
         /// The type used to verify Merkle Patricia Forest proofs.
         /// This verifies proofs of keys belonging to the Merkle Patricia Forest.
@@ -59,8 +60,7 @@ pub mod pallet {
         type ForestVerifier: CommitmentVerifier<Commitment = KeyFor<Self>, Challenge = KeyFor<Self>>
             + ProofDeltaApplier<
                 Self::MerkleTrieHashing,
-                Commitment = KeyFor<Self>,
-                Challenge = KeyFor<Self>,
+                Key = KeyFor<Self>,
                 Proof = ForestVerifierProofFor<Self>,
             >;
 
@@ -182,7 +182,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
-        BoundedVec<(KeyFor<T>, Option<ChallengeKeyInclusion>), MaxCustomChallengesPerBlockFor<T>>,
+        BoundedVec<(KeyFor<T>, Option<Mutation>), MaxCustomChallengesPerBlockFor<T>>,
     >;
 
     /// The block number of the last checkpoint challenge round.
@@ -227,11 +227,8 @@ pub mod pallet {
     /// is required, but using a `VecDeque` would be more efficient as this is a FIFO queue.
     #[pallet::storage]
     #[pallet::getter(fn challenges_queue)]
-    pub type ChallengesQueue<T: Config> = StorageValue<
-        _,
-        BoundedVec<(KeyFor<T>, ChallengeKeyInclusion), ChallengesQueueLengthFor<T>>,
-        ValueQuery,
-    >;
+    pub type ChallengesQueue<T: Config> =
+        StorageValue<_, BoundedVec<KeyFor<T>, ChallengesQueueLengthFor<T>>, ValueQuery>;
 
     /// A priority queue of file keys that have been challenged manually.
     ///
@@ -247,7 +244,7 @@ pub mod pallet {
     #[pallet::getter(fn priority_challenges_queue)]
     pub type PriorityChallengesQueue<T: Config> = StorageValue<
         _,
-        BoundedVec<(KeyFor<T>, ChallengeKeyInclusion), ChallengesQueueLengthFor<T>>,
+        BoundedVec<(KeyFor<T>, Option<Mutation>), ChallengesQueueLengthFor<T>>,
         ValueQuery,
     >;
 
@@ -353,6 +350,10 @@ pub mod pallet {
 
         /// Failed to apply delta to the forest proof partial trie.
         FailedToApplyDelta,
+
+        /// An unexepected mutation was found in the checkpoint challenges.
+        /// Normally only `Mutation::Remove` is supported.
+        UnexpectedMutation,
     }
 
     #[pallet::call]
@@ -367,15 +368,11 @@ pub mod pallet {
         /// TODO: Consider checking also if there was a request to change MSP.
         #[pallet::call_index(0)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn challenge(
-            origin: OriginFor<T>,
-            key: KeyFor<T>,
-            inclusion: ChallengeKeyInclusion,
-        ) -> DispatchResultWithPostInfo {
+        pub fn challenge(origin: OriginFor<T>, key: KeyFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
-            Self::do_challenge(&who, &key, inclusion)?;
+            Self::do_challenge(&who, &key)?;
 
             // Emit event.
             Self::deposit_event(Event::NewChallenge {

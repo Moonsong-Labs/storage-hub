@@ -5,15 +5,14 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
-use shp_traits::{
-    ChallengeKeyInclusion, CommitmentVerifier, MaybeDebug, Mutation, ProofDeltaApplier,
-};
+use shp_traits::{CommitmentVerifier, MaybeDebug, Mutation, ProofDeltaApplier};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     traits::{BlakeTwo256, Bounded, Convert, IdentifyAccount, IdentityLookup, Verify},
     BuildStorage, DispatchError, FixedU128, MultiSignature, SaturatedConversion,
 };
+use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieLayout};
 use system::pallet_prelude::BlockNumberFor;
 
@@ -245,15 +244,19 @@ where
 {
     type Proof = CompactProof;
     type Commitment = H256;
-    type Challenge = C;
+    type Challenge = H256;
 
     fn verify_proof(
         _root: &Self::Commitment,
-        challenges: &[(Self::Challenge, Option<ChallengeKeyInclusion>)],
+        _challenges: &[Self::Challenge],
         proof: &CompactProof,
-    ) -> Result<Vec<Self::Challenge>, DispatchError> {
+    ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            Ok(challenges.iter().map(|(c, _)| *c).collect())
+            Ok(proof
+                .encoded_nodes
+                .iter()
+                .map(|node| H256::from_slice(&node[..]))
+                .collect())
         } else {
             Err("Proof is empty".into())
         }
@@ -266,14 +269,13 @@ where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
     type Proof = CompactProof;
-    type Commitment = <T::Hash as sp_core::Hasher>::Out;
-    type Challenge = <T::Hash as sp_core::Hasher>::Out;
+    type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(
-        root: &Self::Commitment,
-        _mutations: &[Mutation<Self::Challenge>],
+        root: &Self::Key,
+        _mutations: &[(Self::Key, Mutation)],
         _proof: &Self::Proof,
-    ) -> Result<(MemoryDB<T::Hash>, Self::Commitment), DispatchError> {
+    ) -> Result<(MemoryDB<T::Hash>, Self::Key), DispatchError> {
         // Just return the root as is with no mutations
         Ok((MemoryDB::<T::Hash>::default(), *root))
     }

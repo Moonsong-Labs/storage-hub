@@ -6,9 +6,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
-use shp_traits::{
-    ChallengeKeyInclusion, MutateProvidersInterface, Mutation, ReadProvidersInterface,
-};
+use shp_traits::{AsCompact, MutateProvidersInterface, Mutation, ReadProvidersInterface};
 use sp_core::Hasher;
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
@@ -447,15 +445,29 @@ where
             }
         }
 
-        // TODO: Initialise challenges properly constructing the key for this particular file.
-        let file_key = FileKeyHasher::<T>::hash(&location.encode());
+        // Compute the file key hash.
+        let file_key = Self::compute_file_key(
+            file_metadata.owner.clone(),
+            location.clone(),
+            file_metadata.size.clone(),
+            file_metadata.fingerprint.clone(),
+        );
 
         // Verify the proof of non-inclusion.
-        <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
-            &bsp_id,
-            &[(file_key, Some(ChallengeKeyInclusion::NotIncluded))],
-            &non_inclusion_forest_proof,
-        )?;
+        let proven_keys =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+                &bsp_id,
+                &[file_key],
+                &non_inclusion_forest_proof,
+            )?;
+
+        // TODO: Use BTreeSet instead for faster lookups.
+        // Ensure that the file key IS NOT part of the BSP's forest.
+        // The runtime is responsible for adding and removing keys, computing the new root and updating the BSP's root.
+        ensure!(
+            !proven_keys.contains(&file_key),
+            Error::<T>::ExpectedNonInclusionProof
+        );
 
         // TODO: Generate challenges for the key proof properly.
         let challenges = vec![];
@@ -506,7 +518,7 @@ where
         // Compute new root after inserting new file key in forest partial trie.
         let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
             &root,
-            &[Mutation::Add(file_key)],
+            &[(file_key, Mutation::Add)],
             &non_inclusion_forest_proof,
         )?;
 
@@ -556,10 +568,10 @@ where
 
         // Check if there are already BSPs who have confirmed to store the file.
         if file_metadata.bsps_confirmed >= T::StorageRequestBspsRequiredType::zero() {
-            // Issue a challenge to force the BSPs to update their storage root.
+            // Apply Remove mutation of the file key to the BSPs that have confirmed storing the file (proofs of inclusion).
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &file_key,
-                ChallengeKeyInclusion::NotIncluded,
+                Some(Mutation::Remove),
             )?;
         }
 
@@ -595,7 +607,7 @@ where
     /// 1. The BSP has volunteered and confirmed storing the file and wants to stop storing it while the storage request is still open.
     ///
     /// > In this case, the BSP has volunteered and confirmed storing the file for an existing storage request.
-    ///     Therefore, we decrement the `bsps_confirmed` by 1.  
+    ///     Therefore, we decrement the `bsps_confirmed` by 1.
     ///
     /// 2. The BSP stops storing a file that has an opened storage request but is not a volunteer.
     ///
@@ -689,11 +701,20 @@ where
         };
 
         // Verify the proof of inclusion.
-        <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
-            &bsp_id,
-            &[(file_key, Some(ChallengeKeyInclusion::Included))],
-            &inclusion_forest_proof,
-        )?;
+        let proven_keys =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+                &bsp_id,
+                &[file_key],
+                &inclusion_forest_proof,
+            )?;
+
+        // TODO: Use BTreeSet instead for faster lookups.
+        // Ensure that the file key IS part of the BSP's forest.
+        // The runtime is responsible for adding and removing keys, computing the new root and updating the BSP's root.
+        ensure!(
+            proven_keys.contains(&file_key),
+            Error::<T>::ExpectedInclusionProof
+        );
 
         // Get the current root of the BSP.
         let root = <T::Providers as shp_traits::ProvidersInterface>::get_root(bsp_id)
@@ -702,7 +723,7 @@ where
         // Compute new root after removing file key from forest partial trie.
         let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
             &root,
-            &[Mutation::Remove(file_key)],
+            &[(file_key, Mutation::Remove)],
             &inclusion_forest_proof,
         )?;
 
@@ -781,6 +802,27 @@ where
 
         T::ThresholdType::decode(&mut &xor_result[..])
             .map_err(|_| Error::<T>::FailedToDecodeThreshold)
+    }
+
+    /// Compute file key from metadata.
+    pub(crate) fn compute_file_key(
+        owner: T::AccountId,
+        location: FileLocation<T>,
+        size: StorageData<T>,
+        fingerprint: Fingerprint<T>,
+    ) -> FileKey<T> {
+        FileKeyHasher::<T>::hash(
+            &[
+                &owner.encode(),
+                &location.encode(),
+                &AsCompact(size).encode(),
+                &fingerprint.encode(),
+            ]
+            .into_iter()
+            .flatten()
+            .cloned()
+            .collect::<Vec<u8>>(),
+        )
     }
 }
 
