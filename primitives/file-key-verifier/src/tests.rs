@@ -10,7 +10,10 @@ use sp_trie::{
 };
 use trie_db::{Hasher, Trie, TrieIterator};
 
-use crate::{FileKeyProof, FileKeyVerifier, FileMetadata, Fingerprint};
+use crate::types::FileMetadata;
+use crate::types::Fingerprint;
+use crate::ChunkId;
+use crate::{FileKeyProof, FileKeyVerifier};
 
 /// The hash type of trie node keys
 type HashT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -106,7 +109,7 @@ pub fn merklise_data<T: TrieLayout>(data: &[u8]) -> (MemoryDB<T::Hash>, HashT<T>
     {
         let mut t = TrieDBMutBuilder::<T>::new(&mut memdb, &mut root).build();
         for (k, v) in &chunks {
-            t.insert(&AsCompact(*k).encode(), v).unwrap();
+            t.insert(&ChunkId::new(*k).as_trie_key(), v).unwrap();
         }
     }
 
@@ -1038,4 +1041,12 @@ fn commitment_verifier_challenge_with_none_value_failure() {
         >::verify_proof(&file_key, &challenges, &file_key_proof),
         Err("The proof is invalid. The challenged chunk was not found in the trie, possibly because the challenged chunk has an index higher than the amount of chunks in the file. This should not be possible, provided that the size of the file (and therefore number of chunks) is correct.".into())
     );
+}
+
+#[test]
+fn chunk_id_convert_to_and_from_trie_key() {
+    let chunk_id = ChunkId::new(0x12345678u64);
+    let chunk_id_bytes = chunk_id.as_trie_key();
+    let chunk_id_decoded = ChunkId::from_trie_key(&chunk_id_bytes).unwrap();
+    assert_eq!(chunk_id, chunk_id_decoded);
 }

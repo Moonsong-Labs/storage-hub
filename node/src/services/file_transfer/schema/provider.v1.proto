@@ -25,7 +25,7 @@ message RemoteUploadDataRequest {
 	// Location to store data.
 	bytes file_key = 1;
 	// Data to store.
-	bytes file_chunk_with_proof = 2;
+	bytes file_key_proof = 2;
 }
 
 // Remote data upload response.
@@ -45,5 +45,5 @@ message RemoteDownloadDataRequest {
 message RemoteDownloadDataResponse {
 	// Read data stored in provider. No data means that the provider
 	// couldn't retrieve the data at the requested locations.
-	bytes file_chunk_with_proof = 1;
+	bytes file_key_proof = 1;
 }

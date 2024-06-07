@@ -1,4 +1,4 @@
-use shc_common::types::{Chunk, ChunkId, FileMetadata, FileProof, HasherOutT};
+use shc_common::types::{Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HasherOutT};
 use trie_db::TrieLayout;
 
 #[derive(Debug)]
@@ -77,7 +77,7 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         &self,
         key: &HasherOutT<T>,
         chunk_id: &Vec<ChunkId>,
-    ) -> Result<FileProof, FileStorageError>;
+    ) -> Result<FileKeyProof, FileStorageError>;
 
     /// Remove a file from storage.
     fn delete_file(&mut self, key: &HasherOutT<T>);
