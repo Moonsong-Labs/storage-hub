@@ -26,9 +26,9 @@ use crate::{
         ProvidersPalletFor, RandomChallengesPerBlockFor, RandomnessOutputFor,
         RandomnessProviderFor, StakeToChallengePeriodFor, TreasuryAccountFor,
     },
-    ChallengesQueue, ChallengesTicker, Error, Event, LastCheckpointTick,
-    LastTickProviderSubmittedProofFor, Pallet, PriorityChallengesQueue, TickToChallengesSeed,
-    TickToCheckpointChallenges,
+    ChallengeTickToChallengedProviders, ChallengesQueue, ChallengesTicker, Error, Event,
+    LastCheckpointTick, LastTickProviderSubmittedProofFor, Pallet, PriorityChallengesQueue,
+    SlashableProviders, TickToChallengesSeed, TickToCheckpointChallenges,
 };
 
 macro_rules! expect_or_err {
@@ -224,28 +224,41 @@ where
         Ok(())
     }
 
-    // TODO: Document.
+    /// Generate a new round of challenges, be it random or checkpoint.
+    ///
+    /// Random challenges are automatically generated based on some external source of
+    /// randomness, and are added to `TickToChallengesSeed`, for this block's number.
+    ///
+    /// It also takes care of including the challenges from the `ChallengesQueue` and
+    /// `PriorityChallengesQueue`. This custom challenges are only included in "checkpoint"
+    /// blocks
+    ///
+    /// Additionally, it takes care of checking if there are Providers that have
+    /// failed to submit a proof, and should have submitted one by this block. It does so
+    /// by checking the `ChallengeTickToChallengedProviders` StorageMap. If a Provider is found
+    /// to have failed to submit a proof, it is subject to slashing.
+    ///
+    /// Finally, it cleans up:
+    /// - The `TickToChallengesSeed` StorageMap, removing entries older than `ChallengeHistoryLength`.
+    /// - The `TickToCheckpointChallenges` StorageMap, removing the previous checkpoint challenge block.
+    /// - The `ChallengeTickToChallengedProviders` StorageMap, removing entries for the current block number.
     pub fn do_new_challenges_round(n: BlockNumberFor<T>, weight: &mut WeightMeter) {
-        // TODO: Benchmark computational weight cost of this hook.
-        // TODO: Specify read-write weight of this hook.
-
-        // TODO: Consider checkpoint challenge rounds.
-        // TODO: Check if providers failed to submit a proof.
-        // TODO: Clean up `TickToChallengesSeed`, `TickToCheckpointChallenges` and `ChallengeTickToChallengedProviders` storage.
-
         // Increment the challenges ticker.
         let mut challenges_ticker = ChallengesTicker::<T>::get();
         challenges_ticker.saturating_inc();
         ChallengesTicker::<T>::set(challenges_ticker);
+        weight.consume(T::DbWeight::get().reads_writes(1, 1));
 
         // Store random seed for this tick.
         let (seed, _) = RandomnessProviderFor::<T>::random(challenges_ticker.encode().as_ref());
-        TickToChallengesSeed::<T>::insert(challenges_ticker, seed);
+        TickToChallengesSeed::<T>::set(challenges_ticker, Some(seed));
+        weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
         // Remove the oldest challenge seed stored, to clean up the storage.
         let tick_to_remove = challenges_ticker.checked_sub(&ChallengeHistoryLengthFor::<T>::get());
         if let Some(tick_to_remove) = tick_to_remove {
             TickToChallengesSeed::<T>::remove(tick_to_remove);
+            weight.consume(T::DbWeight::get().reads_writes(0, 1));
         }
 
         // Emit new challenge seed event.
@@ -263,15 +276,38 @@ where
             // This is a checkpoint challenge round, so we also generate new checkpoint challenges.
             Self::do_new_checkpoint_challenge_round(challenges_ticker, weight);
         }
+        weight.consume(T::DbWeight::get().reads_writes(2, 0));
+
+        // If there are providers left in `ChallengeTickToChallengedProviders` for this tick,
+        // they are marked as slashable.
+        if let Some(slashable_providers) =
+            ChallengeTickToChallengedProviders::<T>::get(challenges_ticker)
+        {
+            for provider in slashable_providers {
+                SlashableProviders::<T>::set(provider, Some(()));
+                weight.consume(T::DbWeight::get().reads_writes(0, 1));
+
+                // Emit slashable provider event.
+                Self::deposit_event(Event::SlashableProvider { provider });
+            }
+        }
+        weight.consume(T::DbWeight::get().reads_writes(1, 0));
+
+        // Remove this tick entry from `ChallengeTickToChallengedProviders`.
+        ChallengeTickToChallengedProviders::<T>::remove(challenges_ticker);
+        weight.consume(T::DbWeight::get().reads_writes(0, 1));
     }
 
-    // TODO: Document.
+    /// Generate new checkpoint challenges for a given block.
+    ///
+    /// Fills up a new vector of checkpoint challenges with challenges in the `PriorityChallengesQueue`,
+    /// and the `ChallengesQueue` if there is space left.
+    ///
+    /// Cleans up the `TickToCheckpointChallenges` StorageMap, removing the previous checkpoint challenge block.
     fn do_new_checkpoint_challenge_round(
         current_tick: BlockNumberFor<T>,
         weight: &mut WeightMeter,
     ) {
-        // TODO: Specify read-write weight of this hook.
-
         let mut new_checkpoint_challenges: BoundedVec<
             KeyFor<T>,
             MaxCustomChallengesPerBlockFor<T>,
@@ -283,6 +319,7 @@ where
         let original_priority_challenges_queue = PriorityChallengesQueue::<T>::get();
         let mut priority_challenges_queue =
             VecDeque::from(original_priority_challenges_queue.to_vec());
+        weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
         while !new_checkpoint_challenges.is_full() && !priority_challenges_queue.is_empty() {
             let challenge = match priority_challenges_queue.pop_front() {
@@ -311,11 +348,13 @@ where
 
         // Reset the priority challenges queue with the leftovers.
         PriorityChallengesQueue::<T>::set(new_priority_challenges_queue);
+        weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
         // Fill up this round's checkpoint challenges with challenges in the `ChallengesQueue`.
         // It gets filled up until the max number of custom challenges for a block is reached, or until
         // there are no more challenges in the `ChallengesQueue`.
         let mut challenges_queue = VecDeque::from(ChallengesQueue::<T>::get().to_vec());
+        weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
         while !new_checkpoint_challenges.is_full() && !challenges_queue.is_empty() {
             let challenge = match challenges_queue.pop_front() {
@@ -344,16 +383,20 @@ where
 
         // Reset the challenges queue with the leftovers.
         ChallengesQueue::<T>::set(new_challenges_queue);
+        weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
         // Store the new checkpoint challenges.
         TickToCheckpointChallenges::<T>::set(current_tick, Some(new_checkpoint_challenges.clone()));
+        weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
         // Remove the last checkpoint challenge from storage to clean up.
         let last_checkpoint_tick = LastCheckpointTick::<T>::get();
         TickToCheckpointChallenges::<T>::remove(last_checkpoint_tick);
+        weight.consume(T::DbWeight::get().reads_writes(1, 1));
 
         // Set this tick as the last checkpoint tick.
         LastCheckpointTick::<T>::set(current_tick);
+        weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
         // Emit new checkpoint challenge event.
         Self::deposit_event(Event::NewCheckpointChallenge {

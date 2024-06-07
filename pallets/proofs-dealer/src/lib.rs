@@ -253,6 +253,10 @@ pub mod pallet {
     #[pallet::getter(fn challenges_ticker)]
     pub type ChallengesTicker<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
+    #[pallet::storage]
+    #[pallet::getter(fn slashable_providers)]
+    pub type SlashableProviders<T: Config> = StorageMap<_, Blake2_128Concat, ProviderFor<T>, ()>;
+
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
     #[pallet::event]
@@ -281,6 +285,9 @@ pub mod pallet {
             challenges_ticker: BlockNumberFor<T>,
             challenges: BoundedVec<KeyFor<T>, MaxCustomChallengesPerBlockFor<T>>,
         },
+
+        /// A slashable provider was found.
+        SlashableProvider { provider: ProviderFor<T> },
     }
 
     // Errors inform users that something went wrong.
@@ -444,36 +451,6 @@ pub mod pallet {
             // If the proof is valid, the execution of this extrinsic should be refunded.
             Ok(Pays::No.into())
         }
-
-        /// Extrinsic to register a new round of challenges.
-        ///
-        /// This function is called by the block producer to register a new round of challenges.
-        /// Random challenges are automatically generated based on some external source of
-        /// randomness, and are added to `BlockToChallenges`, for this block's number.
-        ///
-        /// It also takes care of including the challenges from the `ChallengesQueue` and
-        /// `PriorityChallengesQueue`. This custom challenges are only included in "checkpoint"
-        /// blocks
-        ///
-        /// Additionally, it takes care of checking if there are Providers that have
-        /// failed to submit a proof, and should have submitted one by this block. It does so
-        /// by checking the `ChallengeTickToChallengedProviders` StorageMap. If a Provider is found
-        /// to have failed to submit a proof, it is subject to slashing.
-        ///
-        /// Finally, it cleans up:
-        /// - The `BlockToChallenges` StorageMap, removing entries older than `ChallengeHistoryLength`.
-        /// - The `ChallengeTickToChallengedProviders` StorageMap, removing entries for the current block number.
-        /// TODO: DELETE THIS
-        #[pallet::call_index(2)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn new_challenges_round(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-            ensure_none(origin)?;
-
-            // TODO: Emit events.
-
-            // Return a successful DispatchResultWithPostInfo
-            Ok(().into())
-        }
     }
 
     #[pallet::hooks]
@@ -485,6 +462,8 @@ pub mod pallet {
         /// For more information on the lifecycle of the block and its hooks, see the [Substrate
         /// documentation](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#method.on_poll).
         fn on_poll(n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
+            // TODO: Benchmark computational weight cost of this hook.
+
             Self::do_new_challenges_round(n, weight);
         }
     }
