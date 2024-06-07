@@ -8,7 +8,7 @@
     "node": "21.x.x"
   },
   "scripts": {
-    "update-types": "cd ../api-augment && pnpm scrape && pnpm generate:all && pnpm build; cd ../test",
+    "update-types": "cd ../api-augment && pnpm scrape && pnpm generate:all && pnpm build && pnpm fmt:fix; cd ../test",
     "fmt": "biome format .",
     "fmt:fix": "biome format . --write",
     "lint": "biome lint .",
