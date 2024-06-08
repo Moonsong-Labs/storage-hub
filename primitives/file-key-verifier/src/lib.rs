@@ -6,7 +6,7 @@ use num_bigint::BigUint;
 use scale_info::TypeInfo;
 use serde::{Deserialize, Serialize};
 use shp_traits::{AsCompact, CommitmentVerifier};
-use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
+use sp_std::{collections::btree_set::BTreeSet};
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
 use trie_db::Trie;
 

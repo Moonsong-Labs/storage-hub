@@ -1010,6 +1010,7 @@ fn submit_proof_challenges_block_too_old_fail() {
             &1,
             provider_id,
         );
+
         pallet_storage_providers::BackupStorageProviders::<Test>::insert(
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
