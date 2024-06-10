@@ -124,6 +124,6 @@ where
             proven_challenges.insert(*challenge);
         }
 
-        return Ok(Vec::from_iter(proven_challenges));
+        Ok(proven_challenges)
     }
 }

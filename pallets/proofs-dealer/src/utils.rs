@@ -1,7 +1,3 @@
-// TODO: Remove this attribute once the file is implemented.
-#![allow(dead_code)]
-#![allow(unused_variables)]
-
 use codec::Encode;
 use frame_support::{
     ensure,
@@ -210,18 +206,11 @@ where
             // Aggregate all mutations to apply to the Forest root.
             let mutations: Vec<_> = challenges
                 .iter()
-                .filter_map(|(key, mutation)| {
-                    match mutation {
-                        Some(Mutation::Remove) if forest_keys_proven.contains(key) => {
-                            Some((*key, Mutation::Remove))
-                        }
-                        Some(Mutation::Remove) => None,
-                        Some(Mutation::Add) => {
-                            // TODO: We should never hit this, but if we do, what should we do?
-                            None
-                        }
-                        None => None,
+                .filter_map(|(key, mutation)| match mutation {
+                    Some(Mutation::Remove) if forest_keys_proven.contains(key) => {
+                        Some((*key, Mutation::Remove))
                     }
+                    Some(Mutation::Remove) | Some(Mutation::Add) | None => None,
                 })
                 .collect();
 
@@ -311,9 +300,6 @@ where
     }
 
     /// Add challenge to `PriorityChallengesQueue`.
-    ///
-    /// Keys that are challenged manually are not random and therefore the key inclusion should be specifed.
-    /// The challenges generated randomly from a seed do not have a specified inclusion type.
     ///
     /// Check if challenge is already queued. If it is, just return. Otherwise, add the challenge
     /// to the queue.
