@@ -1,9 +1,10 @@
-use std::collections::HashMap;
-
-use shc_common::types::{Chunk, ChunkId, FileMetadata, FileProof, HasherOutT, Leaf, H_LENGTH};
-
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
+use std::collections::HashMap;
 use trie_db::TrieDBMutBuilder;
+
+use shc_common::types::{
+    Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HasherOutT, H_LENGTH,
+};
 
 use crate::traits::{
     FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError, FileStorageWriteOutcome,
@@ -54,7 +55,7 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
         let mut chunks = Vec::new();
         for chunk_id in chunk_ids {
             let chunk: Option<Vec<u8>> = trie
-                .get(&chunk_id.to_be_bytes())
+                .get(&chunk_id.as_trie_key())
                 .map_err(|_| FileStorageError::FailedToGetFileChunk)?;
 
             let chunk = chunk.ok_or(FileStorageError::FileChunkDoesNotExist)?;
@@ -70,26 +71,16 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
             .to_compact_proof::<T::Hash>(self.root)
             .map_err(|_| FileStorageError::FailedToGenerateCompactProof)?;
 
-        // Convert the chunks to prove into `Leaf`s.
-        let leaves = chunks
-            .into_iter()
-            .map(|(id, chunk)| Leaf {
-                key: id,
-                data: chunk,
-            })
-            .collect();
-
         Ok(FileProof {
-            proven: leaves,
             proof: proof.into(),
-            root: self.get_root().as_ref().into(),
+            fingerprint: self.get_root().as_ref().into(),
         })
     }
 
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError> {
         let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
 
-        trie.get(&chunk_id.to_be_bytes())
+        trie.get(&chunk_id.as_trie_key())
             .map_err(|_| FileStorageError::FailedToGetFileChunk)?
             .ok_or(FileStorageError::FileChunkDoesNotExist)
     }
@@ -103,14 +94,14 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
 
         // Check that we don't have a chunk already stored.
         if trie
-            .contains(&chunk_id.to_be_bytes())
+            .contains(&chunk_id.as_trie_key())
             .map_err(|_| FileStorageWriteError::FailedToGetFileChunk)?
         {
             return Err(FileStorageWriteError::FileChunkAlreadyExists);
         }
 
         // Insert the chunk into the file trie.
-        trie.insert(&chunk_id.to_be_bytes(), &data)
+        trie.insert(&chunk_id.as_trie_key(), &data)
             .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
 
         drop(trie);
@@ -149,7 +140,7 @@ where
         &self,
         file_key: &HasherOutT<T>,
         chunk_id: &Vec<ChunkId>,
-    ) -> Result<FileProof, FileStorageError> {
+    ) -> Result<FileKeyProof, FileStorageError> {
         let metadata = self
             .metadata
             .get(file_key)
@@ -177,7 +168,9 @@ where
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 
-        file_data.generate_proof(chunk_id)
+        Ok(file_data
+            .generate_proof(chunk_id)?
+            .to_file_key_proof(metadata.clone()))
     }
 
     fn delete_file(&mut self, file_key: &HasherOutT<T>) {
@@ -256,14 +249,14 @@ where
 
         // Check that we don't have a chunk already stored.
         if trie
-            .contains(&chunk_id.to_be_bytes())
+            .contains(&chunk_id.as_trie_key())
             .map_err(|_| FileStorageWriteError::FailedToGetFileChunk)?
         {
             return Err(FileStorageWriteError::FileChunkAlreadyExists);
         }
 
         // Insert the chunk into the file trie.
-        trie.insert(&chunk_id.to_be_bytes(), &data)
+        trie.insert(&chunk_id.as_trie_key(), &data)
             .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
         drop(trie);
 
