@@ -35,6 +35,11 @@ pub enum FileStorageError {
     FingerprintAndStoredFileMismatch,
     /// The requested file is incomplete and a proof is impossible to generate.
     IncompleteFile,
+
+    FailedToReadStorage,
+    FailedToWriteToStorage,
+    FailedToParseKey,
+    ExpectingRootToBeInStorage,
 }
 
 #[derive(Debug)]
@@ -87,7 +92,7 @@ pub trait FileStorage<T: TrieLayout>: 'static {
 
     /// Inserts a new file. If the file already exists, it will return an error.
     /// It is expected that the file key is indeed computed from the [Metadata].
-    /// This method does not require the actual data, file [Chunk]s being inserted separately.
+    /// This method does not require the actual data, file [`Chunk`]s being inserted separately.
     fn insert_file(
         &mut self,
         key: HasherOutT<T>,
