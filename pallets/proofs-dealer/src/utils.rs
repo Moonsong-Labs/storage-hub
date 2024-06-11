@@ -148,7 +148,7 @@ where
 
         // Compute the next tick for which the submitter should be submitting a proof.
         let challenges_tick = last_tick_proven
-            .checked_add(&Self::stake_to_challenge_period(stake)?)
+            .checked_add(&Self::stake_to_challenge_period(stake))
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
         // Check that the challenges tick is lower than the current tick.
@@ -165,6 +165,21 @@ where
                     .saturating_sub(ChallengeHistoryLengthFor::<T>::get()),
             "Challenges tick is too old, beyond the history this pallet keeps track of. This should not be possible.",
             Error::<T>::ChallengesTickTooOld,
+            bool
+        );
+
+        // Check that the submitter is not submitting the proof to late, i.e. that the challenges tick
+        // is not greater or equal than `challenges_tick` + `T::ChallengeTicksTolerance::get()`.
+        // This should never happen, as the `ChallengeTickToChallengedProviders` StorageMap is
+        // cleaned up every block. Therefore if a Provider reached this deadline, it should have been
+        // slashed, and its next challenge tick pushed forwards.
+        let challenges_tick_deadline = challenges_tick
+            .checked_add(&T::ChallengeTicksTolerance::get())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+        expect_or_err!(
+            challenges_tick_deadline> <frame_system::Pallet<T>>::block_number(),
+            "Challenges tick is too late, the proof should be submitted at most `T::ChallengeTicksTolerance::get()` ticks after the challenges tick.",
+            Error::<T>::ChallengesTickTooLate,
             bool
         );
 
@@ -218,8 +233,30 @@ where
                 .map_err(|_| Error::<T>::KeyProofVerificationFailed)?;
         }
 
-        // TODO: Update LastTickProviderSubmittedProofFor.
-        // TODO: Update ChallengeTickToChallengedProviders.
+        // Update `LastTickProviderSubmittedProofFor` to the challenge tick the provider has just
+        // submitted a proof for.
+        LastTickProviderSubmittedProofFor::<T>::set(submitter.clone(), Some(challenges_tick));
+
+        // Remove the submitter from its current deadline registered in `ChallengeTickToChallengedProviders`.
+        ChallengeTickToChallengedProviders::<T>::remove(challenges_tick_deadline, submitter);
+
+        // Calculate the next tick for which the submitter should be submitting a proof.
+        let next_challenges_tick = challenges_tick
+            .checked_add(&Self::stake_to_challenge_period(stake))
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Add tolerance to `next_challenges_tick` to know when is the next deadline for submitting a
+        // proof, for this provider.
+        let next_challenges_tick_deadline = next_challenges_tick
+            .checked_add(&T::ChallengeTicksTolerance::get())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Add this Provider to the `ChallengeTickToChallengedProviders` StorageMap, with its new deadline.
+        ChallengeTickToChallengedProviders::<T>::set(
+            next_challenges_tick_deadline,
+            submitter,
+            Some(()),
+        );
 
         Ok(())
     }
@@ -241,7 +278,7 @@ where
     /// Finally, it cleans up:
     /// - The `TickToChallengesSeed` StorageMap, removing entries older than `ChallengeHistoryLength`.
     /// - The `TickToCheckpointChallenges` StorageMap, removing the previous checkpoint challenge block.
-    /// - The `ChallengeTickToChallengedProviders` StorageMap, removing entries for the current block number.
+    /// - The `ChallengeTickToChallengedProviders` StorageMap, removing entries for the current challenges tick.
     pub fn do_new_challenges_round(n: BlockNumberFor<T>, weight: &mut WeightMeter) {
         // Increment the challenges ticker.
         let mut challenges_ticker = ChallengesTicker::<T>::get();
@@ -271,7 +308,7 @@ where
         let last_checkpoint_tick = LastCheckpointTick::<T>::get();
         // This hook does not return an error, and it cannot fail, that's why we use `saturating_add`.
         let next_checkpoint_tick =
-            last_checkpoint_tick.saturating_add(T::CheckpointChallengePeriod::get().into());
+            last_checkpoint_tick.saturating_add(T::CheckpointChallengePeriod::get());
         if challenges_ticker == next_checkpoint_tick {
             // This is a checkpoint challenge round, so we also generate new checkpoint challenges.
             Self::do_new_checkpoint_challenge_round(challenges_ticker, weight);
@@ -280,22 +317,60 @@ where
 
         // If there are providers left in `ChallengeTickToChallengedProviders` for this tick,
         // they are marked as slashable.
-        if let Some(slashable_providers) =
-            ChallengeTickToChallengedProviders::<T>::get(challenges_ticker)
-        {
+        let slashable_providers: Vec<_> =
+            ChallengeTickToChallengedProviders::<T>::iter_key_prefix(challenges_ticker).collect();
+        let slashable_providers_len = slashable_providers.len();
+        weight.consume(T::DbWeight::get().reads_writes(slashable_providers_len as u64, 0));
+        if !slashable_providers.is_empty() {
             for provider in slashable_providers {
+                // Mark this provider as slashable.
                 SlashableProviders::<T>::set(provider, Some(()));
+                weight.consume(T::DbWeight::get().reads_writes(0, 1));
+
+                // Remove this tick entry from `ChallengeTickToChallengedProviders`.
+                ChallengeTickToChallengedProviders::<T>::remove(challenges_ticker, provider);
+                weight.consume(T::DbWeight::get().reads_writes(0, 1));
+
+                // Get the stake for this Provider, to know its challenge period.
+                // If a submitter is a registered Provider, it must have a stake, so there shouldn't be an error.
+                let stake = match ProvidersPalletFor::<T>::get_stake(provider) {
+                    Some(stake) => stake,
+                    // But to avoid panics, in the odd case of a Provider not being registered, we
+                    // arbitrarily set the stake to be that which would result in 10 ticks of challenge period.
+                    None => {
+                        weight.consume(T::DbWeight::get().reads_writes(1, 0));
+                        StakeToChallengePeriodFor::<T>::get() * 10u32.into()
+                    }
+                };
+                weight.consume(T::DbWeight::get().reads_writes(1, 0));
+
+                // Calculate the next challenge deadline for this Provider.
+                let next_challenge_deadline =
+                    challenges_ticker.saturating_add(Self::stake_to_challenge_period(stake));
+
+                // Calculate the tick for which the Provider should have submitted a proof.
+                let last_tick_proven =
+                    challenges_ticker.saturating_sub(T::ChallengeTicksTolerance::get());
+                weight.consume(T::DbWeight::get().reads_writes(1, 0));
+
+                // Update this Provider's next challenge deadline.
+                ChallengeTickToChallengedProviders::<T>::set(
+                    next_challenge_deadline,
+                    provider,
+                    Some(()),
+                );
+                weight.consume(T::DbWeight::get().reads_writes(0, 1));
+
+                // Update this Provider's last tick it submitted a proof for.
+                // It didn't actually submit a proof for this tick, but we need it to properly calculate next time
+                // it should submit a proof.
+                LastTickProviderSubmittedProofFor::<T>::set(provider, Some(last_tick_proven));
                 weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
                 // Emit slashable provider event.
                 Self::deposit_event(Event::SlashableProvider { provider });
             }
         }
-        weight.consume(T::DbWeight::get().reads_writes(1, 0));
-
-        // Remove this tick entry from `ChallengeTickToChallengedProviders`.
-        ChallengeTickToChallengedProviders::<T>::remove(challenges_ticker);
-        weight.consume(T::DbWeight::get().reads_writes(0, 1));
     }
 
     /// Generate new checkpoint challenges for a given block.
@@ -409,12 +484,12 @@ where
     ///
     /// Stake is divided by `StakeToChallengePeriod` to get the number of blocks in between challenges
     /// for a Provider. The result is then converted to `BlockNumber` type.
-    fn stake_to_challenge_period(stake: BalanceFor<T>) -> Result<BlockNumberFor<T>, DispatchError> {
+    fn stake_to_challenge_period(stake: BalanceFor<T>) -> BlockNumberFor<T> {
         let block_period = stake
             .checked_div(&StakeToChallengePeriodFor::<T>::get())
             .unwrap_or(1u32.into());
 
-        Ok(T::StakeToBlockNumber::convert(block_period))
+        T::StakeToBlockNumber::convert(block_period)
     }
 
     /// Add challenge to ChallengesQueue.

@@ -81,10 +81,6 @@ pub type RandomChallengesPerBlockFor<T> = <T as crate::Config>::RandomChallenges
 /// Syntactic sugar for the MaxCustomChallengesPerBlock type used in the proofs pallet.
 pub type MaxCustomChallengesPerBlockFor<T> = <T as crate::Config>::MaxCustomChallengesPerBlock;
 
-/// Syntactic sugar for the MaxProvidersChallengedPerBlock type used in the proofs pallet.
-pub type MaxProvidersChallengedPerBlockFor<T> =
-    <T as crate::Config>::MaxProvidersChallengedPerBlock;
-
 /// Syntactic sugar for the ChallengesQueueLength type used in the proofs pallet.
 pub type ChallengesQueueLengthFor<T> = <T as crate::Config>::ChallengesQueueLength;
 

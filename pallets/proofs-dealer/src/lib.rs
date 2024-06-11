@@ -107,10 +107,6 @@ pub mod pallet {
         #[pallet::constant]
         type MaxCustomChallengesPerBlock: Get<u32>;
 
-        /// The maximum number of Providers that can be challenged in block.
-        #[pallet::constant]
-        type MaxProvidersChallengedPerBlock: Get<u32>;
-
         /// The number of ticks that challenges history is kept for.
         /// After this many ticks, challenges are removed from `TickToChallengesSeed` StorageMap.
         /// A "tick" is usually one block, but some blocks may be skipped due to migrations.
@@ -133,13 +129,23 @@ pub mod pallet {
         /// Provider in the network. If the smallest Provider has a challenge period of 10 ticks (blocks),
         /// then the checkpoint challenge period needs to be at least 10 ticks.
         #[pallet::constant]
-        type CheckpointChallengePeriod: Get<u32>;
+        type CheckpointChallengePeriod: Get<BlockNumberFor<Self>>;
 
         /// The ratio to convert staked balance to block period.
         /// This is used to determine the period in which a Provider should submit a proof, based on
         /// their stake. The period is calculated as `stake / StakeToBlockPeriod`, saturating at 1.
         #[pallet::constant]
         type StakeToChallengePeriod: Get<BalanceFor<Self>>;
+
+        /// The tolerance in number of ticks (almost equivalent to blocks, but skipping MBM) that
+        /// a Provider has to submit a proof, counting from the tick the challenge is emitted for
+        /// that Provider.
+        ///
+        /// For example, if a Provider is supposed to submit a proof for tick `n`, and the tolerance
+        /// is set to `t`, then the Provider has to submit a proof for challenges in tick `n`, before
+        /// `n + t`.
+        #[pallet::constant]
+        type ChallengeTicksTolerance: Get<BlockNumberFor<Self>>;
 
         /// The fee charged for submitting a challenge.
         /// This fee goes to the Treasury, and is used to prevent spam. Registered Providers are
@@ -202,11 +208,13 @@ pub mod pallet {
     /// have failed to submit a proof and subject to slashing.
     #[pallet::storage]
     #[pallet::getter(fn tick_to_challenged_providers)]
-    pub type ChallengeTickToChallengedProviders<T: Config> = StorageMap<
+    pub type ChallengeTickToChallengedProviders<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
-        BoundedVec<ProviderFor<T>, MaxProvidersChallengedPerBlockFor<T>>,
+        Blake2_128Concat,
+        ProviderFor<T>,
+        (),
     >;
 
     /// A mapping from a Provider to the last challenge tick they submitted a proof for.
@@ -347,6 +355,10 @@ pub mod pallet {
         /// Provider is submitting a proof for a tick before the last tick this pallet registers
         /// challenges for.
         ChallengesTickTooOld,
+
+        /// Provider is submitting a proof for a tick too late, i.e. that the challenges tick
+        /// is greater or equal than `challenges_tick` + `T::ChallengeTicksTolerance::get()`.
+        ChallengesTickTooLate,
 
         /// The seed for the tick could not be found.
         /// This should not be possible for a tick within the `ChallengeHistoryLength` range, as
