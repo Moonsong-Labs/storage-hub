@@ -90,6 +90,7 @@ pub trait FileStorage<T: TrieLayout>: 'static {
     /// Get metadata for a file.
     fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError>;
 
+    // TODO: Remove this method. Not necessary, and now with RocksDB it's wrong to use it.
     /// Inserts a new file. If the file already exists, it will return an error.
     /// It is expected that the file key is indeed computed from the [Metadata].
     /// This method does not require the actual data, file [`Chunk`]s being inserted separately.

@@ -267,6 +267,7 @@ where
             .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
         drop(trie);
 
+        // lines 254-268 might be unnecessary given the following
         file_data.write_chunk(chunk_id, data)?;
 
         let metadata = self.metadata.get(file_key).expect(
