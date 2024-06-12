@@ -177,7 +177,7 @@ where
             .checked_add(&T::ChallengeTicksTolerance::get())
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
         expect_or_err!(
-            challenges_tick_deadline> <frame_system::Pallet<T>>::block_number(),
+            challenges_tick_deadline > <frame_system::Pallet<T>>::block_number(),
             "Challenges tick is too late, the proof should be submitted at most `T::ChallengeTicksTolerance::get()` ticks after the challenges tick.",
             Error::<T>::ChallengesTickTooLate,
             bool

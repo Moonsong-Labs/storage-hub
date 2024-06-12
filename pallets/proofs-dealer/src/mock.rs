@@ -21,7 +21,7 @@ type AccountId = u64;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
 const UNITS: Balance = 1_000_000_000_000;
-const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
+pub(crate) const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumberFor<Test> = 3;
@@ -122,7 +122,7 @@ impl pallet_storage_providers::Config for Test {
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type BucketNameLimit = ConstU32<100>;
-    type SpMinDeposit = ConstU128<10>;
+    type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
     type Subscribers = MockedProvidersSubscriber;
@@ -143,7 +143,7 @@ impl crate::Config for Test {
     type MaxCustomChallengesPerBlock = ConstU32<10>;
     type ChallengeHistoryLength = ConstU64<10>;
     type ChallengesQueueLength = ConstU32<10>;
-    type CheckpointChallengePeriod = ConstU64<2>;
+    type CheckpointChallengePeriod = ConstU64<10>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = ConstU64<181222>;
     type RandomnessProvider = MockRandomness;
