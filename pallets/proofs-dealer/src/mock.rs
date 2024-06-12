@@ -141,14 +141,14 @@ impl crate::Config for Test {
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
-    type MaxProvidersChallengedPerBlock = ConstU32<10>;
     type ChallengeHistoryLength = ConstU64<10>;
     type ChallengesQueueLength = ConstU32<10>;
-    type CheckpointChallengePeriod = ConstU32<2>;
+    type CheckpointChallengePeriod = ConstU64<2>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = ConstU64<181222>;
     type RandomnessProvider = MockRandomness;
     type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
+    type ChallengeTicksTolerance = ConstU64<20>;
 }
 
 pub struct MockedProvidersSubscriber;

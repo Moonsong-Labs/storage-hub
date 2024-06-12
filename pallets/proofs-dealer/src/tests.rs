@@ -222,7 +222,7 @@ fn challenge_submit_in_two_rounds_succeed() {
         assert_eq!(challenges_queue[0], file_key);
 
         // Advance `CheckpointChallengePeriod` blocks.
-        let challenge_period: u32 = <Test as crate::Config>::CheckpointChallengePeriod::get();
+        let challenge_period: u64 = <Test as crate::Config>::CheckpointChallengePeriod::get();
         run_n_blocks(challenge_period as u64 + 1);
 
         // Dispatch challenge extrinsic twice.

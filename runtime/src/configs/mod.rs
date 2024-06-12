@@ -499,12 +499,12 @@ impl Get<AccountId32> for TreasuryAccount {
 parameter_types! {
     pub const RandomChallengesPerBlock: u32 = 10;
     pub const MaxCustomChallengesPerBlock: u32 = 10;
-    pub const MaxProvidersChallengedPerBlock: u32 = 100;
     pub const ChallengeHistoryLength: BlockNumber = 100;
     pub const ChallengesQueueLength: u32 = 100;
     pub const CheckpointChallengePeriod: u32 = 10;
     pub const ChallengesFee: Balance = 1 * UNIT;
     pub const StakeToChallengePeriod: Balance = 10 * UNIT;
+    pub const ChallengeTicksTolerance: u32 = 50;
 }
 
 pub const H_LENGTH: usize = BlakeTwo256::LENGTH;
@@ -525,7 +525,6 @@ impl pallet_proofs_dealer::Config for Runtime {
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = RandomChallengesPerBlock;
     type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
-    type MaxProvidersChallengedPerBlock = MaxProvidersChallengedPerBlock;
     type ChallengeHistoryLength = ChallengeHistoryLength;
     type ChallengesQueueLength = ChallengesQueueLength;
     type CheckpointChallengePeriod = CheckpointChallengePeriod;
@@ -533,6 +532,7 @@ impl pallet_proofs_dealer::Config for Runtime {
     type Treasury = TreasuryAccount;
     type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
     type StakeToChallengePeriod = StakeToChallengePeriod;
+    type ChallengeTicksTolerance = ChallengeTicksTolerance;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
