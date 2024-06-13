@@ -27,3 +27,5 @@ runtimes/
 *.spec.json
 
 .idea/
+
+test/dist/*

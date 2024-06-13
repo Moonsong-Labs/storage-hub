@@ -27,7 +27,6 @@ It is organized:
 ├── test                   <---- Testing module for storage-hub, including Zombienet and TypeScript tests
 ├── .gitignore
 ├── biome.json
-├── bun.lockb
 ├── Cargo.lock
 ├── Cargo.toml
 ├── Containerfile
