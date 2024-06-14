@@ -70,6 +70,9 @@ pub trait FileDataTrie<T: TrieLayout> {
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<(), FileStorageWriteError>;
+
+    /// Removes itself from the underlying Db.
+    fn delete(&mut self) -> Result<(), FileStorageError>;
 }
 
 /// Storage interface to be implemented by the storage providers.
@@ -85,12 +88,12 @@ pub trait FileStorage<T: TrieLayout>: 'static {
     ) -> Result<FileProof, FileStorageError>;
 
     /// Remove a file from storage.
-    fn delete_file(&mut self, key: &HasherOutT<T>);
+    fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError>;
 
     /// Get metadata for a file.
     fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError>;
 
-    // TODO: Remove this method. Not necessary, and now with RocksDB it's wrong to use it.
+    // TODO: check if this method is necessary and what is its use case.
     /// Inserts a new file. If the file already exists, it will return an error.
     /// It is expected that the file key is indeed computed from the [Metadata].
     /// This method does not require the actual data, file [`Chunk`]s being inserted separately.

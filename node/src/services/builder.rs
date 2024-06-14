@@ -8,7 +8,9 @@ use std::{marker::PhantomData, sync::Arc};
 use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
-use shc_file_manager::{in_memory::InMemoryFileStorage, traits::FileStorage};
+use shc_file_manager::{
+    in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage, traits::FileStorage,
+};
 use shc_forest_manager::{
     in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
 };
@@ -163,9 +165,7 @@ where
     }
 }
 
-// TODO: Change this to RocksDB File Storage once it is implemented.
-impl<T> StorageLayerBuilder
-    for StorageHubBuilder<T, InMemoryFileStorage<T>, RocksDBForestStorage<T>>
+impl<T> StorageLayerBuilder for StorageHubBuilder<T, RocksDbFileStorage<T>, RocksDBForestStorage<T>>
 where
     T: TrieLayout + Send + Sync,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
@@ -178,8 +178,7 @@ where
         let storage = RocksDBForestStorage::<T>::rocksdb_storage(storage_path)
             .expect("Failed to create RocksDB");
 
-        // TODO: Change this to RocksDB File Storage once it is implemented.
-        self.with_file_storage(Arc::new(RwLock::new(InMemoryFileStorage::<T>::new())))
+        self.with_file_storage(Arc::new(RwLock::new(RocksDbFileStorage::<T>::new())))
             .with_forest_storage(Arc::new(RwLock::new(
                 RocksDBForestStorage::<T>::new(Box::new(storage))
                     .expect("Failed to create RocksDB"),

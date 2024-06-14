@@ -9,7 +9,9 @@ use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
 
 use futures::{Stream, StreamExt};
-use shc_file_manager::{in_memory::InMemoryFileStorage, traits::FileStorage};
+use shc_file_manager::{
+    in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage, traits::FileStorage,
+};
 use shc_forest_manager::{
     in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
 };
@@ -970,8 +972,7 @@ pub async fn start_dev_node(
             StorageLayer::RocksDB => {
                 start_dev_impl::<
                     LayoutV1<BlakeTwo256>,
-                    // TODO: Change this to RocksDB File Storage once it is implemented.
-                    InMemoryFileStorage<_>,
+                    RocksDbFileStorage<_>,
                     RocksDBForestStorage<_>,
                 >(config, Some(provider_options), hwbench, para_id, sealing)
                 .await
@@ -1017,8 +1018,7 @@ pub async fn start_parachain_node(
             StorageLayer::RocksDB => {
                 start_node_impl::<
                     LayoutV1<BlakeTwo256>,
-                    // TODO: Change this to RocksDB File Storage once it is implemented.
-                    InMemoryFileStorage<_>,
+                    RocksDbFileStorage<_>,
                     RocksDBForestStorage<_>,
                 >(
                     parachain_config,

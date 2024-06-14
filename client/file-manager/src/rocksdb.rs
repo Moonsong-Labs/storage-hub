@@ -80,7 +80,7 @@ where
 {
     fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>> {
         self.db.write(transaction).map_err(|e| {
-            warn!(target: LOG_TARGET, "Failed to write to DB: {}", e);
+            error!(target: LOG_TARGET, "Failed to write to DB: {}", e);
             FileStorageError::FailedToWriteToStorage
         })?;
 
@@ -88,13 +88,13 @@ where
     }
 }
 
-struct RocksDbFileDataTrie<T: TrieLayout> {
+pub struct RocksDbFileDataTrie<T: TrieLayout> {
     // Persistent storage
     // TODO: Why Box not Arc?
     storage: Box<dyn Backend<T>>,
     // Root of the file Trie, which is a file key.
-    pub root: HasherOutT<T>,
-    // Maintains relationship betweek external chunk key representation (integer index)
+    root: HasherOutT<T>,
+    // Maintains relationship between external chunk key representation (integer index)
     // and internal chunk key representation (hash of value)
     inner_chunk_keys: HashMap<ChunkId, HasherOutT<T>>,
 }
@@ -138,7 +138,8 @@ where
     }
 }
 
-// Dropping the trie automatically commits to the underlaying `db`
+// Dropping the trie (either by calling `drop()` or by the end of the scope)
+// automatically commits to the underlaying `db`
 impl<T: TrieLayout + Send + Sync> FileDataTrie<T> for RocksDbFileDataTrie<T>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
@@ -256,6 +257,24 @@ where
 
         Ok(())
     }
+
+    // Deletes the Trie from the underlying Db.
+    fn delete(&mut self) -> Result<(), FileStorageError> {
+        let mut root = self.root;
+        // Need to clone because we cannot have a immutable borrow after mutably borrowing
+        // in the next step.
+        let trie_root_key = root.clone();
+        let mut trie =
+            TrieDBMutBuilder::<T>::from_existing(self.as_hash_db_mut(), &mut root).build();
+
+        // Remove the file key from the trie.
+        trie.remove(trie_root_key.as_ref()).map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to delete File Trie from RocksDb: {}", e);
+            FileStorageError::FailedToWriteToStorage
+        })?;
+
+        Ok(())
+    }
 }
 
 impl<T: TrieLayout + Send + Sync> AsHashDB<HashT<T>, DBValue> for RocksDbFileDataTrie<T>
@@ -290,6 +309,7 @@ where
         let key: HasherOutT<T> = T::Hash::hash(value);
         transaction.put(0, key.as_ref(), value);
 
+        // bubble up error from `write()` method
         if let Err(e) = self.storage.write(transaction) {
             panic!("{}", e)
         };
@@ -301,6 +321,7 @@ where
         let mut transaction = DBTransaction::new();
         transaction.put(0, key.as_ref(), &value);
 
+        // bubble up error from `write()` method
         if let Err(e) = self.storage.write(transaction) {
             panic!("{}", e)
         };
@@ -309,13 +330,15 @@ where
     fn remove(&mut self, key: &HasherOutT<T>, _prefix: Prefix) {
         let mut transaction = DBTransaction::new();
         transaction.delete(0, key.as_ref());
+
+        // bubble up error from `write()` method
         if let Err(e) = self.storage.write(transaction) {
             panic!("{}", e)
         };
     }
 }
 
-struct RocksDbFileStorage<T: TrieLayout + 'static>
+pub struct RocksDbFileStorage<T: TrieLayout + 'static>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
@@ -323,7 +346,17 @@ where
     pub file_data: HashMap<HasherOutT<T>, RocksDbFileDataTrie<T>>,
 }
 
-impl<T: TrieLayout + 'static> RocksDbFileStorage<T> where HasherOutT<T>: TryFrom<[u8; H_LENGTH]> {}
+impl<T: TrieLayout + 'static> RocksDbFileStorage<T>
+where
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+{
+    pub fn new() -> Self {
+        Self {
+            metadata: HashMap::new(),
+            file_data: HashMap::new(),
+        }
+    }
+}
 
 impl<T: TrieLayout + 'static + Send + Sync> FileStorage<T> for RocksDbFileStorage<T>
 where
@@ -336,11 +369,19 @@ where
         key: &HasherOutT<T>,
         chunk_id: &ChunkId,
     ) -> Result<Chunk, FileStorageError> {
-        todo!()
+        let file_data = self
+            .file_data
+            .get(key)
+            .ok_or(FileStorageError::FileDoesNotExist)?;
+
+        file_data.get_chunk(chunk_id)
     }
 
     fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError> {
-        todo!()
+        self.metadata
+            .get(key)
+            .cloned()
+            .ok_or(FileStorageError::FileDoesNotExist)
     }
 
     fn write_chunk(
@@ -349,15 +390,42 @@ where
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
-        todo!()
+        let file_data = self
+            .file_data
+            .get_mut(key)
+            .ok_or(FileStorageWriteError::FileDoesNotExist)?;
+
+        file_data.write_chunk(chunk_id, data)?;
+
+        let metadata = self.metadata.get(key).expect(
+                format!(
+                "Invariant broken! Metadata for file key {:?} not found but associated trie is present",
+                key
+            )
+                .as_str(),
+            );
+
+        // Check if we have all the chunks for the file.
+        if metadata.chunks_count() != file_data.stored_chunks_count() {
+            return Ok(FileStorageWriteOutcome::FileIncomplete);
+        }
+
+        // If we have all the chunks, check if the file metadata fingerprint and the file trie
+        // root matches.
+        if metadata.fingerprint != file_data.root.as_ref().into() {
+            return Err(FileStorageWriteError::FingerprintAndStoredFileMismatch);
+        }
+
+        Ok(FileStorageWriteOutcome::FileComplete)
     }
 
+    // TODO: check why this method is necessary and what is its use case.
     fn insert_file(
         &mut self,
-        key: HasherOutT<T>,
-        metadata: FileMetadata,
+        _key: HasherOutT<T>,
+        _metadata: FileMetadata,
     ) -> Result<(), FileStorageError> {
-        todo!()
+        unimplemented!()
     }
 
     fn insert_file_with_data(
@@ -366,7 +434,17 @@ where
         metadata: FileMetadata,
         file_data: Self::FileDataTrie,
     ) -> Result<(), FileStorageError> {
-        todo!()
+        if self.metadata.contains_key(&key) {
+            return Err(FileStorageError::FileAlreadyExists);
+        }
+        self.metadata.insert(key, metadata);
+
+        let maybe_file_data = self.file_data.insert(key, file_data);
+        if maybe_file_data.is_some() {
+            panic!("Key already associated with File Trie, but not with File Metadata. Possible inconsistency between them.");
+        }
+
+        Ok(())
     }
 
     fn generate_proof(
@@ -381,8 +459,7 @@ where
 
         // TODO: use better error
         let file_data = self.file_data.get(key).expect(
-            format!(
-                "Invariant broken! Metadata for file key {:?} found but no associated trie",
+            format!("Key {:?} already associated with File Metadata, but no File Trie. Possible inconsistency between them.",
                 key
             )
             .as_str(),
@@ -405,8 +482,19 @@ where
         file_data.generate_proof(chunk_id)
     }
 
-    fn delete_file(&mut self, key: &HasherOutT<T>) {
-        todo!()
+    fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError> {
+        // TODO: should FileStorage also have an access point to RocksDb,
+        // or should we create a delete() method for each FileDataTrie?
+        // In the first case, seems cleaner, but then we would lose the separation
+        // between the file data trie and file storage structures.
+        let file_data = self.file_data.get_mut(key).expect("No File data found");
+
+        file_data.delete()?;
+
+        self.metadata.remove(key);
+        self.file_data.remove(key);
+
+        Ok(())
     }
 }
 
