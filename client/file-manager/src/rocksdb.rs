@@ -3,13 +3,14 @@ use std::{collections::HashMap, io, path::PathBuf, sync::Arc};
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use kvdb_rocksdb::{Database, DatabaseConfig};
-use log::debug;
+use log::{debug, error};
 use shc_common::types::{
     Chunk, ChunkId, FileMetadata, FileProof, HashT, HasherOutT, Leaf, H_LENGTH,
 };
 use sp_state_machine::{warn, Storage};
 use sp_trie::{
-    prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieDBBuilder, TrieLayout, TrieMut,
+    prefixed_key, recorder::Recorder, PrefixedKey, PrefixedMemoryDB, TrieDBBuilder, TrieLayout,
+    TrieMut,
 };
 use trie_db::{DBValue, Hasher, Trie, TrieDBMutBuilder};
 
@@ -24,6 +25,7 @@ use crate::{
 // TODO: maybe extract common types used in Forest Manager impls.
 // TODO: create error module for File Manager / refactor errors
 // TODO: Add comments
+// TODO: maybe use different columns in RocksDB for each file data trie?
 // And filedatatrie is ephemeral and created for each file proven
 
 pub(crate) fn other_io_error(err: String) -> io::Error {
@@ -64,19 +66,40 @@ impl<H: Hasher> Storage<H> for StorageDb<H> {
     }
 }
 
-struct RocksDbFileDataTrie<T: TrieLayout> {
-    // Persistent storage
-    pub storage: Box<dyn Backend<T>>,
-    // For staging Trie modifications that will be persisted
-    pub overlay: PrefixedMemoryDB<HashT<T>>,
-    // Root of the file Trie, which is a file key.
-    pub root: HasherOutT<T>,
-    // Map ChunkId to Chunk key in RocksDb
-    chunks_reference: HashMap<u64, HasherOutT<T>>,
+pub trait Backend<T: TrieLayout>: Storage<HashT<T>>
+where
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+{
+    /// Write the transaction to the storage.
+    fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>>;
 }
 
-// TODO: double check this default method,
-// check if Default trait is really required (why is it required in the InMemory impl?)
+impl<T: TrieLayout + Send + Sync> Backend<T> for StorageDb<HashT<T>>
+where
+    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
+{
+    fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>> {
+        self.db.write(transaction).map_err(|e| {
+            warn!(target: LOG_TARGET, "Failed to write to DB: {}", e);
+            FileStorageError::FailedToWriteToStorage
+        })?;
+
+        Ok(())
+    }
+}
+
+struct RocksDbFileDataTrie<T: TrieLayout> {
+    // Persistent storage
+    // TODO: Why Box not Arc?
+    storage: Box<dyn Backend<T>>,
+    // Root of the file Trie, which is a file key.
+    pub root: HasherOutT<T>,
+    // Maintains relationship betweek external chunk key representation (integer index)
+    // and internal chunk key representation (hash of value)
+    inner_chunk_keys: HashMap<ChunkId, HasherOutT<T>>,
+}
+
+// TODO: double check if `Default` is really necessary
 impl<T: TrieLayout + Send + Sync + 'static> Default for RocksDbFileDataTrie<T>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
@@ -96,55 +119,9 @@ where
     fn new(storage: Box<dyn Backend<T>>) -> Self {
         Self {
             root: HasherOutT::<T>::default(),
-            overlay: Default::default(),
             storage,
-            chunks_reference: HashMap::new(),
+            inner_chunk_keys: HashMap::new(),
         }
-    }
-
-    /// Commits [`overlay`](`RocksDbFileDataTrie::overlay`) to [`storage`](`RocksDbFileDataTrie::storage`)
-    /// This will write the changes applied to the overlay.
-    /// If the root has not changed, the commit will be skipped.
-    /// The `overlay` is drained during the operation.
-    pub fn commit(&mut self, file_key: HasherOutT<T>) -> Result<(), ErrorT<T>> {
-        let root = &self
-            .storage
-            .file_root(file_key)?
-            .ok_or(FileStorageError::ExpectingRootToBeInStorage)?;
-
-        // Skip commit if the root has not changed.
-        if &self.root == root {
-            warn!(target: LOG_TARGET, "Root has not changed, skipping commit");
-            return Ok(());
-        }
-
-        // Aggregate changes from the overlay
-        let mut transaction = self.changes();
-
-        // Update the root
-        transaction.put(0, file_key.as_ref(), self.root.as_ref());
-
-        // Write the changes to storage
-        self.storage.write(transaction)?;
-
-        debug!(target: LOG_TARGET, "Committed changes to storage, new File Trie root: {:?}", self.root);
-
-        Ok(())
-    }
-
-    /// Build [`DBTransaction`] from the overlay and clear it.
-    fn changes(&mut self) -> DBTransaction {
-        let mut transaction = DBTransaction::new();
-
-        for (key, (value, rc)) in self.overlay.drain() {
-            if rc <= 0 {
-                transaction.delete(0, &key);
-            } else {
-                transaction.put_vec(0, &key, value);
-            }
-        }
-
-        transaction
     }
 
     /// Open the RocksDB database at `dp_path` and return a new instance of [`StorageDb`].
@@ -161,44 +138,7 @@ where
     }
 }
 
-// Our own trait for interacting with the File storage.
-pub trait Backend<T: TrieLayout>: Storage<HashT<T>>
-where
-    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
-{
-    /// Write the transaction to the storage.
-    fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>>;
-    /// Get the file trie root from the storage.
-    fn file_root(&self, file_key: HasherOutT<T>) -> Result<Option<HasherOutT<T>>, ErrorT<T>>;
-}
-
-impl<T: TrieLayout + Send + Sync> Backend<T> for StorageDb<HashT<T>>
-where
-    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
-{
-    fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>> {
-        self.db.write(transaction).map_err(|e| {
-            warn!(target: LOG_TARGET, "Failed to write to DB: {}", e);
-            FileStorageError::FailedToWriteToStorage
-        })?;
-
-        Ok(())
-    }
-
-    fn file_root(&self, file_key: HasherOutT<T>) -> Result<Option<HasherOutT<T>>, ErrorT<T>> {
-        let maybe_root = self.db.get(0, file_key.as_ref().into()).map_err(|e| {
-            warn!(target: LOG_TARGET, "Failed to read root from DB: {}", e);
-            FileStorageError::FailedToReadStorage
-        })?;
-
-        let root = maybe_root
-            .map(|root| convert_raw_bytes_to_hasher_out::<T>(root))
-            .transpose()?;
-
-        Ok(root)
-    }
-}
-
+// Dropping the trie automatically commits to the underlaying `db`
 impl<T: TrieLayout + Send + Sync> FileDataTrie<T> for RocksDbFileDataTrie<T>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
@@ -208,28 +148,33 @@ where
     }
 
     fn stored_chunks_count(&self) -> u64 {
-        let hash_db = self.as_hash_db();
-        let trie = TrieDBBuilder::<T>::new(&hash_db, &self.root).build();
+        let db: &dyn HashDB<<T as TrieLayout>::Hash, Vec<u8>> = self.as_hash_db();
+        let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
         let stored_chunks = trie.key_iter().iter().count();
         stored_chunks as u64
     }
 
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError> {
+        let db: &dyn HashDB<<T as TrieLayout>::Hash, Vec<u8>> = self.as_hash_db();
         let recorder: Recorder<T::Hash> = Recorder::default();
 
         // A `TrieRecorder` is needed to create a proof of the "visited" leafs, by the end of this process.
         let mut trie_recorder = recorder.as_trie_recorder(self.root);
 
-        let hash_db = self.as_hash_db();
-        let trie = TrieDBBuilder::<T>::new(&hash_db, &self.root)
+        let trie = TrieDBBuilder::<T>::new(&db, &self.root)
             .with_recorder(&mut trie_recorder)
             .build();
 
         // Read all the chunks to prove from the trie.
         let mut chunks = Vec::new();
         for chunk_id in chunk_ids {
+            let chunk_key = self
+                .inner_chunk_keys
+                .get(chunk_id)
+                .ok_or(FileStorageError::FileChunkDoesNotExist)?;
+
             let chunk: Option<Vec<u8>> = trie
-                .get(&chunk_id.to_be_bytes())
+                .get(&chunk_key.as_ref())
                 .map_err(|_| FileStorageError::FailedToGetFileChunk)?;
 
             let chunk = chunk.ok_or(FileStorageError::FileChunkDoesNotExist)?;
@@ -262,62 +207,61 @@ where
     }
 
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError> {
-        let hash_db = self.as_hash_db();
-        let trie = TrieDBBuilder::<T>::new(&hash_db, &self.root).build();
+        let db = self.as_hash_db();
+        let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
 
-        // First check if we have the chunk in our internal hashmap
-        let chunk_hash = self
-            .chunks_reference
-            .get(&chunk_id)
+        let chunk_key = self
+            .inner_chunk_keys
+            .get(chunk_id)
             .ok_or(FileStorageError::FileChunkDoesNotExist)?;
 
-        //
-        trie.get(chunk_hash.as_ref())
+        trie.get(&chunk_key.as_ref())
             .map_err(|_| FileStorageError::FailedToGetFileChunk)?
             .ok_or(FileStorageError::FileChunkDoesNotExist)
     }
 
-    // We shouldn't use this method on its own because we need to update the reference counter
-    // for chunks in the FileStorage struct
     fn write_chunk(
         &mut self,
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<(), FileStorageWriteError> {
+        let chunk_key = T::Hash::hash(data);
+        self.inner_chunk_keys.insert(*chunk_id, chunk_key);
+
         let mut root = self.root;
-        let hash_db = self.as_hash_db_mut();
-        let mut trie = TrieDBMutBuilder::<T>::new(hash_db, &mut root).build();
+        let db = self.as_hash_db_mut();
+
+        let mut trie = TrieDBMutBuilder::<T>::new(db, &mut root).build();
 
         // Check that we don't have a chunk already stored.
         if trie
-            .contains(&chunk_id.to_be_bytes())
+            .contains(&chunk_key.as_ref())
             .map_err(|_| FileStorageWriteError::FailedToGetFileChunk)?
         {
             return Err(FileStorageWriteError::FileChunkAlreadyExists);
         }
 
-        let chunk_hash = T::Hash::hash(data);
         // Insert the chunk into the file trie.
-        trie.insert(chunk_hash.as_ref(), &data)
+        trie.insert(&chunk_key.as_ref(), &data)
             .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
 
-        // Drop trie to free `self`.
+        // get new root so we can update it internally
+        let new_root = *trie.root();
+
+        // drop trie to commit to underlying db and release `self`
         drop(trie);
 
-        self.chunks_reference.insert(*chunk_id, chunk_hash);
-
-        // Update the root hash.
-        self.root = root;
-
-        // Commit changes from the overlay to the persistent storage.
-        self.commit(root)
-            .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
+        // update internal root
+        self.root = new_root;
 
         Ok(())
     }
 }
 
-impl<T: TrieLayout + Send + Sync> AsHashDB<HashT<T>, DBValue> for RocksDbFileDataTrie<T> {
+impl<T: TrieLayout + Send + Sync> AsHashDB<HashT<T>, DBValue> for RocksDbFileDataTrie<T>
+where
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+{
     fn as_hash_db<'b>(&'b self) -> &'b (dyn HashDB<HashT<T>, DBValue> + 'b) {
         self
     }
@@ -326,34 +270,148 @@ impl<T: TrieLayout + Send + Sync> AsHashDB<HashT<T>, DBValue> for RocksDbFileDat
     }
 }
 
-impl<T: TrieLayout + Send + Sync> hash_db::HashDB<HashT<T>, DBValue> for RocksDbFileDataTrie<T> {
+impl<T: TrieLayout + Send + Sync> hash_db::HashDB<HashT<T>, DBValue> for RocksDbFileDataTrie<T>
+where
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+{
     fn get(&self, key: &HasherOutT<T>, prefix: Prefix) -> Option<DBValue> {
-        HashDB::get(&self.overlay, key, prefix).or_else(|| {
-            self.storage.get(key, prefix).unwrap_or_else(|e| {
-                warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
-                None
-            })
+        self.storage.get(key, prefix).unwrap_or_else(|e| {
+            warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
+            None
         })
     }
 
     fn contains(&self, key: &HasherOutT<T>, prefix: Prefix) -> bool {
-        HashDB::get(self, key, prefix).is_some()
+        self.get(key, prefix).is_some()
     }
 
-    fn insert(&mut self, prefix: Prefix, value: &[u8]) -> HasherOutT<T> {
-        HashDB::insert(&mut self.overlay, prefix, value)
+    fn insert(&mut self, _prefix: Prefix, value: &[u8]) -> HasherOutT<T> {
+        let mut transaction = DBTransaction::new();
+        let key: HasherOutT<T> = T::Hash::hash(value);
+        transaction.put(0, key.as_ref(), value);
+
+        if let Err(e) = self.storage.write(transaction) {
+            panic!("{}", e)
+        };
+
+        key
     }
 
-    fn emplace(&mut self, key: HasherOutT<T>, prefix: Prefix, value: DBValue) {
-        HashDB::emplace(&mut self.overlay, key, prefix, value)
+    fn emplace(&mut self, key: HasherOutT<T>, _prefix: Prefix, value: DBValue) {
+        let mut transaction = DBTransaction::new();
+        transaction.put(0, key.as_ref(), &value);
+
+        if let Err(e) = self.storage.write(transaction) {
+            panic!("{}", e)
+        };
     }
 
-    fn remove(&mut self, key: &HasherOutT<T>, prefix: Prefix) {
-        HashDB::remove(&mut self.overlay, key, prefix)
+    fn remove(&mut self, key: &HasherOutT<T>, _prefix: Prefix) {
+        let mut transaction = DBTransaction::new();
+        transaction.delete(0, key.as_ref());
+        if let Err(e) = self.storage.write(transaction) {
+            panic!("{}", e)
+        };
+    }
+}
+
+struct RocksDbFileStorage<T: TrieLayout + 'static>
+where
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+{
+    pub metadata: HashMap<HasherOutT<T>, FileMetadata>,
+    pub file_data: HashMap<HasherOutT<T>, RocksDbFileDataTrie<T>>,
+}
+
+impl<T: TrieLayout + 'static> RocksDbFileStorage<T> where HasherOutT<T>: TryFrom<[u8; H_LENGTH]> {}
+
+impl<T: TrieLayout + 'static + Send + Sync> FileStorage<T> for RocksDbFileStorage<T>
+where
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+{
+    type FileDataTrie = RocksDbFileDataTrie<T>;
+
+    fn get_chunk(
+        &self,
+        key: &HasherOutT<T>,
+        chunk_id: &ChunkId,
+    ) -> Result<Chunk, FileStorageError> {
+        todo!()
+    }
+
+    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError> {
+        todo!()
+    }
+
+    fn write_chunk(
+        &mut self,
+        key: &HasherOutT<T>,
+        chunk_id: &ChunkId,
+        data: &Chunk,
+    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
+        todo!()
+    }
+
+    fn insert_file(
+        &mut self,
+        key: HasherOutT<T>,
+        metadata: FileMetadata,
+    ) -> Result<(), FileStorageError> {
+        todo!()
+    }
+
+    fn insert_file_with_data(
+        &mut self,
+        key: HasherOutT<T>,
+        metadata: FileMetadata,
+        file_data: Self::FileDataTrie,
+    ) -> Result<(), FileStorageError> {
+        todo!()
+    }
+
+    fn generate_proof(
+        &self,
+        key: &HasherOutT<T>,
+        chunk_id: &Vec<ChunkId>,
+    ) -> Result<FileProof, FileStorageError> {
+        let metadata = self
+            .metadata
+            .get(key)
+            .ok_or(FileStorageError::FileDoesNotExist)?;
+
+        // TODO: use better error
+        let file_data = self.file_data.get(key).expect(
+            format!(
+                "Invariant broken! Metadata for file key {:?} found but no associated trie",
+                key
+            )
+            .as_str(),
+        );
+
+        if metadata.chunks_count() != file_data.stored_chunks_count() {
+            return Err(FileStorageError::IncompleteFile);
+        }
+
+        if metadata.fingerprint
+            != file_data
+                .root
+                .as_ref()
+                .try_into()
+                .expect("Hasher output mismatch!")
+        {
+            return Err(FileStorageError::FingerprintAndStoredFileMismatch);
+        }
+
+        file_data.generate_proof(chunk_id)
+    }
+
+    fn delete_file(&mut self, key: &HasherOutT<T>) {
+        todo!()
     }
 }
 
 // Utils
+// TODO: maybe unify errors from FOrest and File Storages in one enum
 fn convert_raw_bytes_to_hasher_out<T: TrieLayout>(key: Vec<u8>) -> Result<HasherOutT<T>, ErrorT<T>>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
@@ -370,151 +428,7 @@ where
     Ok(key)
 }
 
-struct RocksDbFileStorage<T: TrieLayout + 'static>
-where
-    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
-{
-    pub metadata: HashMap<HasherOutT<T>, FileMetadata>,
-    pub file_data: HashMap<HasherOutT<T>, RocksDbFileDataTrie<T>>,
-    // Map Chunk key in RocksDb to reference counter
-    chunks_count: HashMap<HasherOutT<T>, u64>,
-}
-
-impl<T: TrieLayout + Send + Sync> FileStorage<T> for RocksDbFileStorage<T>
-where
-    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
-{
-    type FileDataTrie = RocksDbFileDataTrie<T>;
-
-    fn delete_file(&mut self, key: &HasherOutT<T>) {
-        let file_data = self.file_data.get_mut(key);
-
-        match file_data {
-            None => {
-                debug!(target: LOG_TARGET, "File does not exist, skipping deletion");
-                return;
-            }
-            Some(file_data) => {
-                // update reference counter
-                for (_chunk_id, chunk_hash) in file_data.chunks_reference.iter() {
-                    let current_counter = self.chunks_count.get(chunk_hash);
-                    match current_counter {
-                        Some(0) => {
-                            let mut transaction = DBTransaction::new();
-                            transaction.delete(0, key.as_ref());
-                            file_data.storage.write(transaction);
-                        }
-                        Some(count) => {
-                            self.chunks_count.insert(*chunk_hash, count - 1);
-                        }
-                        None => {}
-                    };
-                }
-
-                self.metadata.remove(key);
-                self.file_data.remove(key);
-            }
-        }
-    }
-
-    fn generate_proof(
-        &self,
-        key: &HasherOutT<T>,
-        chunk_id: &Vec<ChunkId>,
-    ) -> Result<FileProof, FileStorageError> {
-        let metadata = self
-            .metadata
-            .get(key)
-            .ok_or(FileStorageError::FileDoesNotExist)?;
-        let file_data = self.file_data.get(key).expect(
-            format!(
-                "Invariant broken! Metadata for file key {:?} found but no associated trie",
-                key
-            )
-            .as_str(),
-        );
-        if metadata.chunks_count() != file_data.stored_chunks_count() {
-            return Err(FileStorageError::IncompleteFile);
-        }
-        if metadata.fingerprint
-            != file_data
-                .root
-                .as_ref()
-                .try_into()
-                .expect("Hasher output mismatch!")
-        {
-            return Err(FileStorageError::FingerprintAndStoredFileMismatch);
-        }
-
-        file_data.generate_proof(chunk_id)
-    }
-
-    fn get_chunk(
-        &self,
-        key: &HasherOutT<T>,
-        chunk_id: &ChunkId,
-    ) -> Result<Chunk, FileStorageError> {
-        let file_data = self
-            .file_data
-            .get(key)
-            .ok_or(FileStorageError::FileDoesNotExist)?;
-
-        file_data.get_chunk(chunk_id)
-    }
-
-    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError> {
-        self.metadata
-            .get(key)
-            .cloned()
-            .ok_or(FileStorageError::FileDoesNotExist)
-    }
-
-    // Ignore
-    fn insert_file(
-        &mut self,
-        key: HasherOutT<T>,
-        metadata: FileMetadata,
-    ) -> Result<(), FileStorageError> {
-        todo!()
-    }
-
-    fn insert_file_with_data(
-        &mut self,
-        key: HasherOutT<T>,
-        metadata: FileMetadata,
-        file_data: Self::FileDataTrie,
-    ) -> Result<(), FileStorageError> {
-        if self.metadata.contains_key(&key) {
-            return Err(FileStorageError::FileAlreadyExists);
-        }
-        self.metadata.insert(key, metadata);
-
-        // update reference counter
-        for (_chunk_id, chunk_hash) in file_data.chunks_reference.iter() {
-            let current_counter = self.chunks_count.get(chunk_hash);
-            match current_counter {
-                Some(count) => self.chunks_count.insert(*chunk_hash, count + 1),
-                None => self.chunks_count.insert(*chunk_hash, 1),
-            };
-        }
-        self.file_data.insert(key, file_data);
-
-        Ok(())
-    }
-
-    fn write_chunk(
-        &mut self,
-        key: &HasherOutT<T>,
-        chunk_id: &ChunkId,
-        data: &Chunk,
-    ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
-        let file_data = self
-            .file_data
-            .get_mut(key)
-            .ok_or(FileStorageWriteError::FileDoesNotExist)?;
-
-        file_data.write_chunk(chunk_id, data)?;
-
-        Ok(FileStorageWriteOutcome::FileComplete)
-    }
+mod tests {
+    #[test]
+    fn it_works() {}
 }
