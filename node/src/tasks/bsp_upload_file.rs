@@ -1,4 +1,4 @@
-use std::{path::Path, time::Duration};
+use std::{path::Path, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
 use sc_network::PeerId;
@@ -248,8 +248,16 @@ where
         // to the BSP volunteering than the BSP, and therefore initiate a new upload request before the
         // BSP has registered the file and peer ID in the file transfer service.
         for peer_id in event.user_peer_ids.iter() {
-            let peer_id = PeerId::from_bytes(peer_id.as_slice())
-                .map_err(|_| anyhow!("PeerId should be valid; qed"))?;
+            let peer_id = match std::str::from_utf8(&peer_id.as_slice()) {
+                Ok(str_slice) => {
+                    let owned_string = str_slice.to_string();
+                    PeerId::from_str(owned_string.as_str()).map_err(|e| {
+                        error!(target: LOG_TARGET, "Failed to convert peer ID to PeerId: {}", e);
+                        e
+                    })?
+                }
+                Err(e) => return Err(anyhow!("Failed to convert peer ID to a string: {}", e)),
+            };
             self.storage_hub_handler
                 .file_transfer
                 .register_new_file_peer(peer_id, file_key)
