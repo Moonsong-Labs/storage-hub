@@ -136,10 +136,10 @@ where
 
                 match upload_response {
                     Ok(_) => {
-                        debug!(target: LOG_TARGET, "Successfully uploaded chunk id {:?} of file {:?} to peer {:?}", chunk_id, file_metadata.fingerprint, peer_id)
+                        debug!(target: LOG_TARGET, "Successfully uploaded chunk id {:?} of file {:?} to peer {:?}", chunk_id, file_metadata.fingerprint, peer_id);
                     }
                     Err(e) => {
-                        error!(target: LOG_TARGET, "Failed to upload chunk_id {:?} to peer {:?} due to {:?}", chunk_id, peer_id, e);
+                        error!(target: LOG_TARGET, "Failed to upload chunk_id {:?} to peer {:?}\n Error: {:?}", chunk_id, peer_id, e);
                         // In case of an error, we break the inner loop
                         // and try to connect to the next peer id.
                         break;
@@ -147,9 +147,13 @@ where
                 }
             }
             info!(target: LOG_TARGET, "Successfully sent file {:?} to peer {:?}", file_metadata.fingerprint, peer_id);
-            break;
+            return Ok(());
         }
 
-        Ok(())
+        // If we reach this point, it means that we couldn't send the file to any of the peers.
+        return Err(anyhow::anyhow!(
+            "Failed to send file {:?} to any of the peers",
+            file_metadata.fingerprint
+        ));
     }
 }
