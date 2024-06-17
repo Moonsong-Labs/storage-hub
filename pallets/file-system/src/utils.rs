@@ -234,11 +234,11 @@ where
 
         let mut block_to_insert_expiration = Self::next_expiration_insertion_block_number();
 
-        // Get current storage request expirations vec.
+        // Get current storage request expirations.
         let storage_request_expirations =
             <StorageRequestExpirations<T>>::get(block_to_insert_expiration);
 
-        // Check size of storage request expirations vec.
+        // Check size of storage request expirations.
         if storage_request_expirations.len() >= T::MaxExpiredStorageRequests::get() as usize {
             block_to_insert_expiration = match block_to_insert_expiration.checked_add(&1u8.into()) {
                 Some(block) => block,

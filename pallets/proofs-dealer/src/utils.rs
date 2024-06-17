@@ -123,7 +123,7 @@ where
             .ok_or(Error::<T>::ProviderRootNotFound)?;
 
         // Check if root is non-zero.
-        // A zero root means that the Provider is not providing any service yet, so he shouldn't be
+        // Note: Zero root means that the Provider is not providing any service yet, so he shouldn't be
         // submitting any proofs.
         ensure!(root == Self::default_forest_root(), Error::<T>::ZeroRoot);
 
@@ -134,7 +134,7 @@ where
         };
 
         // Get stake for submitter.
-        // If a submitter is a registered Provider, it must have a stake, so this shouldn't happen.
+        // Note: If a submitter is a registered Provider, it must have a stake, so this shouldn't happen.
         // However, since the implementation of that is not up to this pallet, we need to check.
         let stake = ProvidersPalletFor::<T>::get_stake(*submitter)
             .ok_or(Error::<T>::ProviderStakeNotFound)?;
