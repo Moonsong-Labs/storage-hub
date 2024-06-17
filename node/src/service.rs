@@ -516,7 +516,7 @@ where
         }
     }
 
-    thread_local!(static TIMESTAMP: RefCell<u64> = RefCell::new(Utc::now().timestamp().try_into().unwrap()));
+    thread_local!(static TIMESTAMP: RefCell<u64> = RefCell::new(Utc::now().timestamp_millis().try_into().unwrap()));
 
     /// Provide a mock duration starting at 0 in millisecond for timestamp inherent.
     /// Each call will increment timestamp by slot_duration making Aura think time has passed.
