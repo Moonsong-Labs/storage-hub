@@ -110,13 +110,23 @@ where
         // since all peer ids belong to the same BSP.
         for peer_id in peer_ids {
             for chunk_id in 0..chunk_count {
-                let proof = self
+                let proof = match self
                     .storage_hub_handler
                     .file_storage
                     .read()
                     .await
                     .generate_proof(&file_key, &vec![ChunkId::new(chunk_id)])
-                    .expect("File is not in storage, or proof does not exist.");
+                {
+                    Ok(proof) => proof,
+                    Err(e) => {
+                        return Err(anyhow::anyhow!(
+                            "Failed to generate proof for chunk id {:?} of file {:?}\n Error: {:?}",
+                            chunk_id,
+                            file_metadata.fingerprint,
+                            e
+                        ));
+                    }
+                };
 
                 let upload_response = self
                     .storage_hub_handler
