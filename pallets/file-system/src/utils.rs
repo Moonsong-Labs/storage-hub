@@ -400,11 +400,11 @@ where
             <StorageRequests<T>>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         expect_or_err!(
-                    file_metadata.bsps_confirmed < file_metadata.bsps_required,
-                    "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
-                    Error::<T>::StorageRequestBspsRequiredFulfilled,
-                    bool
-                );
+            file_metadata.bsps_confirmed < file_metadata.bsps_required,
+            "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
+            Error::<T>::StorageRequestBspsRequiredFulfilled,
+            bool
+        );
 
         // Check that the BSP has volunteered for the storage request.
         ensure!(
@@ -648,7 +648,7 @@ where
 
         // Compute the file key hash.
         let computed_file_key =
-            Self::compute_file_key(sender.clone(), location.clone(), size, fingerprint);
+            Self::compute_file_key(owner.clone(), location.clone(), size, fingerprint);
 
         // Check that the metadata corresponds to the expected file key.
         ensure!(
