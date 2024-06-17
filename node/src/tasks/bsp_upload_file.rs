@@ -10,7 +10,10 @@ use storage_hub_runtime::H_LENGTH;
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use shc_actors_framework::event_bus::EventHandler;
-use shc_common::types::{FileKey, FileMetadata, HasherOutT};
+use shc_common::{
+    types::{FileKey, FileMetadata, HasherOutT},
+    utils::to_h256,
+};
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_forest_manager::traits::ForestStorage;
 
@@ -155,7 +158,7 @@ where
 
         match write_chunk_result {
             Ok(outcome) => match outcome {
-                FileStorageWriteOutcome::FileComplete => self.on_file_complete(&file_key).await,
+                FileStorageWriteOutcome::FileComplete => self.on_file_complete(&file_key).await?,
                 FileStorageWriteOutcome::FileIncomplete => {}
             },
             Err(error) => match error {
@@ -295,7 +298,7 @@ where
         Ok(())
     }
 
-    async fn on_file_complete(&self, file_key: &HasherOutT<T>) {
+    async fn on_file_complete(&self, file_key: &HasherOutT<T>) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "File upload complete ({:?})", file_key);
 
         // Unregister the file from the file transfer service.
@@ -310,18 +313,46 @@ where
         let metadata = read_file_storage
             .get_metadata(file_key)
             .expect("File metadata not found");
+        // TODO: generate the file proof for proper chunk ids/challenges.
+        let added_file_key_proof = read_file_storage
+            .generate_proof(file_key, &vec![ChunkId::new(0)])
+            .expect("File is not in storage, or proof does not exist.");
         // Release the file storage read lock as soon as possible.
         drop(read_file_storage);
 
         // Get a read lock on the forest storage to generate a proof for the file.
         let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
-        let _forest_proof = read_forest_storage
+        let non_inclusion_forest_proof = read_forest_storage
             .generate_proof(vec![*file_key])
             .expect("Failed to generate forest proof.");
         // Release the forest storage read lock.
         drop(read_forest_storage);
 
         // TODO: send the proof for the new file to the runtime
+
+        let location = metadata
+            .location
+            .clone()
+            .try_into()
+            .map_err(|_| anyhow!("File metadata stored is corrupted: location could not be converted to runtime type"))?;
+
+        // Build extrinsic.
+        let call = storage_hub_runtime::RuntimeCall::FileSystem(
+            pallet_file_system::Call::bsp_confirm_storing {
+                location,
+                root: to_h256(&file_key),
+                non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
+                added_file_key_proof,
+            },
+        );
+
+        self.storage_hub_handler
+            .blockchain
+            .send_extrinsic(call)
+            .await?
+            .with_timeout(Duration::from_secs(60))
+            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .await?;
 
         // TODO: make this a response to the blockchain event for confirm BSP file storage.
         // Save [`FileMetadata`] of the newly stored file in the forest storage.
@@ -350,5 +381,7 @@ where
                 .expect("Failed to write file chunk.");
         }
         drop(read_file_storage);
+
+        Ok(())
     }
 }
