@@ -46,15 +46,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
-      - run: bun install
-      - run: bun fmt
+      - uses: ./.github/workflow-templates/setup-pnpm
+      - run: pnpm install
+      - run: pnpm fmt
 
   check-ts-lint:
     name: "Check lint with biome"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
-      - run: bun install
-      - run: bun lint
+      - uses: ./.github/workflow-templates/setup-pnpm
+      - run: pnpm install
+      - run: pnpm lint

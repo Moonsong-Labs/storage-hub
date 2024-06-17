@@ -16,23 +16,37 @@ export DOCKER_DEFAULT_PLATFORM=linux/amd64
 
 pushd ../
 
-if [ ! -f "target/release/storage-hub-node" ]; then
-    echo "No node found, are you sure you've built it?"
+ARCH=$(uname -m)
+OS=$(uname -s)
+
+## BUILD NODE BINARY
+
+if [[ "$ARCH" == "arm64" && "$OS" == "Darwin" ]]; then
+    BINARY_PATH="target/x86_64-unknown-linux-gnu/release/storage-hub-node"
+else
+    BINARY_PATH="target/release/storage-hub-node"
+fi
+
+## CHECK BINARY
+
+if [ ! -f "$BINARY_PATH" ]; then
+    echo "No node found, something must have gone wrong."
     popd
     exit 1
 fi
 
-if ! file target/release/storage-hub-node | grep -q "x86-64"; then
-    echo "The binary is not for x86 architecture."
+if ! file "$BINARY_PATH" | grep -q "x86-64"; then
+    echo "The binary is not for x86 architecture, something must have gone wrong."
     popd
     exit 1
 fi
 
+## BUILD DOCKER IMAGE
 mkdir -p build
 
-cp target/release/storage-hub-node build/
+cp "$BINARY_PATH" build/
 
-if ! docker build -t storage-hub:local -f docker/storage-hub-node.Dockerfile .; then
+if ! docker build -t storage-hub:local -f docker/storage-hub-node.Dockerfile --load .; then
     echo "Docker build failed."
     popd
     exit 1

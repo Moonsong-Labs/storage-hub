@@ -5,17 +5,19 @@
   "main": "index.js",
   "private": true,
   "type": "module",
-  "workspaces": ["test"],
+  "workspaces": [
+    "test"
+  ],
   "scripts": {
-    "fmt": "biome format .",
-    "fmt:fix": "biome format . --write",
-    "lint": "biome lint ."
+    "lint": "pnpm -r lint",
+    "fmt": "pnpm -r fmt",
+    "fmt:fix": "pnpm -r fmt:fix"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@types/bun": "1.1.0",
+    "@types/node": "20.14.2",
     "typescript": "5.4.5"
   },
   "devDependencies": {

@@ -76,7 +76,7 @@ jobs:
         with:
           cache: false
       - uses: rui314/setup-mold@v1
-      - uses: oven-sh/setup-bun@v1
+      - uses: ./.github/workflow-templates/setup-pnpm
       - uses: arduino/setup-protoc@v3
       - name: Build All
         # TODO: Make this only build the parachain node project
@@ -147,7 +147,7 @@ jobs:
   #       working-directory: test
   #   steps:
   #     - uses: actions/checkout@v4
-  #     - uses: oven-sh/setup-bun@v1
+  # - uses: ./.github/workflow-templates/setup-pnpm
   #     - name: Pull Docker image
   #       run: docker pull moonsonglabs/storage-hub:${{ needs.setup.outputs.image-tag }}
   #     - name: Start local k8 cluster
@@ -159,9 +159,8 @@ jobs:
   #         memory: 12000
   #     - name: Run Zombienet Test!
   #       run: |
-  #         bun install
-  #         bun zombienet test configs/simple.zndsl
-
+  #         pnpm  install
+  #         pnpm  zombienet test configs/simple.zndsl
 
   network_test:
     needs: [build_image, setup]
@@ -170,7 +169,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
+      - uses: ./.github/workflow-templates/setup-pnpm
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
         if: needs.setup.outputs.node_changed == 'true'
@@ -183,27 +182,25 @@ jobs:
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
-          docker cp temp_storage_hub:/usr/bin/storage-hub-node target/release/storage-hub-node
+          docker cp temp_storage_hub:/storage-hub/storage-hub-node target/release/storage-hub-node
           docker rm temp_storage_hub
       - name: Run Zombienet network
         run: |
           chmod +x target/release/storage-hub-node
           cd test
-          bun install
-          bun zombie:run:full:native &
-          
+          pnpm  install
+          pnpm  zombie:run:full:native &
+
           sleep 60
       - name: Setup
         run: |
           cd test
-          bun scalegen
-          bun typegen
-          bun zombie:setup:native
+          pnpm update-types
+          pnpm zombie:setup:native
       - name: Run Zombienet Test!
         run: |
           cd test
-          bun test suites/zombie
-
+          pnpm test:full
 
   zombie_test:
     needs: [build_image, setup]
@@ -212,7 +209,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
+      - uses: ./.github/workflow-templates/setup-pnpm
       - run: mkdir -p target/release/
       - name: Get Node Binary if changed
         if: needs.setup.outputs.node_changed == 'true'
@@ -225,12 +222,58 @@ jobs:
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
-          docker cp temp_storage_hub:/usr/bin/storage-hub-node target/release/storage-hub-node
+          docker cp temp_storage_hub:/storage-hub/storage-hub-node target/release/storage-hub-node
           docker rm temp_storage_hub
       - name: Run Zombienet Test!
         run: |
           chmod +x target/release/storage-hub-node
           cd test
-          bun install
-          bun run scripts/downloadPolkadot.ts 1.8.0
-          bun zombienet test --provider native configs/simpleNative.zndsl
+          pnpm  install
+          pnpm  tsx scripts/downloadPolkadot.ts 1.8.0
+          pnpm  zombienet test --provider native configs/simpleNative.zndsl
+
+  dev_node_test:
+    needs: [build_image, setup]
+    if: always()
+    name: "Run Dev Node Tests"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflow-templates/setup-pnpm
+      - run: mkdir -p target/release/
+      - name: Get Node Binary if changed
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: target/release/
+      - name: Get Latest Node Binary if not changed
+        if: needs.setup.outputs.node_changed == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub:latest
+          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          docker cp temp_storage_hub:/storage-hub/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+      - name: Build Local Docker Image
+        run: |
+          chmod +x target/release/storage-hub-node
+          cd test
+          pnpm install
+          pnpm docker:build
+      - name: Run Dev Node Tests
+        run: |
+          cd test
+          pnpm update-types
+
+          node --import tsx                         \
+               --test                               \
+               --test-reporter=@reporters/github    \
+               --test-reporter-destination=stdout   \
+               --test-reporter=spec                 \
+               --test-reporter-destination=stdout   \
+               --test-shard=${{ matrix.shard }}/4   \
+               ./suites/solo-node/**/**.test.ts

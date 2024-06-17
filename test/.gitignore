@@ -1,2 +1,4 @@
 # Ignore zombienet binaries so that when downloaded for local testing, doesn't get added to the repo accidentally.
 zombienet-*
+
+tmp/*

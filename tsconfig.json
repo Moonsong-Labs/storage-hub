@@ -3,7 +3,7 @@
 		"incremental": true,
 
 		// Enable latest features
-		"lib": ["ESNext"],
+		"lib": ["ESNext", "ESNext.Disposable"],
 		"target": "ESNext",
 		"module": "ESNext",
 		"moduleDetection": "force",
@@ -23,6 +23,8 @@
 		// Some stricter flags
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
-		"noPropertyAccessFromIndexSignature": true
+		"noPropertyAccessFromIndexSignature": true,
+
+		"downlevelIteration": true // Ensure async iteration is supported
 	}
 }
