@@ -65,15 +65,13 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
             .map_err(|_| ProvenFileKeyError::TrieAndExpectedRootMismatch)?;
 
         let trie = TrieDBBuilder::<T>::new(&memdb, &root).build();
+        let mut trie_iter = trie
+            .key_iter()
+            .map_err(|_| ProvenFileKeyError::FailedToGetTrieKeyIterator)?;
 
         let mut proven = Vec::new();
 
-        for key in trie
-            .key_iter()
-            .map_err(|_| ProvenFileKeyError::FailedToGetTrieKeyIterator)?
-            .into_iter()
-        {
-            let key = key.map_err(|_| ProvenFileKeyError::FailedToGetTrieKey)?;
+        while let Some(Ok(key)) = trie_iter.next() {
             let chunk_id = ChunkId::from_trie_key(&key)
                 .map_err(|e| ProvenFileKeyError::ChunkIdFromKeyError(e))?;
             let chunk = trie

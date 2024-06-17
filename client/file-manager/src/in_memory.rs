@@ -165,7 +165,6 @@ where
 
         let stored_chunks = file_data.stored_chunks_count()?;
         if metadata.chunks_count() != stored_chunks {
-            println!("Invariant broken! Metadata for file key {:?} has {} chunks but associated trie has {}", file_key, metadata.chunks_count(), stored_chunks);
             return Err(FileStorageError::IncompleteFile);
         }
 
