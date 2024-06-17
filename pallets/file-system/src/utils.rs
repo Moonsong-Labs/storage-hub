@@ -643,7 +643,21 @@ where
         );
 
         // TODO: charge SP for this action.
-        // TODO: Check that the hash of all the metadata is equal to the `file_key` hash.
+
+        // Compute the file key hash.
+        let computed_file_key = Self::compute_file_key(
+            sender.clone(),
+            location.clone(),
+            size.clone(),
+            fingerprint.clone(),
+        );
+
+        // Check that the metadata corresponds to the expected file key.
+        ensure!(
+            file_key == computed_file_key,
+            Error::<T>::InvalidFileKeyMetadata
+        );
+
         match <StorageRequests<T>>::get(&location) {
             Some(mut metadata) => {
                 match <StorageRequestBsps<T>>::get(&location, &bsp_id) {
