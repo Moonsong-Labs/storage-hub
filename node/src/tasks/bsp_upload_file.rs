@@ -200,6 +200,18 @@ where
                         event.file_key
                     )));
                 }
+                FileStorageWriteError::FailedToConstructTrieIter => {
+                    // This should never happen for a well constructed trie.
+                    // This means that something is seriously wrong, so we error out the whole task.
+
+                    // Unvolunteer the file.
+                    self.unvolunteer_file(file_key).await?;
+
+                    return Err(anyhow::anyhow!(format!(
+                        "This is a bug! Failed to construct trie iter for key {:?}.",
+                        event.file_key
+                    )));
+                }
             },
         }
 

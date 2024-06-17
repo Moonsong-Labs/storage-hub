@@ -110,6 +110,7 @@ where
         // since all peer ids belong to the same BSP.
         for peer_id in peer_ids {
             for chunk_id in 0..chunk_count {
+                debug!(target: LOG_TARGET, "Trying to send chunk id {:?} of file {:?} to peer {:?}", chunk_id, file_key, peer_id);
                 let proof = match self
                     .storage_hub_handler
                     .file_storage
@@ -122,7 +123,7 @@ where
                         return Err(anyhow::anyhow!(
                             "Failed to generate proof for chunk id {:?} of file {:?}\n Error: {:?}",
                             chunk_id,
-                            file_metadata.fingerprint,
+                            file_key,
                             e
                         ));
                     }

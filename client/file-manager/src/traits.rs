@@ -13,6 +13,8 @@ pub enum FileStorageWriteError {
     FailedToGetFileChunk,
     /// File metadata fingerprint does not match the stored file fingerprint.
     FingerprintAndStoredFileMismatch,
+    /// Failed to construct iterator for trie.
+    FailedToConstructTrieIter,
 }
 
 #[derive(Debug)]
@@ -35,6 +37,8 @@ pub enum FileStorageError {
     FingerprintAndStoredFileMismatch,
     /// The requested file is incomplete and a proof is impossible to generate.
     IncompleteFile,
+    /// Failed to construct iterator for trie.
+    FailedToConstructTrieIter,
 }
 
 #[derive(Debug)]
@@ -51,7 +55,7 @@ pub trait FileDataTrie<T: TrieLayout> {
     fn get_root(&self) -> &HasherOutT<T>;
 
     /// Get the number of stored chunks in the trie.
-    fn stored_chunks_count(&self) -> u64;
+    fn stored_chunks_count(&self) -> Result<u64, FileStorageError>;
 
     /// Generate proof for a chunk of a file. Returns error if the chunk does not exist.
     fn generate_proof(&self, chunk_id: &Vec<ChunkId>) -> Result<FileProof, FileStorageError>;
