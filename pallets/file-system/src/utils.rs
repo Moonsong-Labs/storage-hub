@@ -12,21 +12,17 @@ use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
 };
-use sp_std::{vec, vec::Vec};
+use sp_std::{vec, vec::Vec, collections::btree_set::BTreeSet};
 
 use crate::{
     pallet,
     types::{
         BucketIdFor, BucketNameLimitFor, CollectionIdFor, FileKeyHasher, FileLocation, Fingerprint,
         ForestProof, KeyProof, MaxBspsPerStorageRequest, MultiAddresses, PeerIds, StorageData,
-        StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestBspsMetadata, StorageRequestMetadata, CollectionConfigFor, FileKey, ProviderIdFor, TargetBspsRequired
     },
     Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
-    StorageRequestExpirations, StorageRequests,
-};
-use crate::{
-    types::{CollectionConfigFor, FileKey, ProviderIdFor, TargetBspsRequired},
-    BspsAssignmentThreshold,
+    StorageRequestExpirations, StorageRequests, BspsAssignmentThreshold,
 };
 
 macro_rules! expect_or_err {
@@ -454,16 +450,15 @@ where
         );
 
         // Verify the proof of non-inclusion.
-        let proven_keys =
+        let proven_keys: BTreeSet<FileKey<T>> =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
                 &bsp_id,
                 &[file_key],
                 &non_inclusion_forest_proof,
             )?;
 
-        // TODO: Use BTreeSet instead for faster lookups.
         // Ensure that the file key IS NOT part of the BSP's forest.
-        // The runtime is responsible for adding and removing keys, computing the new root and updating the BSP's root.
+        // Note: The runtime is responsible for adding and removing keys, computing the new root and updating the BSP's root.
         ensure!(
             !proven_keys.contains(&file_key),
             Error::<T>::ExpectedNonInclusionProof
@@ -763,7 +758,7 @@ where
 
         // Reset the current expiration block pointer if it is lower then the minimum storage request TTL.
         if <NextAvailableExpirationInsertionBlock<T>>::get() < min_expiration_block {
-            <NextAvailableExpirationInsertionBlock<T>>::set(min_expiration_block);
+            <NextAvailableExpirationInsertionBlock<T>>::set(min_expiration_block.clone());
         }
 
         let block_to_insert_expiration = max(
