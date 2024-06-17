@@ -86,6 +86,16 @@ pub trait ProvidersConfig {
         + AsMut<[u8]>
         + MaxEncodedLen
         + FullCodec;
+    /// Data type for the measurement of storage size
+    type StorageData: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Default
+        + MaybeDisplay
+        + AtLeast32BitUnsigned
+        + Copy
+        + MaxEncodedLen
+        + HasCompact;
     /// The type of the Bucket NFT Collection ID.
     type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
 }
@@ -155,20 +165,16 @@ pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
         owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
     ) -> Self::BucketId;
+
+    /// Get the amount of capacity unused by a Provider.
+    fn has_enough_capacity(
+        who: &Self::ProviderId,
+        size: Self::StorageData,
+    ) -> Result<bool, DispatchError>;
 }
 
 /// Interface to allow the File System pallet to modify the data used by the Storage Providers pallet.
 pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
-    /// Data type for the measurement of storage size
-    type StorageData: Parameter
-        + Member
-        + MaybeSerializeDeserialize
-        + Default
-        + MaybeDisplay
-        + AtLeast32BitUnsigned
-        + Copy
-        + MaxEncodedLen
-        + HasCompact;
     /// The type of the Merkle Patricia Root of the storage trie for BSPs and MSPs' buckets (a hash).
     type MerklePatriciaRoot: Parameter
         + Member

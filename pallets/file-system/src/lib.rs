@@ -397,6 +397,8 @@ pub mod pallet {
         ImpossibleFailedToGetValue,
         /// Bucket is not private. Call `update_bucket_privacy` to make it private.
         BucketIsNotPrivate,
+        /// Provider does not have enough capacity left to store the file.
+        NotEnoughCapacity,
     }
 
     #[pallet::call]

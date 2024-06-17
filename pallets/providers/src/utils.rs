@@ -782,7 +782,6 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
 
 /// Implement the StorageProvidersInterface trait for the Storage Providers pallet.
 impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
-    type StorageData = T::StorageData;
     type MerklePatriciaRoot = T::MerklePatriciaRoot;
 
     fn increase_data_used(provider_id: &Self::ProviderId, delta: T::StorageData) -> DispatchResult {
@@ -921,6 +920,7 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
 
 impl<T: pallet::Config> ProvidersConfig for pallet::Pallet<T> {
     type BucketId = BucketId<T>;
+    type StorageData = T::StorageData;
     type ReadAccessGroupId = T::ReadAccessGroupId;
 }
 
@@ -996,6 +996,19 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
             .collect::<scale_info::prelude::vec::Vec<u8>>();
 
         <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)
+    }
+
+    fn has_enough_capacity(
+        who: &Self::ProviderId,
+        size: Self::StorageData,
+    ) -> Result<bool, DispatchError> {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(who) {
+            Ok(bsp.capacity.saturating_sub(bsp.data_used) >= size)
+        } else if let Some(msp) = MainStorageProviders::<T>::get(who) {
+            Ok(msp.capacity.saturating_sub(msp.data_used) >= size)
+        } else {
+            Err(Error::<T>::NotRegistered.into())
+        }
     }
 }
 

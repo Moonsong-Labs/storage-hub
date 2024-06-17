@@ -102,7 +102,7 @@ pub type Fingerprint<T> = <T as crate::Config>::Fingerprint;
 
 /// Alias for the `StorageData` type used in the MutateProvidersInterface.
 pub type StorageData<T> =
-    <<T as crate::Config>::Providers as shp_traits::MutateProvidersInterface>::StorageData;
+    <<T as crate::Config>::Providers as shp_traits::ProvidersConfig>::StorageData;
 
 /// Alias for the `TargetBspsRequired` type used in the FileSystem pallet.
 pub type TargetBspsRequired<T> = <T as crate::Config>::TargetBspsRequired;

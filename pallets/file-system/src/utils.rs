@@ -287,11 +287,18 @@ where
             Error::<T>::NotABsp
         );
 
-        // TODO: Verify BSP has enough storage capacity to store the file
-
         // Check that the storage request exists.
         let mut file_metadata =
             <StorageRequests<T>>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
+
+        // Check that the BSP has enough storage capacity left to store the file
+        ensure!(
+            <T::Providers as shp_traits::ReadProvidersInterface>::has_enough_capacity(
+                &bsp_id,
+                file_metadata.size
+            )?,
+            Error::<T>::NotEnoughCapacity,
+        );
 
         expect_or_err!(
             file_metadata.bsps_confirmed < file_metadata.bsps_required,
