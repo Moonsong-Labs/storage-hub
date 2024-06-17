@@ -12,17 +12,18 @@ use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
 };
-use sp_std::{vec, vec::Vec, collections::btree_set::BTreeSet};
+use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
 
 use crate::{
     pallet,
     types::{
-        BucketIdFor, BucketNameLimitFor, CollectionIdFor, FileKeyHasher, FileLocation, Fingerprint,
-        ForestProof, KeyProof, MaxBspsPerStorageRequest, MultiAddresses, PeerIds, StorageData,
-        StorageRequestBspsMetadata, StorageRequestMetadata, CollectionConfigFor, FileKey, ProviderIdFor, TargetBspsRequired
+        BucketIdFor, BucketNameLimitFor, CollectionConfigFor, CollectionIdFor, FileKey,
+        FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest,
+        MultiAddresses, PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
+        StorageRequestMetadata, TargetBspsRequired,
     },
-    Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
-    StorageRequestExpirations, StorageRequests, BspsAssignmentThreshold,
+    BspsAssignmentThreshold, Error, NextAvailableExpirationInsertionBlock, Pallet,
+    StorageRequestBsps, StorageRequestExpirations, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -445,8 +446,8 @@ where
         let file_key = Self::compute_file_key(
             file_metadata.owner.clone(),
             location.clone(),
-            file_metadata.size.clone(),
-            file_metadata.fingerprint.clone(),
+            file_metadata.size,
+            file_metadata.fingerprint,
         );
 
         // Verify the proof of non-inclusion.
@@ -633,8 +634,9 @@ where
         can_serve: bool,
         inclusion_forest_proof: ForestProof<T>,
     ) -> Result<ProviderIdFor<T>, DispatchError> {
-        let bsp_id = <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender)
-            .ok_or(Error::<T>::NotABsp)?;
+        let bsp_id =
+            <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
+                .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
@@ -645,12 +647,8 @@ where
         // TODO: charge SP for this action.
 
         // Compute the file key hash.
-        let computed_file_key = Self::compute_file_key(
-            sender.clone(),
-            location.clone(),
-            size.clone(),
-            fingerprint.clone(),
-        );
+        let computed_file_key =
+            Self::compute_file_key(sender.clone(), location.clone(), size, fingerprint);
 
         // Check that the metadata corresponds to the expected file key.
         ensure!(
@@ -772,7 +770,7 @@ where
 
         // Reset the current expiration block pointer if it is lower then the minimum storage request TTL.
         if <NextAvailableExpirationInsertionBlock<T>>::get() < min_expiration_block {
-            <NextAvailableExpirationInsertionBlock<T>>::set(min_expiration_block.clone());
+            <NextAvailableExpirationInsertionBlock<T>>::set(min_expiration_block);
         }
 
         let block_to_insert_expiration = max(

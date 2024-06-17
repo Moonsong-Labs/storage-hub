@@ -405,7 +405,7 @@ pub mod pallet {
         /// Failed to verify proof: required to provide a proof of inclusion.
         ExpectedInclusionProof,
         /// Metadata does not correspond to expected file key.
-        InvalidFileKeyMetadata
+        InvalidFileKeyMetadata,
     }
 
     #[pallet::call]

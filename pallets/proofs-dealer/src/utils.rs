@@ -192,7 +192,7 @@ where
                 ));
 
             if let Some(ref checkpoint_challenges) = checkpoint_challenges {
-                challenges.extend(checkpoint_challenges.iter().map(|(key, _)| key.clone()));
+                challenges.extend(checkpoint_challenges.iter().map(|(key, _)| key));
             }
         }
 
