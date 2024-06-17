@@ -182,8 +182,15 @@ where
         data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>,
     ) -> DispatchResult {
         // TODO: Check user funds and lock them for the storage request.
-        // TODO: Check storage capacity of chosen MSP (when we support MSPs)
-        // TODO: Return error if the file is already stored and overwrite is false.
+        // Check that the MSP has enough storage capacity left to store the file
+        if let Some(ref msp) = msp {
+            ensure!(
+                <T::Providers as shp_traits::ReadProvidersInterface>::has_enough_capacity(
+                    &msp, size
+                )?,
+                Error::<T>::NotEnoughCapacity,
+            );
+        };
 
         if let Some(ref msp) = msp {
             ensure!(
