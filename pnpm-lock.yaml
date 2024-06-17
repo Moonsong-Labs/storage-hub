@@ -78,6 +78,12 @@ importers:
       '@storagehub/api-augment':
         specifier: link:../api-augment
         version: link:../api-augment
+      '@types/dockerode':
+        specifier: 3.3.29
+        version: 3.3.29
+      '@types/dockerode-compose':
+        specifier: 1.4.1
+        version: 1.4.1
       '@types/inquirer':
         specifier: 9.0.7
         version: 9.0.7
@@ -90,6 +96,15 @@ importers:
       '@zombienet/utils':
         specifier: 0.0.25
         version: 0.0.25(@types/node@20.12.13)(chokidar@3.5.3)(typescript@5.4.5)
+      docker-compose:
+        specifier: 0.24.8
+        version: 0.24.8
+      dockerode:
+        specifier: 4.0.2
+        version: 4.0.2
+      dockerode-compose:
+        specifier: 1.4.0
+        version: 1.4.0
       dotenv:
         specifier: 16.4.5
         version: 16.4.5
@@ -668,6 +683,9 @@ packages:
   '@types/docker-modem@3.0.6':
     resolution: {integrity: sha512-yKpAGEuKRSS8wwx0joknWxsmLha78wNMe9R2S3UNsVOkZded8UqOrV8KoeDXoXsjndxwyF3eIhyClGbO1SEhEg==}
 
+  '@types/dockerode-compose@1.4.1':
+    resolution: {integrity: sha512-AouE5+t2bghPrCxWGabBGqvXQDF1Hym0NCuCVDzI3vI5KbucWyLBPUIwZK+a9qb3v2Wr9VvBJzHrHLS5r1VM/w==}
+
   '@types/dockerode@3.3.29':
     resolution: {integrity: sha512-5PRRq/yt5OT/Jf77ltIdz4EiR9+VLnPF+HpU4xGFwUqmV24Co2HKBNW3w+slqZ1CYchbcDeqJASHDYWzZCcMiQ==}
 
@@ -1060,8 +1078,19 @@ packages:
     resolution: {integrity: sha512-f0ReSURdM3pcKPNS30mxOHSbaFLcknGmQjwSfmbcdOw1XWKXVhukM3NJHhr7NpY9BIyyWQb0EBo3KQvvuU5egQ==}
     engines: {node: '>= 8.0'}
 
+  docker-modem@5.0.3:
+    resolution: {integrity: sha512-89zhop5YVhcPEt5FpUFGr3cDyceGhq/F9J+ZndQ4KfqNvfbJpPMfgeixFgUj5OjCYAboElqODxY5Z1EBsSa6sg==}
+    engines: {node: '>= 8.0'}
+
+  dockerode-compose@1.4.0:
+    resolution: {integrity: sha512-6x5ZlK06H+cgoTR4ffucqN5kWVvxNvxwTLcHQUZcegCJBEDGrdzXMOEGDMsxbHwiLtLo2dNwG0eZK7B2RfEWSw==}
+
   dockerode@3.3.5:
     resolution: {integrity: sha512-/0YNa3ZDNeLr/tSckmD69+Gq+qVNhvKfAHNeZJBnp7EOP6RGKV8ORrJHkUn20So5wU+xxT7+1n5u8PjHbfjbSA==}
+    engines: {node: '>= 8.0'}
+
+  dockerode@4.0.2:
+    resolution: {integrity: sha512-9wM1BVpVMFr2Pw3eJNXrYYt6DT9k0xMcsSCjtPvyQ+xa1iPg/Mo3T/gUcwI0B2cczqCeCYRPF8yFYDwtFXT0+w==}
     engines: {node: '>= 8.0'}
 
   dotenv@16.4.5:
@@ -1762,6 +1791,9 @@ packages:
 
   tar-fs@2.0.1:
     resolution: {integrity: sha512-6tzWDMeroL87uF/+lin46k+Q+46rAJ0SyPGz7OW7wTgblI273hsBqk2C1j0/xNadNLKDTUL9BukSjB7cwgmlPA==}
+
+  tar-fs@2.1.1:
+    resolution: {integrity: sha512-V0r2Y9scmbDRLCNex/+hYzvp/zyYjvFbHPNgVTKfQvVrb6guiE/fxP+XblDNR011utopbkex2nM4dHNV6GDsng==}
 
   tar-fs@3.0.6:
     resolution: {integrity: sha512-iokBDQQkUyeXhgPYaZxmczGPhnhXZ0CmrqI+MOb/WFGS9DW5wnfrLgtjUJBvz50vQ3qfRwJ62QVoCFu8mPVu5w==}
@@ -2609,6 +2641,10 @@ snapshots:
       '@types/node': 20.14.2
       '@types/ssh2': 1.15.0
 
+  '@types/dockerode-compose@1.4.1':
+    dependencies:
+      '@types/dockerode': 3.3.29
+
   '@types/dockerode@3.3.29':
     dependencies:
       '@types/docker-modem': 3.0.6
@@ -3087,10 +3123,35 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  docker-modem@5.0.3:
+    dependencies:
+      debug: 4.3.5
+      readable-stream: 3.6.2
+      split-ca: 1.0.1
+      ssh2: 1.15.0
+    transitivePeerDependencies:
+      - supports-color
+
+  dockerode-compose@1.4.0:
+    dependencies:
+      dockerode: 4.0.2
+      js-yaml: 4.1.0
+      tar-fs: 2.1.1
+    transitivePeerDependencies:
+      - supports-color
+
   dockerode@3.3.5:
     dependencies:
       '@balena/dockerignore': 1.0.2
       docker-modem: 3.0.8
+      tar-fs: 2.0.1
+    transitivePeerDependencies:
+      - supports-color
+
+  dockerode@4.0.2:
+    dependencies:
+      '@balena/dockerignore': 1.0.2
+      docker-modem: 5.0.3
       tar-fs: 2.0.1
     transitivePeerDependencies:
       - supports-color
@@ -3839,6 +3900,13 @@ snapshots:
   symbol-tree@3.2.4: {}
 
   tar-fs@2.0.1:
+    dependencies:
+      chownr: 1.1.4
+      mkdirp-classic: 0.5.3
+      pump: 3.0.0
+      tar-stream: 2.2.0
+
+  tar-fs@2.1.1:
     dependencies:
       chownr: 1.1.4
       mkdirp-classic: 0.5.3

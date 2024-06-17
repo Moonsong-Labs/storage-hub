@@ -4,13 +4,16 @@ services:
     platform: linux/amd64
     ports:
       - "9955:9944"
+      - "30350:30333"
     volumes:
       - ./dev-keystores/collator:/keystore:ro
     command:
       [
         "--dev",
+        "--name=sh-collator",
         "--unsafe-rpc-external",
         "--rpc-cors=all",
+        "--node-key=0xe028b8155916ac14941ba1f0d2375124fd16e1a35fc9228cdc88f37e29a26fb4",
         "--no-hardware-benchmarks",
       ]
   sh-bsp:
@@ -25,8 +28,31 @@ services:
         "--dev",
         "--provider",
         "--provider-type=bsp",
+        "--name=sh-bsp",
         "--no-hardware-benchmarks",
         "--unsafe-rpc-external",
         "--rpc-cors=all",
+        "--node-key=0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be",
+        "--bootnodes=/ip4/${COLLATOR_IP}/tcp/30350/p2p/${COLLATOR_PEER_ID}",
+        "--keystore-path=/keystore",
+      ]
+  sh-user:
+    image: storage-hub:local
+    platform: linux/amd64
+    ports:
+      - "9977:9944"
+    volumes:
+      - ./dev-keystores/user:/keystore:ro
+    command:
+      [
+        "--dev",
+        "--name=sh-user",
+        "--provider",
+        "--provider-type=user",
+        "--no-hardware-benchmarks",
+        "--unsafe-rpc-external",
+        "--rpc-cors=all",
+        "--node-key=0x13b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b314",
+        "--bootnodes=/ip4/${COLLATOR_IP}/tcp/30350/p2p/${COLLATOR_PEER_ID}",
         "--keystore-path=/keystore",
       ]

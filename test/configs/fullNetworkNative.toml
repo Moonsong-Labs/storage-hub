@@ -42,6 +42,17 @@ args = [
     "--provider-type bsp",
 ]
 
+[[parachains.collators]]
+name = "sh-User"
+ws_port = 36000
+command = "../target/release/storage-hub-node"
+args = [
+    "--no-hardware-benchmarks",
+    "-lparachain=debug",
+    "--provider",
+    "--provider-type user",
+]
+
 [types.Header]
 number = "u64"
 parent_hash = "Hash"
