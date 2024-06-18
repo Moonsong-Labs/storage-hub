@@ -329,7 +329,8 @@ pub mod pallet {
         /// Notifies that a BSP confirmed storing a file.
         BspConfirmedStoring {
             bsp_id: ProviderIdFor<T>,
-            location: FileLocation<T>,
+            file_key: MerkleHash<T>,
+            new_root: MerkleHash<T>,
         },
         /// Notifies the expiration of a storage request.
         StorageRequestExpired { location: FileLocation<T> },
@@ -338,7 +339,8 @@ pub mod pallet {
         /// Notifies that a BSP has stopped storing a file.
         BspStoppedStoring {
             bsp_id: ProviderIdFor<T>,
-            file_key: FileKey<T>,
+            file_key: MerkleHash<T>,
+            new_root: MerkleHash<T>,
             owner: T::AccountId,
             location: FileLocation<T>,
         },
@@ -522,7 +524,7 @@ pub mod pallet {
         pub fn revoke_storage_request(
             origin: OriginFor<T>,
             location: FileLocation<T>,
-            file_key: FileKey<T>,
+            file_key: MerkleHash<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
@@ -575,7 +577,7 @@ pub mod pallet {
         pub fn bsp_confirm_storing(
             origin: OriginFor<T>,
             location: FileLocation<T>,
-            root: FileKey<T>,
+            root: MerkleHash<T>,
             non_inclusion_forest_proof: ForestProof<T>,
             added_file_key_proof: KeyProof<T>,
         ) -> DispatchResult {
@@ -583,7 +585,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and confirm storage.
-            let bsp_id = Self::do_bsp_confirm_storing(
+            let (bsp_id, file_key, new_root) = Self::do_bsp_confirm_storing(
                 who.clone(),
                 location.clone(),
                 root,
@@ -592,7 +594,11 @@ pub mod pallet {
             )?;
 
             // Emit event.
-            Self::deposit_event(Event::BspConfirmedStoring { bsp_id, location });
+            Self::deposit_event(Event::BspConfirmedStoring {
+                bsp_id,
+                file_key,
+                new_root,
+            });
 
             Ok(())
         }
@@ -609,7 +615,7 @@ pub mod pallet {
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_stop_storing(
             origin: OriginFor<T>,
-            file_key: FileKey<T>,
+            file_key: MerkleHash<T>,
             location: FileLocation<T>,
             owner: T::AccountId,
             fingerprint: Fingerprint<T>,
@@ -620,7 +626,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and stop storing the file.
-            let bsp_id = Self::do_bsp_stop_storing(
+            let (bsp_id, new_root) = Self::do_bsp_stop_storing(
                 who.clone(),
                 file_key,
                 location.clone(),
@@ -635,6 +641,7 @@ pub mod pallet {
             Self::deposit_event(Event::BspStoppedStoring {
                 bsp_id,
                 file_key,
+                new_root,
                 owner,
                 location,
             });

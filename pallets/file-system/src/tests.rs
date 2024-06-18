@@ -1075,8 +1075,28 @@ fn bsp_confirm_storing_success() {
             }
         );
 
+        let file_key = FileSystem::compute_file_key(
+            owner_account_id.clone(),
+            location.clone(),
+            size,
+            fingerprint,
+        );
+
+        let new_root =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                bsp_id,
+            )
+            .unwrap();
+
         // Assert that the correct event was deposited
-        System::assert_last_event(Event::BspConfirmedStoring { bsp_id, location }.into());
+        System::assert_last_event(
+            Event::BspConfirmedStoring {
+                bsp_id,
+                file_key,
+                new_root,
+            }
+            .into(),
+        );
     });
 }
 
@@ -1396,11 +1416,18 @@ fn bsp_stop_storing_success() {
             })
         );
 
+        let new_root =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                bsp_id,
+            )
+            .unwrap();
+
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
                 bsp_id,
                 file_key,
+                new_root,
                 owner: owner_account_id,
                 location,
             }
@@ -1504,11 +1531,18 @@ fn bsp_stop_storing_while_storage_request_open_success() {
             })
         );
 
+        let new_root =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                bsp_id,
+            )
+            .unwrap();
+
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
                 bsp_id,
                 file_key,
+                new_root,
                 owner: owner_account_id,
                 location,
             }
@@ -1592,11 +1626,18 @@ fn bsp_stop_storing_not_volunteered_success() {
             })
         );
 
+        let new_root =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                bsp_id,
+            )
+            .unwrap();
+
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
                 bsp_id,
                 file_key,
+                new_root,
                 owner: owner_account_id,
                 location,
             }
@@ -1662,11 +1703,18 @@ fn bsp_stop_storing_no_storage_request_success() {
             })
         );
 
+        let new_root =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                bsp_id,
+            )
+            .unwrap();
+
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
                 bsp_id,
                 file_key,
+                new_root,
                 owner: owner_account_id,
                 location,
             }

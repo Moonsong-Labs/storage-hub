@@ -17,8 +17,8 @@ use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
 use crate::{
     pallet,
     types::{
-        BucketIdFor, BucketNameLimitFor, CollectionConfigFor, CollectionIdFor, FileKey,
-        FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest,
+        BucketIdFor, BucketNameLimitFor, CollectionConfigFor, CollectionIdFor, FileKeyHasher,
+        FileLocation, Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest, MerkleHash,
         MultiAddresses, PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
         StorageRequestMetadata, TargetBspsRequired,
     },
@@ -381,10 +381,10 @@ where
     pub(crate) fn do_bsp_confirm_storing(
         sender: T::AccountId,
         location: FileLocation<T>,
-        root: FileKey<T>,
+        root: MerkleHash<T>,
         non_inclusion_forest_proof: ForestProof<T>,
         added_file_key_proof: KeyProof<T>,
-    ) -> Result<ProviderIdFor<T>, DispatchError> {
+    ) -> Result<(ProviderIdFor<T>, MerkleHash<T>, MerkleHash<T>), DispatchError> {
         let bsp_id =
             <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
@@ -451,7 +451,7 @@ where
         );
 
         // Verify the proof of non-inclusion.
-        let proven_keys: BTreeSet<FileKey<T>> =
+        let proven_keys: BTreeSet<MerkleHash<T>> =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
                 &bsp_id,
                 &[file_key],
@@ -527,7 +527,7 @@ where
             file_metadata.size,
         )?;
 
-        Ok(bsp_id)
+        Ok((bsp_id, file_key, new_root))
     }
 
     /// Revoke a storage request.
@@ -541,7 +541,7 @@ where
     pub(crate) fn do_revoke_storage_request(
         sender: T::AccountId,
         location: FileLocation<T>,
-        file_key: FileKey<T>,
+        file_key: MerkleHash<T>,
     ) -> DispatchResult {
         // Check that the storage request exists.
         ensure!(
@@ -626,14 +626,14 @@ where
     /// they are added to the storage request as a data server.
     pub(crate) fn do_bsp_stop_storing(
         sender: T::AccountId,
-        file_key: FileKey<T>,
+        file_key: MerkleHash<T>,
         location: FileLocation<T>,
         owner: T::AccountId,
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         can_serve: bool,
         inclusion_forest_proof: ForestProof<T>,
-    ) -> Result<ProviderIdFor<T>, DispatchError> {
+    ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
         let bsp_id =
             <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
@@ -740,7 +740,7 @@ where
         // Decrease data used by the BSP.
         <T::Providers as shp_traits::MutateProvidersInterface>::decrease_data_used(&bsp_id, size)?;
 
-        Ok(bsp_id)
+        Ok((bsp_id, new_root))
     }
 
     /// Create a collection.
@@ -817,7 +817,7 @@ where
         location: FileLocation<T>,
         size: StorageData<T>,
         fingerprint: Fingerprint<T>,
-    ) -> FileKey<T> {
+    ) -> MerkleHash<T> {
         FileKeyHasher::<T>::hash(
             &[
                 &owner.encode(),
