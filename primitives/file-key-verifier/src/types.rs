@@ -71,14 +71,18 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
 
         let mut proven = Vec::new();
 
-        while let Some(Ok(key)) = trie_iter.next() {
-            let chunk_id = ChunkId::from_trie_key(&key)
-                .map_err(|e| ProvenFileKeyError::ChunkIdFromKeyError(e))?;
-            let chunk = trie
-                .get(&key)
-                .map_err(|_| ProvenFileKeyError::FailedToGetTrieValue)?
-                .ok_or_else(|| ProvenFileKeyError::KeyNotFoundInTrie)?;
-            proven.push(Leaf::new(chunk_id, chunk));
+        while let Some(key) = trie_iter.next() {
+            // Only add chunks to `proven` if they are present in the trie.
+            // Ignore them otherwise.
+            if let Ok(key) = key {
+                let chunk_id = ChunkId::from_trie_key(&key)
+                    .map_err(|e| ProvenFileKeyError::ChunkIdFromKeyError(e))?;
+                let chunk = trie
+                    .get(&key)
+                    .map_err(|_| ProvenFileKeyError::FailedToGetTrieValue)?
+                    .ok_or_else(|| ProvenFileKeyError::KeyNotFoundInTrie)?;
+                proven.push(Leaf::new(chunk_id, chunk));
+            }
         }
 
         Ok(proven)
@@ -189,7 +193,7 @@ impl ChunkId {
 pub type Chunk = Vec<u8>;
 
 /// A leaf in the in a trie.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Leaf<K, D: Debug> {
     pub key: K,
     pub data: D,
