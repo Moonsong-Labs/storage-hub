@@ -1,4 +1,4 @@
-use std::{path::Path, str::FromStr, time::Duration};
+use std::{fs::create_dir_all, path::Path, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
 use sc_network::PeerId;
@@ -328,12 +328,12 @@ where
     async fn on_file_complete(&self, file_key: &HasherOutT<T>) {
         info!(target: LOG_TARGET, "File upload complete ({:?})", file_key);
 
-        // Unregister the file from the file transfer service.
-        self.storage_hub_handler
-            .file_transfer
-            .unregister_file(file_key.as_ref().into())
-            .await
-            .expect("File is not registered. This should not happen!");
+        // // Unregister the file from the file transfer service.
+        // self.storage_hub_handler
+        //     .file_transfer
+        //     .unregister_file(file_key.as_ref().into())
+        //     .await
+        //     .expect("File is not registered. This should not happen!");
 
         // Get the metadata for the file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
@@ -345,9 +345,9 @@ where
 
         // Get a read lock on the forest storage to generate a proof for the file.
         let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
-        let _forest_proof = read_forest_storage
-            .generate_proof(vec![*file_key])
-            .expect("Failed to generate forest proof.");
+        // let _forest_proof = read_forest_storage
+        //     .generate_proof(vec![*file_key])
+        //     .expect("Failed to generate forest proof.");
         // Release the forest storage read lock.
         drop(read_forest_storage);
 
@@ -366,6 +366,7 @@ where
                 .expect("File location should be an utf8 string"),
         );
         info!("Saving file to: {:?}", file_path);
+        create_dir_all(&file_path.parent().unwrap()).expect("Failed to create directory");
         let mut file = File::create(file_path)
             .await
             .expect("Failed to open file for writing.");
