@@ -43,8 +43,10 @@ services:
     platform: linux/amd64
     ports:
       - "9977:9944"
+      - "30444:30444"
     volumes:
       - ./dev-keystores/user:/keystore:ro
+      - ./resource:/res:ro
     command:
       [
         "--dev",
@@ -53,6 +55,7 @@ services:
         "--provider-type=user",
         "--no-hardware-benchmarks",
         "--unsafe-rpc-external",
+        "--port=30444",
         "--rpc-cors=all",
         "--node-key=0x13b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b314",
         "--bootnodes=/ip4/${COLLATOR_IP}/tcp/30333/p2p/${COLLATOR_PEER_ID}",

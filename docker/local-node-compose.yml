@@ -10,4 +10,5 @@ services:
         "--unsafe-rpc-external",
         "--rpc-cors=all",
         "--no-hardware-benchmarks",
+        "--sealing=instant"
       ]

@@ -4,7 +4,7 @@ import * as util from "node:util";
 import * as child_process from "node:child_process";
 import * as path from "node:path";
 import { ApiPromise, WsProvider } from "@polkadot/api";
-import { alice, bsp, collator, shUser } from "../util";
+import {  bsp, collator, sendTransaction, shUser } from "../util";
 
 const exec = util.promisify(child_process.exec);
 
@@ -26,14 +26,39 @@ async function getContainerPeerId(url: string): Promise<string> {
       params: [],
     }),
   });
-  const data = await response.json();
+  const data = (await response.json()) as any;
   return data.result;
 }
+
+async function sendFileSendRpc(
+  url: string,
+  filePath: string,
+  remotePath: string,
+  userNodeAccountId: string
+) {
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "filestorage_loadFileInStorage",
+        params: [filePath, remotePath, userNodeAccountId],
+      }),
+    });
+
+    const data = (await response.json()) as any;
+    return data.result;
+  } catch (e) {
+    console.error("Error sending file to user node:", e);
+  }
+}
+
 
 let api: ApiPromise;
 
 async function main() {
-
   console.log(`sh user id: ${shUser.address}`);
   console.log(`sh bsp id: ${bsp.address}`);
   console.log(`collator id: ${collator.address}`);
@@ -65,17 +90,20 @@ async function main() {
   await new Promise((resolve) => setTimeout(resolve, 10000));
 
   //TODO: Get BSP peerID and pass to multiaddressesVec
+  const bspIp = await getContainerIp("docker-sh-collator-1");
+  console.log(`sh-bsp IP: ${bspIp}`);
+
   const peerIDBSP = await getContainerPeerId("http://127.0.0.1:9966");
   console.log(`sh-bsp Peer ID: ${peerIDBSP}`);
 
-  const multiAddressBsp = `/ip4/127.0.0.1/tcp/30350/p2p/${peerIDBSP}`;
+  const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${peerIDBSP}`;
 
   api = await ApiPromise.create({
     provider: new WsProvider("ws://127.0.0.1:9955"),
     noInitWarn: true,
     rpc: {
       filestorage: {
-        loadFileInStorage : {
+        loadFileInStorage: {
           description: "Load file in storage",
           params: [
             {
@@ -92,48 +120,46 @@ async function main() {
             },
           ],
           type: "Result<(Owner, Location, Fingerprint), DispatchError>",
-        }
-      }
-    }
+        },
+      },
+    },
   });
 
   // Give Balances
   const amount = 10000n * 10n ** 12n;
-  await api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bsp.address, amount)).signAndSend(alice);
-  await api.tx.sudo.sudo(api.tx.balances.forceSetBalance(collator.address, amount)).signAndSend(alice);
-  await api.tx.sudo
-    .sudo(api.tx.balances.forceSetBalance(shUser.address, amount))
-    .signAndSend(alice);
+  await sendTransaction(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bsp.address, amount)));
+  await sendTransaction(
+    api.tx.sudo.sudo(api.tx.balances.forceSetBalance(collator.address, amount))
+  );
+  await sendTransaction(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(shUser.address, amount)));
 
   // Make BSP
-  const bspId = "0x0000000000000000000000000000000000000000000000000000000000000100";
+
+  // This is hardcoded to be same as fingerprint of whatsup.jpg
+  const bspId = "0x002aaf768af5b738eea96084f10dac7ad4f6efa257782bdb9823994ffb233300";
   const capacity = 1024n * 1024n * 512n; // 512 MB
 
-  await api.tx.sudo
-    .sudo(
+  await sendTransaction(
+    api.tx.sudo.sudo(
       api.tx.providers.forceBspSignUp(bsp.address, bspId, capacity, [multiAddressBsp], bsp.address)
     )
-    .signAndSend(alice);
+  );
 
   // Make MSP
   const mspId = "0x0000000000000000000000000000000000000000000000000000000000000300";
   const valueProp = "0x0000000000000000000000000000000000000000000000000000000000000770";
-  await api.tx.sudo
-    .sudo(
+  await sendTransaction(
+    api.tx.sudo.sudo(
       api.tx.providers.forceMspSignUp(
-        collator.address, // <------ placeholder, in future we will have separate MSP entity
-        mspId, // whatever i want
+        collator.address,
+        mspId,
         capacity,
-        [multiAddressBsp], // can be whatever multiaddress
-        {
-          identifier: valueProp, // can be whatever
-          dataLimit: 500, // currently unused
-          protocols: ["https", "ssh", "telnet"],
-        },
+        [multiAddressBsp],
+        { identifier: valueProp, dataLimit: 500, protocols: ["https", "ssh", "telnet"] },
         collator.address
       )
     )
-    .signAndSend(alice);
+  );
 
   // Issue file Storage request
   // we need to upload and merkle file to user node
