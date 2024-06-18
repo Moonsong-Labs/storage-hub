@@ -1,7 +1,10 @@
+import "@storagehub/api-augment";
 import * as compose from "docker-compose";
 import * as util from "node:util";
 import * as child_process from "node:child_process";
 import * as path from "node:path";
+import { ApiPromise, WsProvider } from "@polkadot/api";
+import { alice, bsp, collator, shUser } from "../util";
 
 const exec = util.promisify(child_process.exec);
 
@@ -12,8 +15,7 @@ async function getContainerIp(containerName: string): Promise<string> {
   return stdout.trim();
 }
 
-async function getContainerPeerId(containerIp: string): Promise<string> {
-  const url = `http://${containerIp}:9944`;
+async function getContainerPeerId(url: string): Promise<string> {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -28,32 +30,141 @@ async function getContainerPeerId(containerIp: string): Promise<string> {
   return data.result;
 }
 
+let api: ApiPromise;
+
 async function main() {
+
+  console.log(`sh user id: ${shUser.address}`);
+  console.log(`sh bsp id: ${bsp.address}`);
+  console.log(`collator id: ${collator.address}`);
   const composeFilePath = path.resolve(process.cwd(), "..", "docker", "local-dev-bsp-compose.yml");
 
   await compose.upOne("sh-collator", { config: composeFilePath, log: true });
 
+  //todo replace with poll
   console.log("Waiting for sh-collator to start...");
-  await new Promise((resolve) => setTimeout(resolve, 10000)); 
+  await new Promise((resolve) => setTimeout(resolve, 10000));
 
   const collatorIp = await getContainerIp("docker-sh-collator-1");
   console.log(`sh-collator IP: ${collatorIp}`);
 
-  const collatorPeerId = await getContainerPeerId(collatorIp);
+  const collatorPeerId = await getContainerPeerId("http://127.0.0.1:9955");
   console.log(`sh-collator Peer ID: ${collatorPeerId}`);
 
   process.env.COLLATOR_IP = collatorIp;
   process.env.COLLATOR_PEER_ID = collatorPeerId;
 
-  const {out} = await compose.upMany(["sh-bsp", "sh-user"], {
+  await compose.upMany(["sh-bsp", "sh-user"], {
     config: composeFilePath,
     log: true,
     env: { ...process.env, COLLATOR_IP: collatorIp, COLLATOR_PEER_ID: collatorPeerId },
   });
 
-  process.stdout.write(out);
+  //todo replace with poll
+  console.log("Waiting for other processes to start...");
+  await new Promise((resolve) => setTimeout(resolve, 10000));
+
+  //TODO: Get BSP peerID and pass to multiaddressesVec
+  const peerIDBSP = await getContainerPeerId("http://127.0.0.1:9966");
+  console.log(`sh-bsp Peer ID: ${peerIDBSP}`);
+
+  const multiAddressBsp = `/ip4/127.0.0.1/tcp/30350/p2p/${peerIDBSP}`;
+
+  api = await ApiPromise.create({
+    provider: new WsProvider("ws://127.0.0.1:9955"),
+    noInitWarn: true,
+    rpc: {
+      filestorage: {
+        loadFileInStorage : {
+          description: "Load file in storage",
+          params: [
+            {
+              name: "localPath",
+              type: "string",
+            },
+            {
+              name: "remotePath",
+              type: "string",
+            },
+            {
+              name: "userNodeAccountId",
+              type: "AccountId",
+            },
+          ],
+          type: "Result<(Owner, Location, Fingerprint), DispatchError>",
+        }
+      }
+    }
+  });
+
+  // Give Balances
+  const amount = 10000n * 10n ** 12n;
+  await api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bsp.address, amount)).signAndSend(alice);
+  await api.tx.sudo.sudo(api.tx.balances.forceSetBalance(collator.address, amount)).signAndSend(alice);
+  await api.tx.sudo
+    .sudo(api.tx.balances.forceSetBalance(shUser.address, amount))
+    .signAndSend(alice);
+
+  // Make BSP
+  const bspId = "0x0000000000000000000000000000000000000000000000000000000000000100";
+  const capacity = 1024n * 1024n * 512n; // 512 MB
+
+  await api.tx.sudo
+    .sudo(
+      api.tx.providers.forceBspSignUp(bsp.address, bspId, capacity, [multiAddressBsp], bsp.address)
+    )
+    .signAndSend(alice);
+
+  // Make MSP
+  const mspId = "0x0000000000000000000000000000000000000000000000000000000000000300";
+  const valueProp = "0x0000000000000000000000000000000000000000000000000000000000000770";
+  await api.tx.sudo
+    .sudo(
+      api.tx.providers.forceMspSignUp(
+        collator.address, // <------ placeholder, in future we will have separate MSP entity
+        mspId, // whatever i want
+        capacity,
+        [multiAddressBsp], // can be whatever multiaddress
+        {
+          identifier: valueProp, // can be whatever
+          dataLimit: 500, // currently unused
+          protocols: ["https", "ssh", "telnet"],
+        },
+        collator.address
+      )
+    )
+    .signAndSend(alice);
+
+  // Issue file Storage request
+  // we need to upload and merkle file to user node
+  // we user rpc method: filestorage_loadFileInStorage
+
+  //   params:
+  // local path
+  //   remote path,
+  //   user node acocunt identity
+
+  //   result returned is:
+
+  //   owner,
+  //    location
+  //   fingerprint
+
+  // api.rpc.filestorage.loadFileInStorage(localPath, remotePath, userNodeAccountId)
+
+  ////
+  // Fileissue storage request
+  // location has to be remote path
+  // fingerprint has to  be what was from response
+  // size has to match
+  // mspId has to match
+  // peerId has to be of the user node
 }
 
-main().catch((err) => {
-  console.error("Error running bootstrap script:", err);
-});
+main()
+  .catch((err) => {
+    console.error("Error running bootstrap script:", err);
+  })
+  .finally(() => {
+    api.disconnect();
+  });

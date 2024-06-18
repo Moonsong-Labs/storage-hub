@@ -1473,14 +1473,14 @@ export default {
         challengeCount: 'u32'
     },
     /**
-     * Lookup139: shp_file_key_verifier::FileKeyProof
+     * Lookup139: shp_file_key_verifier::types::FileKeyProof
      **/
     ShpFileKeyVerifierFileKeyProof: {
         fileMetadata: 'ShpFileKeyVerifierFileMetadata',
         proof: 'SpTrieStorageProofCompactProof'
     },
     /**
-     * Lookup140: shp_file_key_verifier::FileMetadata
+     * Lookup140: shp_file_key_verifier::types::FileMetadata
      **/
     ShpFileKeyVerifierFileMetadata: {
         _alias: {
@@ -1492,7 +1492,7 @@ export default {
         fingerprint: 'ShpFileKeyVerifierFingerprint'
     },
     /**
-     * Lookup141: shp_file_key_verifier::Fingerprint
+     * Lookup141: shp_file_key_verifier::types::Fingerprint
      **/
     ShpFileKeyVerifierFingerprint: '[u8;32]',
     /**
@@ -2908,7 +2908,22 @@ export default {
                 newCapacity: 'u32',
             },
             add_value_prop: {
-                newValueProp: 'PalletStorageProvidersValueProposition'
+                newValueProp: 'PalletStorageProvidersValueProposition',
+            },
+            force_msp_sign_up: {
+                who: 'AccountId32',
+                mspId: 'H256',
+                capacity: 'u32',
+                multiaddresses: 'Vec<Bytes>',
+                valueProp: 'PalletStorageProvidersValueProposition',
+                paymentAccount: 'AccountId32',
+            },
+            force_bsp_sign_up: {
+                who: 'AccountId32',
+                bspId: 'H256',
+                capacity: 'u32',
+                multiaddresses: 'Vec<Bytes>',
+                paymentAccount: 'AccountId32'
             }
         }
     },

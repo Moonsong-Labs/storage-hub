@@ -19,7 +19,7 @@
     "docker:stop": "docker compose -f ../docker/local-node-compose.yml  -p sh_dev_node down",
     "docker:stop:latest": "docker compose -f ../docker/latest-node-compose.yml  -p sh_dev_node down",
     "docker:start:bspnet": "pnpm tsx scripts/devNetBootstrap.ts",
-    "docker:stop:bspnet": "docker compose -f ../docker/local-dev-bsp-compose.yml  -p sh_dev_node down",
+    "docker:stop:bspnet": "docker compose -f ../docker/local-dev-bsp-compose.yml down",
     "scalegen": "papi update --config papi.json",
     "typegen": "papi generate --config papi.json",
     "zombie:run:latest": "SH_IMAGE=docker.io/moonsonglabs/storage-hub:latest pnpm zombienet spawn configs/simple.toml",

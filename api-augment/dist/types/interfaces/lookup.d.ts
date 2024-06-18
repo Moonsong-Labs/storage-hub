@@ -1470,14 +1470,14 @@ declare const _default: {
         challengeCount: string;
     };
     /**
-     * Lookup139: shp_file_key_verifier::FileKeyProof
+     * Lookup139: shp_file_key_verifier::types::FileKeyProof
      **/
     ShpFileKeyVerifierFileKeyProof: {
         fileMetadata: string;
         proof: string;
     };
     /**
-     * Lookup140: shp_file_key_verifier::FileMetadata
+     * Lookup140: shp_file_key_verifier::types::FileMetadata
      **/
     ShpFileKeyVerifierFileMetadata: {
         _alias: {
@@ -1489,7 +1489,7 @@ declare const _default: {
         fingerprint: string;
     };
     /**
-     * Lookup141: shp_file_key_verifier::Fingerprint
+     * Lookup141: shp_file_key_verifier::types::Fingerprint
      **/
     ShpFileKeyVerifierFingerprint: string;
     /**
@@ -2906,6 +2906,21 @@ declare const _default: {
             };
             add_value_prop: {
                 newValueProp: string;
+            };
+            force_msp_sign_up: {
+                who: string;
+                mspId: string;
+                capacity: string;
+                multiaddresses: string;
+                valueProp: string;
+                paymentAccount: string;
+            };
+            force_bsp_sign_up: {
+                who: string;
+                bspId: string;
+                capacity: string;
+                multiaddresses: string;
+                paymentAccount: string;
             };
         };
     };

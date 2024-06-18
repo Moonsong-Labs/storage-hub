@@ -27,6 +27,11 @@ export const collator = keyring.addFromUri("//Sh-collator", {
   name: "Sh-collator",
 });
 
+export const shUser = keyring.addFromUri("//Sh-User", {
+  name: "Sh-User",
+});
+
+
 export const createSr25519Account = async (privateKey?: string) => {
   const rand = `0x${randomBytes(32).toString("hex")}`;
   console.log("random", rand);

@@ -21,6 +21,7 @@ services:
     platform: linux/amd64
     ports:
       - "9966:9944"
+      - "30350:30350"
     volumes:
       - ./dev-keystores/bsp:/keystore:ro
     command:
@@ -31,6 +32,7 @@ services:
         "--name=sh-bsp",
         "--no-hardware-benchmarks",
         "--unsafe-rpc-external",
+        "--port=30350",
         "--rpc-cors=all",
         "--node-key=0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be",
         "--bootnodes=/ip4/${COLLATOR_IP}/tcp/30333/p2p/${COLLATOR_PEER_ID}",
