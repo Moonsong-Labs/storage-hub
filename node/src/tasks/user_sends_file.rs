@@ -110,13 +110,24 @@ where
         // since all peer ids belong to the same BSP.
         for peer_id in peer_ids {
             for chunk_id in 0..chunk_count {
-                let proof = self
+                debug!(target: LOG_TARGET, "Trying to send chunk id {:?} of file {:?} to peer {:?}", chunk_id, file_key, peer_id);
+                let proof = match self
                     .storage_hub_handler
                     .file_storage
                     .read()
                     .await
                     .generate_proof(&file_key, &vec![ChunkId::new(chunk_id)])
-                    .expect("File is not in storage, or proof does not exist.");
+                {
+                    Ok(proof) => proof,
+                    Err(e) => {
+                        return Err(anyhow::anyhow!(
+                            "Failed to generate proof for chunk id {:?} of file {:?}\n Error: {:?}",
+                            chunk_id,
+                            file_key,
+                            e
+                        ));
+                    }
+                };
 
                 let upload_response = self
                     .storage_hub_handler
@@ -126,10 +137,10 @@ where
 
                 match upload_response {
                     Ok(_) => {
-                        debug!(target: LOG_TARGET, "Successfully uploaded chunk id {:?} of file {:?} to peer {:?}", chunk_id, file_metadata.fingerprint, peer_id)
+                        debug!(target: LOG_TARGET, "Successfully uploaded chunk id {:?} of file {:?} to peer {:?}", chunk_id, file_metadata.fingerprint, peer_id);
                     }
                     Err(e) => {
-                        error!(target: LOG_TARGET, "Failed to upload chunk_id {:?} to peer {:?} due to {:?}", chunk_id, peer_id, e);
+                        error!(target: LOG_TARGET, "Failed to upload chunk_id {:?} to peer {:?}\n Error: {:?}", chunk_id, peer_id, e);
                         // In case of an error, we break the inner loop
                         // and try to connect to the next peer id.
                         break;
@@ -137,9 +148,13 @@ where
                 }
             }
             info!(target: LOG_TARGET, "Successfully sent file {:?} to peer {:?}", file_metadata.fingerprint, peer_id);
-            break;
+            return Ok(());
         }
 
-        Ok(())
+        // If we reach this point, it means that we couldn't send the file to any of the peers.
+        return Err(anyhow::anyhow!(
+            "Failed to send file {:?} to any of the peers",
+            file_metadata.fingerprint
+        ));
     }
 }
