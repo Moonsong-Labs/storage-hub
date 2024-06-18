@@ -286,6 +286,7 @@ where
                 fingerprint: fingerprint.into(),
             });
 
+        // Send extrinsic and wait for it to be included in the block.
         self.storage_hub_handler
             .blockchain
             .send_extrinsic(call)
@@ -293,6 +294,13 @@ where
             .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
+
+        // Create file in file storage.
+        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+        write_file_storage
+            .insert_file(metadata.file_key::<<T as TrieLayout>::Hash>(), metadata)
+            .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
+        drop(write_file_storage);
 
         Ok(())
     }

@@ -254,22 +254,6 @@ where
             .get_mut(file_key)
             .ok_or(FileStorageWriteError::FileDoesNotExist)?;
 
-        let mut trie =
-            TrieDBMutBuilder::<T>::new(&mut file_data.memdb, &mut file_data.root).build();
-
-        // Check that we don't have a chunk already stored.
-        if trie
-            .contains(&chunk_id.as_trie_key())
-            .map_err(|_| FileStorageWriteError::FailedToGetFileChunk)?
-        {
-            return Err(FileStorageWriteError::FileChunkAlreadyExists);
-        }
-
-        // Insert the chunk into the file trie.
-        trie.insert(&chunk_id.as_trie_key(), &data)
-            .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
-        drop(trie);
-
         file_data.write_chunk(chunk_id, data)?;
 
         let metadata = self.metadata.get(file_key).expect(
