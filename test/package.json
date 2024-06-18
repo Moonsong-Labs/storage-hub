@@ -18,7 +18,7 @@
     "docker:start:latest": "docker compose -f ../docker/latest-node-compose.yml  -p sh_dev_node up -d",
     "docker:stop": "docker compose -f ../docker/local-node-compose.yml  -p sh_dev_node down",
     "docker:stop:latest": "docker compose -f ../docker/latest-node-compose.yml  -p sh_dev_node down",
-    "docker:start:bspnet": "docker compose -f ../docker/local-dev-bsp-compose.yml  -p sh_dev_node up -d",
+    "docker:start:bspnet": "pnpm tsx scripts/devNetBootstrap.ts",
     "docker:stop:bspnet": "docker compose -f ../docker/local-dev-bsp-compose.yml  -p sh_dev_node down",
     "scalegen": "papi update --config papi.json",
     "typegen": "papi generate --config papi.json",

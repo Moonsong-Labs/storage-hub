@@ -34,7 +34,7 @@ async function main() {
   await compose.upOne("sh-collator", { config: composeFilePath, log: true });
 
   console.log("Waiting for sh-collator to start...");
-  await new Promise((resolve) => setTimeout(resolve, 10000)); // Adjust as necessary
+  await new Promise((resolve) => setTimeout(resolve, 10000)); 
 
   const collatorIp = await getContainerIp("docker-sh-collator-1");
   console.log(`sh-collator IP: ${collatorIp}`);
@@ -45,11 +45,13 @@ async function main() {
   process.env.COLLATOR_IP = collatorIp;
   process.env.COLLATOR_PEER_ID = collatorPeerId;
 
-  await compose.upMany(["sh-bsp", "sh-user"], {
+  const {out} = await compose.upMany(["sh-bsp", "sh-user"], {
     config: composeFilePath,
     log: true,
     env: { ...process.env, COLLATOR_IP: collatorIp, COLLATOR_PEER_ID: collatorPeerId },
   });
+
+  process.stdout.write(out);
 }
 
 main().catch((err) => {
