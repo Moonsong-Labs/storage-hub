@@ -321,55 +321,53 @@ where
             ChallengeTickToChallengedProviders::<T>::iter_key_prefix(challenges_ticker).collect();
         let slashable_providers_len = slashable_providers.len();
         weight.consume(T::DbWeight::get().reads_writes(slashable_providers_len as u64, 0));
-        if !slashable_providers.is_empty() {
-            for provider in slashable_providers {
-                // Mark this provider as slashable.
-                SlashableProviders::<T>::set(provider, Some(()));
-                weight.consume(T::DbWeight::get().reads_writes(0, 1));
+        for provider in slashable_providers {
+            // Mark this provider as slashable.
+            SlashableProviders::<T>::set(provider, Some(()));
+            weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
-                // Remove this tick entry from `ChallengeTickToChallengedProviders`.
-                ChallengeTickToChallengedProviders::<T>::remove(challenges_ticker, provider);
-                weight.consume(T::DbWeight::get().reads_writes(0, 1));
+            // Remove this tick entry from `ChallengeTickToChallengedProviders`.
+            ChallengeTickToChallengedProviders::<T>::remove(challenges_ticker, provider);
+            weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
-                // Get the stake for this Provider, to know its challenge period.
-                // If a submitter is a registered Provider, it must have a stake, so there shouldn't be an error.
-                let stake = match ProvidersPalletFor::<T>::get_stake(provider) {
-                    Some(stake) => stake,
-                    // But to avoid panics, in the odd case of a Provider not being registered, we
-                    // arbitrarily set the stake to be that which would result in 10 ticks of challenge period.
-                    None => {
-                        weight.consume(T::DbWeight::get().reads_writes(1, 0));
-                        StakeToChallengePeriodFor::<T>::get() * 10u32.into()
-                    }
-                };
-                weight.consume(T::DbWeight::get().reads_writes(1, 0));
+            // Get the stake for this Provider, to know its challenge period.
+            // If a submitter is a registered Provider, it must have a stake, so there shouldn't be an error.
+            let stake = match ProvidersPalletFor::<T>::get_stake(provider) {
+                Some(stake) => stake,
+                // But to avoid panics, in the odd case of a Provider not being registered, we
+                // arbitrarily set the stake to be that which would result in 10 ticks of challenge period.
+                None => {
+                    weight.consume(T::DbWeight::get().reads_writes(1, 0));
+                    StakeToChallengePeriodFor::<T>::get() * 10u32.into()
+                }
+            };
+            weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
-                // Calculate the next challenge deadline for this Provider.
-                let next_challenge_deadline =
-                    challenges_ticker.saturating_add(Self::stake_to_challenge_period(stake));
+            // Calculate the next challenge deadline for this Provider.
+            let next_challenge_deadline =
+                challenges_ticker.saturating_add(Self::stake_to_challenge_period(stake));
 
-                // Calculate the tick for which the Provider should have submitted a proof.
-                let last_tick_proven =
-                    challenges_ticker.saturating_sub(T::ChallengeTicksTolerance::get());
-                weight.consume(T::DbWeight::get().reads_writes(1, 0));
+            // Calculate the tick for which the Provider should have submitted a proof.
+            let last_tick_proven =
+                challenges_ticker.saturating_sub(T::ChallengeTicksTolerance::get());
+            weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
-                // Update this Provider's next challenge deadline.
-                ChallengeTickToChallengedProviders::<T>::set(
-                    next_challenge_deadline,
-                    provider,
-                    Some(()),
-                );
-                weight.consume(T::DbWeight::get().reads_writes(0, 1));
+            // Update this Provider's next challenge deadline.
+            ChallengeTickToChallengedProviders::<T>::set(
+                next_challenge_deadline,
+                provider,
+                Some(()),
+            );
+            weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
-                // Update this Provider's last tick it submitted a proof for.
-                // It didn't actually submit a proof for this tick, but we need it to properly calculate next time
-                // it should submit a proof.
-                LastTickProviderSubmittedProofFor::<T>::set(provider, Some(last_tick_proven));
-                weight.consume(T::DbWeight::get().reads_writes(0, 1));
+            // Update this Provider's last tick it submitted a proof for.
+            // It didn't actually submit a proof for this tick, but we need it to properly calculate next time
+            // it should submit a proof.
+            LastTickProviderSubmittedProofFor::<T>::set(provider, Some(last_tick_proven));
+            weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
-                // Emit slashable provider event.
-                Self::deposit_event(Event::SlashableProvider { provider });
-            }
+            // Emit slashable provider event.
+            Self::deposit_event(Event::SlashableProvider { provider });
         }
     }
 
