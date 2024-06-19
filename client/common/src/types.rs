@@ -77,7 +77,7 @@ pub type ChunkId = u64;
 pub type Chunk = Vec<u8>;
 
 /// Leaf in the Forest or File trie.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Leaf<K, D: Debug> {
     pub key: K,
     pub data: D,

@@ -213,21 +213,15 @@ where
 
     fn stored_chunks_count(&self) -> u64 {
         let db = self.as_hash_db();
-
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
 
-        // dbg!(self.get_chunk(&ChunkId::from(0u64)));
-        // let chunk_key = self.chunk_keys.get(&ChunkId::from(0u64)).unwrap();
-        // let x = trie.iter().unwrap().seek(chunk_key.as_ref());
+        let mut iter = trie.iter().expect("Should be able to get iterator; qed.");
+        let mut count = 0u64;
+        while let Some(_) = iter.next() {
+            count += 1
+        }
 
-        // dbg!(x);
-
-        // if let Some(x) = trie.iter().unwrap().next() {
-        //     println!("{:?}", x);
-        // }
-
-        let stored_chunks = trie.key_iter().iter().count();
-        stored_chunks as u64
+        count as u64
     }
 
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError> {
@@ -275,6 +269,7 @@ where
             })
             .collect();
 
+        // Shouldnt root be `FileKey` instead of `Fingerprint`?
         Ok(FileProof {
             proven: leaves,
             proof: proof.into(),
@@ -365,6 +360,9 @@ where
             error!(target: LOG_TARGET, "Failed to commit changes to persistent storage: {}", e);
             FileStorageError::FailedToWriteToStorage
         })?;
+
+        // // Set inner root as default value (no trie);
+        // self.root = HasherOutT::<T>::default();
 
         Ok(())
     }
@@ -678,29 +676,7 @@ mod tests {
         let chunk = file_trie.get_chunk(&ChunkId::from(0u64)).unwrap();
         assert_eq!(chunk.as_slice(), [1u8; 32]);
     }
-    #[test]
-    fn file_trie_getting_stored_chunks_works() {
-        let storage = Box::new(MockStorageDb {
-            data: Default::default(),
-        });
 
-        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
-
-        file_trie
-            .write_chunk(&ChunkId::from(1u64), &Chunk::from([2u8; 32]))
-            .unwrap();
-
-        // dbg!(file_trie.get_chunk(&ChunkId::from(0u64)));
-        assert_eq!(file_trie.stored_chunks_count(), 1);
-
-        file_trie
-            .write_chunk(&ChunkId::from(0u64), &Chunk::from([1u8; 32]))
-            .unwrap();
-
-        dbg!(file_trie.get_chunk(&ChunkId::from(0u64)));
-        dbg!(file_trie.get_chunk(&ChunkId::from(1u64)));
-        assert_eq!(file_trie.stored_chunks_count(), 2);
-    }
     #[test]
     fn file_trie_getting_chunk_works() {
         let storage = Box::new(MockStorageDb {
@@ -715,14 +691,103 @@ mod tests {
         let chunk = file_trie.get_chunk(&chunk_id).unwrap();
         assert_eq!(chunk.as_slice(), [3u8; 32]);
     }
+
     #[test]
-    fn file_trie_generating_proof_works() {}
+    fn file_trie_getting_stored_chunks_works() {
+        let storage = Box::new(MockStorageDb {
+            data: Default::default(),
+        });
+        let chunk_ids = vec![ChunkId::from(0u64), ChunkId::from(1u64)];
+        let chunks = vec![Chunk::from([0u8; 32]), Chunk::from([1u8; 32])];
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+
+        file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count(), 1);
+        assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count(), 2);
+        assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
+    }
+
     #[test]
-    fn file_trie_deleting_works() {}
+    fn file_trie_generating_proof_works() {
+        let storage = Box::new(MockStorageDb {
+            data: Default::default(),
+        });
+        let chunk_ids = vec![
+            ChunkId::from(0u64),
+            ChunkId::from(1u64),
+            ChunkId::from(2u64),
+        ];
+        let chunks = vec![
+            Chunk::from([0u8; 32]),
+            Chunk::from([1u8; 32]),
+            Chunk::from([2u8; 32]),
+        ];
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+
+        file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count(), 1);
+        assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count(), 2);
+        assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count(), 3);
+        assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
+
+        let file_proof = file_trie.generate_proof(&chunk_ids).unwrap();
+        let proven_leaves = file_proof.proven;
+        for (id, leaf) in proven_leaves.iter().enumerate() {
+            assert_eq!(chunk_ids[id], leaf.key);
+            assert_eq!(chunks[id], leaf.data);
+        }
+    }
+
+    #[test]
+    fn file_trie_deleting_works() {
+        let storage = Box::new(MockStorageDb {
+            data: Default::default(),
+        });
+        let chunk_ids = vec![
+            ChunkId::from(0u64),
+            ChunkId::from(1u64),
+            ChunkId::from(2u64),
+        ];
+        let chunks = vec![
+            Chunk::from([0u8; 32]),
+            Chunk::from([1u8; 32]),
+            Chunk::from([2u8; 32]),
+        ];
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+
+        file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count(), 1);
+        assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count(), 2);
+        assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count(), 3);
+        assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
+
+        file_trie.delete().unwrap();
+        assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
+
+        // assert_eq!(file_trie.stored_chunks_count(), 0);
+    }
+
     #[test]
     fn inserting_whole_file_works() {}
+
     #[test]
     fn deleting_whole_file_works() {}
+
     #[test]
     fn proof_generation_works() {}
 }
