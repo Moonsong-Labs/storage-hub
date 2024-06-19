@@ -6,7 +6,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
-use shp_traits::{AddMutation, MutateProvidersInterface, ReadProvidersInterface, RemoveMutation};
+use shp_traits::{TrieAddMutation, MutateProvidersInterface, ReadProvidersInterface, TrieRemoveMutation};
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
@@ -510,7 +510,7 @@ impl<T: pallet::Config> Pallet<T> {
         // Compute new root after inserting new file key in forest partial trie.
         let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
             &root,
-            &[(file_key, AddMutation::default().into())],
+            &[(file_key, TrieAddMutation::default().into())],
             &non_inclusion_forest_proof,
         )?;
 
@@ -563,7 +563,7 @@ impl<T: pallet::Config> Pallet<T> {
             // Apply Remove mutation of the file key to the BSPs that have confirmed storing the file (proofs of inclusion).
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &file_key,
-                Some(RemoveMutation),
+                Some(TrieRemoveMutation),
             )?;
         }
 
@@ -711,7 +711,6 @@ impl<T: pallet::Config> Pallet<T> {
                 &inclusion_forest_proof,
             )?;
 
-        // TODO: Use BTreeSet instead for faster lookups.
         // Ensure that the file key IS part of the BSP's forest.
         // The runtime is responsible for adding and removing keys, computing the new root and updating the BSP's root.
         ensure!(
@@ -726,7 +725,7 @@ impl<T: pallet::Config> Pallet<T> {
         // Compute new root after removing file key from forest partial trie.
         let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
             &root,
-            &[(file_key, RemoveMutation::default().into())],
+            &[(file_key, TrieRemoveMutation::default().into())],
             &inclusion_forest_proof,
         )?;
 

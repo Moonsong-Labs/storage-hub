@@ -297,7 +297,7 @@ pub trait ProofsDealerInterface {
     /// Submit a new challenge with priority.
     fn challenge_with_priority(
         key_challenged: &Self::MerkleHash,
-        mutation: Option<RemoveMutation>,
+        mutation: Option<TrieRemoveMutation>,
     ) -> DispatchResult;
 
     /// Apply delta (mutations) to the partial trie based on the proof and the commitment.
@@ -305,7 +305,7 @@ pub trait ProofsDealerInterface {
     /// The new root is returned.
     fn apply_delta(
         commitment: &Self::MerkleHash,
-        mutations: &[(Self::MerkleHash, Mutation)],
+        mutations: &[(Self::MerkleHash, TrieMutation)],
         proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, DispatchError>;
 }
@@ -334,31 +334,31 @@ pub trait CommitmentVerifier {
 
 /// Enum representing the type of mutation (addition or removal of a key).
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug)]
-pub enum Mutation {
-    Add(AddMutation),
-    Remove(RemoveMutation),
+pub enum TrieMutation {
+    Add(TrieAddMutation),
+    Remove(TrieRemoveMutation),
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug, Default)]
-pub struct AddMutation;
+pub struct TrieAddMutation;
 
-impl Into<Mutation> for AddMutation {
-    fn into(self) -> Mutation {
-        Mutation::Add(self)
+impl Into<TrieMutation> for TrieAddMutation {
+    fn into(self) -> TrieMutation {
+        TrieMutation::Add(self)
     }
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug, Default)]
-pub struct RemoveMutation;
+pub struct TrieRemoveMutation;
 
-impl Into<Mutation> for RemoveMutation {
-    fn into(self) -> Mutation {
-        Mutation::Remove(self)
+impl Into<TrieMutation> for TrieRemoveMutation {
+    fn into(self) -> TrieMutation {
+        TrieMutation::Remove(self)
     }
 }
 
 /// A trait to apply mutations (delta) to a partial trie based on a proof and a commitment.
-pub trait ProofDeltaApplier<H: sp_core::Hasher> {
+pub trait TrieProofDeltaApplier<H: sp_core::Hasher> {
     /// The type that represents the proof.
     type Proof: Parameter + Member + Debug;
     /// The type that represents the keys (e.g. a Merkle root, node keys, etc.)
@@ -369,7 +369,7 @@ pub trait ProofDeltaApplier<H: sp_core::Hasher> {
     /// Returns the new root computed after applying the mutations.
     fn apply_delta(
         root: &Self::Key,
-        mutations: &[(Self::Key, Mutation)],
+        mutations: &[(Self::Key, TrieMutation)],
         proof: &Self::Proof,
     ) -> Result<(sp_trie::MemoryDB<H>, Self::Key), DispatchError>;
 }

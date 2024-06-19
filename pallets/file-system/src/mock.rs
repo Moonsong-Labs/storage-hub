@@ -5,7 +5,7 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
-use shp_traits::{CommitmentVerifier, MaybeDebug, Mutation, ProofDeltaApplier};
+use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
@@ -263,7 +263,7 @@ where
     }
 }
 
-impl<C, T: TrieLayout, const H_LENGTH: usize> ProofDeltaApplier<T::Hash>
+impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
     for MockVerifier<C, T, H_LENGTH>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
@@ -273,7 +273,7 @@ where
 
     fn apply_delta(
         root: &Self::Key,
-        _mutations: &[(Self::Key, Mutation)],
+        _mutations: &[(Self::Key, TrieMutation)],
         _proof: &Self::Proof,
     ) -> Result<(MemoryDB<T::Hash>, Self::Key), DispatchError> {
         // Just return the root as is with no mutations

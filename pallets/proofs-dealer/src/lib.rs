@@ -29,7 +29,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
-    use shp_traits::{CommitmentVerifier, ProofDeltaApplier, ProvidersInterface, RemoveMutation};
+    use shp_traits::{CommitmentVerifier, TrieProofDeltaApplier, ProvidersInterface, TrieRemoveMutation};
     use sp_runtime::traits::Convert;
     use types::{KeyFor, ProviderFor};
 
@@ -58,7 +58,7 @@ pub mod pallet {
         /// The type of the challenge is a hash, and it is expected that a proof will provide the
         /// exact hash if it exists in the forest, or the previous and next hashes if it does not.
         type ForestVerifier: CommitmentVerifier<Commitment = KeyFor<Self>, Challenge = KeyFor<Self>>
-            + ProofDeltaApplier<
+            + TrieProofDeltaApplier<
                 Self::MerkleTrieHashing,
                 Key = KeyFor<Self>,
                 Proof = ForestVerifierProofFor<Self>,
@@ -182,7 +182,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
-        BoundedVec<(KeyFor<T>, Option<RemoveMutation>), MaxCustomChallengesPerBlockFor<T>>,
+        BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), MaxCustomChallengesPerBlockFor<T>>,
     >;
 
     /// The block number of the last checkpoint challenge round.
@@ -244,7 +244,7 @@ pub mod pallet {
     #[pallet::getter(fn priority_challenges_queue)]
     pub type PriorityChallengesQueue<T: Config> = StorageValue<
         _,
-        BoundedVec<(KeyFor<T>, Option<RemoveMutation>), ChallengesQueueLengthFor<T>>,
+        BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), ChallengesQueueLengthFor<T>>,
         ValueQuery,
     >;
 
@@ -350,10 +350,6 @@ pub mod pallet {
 
         /// Failed to apply delta to the forest proof partial trie.
         FailedToApplyDelta,
-
-        /// An unexepected mutation was found in the checkpoint challenges.
-        /// Normally only `Mutation::Remove` is supported.
-        UnexpectedMutation,
     }
 
     #[pallet::call]

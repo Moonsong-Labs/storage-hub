@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::sp_runtime::DispatchError;
-use shp_traits::{CommitmentVerifier, Mutation, ProofDeltaApplier};
+use shp_traits::{CommitmentVerifier, TrieMutation, TrieProofDeltaApplier};
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{CompactProof, MemoryDB, TrieDBBuilder, TrieDBMutBuilder, TrieLayout, TrieMut};
 use trie_db::TrieIterator;
@@ -204,13 +204,12 @@ where
             }
         }
 
-        // TODO: Return Btreeset instead of Vec for efficient key lookup.
         return Ok(proven_keys);
     }
 }
 
 // TODO: rename to TrieDeltaApplier
-impl<T: TrieLayout, const H_LENGTH: usize> ProofDeltaApplier<T::Hash>
+impl<T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
     for ForestVerifier<T, H_LENGTH>
 where
     <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
@@ -220,7 +219,7 @@ where
 
     fn apply_delta(
         root: &Self::Key,
-        mutations: &[(Self::Key, Mutation)],
+        mutations: &[(Self::Key, TrieMutation)],
         proof: &Self::Proof,
     ) -> Result<(MemoryDB<T::Hash>, Self::Key), DispatchError> {
         // Check if the mutations are empty
@@ -248,11 +247,11 @@ where
         // Apply mutations to the trie
         for mutation in mutations.iter() {
             match mutation {
-                (key, Mutation::Add(_)) => {
+                (key, TrieMutation::Add(_)) => {
                     trie.insert(key.as_ref(), &[])
                         .map_err(|_| "Failed to insert key into trie.")?;
                 }
-                (key, Mutation::Remove(_)) => {
+                (key, TrieMutation::Remove(_)) => {
                     trie.remove(key.as_ref())
                         .map_err(|_| "Failed to remove key from trie.")?;
                 }

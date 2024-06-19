@@ -1,7 +1,7 @@
 use std::io::Read;
 
 use serde::Serialize;
-use shp_traits::{AddMutation, CommitmentVerifier, Mutation, ProofDeltaApplier, RemoveMutation};
+use shp_traits::{TrieAddMutation, CommitmentVerifier, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation};
 use sp_runtime::traits::BlakeTwo256;
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{
@@ -395,7 +395,7 @@ mod verify_proof_tests {
         let largest_key = leaf_keys
             .iter()
             .max()
-            .map(|key| (*key, None::<Mutation>))
+            .map(|key| (*key, None::<TrieMutation>))
             .unwrap();
 
         // Challenge key is the largest key with the most significant bit incremented by 1.
@@ -1421,7 +1421,7 @@ mod mutate_root_tests {
     fn apply_delta(
         mut memdb: MemoryDB<BlakeTwo256>,
         mut root: H256,
-        mutations: Vec<(H256, Mutation)>,
+        mutations: Vec<(H256, TrieMutation)>,
     ) -> H256 {
         let new_root = {
             let mut trie =
@@ -1429,10 +1429,10 @@ mod mutate_root_tests {
 
             for mutation in mutations.clone() {
                 match mutation {
-                    (key, Mutation::Add(_)) => {
+                    (key, TrieMutation::Add(_)) => {
                         trie.insert(&key.0, &[]).unwrap();
                     }
-                    (key, Mutation::Remove(_)) => {
+                    (key, TrieMutation::Remove(_)) => {
                         trie.remove(&key.0).unwrap();
                     }
                 }
@@ -1443,8 +1443,8 @@ mod mutate_root_tests {
 
         for mutation in mutations {
             match mutation {
-                (key, Mutation::Add(_)) => assert_key_in_trie(&memdb, &new_root, &key),
-                (key, Mutation::Remove(_)) => assert_key_not_in_trie(&memdb, &new_root, &key),
+                (key, TrieMutation::Add(_)) => assert_key_in_trie(&memdb, &new_root, &key),
+                (key, TrieMutation::Remove(_)) => assert_key_not_in_trie(&memdb, &new_root, &key),
             }
         }
 
@@ -1499,7 +1499,7 @@ mod mutate_root_tests {
         let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 
         let challenge_key = generate_unique_key(&leaf_keys);
-        let mutations: Vec<(H256, Mutation)> = vec![(challenge_key, AddMutation::default().into())];
+        let mutations: Vec<(H256, TrieMutation)> = vec![(challenge_key, TrieAddMutation::default().into())];
 
         let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
 
@@ -1537,8 +1537,8 @@ mod mutate_root_tests {
         let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 
         let challenge_key = *leaf_keys.first().unwrap();
-        let mutations: Vec<(H256, Mutation)> =
-            vec![(challenge_key, RemoveMutation::default().into())];
+        let mutations: Vec<(H256, TrieMutation)> =
+            vec![(challenge_key, TrieRemoveMutation::default().into())];
 
         let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
 
@@ -1575,9 +1575,9 @@ mod mutate_root_tests {
             challenge_keys.push(generate_unique_key(&leaf_keys));
         }
 
-        let mutations: Vec<(H256, Mutation)> = challenge_keys
+        let mutations: Vec<(H256, TrieMutation)> = challenge_keys
             .iter()
-            .map(|key| (*key, AddMutation::default().into()))
+            .map(|key| (*key, TrieAddMutation::default().into()))
             .collect();
 
         let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
@@ -1620,9 +1620,9 @@ mod mutate_root_tests {
         let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 
         let challenge_keys = leaf_keys.into_iter().take(3).collect::<Vec<H256>>();
-        let mutations: Vec<(H256, Mutation)> = challenge_keys
+        let mutations: Vec<(H256, TrieMutation)> = challenge_keys
             .iter()
-            .map(|key| (*key, RemoveMutation::default().into()))
+            .map(|key| (*key, TrieRemoveMutation::default().into()))
             .collect();
 
         let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());

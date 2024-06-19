@@ -7,8 +7,8 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::prelude::vec::Vec;
 use shp_traits::{
-    CommitmentVerifier, Mutation, ProofDeltaApplier, ProofsDealerInterface, ProvidersInterface,
-    RemoveMutation,
+    CommitmentVerifier, TrieMutation, TrieProofDeltaApplier, ProofsDealerInterface, ProvidersInterface,
+    TrieRemoveMutation,
 };
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, Convert, Hash, Zero},
@@ -218,7 +218,7 @@ where
                     // Remove the key from the list of forest_keys_proven to avoid having to verify the key proof.
                     forest_keys_proven.remove(&mutation.0);
 
-                    <T::ForestVerifier as ProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
+                    <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
                         &acc_root,
                         &[(mutation.0, mutation.1.clone().into())],
                         forest_proof,
@@ -273,9 +273,6 @@ where
 
     /// Add challenge to ChallengesQueue.
     ///
-    /// Keys that are challenged manually are not random and therefore the key inclusion should be specifed.
-    /// The challenges generated randomly from a seed do not have a specified inclusion type.
-    ///
     /// Check if challenge is already queued. If it is, just return. Otherwise, add the challenge
     /// to the queue.
     fn enqueue_challenge(key: &KeyFor<T>) -> DispatchResult {
@@ -304,7 +301,7 @@ where
     /// to the queue.
     fn enqueue_challenge_with_priority(
         key: &KeyFor<T>,
-        mutation: Option<RemoveMutation>,
+        mutation: Option<TrieRemoveMutation>,
     ) -> DispatchResult {
         // Get priority challenges queue from storage.
         let mut priority_challenges_queue = PriorityChallengesQueue::<T>::get();
@@ -347,7 +344,6 @@ where
                 .concat(),
             );
 
-            // The challenge inclusion type is None since we are generating random challenges and don't expect proofs of inclusion or non-inclusion.
             challenges.push(challenge.into());
         }
 
@@ -405,18 +401,18 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
     fn challenge_with_priority(
         key_challenged: &Self::MerkleHash,
-        mutation: Option<RemoveMutation>,
+        mutation: Option<TrieRemoveMutation>,
     ) -> DispatchResult {
         Self::enqueue_challenge_with_priority(key_challenged, mutation)
     }
 
     fn apply_delta(
         commitment: &Self::MerkleHash,
-        mutations: &[(Self::MerkleHash, Mutation)],
+        mutations: &[(Self::MerkleHash, TrieMutation)],
         proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, DispatchError> {
         Ok(
-            <T::ForestVerifier as ProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
+            <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
                 commitment, mutations, proof,
             )
             .map_err(|_| Error::<T>::FailedToApplyDelta)?

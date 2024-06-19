@@ -5,7 +5,7 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
-use shp_traits::{Mutation, ProofsDealerInterface, RemoveMutation, SubscribeProvidersInterface};
+use shp_traits::{TrieMutation, ProofsDealerInterface, TrieRemoveMutation, SubscribeProvidersInterface};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
@@ -132,7 +132,7 @@ impl ProofsDealerInterface for MockProofsDealer {
 
     fn challenge_with_priority(
         _key_challenged: &Self::MerkleHash,
-        _mutation: Option<RemoveMutation>,
+        _mutation: Option<TrieRemoveMutation>,
     ) -> frame_support::dispatch::DispatchResult {
         Ok(())
     }
@@ -155,7 +155,7 @@ impl ProofsDealerInterface for MockProofsDealer {
 
     fn apply_delta(
         _commitment: &Self::MerkleHash,
-        _mutations: &[(Self::MerkleHash, Mutation)],
+        _mutations: &[(Self::MerkleHash, TrieMutation)],
         _proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, sp_runtime::DispatchError> {
         Ok(H256::default())
