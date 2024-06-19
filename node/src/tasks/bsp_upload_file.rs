@@ -1,4 +1,4 @@
-use std::{path::Path, time::Duration};
+use std::{fs::create_dir_all, path::Path, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
 use sc_network::PeerId;
@@ -122,6 +122,8 @@ where
     <T::Hash as sp_core::Hasher>::Out: TryFrom<[u8; H_LENGTH]>,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
+        info!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
+
         let file_key: HasherOutT<T> = TryFrom::try_from(*event.file_key.as_ref())
             .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
 
@@ -201,6 +203,18 @@ where
                         event.file_key
                     )));
                 }
+                FileStorageWriteError::FailedToConstructTrieIter => {
+                    // This should never happen for a well constructed trie.
+                    // This means that something is seriously wrong, so we error out the whole task.
+
+                    // Unvolunteer the file.
+                    self.unvolunteer_file(file_key).await?;
+
+                    return Err(anyhow::anyhow!(format!(
+                        "This is a bug! Failed to construct trie iter for key {:?}.",
+                        event.file_key
+                    )));
+                }
             },
         }
 
@@ -251,8 +265,16 @@ where
         // to the BSP volunteering than the BSP, and therefore initiate a new upload request before the
         // BSP has registered the file and peer ID in the file transfer service.
         for peer_id in event.user_peer_ids.iter() {
-            let peer_id = PeerId::from_bytes(peer_id.as_slice())
-                .map_err(|_| anyhow!("PeerId should be valid; qed"))?;
+            let peer_id = match std::str::from_utf8(&peer_id.as_slice()) {
+                Ok(str_slice) => {
+                    let owned_string = str_slice.to_string();
+                    PeerId::from_str(owned_string.as_str()).map_err(|e| {
+                        error!(target: LOG_TARGET, "Failed to convert peer ID to PeerId: {}", e);
+                        e
+                    })?
+                }
+                Err(e) => return Err(anyhow!("Failed to convert peer ID to a string: {}", e)),
+            };
             self.storage_hub_handler
                 .file_transfer
                 .register_new_file_peer(peer_id, file_key)
@@ -267,6 +289,7 @@ where
                 fingerprint: fingerprint.into(),
             });
 
+        // Send extrinsic and wait for it to be included in the block.
         self.storage_hub_handler
             .blockchain
             .send_extrinsic(call)
@@ -274,6 +297,13 @@ where
             .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
+
+        // Create file in file storage.
+        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+        write_file_storage
+            .insert_file(metadata.file_key::<<T as TrieLayout>::Hash>(), metadata)
+            .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
+        drop(write_file_storage);
 
         Ok(())
     }
@@ -301,12 +331,12 @@ where
     async fn on_file_complete(&self, file_key: &HasherOutT<T>) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "File upload complete ({:?})", file_key);
 
-        // Unregister the file from the file transfer service.
-        self.storage_hub_handler
-            .file_transfer
-            .unregister_file(file_key.as_ref().into())
-            .await
-            .expect("File is not registered. This should not happen!");
+        // // Unregister the file from the file transfer service.
+        // self.storage_hub_handler
+        //     .file_transfer
+        //     .unregister_file(file_key.as_ref().into())
+        //     .await
+        //     .expect("File is not registered. This should not happen!");
 
         // Get the metadata for the file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
@@ -367,6 +397,7 @@ where
                 .expect("File location should be an utf8 string"),
         );
         info!("Saving file to: {:?}", file_path);
+        create_dir_all(&file_path.parent().unwrap()).expect("Failed to create directory");
         let mut file = File::create(file_path)
             .await
             .expect("Failed to open file for writing.");

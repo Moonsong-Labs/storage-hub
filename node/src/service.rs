@@ -4,6 +4,7 @@
 use std::{cell::RefCell, sync::Arc, time::Duration};
 
 use async_channel::Receiver;
+use chrono::Utc;
 use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
@@ -515,7 +516,7 @@ where
         }
     }
 
-    thread_local!(static TIMESTAMP: RefCell<u64> = RefCell::new(0));
+    thread_local!(static TIMESTAMP: RefCell<u64> = RefCell::new(Utc::now().timestamp_millis().try_into().unwrap()));
 
     /// Provide a mock duration starting at 0 in millisecond for timestamp inherent.
     /// Each call will increment timestamp by slot_duration making Aura think time has passed.
