@@ -54,14 +54,14 @@ const nodeInfo = {
     port: 9977,
     p2pPort: 30444,
     AddressId: "5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o",
-    expectedPeerId: "12D3KooWMvbhtYjbhgjoDzbnf71SFznJAKBBkSGYEUtnpES1y9tM"
+    expectedPeerId: "12D3KooWMvbhtYjbhgjoDzbnf71SFznJAKBBkSGYEUtnpES1y9tM",
   },
   bsp: {
     containerName: "docker-sh-bsp-1",
     port: 9966,
     p2pPort: 30350,
     AddressId: "5FHSHEFWHVGDnyiw66DoRUpLyh5RouWkXo9GT1Sjk8qw7MAg",
-    expectedPeerId: "12D3KooWNEZ8PGNydcdXTYy1SPHvkP9mbxdtTqGGFVrhorDzeTfU"
+    expectedPeerId: "12D3KooWNEZ8PGNydcdXTYy1SPHvkP9mbxdtTqGGFVrhorDzeTfU",
   },
   collator: {
     containerName: "docker-sh-collator-1",
@@ -71,16 +71,13 @@ const nodeInfo = {
   },
 } as const;
 
-const getContainerIp = async (
-  containerName: string,
-  verbose = false,
-): Promise<string> => {
+const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {
   for (let i = 0; i < 20; i++) {
     verbose && console.log(`Waiting for ${containerName} to launch...`);
 
     try {
       const { stdout } = await exec(
-        `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`,
+        `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`
       );
       return stdout.trim();
     } catch {
@@ -94,7 +91,7 @@ const sendFileSendRpc = async (
   url: string,
   filePath: string,
   remotePath: string,
-  userNodeAccountId: string,
+  userNodeAccountId: string
 ): Promise<FileSendResponse> => {
   try {
     const response = await fetch(url, {
@@ -127,21 +124,14 @@ let api: ApiPromise;
 async function main() {
   console.log(`sh user id: ${shUser.address}`);
   console.log(`sh bsp id: ${bsp.address}`);
-  const composeFilePath = path.resolve(
-    process.cwd(),
-    "..",
-    "docker",
-    "local-dev-bsp-compose.yml",
-  );
+  const composeFilePath = path.resolve(process.cwd(), "..", "docker", "local-dev-bsp-compose.yml");
 
   await compose.upOne("sh-bsp", { config: composeFilePath, log: true });
 
   const bspIp = await getContainerIp(nodeInfo.bsp.containerName);
   console.log(`sh-bsp IP: ${bspIp}`);
 
-  const bspPeerId = await getContainerPeerId(
-    `http://127.0.0.1:${nodeInfo.bsp.port}`,
-  );
+  const bspPeerId = await getContainerPeerId(`http://127.0.0.1:${nodeInfo.bsp.port}`);
   console.log(`sh-bsp Peer ID: ${bspPeerId}`);
 
   process.env.BSP_IP = bspIp;
@@ -157,9 +147,7 @@ async function main() {
     },
   });
 
-  const peerIDUser = await getContainerPeerId(
-    `http://127.0.0.1:${nodeInfo.user.port}`,
-  );
+  const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${nodeInfo.user.port}`);
   console.log(`sh-user Peer ID: ${peerIDUser}`);
 
   const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
@@ -171,41 +159,26 @@ async function main() {
 
   // Give Balances
   const amount = 10000n * 10n ** 12n;
-  await sealBlock(
-    api,
-    api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bsp.address, amount)),
-  );
-  await sealBlock(
-    api,
-    api.tx.sudo.sudo(api.tx.balances.forceSetBalance(shUser.address, amount)),
-  );
+  await sealBlock(api, api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bsp.address, amount)));
+  await sealBlock(api, api.tx.sudo.sudo(api.tx.balances.forceSetBalance(shUser.address, amount)));
 
   // Make BSP
   // This is hardcoded to be same as fingerprint of whatsup.jpg
   // This is to game the XOR so that this BSP is always chosen by network
 
-  const bspId =
-    "0x002aaf768af5b738eea96084f10dac7ad4f6efa257782bdb9823994ffb233300";
+  const bspId = "0x002aaf768af5b738eea96084f10dac7ad4f6efa257782bdb9823994ffb233300";
   const capacity = 1024n * 1024n * 512n; // 512 MB
 
   await sealBlock(
     api,
     api.tx.sudo.sudo(
-      api.tx.providers.forceBspSignUp(
-        bsp.address,
-        bspId,
-        capacity,
-        [multiAddressBsp],
-        bsp.address,
-      ),
-    ),
+      api.tx.providers.forceBspSignUp(bsp.address, bspId, capacity, [multiAddressBsp], bsp.address)
+    )
   );
 
   // Make MSP
-  const mspId =
-    "0x0000000000000000000000000000000000000000000000000000000000000300";
-  const valueProp =
-    "0x0000000000000000000000000000000000000000000000000000000000000770";
+  const mspId = "0x0000000000000000000000000000000000000000000000000000000000000300";
+  const valueProp = "0x0000000000000000000000000000000000000000000000000000000000000770";
   await sealBlock(
     api,
     api.tx.sudo.sudo(
@@ -219,9 +192,9 @@ async function main() {
           dataLimit: 500,
           protocols: ["https", "ssh", "telnet"],
         },
-        alice.address,
-      ),
-    ),
+        alice.address
+      )
+    )
   );
 
   // Issue file Storage request
@@ -229,11 +202,10 @@ async function main() {
     `http://127.0.0.1:${nodeInfo.user.port}`,
     "/res/whatsup.jpg",
     "tim/whatsup.jpg",
-    nodeInfo.user.AddressId,
+    nodeInfo.user.AddressId
   );
 
   console.log(rpcResponse);
- 
 
   await sealBlock(
     api,
@@ -242,13 +214,13 @@ async function main() {
       rpcResponse.fingerprint,
       rpcResponse.size,
       mspId,
-      [peerIDUser],
+      [peerIDUser]
     ),
-    shUser,
+    shUser
   );
-  
+
   // Seal the block from BSP volunteer
-  await sealBlock(api)
+  await sealBlock(api);
 }
 
 main()

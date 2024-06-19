@@ -365,7 +365,10 @@ where
             String::from_utf8(metadata.location.clone())
                 .expect("File location should be an utf8 string"),
         );
-        dbg!("Current dir: {}", std::env::current_dir().unwrap().display());
+        dbg!(
+            "Current dir: {}",
+            std::env::current_dir().unwrap().display()
+        );
         info!("Intended file path: {:?}", file_path);
 
         create_dir_all(&file_path.parent().unwrap()).expect("Failed to create directory");
