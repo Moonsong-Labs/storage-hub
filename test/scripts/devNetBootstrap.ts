@@ -142,8 +142,7 @@ async function main() {
     env: { ...process.env, COLLATOR_IP: collatorIp, COLLATOR_PEER_ID: collatorPeerId },
   });
 
-  //TODO: Get BSP peerID and pass to multiaddressesVec
-  const bspIp = await getContainerIp("docker-sh-collator-1");
+  const bspIp = await getContainerIp(nodeInfo.bsp.containerName);
   console.log(`sh-bsp IP: ${bspIp}`);
 
   const peerIDBSP = await getContainerPeerId(`http://127.0.0.1:${nodeInfo.bsp.port}`);

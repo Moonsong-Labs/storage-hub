@@ -276,7 +276,7 @@ where
                 .file_transfer
                 .register_new_file_peer(peer_id, file_key)
                 .await
-                .map_err(|_| anyhow!("Failed to register peer file."))?;
+                .map_err(|e| anyhow!("Failed to register new file peer: {:?}", e))?;
         }
 
         // Build extrinsic.
