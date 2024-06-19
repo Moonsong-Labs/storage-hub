@@ -7,8 +7,8 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::prelude::vec::Vec;
 use shp_traits::{
-    CommitmentVerifier, TrieMutation, TrieProofDeltaApplier, ProofsDealerInterface, ProvidersInterface,
-    TrieRemoveMutation,
+    CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, TrieMutation,
+    TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, Convert, Hash, Zero},

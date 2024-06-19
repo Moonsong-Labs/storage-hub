@@ -8,7 +8,8 @@ use frame_support::{
 use frame_system as system;
 use shp_forest_verifier::ForestVerifier;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier, SubscribeProvidersInterface,
+    CommitmentVerifier, MaybeDebug, SubscribeProvidersInterface, TrieMutation,
+    TrieProofDeltaApplier,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{

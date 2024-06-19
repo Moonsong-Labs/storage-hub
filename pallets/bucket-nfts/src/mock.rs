@@ -5,7 +5,9 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
-use shp_traits::{TrieMutation, ProofsDealerInterface, TrieRemoveMutation, SubscribeProvidersInterface};
+use shp_traits::{
+    ProofsDealerInterface, SubscribeProvidersInterface, TrieMutation, TrieRemoveMutation,
+};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{

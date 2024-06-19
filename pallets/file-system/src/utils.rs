@@ -6,7 +6,9 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
-use shp_traits::{TrieAddMutation, MutateProvidersInterface, ReadProvidersInterface, TrieRemoveMutation};
+use shp_traits::{
+    MutateProvidersInterface, ReadProvidersInterface, TrieAddMutation, TrieRemoveMutation,
+};
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
@@ -515,7 +517,9 @@ impl<T: pallet::Config> Pallet<T> {
         )?;
 
         // Update root of BSP.
-        <T::Providers as shp_traits::MutateProvidersInterface>::change_provider_root(bsp_id, new_root)?;
+        <T::Providers as shp_traits::MutateProvidersInterface>::change_provider_root(
+            bsp_id, new_root,
+        )?;
 
         // Add data to storage provider.
         <T::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
@@ -730,7 +734,9 @@ impl<T: pallet::Config> Pallet<T> {
         )?;
 
         // Update root of BSP.
-        <T::Providers as shp_traits::MutateProvidersInterface>::change_provider_root(bsp_id, new_root)?;
+        <T::Providers as shp_traits::MutateProvidersInterface>::change_provider_root(
+            bsp_id, new_root,
+        )?;
 
         // Decrease data used by the BSP.
         <T::Providers as shp_traits::MutateProvidersInterface>::decrease_data_used(&bsp_id, size)?;
