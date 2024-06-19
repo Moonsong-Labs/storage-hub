@@ -232,8 +232,8 @@ where
             return Err("Root is empty.".into());
         }
 
-        // Convert compact proof to `sp_trie::StorageProof` in order to access the trie nodes.
         // TODO: Understand why `CompactProof` cannot be used directly to construct memdb and modify a partial trie. (it fails with error IncompleteDatabase)
+        // Convert compact proof to `sp_trie::StorageProof` in order to access the trie nodes.
         let (storage_proof, mut root) = proof
             .to_storage_proof::<T::Hash>(Some(root.into()))
             .map_err(|_| {

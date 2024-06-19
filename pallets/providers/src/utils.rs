@@ -894,13 +894,8 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
         Ok(())
     }
 
-    fn remove_root_bucket(bucket_id: BucketId<T>) -> DispatchResult {
-        Buckets::<T>::remove(&bucket_id);
-        Ok(())
-    }
-
     // BSP specific functions:
-    fn change_root_bsp(
+    fn change_provider_root(
         who: BackupStorageProviderId<T>,
         new_root: MerklePatriciaRoot<T>,
     ) -> DispatchResult {
@@ -915,6 +910,11 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
         } else {
             return Err(Error::<T>::NotRegistered.into());
         }
+        Ok(())
+    }
+
+    fn remove_root_bucket(bucket_id: BucketId<T>) -> DispatchResult {
+        Buckets::<T>::remove(&bucket_id);
         Ok(())
     }
 }

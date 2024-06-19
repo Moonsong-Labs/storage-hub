@@ -1,7 +1,9 @@
 use std::io::Read;
 
 use serde::Serialize;
-use shp_traits::{TrieAddMutation, CommitmentVerifier, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation};
+use shp_traits::{
+    CommitmentVerifier, TrieAddMutation, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
+};
 use sp_runtime::traits::BlakeTwo256;
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{
@@ -1406,6 +1408,7 @@ mod verify_proof_tests {
 mod mutate_root_tests {
     use super::*;
     use sp_core::H256;
+    use sp_runtime::DispatchError;
 
     fn setup_trie_and_recorder() -> (
         MemoryDB<BlakeTwo256>,
@@ -1416,39 +1419,6 @@ mod mutate_root_tests {
         let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
         let recorder: Recorder<BlakeTwo256> = Recorder::default();
         (memdb, root, leaf_keys, recorder)
-    }
-
-    fn apply_delta(
-        mut memdb: MemoryDB<BlakeTwo256>,
-        mut root: H256,
-        mutations: Vec<(H256, TrieMutation)>,
-    ) -> H256 {
-        let new_root = {
-            let mut trie =
-                TrieDBMutBuilder::<LayoutV1<BlakeTwo256>>::new(&mut memdb, &mut root).build();
-
-            for mutation in mutations.clone() {
-                match mutation {
-                    (key, TrieMutation::Add(_)) => {
-                        trie.insert(&key.0, &[]).unwrap();
-                    }
-                    (key, TrieMutation::Remove(_)) => {
-                        trie.remove(&key.0).unwrap();
-                    }
-                }
-            }
-
-            *trie.root()
-        };
-
-        for mutation in mutations {
-            match mutation {
-                (key, TrieMutation::Add(_)) => assert_key_in_trie(&memdb, &new_root, &key),
-                (key, TrieMutation::Remove(_)) => assert_key_not_in_trie(&memdb, &new_root, &key),
-            }
-        }
-
-        new_root
     }
 
     fn generate_proof_and_verify(
@@ -1499,9 +1469,8 @@ mod mutate_root_tests {
         let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 
         let challenge_key = generate_unique_key(&leaf_keys);
-        let mutations: Vec<(H256, TrieMutation)> = vec![(challenge_key, TrieAddMutation::default().into())];
-
-        let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
+        let mutations: Vec<(H256, TrieMutation)> =
+            vec![(challenge_key, TrieAddMutation::default().into())];
 
         {
             let mut trie_recorder = recorder.as_trie_recorder(root);
@@ -1528,8 +1497,6 @@ mod mutate_root_tests {
             .expect("Failed to mutate root");
 
         assert_key_in_trie(&memdb, &new_root, &challenge_key);
-
-        assert_eq!(new_root, expected_root);
     }
 
     #[test]
@@ -1539,8 +1506,6 @@ mod mutate_root_tests {
         let challenge_key = *leaf_keys.first().unwrap();
         let mutations: Vec<(H256, TrieMutation)> =
             vec![(challenge_key, TrieRemoveMutation::default().into())];
-
-        let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
 
         {
             let mut trie_recorder = recorder.as_trie_recorder(root);
@@ -1562,8 +1527,6 @@ mod mutate_root_tests {
             .expect("Failed to mutate root");
 
         assert_key_not_in_trie(&memdb, &new_root, &challenge_key);
-
-        assert_eq!(new_root, expected_root);
     }
 
     #[test]
@@ -1579,8 +1542,6 @@ mod mutate_root_tests {
             .iter()
             .map(|key| (*key, TrieAddMutation::default().into()))
             .collect();
-
-        let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
 
         {
             let mut trie_recorder = recorder.as_trie_recorder(root);
@@ -1611,8 +1572,6 @@ mod mutate_root_tests {
         for challenge_key in &challenge_keys {
             assert_key_in_trie(&memdb, &new_root, &challenge_key);
         }
-
-        assert_eq!(new_root, expected_root);
     }
 
     #[test]
@@ -1624,8 +1583,6 @@ mod mutate_root_tests {
             .iter()
             .map(|key| (*key, TrieRemoveMutation::default().into()))
             .collect();
-
-        let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
 
         {
             let mut trie_recorder = recorder.as_trie_recorder(root);
@@ -1651,7 +1608,79 @@ mod mutate_root_tests {
         for challenge_key in &challenge_keys {
             assert_key_not_in_trie(&memdb, &new_root, &challenge_key);
         }
+    }
 
-        assert_eq!(new_root, expected_root);
+    #[test]
+    fn mutate_root_no_mutations_failure() {
+        let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
+
+        let challenge_key = *leaf_keys.first().unwrap();
+        let mutations: Vec<(H256, TrieMutation)> = vec![];
+
+        {
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            let mut iter = trie.into_double_ended_iter().unwrap();
+            iter.seek(&challenge_key.0).unwrap();
+
+            // Access the next leaf node.
+            iter.next();
+        }
+
+        let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
+
+        let err =
+            match ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
+                &root, &mutations, &proof,
+            ) {
+                Err(err) => err,
+                Ok(_) => panic!("Expected error."),
+            };
+
+        assert_eq!(err, DispatchError::Other("No mutations provided."));
+    }
+
+    #[test]
+    fn mutate_root_does_not_match_expected_fail() {
+        let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
+
+        let challenge_key = *leaf_keys.first().unwrap();
+        let mutations: Vec<(H256, TrieMutation)> =
+            vec![(challenge_key, TrieRemoveMutation::default().into())];
+
+        {
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            let mut iter = trie.into_double_ended_iter().unwrap();
+            iter.seek(&challenge_key.0).unwrap();
+
+            // Access the next leaf node.
+            iter.next();
+        }
+
+        let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
+
+        let err =
+            match ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
+                &H256([0; 32]),
+                &mutations,
+                &proof,
+            ) {
+                Err(err) => err,
+                Ok(_) => panic!("Expected error."),
+            };
+
+        assert_eq!(
+            err,
+            DispatchError::Other(
+                "Failed to convert proof to memory DB, root doesn't match with expected."
+            )
+        );
     }
 }

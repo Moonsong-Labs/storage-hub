@@ -227,8 +227,8 @@ where
                     .map_err(|_| Error::<T>::FailedToApplyDelta)
                 })?;
 
-                // Update root of BSP after all mutations have been applied to the Forest.
-                <T::ProvidersPallet as shp_traits::MutateProvidersInterface>::change_root_bsp(
+                // Update root of Provider after all mutations have been applied to the Forest.
+                <T::ProvidersPallet as shp_traits::MutateProvidersInterface>::change_provider_root(
                     *submitter, new_root,
                 )?;
             }

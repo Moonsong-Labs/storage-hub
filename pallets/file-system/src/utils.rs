@@ -515,7 +515,7 @@ impl<T: pallet::Config> Pallet<T> {
         )?;
 
         // Update root of BSP.
-        <T::Providers as shp_traits::MutateProvidersInterface>::change_root_bsp(bsp_id, new_root)?;
+        <T::Providers as shp_traits::MutateProvidersInterface>::change_provider_root(bsp_id, new_root)?;
 
         // Add data to storage provider.
         <T::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
@@ -730,7 +730,7 @@ impl<T: pallet::Config> Pallet<T> {
         )?;
 
         // Update root of BSP.
-        <T::Providers as shp_traits::MutateProvidersInterface>::change_root_bsp(bsp_id, new_root)?;
+        <T::Providers as shp_traits::MutateProvidersInterface>::change_provider_root(bsp_id, new_root)?;
 
         // Decrease data used by the BSP.
         <T::Providers as shp_traits::MutateProvidersInterface>::decrease_data_used(&bsp_id, size)?;

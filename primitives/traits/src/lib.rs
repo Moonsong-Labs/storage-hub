@@ -196,7 +196,7 @@ pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
 
     /// Add a new Bucket as a Provider
     fn add_bucket(
-        msp_id: Self::ProviderId,
+        provider_id: Self::ProviderId,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,
@@ -218,9 +218,9 @@ pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
         new_root: Self::MerklePatriciaRoot,
     ) -> DispatchResult;
 
-    /// Change the root of a BSP
-    fn change_root_bsp(
-        bsp_id: Self::ProviderId,
+    /// Change the root of a Provider
+    fn change_provider_root(
+        provider_id: Self::ProviderId,
         new_root: Self::MerklePatriciaRoot,
     ) -> DispatchResult;
 
