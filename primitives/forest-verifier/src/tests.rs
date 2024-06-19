@@ -1,7 +1,7 @@
 use std::io::Read;
 
 use serde::Serialize;
-use shp_traits::{CommitmentVerifier, Mutation, ProofDeltaApplier};
+use shp_traits::{AddMutation, CommitmentVerifier, Mutation, ProofDeltaApplier, RemoveMutation};
 use sp_runtime::traits::BlakeTwo256;
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{
@@ -1429,10 +1429,10 @@ mod mutate_root_tests {
 
             for mutation in mutations.clone() {
                 match mutation {
-                    (key, Mutation::Add) => {
+                    (key, Mutation::Add(_)) => {
                         trie.insert(&key.0, &[]).unwrap();
                     }
-                    (key, Mutation::Remove) => {
+                    (key, Mutation::Remove(_)) => {
                         trie.remove(&key.0).unwrap();
                     }
                 }
@@ -1443,8 +1443,8 @@ mod mutate_root_tests {
 
         for mutation in mutations {
             match mutation {
-                (key, Mutation::Add) => assert_key_in_trie(&memdb, &new_root, &key),
-                (key, Mutation::Remove) => assert_key_not_in_trie(&memdb, &new_root, &key),
+                (key, Mutation::Add(_)) => assert_key_in_trie(&memdb, &new_root, &key),
+                (key, Mutation::Remove(_)) => assert_key_not_in_trie(&memdb, &new_root, &key),
             }
         }
 
@@ -1499,7 +1499,7 @@ mod mutate_root_tests {
         let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 
         let challenge_key = generate_unique_key(&leaf_keys);
-        let mutations: Vec<(H256, Mutation)> = vec![(challenge_key, Mutation::Add)];
+        let mutations: Vec<(H256, Mutation)> = vec![(challenge_key, AddMutation::default().into())];
 
         let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
 
@@ -1537,7 +1537,8 @@ mod mutate_root_tests {
         let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 
         let challenge_key = *leaf_keys.first().unwrap();
-        let mutations: Vec<(H256, Mutation)> = vec![(challenge_key, Mutation::Remove)];
+        let mutations: Vec<(H256, Mutation)> =
+            vec![(challenge_key, RemoveMutation::default().into())];
 
         let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
 
@@ -1576,7 +1577,7 @@ mod mutate_root_tests {
 
         let mutations: Vec<(H256, Mutation)> = challenge_keys
             .iter()
-            .map(|key| (*key, Mutation::Add))
+            .map(|key| (*key, AddMutation::default().into()))
             .collect();
 
         let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());
@@ -1621,7 +1622,7 @@ mod mutate_root_tests {
         let challenge_keys = leaf_keys.into_iter().take(3).collect::<Vec<H256>>();
         let mutations: Vec<(H256, Mutation)> = challenge_keys
             .iter()
-            .map(|key| (*key, Mutation::Remove))
+            .map(|key| (*key, RemoveMutation::default().into()))
             .collect();
 
         let expected_root = apply_delta(memdb.clone(), root.clone(), mutations.clone());

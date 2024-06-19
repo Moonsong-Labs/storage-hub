@@ -1,5 +1,5 @@
-use sp_runtime::traits::BlakeTwo256;
 use sp_core::Hasher;
+use sp_runtime::traits::BlakeTwo256;
 
 pub const H_LENGTH: usize = BlakeTwo256::LENGTH;
 

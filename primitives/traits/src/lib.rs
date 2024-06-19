@@ -297,7 +297,7 @@ pub trait ProofsDealerInterface {
     /// Submit a new challenge with priority.
     fn challenge_with_priority(
         key_challenged: &Self::MerkleHash,
-        mutation: Option<Mutation>,
+        mutation: Option<RemoveMutation>,
     ) -> DispatchResult;
 
     /// Apply delta (mutations) to the partial trie based on the proof and the commitment.
@@ -335,8 +335,26 @@ pub trait CommitmentVerifier {
 /// Enum representing the type of mutation (addition or removal of a key).
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug)]
 pub enum Mutation {
-    Add,
-    Remove,
+    Add(AddMutation),
+    Remove(RemoveMutation),
+}
+
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug, Default)]
+pub struct AddMutation;
+
+impl Into<Mutation> for AddMutation {
+    fn into(self) -> Mutation {
+        Mutation::Add(self)
+    }
+}
+
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug, Default)]
+pub struct RemoveMutation;
+
+impl Into<Mutation> for RemoveMutation {
+    fn into(self) -> Mutation {
+        Mutation::Remove(self)
+    }
 }
 
 /// A trait to apply mutations (delta) to a partial trie based on a proof and a commitment.

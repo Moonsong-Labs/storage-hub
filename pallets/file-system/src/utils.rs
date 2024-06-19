@@ -6,7 +6,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
-use shp_traits::{MutateProvidersInterface, Mutation, ReadProvidersInterface};
+use shp_traits::{AddMutation, MutateProvidersInterface, ReadProvidersInterface, RemoveMutation};
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
@@ -510,7 +510,7 @@ impl<T: pallet::Config> Pallet<T> {
         // Compute new root after inserting new file key in forest partial trie.
         let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
             &root,
-            &[(file_key, Mutation::Add)],
+            &[(file_key, AddMutation::default().into())],
             &non_inclusion_forest_proof,
         )?;
 
@@ -563,7 +563,7 @@ impl<T: pallet::Config> Pallet<T> {
             // Apply Remove mutation of the file key to the BSPs that have confirmed storing the file (proofs of inclusion).
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &file_key,
-                Some(Mutation::Remove),
+                Some(RemoveMutation),
             )?;
         }
 
@@ -726,7 +726,7 @@ impl<T: pallet::Config> Pallet<T> {
         // Compute new root after removing file key from forest partial trie.
         let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
             &root,
-            &[(file_key, Mutation::Remove)],
+            &[(file_key, RemoveMutation::default().into())],
             &inclusion_forest_proof,
         )?;
 

@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 
 use codec::{Decode, Encode};
+pub use shp_file_key_verifier::consts::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
 pub use shp_file_key_verifier::types::{Chunk, ChunkId, Leaf};
 use shp_traits::CommitmentVerifier;
-pub use shp_file_key_verifier::consts::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
 use sp_core::Hasher;
 use sp_trie::CompactProof;
 use storage_hub_runtime::Runtime;

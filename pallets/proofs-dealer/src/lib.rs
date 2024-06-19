@@ -29,7 +29,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
-    use shp_traits::{CommitmentVerifier, Mutation, ProofDeltaApplier, ProvidersInterface};
+    use shp_traits::{CommitmentVerifier, ProofDeltaApplier, ProvidersInterface, RemoveMutation};
     use sp_runtime::traits::Convert;
     use types::{KeyFor, ProviderFor};
 
@@ -182,7 +182,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
-        BoundedVec<(KeyFor<T>, Option<Mutation>), MaxCustomChallengesPerBlockFor<T>>,
+        BoundedVec<(KeyFor<T>, Option<RemoveMutation>), MaxCustomChallengesPerBlockFor<T>>,
     >;
 
     /// The block number of the last checkpoint challenge round.
@@ -244,7 +244,7 @@ pub mod pallet {
     #[pallet::getter(fn priority_challenges_queue)]
     pub type PriorityChallengesQueue<T: Config> = StorageValue<
         _,
-        BoundedVec<(KeyFor<T>, Option<Mutation>), ChallengesQueueLengthFor<T>>,
+        BoundedVec<(KeyFor<T>, Option<RemoveMutation>), ChallengesQueueLengthFor<T>>,
         ValueQuery,
     >;
 

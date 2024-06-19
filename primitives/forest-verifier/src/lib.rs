@@ -248,11 +248,11 @@ where
         // Apply mutations to the trie
         for mutation in mutations.iter() {
             match mutation {
-                (key, Mutation::Add) => {
+                (key, Mutation::Add(_)) => {
                     trie.insert(key.as_ref(), &[])
                         .map_err(|_| "Failed to insert key into trie.")?;
                 }
-                (key, Mutation::Remove) => {
+                (key, Mutation::Remove(_)) => {
                     trie.remove(key.as_ref())
                         .map_err(|_| "Failed to remove key from trie.")?;
                 }

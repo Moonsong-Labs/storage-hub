@@ -8,6 +8,7 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::prelude::vec::Vec;
 use shp_traits::{
     CommitmentVerifier, Mutation, ProofDeltaApplier, ProofsDealerInterface, ProvidersInterface,
+    RemoveMutation,
 };
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, Convert, Hash, Zero},
@@ -207,10 +208,8 @@ where
             let mutations: Vec<_> = challenges
                 .iter()
                 .filter_map(|(key, mutation)| match mutation {
-                    Some(Mutation::Remove) if forest_keys_proven.contains(key) => {
-                        Some((*key, Mutation::Remove))
-                    }
-                    Some(Mutation::Remove) | Some(Mutation::Add) | None => None,
+                    Some(mutation) if forest_keys_proven.contains(key) => Some((*key, mutation)),
+                    Some(_) | None => None,
                 })
                 .collect();
 
@@ -221,7 +220,7 @@ where
 
                     <T::ForestVerifier as ProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
                         &acc_root,
-                        &[mutation.clone()],
+                        &[(mutation.0, mutation.1.clone().into())],
                         forest_proof,
                     )
                     .map(|(_, new_root)| new_root)
@@ -305,7 +304,7 @@ where
     /// to the queue.
     fn enqueue_challenge_with_priority(
         key: &KeyFor<T>,
-        mutation: Option<Mutation>,
+        mutation: Option<RemoveMutation>,
     ) -> DispatchResult {
         // Get priority challenges queue from storage.
         let mut priority_challenges_queue = PriorityChallengesQueue::<T>::get();
@@ -406,7 +405,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
     fn challenge_with_priority(
         key_challenged: &Self::MerkleHash,
-        mutation: Option<Mutation>,
+        mutation: Option<RemoveMutation>,
     ) -> DispatchResult {
         Self::enqueue_challenge_with_priority(key_challenged, mutation)
     }
