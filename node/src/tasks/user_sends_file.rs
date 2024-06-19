@@ -69,6 +69,9 @@ where
             event.owner,
             event.location,
         );
+        
+        // TODO: REMOVE ME 
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
         let file_metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),

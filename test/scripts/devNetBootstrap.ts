@@ -4,7 +4,7 @@ import * as util from "node:util";
 import * as child_process from "node:child_process";
 import * as path from "node:path";
 import { ApiPromise, WsProvider } from "@polkadot/api";
-import { bsp, collator, sendTransaction, shUser } from "../util";
+import { alice, bsp, sealBlock, shUser } from "../util";
 import { u8aToHex } from "@polkadot/util";
 
 const exec = util.promisify(child_process.exec);
@@ -54,12 +54,14 @@ const nodeInfo = {
     port: 9977,
     p2pPort: 30444,
     AddressId: "5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o",
+    expectedPeerId: "12D3KooWMvbhtYjbhgjoDzbnf71SFznJAKBBkSGYEUtnpES1y9tM"
   },
   bsp: {
     containerName: "docker-sh-bsp-1",
     port: 9966,
     p2pPort: 30350,
     AddressId: "5FHSHEFWHVGDnyiw66DoRUpLyh5RouWkXo9GT1Sjk8qw7MAg",
+    expectedPeerId: "12D3KooWNEZ8PGNydcdXTYy1SPHvkP9mbxdtTqGGFVrhorDzeTfU"
   },
   collator: {
     containerName: "docker-sh-collator-1",
@@ -69,13 +71,16 @@ const nodeInfo = {
   },
 } as const;
 
-const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {
+const getContainerIp = async (
+  containerName: string,
+  verbose = false,
+): Promise<string> => {
   for (let i = 0; i < 20; i++) {
     verbose && console.log(`Waiting for ${containerName} to launch...`);
 
     try {
       const { stdout } = await exec(
-        `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`
+        `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`,
       );
       return stdout.trim();
     } catch {
@@ -89,7 +94,7 @@ const sendFileSendRpc = async (
   url: string,
   filePath: string,
   remotePath: string,
-  userNodeAccountId: string
+  userNodeAccountId: string,
 ): Promise<FileSendResponse> => {
   try {
     const response = await fetch(url, {
@@ -122,143 +127,128 @@ let api: ApiPromise;
 async function main() {
   console.log(`sh user id: ${shUser.address}`);
   console.log(`sh bsp id: ${bsp.address}`);
-  console.log(`collator id: ${collator.address}`);
-  const composeFilePath = path.resolve(process.cwd(), "..", "docker", "local-dev-bsp-compose.yml");
+  const composeFilePath = path.resolve(
+    process.cwd(),
+    "..",
+    "docker",
+    "local-dev-bsp-compose.yml",
+  );
 
-  await compose.upOne("sh-collator", { config: composeFilePath, log: true });
-
-  const collatorIp = await getContainerIp(nodeInfo.collator.containerName);
-  console.log(`sh-collator IP: ${collatorIp}`);
-
-  const collatorPeerId = await getContainerPeerId(`http://127.0.0.1:${nodeInfo.collator.port}`);
-  console.log(`sh-collator Peer ID: ${collatorPeerId}`);
-
-  process.env.COLLATOR_IP = collatorIp;
-  process.env.COLLATOR_PEER_ID = collatorPeerId;
-
-  await compose.upMany(["sh-bsp", "sh-user"], {
-    config: composeFilePath,
-    log: true,
-    env: { ...process.env, COLLATOR_IP: collatorIp, COLLATOR_PEER_ID: collatorPeerId },
-  });
+  await compose.upOne("sh-bsp", { config: composeFilePath, log: true });
 
   const bspIp = await getContainerIp(nodeInfo.bsp.containerName);
   console.log(`sh-bsp IP: ${bspIp}`);
 
-  const peerIDBSP = await getContainerPeerId(`http://127.0.0.1:${nodeInfo.bsp.port}`);
-  console.log(`sh-bsp Peer ID: ${peerIDBSP}`);
+  const bspPeerId = await getContainerPeerId(
+    `http://127.0.0.1:${nodeInfo.bsp.port}`,
+  );
+  console.log(`sh-bsp Peer ID: ${bspPeerId}`);
 
-  const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${nodeInfo.user.port}`);
+  process.env.BSP_IP = bspIp;
+  process.env.BSP_PEER_ID = bspPeerId;
+
+  await compose.upOne("sh-user", {
+    config: composeFilePath,
+    log: true,
+    env: {
+      ...process.env,
+      BSP_IP: bspIp,
+      BSP_PEER_ID: bspPeerId,
+    },
+  });
+
+  const peerIDUser = await getContainerPeerId(
+    `http://127.0.0.1:${nodeInfo.user.port}`,
+  );
   console.log(`sh-user Peer ID: ${peerIDUser}`);
 
-
-  const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${peerIDBSP}`;
+  const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
   api = await ApiPromise.create({
     provider: new WsProvider(`ws://127.0.0.1:${nodeInfo.user.port}`),
     noInitWarn: true,
-    rpc: {
-      filestorage: {
-        loadFileInStorage: {
-          description: "Load file in storage",
-          params: [
-            {
-              name: "localPath",
-              type: "string",
-            },
-            {
-              name: "remotePath",
-              type: "string",
-            },
-            {
-              name: "userNodeAccountId",
-              type: "AccountId",
-            },
-          ],
-          type: "Result<(Owner, Location, Fingerprint), DispatchError>",
-        },
-      },
-    },
   });
 
   // Give Balances
   const amount = 10000n * 10n ** 12n;
-  await sendTransaction(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bsp.address, amount)));
-  await sendTransaction(
-    api.tx.sudo.sudo(api.tx.balances.forceSetBalance(collator.address, amount))
+  await sealBlock(
+    api,
+    api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bsp.address, amount)),
   );
-  await sendTransaction(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(shUser.address, amount)));
+  await sealBlock(
+    api,
+    api.tx.sudo.sudo(api.tx.balances.forceSetBalance(shUser.address, amount)),
+  );
 
   // Make BSP
-
   // This is hardcoded to be same as fingerprint of whatsup.jpg
-  const bspId = "0x002aaf768af5b738eea96084f10dac7ad4f6efa257782bdb9823994ffb233300";
+  // This is to game the XOR so that this BSP is always chosen by network
+
+  const bspId =
+    "0x002aaf768af5b738eea96084f10dac7ad4f6efa257782bdb9823994ffb233300";
   const capacity = 1024n * 1024n * 512n; // 512 MB
 
-  await sendTransaction(
+  await sealBlock(
+    api,
     api.tx.sudo.sudo(
-      api.tx.providers.forceBspSignUp(bsp.address, bspId, capacity, [multiAddressBsp], bsp.address)
-    )
+      api.tx.providers.forceBspSignUp(
+        bsp.address,
+        bspId,
+        capacity,
+        [multiAddressBsp],
+        bsp.address,
+      ),
+    ),
   );
 
   // Make MSP
-  const mspId = "0x0000000000000000000000000000000000000000000000000000000000000300";
-  const valueProp = "0x0000000000000000000000000000000000000000000000000000000000000770";
-  await sendTransaction(
+  const mspId =
+    "0x0000000000000000000000000000000000000000000000000000000000000300";
+  const valueProp =
+    "0x0000000000000000000000000000000000000000000000000000000000000770";
+  await sealBlock(
+    api,
     api.tx.sudo.sudo(
       api.tx.providers.forceMspSignUp(
-        collator.address,
+        alice.address,
         mspId,
         capacity,
         [multiAddressBsp],
-        { identifier: valueProp, dataLimit: 500, protocols: ["https", "ssh", "telnet"] },
-        collator.address
-      )
-    )
+        {
+          identifier: valueProp,
+          dataLimit: 500,
+          protocols: ["https", "ssh", "telnet"],
+        },
+        alice.address,
+      ),
+    ),
   );
 
   // Issue file Storage request
-  // we need to upload and merkle file to user node
-  // we user rpc method: filestorage_loadFileInStorage
-
-  const timbo = await sendFileSendRpc(
+  const rpcResponse = await sendFileSendRpc(
     `http://127.0.0.1:${nodeInfo.user.port}`,
     "/res/whatsup.jpg",
     "tim/whatsup.jpg",
-    nodeInfo.user.AddressId
+    nodeInfo.user.AddressId,
   );
 
-  console.log(timbo);
-  //   params:
-  // local path
-  //   remote path,
-  //   user node acocunt identity
+  console.log(rpcResponse);
+ 
 
-  //   result returned is:
-
-  //   owner,
-  //    location
-  //   fingerprint
-
-  // api.rpc.filestorage.loadFileInStorage(localPath, remotePath, userNodeAccountId)
-
-  ////
-  // Fileissue storage request
-  // location has to be remote path
-  // fingerprint has to  be what was from response
-  // size has to match
-  // mspId has to match
-  // peerId has to be of the user node
-
-  await sendTransaction(
+  await sealBlock(
+    api,
     api.tx.fileSystem.issueStorageRequest(
       "tim/whatsup.jpg",
-      timbo.fingerprint,
-      timbo.size,
+      rpcResponse.fingerprint,
+      rpcResponse.size,
       mspId,
-      [peerIDUser]
-    )
-  )
+      [peerIDUser],
+    ),
+    shUser,
+  );
+  
+  // Seal the block from BSP volunteer
+  await sealBlock(api)
 }
 
 main()
