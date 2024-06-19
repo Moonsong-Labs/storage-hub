@@ -6,8 +6,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
-use shp_traits::{AsCompact, MutateProvidersInterface, Mutation, ReadProvidersInterface};
-use sp_core::Hasher;
+use shp_traits::{MutateProvidersInterface, Mutation, ReadProvidersInterface};
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
@@ -56,10 +55,7 @@ macro_rules! expect_or_err {
     }};
 }
 
-impl<T> Pallet<T>
-where
-    T: pallet::Config,
-{
+impl<T: pallet::Config> Pallet<T> {
     /// Create a bucket for a owner (user) under a given MSP account.
     pub(crate) fn do_create_bucket(
         sender: T::AccountId,
@@ -811,25 +807,25 @@ where
             .map_err(|_| Error::<T>::FailedToDecodeThreshold)
     }
 
-    /// Compute file key from metadata.
     pub(crate) fn compute_file_key(
         owner: T::AccountId,
         location: FileLocation<T>,
         size: StorageData<T>,
         fingerprint: Fingerprint<T>,
     ) -> MerkleHash<T> {
-        FileKeyHasher::<T>::hash(
-            &[
-                &owner.encode(),
-                &location.encode(),
-                &AsCompact(size).encode(),
-                &fingerprint.encode(),
-            ]
-            .into_iter()
-            .flatten()
-            .cloned()
-            .collect::<Vec<u8>>(),
-        )
+        let size: u32 = size.into();
+
+        shp_file_key_verifier::types::FileMetadata::<
+            { shp_file_key_verifier::consts::H_LENGTH },
+            { shp_file_key_verifier::consts::FILE_CHUNK_SIZE },
+            { shp_file_key_verifier::consts::FILE_SIZE_TO_CHALLENGES },
+        > {
+            owner: owner.encode(),
+            location: location.clone().to_vec(),
+            size: size.into(),
+            fingerprint: fingerprint.as_ref().into(),
+        }
+        .file_key::<FileKeyHasher<T>>()
     }
 }
 

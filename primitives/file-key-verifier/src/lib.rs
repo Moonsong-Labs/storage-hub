@@ -11,6 +11,7 @@ use types::{ChunkId, FileKeyProof};
 #[cfg(test)]
 mod tests;
 
+pub mod consts;
 pub mod types;
 
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment

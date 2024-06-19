@@ -170,7 +170,8 @@ pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
         + AtLeast32BitUnsigned
         + Copy
         + MaxEncodedLen
-        + HasCompact;
+        + HasCompact
+        + Into<u32>;
     /// The type of the Merkle Patricia Root of the storage trie for BSPs and MSPs' buckets (a hash).
     type MerklePatriciaRoot: Parameter
         + Member
