@@ -4,16 +4,14 @@ use anyhow::anyhow;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shp_file_key_verifier::types::ChunkId;
+use sp_core::H256;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
 use storage_hub_runtime::H_LENGTH;
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use shc_actors_framework::event_bus::EventHandler;
-use shc_common::{
-    types::{FileKey, FileMetadata, HasherOutT},
-    utils::to_h256,
-};
+use shc_common::types::{FileKey, FileMetadata, HasherOutT};
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_forest_manager::traits::ForestStorage;
 
@@ -279,7 +277,7 @@ where
                 .file_transfer
                 .register_new_file_peer(peer_id, file_key)
                 .await
-                .map_err(|_| anyhow!("Failed to register peer file."))?;
+                .map(|e| anyhow!("Failed to register new file peer: {:?}", e))?;
         }
 
         // Build extrinsic.
@@ -370,7 +368,7 @@ where
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
             pallet_file_system::Call::bsp_confirm_storing {
                 location,
-                root: to_h256(&file_key),
+                root: H256::from_slice(file_key.as_ref()),
                 non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
                 added_file_key_proof,
             },
