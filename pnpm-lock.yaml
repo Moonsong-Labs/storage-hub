@@ -66,6 +66,9 @@ importers:
       '@polkadot/types':
         specifier: 11.2.1
         version: 11.2.1
+      '@polkadot/util':
+        specifier: 12.6.2
+        version: 12.6.2
       '@polkadot/util-crypto':
         specifier: 12.6.2
         version: 12.6.2(@polkadot/util@12.6.2)

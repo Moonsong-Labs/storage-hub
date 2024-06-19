@@ -4,38 +4,93 @@ import * as util from "node:util";
 import * as child_process from "node:child_process";
 import * as path from "node:path";
 import { ApiPromise, WsProvider } from "@polkadot/api";
-import {  bsp, collator, sendTransaction, shUser } from "../util";
+import { bsp, collator, sendTransaction, shUser } from "../util";
+import { u8aToHex } from "@polkadot/util";
 
 const exec = util.promisify(child_process.exec);
 
-async function getContainerIp(containerName: string): Promise<string> {
-  const { stdout } = await exec(
-    `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`
-  );
-  return stdout.trim();
+interface FileSendResponse {
+  owner: string;
+  location: string;
+  size: bigint;
+  fingerprint: string;
 }
 
-async function getContainerPeerId(url: string): Promise<string> {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "system_localPeerId",
-      params: [],
-    }),
-  });
-  const data = (await response.json()) as any;
-  return data.result;
-}
+const getContainerPeerId = async (url: string, verbose = false) => {
+  const payload = {
+    id: "1",
+    jsonrpc: "2.0",
+    method: "system_localPeerId",
+    params: [],
+  };
 
-async function sendFileSendRpc(
+  for (let i = 0; i < 10; i++) {
+    verbose && console.log(`Waiting for node at ${url} to launch...`);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const resp = (await response.json()) as any;
+      return resp.result as string;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+  throw new Error(`Error fetching peerId from ${url}`);
+};
+
+const nodeInfo = {
+  user: {
+    containerName: "docker-sh-user-1",
+    port: 9977,
+    p2pPort: 30444,
+    AddressId: "5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o",
+  },
+  bsp: {
+    containerName: "docker-sh-bsp-1",
+    port: 9966,
+    p2pPort: 30350,
+    AddressId: "5FHSHEFWHVGDnyiw66DoRUpLyh5RouWkXo9GT1Sjk8qw7MAg",
+  },
+  collator: {
+    containerName: "docker-sh-collator-1",
+    port: 9955,
+    p2pPort: 30333,
+    AddressId: "5C8NC6YuAivp3knYC58Taycx2scQoDcDd3MCEEgyw36Gh1R4",
+  },
+} as const;
+
+const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {
+  for (let i = 0; i < 20; i++) {
+    verbose && console.log(`Waiting for ${containerName} to launch...`);
+
+    try {
+      const { stdout } = await exec(
+        `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`
+      );
+      return stdout.trim();
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+  throw new Error(`Error fetching container IP for ${containerName}`);
+};
+
+const sendFileSendRpc = async (
   url: string,
   filePath: string,
   remotePath: string,
   userNodeAccountId: string
-) {
+): Promise<FileSendResponse> => {
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -48,13 +103,19 @@ async function sendFileSendRpc(
       }),
     });
 
-    const data = (await response.json()) as any;
-    return data.result;
+    const resp = (await response.json()) as any;
+    const { owner, location, size, fingerprint } = resp.result;
+    return {
+      owner: u8aToHex(owner),
+      location: u8aToHex(location),
+      size: BigInt(size),
+      fingerprint: u8aToHex(fingerprint),
+    };
   } catch (e) {
     console.error("Error sending file to user node:", e);
+    throw new Error("filestorage_loadFileInStorage RPC call failed");
   }
-}
-
+};
 
 let api: ApiPromise;
 
@@ -66,14 +127,10 @@ async function main() {
 
   await compose.upOne("sh-collator", { config: composeFilePath, log: true });
 
-  //todo replace with poll
-  console.log("Waiting for sh-collator to start...");
-  await new Promise((resolve) => setTimeout(resolve, 10000));
-
-  const collatorIp = await getContainerIp("docker-sh-collator-1");
+  const collatorIp = await getContainerIp(nodeInfo.collator.containerName);
   console.log(`sh-collator IP: ${collatorIp}`);
 
-  const collatorPeerId = await getContainerPeerId("http://127.0.0.1:9955");
+  const collatorPeerId = await getContainerPeerId(`http://127.0.0.1:${nodeInfo.collator.port}`);
   console.log(`sh-collator Peer ID: ${collatorPeerId}`);
 
   process.env.COLLATOR_IP = collatorIp;
@@ -85,21 +142,21 @@ async function main() {
     env: { ...process.env, COLLATOR_IP: collatorIp, COLLATOR_PEER_ID: collatorPeerId },
   });
 
-  //todo replace with poll
-  console.log("Waiting for other processes to start...");
-  await new Promise((resolve) => setTimeout(resolve, 10000));
-
   //TODO: Get BSP peerID and pass to multiaddressesVec
   const bspIp = await getContainerIp("docker-sh-collator-1");
   console.log(`sh-bsp IP: ${bspIp}`);
 
-  const peerIDBSP = await getContainerPeerId("http://127.0.0.1:9966");
+  const peerIDBSP = await getContainerPeerId(`http://127.0.0.1:${nodeInfo.bsp.port}`);
   console.log(`sh-bsp Peer ID: ${peerIDBSP}`);
+
+  const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${nodeInfo.user.port}`);
+  console.log(`sh-user Peer ID: ${peerIDUser}`);
+
 
   const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${peerIDBSP}`;
 
   api = await ApiPromise.create({
-    provider: new WsProvider("ws://127.0.0.1:9955"),
+    provider: new WsProvider(`ws://127.0.0.1:${nodeInfo.user.port}`),
     noInitWarn: true,
     rpc: {
       filestorage: {
@@ -165,6 +222,14 @@ async function main() {
   // we need to upload and merkle file to user node
   // we user rpc method: filestorage_loadFileInStorage
 
+  const timbo = await sendFileSendRpc(
+    `http://127.0.0.1:${nodeInfo.user.port}`,
+    "/res/whatsup.jpg",
+    "tim/whatsup.jpg",
+    nodeInfo.user.AddressId
+  );
+
+  console.log(timbo);
   //   params:
   // local path
   //   remote path,
@@ -185,6 +250,16 @@ async function main() {
   // size has to match
   // mspId has to match
   // peerId has to be of the user node
+
+  await sendTransaction(
+    api.tx.fileSystem.issueStorageRequest(
+      "tim/whatsup.jpg",
+      timbo.fingerprint,
+      timbo.size,
+      mspId,
+      [peerIDUser]
+    )
+  )
 }
 
 main()

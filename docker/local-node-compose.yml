@@ -9,6 +9,8 @@ services:
         "--dev",
         "--unsafe-rpc-external",
         "--rpc-cors=all",
+        "--provider",
+        "--provider-type=user",
         "--no-hardware-benchmarks",
         "--sealing=instant"
       ]

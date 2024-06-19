@@ -2,20 +2,17 @@
 #
 # Requires to run from /test folder and to copy the binary in the build folder
 # (This can be done as part of the release workflow or manually)
+FROM debian:stable-slim AS builder
 
-FROM docker.io/library/ubuntu:rolling AS builder
-
-# show backtraces
 ENV RUST_BACKTRACE 1
 
-# install tools and dependencies
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        ca-certificates && \
-    apt-get autoremove -y && \
+        ca-certificates iputils-ping && \
     apt-get clean && \
-    find /var/lib/apt/lists/ -type f -not -name lock -delete; \
-    useradd -m -u 1337 -U -s /bin/sh -d /storage-hub storage-hub && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -u 1337 -U -s /bin/sh -d /storage-hub storage-hub && \
     mkdir -p /data /storage-hub/.local/share && \
     chown -R storage-hub:storage-hub /data && \
     ln -s /data /storage-hub/.local/share/storage-hub-node && \
@@ -31,4 +28,4 @@ EXPOSE 9333 9944 30333 30334 9615
 VOLUME ["/data"]
 
 ENTRYPOINT ["storage-hub-node"]
-CMD [ "--tmp" ]
+CMD ["--tmp"]
