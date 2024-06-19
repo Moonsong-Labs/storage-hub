@@ -1,6 +1,7 @@
 use std::{collections::HashMap, io, path::PathBuf, sync::Arc};
 
-use hash_db::{AsHashDB, HashDB, Prefix};
+use codec::Encode;
+use hash_db::{AsHashDB, HashDB, Prefix, EMPTY_PREFIX};
 use kvdb::{DBTransaction, KeyValueDB};
 use kvdb_rocksdb::{Database, DatabaseConfig};
 use log::{debug, error};
@@ -9,10 +10,9 @@ use shc_common::types::{
 };
 use sp_state_machine::{warn, Storage};
 use sp_trie::{
-    prefixed_key, recorder::Recorder, PrefixedKey, PrefixedMemoryDB, TrieDBBuilder, TrieLayout,
-    TrieMut,
+    prefixed_key, recorder::Recorder, PrefixedKey, PrefixedMemoryDB, TrieLayout, TrieMut,
 };
-use trie_db::{DBValue, Hasher, Trie, TrieDBMutBuilder};
+use trie_db::{DBValue, Hasher, Trie, TrieDBBuilder, TrieDBMutBuilder};
 
 use crate::{
     error::ErrorT,
@@ -25,8 +25,9 @@ use crate::{
 // TODO: maybe extract common types used in Forest Manager impls.
 // TODO: create error module for File Manager / refactor errors
 // TODO: Add comments
-// TODO: maybe use different columns in RocksDB for each file data trie?
-// And filedatatrie is ephemeral and created for each file proven
+// TODO: chunk_keys HashMap will not work because it's not persistent?
+// TODO: Check TODOs
+// TODO: use batch insert (write_chunks()). Needs API change
 
 pub(crate) fn other_io_error(err: String) -> io::Error {
     io::Error::new(io::ErrorKind::Other, err)
@@ -92,11 +93,14 @@ pub struct RocksDbFileDataTrie<T: TrieLayout> {
     // Persistent storage
     // TODO: Why Box not Arc?
     storage: Box<dyn Backend<T>>,
+    overlay: PrefixedMemoryDB<HashT<T>>,
     // Root of the file Trie, which is a file key.
     root: HasherOutT<T>,
-    // Maintains relationship between external chunk key representation (integer index)
+    // TODO: we also need to persist this somewhere.
+    // idea: [owner/bucket/file_location/chunk_ids]: {chunk_hash: H, chunk_data: []}
+    // Maintains relationship between external chunk key representation (chunk_id)
     // and internal chunk key representation (hash of value)
-    inner_chunk_keys: HashMap<ChunkId, HasherOutT<T>>,
+    chunk_keys: HashMap<ChunkId, HasherOutT<T>>,
 }
 
 // TODO: double check if `Default` is really necessary
@@ -117,11 +121,70 @@ where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn new(storage: Box<dyn Backend<T>>) -> Self {
-        Self {
-            root: HasherOutT::<T>::default(),
+        let mut root = HasherOutT::<T>::default();
+        let mut rocksdb_file_data_trie = RocksDbFileDataTrie::<T> {
             storage,
-            inner_chunk_keys: HashMap::new(),
+            root,
+            overlay: Default::default(),
+            chunk_keys: HashMap::new(),
+        };
+        let db = rocksdb_file_data_trie.as_hash_db_mut();
+        let trie = TrieDBMutBuilder::<T>::new(db, &mut root).build();
+
+        drop(trie);
+
+        rocksdb_file_data_trie.root = root;
+
+        debug!(target: LOG_TARGET, "New root: {:?}", rocksdb_file_data_trie.root);
+
+        rocksdb_file_data_trie
+    }
+
+    /// Persists the changes applied to the overlay.
+    /// If the root has not changed, the commit will be skipped.
+    /// The `overlay` will be cleared.
+    pub fn commit(&mut self, new_root: HasherOutT<T>) -> Result<(), ErrorT<T>> {
+        // Skip commit if the root has not changed.
+        if self.root == new_root {
+            warn!(target: LOG_TARGET, "Root has not changed, skipping commit");
+            println!(
+                "CANNOT COMMIT received root: {:?}, internal root: {:?}",
+                new_root, self.root
+            );
+            return Ok(());
         }
+
+        println!(
+            "COMMITING NOW received root: {:?}, internal root: {:?}",
+            new_root, self.root
+        );
+
+        // Aggregate changes from the overlay
+        let transaction = self.changes();
+
+        // Write the changes to storage
+        self.storage.write(transaction)?;
+
+        self.root = new_root;
+
+        debug!(target: LOG_TARGET, "Committed changes to storage, new root: {:?}", self.root);
+
+        Ok(())
+    }
+
+    /// Build [`DBTransaction`] from the overlay and clear it.
+    fn changes(&mut self) -> DBTransaction {
+        let mut transaction = DBTransaction::new();
+
+        for (key, (value, rc)) in self.overlay.drain() {
+            if rc <= 0 {
+                transaction.delete(0, &key);
+            } else {
+                transaction.put_vec(0, &key, value);
+            }
+        }
+
+        transaction
     }
 
     /// Open the RocksDB database at `dp_path` and return a new instance of [`StorageDb`].
@@ -139,7 +202,7 @@ where
 }
 
 // Dropping the trie (either by calling `drop()` or by the end of the scope)
-// automatically commits to the underlaying `db`
+// automatically commits to the underlying db.
 impl<T: TrieLayout + Send + Sync> FileDataTrie<T> for RocksDbFileDataTrie<T>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
@@ -149,14 +212,26 @@ where
     }
 
     fn stored_chunks_count(&self) -> u64 {
-        let db: &dyn HashDB<<T as TrieLayout>::Hash, Vec<u8>> = self.as_hash_db();
+        let db = self.as_hash_db();
+
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
+
+        // dbg!(self.get_chunk(&ChunkId::from(0u64)));
+        // let chunk_key = self.chunk_keys.get(&ChunkId::from(0u64)).unwrap();
+        // let x = trie.iter().unwrap().seek(chunk_key.as_ref());
+
+        // dbg!(x);
+
+        // if let Some(x) = trie.iter().unwrap().next() {
+        //     println!("{:?}", x);
+        // }
+
         let stored_chunks = trie.key_iter().iter().count();
         stored_chunks as u64
     }
 
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError> {
-        let db: &dyn HashDB<<T as TrieLayout>::Hash, Vec<u8>> = self.as_hash_db();
+        let db = self.as_hash_db();
         let recorder: Recorder<T::Hash> = Recorder::default();
 
         // A `TrieRecorder` is needed to create a proof of the "visited" leafs, by the end of this process.
@@ -170,7 +245,7 @@ where
         let mut chunks = Vec::new();
         for chunk_id in chunk_ids {
             let chunk_key = self
-                .inner_chunk_keys
+                .chunk_keys
                 .get(chunk_id)
                 .ok_or(FileStorageError::FileChunkDoesNotExist)?;
 
@@ -212,7 +287,7 @@ where
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
 
         let chunk_key = self
-            .inner_chunk_keys
+            .chunk_keys
             .get(chunk_id)
             .ok_or(FileStorageError::FileChunkDoesNotExist)?;
 
@@ -226,39 +301,48 @@ where
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<(), FileStorageWriteError> {
-        let chunk_key = T::Hash::hash(data);
-        self.inner_chunk_keys.insert(*chunk_id, chunk_key);
+        let chunk_key = HashT::<T>::hash(data);
+        self.chunk_keys.insert(*chunk_id, chunk_key);
 
-        let mut root = self.root;
+        let mut current_root = self.root;
+        println!("WRITE_CHUNK OLD ROOT: {:?}", current_root);
         let db = self.as_hash_db_mut();
-
-        let mut trie = TrieDBMutBuilder::<T>::new(db, &mut root).build();
+        let mut trie = TrieDBMutBuilder::<T>::from_existing(db, &mut current_root).build();
+        println!("TRIE.ROOT {:?}", *trie.root());
 
         // Check that we don't have a chunk already stored.
-        if trie
-            .contains(&chunk_key.as_ref())
-            .map_err(|_| FileStorageWriteError::FailedToGetFileChunk)?
-        {
+        if trie.contains(chunk_key.as_ref()).map_err(|e| {
+            error!(target: LOG_TARGET, "{}", e);
+            println!("WRITE_CHUNK CONTAINS {}", e);
+            FileStorageWriteError::FailedToGetFileChunk
+        })? {
             return Err(FileStorageWriteError::FileChunkAlreadyExists);
         }
 
         // Insert the chunk into the file trie.
-        trie.insert(&chunk_key.as_ref(), &data)
-            .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
+        trie.insert(chunk_key.as_ref(), &data).map_err(|e| {
+            error!(target: LOG_TARGET, "{}", e);
+            println!("WRITE_CHUNK INSERTS {}", e);
+            FileStorageWriteError::FailedToInsertFileChunk
+        })?;
 
-        // get new root so we can update it internally
+        // get new root after trie modifications
         let new_root = *trie.root();
-
         // drop trie to commit to underlying db and release `self`
         drop(trie);
 
-        // update internal root
-        self.root = new_root;
+        println!("WRITE_CHUNK NEW ROOT: {:?}", new_root);
+        // TODO: improve error handling
+        // Commit the changes to disk.
+        self.commit(new_root).map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to commit changes to persistent storage: {}", e);
+            FileStorageWriteError::FailedToInsertFileChunk
+        })?;
 
         Ok(())
     }
 
-    // Deletes the Trie from the underlying Db.
+    // Deletes itself from the underlying db.
     fn delete(&mut self) -> Result<(), FileStorageError> {
         let mut root = self.root;
         // Need to clone because we cannot have a immutable borrow after mutably borrowing
@@ -270,6 +354,15 @@ where
         // Remove the file key from the trie.
         trie.remove(trie_root_key.as_ref()).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to delete File Trie from RocksDb: {}", e);
+            FileStorageError::FailedToWriteToStorage
+        })?;
+
+        drop(trie);
+
+        // TODO: improve error handling
+        // Commit the changes to disk.
+        self.commit(trie_root_key).map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to commit changes to persistent storage: {}", e);
             FileStorageError::FailedToWriteToStorage
         })?;
 
@@ -294,47 +387,28 @@ where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn get(&self, key: &HasherOutT<T>, prefix: Prefix) -> Option<DBValue> {
-        self.storage.get(key, prefix).unwrap_or_else(|e| {
-            warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
-            None
+        HashDB::get(&self.overlay, key, prefix).or_else(|| {
+            self.storage.get(key, prefix).unwrap_or_else(|e| {
+                warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
+                None
+            })
         })
     }
 
     fn contains(&self, key: &HasherOutT<T>, prefix: Prefix) -> bool {
-        self.get(key, prefix).is_some()
+        HashDB::contains(&self.overlay, key, prefix)
     }
 
-    fn insert(&mut self, _prefix: Prefix, value: &[u8]) -> HasherOutT<T> {
-        let mut transaction = DBTransaction::new();
-        let key: HasherOutT<T> = T::Hash::hash(value);
-        transaction.put(0, key.as_ref(), value);
-
-        // bubble up error from `write()` method
-        if let Err(e) = self.storage.write(transaction) {
-            panic!("{}", e)
-        };
-
-        key
+    fn insert(&mut self, prefix: Prefix, value: &[u8]) -> HasherOutT<T> {
+        HashDB::insert(&mut self.overlay, prefix, value)
     }
 
-    fn emplace(&mut self, key: HasherOutT<T>, _prefix: Prefix, value: DBValue) {
-        let mut transaction = DBTransaction::new();
-        transaction.put(0, key.as_ref(), &value);
-
-        // bubble up error from `write()` method
-        if let Err(e) = self.storage.write(transaction) {
-            panic!("{}", e)
-        };
+    fn emplace(&mut self, key: HasherOutT<T>, prefix: Prefix, value: DBValue) {
+        HashDB::emplace(&mut self.overlay, key, prefix, value)
     }
 
-    fn remove(&mut self, key: &HasherOutT<T>, _prefix: Prefix) {
-        let mut transaction = DBTransaction::new();
-        transaction.delete(0, key.as_ref());
-
-        // bubble up error from `write()` method
-        if let Err(e) = self.storage.write(transaction) {
-            panic!("{}", e)
-        };
+    fn remove(&mut self, key: &HasherOutT<T>, prefix: Prefix) {
+        HashDB::remove(&mut self.overlay, key, prefix)
     }
 }
 
@@ -399,8 +473,8 @@ where
 
         let metadata = self.metadata.get(key).expect(
                 format!(
-                "Invariant broken! Metadata for file key {:?} not found but associated trie is present",
-                key
+                    "Key {:?} already associated with File Trie, but not with File Metadata. Possible inconsistency between them.",                
+                    key
             )
                 .as_str(),
             );
@@ -459,7 +533,7 @@ where
 
         // TODO: use better error
         let file_data = self.file_data.get(key).expect(
-            format!("Key {:?} already associated with File Metadata, but no File Trie. Possible inconsistency between them.",
+            format!("Key {:?} already associated with File Metadata, but not with File Trie. Possible inconsistency between them.",
                 key
             )
             .as_str(),
@@ -474,7 +548,7 @@ where
                 .root
                 .as_ref()
                 .try_into()
-                .expect("Hasher output mismatch!")
+                .expect("Hasher output mismatch")
         {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
@@ -483,10 +557,6 @@ where
     }
 
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError> {
-        // TODO: should FileStorage also have an access point to RocksDb,
-        // or should we create a delete() method for each FileDataTrie?
-        // In the first case, seems cleaner, but then we would lose the separation
-        // between the file data trie and file storage structures.
         let file_data = self.file_data.get_mut(key).expect("No File data found");
 
         file_data.delete()?;
@@ -517,6 +587,142 @@ where
 }
 
 mod tests {
+    use sp_core::H256;
+    use sp_runtime::traits::BlakeTwo256;
+    use sp_trie::LayoutV1;
+    use trie_db::TrieHash;
+
+    use super::*;
+
+    /// Mock that simulates the backend for testing purposes.
+    struct MockStorageDb {
+        pub data: std::collections::HashMap<Vec<u8>, Vec<u8>>,
+    }
+
+    impl<H: Hasher> Storage<H> for MockStorageDb {
+        fn get(&self, key: &H::Out, prefix: Prefix) -> Result<Option<DBValue>, String> {
+            let prefixed_key = prefixed_key::<H>(key, prefix);
+            Ok(self.data.get(&prefixed_key).cloned())
+        }
+    }
+
+    impl<T: TrieLayout> Backend<T> for MockStorageDb
+    where
+        HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+    {
+        fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>> {
+            for op in transaction.ops {
+                match op {
+                    kvdb::DBOp::Insert {
+                        col: _col,
+                        key,
+                        value,
+                    } => {
+                        self.data.insert(key.to_vec(), value);
+                    }
+                    kvdb::DBOp::Delete { col: _col, key } => {
+                        self.data.remove(&key.to_vec());
+                    }
+                    kvdb::DBOp::DeletePrefix { col: _col, prefix } => {
+                        self.data.retain(|k, _| !k.starts_with(&prefix));
+                    }
+                };
+            }
+
+            Ok(())
+        }
+    }
+
+    // TODO: tests
+    // file insertion
+    // file deletion
+    // proof generation
+    // test errors
+
     #[test]
-    fn it_works() {}
+    fn file_trie_creating_empty_works() {
+        let storage = Box::new(MockStorageDb {
+            data: Default::default(),
+        });
+
+        let file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+
+        // let default_hash = HasherOutT::<LayoutV1<BlakeTwo256>>::default();
+        let expected_hash = TrieHash::<LayoutV1<BlakeTwo256>>::try_from([
+            3, 23, 10, 46, 117, 151, 183, 183, 227, 216, 76, 5, 57, 29, 19, 154, 98, 177, 87, 231,
+            135, 134, 216, 192, 130, 242, 157, 207, 76, 17, 19, 20,
+        ])
+        .unwrap();
+
+        assert_eq!(
+            H256::from(*file_trie.get_root()),
+            expected_hash,
+            "Root should be initialized to default."
+        );
+    }
+
+    #[test]
+    fn file_trie_writing_chunk_works() {
+        let storage = Box::new(MockStorageDb {
+            data: Default::default(),
+        });
+
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+        let old_root = file_trie.get_root().clone();
+        file_trie
+            .write_chunk(&ChunkId::from(0u64), &Chunk::from([1u8; 32]))
+            .unwrap();
+        let new_root = file_trie.get_root();
+        assert_ne!(&old_root, new_root);
+
+        let chunk = file_trie.get_chunk(&ChunkId::from(0u64)).unwrap();
+        assert_eq!(chunk.as_slice(), [1u8; 32]);
+    }
+    #[test]
+    fn file_trie_getting_stored_chunks_works() {
+        let storage = Box::new(MockStorageDb {
+            data: Default::default(),
+        });
+
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+
+        file_trie
+            .write_chunk(&ChunkId::from(1u64), &Chunk::from([2u8; 32]))
+            .unwrap();
+
+        // dbg!(file_trie.get_chunk(&ChunkId::from(0u64)));
+        assert_eq!(file_trie.stored_chunks_count(), 1);
+
+        file_trie
+            .write_chunk(&ChunkId::from(0u64), &Chunk::from([1u8; 32]))
+            .unwrap();
+
+        dbg!(file_trie.get_chunk(&ChunkId::from(0u64)));
+        dbg!(file_trie.get_chunk(&ChunkId::from(1u64)));
+        assert_eq!(file_trie.stored_chunks_count(), 2);
+    }
+    #[test]
+    fn file_trie_getting_chunk_works() {
+        let storage = Box::new(MockStorageDb {
+            data: Default::default(),
+        });
+
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+
+        let chunk = Chunk::from([3u8; 32]);
+        let chunk_id: ChunkId = 3;
+        file_trie.write_chunk(&chunk_id, &chunk).unwrap();
+        let chunk = file_trie.get_chunk(&chunk_id).unwrap();
+        assert_eq!(chunk.as_slice(), [3u8; 32]);
+    }
+    #[test]
+    fn file_trie_generating_proof_works() {}
+    #[test]
+    fn file_trie_deleting_works() {}
+    #[test]
+    fn inserting_whole_file_works() {}
+    #[test]
+    fn deleting_whole_file_works() {}
+    #[test]
+    fn proof_generation_works() {}
 }
