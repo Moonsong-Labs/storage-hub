@@ -1614,15 +1614,16 @@ mod mutate_root_tests {
     fn mutate_root_add_remove_multiple_keys_success() {
         let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 
-        let mut leaf_to_add = *leaf_keys
-            .first().unwrap();
+        let mut leaf_to_add = *leaf_keys.first().unwrap();
 
         leaf_to_add.0[0] += 1;
 
         let add_mutation: (H256, TrieMutation) = (leaf_to_add, TrieAddMutation::default().into());
 
-        let remove_mutation: (H256, TrieMutation) = (*leaf_keys
-            .last().unwrap(), TrieRemoveMutation::default().into());
+        let remove_mutation: (H256, TrieMutation) = (
+            *leaf_keys.last().unwrap(),
+            TrieRemoveMutation::default().into(),
+        );
 
         let mut challenge_keys = [add_mutation.clone(), remove_mutation.clone()];
 
@@ -1634,7 +1635,7 @@ mod mutate_root_tests {
 
             for challenge_key in &challenge_keys {
                 let mut iter = trie.into_double_ended_iter().unwrap();
-                iter.seek(challenge_key.0.0.as_slice()).unwrap();
+                iter.seek(challenge_key.0 .0.as_slice()).unwrap();
 
                 // Access the next leaf node.
                 iter.next();
@@ -1646,7 +1647,14 @@ mod mutate_root_tests {
             }
         }
 
-        let proof = generate_proof_and_verify(&mut recorder, &root, &challenge_keys.iter().map(|(key, _)| *key).collect::<Vec<H256>>());
+        let proof = generate_proof_and_verify(
+            &mut recorder,
+            &root,
+            &challenge_keys
+                .iter()
+                .map(|(key, _)| *key)
+                .collect::<Vec<H256>>(),
+        );
 
         let (memdb, new_root) =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
