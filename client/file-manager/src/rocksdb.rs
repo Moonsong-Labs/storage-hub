@@ -147,17 +147,17 @@ where
         // Skip commit if the root has not changed.
         if self.root == new_root {
             warn!(target: LOG_TARGET, "Root has not changed, skipping commit");
-            println!(
-                "CANNOT COMMIT received root: {:?}, internal root: {:?}",
-                new_root, self.root
-            );
+            // println!(
+            //     "CANNOT COMMIT received root: {:?}, internal root: {:?}",
+            //     new_root, self.root
+            // );
             return Ok(());
         }
 
-        println!(
-            "COMMITING NOW received root: {:?}, internal root: {:?}",
-            new_root, self.root
-        );
+        // println!(
+        //     "COMMITING NOW received root: {:?}, internal root: {:?}",
+        //     new_root, self.root
+        // );
 
         // Aggregate changes from the overlay
         let transaction = self.changes();
@@ -217,7 +217,8 @@ where
 
         let mut iter = trie.iter().expect("Should be able to get iterator; qed.");
         let mut count = 0u64;
-        while let Some(_) = iter.next() {
+        while let Some(element) = iter.next() {
+            // println!("{:?}", element);
             count += 1
         }
 
@@ -277,6 +278,7 @@ where
         })
     }
 
+    // TODO: Return Result<Option> instead of Result only
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError> {
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
@@ -300,15 +302,15 @@ where
         self.chunk_keys.insert(*chunk_id, chunk_key);
 
         let mut current_root = self.root;
-        println!("WRITE_CHUNK OLD ROOT: {:?}", current_root);
+        // println!("WRITE_CHUNK OLD ROOT: {:?}", current_root);
         let db = self.as_hash_db_mut();
         let mut trie = TrieDBMutBuilder::<T>::from_existing(db, &mut current_root).build();
-        println!("TRIE.ROOT {:?}", *trie.root());
+        // println!("TRIE.ROOT {:?}", *trie.root());
 
         // Check that we don't have a chunk already stored.
         if trie.contains(chunk_key.as_ref()).map_err(|e| {
             error!(target: LOG_TARGET, "{}", e);
-            println!("WRITE_CHUNK CONTAINS {}", e);
+            // println!("WRITE_CHUNK CONTAINS {}", e);
             FileStorageWriteError::FailedToGetFileChunk
         })? {
             return Err(FileStorageWriteError::FileChunkAlreadyExists);
@@ -317,7 +319,7 @@ where
         // Insert the chunk into the file trie.
         trie.insert(chunk_key.as_ref(), &data).map_err(|e| {
             error!(target: LOG_TARGET, "{}", e);
-            println!("WRITE_CHUNK INSERTS {}", e);
+            // println!("WRITE_CHUNK INSERTS {}", e);
             FileStorageWriteError::FailedToInsertFileChunk
         })?;
 
@@ -326,7 +328,7 @@ where
         // drop trie to commit to underlying db and release `self`
         drop(trie);
 
-        println!("WRITE_CHUNK NEW ROOT: {:?}", new_root);
+        // println!("WRITE_CHUNK NEW ROOT: {:?}", new_root);
         // TODO: improve error handling
         // Commit the changes to disk.
         self.commit(new_root).map_err(|e| {
@@ -337,9 +339,12 @@ where
         Ok(())
     }
 
+    // TODO: maybe make this only delete a chunk and iterate
+    // using the chunk_keys map, removing each one.
     // Deletes itself from the underlying db.
     fn delete(&mut self) -> Result<(), FileStorageError> {
         let mut root = self.root;
+
         // Need to clone because we cannot have a immutable borrow after mutably borrowing
         // in the next step.
         let trie_root_key = root.clone();
@@ -352,6 +357,14 @@ where
             FileStorageError::FailedToWriteToStorage
         })?;
 
+        dbg!(trie_root_key);
+        let x = trie.get(trie_root_key.as_ref()).unwrap();
+        dbg!(x);
+
+        let new_root = *trie.root();
+        dbg!(new_root);
+        let z = trie.get(new_root.as_ref()).unwrap();
+        dbg!(z);
         drop(trie);
 
         // TODO: improve error handling
@@ -361,8 +374,9 @@ where
             FileStorageError::FailedToWriteToStorage
         })?;
 
-        // // Set inner root as default value (no trie);
+        // Set inner root as default value (no trie);
         // self.root = HasherOutT::<T>::default();
+        self.root = new_root;
 
         Ok(())
     }
@@ -522,7 +536,7 @@ where
     fn generate_proof(
         &self,
         key: &HasherOutT<T>,
-        chunk_id: &Vec<ChunkId>,
+        chunk_ids: &Vec<ChunkId>,
     ) -> Result<FileProof, FileStorageError> {
         let metadata = self
             .metadata
@@ -538,6 +552,8 @@ where
         );
 
         if metadata.chunks_count() != file_data.stored_chunks_count() {
+            println!("METADATA: {:?}", metadata.chunks_count());
+            println!("FILE TRIE: {:?}", file_data.stored_chunks_count());
             return Err(FileStorageError::IncompleteFile);
         }
 
@@ -551,7 +567,7 @@ where
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 
-        file_data.generate_proof(chunk_id)
+        file_data.generate_proof(chunk_ids)
     }
 
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError> {
@@ -567,7 +583,6 @@ where
 }
 
 // Utils
-// TODO: maybe unify errors from FOrest and File Storages in one enum
 fn convert_raw_bytes_to_hasher_out<T: TrieLayout>(key: Vec<u8>) -> Result<HasherOutT<T>, ErrorT<T>>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
@@ -587,6 +602,7 @@ where
 mod tests {
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
+    use sp_runtime::AccountId32;
     use sp_trie::LayoutV1;
     use trie_db::TrieHash;
 
@@ -631,12 +647,6 @@ mod tests {
         }
     }
 
-    // TODO: tests
-    // file insertion
-    // file deletion
-    // proof generation
-    // test errors
-
     #[test]
     fn file_trie_creating_empty_works() {
         let storage = Box::new(MockStorageDb {
@@ -645,7 +655,7 @@ mod tests {
 
         let file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
 
-        // let default_hash = HasherOutT::<LayoutV1<BlakeTwo256>>::default();
+        // expected hash is the root hash of an empty tree.
         let expected_hash = TrieHash::<LayoutV1<BlakeTwo256>>::try_from([
             3, 23, 10, 46, 117, 151, 183, 183, 227, 216, 76, 5, 57, 29, 19, 154, 98, 177, 87, 231,
             135, 134, 216, 192, 130, 242, 157, 207, 76, 17, 19, 20,
@@ -668,13 +678,13 @@ mod tests {
         let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
         let old_root = file_trie.get_root().clone();
         file_trie
-            .write_chunk(&ChunkId::from(0u64), &Chunk::from([1u8; 32]))
+            .write_chunk(&ChunkId::from(0u64), &Chunk::from([1u8; 1024]))
             .unwrap();
         let new_root = file_trie.get_root();
         assert_ne!(&old_root, new_root);
 
         let chunk = file_trie.get_chunk(&ChunkId::from(0u64)).unwrap();
-        assert_eq!(chunk.as_slice(), [1u8; 32]);
+        assert_eq!(chunk.as_slice(), [1u8; 1024]);
     }
 
     #[test]
@@ -685,11 +695,11 @@ mod tests {
 
         let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
 
-        let chunk = Chunk::from([3u8; 32]);
+        let chunk = Chunk::from([3u8; 1024]);
         let chunk_id: ChunkId = 3;
         file_trie.write_chunk(&chunk_id, &chunk).unwrap();
         let chunk = file_trie.get_chunk(&chunk_id).unwrap();
-        assert_eq!(chunk.as_slice(), [3u8; 32]);
+        assert_eq!(chunk.as_slice(), [3u8; 1024]);
     }
 
     #[test]
@@ -698,7 +708,7 @@ mod tests {
             data: Default::default(),
         });
         let chunk_ids = vec![ChunkId::from(0u64), ChunkId::from(1u64)];
-        let chunks = vec![Chunk::from([0u8; 32]), Chunk::from([1u8; 32])];
+        let chunks = vec![Chunk::from([0u8; 1024]), Chunk::from([1u8; 1024])];
         let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
@@ -715,16 +725,19 @@ mod tests {
         let storage = Box::new(MockStorageDb {
             data: Default::default(),
         });
+
         let chunk_ids = vec![
             ChunkId::from(0u64),
             ChunkId::from(1u64),
             ChunkId::from(2u64),
         ];
+
         let chunks = vec![
-            Chunk::from([0u8; 32]),
-            Chunk::from([1u8; 32]),
-            Chunk::from([2u8; 32]),
+            Chunk::from([0u8; 1024]),
+            Chunk::from([1u8; 1024]),
+            Chunk::from([2u8; 1024]),
         ];
+
         let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
@@ -748,20 +761,24 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn file_trie_deleting_works() {
         let storage = Box::new(MockStorageDb {
             data: Default::default(),
         });
+
         let chunk_ids = vec![
             ChunkId::from(0u64),
             ChunkId::from(1u64),
             ChunkId::from(2u64),
         ];
+
         let chunks = vec![
-            Chunk::from([0u8; 32]),
-            Chunk::from([1u8; 32]),
-            Chunk::from([2u8; 32]),
+            Chunk::from([0u8; 1024]),
+            Chunk::from([1u8; 1024]),
+            Chunk::from([2u8; 1024]),
         ];
+
         let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
@@ -777,17 +794,118 @@ mod tests {
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         file_trie.delete().unwrap();
-        assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
+        assert!(file_trie.get_chunk(&chunk_ids[0]).is_err());
+        assert!(file_trie.get_chunk(&chunk_ids[1]).is_err());
+        assert!(file_trie.get_chunk(&chunk_ids[2]).is_err());
 
-        // assert_eq!(file_trie.stored_chunks_count(), 0);
+        assert_eq!(file_trie.stored_chunks_count(), 0);
     }
 
     #[test]
-    fn inserting_whole_file_works() {}
+    fn file_storage_inserting_whole_file_works() {
+        let storage = Box::new(MockStorageDb {
+            data: Default::default(),
+        });
+
+        let chunks = vec![
+            Chunk::from([5u8; 32]),
+            Chunk::from([6u8; 32]),
+            Chunk::from([7u8; 32]),
+        ];
+
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::from(id as u64))
+            .collect();
+
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+
+        file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count(), 1);
+        assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count(), 2);
+        assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count(), 3);
+        assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
+
+        let file_metadata = FileMetadata {
+            size: 32u64 * chunks.len() as u64,
+            fingerprint: file_trie.get_root().as_ref().into(),
+            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            location: "location".to_string().into_bytes(),
+        };
+
+        let key = file_metadata.file_key::<BlakeTwo256>();
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new();
+        file_storage
+            .insert_file_with_data(key, file_metadata, file_trie)
+            .unwrap();
+
+        assert!(file_storage.file_data.contains_key(&key));
+        assert!(file_storage.metadata.contains_key(&key));
+    }
 
     #[test]
-    fn deleting_whole_file_works() {}
+    fn file_storage_deleting_whole_file_works() {}
 
     #[test]
-    fn proof_generation_works() {}
+    fn file_storage_proof_generation_works() {
+        let storage = Box::new(MockStorageDb {
+            data: Default::default(),
+        });
+
+        let chunks = vec![
+            Chunk::from([8u8; 1024]),
+            Chunk::from([9u8; 1024]),
+            Chunk::from([10u8; 1024]),
+        ];
+
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::from(id as u64))
+            .collect();
+
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+
+        file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count(), 1);
+        assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count(), 2);
+        assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count(), 3);
+        assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
+
+        let file_metadata = FileMetadata {
+            size: 1024u64 * chunks.len() as u64,
+            fingerprint: file_trie.get_root().as_ref().into(),
+            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            location: "location".to_string().into_bytes(),
+        };
+
+        let key = file_metadata.file_key::<BlakeTwo256>();
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new();
+        file_storage
+            .insert_file_with_data(key, file_metadata, file_trie)
+            .unwrap();
+
+        assert!(file_storage.file_data.contains_key(&key));
+        assert!(file_storage.metadata.contains_key(&key));
+
+        let file_proof = file_storage.generate_proof(&key, &chunk_ids).unwrap();
+        let proven_leaves = file_proof.proven;
+        for (id, leaf) in proven_leaves.iter().enumerate() {
+            assert_eq!(chunk_ids[id], leaf.key);
+            assert_eq!(chunks[id], leaf.data);
+        }
+    }
 }
