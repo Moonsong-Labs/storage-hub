@@ -6,7 +6,6 @@ use frame_support::{
     weights::constants::RocksDbWeight,
 };
 use frame_system as system;
-use shp_forest_verifier::ForestVerifier;
 use shp_traits::{
     CommitmentVerifier, MaybeDebug, SubscribeProvidersInterface, TrieMutation,
     TrieProofDeltaApplier,
@@ -212,7 +211,7 @@ where
     ) -> Result<(MemoryDB<T::Hash>, Self::Key), DispatchError> {
         let last_key = mutations.last().unwrap().0;
 
-        let mut db = MemoryDB::<T::Hash>::default();
+        let db = MemoryDB::<T::Hash>::default();
 
         // Return default db and the last key in mutations, so it is deterministic for testing.
         Ok((db, last_key))
