@@ -3,19 +3,11 @@ import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import { alice } from "./pjsKeyring";
-import type { ApiPromise } from "@polkadot/api";
+import { ApiPromise, WsProvider } from "@polkadot/api";
+import type { BspNetApi } from "./bspNet";
 
-export const sealBlock = async (
-  api: ApiPromise,
-  call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
-  signer?: KeyringPair
-) => {
-  if (call) {
-    await call.signAndSend(signer || alice);
-  }
-  const resp = await api.rpc.engine.createBlock(true, true);
-  return resp;
-};
+
+
 
 export const sendTransaction = async (
   call: SubmittableExtrinsic<"promise", ISubmittableResult>,
@@ -23,7 +15,7 @@ export const sendTransaction = async (
     nonce?: number;
     signer?: KeyringPair;
     waitFor?: "Finalized" | "InBlock";
-  }
+  },
 ) => {
   return new Promise(async (resolve, reject) => {
     const trigger = options?.waitFor || "InBlock";
@@ -57,7 +49,7 @@ export const sendTransaction = async (
             break;
           }
         }
-      }
+      },
     );
   });
 };

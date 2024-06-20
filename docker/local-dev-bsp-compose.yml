@@ -1,21 +1,4 @@
 services:
-  # sh-collator:
-  #   image: storage-hub:local
-  #   platform: linux/amd64
-  #   ports:
-  #     - "9955:9944"
-  #     - "30333:30333"
-  #   volumes:
-  #     - ./dev-keystores/collator:/keystore:ro
-  #   command:
-  #     [
-  #       "--dev",
-  #       "--name=sh-collator",
-  #       "--unsafe-rpc-external",
-  #       "--rpc-cors=all",
-  #       "--node-key=0xe028b8155916ac14941ba1f0d2375124fd16e1a35fc9228cdc88f37e29a26fb4",
-  #       "--no-hardware-benchmarks",
-  #     ]
   sh-bsp:
     image: storage-hub:local
     platform: linux/amd64
@@ -35,7 +18,6 @@ services:
         "--port=30350",
         "--rpc-cors=all",
         "--node-key=0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be",
-        # "--bootnodes=/ip4/${COLLATOR_IP}/tcp/30333/p2p/${COLLATOR_PEER_ID}",
         "--keystore-path=/keystore",
         "--sealing=manual",
         "--base-path=/data"
