@@ -916,12 +916,6 @@ fn revoke_storage_request_with_confirmed_bsps_success() {
 
         assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-        let bsp_id =
-            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
-                bsp_account_id,
-            )
-            .unwrap();
-
         assert_ok!(FileSystem::bsp_volunteer(
             bsp_signed.clone(),
             location.clone(),
