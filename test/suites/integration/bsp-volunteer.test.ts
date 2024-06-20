@@ -4,7 +4,6 @@ import {
   DUMMY_MSP_ID,
   NODE_INFOS,
   TEST_ARTEFACTS,
-  assertEventPresent,
   closeBspNet,
   createApiObject,
   runBspNet,
@@ -71,15 +70,20 @@ describe("BSPNet: BSP Volunteer", () => {
       ),
       shUser,
     );
-    
-    const event = assertEventPresent(
-      api,
+
+    const event = api.assertEvent(
       "fileSystem",
       "NewStorageRequest",
       result.events,
     );
 
-    console.log(event.toHuman());
+    const dataBlob = event.data.toHuman() as any;
+    strictEqual(dataBlob["who"], NODE_INFOS.user.AddressId);
+    strictEqual(dataBlob["location"], destination);
+    strictEqual(dataBlob["fingerprint"], fingerprint);
+    strictEqual(BigInt(dataBlob["size_"].replaceAll(",", "")), size);
+    strictEqual(dataBlob["peerIds"].length, 1);
+    strictEqual(dataBlob["peerIds"][0], NODE_INFOS.user.expectedPeerId);
   });
 
   // it("bsp volunteers when issueStorageRequest sent", async ()=>{

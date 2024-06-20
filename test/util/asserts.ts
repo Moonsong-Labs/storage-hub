@@ -1,9 +1,9 @@
 import type { EventRecord } from "@polkadot/types/interfaces";
 import { strictEqual } from "node:assert";
-import type { BspNetApi } from "./bspNet";
+import type { ApiPromise } from "@polkadot/api";
 
 export const assertEventPresent = (
-  api: BspNetApi,
+  api: ApiPromise,
   module: string,
   method: string,
   events?: EventRecord[],
