@@ -19,7 +19,7 @@
     "docker:stop": "docker compose -f ../docker/local-node-compose.yml  -p sh_dev_node down",
     "docker:stop:latest": "docker compose -f ../docker/latest-node-compose.yml  -p sh_dev_node down",
     "docker:start:bspnet": "pnpm tsx scripts/bspNetBootstrap.ts",
-    "docker:stop:bspnet": "docker compose -f ../docker/local-dev-bsp-compose.yml down --remove-orphans",
+    "docker:stop:bspnet": "docker compose -f ../docker/local-dev-bsp-compose.yml down --remove-orphans && docker volume prune -f",
     "scalegen": "papi update --config papi.json",
     "typegen": "papi generate --config papi.json",
     "zombie:run:latest": "SH_IMAGE=docker.io/moonsonglabs/storage-hub:latest pnpm zombienet spawn configs/simple.toml",
@@ -32,6 +32,7 @@
     "zome:test:local": "SH_IMAGE=storage-hub:local pnpm zombienet test configs/simple.zndsl",
     "zombie:test:latest": "SH_IMAGE=docker.io/moonsonglabs/storage-hub:latest pnpm zombienet test configs/simple.zndsl",
     "test:full": "node --no-deprecation --import tsx --test ./suites/zombie/**.spec.ts",
+    "test:bspnet": "node --no-deprecation --import tsx --test ./suites/integration/**.test.ts",
     "test:node": "node --no-deprecation --import tsx --test ./suites/solo-node/**/**.test.ts",
     "test:node:only": "node --no-deprecation --import tsx --test --test-only ./suites/solo-node/**/**.test.ts",
     "test:node:single": "node --no-deprecation --import tsx --test --test-name-pattern=$FILTER ./suites/solo-node/**/**.test.ts"

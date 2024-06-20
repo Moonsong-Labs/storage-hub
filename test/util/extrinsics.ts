@@ -3,11 +3,8 @@ import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import { alice } from "./pjsKeyring";
-import { ApiPromise, WsProvider } from "@polkadot/api";
-import type { BspNetApi } from "./bspNet";
-
-
-
+import type { EventRecord } from "@polkadot/types/interfaces";
+import { strictEqual } from "node:assert";
 
 export const sendTransaction = async (
   call: SubmittableExtrinsic<"promise", ISubmittableResult>,
@@ -53,3 +50,4 @@ export const sendTransaction = async (
     );
   });
 };
+

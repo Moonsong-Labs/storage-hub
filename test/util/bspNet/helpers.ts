@@ -4,13 +4,25 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import compose from "docker-compose";
 import { alice, bsp, shUser } from "../pjsKeyring";
-import { nodeInfo } from "./consts";
+import {
+  DUMMY_MSP_ID,
+  VALUE_PROP,
+  NODE_INFOS,
+  DUMMY_BSP_ID,
+  CAPACITY_512,
+} from "./consts";
 import { createApiObject } from "./api";
 import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import * as util from "node:util";
 import * as child_process from "node:child_process";
 import type { BspNetApi } from "./types";
+import type {
+  CreatedBlock,
+  EventRecord,
+  Hash,
+  SignedBlock,
+} from "@polkadot/types/interfaces";
 const exec = util.promisify(child_process.exec);
 
 export const sendFileSendRpc = async (
@@ -111,11 +123,11 @@ export const runBspNet = async () => {
 
     await compose.upOne("sh-bsp", { config: composeFilePath, log: true });
 
-    const bspIp = await getContainerIp(nodeInfo.bsp.containerName);
+    const bspIp = await getContainerIp(NODE_INFOS.bsp.containerName);
     console.log(`sh-bsp IP: ${bspIp}`);
 
     const bspPeerId = await getContainerPeerId(
-      `http://127.0.0.1:${nodeInfo.bsp.port}`,
+      `http://127.0.0.1:${NODE_INFOS.bsp.port}`,
     );
     console.log(`sh-bsp Peer ID: ${bspPeerId}`);
 
@@ -133,14 +145,14 @@ export const runBspNet = async () => {
     });
 
     const peerIDUser = await getContainerPeerId(
-      `http://127.0.0.1:${nodeInfo.user.port}`,
+      `http://127.0.0.1:${NODE_INFOS.user.port}`,
     );
     console.log(`sh-user Peer ID: ${peerIDUser}`);
 
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
     // Create Connection API Object to User Node
-    api = await createApiObject(`ws://127.0.0.1:${nodeInfo.user.port}`);
+    api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
     // Give Balances
     const amount = 10000n * 10n ** 12n;
@@ -152,18 +164,12 @@ export const runBspNet = async () => {
     );
 
     // Make BSP
-    // This is hardcoded to be same as fingerprint of whatsup.jpg
-    // This is to game the XOR so that this BSP is always chosen by network
-    const bspId =
-      "0x002aaf768af5b738eea96084f10dac7ad4f6efa257782bdb9823994ffb233300";
-    const capacity = 1024n * 1024n * 512n; // 512 MB
-
     await api.sealBlock(
       api.tx.sudo.sudo(
         api.tx.providers.forceBspSignUp(
           bsp.address,
-          bspId,
-          capacity,
+          DUMMY_BSP_ID,
+          CAPACITY_512,
           [multiAddressBsp],
           bsp.address,
         ),
@@ -171,19 +177,15 @@ export const runBspNet = async () => {
     );
 
     // Make MSP
-    const mspId =
-      "0x0000000000000000000000000000000000000000000000000000000000000300";
-    const valueProp =
-      "0x0000000000000000000000000000000000000000000000000000000000000770";
     await api.sealBlock(
       api.tx.sudo.sudo(
         api.tx.providers.forceMspSignUp(
           alice.address,
-          mspId,
-          capacity,
+          DUMMY_MSP_ID,
+          CAPACITY_512,
           [multiAddressBsp],
           {
-            identifier: valueProp,
+            identifier: VALUE_PROP,
             dataLimit: 500,
             protocols: ["https", "ssh", "telnet"],
           },
@@ -191,30 +193,6 @@ export const runBspNet = async () => {
         ),
       ),
     );
-
-    // Issue file Storage request
-    const rpcResponse = await sendFileSendRpc(
-      api,
-      "/res/whatsup.jpg",
-      "cat/whatsup.jpg",
-      nodeInfo.user.AddressId,
-    );
-
-    console.log(rpcResponse);
-
-    await api.sealBlock(
-      api.tx.fileSystem.issueStorageRequest(
-        "cat/whatsup.jpg",
-        rpcResponse.fingerprint,
-        rpcResponse.size,
-        mspId,
-        [peerIDUser],
-      ),
-      shUser,
-    );
-
-    // Seal the block from BSP volunteer
-    await api.sealBlock();
   } catch (e) {
     console.error("Error sending file to user node:", e);
   } finally {
@@ -236,14 +214,58 @@ export const closeBspNet = async () => {
   });
 };
 
+export interface SealedBlock {
+  blockReceipt: CreatedBlock;
+  txHash?: string;
+  blockData?: SignedBlock;
+  events?: EventRecord[];
+}
+
 export const sealBlock = async (
   api: ApiPromise,
   call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
   signer?: KeyringPair,
-) => {
+): Promise<SealedBlock> => {
+  let results: {
+    hash?: Hash;
+    events?: EventRecord[];
+    blockData?: SignedBlock;
+  } = {};
+
+  // TODO: extend to take multiple exts in one block
   if (call) {
-    await call.signAndSend(signer || alice);
+    results.hash = await call.signAndSend(signer || alice);
   }
-  const resp = await api.rpc.engine.createBlock(true, true);
-  return resp;
+
+  // if (call && !call?.isEmpty && !call?.isSigned) {
+  //   const tx =  api.tx(call)
+  //   results.hash = await tx.signAndSend(signer || alice)
+  // }
+
+  const sealedResults = {
+    blockReceipt: await api.rpc.engine.createBlock(true, true),
+    txHash: results.hash?.toString(),
+  };
+
+  if (results.hash) {
+    const blockHash = sealedResults.blockReceipt.blockHash;
+    const allEvents = await (await api.at(blockHash)).query.system.events();
+    const blockData = await api.rpc.chain.getBlock(blockHash);
+    const getExtIndex = (txHash: Hash) => {
+      return blockData.block.extrinsics.findIndex(
+        (ext) => ext.hash.toHex() === txHash.toString(),
+      );
+    };
+    const extIndex = getExtIndex(results.hash);
+    const extEvents = allEvents.filter(
+      ({ phase }) =>
+        phase.isApplyExtrinsic &&
+        Number(phase.asApplyExtrinsic.toString()) === extIndex,
+    );
+    results.blockData = blockData;
+    results.events = extEvents;
+  }
+  return Object.assign(sealedResults, {
+    events: results.events,
+  }) satisfies SealedBlock;
 };

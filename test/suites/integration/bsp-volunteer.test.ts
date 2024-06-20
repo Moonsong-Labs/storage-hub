@@ -1,32 +1,90 @@
 import { strictEqual } from "node:assert";
 import { after, before, describe, it } from "node:test";
 import {
+  DUMMY_MSP_ID,
+  NODE_INFOS,
+  TEST_ARTEFACTS,
+  assertEventPresent,
   closeBspNet,
   createApiObject,
-  nodeInfo,
   runBspNet,
+  shUser,
   type BspNetApi,
 } from "../../util";
+import { hexToString } from "@polkadot/util";
 
 describe("BSPNet: BSP Volunteer", () => {
   let api: BspNetApi;
 
   before(async () => {
     await runBspNet();
-    api = await createApiObject(`ws://127.0.0.1:${nodeInfo.user.port}`);
+    api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
   });
 
   after(async () => {
+    await api.disconnect();
     await closeBspNet();
   });
 
   it("Network launches and can be queried", async () => {
     const userNodePeerId = await api.rpc.system.localPeerId();
-    strictEqual(userNodePeerId.toString(), nodeInfo.user.expectedPeerId);
+    strictEqual(userNodePeerId.toString(), NODE_INFOS.user.expectedPeerId);
 
-
-    const bspApi = await createApiObject(`ws://127.0.0.1:${nodeInfo.bsp.port}`);
+    const bspApi = await createApiObject(
+      `ws://127.0.0.1:${NODE_INFOS.bsp.port}`,
+    );
     const bspNodePeerId = await bspApi.rpc.system.localPeerId();
-    strictEqual(bspNodePeerId.toString(), nodeInfo.bsp.expectedPeerId);
+    bspApi.disconnect();
+    strictEqual(bspNodePeerId.toString(), NODE_INFOS.bsp.expectedPeerId);
   });
+
+  it("file is finger printed correctly", async () => {
+    const source = "res/adolphus.jpg";
+    const destination = "test/adolphus.jpg";
+    const { fingerprint, size, location } = await api.sendFile(
+      source,
+      destination,
+      NODE_INFOS.user.AddressId,
+    );
+
+    strictEqual(hexToString(location), destination);
+    strictEqual(fingerprint, TEST_ARTEFACTS[source].fingerprint);
+    strictEqual(size, TEST_ARTEFACTS[source].size);
+  });
+
+  it("issueStorageRequest sent correctly", async () => {
+    const source = "res/smile.jpg";
+    const destination = "test/smile.jpg";
+    const { fingerprint, size, location } = await api.sendFile(
+      source,
+      destination,
+      NODE_INFOS.user.AddressId,
+    );
+
+    const result = await api.sealBlock(
+      api.tx.fileSystem.issueStorageRequest(
+        location,
+        fingerprint,
+        size,
+        DUMMY_MSP_ID,
+        [NODE_INFOS.user.expectedPeerId],
+      ),
+      shUser,
+    );
+    
+    const event = assertEventPresent(
+      api,
+      "fileSystem",
+      "NewStorageRequest",
+      result.events,
+    );
+
+    console.log(event.toHuman());
+  });
+
+  // it("bsp volunteers when issueStorageRequest sent", async ()=>{
+
+  // })
+
+  // File can be copied from bsp and matches checksum
 });
