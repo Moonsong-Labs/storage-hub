@@ -201,7 +201,7 @@ export const sealBlock = async (
   call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
   signer?: KeyringPair
 ): Promise<SealedBlock> => {
-  let results: {
+  const results: {
     hash?: Hash;
     events?: EventRecord[];
     blockData?: SignedBlock;

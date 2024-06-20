@@ -7,11 +7,13 @@ import {
   sendFileSendRpc,
   shUser,
 } from "../util";
-import { setTimeout } from "timers/promises";
+import { setTimeout } from "node:timers/promises";
 
 async function bootStrapNetwork() {
   try {
     await runBspNet();
+    // biome-ignore lint/style/noVar: this is neater
+    // biome-ignore lint/correctness/noInnerDeclarations: this is neater
     var api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
     // Issue file Storage request
