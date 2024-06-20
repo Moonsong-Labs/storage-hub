@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde_json::Number;
 use shc_actors_framework::actor::ActorHandle;
-use sp_core::H256;
+use sp_core::{H256, U256};
 
 use super::{
     handler::BlockchainService,
@@ -25,6 +25,10 @@ pub enum BlockchainServiceCommand {
         subscription_id: Number,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
     },
+    WaitForBlock {
+        block_number: U256,
+        callback: tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<()>>,
+    },
 }
 
 /// Interface for interacting with the BlockchainService actor.
@@ -47,6 +51,9 @@ pub trait BlockchainServiceInterface {
 
     /// Helper function to check if an extrinsic failed or succeeded in a block.
     fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult>;
+
+    /// Wait for a block number.
+    async fn wait_for_block(&self, block_number: U256) -> Result<()>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -118,5 +125,18 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         Err(anyhow::anyhow!(
             "Extrinsic does not contain an ExtrinsicFailed event."
         ))
+    }
+
+    async fn wait_for_block(&self, block_number: U256) -> Result<()> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::WaitForBlock {
+            block_number,
+            callback,
+        };
+        self.send(message).await;
+        let rx = rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.");
+        rx.await.expect("Failed to wait for block");
+        Ok(())
     }
 }
