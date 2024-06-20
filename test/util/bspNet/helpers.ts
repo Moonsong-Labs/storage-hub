@@ -214,6 +214,7 @@ export const closeBspNet = async () => {
   });
 };
 
+// TODO: Add a succesful flag to track whether ext was successful or not
 export interface SealedBlock {
   blockReceipt: CreatedBlock;
   txHash?: string;
@@ -237,6 +238,7 @@ export const sealBlock = async (
     results.hash = await call.signAndSend(signer || alice);
   }
 
+  // TODO: Accept ext hash strings as well
   // if (call && !call?.isEmpty && !call?.isSigned) {
   //   const tx =  api.tx(call)
   //   results.hash = await tx.signAndSend(signer || alice)
@@ -264,7 +266,8 @@ export const sealBlock = async (
     );
     results.blockData = blockData;
     results.events = extEvents;
-  }
+  } 
+  
   return Object.assign(sealedResults, {
     events: results.events,
   }) satisfies SealedBlock;

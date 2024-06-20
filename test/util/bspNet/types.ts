@@ -1,10 +1,9 @@
 import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type { ISubmittableResult } from "@polkadot/types/types";
+import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
 import type { FileSendResponse, SealedBlock } from "./helpers";
-import type { EventRecord } from "@polkadot/types/interfaces";
-import type { Event } from "@polkadot/types/interfaces";
+import type { EventRecord,Event } from "@polkadot/types/interfaces";
 
 export type BspNetApi = ApiPromise & {
   sealBlock: (
@@ -22,5 +21,8 @@ export type BspNetApi = ApiPromise & {
     module: string,
     method: string,
     events?: EventRecord[],
-  ) => Event;
+  ) => {event: Event, data: Codec[] & IEventData};
+  
+  // TODO: add a fetchEvent function which infers type from the module and method
+  fetchEvent: () => void;
 };
