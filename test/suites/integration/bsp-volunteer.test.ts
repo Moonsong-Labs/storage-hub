@@ -12,9 +12,7 @@ import {
   shUser,
   type BspNetApi,
 } from "../../util";
-import { type PalletFileSystemEvent } from "@polkadot/types/lookup";
-import { hexToString, hexToU8a } from "@polkadot/util";
-import { blake2AsU8a, encodeAddress } from "@polkadot/util-crypto";
+import { hexToString } from "@polkadot/util";
 
 describe("BSPNet: BSP Volunteer", () => {
   let api: BspNetApi;
@@ -131,17 +129,13 @@ describe("BSPNet: BSP Volunteer", () => {
       events,
     );
     
-    console.log(resBspId.toHuman())
-    
-    // TODO: Fix Address Encoding
-    // strictEqual(encodeAddress(resBspId), NODE_INFOS.bsp.AddressId);
+    strictEqual(resBspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
     strictEqual(resLoc.toHuman(), destination);
     strictEqual(resFinger.toString(), fingerprint);
     strictEqual(resMulti.length, 1);
     strictEqual((resMulti[0].toHuman() as string).includes(NODE_INFOS.bsp.expectedPeerId),true );
     strictEqual(resOwner.toString(), NODE_INFOS.user.AddressId);
     strictEqual(resSize.toBigInt(), size);
-
   });
 
   // File can be copied from bsp and matches checksum
