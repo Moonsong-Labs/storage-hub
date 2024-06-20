@@ -24,5 +24,5 @@ export type BspNetApi = ApiPromise & {
   ) => {event: Event, data: Codec[] & IEventData};
   
   // TODO: add a fetchEvent function which infers type from the module and method
-  fetchEvent: () => void;
+  // fetchEvent: () => void;
 };

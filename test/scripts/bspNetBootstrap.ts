@@ -6,15 +6,13 @@ import {
   runBspNet,
   sendFileSendRpc,
   shUser,
-  type BspNetApi,
 } from "../util";
-import { setTimeout } from "timers/promises"
+import { setTimeout } from "timers/promises";
 
-let api: BspNetApi;
-
-runBspNet()
-  .then(async () => {
-    api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+async function bootStrapNetwork() {
+  try {
+    await runBspNet();
+    var api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
     // Issue file Storage request
     const rpcResponse = await sendFileSendRpc(
@@ -42,16 +40,17 @@ runBspNet()
     );
 
     // Seal the block from BSP volunteer
-    await setTimeout(1000)
+    await setTimeout(1000);
     await api.sealBlock();
-
     console.log("✅ BSPNet Bootstrap success");
-  })
-  .catch((err) => {
-    console.error("Error running bootstrap script:", err);
+  } catch (e) {
+    console.error("Error running bootstrap script:", e);
     console.log("❌ BSPNet Bootstrap failure");
-  })
-  .finally(() => {
-    api?.disconnect()   
-    console.log("🏁 BSPNet Bootstrap script completed");
-  });
+    process.exitCode = 1;
+  }
+
+  // @ts-expect-error - bug in tsc
+  await api.disconnect();
+}
+
+bootStrapNetwork();

@@ -43,6 +43,11 @@ export const TEST_ARTEFACTS = {
     fingerprint:
       "0x0e2aaf768af5b738eea96084f10dac7ad4f6efa257782bdb9823994ffb233344",
   },
+  "res/cloud.jpg": {
+    size: 346248n,
+    checksum:"8e06811883fc3e5e6a0331825b365e4bd7b83ba7683fa9da17e4daea25d7a9f5",
+    fingerprint: "0x00b122b1b40969f3b6ce9277d511d7f771f8a4e213fa1a8a2951662bd3044000",
+  }
 } as const;
 
 export const DUMMY_MSP_ID =
