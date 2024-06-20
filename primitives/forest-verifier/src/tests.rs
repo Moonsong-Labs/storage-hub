@@ -1625,7 +1625,7 @@ mod mutate_root_tests {
             TrieRemoveMutation::default().into(),
         );
 
-        let mut challenge_keys = [add_mutation.clone(), remove_mutation.clone()];
+        let challenge_keys = [add_mutation.clone(), remove_mutation.clone()];
 
         {
             let mut trie_recorder = recorder.as_trie_recorder(root);
