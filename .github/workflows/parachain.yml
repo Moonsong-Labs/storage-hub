@@ -277,3 +277,49 @@ jobs:
                --test-reporter-destination=stdout   \
                --test-shard=${{ matrix.shard }}/4   \
                ./suites/solo-node/**/**.test.ts
+               
+  bsp_net:
+      needs: [build_image, setup]
+      if: always()
+      name: "Run BSPNet Tests"
+      runs-on: ubuntu-latest
+      strategy:
+        fail-fast: false
+        matrix:
+          shard: [1, 2, 3, 4]
+      steps:
+        - uses: actions/checkout@v4
+        - uses: ./.github/workflow-templates/setup-pnpm
+        - run: mkdir -p target/release/
+        - name: Get Node Binary if changed
+          if: needs.setup.outputs.node_changed == 'true'
+          uses: actions/download-artifact@v4
+          with:
+            name: node
+            path: target/release/
+        - name: Get Latest Node Binary if not changed
+          if: needs.setup.outputs.node_changed == 'false'
+          run: |
+            docker pull moonsonglabs/storage-hub:latest
+            docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+            docker cp temp_storage_hub:/storage-hub/storage-hub-node target/release/storage-hub-node
+            docker rm temp_storage_hub
+        - name: Build Local Docker Image
+          run: |
+            chmod +x target/release/storage-hub-node
+            cd test
+            pnpm install
+            pnpm docker:build
+        - name: Run Dev Node Tests
+          run: |
+            cd test
+            pnpm update-types
+  
+            node --import tsx                        \
+                --test                               \
+                --test-reporter=@reporters/github    \
+                --test-reporter-destination=stdout   \
+                --test-reporter=spec                 \
+                --test-reporter-destination=stdout   \
+                --test-shard=${{ matrix.shard }}/4   \
+                ./suites/integration/**/**.test.ts

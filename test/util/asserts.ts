@@ -7,21 +7,15 @@ export const assertEventPresent = (
   api: ApiPromise,
   module: string,
   method: string,
-  events?: EventRecord[],
+  events?: EventRecord[]
 ) => {
   strictEqual(events && events.length > 0, true, "No events emitted in block");
   if (!events) {
     throw new Error("No events found, should be caught by assert");
   }
 
-  const event = events.find(
-    (e) => e.event.section === module && e.event.method === method,
-  );
-  strictEqual(
-    event !== undefined,
-    true,
-    `No events matching ${module}.${method}`,
-  );
+  const event = events.find((e) => e.event.section === module && e.event.method === method);
+  strictEqual(event !== undefined, true, `No events matching ${module}.${method}`);
   if (!event) {
     throw new Error("No event found, should be caught by assert");
   }
@@ -33,12 +27,13 @@ export const assertEventPresent = (
   return { event: event.event, data: event.event.data };
 };
 
-
-type EventData<T extends AugmentedEvent<"promise">> = T extends AugmentedEvent<"promise", infer D> ? D : never;
+type EventData<T extends AugmentedEvent<"promise">> = T extends AugmentedEvent<"promise", infer D>
+  ? D
+  : never;
 
 export const fetchEventData = <T extends AugmentedEvent<"promise">>(
   matcher: T,
-  events?: EventRecord[],
+  events?: EventRecord[]
 ): EventData<T> => {
   strictEqual(events && events.length > 0, true, "No events emitted in block");
   if (!events) {

@@ -4,39 +4,29 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import compose from "docker-compose";
 import { alice, bsp, shUser } from "../pjsKeyring";
-import {
-  DUMMY_MSP_ID,
-  VALUE_PROP,
-  NODE_INFOS,
-  DUMMY_BSP_ID,
-  CAPACITY_512,
-} from "./consts";
+import { DUMMY_MSP_ID, VALUE_PROP, NODE_INFOS, DUMMY_BSP_ID, CAPACITY_512 } from "./consts";
 import { createApiObject } from "./api";
 import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import * as util from "node:util";
 import * as child_process from "node:child_process";
 import type { BspNetApi } from "./types";
-import type {
-  CreatedBlock,
-  EventRecord,
-  Hash,
-  SignedBlock,
-} from "@polkadot/types/interfaces";
+import type { CreatedBlock, EventRecord, Hash, SignedBlock } from "@polkadot/types/interfaces";
 const exec = util.promisify(child_process.exec);
 
 export const sendFileSendRpc = async (
   api: ApiPromise,
   filePath: string,
   remotePath: string,
-  userNodeAccountId: string,
+  userNodeAccountId: string
 ): Promise<FileSendResponse> => {
   try {
     // @ts-expect-error - rpc provider not officially exposed
-    const resp = await api._rpcCore.provider.send(
-      "filestorage_loadFileInStorage",
-      [filePath, remotePath, userNodeAccountId],
-    );
+    const resp = await api._rpcCore.provider.send("filestorage_loadFileInStorage", [
+      filePath,
+      remotePath,
+      userNodeAccountId,
+    ]);
     const { owner, location, size, fingerprint } = resp;
     return {
       owner: u8aToHex(owner),
@@ -50,16 +40,13 @@ export const sendFileSendRpc = async (
   }
 };
 
-export const getContainerIp = async (
-  containerName: string,
-  verbose = false,
-): Promise<string> => {
+export const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {
   for (let i = 0; i < 20; i++) {
     verbose && console.log(`Waiting for ${containerName} to launch...`);
 
     try {
       const { stdout } = await exec(
-        `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`,
+        `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`
       );
       return stdout.trim();
     } catch {
@@ -118,7 +105,7 @@ export const runBspNet = async () => {
       process.cwd(),
       "..",
       "docker",
-      "local-dev-bsp-compose.yml",
+      "local-dev-bsp-compose.yml"
     );
 
     await compose.upOne("sh-bsp", { config: composeFilePath, log: true });
@@ -126,9 +113,7 @@ export const runBspNet = async () => {
     const bspIp = await getContainerIp(NODE_INFOS.bsp.containerName);
     console.log(`sh-bsp IP: ${bspIp}`);
 
-    const bspPeerId = await getContainerPeerId(
-      `http://127.0.0.1:${NODE_INFOS.bsp.port}`,
-    );
+    const bspPeerId = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.bsp.port}`);
     console.log(`sh-bsp Peer ID: ${bspPeerId}`);
 
     process.env.BSP_IP = bspIp;
@@ -144,9 +129,7 @@ export const runBspNet = async () => {
       },
     });
 
-    const peerIDUser = await getContainerPeerId(
-      `http://127.0.0.1:${NODE_INFOS.user.port}`,
-    );
+    const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
     console.log(`sh-user Peer ID: ${peerIDUser}`);
 
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
@@ -156,12 +139,8 @@ export const runBspNet = async () => {
 
     // Give Balances
     const amount = 10000n * 10n ** 12n;
-    await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bsp.address, amount)),
-    );
-    await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.balances.forceSetBalance(shUser.address, amount)),
-    );
+    await api.sealBlock(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bsp.address, amount)));
+    await api.sealBlock(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(shUser.address, amount)));
 
     // Make BSP
     await api.sealBlock(
@@ -171,9 +150,9 @@ export const runBspNet = async () => {
           DUMMY_BSP_ID,
           CAPACITY_512,
           [multiAddressBsp],
-          bsp.address,
-        ),
-      ),
+          bsp.address
+        )
+      )
     );
 
     // Make MSP
@@ -189,9 +168,9 @@ export const runBspNet = async () => {
             dataLimit: 500,
             protocols: ["https", "ssh", "telnet"],
           },
-          alice.address,
-        ),
-      ),
+          alice.address
+        )
+      )
     );
   } catch (e) {
     console.error("Error sending file to user node:", e);
@@ -201,12 +180,7 @@ export const runBspNet = async () => {
 };
 
 export const closeBspNet = async () => {
-  const composeFilePath = path.resolve(
-    process.cwd(),
-    "..",
-    "docker",
-    "local-dev-bsp-compose.yml",
-  );
+  const composeFilePath = path.resolve(process.cwd(), "..", "docker", "local-dev-bsp-compose.yml");
 
   return compose.down({
     config: composeFilePath,
@@ -225,7 +199,7 @@ export interface SealedBlock {
 export const sealBlock = async (
   api: ApiPromise,
   call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
-  signer?: KeyringPair,
+  signer?: KeyringPair
 ): Promise<SealedBlock> => {
   let results: {
     hash?: Hash;
@@ -254,20 +228,17 @@ export const sealBlock = async (
     const allEvents = await (await api.at(blockHash)).query.system.events();
     const blockData = await api.rpc.chain.getBlock(blockHash);
     const getExtIndex = (txHash: Hash) => {
-      return blockData.block.extrinsics.findIndex(
-        (ext) => ext.hash.toHex() === txHash.toString(),
-      );
+      return blockData.block.extrinsics.findIndex((ext) => ext.hash.toHex() === txHash.toString());
     };
     const extIndex = getExtIndex(results.hash);
     const extEvents = allEvents.filter(
       ({ phase }) =>
-        phase.isApplyExtrinsic &&
-        Number(phase.asApplyExtrinsic.toString()) === extIndex,
+        phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex
     );
     results.blockData = blockData;
     results.events = extEvents;
-  } 
-  
+  }
+
   return Object.assign(sealedResults, {
     events: results.events,
   }) satisfies SealedBlock;

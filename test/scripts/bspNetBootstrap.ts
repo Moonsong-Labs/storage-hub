@@ -19,13 +19,11 @@ async function bootStrapNetwork() {
       api,
       "/res/whatsup.jpg",
       "cat/whatsup.jpg",
-      NODE_INFOS.user.AddressId,
+      NODE_INFOS.user.AddressId
     );
     console.log(rpcResponse);
 
-    const peerIDUser = await getContainerPeerId(
-      `http://127.0.0.1:${NODE_INFOS.user.port}`,
-    );
+    const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
     console.log(`sh-user Peer ID: ${peerIDUser}`);
 
     await api.sealBlock(
@@ -34,9 +32,9 @@ async function bootStrapNetwork() {
         rpcResponse.fingerprint,
         rpcResponse.size,
         DUMMY_MSP_ID,
-        [peerIDUser],
+        [peerIDUser]
       ),
-      shUser,
+      shUser
     );
 
     // Seal the block from BSP volunteer

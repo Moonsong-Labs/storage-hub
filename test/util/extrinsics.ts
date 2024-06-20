@@ -12,7 +12,7 @@ export const sendTransaction = async (
     nonce?: number;
     signer?: KeyringPair;
     waitFor?: "Finalized" | "InBlock";
-  },
+  }
 ) => {
   return new Promise(async (resolve, reject) => {
     const trigger = options?.waitFor || "InBlock";
@@ -46,8 +46,7 @@ export const sendTransaction = async (
             break;
           }
         }
-      },
+      }
     );
   });
 };
-
