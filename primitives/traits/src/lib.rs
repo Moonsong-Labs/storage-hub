@@ -66,6 +66,9 @@ pub trait ProvidersInterface {
     /// Get the root for a registered Provider.
     fn get_root(who: Self::ProviderId) -> Option<Self::MerkleHash>;
 
+    /// Update the root for a registered Provider.
+    fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult;
+
     /// Get the stake for a registered  Provider.
     fn get_stake(
         who: Self::ProviderId,
@@ -215,12 +218,6 @@ pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
     /// Change the root of a bucket
     fn change_root_bucket(
         bucket_id: Self::BucketId,
-        new_root: Self::MerklePatriciaRoot,
-    ) -> DispatchResult;
-
-    /// Change the root of a Provider
-    fn change_provider_root(
-        provider_id: Self::ProviderId,
         new_root: Self::MerklePatriciaRoot,
     ) -> DispatchResult;
 

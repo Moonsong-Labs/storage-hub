@@ -215,7 +215,7 @@ where
 
             if !mutations.is_empty() {
                 let new_root = mutations.iter().try_fold(root, |acc_root, mutation| {
-                    // Remove the key from the list of forest_keys_proven to avoid having to verify the key proof.
+                    // Remove the key from the list of `forest_keys_proven` to avoid having to verify the key proof.
                     forest_keys_proven.remove(&mutation.0);
 
                     <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
@@ -228,7 +228,7 @@ where
                 })?;
 
                 // Update root of Provider after all mutations have been applied to the Forest.
-                <T::ProvidersPallet as shp_traits::MutateProvidersInterface>::change_provider_root(
+                <T::ProvidersPallet as shp_traits::ProvidersInterface>::update_root(
                     *submitter, new_root,
                 )?;
             }

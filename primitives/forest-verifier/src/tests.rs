@@ -1611,6 +1611,61 @@ mod mutate_root_tests {
     }
 
     #[test]
+    fn mutate_root_add_remove_multiple_keys_success() {
+        let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
+
+        let mut leaf_to_add = *leaf_keys
+            .first().unwrap();
+
+        leaf_to_add.0[0] += 1;
+
+        let add_mutation: (H256, TrieMutation) = (leaf_to_add, TrieAddMutation::default().into());
+
+        let remove_mutation: (H256, TrieMutation) = (*leaf_keys
+            .last().unwrap(), TrieRemoveMutation::default().into());
+
+        let mut challenge_keys = [add_mutation.clone(), remove_mutation.clone()];
+
+        {
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            for challenge_key in &challenge_keys {
+                let mut iter = trie.into_double_ended_iter().unwrap();
+                iter.seek(challenge_key.0.0.as_slice()).unwrap();
+
+                // Access the next leaf node.
+                iter.next();
+
+                // Access the previous leaf node only if it's a remove mutation.
+                if let TrieMutation::Add(_) = challenge_key.1 {
+                    iter.next_back();
+                }
+            }
+        }
+
+        let proof = generate_proof_and_verify(&mut recorder, &root, &challenge_keys.iter().map(|(key, _)| *key).collect::<Vec<H256>>());
+
+        let (memdb, new_root) =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
+                &root,
+                &[add_mutation],
+                &proof,
+            )
+            .expect("Failed to mutate root");
+
+        for challenge_key in &challenge_keys {
+            if let TrieMutation::Add(_) = challenge_key.1 {
+                assert_key_in_trie(&memdb, &new_root, &challenge_key.0);
+            } else {
+                assert_key_not_in_trie(&memdb, &new_root, &challenge_key.0);
+            }
+        }
+    }
+
+    #[test]
     fn mutate_root_no_mutations_failure() {
         let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 

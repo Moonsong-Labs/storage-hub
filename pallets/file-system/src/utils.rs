@@ -488,11 +488,12 @@ impl<T: pallet::Config> Pallet<T> {
                 .map_err(|_| Error::<T>::FailedTypeConversion)?;
 
             // Remove storage request bsps
-            let removed = <StorageRequestBsps<T>>::clear_prefix(&location, remove_limit, None);
+            let removed =
+                <StorageRequestBsps<T>>::drain_prefix(&location).fold(0, |acc, _| acc + 1);
 
             // Make sure that the expected number of bsps were removed.
             expect_or_err!(
-                removed.backend == remove_limit,
+                removed == remove_limit,
                 "Number of volunteered bsps for storage request should have been removed",
                 Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
                 bool
@@ -517,7 +518,7 @@ impl<T: pallet::Config> Pallet<T> {
         )?;
 
         // Update root of BSP.
-        <T::Providers as shp_traits::MutateProvidersInterface>::change_provider_root(
+        <T::Providers as shp_traits::ProvidersInterface>::update_root(
             bsp_id, new_root,
         )?;
 
@@ -578,11 +579,11 @@ impl<T: pallet::Config> Pallet<T> {
             .map_err(|_| Error::<T>::FailedTypeConversion)?;
 
         // Remove storage request bsps
-        let removed = <StorageRequestBsps<T>>::clear_prefix(&location, remove_limit, None);
+        let removed = <StorageRequestBsps<T>>::drain_prefix(&location).fold(0, |acc, _| acc + 1);
 
         // Make sure that the expected number of bsps were removed.
         expect_or_err!(
-            removed.backend == remove_limit,
+            removed == remove_limit,
             "Number of volunteered bsps for storage request should have been removed",
             Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
             bool
@@ -734,7 +735,7 @@ impl<T: pallet::Config> Pallet<T> {
         )?;
 
         // Update root of BSP.
-        <T::Providers as shp_traits::MutateProvidersInterface>::change_provider_root(
+        <T::Providers as shp_traits::ProvidersInterface>::update_root(
             bsp_id, new_root,
         )?;
 

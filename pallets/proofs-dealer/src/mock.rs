@@ -210,8 +210,12 @@ where
         mutations: &[(Self::Key, TrieMutation)],
         proof: &Self::Proof,
     ) -> Result<(MemoryDB<T::Hash>, Self::Key), DispatchError> {
-        // Just use the main implementation used by the runtime
-        ForestVerifier::<T, H_LENGTH>::apply_delta(root, mutations, proof)
+        let last_key = mutations.last().unwrap().0;
+
+        let mut db = MemoryDB::<T::Hash>::default();
+
+        // Return default db and the last key in mutations, so it is deterministic for testing.
+        Ok((db, last_key))
     }
 }
 

@@ -46,13 +46,10 @@ pub mod pallet {
         /// The Providers pallet.
         /// To check if whoever submits a proof is a registered Provider.
         type ProvidersPallet: ProvidersInterface<
-                AccountId = Self::AccountId,
-                MerkleHash = Self::MerkleTrieHash,
-                Balance = Self::NativeBalance,
-            > + shp_traits::MutateProvidersInterface<
-                AccountId = Self::AccountId,
-                MerklePatriciaRoot = Self::MerkleTrieHash,
-            >;
+            AccountId = Self::AccountId,
+            MerkleHash = Self::MerkleTrieHash,
+            Balance = Self::NativeBalance,
+        >;
 
         /// The type used to verify Merkle Patricia Forest proofs.
         /// This verifies proofs of keys belonging to the Merkle Patricia Forest.
