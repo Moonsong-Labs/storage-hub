@@ -69,7 +69,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
       (maxRetries * sleepTime) / 1000
     } seconds`
   );
-  showContainers()
+  showContainers();
   throw new Error("Error fetching container IP");
 };
 
@@ -83,7 +83,7 @@ export interface FileSendResponse {
 export const getContainerPeerId = async (url: string, verbose = false) => {
   const maxRetries = 60;
   const sleepTime = 500;
-  
+
   const payload = {
     id: "1",
     jsonrpc: "2.0",
@@ -112,13 +112,9 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
       await new Promise((resolve) => setTimeout(resolve, sleepTime));
     }
   }
-  
-  console.log(
-    `Error fetching peerId from ${url} after ${
-      (maxRetries * sleepTime) / 1000
-    } seconds`
-  );
-  showContainers()
+
+  console.log(`Error fetching peerId from ${url} after ${(maxRetries * sleepTime) / 1000} seconds`);
+  showContainers();
   throw new Error(`Error fetching peerId from ${url}`);
 };
 
