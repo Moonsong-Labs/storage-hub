@@ -33,22 +33,12 @@ const fetchMetadata = async () => {
       await new Promise((resolve) => setTimeout(resolve, sleepTime));
     }
   }
-  console.log(
-    `Error fetching container IP  after ${
-      (maxRetries * sleepTime) / 1000
-    } seconds`,
-  );
+  console.log(`Error fetching container IP  after ${(maxRetries * sleepTime) / 1000} seconds`);
   throw new Error("Error fetching metadata");
 };
 
 async function main() {
-  const nodePath = path.join(
-    process.cwd(),
-    "..",
-    "target",
-    "release",
-    "storage-hub-node",
-  );
+  const nodePath = path.join(process.cwd(), "..", "target", "release", "storage-hub-node");
   const metadataPath = path.join(process.cwd(), "storagehub.json");
 
   if (!fs.existsSync(nodePath)) {
@@ -67,7 +57,7 @@ async function main() {
     ],
     {
       stdio: "inherit",
-    },
+    }
   );
 
   const metadata = await fetchMetadata();
@@ -82,7 +72,5 @@ main()
     process.exitCode = 1;
   })
   .finally(() => {
-    execSync(
-      "docker compose -f=../docker/local-node-compose.yml down --remove-orphans --volumes",
-    );
+    execSync("docker compose -f=../docker/local-node-compose.yml down --remove-orphans --volumes");
   });
