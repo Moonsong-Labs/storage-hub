@@ -276,6 +276,7 @@ jobs:
                --test-reporter=spec                 \
                --test-reporter-destination=stdout   \
                --test-shard=${{ matrix.shard }}/4   \
+               --test-force-exit                    \
                ./suites/solo-node/**/**.test.ts
                
   bsp_net:
@@ -310,7 +311,7 @@ jobs:
             cd test
             pnpm install
             pnpm docker:build
-        - name: Run Dev Node Tests
+        - name: Run BSPNet Tests
           run: |
             cd test
             pnpm typegen
@@ -322,4 +323,5 @@ jobs:
                 --test-reporter=spec                 \
                 --test-reporter-destination=stdout   \
                 --test-shard=${{ matrix.shard }}/4   \
+                --test-force-exit                    \
                 ./suites/integration/**/**.test.ts

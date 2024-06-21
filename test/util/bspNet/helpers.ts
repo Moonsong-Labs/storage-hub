@@ -10,8 +10,8 @@ import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import * as util from "node:util";
 import * as child_process from "node:child_process";
-import type { BspNetApi } from "./types";
 import type { CreatedBlock, EventRecord, Hash, SignedBlock } from "@polkadot/types/interfaces";
+import { execSync } from "node:child_process";
 const exec = util.promisify(child_process.exec);
 
 export const sendFileSendRpc = async (
@@ -41,7 +41,10 @@ export const sendFileSendRpc = async (
 };
 
 export const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {
-  for (let i = 0; i < 20; i++) {
+  const maxRetries = 60;
+  const sleepTime = 500;
+
+  for (let i = 0; i < maxRetries; i++) {
     verbose && console.log(`Waiting for ${containerName} to launch...`);
 
     try {
@@ -50,10 +53,22 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
       );
       return stdout.trim();
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, sleepTime));
     }
   }
-  throw new Error(`Error fetching container IP for ${containerName}`);
+  execSync("docker ps -a", { stdio: "inherit" });
+  try {
+    execSync("docker logs docker-sh-bsp-1", { stdio: "inherit" });
+    execSync("docker logs docker-sh-user-1", { stdio: "inherit" });
+  } catch (e) {
+    console.log(e);
+  }
+  console.log(
+    `Error fetching container IP for ${containerName} after ${
+      (maxRetries * sleepTime) / 1000
+    } seconds`
+  );
+  throw new Error("Error fetching container IP");
 };
 
 export interface FileSendResponse {
@@ -96,8 +111,6 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
 };
 
 export const runBspNet = async () => {
-  let api: BspNetApi | undefined;
-
   try {
     console.log(`sh user id: ${shUser.address}`);
     console.log(`sh bsp id: ${bsp.address}`);
@@ -135,7 +148,9 @@ export const runBspNet = async () => {
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
     // Create Connection API Object to User Node
-    api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+    // biome-ignore lint/style/noVar: <explanation>
+    // biome-ignore lint/correctness/noInnerDeclarations: <explanation>
+    var api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
     // Give Balances
     const amount = 10000n * 10n ** 12n;
@@ -173,8 +188,9 @@ export const runBspNet = async () => {
       )
     );
   } catch (e) {
-    console.error("Error sending file to user node:", e);
+    console.error("Error ", e);
   } finally {
+    // @ts-expect-error - bug in tsc
     api?.disconnect();
   }
 };
