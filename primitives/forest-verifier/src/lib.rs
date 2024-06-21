@@ -208,7 +208,6 @@ where
     }
 }
 
-// TODO: rename to TrieDeltaApplier
 impl<T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
     for ForestVerifier<T, H_LENGTH>
 where
