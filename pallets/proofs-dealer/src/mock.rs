@@ -141,8 +141,8 @@ impl crate::Config for Test {
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
-    type ChallengeHistoryLength = ConstU64<10>;
-    type ChallengesQueueLength = ConstU32<10>;
+    type ChallengeHistoryLength = ConstU64<30>;
+    type ChallengesQueueLength = ConstU32<25>;
     type CheckpointChallengePeriod = ConstU64<10>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = ConstU64<181222>;

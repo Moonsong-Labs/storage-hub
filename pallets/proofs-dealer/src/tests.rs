@@ -2,23 +2,30 @@ use std::collections::BTreeMap;
 use std::vec;
 
 use crate::pallet::Event;
-use crate::types::{ChallengeHistoryLengthFor, KeyProof, RandomChallengesPerBlockFor};
+use crate::types::{
+    ChallengeHistoryLengthFor, ChallengeTicksToleranceFor, ChallengesQueueLengthFor,
+    CheckpointChallengePeriodFor, KeyProof, MaxCustomChallengesPerBlockFor,
+    RandomChallengesPerBlockFor,
+};
 use crate::{mock::*, types::Proof};
 use crate::{
-    LastCheckpointTick, LastTickProviderSubmittedProofFor, TickToChallengesSeed,
+    ChallengesTicker, LastCheckpointTick, LastTickProviderSubmittedProofFor, TickToChallengesSeed,
     TickToCheckpointChallenges,
 };
-use frame_support::weights::WeightMeter;
+use codec::Encode;
+use frame_support::assert_err;
 use frame_support::{
     assert_noop, assert_ok,
     traits::{fungible::Mutate, OnPoll},
+    weights::WeightMeter,
 };
-use sp_core::{Get, Hasher};
+use shp_traits::ProofsDealerInterface;
+use sp_core::{blake2_256, Get, Hasher, H256};
 use sp_runtime::BoundedVec;
 use sp_runtime::{traits::BlakeTwo256, DispatchError};
 use sp_trie::CompactProof;
 
-fn run_n_blocks(n: u64) {
+fn run_to_block(n: u64) {
     while System::block_number() < n {
         System::set_block_number(System::block_number() + 1);
 
@@ -31,7 +38,7 @@ fn run_n_blocks(n: u64) {
 fn challenge_submit_succeed() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -74,7 +81,7 @@ fn challenge_submit_succeed() {
 fn challenge_submit_twice_succeed() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create two users and add funds to the accounts.
         let user_1 = RuntimeOrigin::signed(1);
@@ -145,7 +152,7 @@ fn challenge_submit_twice_succeed() {
 fn challenge_submit_existing_challenge_succeed() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -189,7 +196,7 @@ fn challenge_submit_existing_challenge_succeed() {
 fn challenge_submit_in_two_rounds_succeed() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -228,7 +235,7 @@ fn challenge_submit_in_two_rounds_succeed() {
 
         // Advance `CheckpointChallengePeriod` blocks.
         let challenge_period: u64 = <Test as crate::Config>::CheckpointChallengePeriod::get();
-        run_n_blocks(challenge_period as u64 + 1);
+        run_to_block(challenge_period as u64 + 1);
 
         // Dispatch challenge extrinsic twice.
         let file_key = BlakeTwo256::hash(b"file_key_2");
@@ -261,7 +268,7 @@ fn challenge_submit_in_two_rounds_succeed() {
 fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user with no funds.
         let user = RuntimeOrigin::signed(1);
@@ -310,7 +317,7 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
 fn challenge_wrong_origin_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Mock a FileKey.
         let file_key = BlakeTwo256::hash(b"file_key");
@@ -327,7 +334,7 @@ fn challenge_wrong_origin_fail() {
 fn challenge_submit_by_regular_user_with_no_funds_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user with no funds.
         let user = RuntimeOrigin::signed(1);
@@ -347,7 +354,7 @@ fn challenge_submit_by_regular_user_with_no_funds_fail() {
 fn challenge_overflow_challenges_queue_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -474,7 +481,7 @@ fn proofs_dealer_trait_challenge_with_priority_overflow_challenges_queue_fail() 
 fn submit_proof_success() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -503,11 +510,15 @@ fn submit_proof_success() {
         );
 
         // Set Provider's last submitted proof block.
-        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        let last_tick_provider_submitted_proof = System::block_number();
+        LastTickProviderSubmittedProofFor::<Test>::insert(
+            &provider_id,
+            last_tick_provider_submitted_proof,
+        );
 
-        // Advance less than `ChallengeHistoryLength` blocks.
-        let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
-        run_n_blocks(challenge_history_length - 1);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        run_to_block(challenge_ticks_tolerance - 1);
 
         // Get the seed for block 2.
         let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
@@ -541,9 +552,8 @@ fn submit_proof_success() {
             key_proofs,
         };
 
-        // Advance less than `ChallengeHistoryLength` blocks.
-        let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
-        run_n_blocks(challenge_history_length - 1);
+        // Check provider deadline before submitting proof.
+        // Should be `ChallengeTicksTolerance` after the last submitted proof.
 
         // Dispatch challenge extrinsic.
         assert_ok!(ProofsDealer::submit_proof(
@@ -558,7 +568,7 @@ fn submit_proof_success() {
 fn submit_proof_submitted_by_not_a_provider_success() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(2);
@@ -590,9 +600,9 @@ fn submit_proof_submitted_by_not_a_provider_success() {
         // Set Provider's last submitted proof block.
         LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
-        // Advance less than `ChallengeHistoryLength` blocks.
-        let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
-        run_n_blocks(challenge_history_length - 1);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        run_to_block(challenge_ticks_tolerance - 1);
 
         // Get the seed for block 2.
         let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
@@ -639,7 +649,7 @@ fn submit_proof_submitted_by_not_a_provider_success() {
 fn submit_proof_with_checkpoint_challenges_success() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -670,9 +680,9 @@ fn submit_proof_with_checkpoint_challenges_success() {
         // Set Provider's last submitted proof block.
         LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
-        // Advance less than `ChallengeHistoryLength` blocks.
-        let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
-        run_n_blocks(challenge_history_length - 1);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        run_to_block(challenge_ticks_tolerance - 1);
 
         // Get the seed for block 2.
         let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
@@ -726,10 +736,6 @@ fn submit_proof_with_checkpoint_challenges_success() {
             key_proofs,
         };
 
-        // Advance less than `ChallengeHistoryLength` blocks.
-        let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
-        run_n_blocks(challenge_history_length - 1);
-
         // Dispatch challenge extrinsic.
         assert_ok!(ProofsDealer::submit_proof(
             RuntimeOrigin::signed(1),
@@ -743,7 +749,7 @@ fn submit_proof_with_checkpoint_challenges_success() {
 fn submit_proof_caller_not_a_provider_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -773,7 +779,7 @@ fn submit_proof_caller_not_a_provider_fail() {
 fn submit_proof_provider_passed_not_registered_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -806,7 +812,7 @@ fn submit_proof_provider_passed_not_registered_fail() {
 fn submit_proof_empty_key_proofs_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -854,7 +860,7 @@ fn submit_proof_empty_key_proofs_fail() {
 fn submit_proof_no_record_of_last_proof_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -913,7 +919,7 @@ fn submit_proof_no_record_of_last_proof_fail() {
 fn submit_proof_challenges_block_not_reached_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -978,7 +984,7 @@ fn submit_proof_challenges_block_not_reached_fail() {
 fn submit_proof_challenges_block_too_old_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -1030,7 +1036,7 @@ fn submit_proof_challenges_block_too_old_fail() {
 
         // Advance more than `ChallengeHistoryLength` blocks.
         let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
-        run_n_blocks(challenge_history_length * 2);
+        run_to_block(challenge_history_length * 2);
 
         // Dispatch challenge extrinsic.
         let _ = ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None);
@@ -1044,7 +1050,7 @@ fn submit_proof_challenges_block_too_old_fail() {
 fn submit_proof_seed_not_found_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -1094,9 +1100,9 @@ fn submit_proof_seed_not_found_fail() {
         // Set Provider's last submitted proof block.
         LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, 1);
 
-        // Advance less than `ChallengeHistoryLength` blocks.
-        let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
-        run_n_blocks(challenge_history_length - 1);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        run_to_block(challenge_ticks_tolerance - 1);
 
         // Remove challenge seed for block 2.
         TickToChallengesSeed::<Test>::remove(2);
@@ -1113,7 +1119,7 @@ fn submit_proof_seed_not_found_fail() {
 fn submit_proof_checkpoint_challenge_not_found_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -1168,9 +1174,9 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
         println!("Block number: {:?}", System::block_number());
         TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
-        // Advance less than `ChallengeHistoryLength` blocks.
-        let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
-        run_n_blocks(challenge_history_length - 1);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        run_to_block(challenge_ticks_tolerance - 1);
 
         // Set last checkpoint challenge block to something before the challenge tick
         // that is being submitted.
@@ -1186,7 +1192,7 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
 fn submit_proof_forest_proof_verification_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -1242,9 +1248,9 @@ fn submit_proof_forest_proof_verification_fail() {
         println!("Block number: {:?}", System::block_number());
         TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
-        // Advance less than `ChallengeHistoryLength` blocks.
-        let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
-        run_n_blocks(challenge_history_length - 1);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        run_to_block(challenge_ticks_tolerance - 1);
 
         // Dispatch challenge extrinsic.
         assert_noop!(
@@ -1258,7 +1264,7 @@ fn submit_proof_forest_proof_verification_fail() {
 fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -1314,9 +1320,9 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
         println!("Block number: {:?}", System::block_number());
         TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
-        // Advance less than `ChallengeHistoryLength` blocks.
-        let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
-        run_n_blocks(challenge_history_length - 1);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        run_to_block(challenge_ticks_tolerance - 1);
 
         // Dispatch challenge extrinsic.
         // The forest proof will pass because it's not empty, so the MockVerifier will accept it,
@@ -1333,7 +1339,7 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
 fn submit_proof_out_checkpoint_challenges_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -1415,9 +1421,9 @@ fn submit_proof_out_checkpoint_challenges_fail() {
             key_proofs,
         };
 
-        // Advance less than `ChallengeHistoryLength` blocks.
-        let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
-        run_n_blocks(challenge_history_length - 1);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        run_to_block(challenge_ticks_tolerance - 1);
 
         // Dispatch challenge extrinsic.
         // The forest proof will pass because it's not empty, so the MockVerifier will accept it,
@@ -1435,7 +1441,7 @@ fn submit_proof_out_checkpoint_challenges_fail() {
 fn submit_proof_key_proof_verification_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        run_n_blocks(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -1466,9 +1472,9 @@ fn submit_proof_key_proof_verification_fail() {
         // Set Provider's last submitted proof block.
         LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
-        // Advance less than `ChallengeHistoryLength` blocks.
-        let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
-        run_n_blocks(challenge_history_length - 1);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        run_to_block(challenge_ticks_tolerance - 1);
 
         // Get the seed for block 2.
         let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
@@ -1511,5 +1517,309 @@ fn submit_proof_key_proof_verification_fail() {
             ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
             crate::Error::<Test>::KeyProofVerificationFailed
         );
+    });
+}
+
+#[test]
+fn new_challenges_round_random_and_checkpoint_challenges() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Run a block and check that the random challenge was emitted.
+        run_to_block(2);
+
+        // Build the expected random seed.
+        let challenges_ticker = ChallengesTicker::<Test>::get().encode();
+        let challenges_ticker: &[u8] = challenges_ticker.as_ref();
+        let subject = [
+            challenges_ticker,
+            &frame_system::Pallet::<Test>::block_number().to_le_bytes(),
+        ]
+        .concat();
+        let hashed_subject = blake2_256(&subject);
+        let expected_seed = H256::from_slice(&hashed_subject);
+
+        // Check that the event is emitted.
+        // This would be the first time the random seed is emitted.
+        System::assert_last_event(
+            Event::NewChallengeSeed {
+                challenges_ticker: 2,
+                seed: expected_seed,
+            }
+            .into(),
+        );
+
+        // Run another block and check that the random challenge was emitted.
+        run_to_block(3);
+
+        // Build the expected random seed.
+        let challenges_ticker = ChallengesTicker::<Test>::get().encode();
+        let challenges_ticker: &[u8] = challenges_ticker.as_ref();
+        let subject: Vec<u8> = [
+            challenges_ticker,
+            &frame_system::Pallet::<Test>::block_number().to_le_bytes(),
+        ]
+        .concat();
+        let hashed_subject = blake2_256(&subject);
+        let expected_seed = H256::from_slice(&hashed_subject);
+
+        // Check that the event is emitted.
+        // This would be the second time the random seed is emitted.
+        System::assert_last_event(
+            Event::NewChallengeSeed {
+                challenges_ticker: 3,
+                seed: expected_seed,
+            }
+            .into(),
+        );
+
+        // Run until the next checkpoint challenge block.
+        let checkpoint_challenge_period: u64 = CheckpointChallengePeriodFor::<Test>::get();
+        run_to_block(checkpoint_challenge_period);
+
+        // Expect an empty set of checkpoint challenges.
+        let challenges_ticker = ChallengesTicker::<Test>::get();
+        let checkpoint_challenges =
+            TickToCheckpointChallenges::<Test>::get(challenges_ticker).unwrap();
+        assert_eq!(checkpoint_challenges.len(), 0);
+
+        // Check that the event is emitted.
+        System::assert_last_event(
+            Event::NewCheckpointChallenge {
+                challenges_ticker,
+                challenges: Default::default(),
+            }
+            .into(),
+        );
+    });
+}
+
+#[test]
+fn new_challenges_round_random_challenges_cleanup() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Run until block number `ChallengesHistoryLength` + 1.
+        let challenges_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
+        run_to_block(challenges_history_length + 1u64);
+
+        // Check that the challenge seed for block 1 is not found.
+        assert_eq!(
+            TickToChallengesSeed::<Test>::get(1),
+            None,
+            "Challenge seed for block 1 should not be found."
+        );
+
+        // Check that the challenge seed exists for block 2.
+        let challenges_ticker = 2u64.encode();
+        let challenges_ticker: &[u8] = challenges_ticker.as_ref();
+        let subject: Vec<u8> = [challenges_ticker, &2u64.to_le_bytes()].concat();
+        let hashed_subject = blake2_256(&subject);
+        let expected_seed = H256::from_slice(&hashed_subject);
+        assert_eq!(
+            TickToChallengesSeed::<Test>::get(2),
+            Some(expected_seed),
+            "Challenge seed for block 2 should be found."
+        );
+    });
+}
+
+#[test]
+fn new_challenges_round_checkpoint_challenges_cleanup() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Run until block number 2 * `CheckpointChallengePeriod`.
+        let checkpoint_challenge_period: u64 = CheckpointChallengePeriodFor::<Test>::get();
+        run_to_block(checkpoint_challenge_period * 2);
+
+        // Check that the checkpoint challenge for block `checkpoint_challenge_period` is not found.
+        assert_eq!(
+            TickToCheckpointChallenges::<Test>::get(checkpoint_challenge_period),
+            None,
+            "Checkpoint challenge for block `CheckpointChallengePeriod` should not be found."
+        );
+
+        // Check that the checkpoint challenge exists for block `checkpoint_challenge_period * 2`.
+        assert_eq!(
+            TickToCheckpointChallenges::<Test>::get(checkpoint_challenge_period * 2),
+            Some(Default::default()),
+            "Checkpoint challenge for block `CheckpointChallengePeriod * 2` should be found."
+        )
+    });
+}
+
+#[test]
+fn new_challenges_round_checkpoint_challenges_with_custom_challenges() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Add custom challenges to the challenges vector.
+        let key_challenged = BlakeTwo256::hash(b"key_challenged");
+        assert_ok!(<crate::Pallet<Test> as ProofsDealerInterface>::challenge(
+            &key_challenged
+        ));
+
+        // Add priority challenge to the challenges vector.
+        let priority_key_challenged = BlakeTwo256::hash(b"key_challenged");
+        assert_ok!(
+            <crate::Pallet<Test> as ProofsDealerInterface>::challenge_with_priority(
+                &priority_key_challenged
+            )
+        );
+
+        // Run until the next checkpoint challenge block.
+        let checkpoint_challenge_period: u64 = CheckpointChallengePeriodFor::<Test>::get();
+        run_to_block(checkpoint_challenge_period);
+
+        // Expect checkpoint challenges to be emitted, with the priority first.
+        let challenges_ticker = ChallengesTicker::<Test>::get();
+        let checkpoint_challenges =
+            TickToCheckpointChallenges::<Test>::get(challenges_ticker).unwrap();
+        assert_eq!(checkpoint_challenges.len(), 2);
+        assert_eq!(checkpoint_challenges[0], priority_key_challenged);
+        assert_eq!(checkpoint_challenges[1], key_challenged);
+    });
+}
+
+#[test]
+fn new_challenges_round_max_custom_challenges() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Add max amount of custom challenges to the challenges vector.
+        let max_custom_challenges = ChallengesQueueLengthFor::<Test>::get();
+        for i in 0..max_custom_challenges {
+            let key_challenged = BlakeTwo256::hash(&(i as usize).to_le_bytes());
+            assert_ok!(<crate::Pallet<Test> as ProofsDealerInterface>::challenge(
+                &key_challenged
+            ));
+        }
+
+        // Add another custom challenge. It should fail.
+        assert_err!(
+            <crate::Pallet<Test> as ProofsDealerInterface>::challenge(&BlakeTwo256::hash(
+                b"key_challenged"
+            )),
+            crate::Error::<Test>::ChallengesQueueOverflow
+        );
+
+        // Add max amount of priority challenges to the challenges vector.
+        let max_priority_challenges = ChallengesQueueLengthFor::<Test>::get();
+        for i in 0..max_priority_challenges {
+            let key_challenged = BlakeTwo256::hash(&(i as usize).to_le_bytes());
+            assert_ok!(
+                <crate::Pallet<Test> as ProofsDealerInterface>::challenge_with_priority(
+                    &key_challenged
+                )
+            );
+        }
+
+        // Add another priority challenge. It should fail.
+        assert_err!(
+            <crate::Pallet<Test> as ProofsDealerInterface>::challenge_with_priority(
+                &BlakeTwo256::hash(b"key_challenged")
+            ),
+            crate::Error::<Test>::PriorityChallengesQueueOverflow
+        );
+
+        // Check how many checkpoint challenges round are needed to evacuate all the queue.
+        let queue_length: u32 = ChallengesQueueLengthFor::<Test>::get();
+        let custom_challenges_per_round: u32 = MaxCustomChallengesPerBlockFor::<Test>::get();
+        let mut checkpoint_challenge_rounds_needed = queue_length / custom_challenges_per_round;
+        if queue_length % custom_challenges_per_round != 0 {
+            checkpoint_challenge_rounds_needed += 1;
+        }
+
+        // Run until the next checkpoint challenge round.
+        let checkpoint_challenge_period: u64 = CheckpointChallengePeriodFor::<Test>::get();
+        run_to_block(checkpoint_challenge_period);
+
+        // Expect checkpoint challenges to be emitted, with the priority first.
+        let challenges_ticker = ChallengesTicker::<Test>::get();
+        let checkpoint_challenges =
+            TickToCheckpointChallenges::<Test>::get(challenges_ticker).unwrap();
+        assert_eq!(
+            checkpoint_challenges.len(),
+            custom_challenges_per_round as usize
+        );
+        for i in 0..checkpoint_challenges.len() {
+            let key_challenged = BlakeTwo256::hash(&(i as usize).to_le_bytes());
+            assert_eq!(checkpoint_challenges[i], key_challenged);
+        }
+
+        // Run until the needed checkpoint challenge block.
+        let checkpoint_challenge_period: u64 = CheckpointChallengePeriodFor::<Test>::get();
+        run_to_block(checkpoint_challenge_period * checkpoint_challenge_rounds_needed as u64);
+
+        // The length of the checkpoint challenges should be max, because even if the priority
+        // challenges don't fill the queue, the custom challenges will.
+        let challenges_ticker = ChallengesTicker::<Test>::get();
+        let checkpoint_challenges =
+            TickToCheckpointChallenges::<Test>::get(challenges_ticker).unwrap();
+        assert_eq!(
+            checkpoint_challenges.len(),
+            custom_challenges_per_round as usize
+        );
+
+        // Expect the last priority challenge to be emitted first.
+        let last_priority_challenges_amount = if queue_length % custom_challenges_per_round == 0 {
+            custom_challenges_per_round
+        } else {
+            queue_length % custom_challenges_per_round
+        };
+        let last_priority_challenges_start_index =
+            (checkpoint_challenge_rounds_needed - 1) * custom_challenges_per_round;
+        for i in 0..last_priority_challenges_amount {
+            let key_challenged = BlakeTwo256::hash(
+                &((last_priority_challenges_start_index + i) as usize).to_le_bytes(),
+            );
+            assert_eq!(checkpoint_challenges[i as usize], key_challenged);
+        }
+
+        // Calculate the custom challenges that were included in the last checkpoint challenge.
+        let last_checkpoint_challenges_amount = if queue_length % custom_challenges_per_round == 0 {
+            0
+        } else {
+            custom_challenges_per_round - (queue_length % custom_challenges_per_round)
+        };
+
+        // Check that the last checkpoint challenges contain the custom challenges.
+        let checkpoint_challenges_start_index = if queue_length % custom_challenges_per_round == 0 {
+            custom_challenges_per_round
+        } else {
+            queue_length % custom_challenges_per_round
+        };
+        let checkpoint_challenges_amount =
+            custom_challenges_per_round - checkpoint_challenges_start_index;
+        for i in 0..checkpoint_challenges_amount {
+            let key_challenged = BlakeTwo256::hash(&(i as usize).to_le_bytes());
+            assert_eq!(
+                checkpoint_challenges[(checkpoint_challenges_start_index + i) as usize],
+                key_challenged
+            );
+        }
+
+        // Run until the custom challenges are all evacuated.
+        let mut checkpoint_challenge_rounds_needed = queue_length / custom_challenges_per_round * 2;
+        if queue_length % custom_challenges_per_round != 0 {
+            checkpoint_challenge_rounds_needed += 1;
+        }
+        run_to_block(checkpoint_challenge_period * checkpoint_challenge_rounds_needed as u64);
+
+        // The last checkpoint challenge should be the last custom challenge.
+        let challenges_ticker = ChallengesTicker::<Test>::get();
+        let checkpoint_challenges =
+            TickToCheckpointChallenges::<Test>::get(challenges_ticker).unwrap();
+        let last_checkpoint_challenge = checkpoint_challenges[checkpoint_challenges.len() - 1];
+        assert_eq!(
+            last_checkpoint_challenge,
+            BlakeTwo256::hash(&((queue_length - 1) as usize).to_le_bytes())
+        )
     });
 }

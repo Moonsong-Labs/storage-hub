@@ -93,6 +93,12 @@ pub type StakeToChallengePeriodFor<T> = <T as crate::Config>::StakeToChallengePe
 /// Syntactic sugar for the ChallengeHistoryLength type used in the proofs pallet.
 pub type ChallengeHistoryLengthFor<T> = <T as crate::Config>::ChallengeHistoryLength;
 
+/// Syntactic sugar for the CheckpointChallengePeriod type used in the proofs pallet.
+pub type CheckpointChallengePeriodFor<T> = <T as crate::Config>::CheckpointChallengePeriod;
+
+/// Syntactic sugar for the ChallengeTicksTolerance type used in the proofs pallet.
+pub type ChallengeTicksToleranceFor<T> = <T as crate::Config>::ChallengeTicksTolerance;
+
 /// Syntactic sugar for the Treasury type used in the proofs pallet.
 pub type TreasuryAccountFor<T> = <T as crate::Config>::Treasury;
 
