@@ -339,11 +339,11 @@ where
         Ok(())
     }
 
-    // TODO: maybe make this only delete a chunk and iterate
-    // using the chunk_keys map, removing each one.
     // Deletes itself from the underlying db.
     fn delete(&mut self) -> Result<(), FileStorageError> {
         let mut root = self.root;
+        // TODO: not good, bad performance
+        let chunk_keys = self.chunk_keys.clone();
 
         // Need to clone because we cannot have a immutable borrow after mutably borrowing
         // in the next step.
@@ -351,20 +351,21 @@ where
         let mut trie =
             TrieDBMutBuilder::<T>::from_existing(self.as_hash_db_mut(), &mut root).build();
 
-        // Remove the file key from the trie.
+        for (_, chunk_key) in chunk_keys {
+            trie.remove(chunk_key.as_ref()).map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to delete chunk from RocksDb: {}", e);
+                FileStorageError::FailedToWriteToStorage
+            })?;
+        }
+
+        // Remove the root from the trie.
         trie.remove(trie_root_key.as_ref()).map_err(|e| {
-            error!(target: LOG_TARGET, "Failed to delete File Trie from RocksDb: {}", e);
+            error!(target: LOG_TARGET, "Failed to delete root from RocksDb: {}", e);
             FileStorageError::FailedToWriteToStorage
         })?;
 
-        dbg!(trie_root_key);
-        let x = trie.get(trie_root_key.as_ref()).unwrap();
-        dbg!(x);
-
         let new_root = *trie.root();
-        dbg!(new_root);
-        let z = trie.get(new_root.as_ref()).unwrap();
-        dbg!(z);
+
         drop(trie);
 
         // TODO: improve error handling
@@ -374,8 +375,7 @@ where
             FileStorageError::FailedToWriteToStorage
         })?;
 
-        // Set inner root as default value (no trie);
-        // self.root = HasherOutT::<T>::default();
+        // Set new internal root (no trie)
         self.root = new_root;
 
         Ok(())
@@ -571,9 +571,9 @@ where
     }
 
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError> {
-        let file_data = self.file_data.get_mut(key).expect("No File data found");
+        let file_trie = self.file_data.get_mut(key).expect("No File data found");
 
-        file_data.delete()?;
+        file_trie.delete()?;
 
         self.metadata.remove(key);
         self.file_data.remove(key);
@@ -761,7 +761,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn file_trie_deleting_works() {
         let storage = Box::new(MockStorageDb {
             data: Default::default(),

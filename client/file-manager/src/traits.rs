@@ -71,7 +71,7 @@ pub trait FileDataTrie<T: TrieLayout> {
         data: &Chunk,
     ) -> Result<(), FileStorageWriteError>;
 
-    /// Removes itself from the underlying db.
+    /// Removes all chunks from storage.
     fn delete(&mut self) -> Result<(), FileStorageError>;
 }
 
