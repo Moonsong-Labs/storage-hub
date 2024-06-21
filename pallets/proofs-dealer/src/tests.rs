@@ -9,6 +9,7 @@ use crate::{
     LastCheckpointBlock,
 };
 use frame_support::{assert_noop, assert_ok, traits::fungible::Mutate};
+use shp_traits::{ProvidersInterface, TrieRemoveMutation};
 use sp_core::{Get, Hasher};
 use sp_runtime::BoundedVec;
 use sp_runtime::{traits::BlakeTwo256, DispatchError};
@@ -733,6 +734,116 @@ fn submit_proof_with_checkpoint_challenges_success() {
             proof,
             None
         ));
+    });
+}
+
+#[test]
+fn submit_proof_with_checkpoint_challenges_mutations_success() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        System::set_block_number(1);
+
+        // Create user and add funds to the account.
+        let user = RuntimeOrigin::signed(1);
+        let user_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            user_balance
+        ));
+
+        // Register user as a Provider in Providers pallet.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                data_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's last submitted proof block.
+        LastBlockProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+
+        // Set random seed for this block challenges.
+        let seed = BlakeTwo256::hash(b"seed");
+        println!("Block number: {:?}", System::block_number());
+        BlockToChallengesSeed::<Test>::insert(System::block_number(), seed);
+
+        // Calculate challenges from seed, so that we can mock a key proof for each.
+        let mut challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
+            seed,
+            &provider_id,
+            RandomChallengesPerBlockFor::<Test>::get(),
+        );
+
+        // Set last checkpoint challenge block.
+        let checkpoint_challenge_block = System::block_number() + 1;
+        LastCheckpointBlock::<Test>::set(checkpoint_challenge_block);
+
+        // Make up custom challenges.
+        let custom_challenges = BoundedVec::try_from(vec![(
+            BlakeTwo256::hash(b"custom_challenge_1"),
+            Some(TrieRemoveMutation::default()),
+        )])
+        .unwrap();
+
+        // Set custom challenges in checkpoint block.
+        BlockToCheckpointChallenges::<Test>::insert(
+            checkpoint_challenge_block,
+            custom_challenges.clone(),
+        );
+
+        // Add custom challenges to the challenges vector.
+        challenges.extend(custom_challenges.iter().map(|(challenge, _)| *challenge));
+
+        // Creating a vec of empty key proofs for each challenge, to fail verification.
+        let mut key_proofs = BTreeMap::new();
+        for challenge in &challenges {
+            key_proofs.insert(
+                *challenge,
+                KeyProof::<Test> {
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
+                    challenge_count: Default::default(),
+                },
+            );
+        }
+
+        // Mock a proof.
+        let proof = Proof::<Test> {
+            forest_proof: CompactProof {
+                encoded_nodes: challenges.iter().map(|c| c.as_ref().to_vec()).collect(),
+            },
+            key_proofs,
+        };
+
+        // Advance less than `ChallengeHistoryLength` blocks.
+        let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
+        run_n_blocks(challenge_history_length - 1);
+
+        // Dispatch challenge extrinsic.
+        assert_ok!(ProofsDealer::submit_proof(
+            RuntimeOrigin::signed(1),
+            proof,
+            None
+        ));
+
+        // Check if root of the provider was updated the last challenge key
+        // Note: The apply_delta method is applying the mutation the root of the provider for every challenge key.
+        // This is to avoid having to construct valid tries and proofs.
+        let root =
+            <<Test as crate::Config>::ProvidersPallet as ProvidersInterface>::get_root(provider_id)
+                .unwrap();
+        assert_eq!(root.as_ref(), challenges.last().unwrap().as_ref());
     });
 }
 
