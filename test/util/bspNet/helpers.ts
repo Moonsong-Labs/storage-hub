@@ -12,6 +12,7 @@ import * as util from "node:util";
 import * as child_process from "node:child_process";
 import type { CreatedBlock, EventRecord, Hash, SignedBlock } from "@polkadot/types/interfaces";
 import { execSync } from "node:child_process";
+import { showContainers } from "./docker";
 const exec = util.promisify(child_process.exec);
 
 export const sendFileSendRpc = async (
@@ -68,6 +69,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
       (maxRetries * sleepTime) / 1000
     } seconds`
   );
+  showContainers()
   throw new Error("Error fetching container IP");
 };
 
@@ -79,6 +81,9 @@ export interface FileSendResponse {
 }
 
 export const getContainerPeerId = async (url: string, verbose = false) => {
+  const maxRetries = 60;
+  const sleepTime = 500;
+  
   const payload = {
     id: "1",
     jsonrpc: "2.0",
@@ -86,7 +91,7 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
     params: [],
   };
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < maxRetries; i++) {
     verbose && console.log(`Waiting for node at ${url} to launch...`);
 
     try {
@@ -104,9 +109,16 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
       const resp = (await response.json()) as any;
       return resp.result as string;
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, sleepTime));
     }
   }
+  
+  console.log(
+    `Error fetching peerId from ${url} after ${
+      (maxRetries * sleepTime) / 1000
+    } seconds`
+  );
+  showContainers()
   throw new Error(`Error fetching peerId from ${url}`);
 };
 
@@ -126,7 +138,7 @@ export const runBspNet = async () => {
     const bspIp = await getContainerIp(NODE_INFOS.bsp.containerName);
     console.log(`sh-bsp IP: ${bspIp}`);
 
-    const bspPeerId = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.bsp.port}`);
+    const bspPeerId = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.bsp.port}`, true);
     console.log(`sh-bsp Peer ID: ${bspPeerId}`);
 
     process.env.BSP_IP = bspIp;

@@ -22,3 +22,12 @@ export const checkFileChecksum = async (filePath: string) => {
   const output = execSync(`docker exec ${containerId} sha256sum ${loc}`);
   return output.toString().split(" ")[0];
 };
+
+export const showContainers = () => {
+  try {
+    execSync("docker ps -a", { stdio: "inherit" });
+  } catch (e) {
+    console.log(e);
+    console.log("Error displaying docker containers");
+  }
+};
