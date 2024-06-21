@@ -59,7 +59,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Convert, Verify},
     AccountId32, DispatchError, FixedU128, Perbill, SaturatedConversion,
 };
-use sp_std::vec::Vec;
+use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::CompactProof;
 use sp_trie::LayoutV1;
 use sp_version::RuntimeVersion;
@@ -69,13 +69,12 @@ use xcm::latest::prelude::BodyId;
 use super::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection,
-    FileSystem, Hash, MessageQueue, Nfts, Nonce, PalletInfo, ParachainSystem, ProofsDealer,
-    Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason,
-    RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System, WeightToFee, XcmpQueue,
-    AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS, EXISTENTIAL_DEPOSIT, HOURS,
-    MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
+    FileSystem, Hash, MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem,
+    ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
+    RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
+    WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS,
+    EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
     RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
-    {ParachainInfo, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES},
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
@@ -507,8 +506,6 @@ parameter_types! {
     pub const StakeToChallengePeriod: Balance = 10 * UNIT;
 }
 
-pub const H_LENGTH: usize = BlakeTwo256::LENGTH;
-
 impl pallet_proofs_dealer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;
@@ -518,9 +515,9 @@ impl pallet_proofs_dealer::Config for Runtime {
     type ForestVerifier = ForestVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type KeyVerifier = FileKeyVerifier<
         LayoutV1<BlakeTwo256>,
-        { H_LENGTH },
-        { FILE_CHUNK_SIZE },
-        { FILE_SIZE_TO_CHALLENGES },
+        { shp_file_key_verifier::consts::H_LENGTH },
+        { shp_file_key_verifier::consts::FILE_CHUNK_SIZE },
+        { shp_file_key_verifier::consts::FILE_SIZE_TO_CHALLENGES },
     >;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = RandomChallengesPerBlock;
@@ -554,9 +551,9 @@ where
         _root: &Self::Commitment,
         challenges: &[Self::Challenge],
         proof: &CompactProof,
-    ) -> Result<Vec<Self::Challenge>, DispatchError> {
+    ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            Ok(challenges.to_vec())
+            Ok(challenges.iter().cloned().collect())
         } else {
             Err("Proof is empty".into())
         }

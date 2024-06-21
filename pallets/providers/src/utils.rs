@@ -898,25 +898,6 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
         Buckets::<T>::remove(&bucket_id);
         Ok(())
     }
-
-    // BSP specific functions:
-    fn change_root_bsp(
-        who: BackupStorageProviderId<T>,
-        new_root: MerklePatriciaRoot<T>,
-    ) -> DispatchResult {
-        if let Some(b) = BackupStorageProviders::<T>::get(&who) {
-            BackupStorageProviders::<T>::insert(
-                who,
-                BackupStorageProvider {
-                    root: new_root,
-                    ..b
-                },
-            );
-        } else {
-            return Err(Error::<T>::NotRegistered.into());
-        }
-        Ok(())
-    }
 }
 
 impl<T: pallet::Config> ProvidersConfig for pallet::Pallet<T> {
@@ -1042,5 +1023,28 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
         } else {
             None
         }
+    }
+
+    fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult {
+        if let Some(bucket) = Buckets::<T>::get(&who) {
+            Buckets::<T>::insert(
+                &who,
+                Bucket {
+                    root: new_root,
+                    ..bucket
+                },
+            );
+        } else if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
+            BackupStorageProviders::<T>::insert(
+                &who,
+                BackupStorageProvider {
+                    root: new_root,
+                    ..bsp
+                },
+            );
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        }
+        Ok(())
     }
 }

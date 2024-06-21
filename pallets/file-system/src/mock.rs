@@ -5,14 +5,15 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
-use shp_traits::{CommitmentVerifier, MaybeDebug};
-use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
+use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
+use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     traits::{BlakeTwo256, Bounded, Convert, IdentifyAccount, IdentityLookup, Verify},
     BuildStorage, DispatchError, FixedU128, MultiSignature, SaturatedConversion,
 };
-use sp_trie::CompactProof;
+use sp_std::collections::btree_set::BTreeSet;
+use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieLayout};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -215,8 +216,8 @@ impl pallet_proofs_dealer::Config for Test {
     type NativeBalance = Balances;
     type MerkleTrieHash = H256;
     type MerkleTrieHashing = BlakeTwo256;
-    type ForestVerifier = MockVerifier<H256>;
-    type KeyVerifier = MockVerifier<H256>;
+    type ForestVerifier = MockVerifier<H256, LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
+    type KeyVerifier = MockVerifier<H256, LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
@@ -232,29 +233,51 @@ impl pallet_proofs_dealer::Config for Test {
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
 /// and `false` otherwise.
-pub struct MockVerifier<C> {
-    _phantom: core::marker::PhantomData<C>,
+pub struct MockVerifier<C, T: TrieLayout, const H_LENGTH: usize> {
+    _phantom: core::marker::PhantomData<(C, T)>,
 }
 
-/// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl<C> CommitmentVerifier for MockVerifier<C>
+/// Implement the `TrieVerifier` trait for the `MockForestManager` struct.
+impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifier<C, T, H_LENGTH>
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
     type Proof = CompactProof;
     type Commitment = H256;
-    type Challenge = C;
+    type Challenge = H256;
 
     fn verify_proof(
         _root: &Self::Commitment,
-        challenges: &[Self::Challenge],
+        _challenges: &[Self::Challenge],
         proof: &CompactProof,
-    ) -> Result<Vec<Self::Challenge>, DispatchError> {
+    ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            Ok(challenges.to_vec())
+            Ok(proof
+                .encoded_nodes
+                .iter()
+                .map(|node| H256::from_slice(&node[..]))
+                .collect())
         } else {
             Err("Proof is empty".into())
         }
+    }
+}
+
+impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
+    for MockVerifier<C, T, H_LENGTH>
+where
+    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
+{
+    type Proof = CompactProof;
+    type Key = <T::Hash as sp_core::Hasher>::Out;
+
+    fn apply_delta(
+        root: &Self::Key,
+        _mutations: &[(Self::Key, TrieMutation)],
+        _proof: &Self::Proof,
+    ) -> Result<(MemoryDB<T::Hash>, Self::Key), DispatchError> {
+        // Just return the root as is with no mutations
+        Ok((MemoryDB::<T::Hash>::default(), *root))
     }
 }
 

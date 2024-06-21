@@ -1,7 +1,3 @@
-// TODO: Remove this attribute once the file is implemented.
-#![allow(dead_code)]
-#![allow(unused_variables)]
-
 use codec::Encode;
 use frame_support::{
     ensure,
@@ -10,11 +6,15 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::prelude::vec::Vec;
-use shp_traits::{CommitmentVerifier, ProofsDealerInterface, ProvidersInterface};
+use shp_traits::{
+    CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, TrieMutation,
+    TrieProofDeltaApplier, TrieRemoveMutation,
+};
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, Convert, Hash, Zero},
     ArithmeticError, DispatchError, Saturating,
 };
+use sp_std::collections::btree_set::BTreeSet;
 
 use crate::{
     pallet,
@@ -182,21 +182,57 @@ where
         // the current block. If there has been, the Provider should have included proofs for the
         // challenges in that block.
         let last_checkpoint_block = LastCheckpointBlock::<T>::get();
+        let mut checkpoint_challenges = None;
         if last_block_proven < last_checkpoint_block {
             // Add challenges from the Checkpoint Challenge block.
-            let checkpoint_challenges =
-                expect_or_err!(
+            checkpoint_challenges =
+                Some(expect_or_err!(
                     BlockToCheckpointChallenges::<T>::get(last_checkpoint_block),
                     "Checkpoint challenges not found, when dereferencing in last registered checkpoint challenge block.",
                     Error::<T>::CheckpointChallengesNotFound
-                );
-            challenges.extend(checkpoint_challenges);
+                ));
+
+            if let Some(ref checkpoint_challenges) = checkpoint_challenges {
+                challenges.extend(checkpoint_challenges.iter().map(|(key, _)| key));
+            }
         }
 
         // Verify forest proof.
-        let forest_keys_proven =
+        let mut forest_keys_proven =
             ForestVerifierFor::<T>::verify_proof(&root, &challenges, forest_proof)
                 .map_err(|_| Error::<T>::ForestProofVerificationFailed)?;
+
+        // Apply the delta to the Forest root for all mutations that are in checkpoint challenges.
+        if let Some(challenges) = checkpoint_challenges {
+            // Aggregate all mutations to apply to the Forest root.
+            let mutations: Vec<_> = challenges
+                .iter()
+                .filter_map(|(key, mutation)| match mutation {
+                    Some(mutation) if forest_keys_proven.contains(key) => Some((*key, mutation)),
+                    Some(_) | None => None,
+                })
+                .collect();
+
+            if !mutations.is_empty() {
+                let new_root = mutations.iter().try_fold(root, |acc_root, mutation| {
+                    // Remove the key from the list of `forest_keys_proven` to avoid having to verify the key proof.
+                    forest_keys_proven.remove(&mutation.0);
+
+                    <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
+                        &acc_root,
+                        &[(mutation.0, mutation.1.clone().into())],
+                        forest_proof,
+                    )
+                    .map(|(_, new_root)| new_root)
+                    .map_err(|_| Error::<T>::FailedToApplyDelta)
+                })?;
+
+                // Update root of Provider after all mutations have been applied to the Forest.
+                <T::ProvidersPallet as shp_traits::ProvidersInterface>::update_root(
+                    *submitter, new_root,
+                )?;
+            }
+        };
 
         // Verify each key proof.
         for key_proven in forest_keys_proven {
@@ -244,7 +280,7 @@ where
         let mut challenges_queue = ChallengesQueue::<T>::get();
 
         // Check if challenge is already queued. If it is, just return.
-        if challenges_queue.contains(key) {
+        if challenges_queue.contains(&key) {
             return Ok(());
         }
 
@@ -259,22 +295,25 @@ where
         Ok(())
     }
 
-    /// Add challenge to PriorityChallengesQueue.
+    /// Add challenge to `PriorityChallengesQueue`.
     ///
     /// Check if challenge is already queued. If it is, just return. Otherwise, add the challenge
     /// to the queue.
-    fn enqueue_challenge_with_priority(key: &KeyFor<T>) -> DispatchResult {
+    fn enqueue_challenge_with_priority(
+        key: &KeyFor<T>,
+        mutation: Option<TrieRemoveMutation>,
+    ) -> DispatchResult {
         // Get priority challenges queue from storage.
         let mut priority_challenges_queue = PriorityChallengesQueue::<T>::get();
 
         // Check if challenge is already queued. If it is, just return.
-        if priority_challenges_queue.contains(key) {
+        if priority_challenges_queue.contains(&(*key, mutation.clone())) {
             return Ok(());
         }
 
         // Add challenge to queue.
         priority_challenges_queue
-            .try_push(*key)
+            .try_push((*key, mutation))
             .map_err(|_| Error::<T>::PriorityChallengesQueueOverflow)?;
 
         // Set priority challenges queue in storage.
@@ -329,7 +368,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         who: &Self::ProviderId,
         challenges: &[Self::MerkleHash],
         proof: &Self::ForestProof,
-    ) -> Result<Vec<Self::MerkleHash>, DispatchError> {
+    ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError> {
         // Check if submitter is a registered Provider.
         ensure!(
             ProvidersPalletFor::<T>::is_provider(*who),
@@ -350,7 +389,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         key: &Self::MerkleHash,
         challenges: &[Self::MerkleHash],
         proof: &Self::KeyProof,
-    ) -> Result<Vec<Self::MerkleHash>, DispatchError> {
+    ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError> {
         // Verify key proof.
         KeyVerifierFor::<T>::verify_proof(key, &challenges, proof)
             .map_err(|_| Error::<T>::KeyProofVerificationFailed.into())
@@ -360,7 +399,24 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         Self::enqueue_challenge(key_challenged)
     }
 
-    fn challenge_with_priority(key_challenged: &Self::MerkleHash) -> DispatchResult {
-        Self::enqueue_challenge_with_priority(key_challenged)
+    fn challenge_with_priority(
+        key_challenged: &Self::MerkleHash,
+        mutation: Option<TrieRemoveMutation>,
+    ) -> DispatchResult {
+        Self::enqueue_challenge_with_priority(key_challenged, mutation)
+    }
+
+    fn apply_delta(
+        commitment: &Self::MerkleHash,
+        mutations: &[(Self::MerkleHash, TrieMutation)],
+        proof: &Self::ForestProof,
+    ) -> Result<Self::MerkleHash, DispatchError> {
+        Ok(
+            <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
+                commitment, mutations, proof,
+            )
+            .map_err(|_| Error::<T>::FailedToApplyDelta)?
+            .1,
+        )
     }
 }

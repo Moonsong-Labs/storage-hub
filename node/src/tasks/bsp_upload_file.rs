@@ -3,10 +3,10 @@ use std::{fs::create_dir_all, path::Path, str::FromStr, time::Duration};
 use anyhow::anyhow;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
+use shp_file_key_verifier::consts::H_LENGTH;
 use shp_file_key_verifier::types::ChunkId;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
-use storage_hub_runtime::H_LENGTH;
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use shc_actors_framework::event_bus::EventHandler;
