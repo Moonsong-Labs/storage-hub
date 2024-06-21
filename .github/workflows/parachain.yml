@@ -226,12 +226,15 @@ jobs:
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
           docker cp temp_storage_hub:/storage-hub/storage-hub-node target/release/storage-hub-node
           docker rm temp_storage_hub
-      - name: Run Zombienet Test!
+      - name: Run Zombienet setup
         run: |
           chmod +x target/release/storage-hub-node
           cd test
           pnpm  install
           pnpm  tsx scripts/downloadPolkadot.ts 1.8.0
+      - name: Run Zombienet Test!
+        run: |
+          cd test
           pnpm  zombienet test --provider native configs/simpleNative.zndsl
 
   dev_node_test:
@@ -267,11 +270,13 @@ jobs:
           cd test
           pnpm install
           pnpm docker:build
-      - name: Run Dev Node Tests
+      - name: Run Typegen
         run: |
           cd test
           pnpm typegen
-
+      - name: Run Dev Node Tests
+        run: |
+          cd test
           node --import tsx                         \
                --test                               \
                --test-reporter=@reporters/github    \
@@ -316,11 +321,13 @@ jobs:
             cd test
             pnpm install
             pnpm docker:build
-        - name: Run BSPNet Tests
+        - name: Run Typegen
           run: |
             cd test
             pnpm typegen
-  
+        - name: Run BSPNet Tests
+          run: |
+            cd test
             node --import tsx                        \
                 --test                               \
                 --test-reporter=@reporters/github    \
