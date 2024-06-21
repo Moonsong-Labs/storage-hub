@@ -167,6 +167,7 @@ jobs:
     if: always()
     name: "Run Para & Relay Network Test"
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -206,6 +207,7 @@ jobs:
     needs: [build_image, setup]
     if: always()
     name: "Run Zombienet Tests"
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -234,6 +236,7 @@ jobs:
 
   dev_node_test:
     needs: [build_image, setup]
+    timeout-minutes: 30
     if: always()
     name: "Run Dev Node Tests"
     runs-on: ubuntu-latest
@@ -276,7 +279,6 @@ jobs:
                --test-reporter=spec                 \
                --test-reporter-destination=stdout   \
                --test-shard=${{ matrix.shard }}/4   \
-               --test-force-exit                    \
                ./suites/solo-node/**/**.test.ts
                
   bsp_net:
@@ -284,6 +286,7 @@ jobs:
       if: always()
       name: "Run BSPNet Tests"
       runs-on: ubuntu-latest
+      timeout-minutes: 30
       strategy:
         fail-fast: false
         matrix:
@@ -291,6 +294,8 @@ jobs:
       steps:
         - uses: actions/checkout@v4
         - uses: ./.github/workflow-templates/setup-pnpm
+          with:
+            node_version: 22
         - run: mkdir -p target/release/
         - name: Get Node Binary if changed
           if: needs.setup.outputs.node_changed == 'true'

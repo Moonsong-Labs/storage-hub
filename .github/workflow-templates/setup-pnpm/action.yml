@@ -1,13 +1,19 @@
 name: Setup pnpm & cache
 description: Installs pnpm and caches the pnpm store
 
+inputs:
+  node_version:
+    description: 'Node.js version'
+    default: '21'
+    required: false
+
 runs:
   using: composite
   steps:
     - name: Install Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: 21
+        node-version: ${{ inputs.node_version }}
 
     - name: Install pnpm
       uses: pnpm/action-setup@v4
