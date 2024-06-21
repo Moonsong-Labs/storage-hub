@@ -3,6 +3,8 @@ import { execSync, spawn } from "node:child_process";
 import path from "node:path";
 
 const fetchMetadata = async () => {
+  const maxRetries = 60;
+  const sleepTime = 500;
   const url = "http://localhost:9944";
   const payload = {
     id: "1",
@@ -11,7 +13,7 @@ const fetchMetadata = async () => {
     params: [],
   };
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < maxRetries; i++) {
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -28,14 +30,25 @@ const fetchMetadata = async () => {
       return response.arrayBuffer();
     } catch {
       console.log("Waiting for node to launch...");
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, sleepTime));
     }
   }
+  console.log(
+    `Error fetching container IP  after ${
+      (maxRetries * sleepTime) / 1000
+    } seconds`,
+  );
   throw new Error("Error fetching metadata");
 };
 
 async function main() {
-  const nodePath = path.join(process.cwd(), "..", "target", "release", "storage-hub-node");
+  const nodePath = path.join(
+    process.cwd(),
+    "..",
+    "target",
+    "release",
+    "storage-hub-node",
+  );
   const metadataPath = path.join(process.cwd(), "storagehub.json");
 
   if (!fs.existsSync(nodePath)) {
@@ -54,7 +67,7 @@ async function main() {
     ],
     {
       stdio: "inherit",
-    }
+    },
   );
 
   const metadata = await fetchMetadata();
@@ -69,5 +82,7 @@ main()
     process.exitCode = 1;
   })
   .finally(() => {
-    execSync("docker compose -f=../docker/local-node-compose.yml down --remove-orphans --volumes");
+    execSync(
+      "docker compose -f=../docker/local-node-compose.yml down --remove-orphans --volumes",
+    );
   });
