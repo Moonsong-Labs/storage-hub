@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use anyhow::Result;
 use codec::{Decode, Encode};
@@ -335,17 +335,17 @@ impl BlockchainService {
                             size,
                             user_peer_ids: peer_ids,
                         }),
-                        // A BSP will only process this event if itself triggered it.
+                        // This event should only be of any use if a node is run by as a user.
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::AcceptedBspVolunteer {
-                                who,
+                                bsp_id,
                                 location,
                                 fingerprint,
                                 multiaddresses,
                                 owner,
                                 size,
                             },
-                        ) if who
+                        ) if owner
                             == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) =>
                         {
                             // We try to convert the types coming from the runtime into our expected types.
@@ -354,17 +354,25 @@ impl BlockchainService {
                             // and we need to convert them. Returns if any of the provided multiaddresses are invalid.
                             let mut multiaddress_vec: Vec<Multiaddr> = Vec::new();
                             for raw_multiaddr in multiaddresses.into_iter() {
-                                let result = Multiaddr::try_from(raw_multiaddr.into_inner());
-                                if let Ok(multiaddr) = result {
-                                    multiaddress_vec.push(multiaddr);
-                                } else {
-                                    error!(target: LOG_TARGET, "Malformed Multiaddress in AcceptedBspVolunteer event. bsp: {:?}, file owner: {:?}, file fingerprint: {:?}", who, owner, fingerprint);
-                                    return;
-                                }
+                                let multiaddress = match std::str::from_utf8(&raw_multiaddr) {
+                                    Ok(s) => match Multiaddr::from_str(s) {
+                                        Ok(multiaddr) => multiaddr,
+                                        Err(e) => {
+                                            error!(target: LOG_TARGET, "Failed to parse Multiaddress from string in AcceptedBspVolunteer event. bsp: {:?}, file owner: {:?}, file fingerprint: {:?}\n Error: {:?}", bsp_id, owner, fingerprint, e);
+                                            return;
+                                        }
+                                    },
+                                    Err(e) => {
+                                        error!(target: LOG_TARGET, "Failed to parse Multiaddress from bytes in AcceptedBspVolunteer event. bsp: {:?}, file owner: {:?}, file fingerprint: {:?}\n Error: {:?}", bsp_id, owner, fingerprint, e);
+                                        return;
+                                    }
+                                };
+
+                                multiaddress_vec.push(multiaddress);
                             }
 
                             self.emit(AcceptedBspVolunteer {
-                                who,
+                                bsp_id,
                                 location,
                                 fingerprint,
                                 multiaddresses: multiaddress_vec,

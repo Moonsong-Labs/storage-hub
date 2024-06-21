@@ -1,14 +1,16 @@
 use crate as pallet_payment_streams;
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
-    traits::{Everything, Randomness},
+    traits::{AsEnsureOriginWithArg, Everything, Randomness},
     weights::constants::RocksDbWeight,
 };
 use frame_system as system;
+use pallet_nfts::PalletFeatures;
 use shp_traits::SubscribeProvidersInterface;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256};
 use sp_runtime::traits::Convert;
 use sp_runtime::{
+    testing::TestSignature,
     traits::{BlakeTwo256, IdentityLookup},
     BuildStorage, DispatchResult,
 };
@@ -17,6 +19,9 @@ use system::pallet_prelude::BlockNumberFor;
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
 type StorageUnit = u32;
+// type Signature = MultiSignature;
+// type AccountPublic = <Signature as Verify>::Signer;
+type AccountId = u64;
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
@@ -50,7 +55,8 @@ construct_runtime!(
         System: frame_system,
         Balances: pallet_balances,
         StorageProviders: pallet_storage_providers,
-        PaymentStreams: pallet_payment_streams
+        PaymentStreams: pallet_payment_streams,
+        Nfts: pallet_nfts
     }
 );
 
@@ -70,7 +76,7 @@ impl system::Config for Test {
     type Nonce = u64;
     type Hash = H256;
     type Hashing = BlakeTwo256;
-    type AccountId = u64;
+    type AccountId = AccountId;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Block = Block;
     type RuntimeEvent = RuntimeEvent;
@@ -113,6 +119,7 @@ impl pallet_storage_providers::Config for Test {
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
+    type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
@@ -126,6 +133,41 @@ impl pallet_storage_providers::Config for Test {
     type DepositPerData = ConstU128<2>;
     type Subscribers = MockedProvidersSubscriber;
     type ProvidersRandomness = MockRandomness;
+    type BucketNameLimit = ConstU32<100>;
+}
+
+parameter_types! {
+    pub storage Features: PalletFeatures = PalletFeatures::all_enabled();
+}
+
+impl pallet_nfts::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type CollectionId = u128;
+    type ItemId = u128;
+    type Currency = Balances;
+    type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<Self::AccountId>>;
+    type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+    type Locker = ();
+    type CollectionDeposit = ConstU128<2>;
+    type ItemDeposit = ConstU128<1>;
+    type MetadataDepositBase = ConstU128<1>;
+    type AttributeDepositBase = ConstU128<1>;
+    type DepositPerByte = ConstU128<1>;
+    type StringLimit = ConstU32<50>;
+    type KeyLimit = ConstU32<50>;
+    type ValueLimit = ConstU32<50>;
+    type ApprovalsLimit = ConstU32<10>;
+    type ItemAttributesApprovalsLimit = ConstU32<2>;
+    type MaxTips = ConstU32<10>;
+    type MaxDeadlineDuration = ConstU64<10000>;
+    type MaxAttributesPerCall = ConstU32<2>;
+    type Features = Features;
+    type OffchainSignature = TestSignature;
+    type OffchainPublic = <TestSignature as sp_runtime::traits::Verify>::Signer;
+    type WeightInfo = ();
+    pallet_nfts::runtime_benchmarks_enabled! {
+        type Helper = ();
+    }
 }
 
 parameter_types! {

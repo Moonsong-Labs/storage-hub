@@ -116,6 +116,7 @@ impl crate::Config for Test {
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
+    type ReadAccessGroupId = u32;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
@@ -124,6 +125,7 @@ impl crate::Config for Test {
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
+    type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;

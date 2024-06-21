@@ -15,6 +15,7 @@ publish = false
 workspace = true
 
 [dependencies]
+codec = { workspace = true }
 bincode = { workspace = true }
 codec = { workspace = true }
 hash-db = { workspace = true }
@@ -30,5 +31,6 @@ sp-runtime = { workspace = true }
 sp-state-machine = { workspace = true }
 sp-trie = { workspace = true, default-features = true }
 
+shp-traits = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }

@@ -40,6 +40,7 @@ sp-io = { workspace = true }
 
 # Frame
 pallet-balances = { workspace = true, features = ["std"] }
+pallet-nfts = { workspace = true }
 
 [features]
 default = ["std"]

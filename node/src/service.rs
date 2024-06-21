@@ -1,9 +1,10 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
 // std
-use std::{sync::Arc, time::Duration};
+use std::{cell::RefCell, sync::Arc, time::Duration};
 
 use async_channel::Receiver;
+use chrono::Utc;
 use codec::Encode;
 use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
@@ -517,6 +518,34 @@ where
         }
     }
 
+    thread_local!(static TIMESTAMP: RefCell<u64> = RefCell::new(Utc::now().timestamp_millis().try_into().unwrap()));
+
+    /// Provide a mock duration starting at 0 in millisecond for timestamp inherent.
+    /// Each call will increment timestamp by slot_duration making Aura think time has passed.
+    struct MockTimestampInherentDataProvider;
+
+    #[async_trait::async_trait]
+    impl sp_inherents::InherentDataProvider for MockTimestampInherentDataProvider {
+        async fn provide_inherent_data(
+            &self,
+            inherent_data: &mut sp_inherents::InherentData,
+        ) -> Result<(), sp_inherents::Error> {
+            TIMESTAMP.with(|x| {
+                *x.borrow_mut() += storage_hub_runtime::SLOT_DURATION;
+                inherent_data.put_data(sp_timestamp::INHERENT_IDENTIFIER, &*x.borrow())
+            })
+        }
+
+        async fn try_handle_error(
+            &self,
+            _identifier: &sp_inherents::InherentIdentifier,
+            _error: &[u8],
+        ) -> Option<Result<(), sp_inherents::Error>> {
+            // The pallet never reports error.
+            None
+        }
+    }
+
     if collator {
         let proposer = sc_basic_authorship::ProposerFactory::with_proof_recording(
             task_manager.spawn_handle(),
@@ -567,14 +596,23 @@ where
                     let relay_slot_key = RelayChainWellKnownKeys::CURRENT_SLOT.to_vec();
 
                     async move {
-                        let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+                        let mut timestamp = 0u64;
+                        // This allows us to create multiple blocks without considering the actualy slot duration wait time. We increment the timestamp by slot_duration in inherent data.
+                        TIMESTAMP.with(|x| {
+                            timestamp = x.clone().take();
+                        });
+
+                        // If we don't increment the timestamp, we will hit a para slot and relay slot mismatch.
+                        timestamp += storage_hub_runtime::SLOT_DURATION;
 
 						let relay_slot = sp_consensus_aura::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
-							*timestamp,
+							timestamp.into(),
 							slot_duration,
 						);
 
                         let additional_keys = vec![(para_head_key, para_head_data), (relay_slot_key, Slot::from(u64::from(*relay_slot)).encode())];
+
+                        let time = MockTimestampInherentDataProvider;
 
                         let mocked_parachain = {
                             MockValidationDataInherentDataProvider {
@@ -595,7 +633,7 @@ where
                             }
                         };
 
-                        Ok((relay_slot, mocked_parachain, timestamp))
+                        Ok((relay_slot, mocked_parachain, time))
                     }
                 },
             }),

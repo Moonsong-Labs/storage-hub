@@ -1,0 +1,32 @@
+services:
+  sh-collator:
+    image: storage-hub:local
+    platform: linux/amd64
+    ports:
+      - "9955:9944"
+    volumes:
+      - ./dev-keystores/collator:/keystore:ro
+    command:
+      [
+        "--dev",
+        "--unsafe-rpc-external",
+        "--rpc-cors=all",
+        "--no-hardware-benchmarks",
+      ]
+  sh-bsp:
+    image: storage-hub:local
+    platform: linux/amd64
+    ports:
+      - "9966:9944"
+    volumes:
+      - ./dev-keystores/bsp:/keystore:ro
+    command:
+      [
+        "--dev",
+        "--provider",
+        "--provider-type=bsp",
+        "--no-hardware-benchmarks",
+        "--unsafe-rpc-external",
+        "--rpc-cors=all",
+        "--keystore-path=/keystore",
+      ]

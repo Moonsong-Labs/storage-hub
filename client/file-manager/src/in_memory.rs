@@ -1,9 +1,10 @@
-use std::collections::HashMap;
-
-use shc_common::types::{Chunk, ChunkId, FileMetadata, FileProof, HasherOutT, Leaf, H_LENGTH};
-
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
+use std::collections::HashMap;
 use trie_db::TrieDBMutBuilder;
+
+use shc_common::types::{
+    Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HasherOutT, H_LENGTH,
+};
 
 use crate::traits::{
     FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError, FileStorageWriteOutcome,
@@ -34,10 +35,13 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
         &self.root
     }
 
-    fn stored_chunks_count(&self) -> u64 {
+    fn stored_chunks_count(&self) -> Result<u64, FileStorageError> {
         let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
-        let stored_chunks = trie.key_iter().iter().count() as u64;
-        stored_chunks
+        let trie_iter = trie
+            .iter()
+            .map_err(|_| FileStorageError::FailedToConstructTrieIter)?;
+        let stored_chunks = trie_iter.count() as u64;
+        Ok(stored_chunks)
     }
 
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError> {
@@ -54,7 +58,7 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
         let mut chunks = Vec::new();
         for chunk_id in chunk_ids {
             let chunk: Option<Vec<u8>> = trie
-                .get(&chunk_id.to_be_bytes())
+                .get(&chunk_id.as_trie_key())
                 .map_err(|_| FileStorageError::FailedToGetFileChunk)?;
 
             let chunk = chunk.ok_or(FileStorageError::FileChunkDoesNotExist)?;
@@ -70,26 +74,16 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
             .to_compact_proof::<T::Hash>(self.root)
             .map_err(|_| FileStorageError::FailedToGenerateCompactProof)?;
 
-        // Convert the chunks to prove into `Leaf`s.
-        let leaves = chunks
-            .into_iter()
-            .map(|(id, chunk)| Leaf {
-                key: id,
-                data: chunk,
-            })
-            .collect();
-
         Ok(FileProof {
-            proven: leaves,
             proof: proof.into(),
-            root: self.get_root().as_ref().into(),
+            fingerprint: self.get_root().as_ref().into(),
         })
     }
 
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError> {
         let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
 
-        trie.get(&chunk_id.to_be_bytes())
+        trie.get(&chunk_id.as_trie_key())
             .map_err(|_| FileStorageError::FailedToGetFileChunk)?
             .ok_or(FileStorageError::FileChunkDoesNotExist)
     }
@@ -99,18 +93,24 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<(), FileStorageWriteError> {
-        let mut trie = TrieDBMutBuilder::<T>::new(&mut self.memdb, &mut self.root).build();
+        let mut trie = if self.memdb.keys().is_empty() {
+            // If the database is empty, create a new trie.
+            TrieDBMutBuilder::<T>::new(&mut self.memdb, &mut self.root).build()
+        } else {
+            // If the database is not empty, build the trie from an existing root and memdb.
+            TrieDBMutBuilder::<T>::from_existing(&mut self.memdb, &mut self.root).build()
+        };
 
         // Check that we don't have a chunk already stored.
         if trie
-            .contains(&chunk_id.to_be_bytes())
+            .contains(&chunk_id.as_trie_key())
             .map_err(|_| FileStorageWriteError::FailedToGetFileChunk)?
         {
             return Err(FileStorageWriteError::FileChunkAlreadyExists);
         }
 
         // Insert the chunk into the file trie.
-        trie.insert(&chunk_id.to_be_bytes(), &data)
+        trie.insert(&chunk_id.as_trie_key(), &data)
             .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
 
         // dropping the trie automatically commits changes to the underlying db
@@ -157,7 +157,7 @@ where
         &self,
         file_key: &HasherOutT<T>,
         chunk_id: &Vec<ChunkId>,
-    ) -> Result<FileProof, FileStorageError> {
+    ) -> Result<FileKeyProof, FileStorageError> {
         let metadata = self
             .metadata
             .get(file_key)
@@ -171,7 +171,8 @@ where
             .as_str(),
         );
 
-        if metadata.chunks_count() != file_data.stored_chunks_count() {
+        let stored_chunks = file_data.stored_chunks_count()?;
+        if metadata.chunks_count() != stored_chunks {
             return Err(FileStorageError::IncompleteFile);
         }
 
@@ -185,7 +186,9 @@ where
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 
-        file_data.generate_proof(chunk_id)
+        Ok(file_data
+            .generate_proof(chunk_id)?
+            .to_file_key_proof(metadata.clone()))
     }
 
     fn delete_file(&mut self, file_key: &HasherOutT<T>) -> Result<(), FileStorageError> {
@@ -263,24 +266,6 @@ where
             .get_mut(file_key)
             .ok_or(FileStorageWriteError::FileDoesNotExist)?;
 
-        let mut trie =
-            TrieDBMutBuilder::<T>::new(&mut file_data.memdb, &mut file_data.root).build();
-
-        // Check that we don't have a chunk already stored.
-        if trie
-            .contains(&chunk_id.to_be_bytes())
-            .map_err(|_| FileStorageWriteError::FailedToGetFileChunk)?
-        {
-            return Err(FileStorageWriteError::FileChunkAlreadyExists);
-        }
-
-        // Insert the chunk into the file trie.
-        trie.insert(&chunk_id.to_be_bytes(), &data)
-            .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
-        drop(trie);
-
-        // TODO: check if lines 254-268 might be unnecessary because we
-        // do that inside the file_data.write_chunk() method.
         file_data.write_chunk(chunk_id, data)?;
 
         let metadata = self.metadata.get(file_key).expect(
@@ -291,7 +276,10 @@ where
         );
 
         // Check if we have all the chunks for the file.
-        if metadata.chunks_count() != file_data.stored_chunks_count() {
+        let stored_chunks = file_data
+            .stored_chunks_count()
+            .map_err(|_| FileStorageWriteError::FailedToConstructTrieIter)?;
+        if metadata.chunks_count() != stored_chunks {
             return Ok(FileStorageWriteOutcome::FileIncomplete);
         }
 

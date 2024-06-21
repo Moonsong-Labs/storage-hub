@@ -1,15 +1,16 @@
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
-    traits::{Everything, Hooks, Randomness},
+    traits::{AsEnsureOriginWithArg, Everything, Hooks, Randomness},
     weights::{constants::RocksDbWeight, Weight},
 };
 use frame_system as system;
+use pallet_nfts::PalletFeatures;
 use shp_traits::{CommitmentVerifier, MaybeDebug};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
-    traits::{BlakeTwo256, Bounded, Convert, IdentityLookup},
-    AccountId32, BuildStorage, DispatchError, FixedU128, SaturatedConversion,
+    traits::{BlakeTwo256, Bounded, Convert, IdentifyAccount, IdentityLookup, Verify},
+    BuildStorage, DispatchError, FixedU128, MultiSignature, SaturatedConversion,
 };
 use sp_trie::CompactProof;
 use system::pallet_prelude::BlockNumberFor;
@@ -17,7 +18,9 @@ use system::pallet_prelude::BlockNumberFor;
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
 type Balance = u128;
-type AccountId = AccountId32;
+type Signature = MultiSignature;
+type AccountPublic = <Signature as Verify>::Signer;
+type AccountId = <AccountPublic as IdentifyAccount>::AccountId;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10;
 const UNITS: Balance = 1_000_000_000_000;
@@ -79,6 +82,8 @@ construct_runtime!(
         FileSystem: crate::{Pallet, Call, Storage, Event<T>},
         Providers: pallet_storage_providers::{Pallet, Call, Storage, Event<T>, HoldReason},
         ProofsDealer: pallet_proofs_dealer::{Pallet, Call, Storage, Event<T>},
+        BucketNfts: pallet_bucket_nfts::{Pallet, Call, Storage, Event<T>},
+        Nfts: pallet_nfts::{Pallet, Call, Storage, Event<T>},
     }
 );
 
@@ -132,6 +137,40 @@ impl pallet_balances::Config for Test {
 }
 
 parameter_types! {
+    pub storage Features: PalletFeatures = PalletFeatures::all_enabled();
+}
+
+impl pallet_nfts::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type CollectionId = u128;
+    type ItemId = u128;
+    type Currency = Balances;
+    type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<Self::AccountId>>;
+    type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+    type Locker = ();
+    type CollectionDeposit = ConstU128<2>;
+    type ItemDeposit = ConstU128<1>;
+    type MetadataDepositBase = ConstU128<1>;
+    type AttributeDepositBase = ConstU128<1>;
+    type DepositPerByte = ConstU128<1>;
+    type StringLimit = ConstU32<50>;
+    type KeyLimit = ConstU32<50>;
+    type ValueLimit = ConstU32<50>;
+    type ApprovalsLimit = ConstU32<10>;
+    type ItemAttributesApprovalsLimit = ConstU32<2>;
+    type MaxTips = ConstU32<10>;
+    type MaxDeadlineDuration = ConstU64<10000>;
+    type MaxAttributesPerCall = ConstU32<2>;
+    type Features = Features;
+    type OffchainSignature = Signature;
+    type OffchainPublic = AccountPublic;
+    type WeightInfo = ();
+    pallet_nfts::runtime_benchmarks_enabled! {
+        type Helper = ();
+    }
+}
+
+parameter_types! {
     pub const MaxNumberOfPeerIds: u32 = 100;
     pub const MaxMultiAddressSize: u32 = 100;
     pub const MaxMultiAddressAmount: u32 = 5;
@@ -145,12 +184,14 @@ impl pallet_storage_providers::Config for Test {
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type ValuePropId = H256;
+    type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = ConstU32<100>;
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
+    type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
@@ -217,6 +258,13 @@ where
     }
 }
 
+impl pallet_bucket_nfts::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type Providers = Providers;
+    #[cfg(feature = "runtime-benchmarks")]
+    type Helper = ();
+}
+
 pub(crate) type ThresholdType = FixedU128;
 
 parameter_types! {
@@ -232,6 +280,9 @@ impl crate::Config for Test {
     type Fingerprint = H256;
     type StorageRequestBspsRequiredType = u32;
     type ThresholdType = ThresholdType;
+    type Currency = Balances;
+    type Nfts = Nfts;
+    type CollectionInspector = BucketNfts;
     type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
     type AssignmentThresholdAsymptote = ThresholdAsymptote;
     type AssignmentThresholdMultiplier = ThresholdMultiplier;

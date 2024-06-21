@@ -5,7 +5,7 @@ use thiserror::Error;
 use sc_network::{Multiaddr, PeerId, ProtocolName, RequestFailure};
 
 use shc_actors_framework::actor::ActorHandle;
-use shc_common::types::{ChunkId, FileKey, FileProof};
+use shc_common::types::{ChunkId, FileKey, FileKeyProof};
 
 use super::{schema, FileTransferService};
 
@@ -14,7 +14,7 @@ pub enum FileTransferServiceCommand {
     UploadRequest {
         peer_id: PeerId,
         file_key: FileKey,
-        chunk_with_proof: FileProof,
+        file_key_proof: FileKeyProof,
         callback: tokio::sync::oneshot::Sender<
             futures::channel::oneshot::Receiver<Result<(Vec<u8>, ProtocolName), RequestFailure>>,
         >,
@@ -69,7 +69,7 @@ pub trait FileTransferServiceInterface {
         &self,
         peer_id: PeerId,
         file_key: FileKey,
-        data: FileProof,
+        file_key_proof: FileKeyProof,
     ) -> Result<schema::v1::provider::RemoteUploadDataResponse, RequestError>;
 
     async fn download_request(
@@ -101,13 +101,13 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         &self,
         peer_id: PeerId,
         file_key: FileKey,
-        chunk_with_proof: FileProof,
+        file_key_proof: FileKeyProof,
     ) -> Result<schema::v1::provider::RemoteUploadDataResponse, RequestError> {
         let (callback, file_transfer_rx) = tokio::sync::oneshot::channel();
         let command = FileTransferServiceCommand::UploadRequest {
             peer_id,
             file_key,
-            chunk_with_proof,
+            file_key_proof,
             callback,
         };
         self.send(command).await;
