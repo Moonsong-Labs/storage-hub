@@ -78,7 +78,7 @@ Wait for zombie network to start, and then:
 #### 2. Run Setup & Tests
 
 ```shell
-pnpm update-types
+pnpm typegen
 pnpm zombie:setup:native
 pnpm zombie:test suites/zombie
 ```
@@ -125,11 +125,11 @@ From here you can interact via the websockets exposed in the direct links, in th
 
 ## Generating new Type Interfaces
 
-This repo uses Parity's [polkadot-api](https://github.com/polkadot-api/polkadot-api) AKA PAPI.
+This repo uses polkadot{.js} [TS Type Generation](https://polkadot.js.org/docs/api/examples/promise/typegeni) AKA `api-augment`.
 To generate new type interfaces run the following in `/test`:
 
 ```sh
-pnpm update-types
+pnpm typegen
 ```
 
 ## Misc

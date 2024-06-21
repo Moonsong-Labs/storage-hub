@@ -1,8 +1,6 @@
 import fs from "node:fs";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import path from "node:path";
-
-let nodeProcess: ChildProcess | undefined = undefined;
 
 const fetchMetadata = async () => {
   const url = "http://localhost:9944";
@@ -45,19 +43,19 @@ async function main() {
     throw new Error("File not found");
   }
 
-  nodeProcess = spawn("docker", ["compose", "-f=../docker/local-node-compose.yml", "up"]);
-
-  const onProcessExit = () => {
-    nodeProcess?.kill();
-  };
-
-  process.once("exit", onProcessExit);
-  process.once("SIGINT", onProcessExit);
-
-  nodeProcess.once("exit", () => {
-    process.removeListener("exit", onProcessExit);
-    process.removeListener("SIGINT", onProcessExit);
-  });
+  spawn(
+    "docker",
+    [
+      "compose",
+      "-f=../docker/local-node-compose.yml",
+      "up",
+      "--remove-orphans",
+      "--renew-anon-volumes",
+    ],
+    {
+      stdio: "inherit",
+    }
+  );
 
   const metadata = await fetchMetadata();
   fs.writeFileSync(metadataPath, Buffer.from(metadata));
@@ -68,10 +66,8 @@ async function main() {
 main()
   .catch((error) => {
     console.error(error);
-    nodeProcess?.kill();
-    process.exit(1);
+    process.exitCode = 1;
   })
-  .then(() => {
-    nodeProcess?.kill();
-    process.exit(0);
+  .finally(() => {
+    execSync("docker compose -f=../docker/local-node-compose.yml down --remove-orphans --volumes");
   });

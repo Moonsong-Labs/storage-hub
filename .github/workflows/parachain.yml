@@ -195,7 +195,7 @@ jobs:
       - name: Setup
         run: |
           cd test
-          pnpm update-types
+          pnpm typegen
           pnpm zombie:setup:native
       - name: Run Zombienet Test!
         run: |
@@ -267,7 +267,7 @@ jobs:
       - name: Run Dev Node Tests
         run: |
           cd test
-          pnpm update-types
+          pnpm typegen
 
           node --import tsx                         \
                --test                               \
@@ -313,7 +313,7 @@ jobs:
         - name: Run Dev Node Tests
           run: |
             cd test
-            pnpm update-types
+            pnpm typegen
   
             node --import tsx                        \
                 --test                               \

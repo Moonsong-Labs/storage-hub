@@ -185,10 +185,13 @@ export const closeBspNet = async () => {
   return compose.down({
     config: composeFilePath,
     log: true,
+    commandOptions: ["--volumes", "--remove-orphans"],
   });
 };
 
 // TODO: Add a succesful flag to track whether ext was successful or not
+//        Determine whether extrinsic was successful or not based on the
+//        ExtrinsicSucess event
 export interface SealedBlock {
   blockReceipt: CreatedBlock;
   txHash?: string;

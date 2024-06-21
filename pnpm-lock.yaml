@@ -81,12 +81,6 @@ importers:
       '@storagehub/api-augment':
         specifier: link:../api-augment
         version: link:../api-augment
-      '@types/dockerode':
-        specifier: 3.3.29
-        version: 3.3.29
-      '@types/dockerode-compose':
-        specifier: 1.4.1
-        version: 1.4.1
       '@types/inquirer':
         specifier: 9.0.7
         version: 9.0.7
@@ -685,9 +679,6 @@ packages:
 
   '@types/docker-modem@3.0.6':
     resolution: {integrity: sha512-yKpAGEuKRSS8wwx0joknWxsmLha78wNMe9R2S3UNsVOkZded8UqOrV8KoeDXoXsjndxwyF3eIhyClGbO1SEhEg==}
-
-  '@types/dockerode-compose@1.4.1':
-    resolution: {integrity: sha512-AouE5+t2bghPrCxWGabBGqvXQDF1Hym0NCuCVDzI3vI5KbucWyLBPUIwZK+a9qb3v2Wr9VvBJzHrHLS5r1VM/w==}
 
   '@types/dockerode@3.3.29':
     resolution: {integrity: sha512-5PRRq/yt5OT/Jf77ltIdz4EiR9+VLnPF+HpU4xGFwUqmV24Co2HKBNW3w+slqZ1CYchbcDeqJASHDYWzZCcMiQ==}
@@ -2643,10 +2634,6 @@ snapshots:
     dependencies:
       '@types/node': 20.14.2
       '@types/ssh2': 1.15.0
-
-  '@types/dockerode-compose@1.4.1':
-    dependencies:
-      '@types/dockerode': 3.3.29
 
   '@types/dockerode@3.3.29':
     dependencies:
