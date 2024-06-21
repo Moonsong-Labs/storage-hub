@@ -6,7 +6,7 @@ use kvdb::{DBTransaction, KeyValueDB};
 use kvdb_rocksdb::{Database, DatabaseConfig};
 use log::{debug, error};
 use shc_common::types::{
-    Chunk, ChunkId, FileMetadata, FileProof, HashT, HasherOutT, Leaf, H_LENGTH,
+    Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, Leaf, H_LENGTH,
 };
 use sp_state_machine::{warn, Storage};
 use sp_trie::{
@@ -211,7 +211,7 @@ where
         &self.root
     }
 
-    fn stored_chunks_count(&self) -> u64 {
+    fn stored_chunks_count(&self) -> Result<u64, FileStorageError> {
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
 
@@ -222,7 +222,7 @@ where
             count += 1
         }
 
-        count as u64
+        Ok(count as u64)
     }
 
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError> {
@@ -261,20 +261,9 @@ where
             .to_compact_proof::<T::Hash>(self.root)
             .map_err(|_| FileStorageError::FailedToGenerateCompactProof)?;
 
-        // Convert the chunks to prove into `Leaf`s.
-        let leaves = chunks
-            .into_iter()
-            .map(|(id, chunk)| Leaf {
-                key: id,
-                data: chunk,
-            })
-            .collect();
-
-        // Shouldnt root be `FileKey` instead of `Fingerprint`?
         Ok(FileProof {
-            proven: leaves,
             proof: proof.into(),
-            root: self.get_root().as_ref().into(),
+            fingerprint: self.get_root().as_ref().into(),
         })
     }
 
@@ -492,7 +481,10 @@ where
             );
 
         // Check if we have all the chunks for the file.
-        if metadata.chunks_count() != file_data.stored_chunks_count() {
+        let stored_chunks = file_data
+            .stored_chunks_count()
+            .map_err(|_| FileStorageWriteError::FailedToConstructTrieIter)?;
+        if metadata.chunks_count() != stored_chunks {
             return Ok(FileStorageWriteOutcome::FileIncomplete);
         }
 
@@ -537,7 +529,7 @@ where
         &self,
         key: &HasherOutT<T>,
         chunk_ids: &Vec<ChunkId>,
-    ) -> Result<FileProof, FileStorageError> {
+    ) -> Result<FileKeyProof, FileStorageError> {
         let metadata = self
             .metadata
             .get(key)
@@ -551,9 +543,8 @@ where
             .as_str(),
         );
 
-        if metadata.chunks_count() != file_data.stored_chunks_count() {
-            println!("METADATA: {:?}", metadata.chunks_count());
-            println!("FILE TRIE: {:?}", file_data.stored_chunks_count());
+        let stored_chunks = file_data.stored_chunks_count()?;
+        if metadata.chunks_count() != stored_chunks {
             return Err(FileStorageError::IncompleteFile);
         }
 
@@ -567,7 +558,9 @@ where
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 
-        file_data.generate_proof(chunk_ids)
+        Ok(file_data
+            .generate_proof(chunk_ids)?
+            .to_file_key_proof(metadata.clone()))
     }
 
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError> {

@@ -89,7 +89,7 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         &self,
         key: &HasherOutT<T>,
         chunk_ids: &Vec<ChunkId>,
-    ) -> Result<FileProof, FileStorageError>;
+    ) -> Result<FileKeyProof, FileStorageError>;
 
     /// Remove a file from storage.
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError>;
