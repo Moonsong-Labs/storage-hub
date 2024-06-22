@@ -529,7 +529,8 @@ fn submit_proof_success() {
         ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
 
         // Advance less than `ChallengeTicksTolerance` blocks.
-        run_to_block(challenge_ticks_tolerance - 1);
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
 
         // Get the seed for block 2.
         let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
@@ -1935,6 +1936,193 @@ fn new_challenges_round_provider_marked_as_slashable() {
         let new_deadline = expected_new_tick + challenge_period + challenge_ticks_tolerance;
         assert_eq!(
             ChallengeTickToChallengedProviders::<Test>::get(new_deadline, provider_id),
+            Some(()),
+        );
+    });
+}
+
+#[test]
+fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Create an Alice user and add funds to the account.
+        let alice = RuntimeOrigin::signed(1);
+        let alice_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            alice_balance
+        ));
+
+        // Create a Bob user and add funds to the account.
+        let bob = RuntimeOrigin::signed(2);
+        let bob_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &2,
+            bob_balance
+        ));
+
+        // Register Alice as a Provider in Providers pallet.
+        let alice_provider_id = BlakeTwo256::hash(b"alice_id");
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            alice_provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &alice_provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                data_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                payment_account: Default::default(),
+            },
+        );
+
+        // Register Bob as a Provider in Providers pallet.
+        let bob_provider_id = BlakeTwo256::hash(b"bob_id");
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &2,
+            bob_provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &bob_provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                data_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                payment_account: Default::default(),
+            },
+        );
+
+        // Set Alice and Bob's last submitted proof block.
+        let current_tick = ChallengesTicker::<Test>::get();
+        let last_tick_provider_submitted_proof = current_tick;
+        LastTickProviderSubmittedProofFor::<Test>::insert(
+            &alice_provider_id,
+            last_tick_provider_submitted_proof,
+        );
+        LastTickProviderSubmittedProofFor::<Test>::insert(
+            &bob_provider_id,
+            last_tick_provider_submitted_proof,
+        );
+
+        // Set Alice and Bob's deadline for submitting a proof.
+        // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(alice_provider_id).unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = current_tick + challenge_period_plus_tolerance;
+        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, alice_provider_id, ());
+        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, bob_provider_id, ());
+
+        // Check that Alice and Bob are not in the SlashableProviders storage map.
+        assert!(!SlashableProviders::<Test>::contains_key(
+            &alice_provider_id
+        ));
+        assert!(!SlashableProviders::<Test>::contains_key(&bob_provider_id));
+
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
+
+        // Get the seed for block 2.
+        let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
+
+        // Calculate challenges from seed, so that we can mock a key proof for each.
+        let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
+            seed,
+            &alice_provider_id,
+            RandomChallengesPerBlockFor::<Test>::get(),
+        );
+
+        // Creating a vec of proofs with some content to pass verification.
+        let mut key_proofs = BTreeMap::new();
+        for challenge in challenges {
+            key_proofs.insert(
+                challenge,
+                KeyProof::<Test> {
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
+                    challenge_count: Default::default(),
+                },
+            );
+        }
+
+        // Mock a proof.
+        let proof = Proof::<Test> {
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            key_proofs,
+        };
+
+        // Have Alice submit a proof.
+        assert_ok!(ProofsDealer::submit_proof(
+            RuntimeOrigin::signed(1),
+            proof.clone(),
+            None
+        ));
+
+        // Check for event submitted.
+        System::assert_last_event(
+            Event::ProofAccepted {
+                provider: alice_provider_id,
+                proof,
+            }
+            .into(),
+        );
+
+        // Advance to the deadline block for this Provider.
+        run_to_block(prev_deadline);
+
+        // // Check event of Bob being marked as slashable.
+        // System::assert_has_event(
+        //     Event::SlashableProvider {
+        //         provider: bob_provider_id,
+        //     }
+        //     .into(),
+        // );
+
+        // Check that Bob is in the SlashableProviders storage map and that Alice is not.
+        assert!(!SlashableProviders::<Test>::contains_key(
+            &alice_provider_id
+        ));
+        assert!(SlashableProviders::<Test>::contains_key(&bob_provider_id));
+
+        // Check the new last time Bob and Alice submitted a proof.
+        let expected_new_tick = last_tick_provider_submitted_proof + challenge_period;
+        let new_last_tick_alice_submitted_proof =
+            LastTickProviderSubmittedProofFor::<Test>::get(alice_provider_id).unwrap();
+        assert_eq!(expected_new_tick, new_last_tick_alice_submitted_proof);
+        let new_last_tick_bob_submitted_proof =
+            LastTickProviderSubmittedProofFor::<Test>::get(bob_provider_id).unwrap();
+        assert_eq!(expected_new_tick, new_last_tick_bob_submitted_proof);
+
+        // Check that the both Alice and Bob's deadlines were pushed forward.
+        assert_eq!(
+            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, alice_provider_id),
+            None
+        );
+        let new_deadline = expected_new_tick + challenge_period + challenge_ticks_tolerance;
+        assert_eq!(
+            ChallengeTickToChallengedProviders::<Test>::get(new_deadline, alice_provider_id),
+            Some(()),
+        );
+        assert_eq!(
+            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, bob_provider_id),
+            None
+        );
+        let new_deadline = expected_new_tick + challenge_period + challenge_ticks_tolerance;
+        assert_eq!(
+            ChallengeTickToChallengedProviders::<Test>::get(new_deadline, bob_provider_id),
             Some(()),
         );
     });
