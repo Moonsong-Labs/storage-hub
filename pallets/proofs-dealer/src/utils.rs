@@ -482,7 +482,7 @@ where
     ///
     /// Stake is divided by `StakeToChallengePeriod` to get the number of blocks in between challenges
     /// for a Provider. The result is then converted to `BlockNumber` type.
-    fn stake_to_challenge_period(stake: BalanceFor<T>) -> BlockNumberFor<T> {
+    pub(crate) fn stake_to_challenge_period(stake: BalanceFor<T>) -> BlockNumberFor<T> {
         let block_period = stake
             .checked_div(&StakeToChallengePeriodFor::<T>::get())
             .unwrap_or(1u32.into());

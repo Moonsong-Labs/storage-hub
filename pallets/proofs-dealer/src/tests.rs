@@ -4,13 +4,13 @@ use std::vec;
 use crate::pallet::Event;
 use crate::types::{
     ChallengeHistoryLengthFor, ChallengeTicksToleranceFor, ChallengesQueueLengthFor,
-    CheckpointChallengePeriodFor, KeyProof, MaxCustomChallengesPerBlockFor,
+    CheckpointChallengePeriodFor, KeyProof, MaxCustomChallengesPerBlockFor, ProvidersPalletFor,
     RandomChallengesPerBlockFor,
 };
 use crate::{mock::*, types::Proof};
 use crate::{
-    ChallengesTicker, LastCheckpointTick, LastTickProviderSubmittedProofFor, TickToChallengesSeed,
-    TickToCheckpointChallenges,
+    ChallengeTickToChallengedProviders, ChallengesTicker, LastCheckpointTick,
+    LastTickProviderSubmittedProofFor, TickToChallengesSeed, TickToCheckpointChallenges,
 };
 use codec::Encode;
 use frame_support::assert_err;
@@ -19,7 +19,7 @@ use frame_support::{
     traits::{fungible::Mutate, OnPoll},
     weights::WeightMeter,
 };
-use shp_traits::ProofsDealerInterface;
+use shp_traits::{ProofsDealerInterface, ProvidersInterface};
 use sp_core::{blake2_256, Get, Hasher, H256};
 use sp_runtime::BoundedVec;
 use sp_runtime::{traits::BlakeTwo256, DispatchError};
@@ -510,14 +510,24 @@ fn submit_proof_success() {
         );
 
         // Set Provider's last submitted proof block.
-        let last_tick_provider_submitted_proof = System::block_number();
+        let current_tick = ChallengesTicker::<Test>::get();
+        let last_tick_provider_submitted_proof = current_tick;
         LastTickProviderSubmittedProofFor::<Test>::insert(
             &provider_id,
             last_tick_provider_submitted_proof,
         );
 
-        // Advance less than `ChallengeTicksTolerance` blocks.
+        // Set Provider's deadline for submitting a proof.
+        // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id).unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = current_tick + challenge_period_plus_tolerance;
+        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+
+        // Advance less than `ChallengeTicksTolerance` blocks.
         run_to_block(challenge_ticks_tolerance - 1);
 
         // Get the seed for block 2.
@@ -552,15 +562,38 @@ fn submit_proof_success() {
             key_proofs,
         };
 
-        // Check provider deadline before submitting proof.
-        // Should be `ChallengeTicksTolerance` after the last submitted proof.
-
         // Dispatch challenge extrinsic.
         assert_ok!(ProofsDealer::submit_proof(
             RuntimeOrigin::signed(1),
-            proof,
+            proof.clone(),
             None
         ));
+
+        // Check for event submitted.
+        System::assert_last_event(
+            Event::ProofAccepted {
+                provider: provider_id,
+                proof,
+            }
+            .into(),
+        );
+
+        // Check the new last time this provider submitted a proof.
+        let expected_new_tick = last_tick_provider_submitted_proof + challenge_period;
+        let new_last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedProofFor::<Test>::get(provider_id).unwrap();
+        assert_eq!(expected_new_tick, new_last_tick_provider_submitted_proof);
+
+        // Check that the Provider's deadline was pushed forward.
+        assert_eq!(
+            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id),
+            None
+        );
+        let new_deadline = expected_new_tick + challenge_period + challenge_ticks_tolerance;
+        assert_eq!(
+            ChallengeTickToChallengedProviders::<Test>::get(new_deadline, provider_id),
+            Some(()),
+        );
     });
 }
 
@@ -1532,11 +1565,7 @@ fn new_challenges_round_random_and_checkpoint_challenges() {
         // Build the expected random seed.
         let challenges_ticker = ChallengesTicker::<Test>::get().encode();
         let challenges_ticker: &[u8] = challenges_ticker.as_ref();
-        let subject = [
-            challenges_ticker,
-            &frame_system::Pallet::<Test>::block_number().to_le_bytes(),
-        ]
-        .concat();
+        let subject = [challenges_ticker, &System::block_number().to_le_bytes()].concat();
         let hashed_subject = blake2_256(&subject);
         let expected_seed = H256::from_slice(&hashed_subject);
 
