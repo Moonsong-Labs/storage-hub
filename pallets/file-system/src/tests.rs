@@ -812,10 +812,7 @@ fn revoke_request_storage_success() {
             vec![file_key]
         );
 
-        assert_ok!(FileSystem::revoke_storage_request(
-            owner.clone(),
-            file_key
-        ));
+        assert_ok!(FileSystem::revoke_storage_request(owner.clone(), file_key));
 
         System::assert_last_event(Event::StorageRequestRevoked { file_key }.into());
     });
@@ -907,17 +904,10 @@ fn revoke_storage_request_with_volunteered_bsps_success() {
             )
                 .unwrap();
 
-        let file_key = FileSystem::compute_file_key(
-            owner_account.clone(),
-            location.clone(),
-            4,
-            fingerprint,
-        );
+        let file_key =
+            FileSystem::compute_file_key(owner_account.clone(), location.clone(), 4, fingerprint);
 
-        assert_ok!(FileSystem::bsp_volunteer(
-            bsp_signed.clone(),
-            file_key,
-        ));
+        assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
         // Check StorageRequestBsps storage for confirmed BSPs
         assert_eq!(
@@ -930,10 +920,7 @@ fn revoke_storage_request_with_volunteered_bsps_success() {
         );
 
         // Dispatch a signed extrinsic.
-        assert_ok!(FileSystem::revoke_storage_request(
-            owner.clone(),
-            file_key
-        ));
+        assert_ok!(FileSystem::revoke_storage_request(owner.clone(), file_key));
 
         // Assert that the correct event was deposited
         System::assert_last_event(Event::StorageRequestRevoked { file_key }.into());
@@ -971,17 +958,10 @@ fn revoke_storage_request_with_confirmed_bsps_success() {
 
         assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-        let file_key = FileSystem::compute_file_key(
-            owner_account.clone(),
-            location.clone(),
-            4,
-            fingerprint,
-        );
+        let file_key =
+            FileSystem::compute_file_key(owner_account.clone(), location.clone(), 4, fingerprint);
 
-        assert_ok!(FileSystem::bsp_volunteer(
-            bsp_signed.clone(),
-            file_key,
-        ));
+        assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
         assert_ok!(FileSystem::bsp_confirm_storing(
             bsp_signed.clone(),
@@ -996,10 +976,7 @@ fn revoke_storage_request_with_confirmed_bsps_success() {
         ));
 
         // Dispatch a signed extrinsic.
-        assert_ok!(FileSystem::revoke_storage_request(
-            owner.clone(),
-            file_key
-        ));
+        assert_ok!(FileSystem::revoke_storage_request(owner.clone(), file_key));
 
         // Check ProofsDealer pallet storage for queued custom challenges for remove trie mutation of file key
         let priority_challenges_queue = PriorityChallengesQueue::<Test>::get();
@@ -1042,12 +1019,8 @@ fn bsp_volunteer_success() {
         // Sign up account as a Backup Storage Provider
         assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-        let file_key = FileSystem::compute_file_key(
-            owner.clone(),
-            location.clone(),
-            4,
-            fingerprint,
-        );
+        let file_key =
+            FileSystem::compute_file_key(owner.clone(), location.clone(), 4, fingerprint);
 
         let bsp_id =
             <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
@@ -1056,10 +1029,7 @@ fn bsp_volunteer_success() {
             .unwrap();
 
         // Dispatch BSP volunteer.
-        assert_ok!(FileSystem::bsp_volunteer(
-            bsp_signed.clone(),
-            file_key,
-        ));
+        assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
         // Assert that the RequestStorageBsps has the correct value
         assert_eq!(
@@ -1096,12 +1066,8 @@ fn bsp_volunteer_storage_request_not_found_fail() {
 
         assert_ok!(bsp_sign_up(bsp_signed.clone(), 100,));
 
-        let file_key = FileSystem::compute_file_key(
-            bsp_account_id.clone(),
-            location.clone(),
-            4,
-            fingerprint,
-        );
+        let file_key =
+            FileSystem::compute_file_key(bsp_account_id.clone(), location.clone(), 4, fingerprint);
 
         assert_noop!(
             FileSystem::bsp_volunteer(bsp_signed.clone(), file_key),
@@ -1149,10 +1115,7 @@ fn bsp_already_volunteered_failed() {
         );
 
         // Dispatch BSP volunteer.
-        assert_ok!(FileSystem::bsp_volunteer(
-            bsp_signed.clone(),
-            file_key
-        ));
+        assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
 
         assert_noop!(
             FileSystem::bsp_volunteer(bsp_signed.clone(), file_key),
@@ -1253,10 +1216,7 @@ fn bsp_confirm_storing_success() {
             .unwrap();
 
         // Dispatch BSP volunteer.
-        assert_ok!(FileSystem::bsp_volunteer(
-            bsp_signed.clone(),
-            file_key,
-        ));
+        assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
         // Dispatch BSP confirm storing.
         assert_ok!(FileSystem::bsp_confirm_storing(
@@ -1334,12 +1294,8 @@ fn bsp_confirm_storing_storage_request_not_found_fail() {
         // Sign up account as a Backup Storage Provider
         assert_ok!(bsp_sign_up(bsp_signed.clone(), 100,));
 
-        let file_key = FileSystem::compute_file_key(
-            bsp_account_id.clone(),
-            location.clone(),
-            4,
-            H256::zero(),
-        );
+        let file_key =
+            FileSystem::compute_file_key(bsp_account_id.clone(), location.clone(), 4, H256::zero());
 
         assert_noop!(
             FileSystem::bsp_confirm_storing(
@@ -1452,10 +1408,7 @@ fn bsp_already_confirmed_fail() {
         );
 
         // Dispatch BSP volunteer.
-        assert_ok!(FileSystem::bsp_volunteer(
-            bsp_signed.clone(),
-            file_key,
-        ));
+        assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
         // Dispatch BSP confirm storing.
         assert_ok!(FileSystem::bsp_confirm_storing(
@@ -1587,10 +1540,7 @@ fn bsp_stop_storing_success() {
             .unwrap();
 
         // Dispatch BSP volunteer.
-        assert_ok!(FileSystem::bsp_volunteer(
-            bsp_signed.clone(),
-            file_key,
-        ));
+        assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
         // Dispatch BSP confirm storing.
         assert_ok!(FileSystem::bsp_confirm_storing(
@@ -1735,10 +1685,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
             .unwrap();
 
         // Dispatch BSP volunteer.
-        assert_ok!(FileSystem::bsp_volunteer(
-            bsp_signed.clone(),
-            file_key
-        ));
+        assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
 
         // Dispatch BSP confirm storing.
         assert_ok!(FileSystem::bsp_confirm_storing(

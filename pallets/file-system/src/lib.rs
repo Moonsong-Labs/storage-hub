@@ -545,10 +545,7 @@ pub mod pallet {
         /// that some of the collateral tokens of that MSP are frozen.
         #[pallet::call_index(5)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
-        pub fn bsp_volunteer(
-            origin: OriginFor<T>,
-            file_key: MerkleHash<T>,
-        ) -> DispatchResult {
+        pub fn bsp_volunteer(origin: OriginFor<T>, file_key: MerkleHash<T>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 

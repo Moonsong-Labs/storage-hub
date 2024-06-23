@@ -212,12 +212,7 @@ impl<T: pallet::Config> Pallet<T> {
         };
 
         // Compute the file key used throughout this file's lifespan.
-        let file_key = Self::compute_file_key(
-            sender.clone(),
-            location.clone(),
-            size,
-            fingerprint,
-        );
+        let file_key = Self::compute_file_key(sender.clone(), location.clone(), size, fingerprint);
 
         // Check a storage request does not already exist for this file key.
         ensure!(
@@ -274,7 +269,7 @@ impl<T: pallet::Config> Pallet<T> {
         (
             ProviderIdFor<T>,
             MultiAddresses<T>,
-            StorageRequestMetadata<T>
+            StorageRequestMetadata<T>,
         ),
         DispatchError,
     > {
@@ -309,7 +304,8 @@ impl<T: pallet::Config> Pallet<T> {
 
         // Compute BSP's threshold
         let bsp_threshold: T::ThresholdType = Self::compute_bsp_xor(
-            storage_request_metadata.fingerprint
+            storage_request_metadata
+                .fingerprint
                 .as_ref()
                 .try_into()
                 .map_err(|_| Error::<T>::FailedToEncodeFingerprint)?,
@@ -665,18 +661,22 @@ impl<T: pallet::Config> Pallet<T> {
                             bool
                         );
 
-                        storage_request_metadata.bsps_confirmed =
-                            storage_request_metadata.bsps_confirmed.saturating_sub(1u32.into());
+                        storage_request_metadata.bsps_confirmed = storage_request_metadata
+                            .bsps_confirmed
+                            .saturating_sub(1u32.into());
 
-                        storage_request_metadata.bsps_volunteered =
-                            storage_request_metadata.bsps_volunteered.saturating_sub(1u32.into());
+                        storage_request_metadata.bsps_volunteered = storage_request_metadata
+                            .bsps_volunteered
+                            .saturating_sub(1u32.into());
 
                         <StorageRequestBsps<T>>::remove(&file_key, &bsp_id);
                     }
                     // We hit scenario 2. There is an open storage request but the BSP is not a volunteer.
                     // We need to increment the number of bsps required.
                     None => {
-                        storage_request_metadata.bsps_required = storage_request_metadata.bsps_required.saturating_add(1u32.into())
+                        storage_request_metadata.bsps_required = storage_request_metadata
+                            .bsps_required
+                            .saturating_add(1u32.into())
                     }
                 }
 
@@ -765,7 +765,7 @@ impl<T: pallet::Config> Pallet<T> {
 
         // Reset the current expiration block pointer if it is lower than the minimum storage request TTL.
         if <NextAvailableExpirationInsertionBlock<T>>::get() < min_expiration_block {
-            <NextAvailableExpirationInsertionBlock<T>>::set(min_expiration_block.clone());
+            <NextAvailableExpirationInsertionBlock<T>>::set(min_expiration_block);
         }
 
         let block_to_insert_expiration = max(

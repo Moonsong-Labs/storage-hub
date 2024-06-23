@@ -36,6 +36,7 @@ use sc_tracing::tracing::{error, info};
 use serde_json::Number;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::Fingerprint;
+use shp_file_key_verifier::types::FileKey;
 use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::{Keystore, KeystorePtr};
@@ -45,7 +46,6 @@ use sp_runtime::{
 };
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
-use shp_file_key_verifier::types::FileKey;
 
 use crate::{
     service::ParachainClient,
