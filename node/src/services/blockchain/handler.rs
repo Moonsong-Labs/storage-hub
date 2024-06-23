@@ -45,6 +45,7 @@ use sp_runtime::{
 };
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
+use shp_file_key_verifier::types::FileKey;
 
 use crate::{
     service::ParachainClient,
@@ -323,6 +324,7 @@ impl BlockchainService {
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::NewStorageRequest {
                                 who,
+                                file_key,
                                 location,
                                 fingerprint,
                                 size,
@@ -330,6 +332,7 @@ impl BlockchainService {
                             },
                         ) => self.emit(NewStorageRequest {
                             who,
+                            file_key: FileKey::from(file_key.as_ref()),
                             location,
                             fingerprint: fingerprint.as_ref().into(),
                             size,

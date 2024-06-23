@@ -3,6 +3,7 @@ use std::{fs::create_dir_all, path::Path, str::FromStr, time::Duration};
 use anyhow::anyhow;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
+use sp_core::H256;
 use shp_file_key_verifier::consts::H_LENGTH;
 use shp_file_key_verifier::types::ChunkId;
 use sp_runtime::AccountId32;
@@ -233,12 +234,6 @@ where
     where
         HasherOutT<T>: TryFrom<[u8; 32]>,
     {
-        let fingerprint: [u8; 32] = event
-            .fingerprint
-            .as_ref()
-            .try_into()
-            .expect("Fingerprint should be 32 bytes; qed");
-
         // Construct file metadata.
         let metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
@@ -282,8 +277,7 @@ where
         // Build extrinsic.
         let call =
             storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
-                location: event.location.clone(),
-                fingerprint: fingerprint.into(),
+                file_key: H256(file_key.into()),
             });
 
         // Send extrinsic and wait for it to be included in the block.
