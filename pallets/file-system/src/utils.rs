@@ -141,7 +141,7 @@ impl<T: pallet::Config> Pallet<T> {
     /// *Callable only by the owner of the bucket. The bucket must be private.*
     ///
     /// It is possible to have a bucket that is private but does not have a collection associated with it. This can happen if
-    /// a user destroys the collection associated with the bucket by calling the nets pallet directly.
+    /// a user destroys the collection associated with the bucket by calling the NFTs pallet directly.
     ///
     /// In any case, we will set a new collection the bucket even if there is an existing one associated with it.
     pub(crate) fn do_create_and_associate_collection_with_bucket(
