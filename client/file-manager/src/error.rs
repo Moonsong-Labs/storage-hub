@@ -1,7 +1,7 @@
 use shc_common::types::HasherOutT;
 use trie_db::CError;
 
-use crate::traits::{FileStorageError, FileStorageWriteError};
+use crate::traits::FileStorageError;
 
 pub(crate) type ErrorT<T> = Error<HasherOutT<T>, CError<T>>;
 

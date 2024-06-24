@@ -294,11 +294,12 @@ where
 }
 
 mod tests {
-    use shc_common::types::FILE_CHUNK_SIZE;
+    use shc_common::types::Chunk;
+    use shc_common::types::ChunkId;
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
+    use sp_runtime::AccountId32;
     use sp_trie::LayoutV1;
-    use trie_db::TrieHash;
 
     use super::*;
 
@@ -308,7 +309,7 @@ mod tests {
         let file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
 
         // expected hash is the root hash of an empty tree.
-        let expected_hash = TrieHash::<LayoutV1<BlakeTwo256>>::try_from([
+        let expected_hash = HasherOutT::<LayoutV1<BlakeTwo256>>::try_from([
             3, 23, 10, 46, 117, 151, 183, 183, 227, 216, 76, 5, 57, 29, 19, 154, 98, 177, 87, 231,
             135, 134, 216, 192, 130, 242, 157, 207, 76, 17, 19, 20,
         ])

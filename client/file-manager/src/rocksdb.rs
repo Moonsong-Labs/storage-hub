@@ -1,17 +1,14 @@
 use std::{collections::HashMap, io, path::PathBuf, sync::Arc};
 
-use codec::Encode;
-use hash_db::{AsHashDB, HashDB, Prefix, EMPTY_PREFIX};
+use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use kvdb_rocksdb::{Database, DatabaseConfig};
 use log::{debug, error};
 use shc_common::types::{
-    Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, Leaf, H_LENGTH,
+    Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
 };
 use sp_state_machine::{warn, Storage};
-use sp_trie::{
-    prefixed_key, recorder::Recorder, PrefixedKey, PrefixedMemoryDB, TrieLayout, TrieMut,
-};
+use sp_trie::{prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieLayout, TrieMut};
 use trie_db::{DBValue, Hasher, Trie, TrieDBBuilder, TrieDBMutBuilder};
 
 use crate::{
@@ -309,7 +306,7 @@ where
         let db = self.as_hash_db_mut();
         // Need to clone because we cannot have a immutable borrow after mutably borrowing
         // in the next step.
-        let trie_root_key = root.clone();
+        let trie_root_key = root;
         let mut trie = TrieDBMutBuilder::<T>::from_existing(db, &mut root).build();
 
         for i in 0..chunk_count {
@@ -551,11 +548,12 @@ where
 }
 
 mod tests {
+    use shc_common::types::Chunk;
+    use shc_common::types::ChunkId;
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_runtime::AccountId32;
     use sp_trie::LayoutV1;
-    use trie_db::TrieHash;
 
     use super::*;
 
@@ -607,7 +605,7 @@ mod tests {
         let file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
 
         // expected hash is the root hash of an empty tree.
-        let expected_hash = TrieHash::<LayoutV1<BlakeTwo256>>::try_from([
+        let expected_hash = HasherOutT::<LayoutV1<BlakeTwo256>>::try_from([
             3, 23, 10, 46, 117, 151, 183, 183, 227, 216, 76, 5, 57, 29, 19, 154, 98, 177, 87, 231,
             135, 134, 216, 192, 130, 242, 157, 207, 76, 17, 19, 20,
         ])
@@ -700,11 +698,11 @@ mod tests {
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         let file_proof = file_trie.generate_proof(&chunk_ids).unwrap();
-        // let proven_leaves = file_proof.proven;
-        // for (id, leaf) in proven_leaves.iter().enumerate() {
-        //     assert_eq!(chunk_ids[id], leaf.key);
-        //     assert_eq!(chunks[id], leaf.data);
-        // }
+
+        assert_eq!(
+            file_proof.fingerprint.as_ref(),
+            file_trie.get_root().as_ref()
+        );
     }
 
     #[test]
