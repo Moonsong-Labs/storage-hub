@@ -294,14 +294,13 @@ where
 }
 
 mod tests {
+    use super::*;
     use shc_common::types::Chunk;
     use shc_common::types::ChunkId;
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_runtime::AccountId32;
     use sp_trie::LayoutV1;
-
-    use super::*;
 
     #[test]
     #[ignore]
@@ -393,11 +392,11 @@ mod tests {
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         let file_proof = file_trie.generate_proof(&chunk_ids).unwrap();
-        // let proven_leaves = file_proof.proven();
-        // for (id, leaf) in proven_leaves.iter().enumerate() {
-        //     assert_eq!(chunk_ids[id], leaf.key);
-        //     assert_eq!(chunks[id], leaf.data);
-        // }
+
+        assert_eq!(
+            file_proof.fingerprint.as_ref(),
+            file_trie.get_root().as_ref()
+        );
     }
 
     #[test]
@@ -425,19 +424,20 @@ mod tests {
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
-        let root = file_trie.get_root().clone();
-        let chunk_count = file_trie.stored_chunks_count().unwrap();
         file_trie.delete().unwrap();
 
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 0);
     }
 
     #[test]
+    #[ignore]
     fn inserting_whole_file_works() {}
 
     #[test]
+    #[ignore]
     fn deleting_whole_file_works() {}
 
     #[test]
+    #[ignore]
     fn proof_generation_works() {}
 }

@@ -318,7 +318,9 @@ where
 
         // Delete the file from the file storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        write_file_storage.delete_file(&file_key);
+
+        // TODO: Handle error
+        let _ = write_file_storage.delete_file(&file_key);
 
         // TODO: Send transaction to runtime to unvolunteer the file.
 
