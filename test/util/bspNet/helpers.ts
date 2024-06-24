@@ -13,6 +13,7 @@ import * as child_process from "node:child_process";
 import type { CreatedBlock, EventRecord, Hash, SignedBlock } from "@polkadot/types/interfaces";
 import { execSync } from "node:child_process";
 import { showContainers } from "./docker";
+import { isExtSuccess } from "../extrinsics";
 const exec = util.promisify(child_process.exec);
 
 export const sendFileSendRpc = async (
@@ -221,8 +222,11 @@ export interface SealedBlock {
   txHash?: string;
   blockData?: SignedBlock;
   events?: EventRecord[];
+  extSuccess?: boolean;
 }
 
+// TODO: extend to take multiple exts in one block
+// TODO: Accept ext hash strings as well
 export const sealBlock = async (
   api: ApiPromise,
   call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
@@ -232,18 +236,14 @@ export const sealBlock = async (
     hash?: Hash;
     events?: EventRecord[];
     blockData?: SignedBlock;
+    success?: boolean;
   } = {};
 
-  // TODO: extend to take multiple exts in one block
-  if (call) {
+  if (call?.isSigned) {
+    results.hash = await call.send();
+  } else if (call) {
     results.hash = await call.signAndSend(signer || alice);
   }
-
-  // TODO: Accept ext hash strings as well
-  // if (call && !call?.isEmpty && !call?.isSigned) {
-  //   const tx =  api.tx(call)
-  //   results.hash = await tx.signAndSend(signer || alice)
-  // }
 
   const sealedResults = {
     blockReceipt: await api.rpc.engine.createBlock(true, true),
@@ -264,9 +264,14 @@ export const sealBlock = async (
     );
     results.blockData = blockData;
     results.events = extEvents;
+    results.success = isExtSuccess(extEvents);
   }
 
   return Object.assign(sealedResults, {
     events: results.events,
+    extSuccess: results.success,
   }) satisfies SealedBlock;
 };
+
+// TODO: Create a helper for test clean up
+//       - Add an interactive function as well enabled by a toggle

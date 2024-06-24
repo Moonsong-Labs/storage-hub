@@ -13,6 +13,8 @@ import {
   checkBspForFile,
   checkFileChecksum,
   type BspNetApi,
+  bob,
+  charlie,
 } from "../../util";
 import { hexToString } from "@polkadot/util";
 
@@ -122,5 +124,15 @@ describe("BSPNet: BSP Volunteer", () => {
       const sha = await checkFileChecksum("test/whatsup.jpg");
       strictEqual(sha, TEST_ARTEFACTS["res/whatsup.jpg"].checksum);
     });
+  });
+
+  it("timbo test", async () => {
+    console.log("remove me");
+
+    const { extSuccess } = await api.sealBlock(
+      await api.tx.balances.transferAllowDeath(charlie.address, 10000000000n).signAsync(bob)
+    );
+
+    console.log("extSuccess", extSuccess);
   });
 });

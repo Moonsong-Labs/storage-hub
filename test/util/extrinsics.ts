@@ -3,8 +3,7 @@ import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import { alice } from "./pjsKeyring";
-import type { EventRecord } from "@polkadot/types/interfaces";
-import { strictEqual } from "node:assert";
+import type { FrameSystemEventRecord } from "@polkadot/types/lookup";
 
 export const sendTransaction = async (
   call: SubmittableExtrinsic<"promise", ISubmittableResult>,
@@ -49,4 +48,21 @@ export const sendTransaction = async (
       }
     );
   });
+};
+
+export const isExtSuccess = (events: FrameSystemEventRecord[]) => {
+  let success: boolean | undefined;
+
+  for (const event of events) {
+    if (event.event.method === "ExtrinsicSuccess") {
+      success = true;
+      break;
+    }
+    if (event.event.method === "ExtrinsicFailed") {
+      success = false;
+      break;
+    }
+  }
+
+  return success;
 };
