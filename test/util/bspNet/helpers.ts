@@ -14,6 +14,8 @@ import type { CreatedBlock, EventRecord, Hash, SignedBlock } from "@polkadot/typ
 import { execSync } from "node:child_process";
 import { showContainers } from "./docker";
 import { isExtSuccess } from "../extrinsics";
+import type { BspNetApi } from "./types";
+import inquirer from "inquirer";
 const exec = util.promisify(child_process.exec);
 
 export const sendFileSendRpc = async (
@@ -273,5 +275,7 @@ export const sealBlock = async (
   }) satisfies SealedBlock;
 };
 
-// TODO: Create a helper for test clean up
-//       - Add an interactive function as well enabled by a toggle
+export const cleardownTest = async (api: BspNetApi) => {
+  await api.disconnect();
+  await closeBspNet();
+};

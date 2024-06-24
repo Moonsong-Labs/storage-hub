@@ -5,7 +5,6 @@ import {
   DUMMY_MSP_ID,
   NODE_INFOS,
   TEST_ARTEFACTS,
-  closeBspNet,
   createApiObject,
   fetchEventData,
   runBspNet,
@@ -13,8 +12,7 @@ import {
   checkBspForFile,
   checkFileChecksum,
   type BspNetApi,
-  bob,
-  charlie,
+  cleardownTest,
 } from "../../util";
 import { hexToString } from "@polkadot/util";
 
@@ -27,8 +25,7 @@ describe("BSPNet: BSP Volunteer", () => {
   });
 
   after(async () => {
-    await api.disconnect();
-    await closeBspNet();
+    await cleardownTest(api);
   });
 
   it("Network launches and can be queried", async () => {
@@ -124,15 +121,5 @@ describe("BSPNet: BSP Volunteer", () => {
       const sha = await checkFileChecksum("test/whatsup.jpg");
       strictEqual(sha, TEST_ARTEFACTS["res/whatsup.jpg"].checksum);
     });
-  });
-
-  it("timbo test", async () => {
-    console.log("remove me");
-
-    const { extSuccess } = await api.sealBlock(
-      await api.tx.balances.transferAllowDeath(charlie.address, 10000000000n).signAsync(bob)
-    );
-
-    console.log("extSuccess", extSuccess);
   });
 });
