@@ -19,11 +19,8 @@ use crate::{
     LOG_TARGET,
 };
 
-// TODO: maybe extract common types used in Forest Manager impls.
-// TODO: create error module for File Manager / refactor errors
-// TODO: Add comments
-// TODO: Check TODOs
-// TODO: use batch insert (write_chunks()). Needs API change
+// TODO: Add documentation
+// TODO: improve error handling
 
 pub(crate) fn other_io_error(err: String) -> io::Error {
     io::Error::new(io::ErrorKind::Other, err)
@@ -86,16 +83,16 @@ where
 }
 
 pub struct RocksDbFileDataTrie<T: TrieLayout> {
-    // Persistent storage
-    // TODO: Why Box not Arc?
+    // Persistent storage.
     storage: Box<dyn Backend<T>>,
+    // In memory overlay used for Trie operations.
     overlay: PrefixedMemoryDB<HashT<T>>,
     // Root of the file Trie, which is a file key.
     root: HasherOutT<T>,
+    // Number of chunks in this file.
     chunk_count: u64,
 }
 
-// TODO: double check if `Default` is really necessary
 impl<T: TrieLayout + Send + Sync + 'static> Default for RocksDbFileDataTrie<T>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
@@ -202,11 +199,6 @@ where
         let mut count = 0u64;
         while let Some(_) = iter.next() {
             count += 1
-        }
-
-        // TODO: create specific error
-        if count != self.chunk_count {
-            return Err(FileStorageError::IncompleteFile);
         }
 
         Ok(count)
@@ -334,7 +326,7 @@ where
             FileStorageError::FailedToWriteToStorage
         })?;
 
-        // Set new internal root (no trie)
+        // Set new internal root (emptry trie root)
         self.root = new_root;
 
         self.chunk_count = 0;
@@ -469,13 +461,22 @@ where
         Ok(FileStorageWriteOutcome::FileComplete)
     }
 
-    // TODO: check why this method is necessary and what is its use case.
     fn insert_file(
         &mut self,
-        _key: HasherOutT<T>,
-        _metadata: FileMetadata,
+        key: HasherOutT<T>,
+        metadata: FileMetadata,
     ) -> Result<(), FileStorageError> {
-        unimplemented!()
+        if self.metadata.contains_key(&key) {
+            return Err(FileStorageError::FileAlreadyExists);
+        }
+        self.metadata.insert(key, metadata);
+
+        let maybe_file_data = self.file_data.insert(key, RocksDbFileDataTrie::default());
+        if maybe_file_data.is_some() {
+            panic!("Key already associated with File Trie, but not with File Metadata. Possible inconsistency between them.");
+        }
+
+        Ok(())
     }
 
     fn insert_file_with_data(
@@ -900,7 +901,7 @@ mod tests {
     }
 
     #[test]
-    fn same_chunk_id_different_data_different_roots_works() {
+    fn same_chunk_id_different_data_gives_different_roots() {
         use sp_trie::MemoryDB;
 
         let mut memdb = MemoryDB::<BlakeTwo256>::default();
