@@ -37,9 +37,12 @@ async function main() {
   fs.copyFileSync(BINARY_PATH, path.join(buildDir, path.basename(BINARY_PATH)));
 
   try {
-    execSync("docker build -t storage-hub:local -f docker/storage-hub-node.Dockerfile --load .", {
-      stdio: "inherit",
-    });
+    execSync(
+      "docker build --platform linux/amd64 -t storage-hub:local -f docker/storage-hub-node.Dockerfile --load .",
+      {
+        stdio: "inherit",
+      }
+    );
     console.log("Docker image built successfully.");
   } catch (error) {
     console.error("Docker build failed.");
