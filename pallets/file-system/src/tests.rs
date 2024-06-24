@@ -12,7 +12,8 @@ use frame_support::{
     traits::{nonfungibles_v2::Destroy, Hooks, OriginTrait},
     weights::Weight,
 };
-use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface};
+use pallet_proofs_dealer::PriorityChallengesQueue;
+use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface, TrieRemoveMutation};
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
@@ -764,14 +765,12 @@ fn revoke_request_storage_success() {
             vec![location.clone()]
         );
 
-        // Dispatch a signed extrinsic.
         assert_ok!(FileSystem::revoke_storage_request(
             owner.clone(),
             location.clone(),
             file_key
         ));
 
-        // Assert that the correct event was deposited
         System::assert_last_event(Event::StorageRequestRevoked { location }.into());
     });
 }
@@ -817,6 +816,138 @@ fn revoke_storage_request_not_owner_fail() {
             FileSystem::revoke_storage_request(not_owner.clone(), location.clone(), file_key),
             Error::<Test>::StorageRequestNotAuthorized
         );
+    });
+}
+
+#[test]
+fn revoke_storage_request_with_volunteered_bsps_success() {
+    new_test_ext().execute_with(|| {
+        let owner_account = Keyring::Alice.to_account_id();
+        let owner = RuntimeOrigin::signed(owner_account.clone());
+        let msp = Keyring::Charlie.to_account_id();
+        let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+        let file_content = b"test".to_vec();
+        let fingerprint = BlakeTwo256::hash(&file_content);
+        let file_key = H256::zero();
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+        let msp_id = add_msp_to_provider_storage(&msp);
+
+        assert_ok!(FileSystem::issue_storage_request(
+            owner.clone(),
+            location.clone(),
+            fingerprint,
+            4,
+            msp_id,
+            peer_ids.clone(),
+        ));
+
+        let bsp_account_id = Keyring::Bob.to_account_id();
+        let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+
+        let storage_amount: StorageData<Test> = 100;
+
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+        let bsp_id =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                bsp_account_id,
+            )
+                .unwrap();
+
+        assert_ok!(FileSystem::bsp_volunteer(
+            bsp_signed.clone(),
+            location.clone(),
+            fingerprint,
+        ));
+
+        // Check StorageRequestBsps storage for confirmed BSPs
+        assert_eq!(
+            FileSystem::storage_request_bsps(location.clone(), bsp_id)
+                .expect("BSP should exist in storage"),
+            StorageRequestBspsMetadata::<Test> {
+                confirmed: false,
+                _phantom: Default::default()
+            }
+        );
+
+        // Dispatch a signed extrinsic.
+        assert_ok!(FileSystem::revoke_storage_request(
+            owner.clone(),
+            location.clone(),
+            file_key
+        ));
+
+        // Assert that the correct event was deposited
+        System::assert_last_event(Event::StorageRequestRevoked { location }.into());
+    });
+}
+
+#[test]
+fn revoke_storage_request_with_confirmed_bsps_success() {
+    new_test_ext().execute_with(|| {
+        let owner_account = Keyring::Alice.to_account_id();
+        let owner = RuntimeOrigin::signed(owner_account.clone());
+        let msp = Keyring::Charlie.to_account_id();
+        let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+        let file_content = b"test".to_vec();
+        let fingerprint = BlakeTwo256::hash(&file_content);
+        let file_key = H256::zero();
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+        let msp_id = add_msp_to_provider_storage(&msp);
+
+        // Dispatch a signed extrinsic.
+        assert_ok!(FileSystem::issue_storage_request(
+            owner.clone(),
+            location.clone(),
+            fingerprint,
+            4,
+            msp_id,
+            peer_ids.clone(),
+        ));
+
+        let bsp_account_id = Keyring::Bob.to_account_id();
+        let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+
+        let storage_amount: StorageData<Test> = 100;
+
+        assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+        assert_ok!(FileSystem::bsp_volunteer(
+            bsp_signed.clone(),
+            location.clone(),
+            fingerprint,
+        ));
+
+        assert_ok!(FileSystem::bsp_confirm_storing(
+            bsp_signed.clone(),
+            location.clone(),
+            H256::zero(),
+            ForestProof {
+                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+            },
+            KeyProof {
+                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+            }
+        ));
+
+        // Dispatch a signed extrinsic.
+        assert_ok!(FileSystem::revoke_storage_request(
+            owner.clone(),
+            location.clone(),
+            file_key
+        ));
+
+        // Check ProofsDealer pallet storage for queued custom challenges for remove trie mutation of file key
+        let priority_challenges_queue = PriorityChallengesQueue::<Test>::get();
+
+        assert!(priority_challenges_queue.contains(&(file_key, Some(TrieRemoveMutation))));
+
+        // Assert that the correct event was deposited
+        System::assert_last_event(Event::StorageRequestRevoked { location }.into());
     });
 }
 
@@ -1041,10 +1172,10 @@ fn bsp_confirm_storing_success() {
             location.clone(),
             H256::zero(), // TODO construct a real proof
             ForestProof {
-                encoded_nodes: vec![vec![0]],
+                encoded_nodes: vec![H256::default().as_ref().to_vec()],
             },
             KeyProof {
-                encoded_nodes: vec![vec![0]],
+                encoded_nodes: vec![H256::default().as_ref().to_vec()],
             }
         ));
 
@@ -1075,8 +1206,28 @@ fn bsp_confirm_storing_success() {
             }
         );
 
+        let file_key = FileSystem::compute_file_key(
+            owner_account_id.clone(),
+            location.clone(),
+            size,
+            fingerprint,
+        );
+
+        let new_root =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                bsp_id,
+            )
+            .unwrap();
+
         // Assert that the correct event was deposited
-        System::assert_last_event(Event::BspConfirmedStoring { bsp_id, location }.into());
+        System::assert_last_event(
+            Event::BspConfirmedStoring {
+                bsp_id,
+                file_key,
+                new_root,
+            }
+            .into(),
+        );
     });
 }
 
@@ -1096,10 +1247,10 @@ fn bsp_confirm_storing_storage_request_not_found_fail() {
                 location.clone(),
                 H256::zero(), // TODO construct a real proof
                 ForestProof {
-                    encoded_nodes: vec![vec![0]],
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 },
                 KeyProof {
-                    encoded_nodes: vec![vec![0]],
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 }
             ),
             Error::<Test>::StorageRequestNotFound
@@ -1144,10 +1295,10 @@ fn bsp_confirm_storing_not_volunteered_fail() {
                 location.clone(),
                 H256::zero(), // TODO construct a real proof
                 ForestProof {
-                    encoded_nodes: vec![vec![0]],
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 },
                 KeyProof {
-                    encoded_nodes: vec![vec![0]],
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 }
             ),
             Error::<Test>::BspNotVolunteered
@@ -1199,10 +1350,10 @@ fn bsp_already_confirmed_fail() {
             location.clone(),
             H256::zero(), // TODO construct a real proof
             ForestProof {
-                encoded_nodes: vec![vec![0]],
+                encoded_nodes: vec![H256::default().as_ref().to_vec()],
             },
             KeyProof {
-                encoded_nodes: vec![vec![0]],
+                encoded_nodes: vec![H256::default().as_ref().to_vec()],
             }
         ));
 
@@ -1212,10 +1363,10 @@ fn bsp_already_confirmed_fail() {
                 location.clone(),
                 H256::zero(), // TODO construct a real proof
                 ForestProof {
-                    encoded_nodes: vec![vec![0]],
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 },
                 KeyProof {
-                    encoded_nodes: vec![vec![0]],
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 }
             ),
             Error::<Test>::BspAlreadyConfirmed
@@ -1260,10 +1411,10 @@ fn bsp_actions_not_a_bsp_fail() {
                 location.clone(),
                 H256::zero(), // TODO construct a real proof
                 ForestProof {
-                    encoded_nodes: vec![vec![0]],
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 },
                 KeyProof {
-                    encoded_nodes: vec![vec![0]],
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 }
             ),
             Error::<Test>::NotABsp
@@ -1279,7 +1430,6 @@ fn bsp_stop_storing_success() {
         let bsp_account_id = Keyring::Bob.to_account_id();
         let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
         let msp = Keyring::Charlie.to_account_id();
-        let file_key = H256::from_slice(&[1; 32]);
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let size = 4;
         // TODO: right now we are bypassing the volunteer assignment threshold
@@ -1322,10 +1472,10 @@ fn bsp_stop_storing_success() {
             location.clone(),
             H256::zero(), // TODO construct a real proof
             ForestProof {
-                encoded_nodes: vec![vec![0]],
+                encoded_nodes: vec![H256::default().as_ref().to_vec()],
             },
             KeyProof {
-                encoded_nodes: vec![vec![0]],
+                encoded_nodes: vec![H256::default().as_ref().to_vec()],
             }
         ));
 
@@ -1356,6 +1506,13 @@ fn bsp_stop_storing_success() {
             })
         );
 
+        let file_key = FileSystem::compute_file_key(
+            owner_account_id.clone(),
+            location.clone(),
+            size,
+            fingerprint,
+        );
+
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
             bsp_signed.clone(),
@@ -1364,7 +1521,10 @@ fn bsp_stop_storing_success() {
             owner_account_id.clone(),
             fingerprint,
             size,
-            false
+            false,
+            ForestProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            },
         ));
 
         // Assert that the RequestStorageBsps has the correct value
@@ -1387,11 +1547,18 @@ fn bsp_stop_storing_success() {
             })
         );
 
+        let new_root =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                bsp_id,
+            )
+            .unwrap();
+
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
                 bsp_id,
                 file_key,
+                new_root,
                 owner: owner_account_id,
                 location,
             }
@@ -1408,9 +1575,9 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         let bsp_account_id = Keyring::Bob.to_account_id();
         let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
         let msp = Keyring::Charlie.to_account_id();
-        let file_key = H256::from_slice(&[1; 32]);
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let size = 4;
+        let fingerprint = H256::zero();
         let storage_amount: StorageData<Test> = 100;
 
         let msp_id = add_msp_to_provider_storage(&msp);
@@ -1419,7 +1586,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         assert_ok!(FileSystem::issue_storage_request(
             owner.clone(),
             location.clone(),
-            H256::zero(),
+            fingerprint,
             size,
             msp_id,
             Default::default(),
@@ -1438,7 +1605,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         assert_ok!(FileSystem::bsp_volunteer(
             bsp_signed.clone(),
             location.clone(),
-            H256::zero(),
+            fingerprint,
         ));
 
         // Dispatch BSP confirm storing.
@@ -1447,12 +1614,19 @@ fn bsp_stop_storing_while_storage_request_open_success() {
             location.clone(),
             H256::zero(),
             ForestProof {
-                encoded_nodes: vec![vec![0]],
+                encoded_nodes: vec![H256::default().as_ref().to_vec()],
             },
             KeyProof {
-                encoded_nodes: vec![vec![0]],
+                encoded_nodes: vec![H256::default().as_ref().to_vec()],
             }
         ));
+
+        let file_key = FileSystem::compute_file_key(
+            owner_account_id.clone(),
+            location.clone(),
+            size,
+            fingerprint,
+        );
 
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
@@ -1462,7 +1636,10 @@ fn bsp_stop_storing_while_storage_request_open_success() {
             owner_account_id.clone(),
             H256::zero(),
             size,
-            false
+            false,
+            ForestProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            },
         ));
 
         // Assert that the RequestStorageBsps has the correct value
@@ -1485,11 +1662,18 @@ fn bsp_stop_storing_while_storage_request_open_success() {
             })
         );
 
+        let new_root =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                bsp_id,
+            )
+            .unwrap();
+
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
                 bsp_id,
                 file_key,
+                new_root,
                 owner: owner_account_id,
                 location,
             }
@@ -1506,7 +1690,6 @@ fn bsp_stop_storing_not_volunteered_success() {
         let bsp_account_id = Keyring::Bob.to_account_id();
         let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
         let msp = Keyring::Charlie.to_account_id();
-        let file_key = H256::from_slice(&[1; 32]);
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let size = 4;
         let fingerprint = H256::zero();
@@ -1533,6 +1716,13 @@ fn bsp_stop_storing_not_volunteered_success() {
             )
             .unwrap();
 
+        let file_key = FileSystem::compute_file_key(
+            owner_account_id.clone(),
+            location.clone(),
+            size,
+            fingerprint,
+        );
+
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
             bsp_signed.clone(),
@@ -1541,7 +1731,10 @@ fn bsp_stop_storing_not_volunteered_success() {
             owner_account_id.clone(),
             fingerprint,
             size,
-            false
+            false,
+            ForestProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            },
         ));
 
         let current_bsps_required: <Test as Config>::StorageRequestBspsRequiredType =
@@ -1564,11 +1757,18 @@ fn bsp_stop_storing_not_volunteered_success() {
             })
         );
 
+        let new_root =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                bsp_id,
+            )
+            .unwrap();
+
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
                 bsp_id,
                 file_key,
+                new_root,
                 owner: owner_account_id,
                 location,
             }
@@ -1582,7 +1782,6 @@ fn bsp_stop_storing_no_storage_request_success() {
     new_test_ext().execute_with(|| {
         let bsp_account_id = Keyring::Bob.to_account_id();
         let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-        let file_key = H256::from_slice(&[1; 32]);
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
         let owner_account_id = Keyring::Alice.to_account_id();
         let size = 4;
@@ -1597,6 +1796,13 @@ fn bsp_stop_storing_no_storage_request_success() {
             )
             .unwrap();
 
+        let file_key = FileSystem::compute_file_key(
+            owner_account_id.clone(),
+            location.clone(),
+            size,
+            fingerprint,
+        );
+
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
             bsp_signed.clone(),
@@ -1605,7 +1811,10 @@ fn bsp_stop_storing_no_storage_request_success() {
             owner_account_id.clone(),
             fingerprint,
             size,
-            false
+            false,
+            ForestProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            },
         ));
 
         // Assert that the storage request was created with one bsps_required
@@ -1625,11 +1834,18 @@ fn bsp_stop_storing_no_storage_request_success() {
             })
         );
 
+        let new_root =
+            <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                bsp_id,
+            )
+            .unwrap();
+
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspStoppedStoring {
                 bsp_id,
                 file_key,
+                new_root,
                 owner: owner_account_id,
                 location,
             }

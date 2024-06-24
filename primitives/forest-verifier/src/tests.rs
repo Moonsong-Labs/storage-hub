@@ -1,10 +1,13 @@
 use std::io::Read;
 
 use serde::Serialize;
-use shp_traits::CommitmentVerifier;
+use shp_traits::{
+    CommitmentVerifier, TrieAddMutation, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
+};
 use sp_runtime::traits::BlakeTwo256;
+use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{
-    recorder::Recorder, CompactProof, LayoutV1, MemoryDB, TrieDBBuilder, TrieDBMutBuilder,
+    recorder::Recorder, CompactProof, LayoutV1, MemoryDB, Trie, TrieDBBuilder, TrieDBMutBuilder,
     TrieLayout, TrieMut,
 };
 use trie_db::{Hasher, TrieIterator};
@@ -223,471 +226,1259 @@ pub fn merklise_file<T: TrieLayout>(file_path: &str) -> (MemoryDB<T::Hash>, Hash
     (memdb, root)
 }
 
-#[test]
-fn commitment_verifier_challenge_exactly_first_key_success() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+mod verify_proof_tests {
+    use super::*;
 
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
+    #[test]
+    fn commitment_verifier_challenge_exactly_first_key_success() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
 
-    let challenge_key = leaf_keys.first().unwrap();
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
+        let challenge_key = leaf_keys.first().unwrap();
 
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
 
-        // Seek to the challenge key.
-        iter.seek(&challenge_key.0).unwrap();
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
 
-        // Read the leaf node.
-        iter.next();
+            // Seek to the challenge key.
+            iter.seek(&challenge_key.0).unwrap();
+
+            // Read the leaf node.
+            iter.next();
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        // Verify proof
+        let proof_keys =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &[*challenge_key],
+                &proof,
+            )
+            .expect("Failed to verify proof");
+
+        assert_eq!(proof_keys, BTreeSet::from_iter(vec![*challenge_key]));
     }
 
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
+    #[test]
+    fn commitment_verifier_challenge_key_in_between_success() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
 
-    // Verify proof
-    let proof_keys =
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &[*challenge_key],
-            &proof,
-        )
-        .expect("Failed to verify proof");
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
-    assert_eq!(proof_keys, vec![*challenge_key]);
-}
+        // Challenge key is the first key with the most significant bit incremented by 1.
+        let mut challenge_key = leaf_keys[0];
+        challenge_key.0[0] += 1;
 
-#[test]
-fn commitment_verifier_challenge_key_in_between_success() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
 
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
 
-    // Challenge key is the first key with the most significant bit incremented by 1.
-    let mut challenge_key = leaf_keys[0];
-    challenge_key.0[0] += 1;
+            // Seek to the challenge key.
+            iter.seek(&challenge_key.0).unwrap();
 
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
+            // Access the next leaf node.
+            let next_leaf = iter.next();
 
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
+            // Access the previous leaf node.
+            let prev_leaf = iter.next_back();
 
-        // Seek to the challenge key.
-        iter.seek(&challenge_key.0).unwrap();
+            let challenged_key_vec = challenge_key.0.to_vec();
 
-        // Access the next leaf node.
-        let next_leaf = iter.next();
+            // Assert that challenge_key is between `next_leaf` and `prev_leaf`
+            assert!(
+                prev_leaf.unwrap().unwrap().0 < challenged_key_vec
+                    && challenged_key_vec < next_leaf.unwrap().unwrap().0
+            );
+        }
 
-        // Access the previous leaf node.
-        let prev_leaf = iter.next_back();
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
 
-        let challenged_key_vec = challenge_key.0.to_vec();
+        // Verify proof
+        let proof_keys =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &[challenge_key],
+                &proof,
+            )
+            .expect("Failed to verify proof");
 
-        // Assert that challenge_key is between `next_leaf` and `prev_leaf`
-        assert!(
-            prev_leaf.unwrap().unwrap().0 < challenged_key_vec
-                && challenged_key_vec < next_leaf.unwrap().unwrap().0
+        assert_eq!(
+            proof_keys,
+            BTreeSet::from_iter(vec![leaf_keys[0], leaf_keys[1]])
         );
     }
 
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
+    #[test]
+    fn commitment_verifier_challenge_key_before_first_key_success() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
 
-    // Verify proof
-    let proof_keys =
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &[challenge_key],
-            &proof,
-        )
-        .expect("Failed to verify proof");
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
-    assert_eq!(proof_keys, vec![leaf_keys[0], leaf_keys[1]]);
-}
+        // Challenge key is the first key with the most significant bit decremented by 1.
+        let mut challenge_key = leaf_keys[0];
+        challenge_key.0[0] -= 1;
 
-#[test]
-fn commitment_verifier_challenge_key_before_first_key_success() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
 
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
 
-    // Challenge key is the first key with the most significant bit decremented by 1.
-    let mut challenge_key = leaf_keys[0];
-    challenge_key.0[0] -= 1;
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        // Seek to the challenge key.
-        iter.seek(&challenge_key.0).unwrap();
-
-        // Access the next leaf node.
-        let next_leaf = iter.next();
-
-        // Access the previous leaf node.
-        let prev_leaf = iter.next_back();
-
-        let challenged_key_vec = challenge_key.0.to_vec();
-
-        // Assert that challenge_key is below next_leaf and that prev_leaf is None.
-        assert!(prev_leaf.is_none() && challenged_key_vec < next_leaf.unwrap().unwrap().0);
-    }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    // Verify proof
-    let proof_keys =
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &[challenge_key],
-            &proof,
-        )
-        .expect("Failed to verify proof");
-
-    assert_eq!(proof_keys, vec![leaf_keys[0]]);
-}
-
-#[test]
-fn commitment_verifier_challenge_key_after_last_key_success() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    let largest_key = leaf_keys.iter().max().unwrap();
-
-    // Challenge key is the largest key with the most significant bit incremented by 1.
-    let mut challenge_key = *largest_key;
-    challenge_key.0[0] += 1;
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        // Seek to the challenge key.
-        iter.seek(&challenge_key.0).unwrap();
-
-        // Access the previous leaf node.
-        let prev_leaf = iter.next_back();
-
-        // Access the next leaf node.
-        let next_leaf = iter.next();
-
-        // Assert that challenge_key is greater than the last leaf node and that next_leaf is None.
-        assert!(prev_leaf.unwrap().unwrap().0 < challenge_key.0.to_vec() && next_leaf.is_none());
-    }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    // Verify proof
-    let proof_keys =
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &[challenge_key],
-            &proof,
-        )
-        .expect("Failed to verify proof");
-
-    assert_eq!(proof_keys, vec![*largest_key]);
-}
-
-#[test]
-fn commitment_verifier_multiple_exact_challenge_keys_success() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    let challenge_keys = [leaf_keys[0], leaf_keys[1], leaf_keys[2]];
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        for challenge_key in &challenge_keys {
             // Seek to the challenge key.
             iter.seek(&challenge_key.0).unwrap();
 
             // Access the next leaf node.
-            iter.next();
-        }
-    }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    // Verify proof
-    let proof_keys =
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &challenge_keys,
-            &proof,
-        )
-        .expect("Failed to verify proof");
-
-    assert_eq!(proof_keys, challenge_keys);
-}
-
-#[test]
-fn commitment_verifier_multiple_in_between_challenge_keys_success() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    let mut challenge_keys = [leaf_keys[0], leaf_keys[1], leaf_keys[2]];
-
-    // Increment the most significant bit of every challenge key by 1.
-    for key in &mut challenge_keys {
-        key.0[0] += 1;
-    }
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        for challenge_key in &challenge_keys {
-            // Seek to the challenge key.
-            iter.seek(&challenge_key.0).unwrap();
-
-            // Access the next leaf node.
-            iter.next();
+            let next_leaf = iter.next();
 
             // Access the previous leaf node.
-            iter.next_back();
+            let prev_leaf = iter.next_back();
+
+            let challenged_key_vec = challenge_key.0.to_vec();
+
+            // Assert that challenge_key is below next_leaf and that prev_leaf is None.
+            assert!(prev_leaf.is_none() && challenged_key_vec < next_leaf.unwrap().unwrap().0);
         }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        // Verify proof
+        let proof_keys =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &[challenge_key],
+                &proof,
+            )
+            .expect("Failed to verify proof");
+
+        assert_eq!(proof_keys, BTreeSet::from_iter(vec![leaf_keys[0]]));
     }
 
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
+    #[test]
+    fn commitment_verifier_challenge_key_after_last_key_success() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
 
-    // Verify proof
-    let proof_keys =
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &challenge_keys,
-            &proof,
-        )
-        .expect("Failed to verify proof");
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
-    assert_eq!(
-        proof_keys,
-        [leaf_keys[0], leaf_keys[1], leaf_keys[2], leaf_keys[3]]
-    );
-}
+        let largest_key = leaf_keys
+            .iter()
+            .max()
+            .map(|key| (*key, None::<TrieMutation>))
+            .unwrap();
 
-#[test]
-fn commitment_verifier_multiple_in_between_challenge_keys_starting_before_first_key_success() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+        // Challenge key is the largest key with the most significant bit incremented by 1.
+        let mut challenge_key = largest_key.0;
+        challenge_key.0[0] += 1;
 
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
 
-    let mut challenge_keys = [leaf_keys[0], leaf_keys[1], leaf_keys[2]];
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
 
-    // Decrement the most significant bit of every challenge key by 1.
-    for key in &mut challenge_keys {
-        key.0[0] -= 1;
-    }
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        for challenge_key in &challenge_keys {
             // Seek to the challenge key.
             iter.seek(&challenge_key.0).unwrap();
 
-            // Access the next leaf node.
-            iter.next();
-
             // Access the previous leaf node.
-            iter.next_back();
-        }
-    }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    // Verify proof
-    let proof_keys =
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &challenge_keys,
-            &proof,
-        )
-        .expect("Failed to verify proof");
-
-    assert_eq!(proof_keys, [leaf_keys[0], leaf_keys[1], leaf_keys[2]]);
-}
-
-#[test]
-fn commitment_verifier_multiple_in_between_challenge_keys_and_one_after_last_key_success() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    let largest_key = leaf_keys.iter().max().unwrap();
-    let mut challenge_keys = [
-        leaf_keys[0],
-        leaf_keys[1],
-        leaf_keys[2],
-        leaf_keys[3],
-        *largest_key,
-    ];
-
-    // Increment the least significant byte of every challenge key by 1.
-    for key in &mut challenge_keys {
-        key.0[31] += 1;
-    }
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        for challenge_key in &challenge_keys {
-            // Seek to the challenge key.
-            iter.seek(&challenge_key.0).unwrap();
+            let prev_leaf = iter.next_back();
 
             // Access the next leaf node.
-            iter.next();
+            let next_leaf = iter.next();
 
-            // Access the previous leaf node.
-            iter.next_back();
+            // Assert that challenge_key is greater than the last leaf node and that next_leaf is None.
+            assert!(
+                prev_leaf.unwrap().unwrap().0 < challenge_key.0.to_vec() && next_leaf.is_none()
+            );
         }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        // Verify proof
+        let proof_keys =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &[challenge_key],
+                &proof,
+            )
+            .expect("Failed to verify proof");
+
+        assert_eq!(proof_keys, BTreeSet::from_iter(vec![largest_key.0]));
     }
 
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
+    #[test]
+    fn commitment_verifier_multiple_exact_challenge_keys_success() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
 
-    // Verify proof
-    let proof_keys =
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &challenge_keys,
-            &proof,
-        )
-        .expect("Failed to verify proof");
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
-    assert_eq!(
-        proof_keys,
-        [
+        let challenge_keys = [leaf_keys[0], leaf_keys[1], leaf_keys[2]];
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            for challenge_key in &challenge_keys {
+                // Seek to the challenge key.
+                iter.seek(&challenge_key.0).unwrap();
+
+                // Access the next leaf node.
+                iter.next();
+            }
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        // Verify proof
+        let proof_keys =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &challenge_keys,
+                &proof,
+            )
+            .expect("Failed to verify proof");
+
+        assert_eq!(
+            proof_keys,
+            BTreeSet::from_iter(challenge_keys.iter().cloned())
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_multiple_in_between_challenge_keys_success() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        let mut challenge_keys = [leaf_keys[0], leaf_keys[1], leaf_keys[2]];
+
+        // Increment the most significant bit of every challenge key by 1.
+        for key in &mut challenge_keys {
+            key.0[0] += 1;
+        }
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            for challenge_key in &challenge_keys {
+                // Seek to the challenge key.
+                iter.seek(&challenge_key.0).unwrap();
+
+                // Access the next leaf node.
+                iter.next();
+
+                // Access the previous leaf node.
+                iter.next_back();
+            }
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        // Verify proof
+        let proof_keys =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &challenge_keys,
+                &proof,
+            )
+            .expect("Failed to verify proof");
+
+        assert_eq!(
+            proof_keys,
+            BTreeSet::from_iter([leaf_keys[0], leaf_keys[1], leaf_keys[2], leaf_keys[3]])
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_multiple_in_between_challenge_keys_starting_before_first_key_success() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        let mut challenge_keys = [leaf_keys[0], leaf_keys[1], leaf_keys[2]];
+
+        // Decrement the most significant bit of every challenge key by 1.
+        for key in &mut challenge_keys {
+            key.0[0] -= 1;
+        }
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            for challenge_key in &challenge_keys {
+                // Seek to the challenge key.
+                iter.seek(&challenge_key.0).unwrap();
+
+                // Access the next leaf node.
+                iter.next();
+
+                // Access the previous leaf node.
+                iter.next_back();
+            }
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        // Verify proof
+        let proof_keys =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &challenge_keys,
+                &proof,
+            )
+            .expect("Failed to verify proof");
+
+        assert_eq!(
+            proof_keys,
+            BTreeSet::from_iter([leaf_keys[0], leaf_keys[1], leaf_keys[2]])
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_multiple_in_between_challenge_keys_and_one_after_last_key_success() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        let largest_key = leaf_keys.iter().max().unwrap();
+        let mut challenge_keys = [
             leaf_keys[0],
             leaf_keys[1],
             leaf_keys[2],
             leaf_keys[3],
-            leaf_keys[4],
-            *largest_key
-        ]
-    );
-}
+            *largest_key,
+        ];
 
-#[test]
-fn commitment_verifier_multiple_challenges_before_single_key_trie_success() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest_one_key::<LayoutV1<BlakeTwo256>>();
+        // Increment the least significant byte of every challenge key by 1.
+        for key in &mut challenge_keys {
+            key.0[31] += 1;
+        }
 
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
 
-    let mut challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
 
-    // Decrement the most significant bit of every challenge key by 1.
-    let mut i = 0;
-    for key in &mut challenge_keys {
-        i += 2;
-        key.0[0] -= i;
+            for challenge_key in &challenge_keys {
+                // Seek to the challenge key.
+                iter.seek(&challenge_key.0).unwrap();
+
+                // Access the next leaf node.
+                iter.next();
+
+                // Access the previous leaf node.
+                iter.next_back();
+            }
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        // Verify proof
+        let proof_keys =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &challenge_keys,
+                &proof,
+            )
+            .expect("Failed to verify proof");
+
+        assert_eq!(
+            proof_keys,
+            BTreeSet::from_iter([
+                leaf_keys[0],
+                leaf_keys[1],
+                leaf_keys[2],
+                leaf_keys[3],
+                leaf_keys[4],
+                *largest_key
+            ])
+        );
     }
 
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
+    #[test]
+    fn commitment_verifier_multiple_challenges_before_single_key_trie_success() {
+        let (memdb, root, leaf_keys) =
+            build_merkle_patricia_forest_one_key::<LayoutV1<BlakeTwo256>>();
 
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
-        for challenge_key in &challenge_keys {
+        let mut challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
+
+        // Decrement the most significant bit of every challenge key by 1.
+        let mut i = 0;
+        for key in &mut challenge_keys {
+            i += 2;
+            key.0[0] -= i;
+        }
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            for challenge_key in &challenge_keys {
+                // Seek to the challenge key.
+                iter.seek(&challenge_key.0).unwrap();
+
+                // Access the next leaf node.
+                iter.next();
+
+                // Access the previous leaf node.
+                iter.next_back();
+            }
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        // Verify proof
+        let proof_keys =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &challenge_keys,
+                &proof,
+            )
+            .expect("Failed to verify proof");
+
+        assert_eq!(proof_keys, BTreeSet::from_iter([leaf_keys[0]]));
+    }
+
+    #[test]
+    fn commitment_verifier_multiple_challenges_after_single_key_trie_success() {
+        let (memdb, root, leaf_keys) =
+            build_merkle_patricia_forest_one_key::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        let mut challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
+
+        // Decrement the most significant bit of every challenge key by 1.
+        let mut i = 0;
+        for key in &mut challenge_keys {
+            i += 2;
+            key.0[0] += i;
+        }
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            for challenge_key in &challenge_keys {
+                // Seek to the challenge key.
+                iter.seek(&challenge_key.0).unwrap();
+
+                // Access the next leaf node.
+                iter.next();
+
+                // Access the previous leaf node.
+                iter.next_back();
+            }
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        // Verify proof
+        let proof_keys =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &challenge_keys,
+                &proof,
+            )
+            .expect("Failed to verify proof");
+
+        assert_eq!(proof_keys, BTreeSet::from_iter([leaf_keys[0]]));
+    }
+
+    #[test]
+    fn commitment_verifier_multiple_challenges_single_key_trie_success() {
+        let (memdb, root, leaf_keys) =
+            build_merkle_patricia_forest_one_key::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        let mut challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
+
+        // Decrement most significant byte of second challenge key by 1.
+        challenge_keys[1].0[0] -= 1;
+        // Increment most significant byte of third challenge key by 1.
+        challenge_keys[2].0[0] += 1;
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            for challenge_key in &challenge_keys {
+                // Seek to the challenge key.
+                iter.seek(&challenge_key.0).unwrap();
+
+                // Access the next leaf node.
+                iter.next();
+
+                // Access the previous leaf node.
+                iter.next_back();
+            }
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        // Verify proof
+        let proof_keys =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &challenge_keys,
+                &proof,
+            )
+            .expect("Failed to verify proof");
+
+        assert_eq!(proof_keys, BTreeSet::from_iter([leaf_keys[0]]));
+    }
+
+    #[test]
+    fn commitment_verifier_challenge_in_between_existing_leafs_shares_prefix_with_next_leaf() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        let mut challenge_keys = [leaf_keys[1]];
+
+        // Decrement the least significant byte of the challenge key by 1.
+        challenge_keys[0].0[31] -= 1;
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            for challenge_key in &challenge_keys {
+                // Seek to the challenge key.
+                iter.seek(&challenge_key.0).unwrap();
+
+                // Access the next leaf node.
+                iter.next();
+
+                // Access the previous leaf node.
+                iter.next_back();
+            }
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        // Verify proof
+        let proof_keys =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &challenge_keys,
+                &proof,
+            )
+            .expect("Failed to verify proof");
+
+        assert_eq!(
+            proof_keys,
+            BTreeSet::from_iter([leaf_keys[0], leaf_keys[1],])
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_challenge_in_between_existing_leafs_shares_prefix_with_prev_leaf() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        let mut challenge_keys = [leaf_keys[0]];
+
+        // Increment the least significant byte of the challenge key by 1.
+        challenge_keys[0].0[31] += 1;
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            for challenge_key in &challenge_keys {
+                // Seek to the challenge key.
+                iter.seek(&challenge_key.0).unwrap();
+
+                // Access the next leaf node.
+                iter.next();
+
+                // Access the previous leaf node.
+                iter.next_back();
+            }
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        // Verify proof
+        let proof_keys =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &challenge_keys,
+                &proof,
+            )
+            .expect("Failed to verify proof");
+
+        assert_eq!(
+            proof_keys,
+            BTreeSet::from_iter([leaf_keys[0], leaf_keys[1],])
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_empty_proof_and_root_failure() {
+        let (_, _, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        let challenge_key = leaf_keys.first().unwrap();
+
+        // Generate empty proof
+        let empty_proof = CompactProof {
+            encoded_nodes: vec![], // Empty proof
+        };
+
+        // Generate empty root
+        let empty_root = Default::default();
+
+        assert_eq!(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &empty_root,
+                &[*challenge_key],
+                &empty_proof
+            ),
+            Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_invalid_root_failure() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        let challenge_key = leaf_keys.first().unwrap();
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
             // Seek to the challenge key.
+            iter.seek(&challenge_key.0).unwrap();
+            iter.next().unwrap().unwrap();
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        let invalid_root = Default::default();
+
+        assert_eq!(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &invalid_root,
+                &[*challenge_key],
+                &proof
+            ),
+            Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_invalid_proof_failure() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        let challenge_key = leaf_keys.first().unwrap();
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            // Seek to the challenge key.
+            iter.seek(&challenge_key.0).unwrap();
+            iter.next().unwrap().unwrap();
+        }
+
+        // Generate proof
+        let mut proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        // Modify the proof to make it invalid
+        proof.encoded_nodes[0] = vec![0; 32];
+
+        assert_eq!(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &[*challenge_key],
+                &proof
+            ),
+            Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_empty_proof_failure() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        let challenge_key = leaf_keys.first().unwrap();
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let _iter = trie.into_double_ended_iter().unwrap();
+
+            // Not seeking any key, so that no leaf nodes are accessed.
+        }
+
+        // Generate proof
+        let proof = CompactProof {
+            encoded_nodes: vec![], // Empty proof
+        };
+
+        assert_eq!(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &[*challenge_key],
+                &proof
+            ),
+            Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_no_challenges_failure() {
+        let (memdb, root, _) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let _iter = trie.into_double_ended_iter().unwrap();
+
+            // Not seeking any key, so that no leaf nodes are accessed.
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        assert_eq!(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &[],
+                &proof
+            ),
+            Err("No challenges provided.".into())
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_no_leaves_in_proof_failure() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        let challenge_key = leaf_keys.first().unwrap();
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let _iter = trie.into_double_ended_iter().unwrap();
+
+            // Not seeking any key, so that no leaf nodes are accessed.
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        assert_eq!(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &[*challenge_key],
+                &proof
+            ),
+            Err("Failed to seek challenged key.".into())
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_wrong_proof_answer_to_challenge_failure() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        let challenge_key = &leaf_keys[0];
+        let wrong_challenge_key = &leaf_keys[1];
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            // Seek to the wrong challenge key so that we can generate a valid proof for the wrong key.
+            iter.seek(&wrong_challenge_key.0).unwrap();
+            iter.next().unwrap().unwrap();
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        assert_eq!(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &[*challenge_key],
+                &proof
+            ),
+            Err("Failed to seek challenged key.".into())
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_wrong_proof_next_and_prev_when_should_be_exact_failure() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        // Existing key before the challenge.
+        let prev_challenge_key = leaf_keys[0];
+
+        // Actual challenge, which is an existing key in the trie.
+        let challenge_key = leaf_keys[1];
+
+        // Existing key after the challenge.
+        let next_challenge_key = leaf_keys[2];
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            // Seek to the existing key before the challenge.
+            iter.seek(&prev_challenge_key.0).unwrap();
+
+            // Seek to the key after the challenge.
+            iter.seek(&next_challenge_key.0).unwrap();
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        assert_eq!(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &[challenge_key],
+                &proof
+            ),
+            Err("Failed to seek challenged key.".into())
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_wrong_proof_only_provide_prev_failure() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        // Increment the most significant byte of the challenge key by 1.
+        let mut challenge_key = leaf_keys[0];
+        challenge_key.0[0] += 1;
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            // Seek to the challenge key, this will only look up the next leaf node.
+            iter.seek(&challenge_key.0).unwrap();
+            iter.next_back().unwrap().unwrap();
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        assert_eq!(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &[challenge_key],
+                &proof
+            ),
+            Err("Failed to get next leaf.".into())
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_wrong_proof_only_provide_next_failure() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        // Increment the most significant byte of the challenge key by 1.
+        let mut challenge_key = leaf_keys[0];
+        challenge_key.0[0] += 1;
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            // Seek to the challenge key, this will only look up the next leaf node.
+            iter.seek(&challenge_key.0).unwrap();
+            iter.next().unwrap().unwrap();
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        assert_eq!(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &[challenge_key],
+                &proof
+            ),
+            Err("Failed to get previous leaf.".into())
+        );
+    }
+
+    #[test]
+    fn commitment_verifier_wrong_proof_skip_actual_next_leaf_failure() {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        // Increment the most significant byte of the challenge key by 1.
+        let mut challenge_key = leaf_keys[0];
+        challenge_key.0[0] += 1;
+
+        // Do the same for the next leaf key.
+        let mut next_leaf_key = leaf_keys[1];
+        next_leaf_key.0[0] += 1;
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            // Create an iterator over the leaf nodes.
+            let mut iter = trie.into_double_ended_iter().unwrap();
+
+            // Seek to the challenge key, this will only look up the next leaf node.
+            iter.seek(&challenge_key.0).unwrap();
+            iter.next_back().unwrap().unwrap();
+
+            // Seek to two keys ahead of the challenge key.
+            iter.seek(&next_leaf_key.0).unwrap();
+            iter.next().unwrap().unwrap();
+        }
+
+        // Generate proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create compact proof from recorder");
+
+        assert_eq!(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &[challenge_key],
+                &proof
+            ),
+            Err("Failed to get next leaf.".into())
+        );
+    }
+}
+
+mod mutate_root_tests {
+    use super::*;
+    use sp_core::H256;
+    use sp_runtime::DispatchError;
+
+    fn setup_trie_and_recorder() -> (
+        MemoryDB<BlakeTwo256>,
+        H256,
+        Vec<H256>,
+        Recorder<BlakeTwo256>,
+    ) {
+        let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+        (memdb, root, leaf_keys, recorder)
+    }
+
+    fn generate_proof_and_verify(
+        recorder: &mut Recorder<BlakeTwo256>,
+        root: &H256,
+        challenge_keys: &[H256],
+    ) -> CompactProof {
+        let proof = recorder
+            .clone()
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(*root)
+            .expect("Failed to create compact proof from recorder");
+
+        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+            root,
+            challenge_keys,
+            &proof,
+        )
+        .expect("Failed to verify proof");
+
+        proof
+    }
+
+    fn assert_key_in_trie(memdb: &MemoryDB<BlakeTwo256>, root: &H256, key: &H256) {
+        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(memdb, root).build();
+        let mut iter = trie.iter().unwrap();
+        iter.seek(&key.0).unwrap();
+        assert_eq!(iter.next().unwrap().unwrap().0, key.0);
+    }
+
+    fn assert_key_not_in_trie(memdb: &MemoryDB<BlakeTwo256>, root: &H256, key: &H256) {
+        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(memdb, root).build();
+        let mut iter = trie.iter().unwrap();
+        iter.seek(&key.0).unwrap();
+        assert!(iter.next().is_none());
+    }
+
+    fn generate_unique_key(existing_keys: &Vec<H256>) -> H256 {
+        let mut new_key = H256::random();
+        while existing_keys.contains(&new_key) {
+            new_key = H256::random();
+        }
+        new_key
+    }
+
+    #[test]
+    fn mutate_root_add_key_success() {
+        let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
+
+        let challenge_key = generate_unique_key(&leaf_keys);
+        let mutations: Vec<(H256, TrieMutation)> =
+            vec![(challenge_key, TrieAddMutation::default().into())];
+
+        {
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            let mut iter = trie.into_double_ended_iter().unwrap();
             iter.seek(&challenge_key.0).unwrap();
 
             // Access the next leaf node.
@@ -696,680 +1487,263 @@ fn commitment_verifier_multiple_challenges_before_single_key_trie_success() {
             // Access the previous leaf node.
             iter.next_back();
         }
+
+        let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
+
+        let (memdb, new_root) =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
+                &root, &mutations, &proof,
+            )
+            .expect("Failed to mutate root");
+
+        assert_key_in_trie(&memdb, &new_root, &challenge_key);
     }
 
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
+    #[test]
+    fn mutate_root_remove_key_success() {
+        let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 
-    // Verify proof
-    let proof_keys =
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &challenge_keys,
-            &proof,
-        )
-        .expect("Failed to verify proof");
+        let challenge_key = *leaf_keys.first().unwrap();
+        let mutations: Vec<(H256, TrieMutation)> =
+            vec![(challenge_key, TrieRemoveMutation::default().into())];
 
-    assert_eq!(proof_keys, [leaf_keys[0]]);
-}
+        {
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
 
-#[test]
-fn commitment_verifier_multiple_challenges_after_single_key_trie_success() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest_one_key::<LayoutV1<BlakeTwo256>>();
+            let mut iter = trie.into_double_ended_iter().unwrap();
+            iter.seek(&challenge_key.0).unwrap();
+            assert_eq!(iter.next().unwrap().unwrap().0, challenge_key.0);
+        }
 
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
+        let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
 
-    let mut challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
+        let (memdb, new_root) =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
+                &root, &mutations, &proof,
+            )
+            .expect("Failed to mutate root");
 
-    // Decrement the most significant bit of every challenge key by 1.
-    let mut i = 0;
-    for key in &mut challenge_keys {
-        i += 2;
-        key.0[0] += i;
+        assert_key_not_in_trie(&memdb, &new_root, &challenge_key);
     }
 
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
+    #[test]
+    fn mutate_root_add_multiple_keys_success() {
+        let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
+        let mut challenge_keys = vec![];
+        for _ in 0..3 {
+            challenge_keys.push(generate_unique_key(&leaf_keys));
+        }
+
+        let mutations: Vec<(H256, TrieMutation)> = challenge_keys
+            .iter()
+            .map(|key| (*key, TrieAddMutation::default().into()))
+            .collect();
+
+        {
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            for challenge_key in &challenge_keys {
+                let mut iter = trie.into_double_ended_iter().unwrap();
+                iter.seek(challenge_key.0.as_slice()).unwrap();
+
+                // Access the next leaf node.
+                iter.next();
+
+                // Access the previous leaf node.
+                iter.next_back();
+            }
+        }
+
+        let proof = generate_proof_and_verify(&mut recorder, &root, &challenge_keys);
+
+        let (memdb, new_root) =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
+                &root, &mutations, &proof,
+            )
+            .expect("Failed to mutate root");
 
         for challenge_key in &challenge_keys {
-            // Seek to the challenge key.
+            assert_key_in_trie(&memdb, &new_root, &challenge_key);
+        }
+    }
+
+    #[test]
+    fn mutate_root_remove_multiple_keys_success() {
+        let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
+
+        let challenge_keys = leaf_keys.into_iter().take(3).collect::<Vec<H256>>();
+        let mutations: Vec<(H256, TrieMutation)> = challenge_keys
+            .iter()
+            .map(|key| (*key, TrieRemoveMutation::default().into()))
+            .collect();
+
+        {
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            for challenge_key in &challenge_keys {
+                let mut iter = trie.iter().unwrap();
+                iter.seek(&challenge_key.0).unwrap();
+                assert_eq!(iter.next().unwrap().unwrap().0, challenge_key.0);
+            }
+        }
+
+        let proof = generate_proof_and_verify(&mut recorder, &root, challenge_keys.as_slice());
+
+        let (memdb, new_root) =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
+                &root, &mutations, &proof,
+            )
+            .expect("Failed to mutate root");
+
+        for challenge_key in &challenge_keys {
+            assert_key_not_in_trie(&memdb, &new_root, &challenge_key);
+        }
+    }
+
+    #[test]
+    fn mutate_root_add_remove_multiple_keys_success() {
+        let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
+
+        let mut leaf_to_add = *leaf_keys.first().unwrap();
+
+        leaf_to_add.0[0] += 1;
+
+        let add_mutation: (H256, TrieMutation) = (leaf_to_add, TrieAddMutation::default().into());
+
+        let remove_mutation: (H256, TrieMutation) = (
+            *leaf_keys.last().unwrap(),
+            TrieRemoveMutation::default().into(),
+        );
+
+        let challenge_keys = [add_mutation.clone(), remove_mutation.clone()];
+
+        {
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            for challenge_key in &challenge_keys {
+                let mut iter = trie.into_double_ended_iter().unwrap();
+                iter.seek(challenge_key.0 .0.as_slice()).unwrap();
+
+                // Access the next leaf node.
+                iter.next();
+
+                // Access the previous leaf node only if it's a remove mutation.
+                if let TrieMutation::Add(_) = challenge_key.1 {
+                    iter.next_back();
+                }
+            }
+        }
+
+        let proof = generate_proof_and_verify(
+            &mut recorder,
+            &root,
+            &challenge_keys
+                .iter()
+                .map(|(key, _)| *key)
+                .collect::<Vec<H256>>(),
+        );
+
+        let (memdb, new_root) =
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
+                &root,
+                &[add_mutation],
+                &proof,
+            )
+            .expect("Failed to mutate root");
+
+        for challenge_key in &challenge_keys {
+            if let TrieMutation::Add(_) = challenge_key.1 {
+                assert_key_in_trie(&memdb, &new_root, &challenge_key.0);
+            } else {
+                assert_key_not_in_trie(&memdb, &new_root, &challenge_key.0);
+            }
+        }
+    }
+
+    #[test]
+    fn mutate_root_no_mutations_failure() {
+        let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
+
+        let challenge_key = *leaf_keys.first().unwrap();
+        let mutations: Vec<(H256, TrieMutation)> = vec![];
+
+        {
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+
+            let mut iter = trie.into_double_ended_iter().unwrap();
             iter.seek(&challenge_key.0).unwrap();
 
             // Access the next leaf node.
             iter.next();
-
-            // Access the previous leaf node.
-            iter.next_back();
         }
+
+        let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
+
+        let err =
+            match ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
+                &root, &mutations, &proof,
+            ) {
+                Err(err) => err,
+                Ok(_) => panic!("Expected error."),
+            };
+
+        assert_eq!(err, DispatchError::Other("No mutations provided."));
     }
 
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
+    #[test]
+    fn mutate_root_does_not_match_expected_fail() {
+        let (memdb, root, leaf_keys, mut recorder) = setup_trie_and_recorder();
 
-    // Verify proof
-    let proof_keys =
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &challenge_keys,
-            &proof,
-        )
-        .expect("Failed to verify proof");
+        let challenge_key = *leaf_keys.first().unwrap();
+        let mutations: Vec<(H256, TrieMutation)> =
+            vec![(challenge_key, TrieRemoveMutation::default().into())];
 
-    assert_eq!(proof_keys, [leaf_keys[0]]);
-}
+        {
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
 
-#[test]
-fn commitment_verifier_multiple_challenges_single_key_trie_success() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest_one_key::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    let mut challenge_keys = [leaf_keys[0], leaf_keys[0], leaf_keys[0]];
-
-    // Decrement most significant byte of second challenge key by 1.
-    challenge_keys[1].0[0] -= 1;
-    // Increment most significant byte of third challenge key by 1.
-    challenge_keys[2].0[0] += 1;
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        for challenge_key in &challenge_keys {
-            // Seek to the challenge key.
+            let mut iter = trie.into_double_ended_iter().unwrap();
             iter.seek(&challenge_key.0).unwrap();
 
             // Access the next leaf node.
             iter.next();
-
-            // Access the previous leaf node.
-            iter.next_back();
         }
+
+        let proof = generate_proof_and_verify(&mut recorder, &root, &[challenge_key]);
+
+        let err =
+            match ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
+                &H256([0; 32]),
+                &mutations,
+                &proof,
+            ) {
+                Err(err) => err,
+                Ok(_) => panic!("Expected error."),
+            };
+
+        assert_eq!(
+            err,
+            DispatchError::Other(
+                "Failed to convert proof to memory DB, root doesn't match with expected."
+            )
+        );
     }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    // Verify proof
-    let proof_keys =
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &challenge_keys,
-            &proof,
-        )
-        .expect("Failed to verify proof");
-
-    assert_eq!(proof_keys, [leaf_keys[0]]);
-}
-
-#[test]
-fn commitment_verifier_challenge_in_between_existing_leafs_shares_prefix_with_next_leaf() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    let mut challenge_keys = [leaf_keys[1]];
-
-    // Decrement the least significant byte of the challenge key by 1.
-    challenge_keys[0].0[31] -= 1;
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        for challenge_key in &challenge_keys {
-            // Seek to the challenge key.
-            iter.seek(&challenge_key.0).unwrap();
-
-            // Access the next leaf node.
-            iter.next();
-
-            // Access the previous leaf node.
-            iter.next_back();
-        }
-    }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    // Verify proof
-    let proof_keys =
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &challenge_keys,
-            &proof,
-        )
-        .expect("Failed to verify proof");
-
-    assert_eq!(proof_keys, [leaf_keys[0], leaf_keys[1],]);
-}
-
-#[test]
-fn commitment_verifier_challenge_in_between_existing_leafs_shares_prefix_with_prev_leaf() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    let mut challenge_keys = [leaf_keys[0]];
-
-    // Increment the least significant byte of the challenge key by 1.
-    challenge_keys[0].0[31] += 1;
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        for challenge_key in &challenge_keys {
-            // Seek to the challenge key.
-            iter.seek(&challenge_key.0).unwrap();
-
-            // Access the next leaf node.
-            iter.next();
-
-            // Access the previous leaf node.
-            iter.next_back();
-        }
-    }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    // Verify proof
-    let proof_keys =
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &challenge_keys,
-            &proof,
-        )
-        .expect("Failed to verify proof");
-
-    assert_eq!(proof_keys, [leaf_keys[0], leaf_keys[1],]);
-}
-
-#[test]
-fn commitment_verifier_empty_proof_and_root_failure() {
-    let (_, _, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    let challenge_key = leaf_keys.first().unwrap();
-
-    // Generate empty proof
-    let empty_proof = CompactProof {
-        encoded_nodes: vec![], // Empty proof
-    };
-
-    // Generate empty root
-    let empty_root = Default::default();
-
-    assert_eq!(
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &empty_root,
-            &[*challenge_key],
-            &empty_proof
-        ),
-        Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
-    );
-}
-
-#[test]
-fn commitment_verifier_invalid_root_failure() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    let challenge_key = leaf_keys.first().unwrap();
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        // Seek to the challenge key.
-        iter.seek(&challenge_key.0).unwrap();
-        iter.next().unwrap().unwrap();
-    }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    let invalid_root = Default::default();
-
-    assert_eq!(
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &invalid_root,
-            &[*challenge_key],
-            &proof
-        ),
-        Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
-    );
-}
-
-#[test]
-fn commitment_verifier_invalid_proof_failure() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    let challenge_key = leaf_keys.first().unwrap();
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        // Seek to the challenge key.
-        iter.seek(&challenge_key.0).unwrap();
-        iter.next().unwrap().unwrap();
-    }
-
-    // Generate proof
-    let mut proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    // Modify the proof to make it invalid
-    proof.encoded_nodes[0] = vec![0; 32];
-
-    assert_eq!(
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &[*challenge_key],
-            &proof
-        ),
-        Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
-    );
-}
-
-#[test]
-fn commitment_verifier_empty_proof_failure() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    let challenge_key = leaf_keys.first().unwrap();
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let _iter = trie.into_double_ended_iter().unwrap();
-
-        // Not seeking any key, so that no leaf nodes are accessed.
-    }
-
-    // Generate proof
-    let proof = CompactProof {
-        encoded_nodes: vec![], // Empty proof
-    };
-
-    assert_eq!(
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &[*challenge_key],
-            &proof
-        ),
-        Err("Failed to convert proof to memory DB, root doesn't match with expected.".into())
-    );
-}
-
-#[test]
-fn commitment_verifier_no_challenges_failure() {
-    let (memdb, root, _) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let _iter = trie.into_double_ended_iter().unwrap();
-
-        // Not seeking any key, so that no leaf nodes are accessed.
-    }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    assert_eq!(
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &[],
-            &proof
-        ),
-        Err("No challenges provided.".into())
-    );
-}
-
-#[test]
-fn commitment_verifier_no_leaves_in_proof_failure() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    let challenge_key = leaf_keys.first().unwrap();
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let _iter = trie.into_double_ended_iter().unwrap();
-
-        // Not seeking any key, so that no leaf nodes are accessed.
-    }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    assert_eq!(
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &[*challenge_key],
-            &proof
-        ),
-        Err("Failed to seek challenged key.".into())
-    );
-}
-
-#[test]
-fn commitment_verifier_wrong_proof_answer_to_challenge_failure() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    let challenge_key = &leaf_keys[0];
-    let wrong_challenge_key = &leaf_keys[1];
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        // Seek to the wrong challenge key so that we can generate a valid proof for the wrong key.
-        iter.seek(&wrong_challenge_key.0).unwrap();
-        iter.next().unwrap().unwrap();
-    }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    assert_eq!(
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &[*challenge_key],
-            &proof
-        ),
-        Err("Failed to seek challenged key.".into())
-    );
-}
-
-#[test]
-fn commitment_verifier_wrong_proof_next_and_prev_when_should_be_exact_failure() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    // Existing key before the challenge.
-    let prev_challenge_key = leaf_keys[0];
-
-    // Actual challenge, which is an existing key in the trie.
-    let challenge_key = leaf_keys[1];
-
-    // Existing key after the challenge.
-    let next_challenge_key = leaf_keys[2];
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        // Seek to the existing key before the challenge.
-        iter.seek(&prev_challenge_key.0).unwrap();
-
-        // Seek to the key after the challenge.
-        iter.seek(&next_challenge_key.0).unwrap();
-    }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    assert_eq!(
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &[challenge_key],
-            &proof
-        ),
-        Err("Failed to seek challenged key.".into())
-    );
-}
-
-#[test]
-fn commitment_verifier_wrong_proof_only_provide_prev_failure() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    // Increment the most significant byte of the challenge key by 1.
-    let mut challenge_key = leaf_keys[0];
-    challenge_key.0[0] += 1;
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        // Seek to the challenge key, this will only look up the next leaf node.
-        iter.seek(&challenge_key.0).unwrap();
-        iter.next_back().unwrap().unwrap();
-    }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    assert_eq!(
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &[challenge_key],
-            &proof
-        ),
-        Err("Failed to get next leaf.".into())
-    );
-}
-
-#[test]
-fn commitment_verifier_wrong_proof_only_provide_next_failure() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    // Increment the most significant byte of the challenge key by 1.
-    let mut challenge_key = leaf_keys[0];
-    challenge_key.0[0] += 1;
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        // Seek to the challenge key, this will only look up the next leaf node.
-        iter.seek(&challenge_key.0).unwrap();
-        iter.next().unwrap().unwrap();
-    }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    assert_eq!(
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &[challenge_key],
-            &proof
-        ),
-        Err("Failed to get previous leaf.".into())
-    );
-}
-
-#[test]
-fn commitment_verifier_wrong_proof_skip_actual_next_leaf_failure() {
-    let (memdb, root, leaf_keys) = build_merkle_patricia_forest::<LayoutV1<BlakeTwo256>>();
-
-    // This recorder is used to record accessed keys in the trie and later generate a proof for them.
-    let recorder: Recorder<BlakeTwo256> = Recorder::default();
-
-    // Increment the most significant byte of the challenge key by 1.
-    let mut challenge_key = leaf_keys[0];
-    challenge_key.0[0] += 1;
-
-    // Do the same for the next leaf key.
-    let mut next_leaf_key = leaf_keys[1];
-    next_leaf_key.0[0] += 1;
-
-    {
-        // Creating trie inside of closure to drop it before generating proof.
-        let mut trie_recorder = recorder.as_trie_recorder(root);
-        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
-            .with_recorder(&mut trie_recorder)
-            .build();
-
-        // Create an iterator over the leaf nodes.
-        let mut iter = trie.into_double_ended_iter().unwrap();
-
-        // Seek to the challenge key, this will only look up the next leaf node.
-        iter.seek(&challenge_key.0).unwrap();
-        iter.next_back().unwrap().unwrap();
-
-        // Seek to two keys ahead of the challenge key.
-        iter.seek(&next_leaf_key.0).unwrap();
-        iter.next().unwrap().unwrap();
-    }
-
-    // Generate proof
-    let proof = recorder
-        .drain_storage_proof()
-        .to_compact_proof::<BlakeTwo256>(root)
-        .expect("Failed to create compact proof from recorder");
-
-    assert_eq!(
-        ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
-            &root,
-            &[challenge_key],
-            &proof
-        ),
-        Err("Failed to get next leaf.".into())
-    );
 }

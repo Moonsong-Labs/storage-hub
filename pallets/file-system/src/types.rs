@@ -76,7 +76,7 @@ pub enum BucketPrivacy {
 }
 
 /// Alias for the `MerkleHash` type used in the ProofsDealerInterface.
-pub type FileKey<T> =
+pub type MerkleHash<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash;
 
 /// Alias for the `ForestProof` type used in the ProofsDealerInterface.

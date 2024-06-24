@@ -19,6 +19,7 @@ array-bytes = { workspace = true }
 async-channel = { workspace = true }
 async-io = { workspace = true }
 async-trait = { workspace = true }
+chrono = { workspace = true }
 color-print = { workspace = true }
 futures-timer = { workspace = true }
 hex = { workspace = true }

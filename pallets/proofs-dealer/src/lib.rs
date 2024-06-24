@@ -29,7 +29,9 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
-    use shp_traits::{CommitmentVerifier, ProvidersInterface};
+    use shp_traits::{
+        CommitmentVerifier, ProvidersInterface, TrieProofDeltaApplier, TrieRemoveMutation,
+    };
     use sp_runtime::traits::Convert;
     use types::{KeyFor, ProviderFor};
 
@@ -54,7 +56,12 @@ pub mod pallet {
         /// Something that implements the `CommitmentVerifier` trait.
         /// The type of the challenge is a hash, and it is expected that a proof will provide the
         /// exact hash if it exists in the forest, or the previous and next hashes if it does not.
-        type ForestVerifier: CommitmentVerifier<Commitment = KeyFor<Self>, Challenge = KeyFor<Self>>;
+        type ForestVerifier: CommitmentVerifier<Commitment = KeyFor<Self>, Challenge = KeyFor<Self>>
+            + TrieProofDeltaApplier<
+                Self::MerkleTrieHashing,
+                Key = KeyFor<Self>,
+                Proof = ForestVerifierProofFor<Self>,
+            >;
 
         /// The type used to verify the proof of a specific key within the Merkle Patricia Forest.
         /// While `ForestVerifier` verifies that some keys are in the Merkle Patricia Forest, this
@@ -185,7 +192,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
-        BoundedVec<KeyFor<T>, MaxCustomChallengesPerBlockFor<T>>,
+        BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), MaxCustomChallengesPerBlockFor<T>>,
     >;
 
     /// The challenge tick of the last checkpoint challenge round.
@@ -248,8 +255,11 @@ pub mod pallet {
     /// is required, but using a `VecDeque` would be more efficient as this is a FIFO queue.
     #[pallet::storage]
     #[pallet::getter(fn priority_challenges_queue)]
-    pub type PriorityChallengesQueue<T: Config> =
-        StorageValue<_, BoundedVec<KeyFor<T>, ChallengesQueueLengthFor<T>>, ValueQuery>;
+    pub type PriorityChallengesQueue<T: Config> = StorageValue<
+        _,
+        BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), ChallengesQueueLengthFor<T>>,
+        ValueQuery,
+    >;
 
     /// A counter of blocks in which challenges were distributed.
     ///
@@ -383,6 +393,9 @@ pub mod pallet {
         /// This could be because the proof is not valid for the root of that key, or because the proof
         /// is not sufficient for the challenges made.
         KeyProofVerificationFailed,
+
+        /// Failed to apply delta to the forest proof partial trie.
+        FailedToApplyDelta,
     }
 
     #[pallet::call]

@@ -1,113 +1,106 @@
 # StorageHub Testing
 
-## Types
+## Pre-requisites
 
-### Runtime Tests
+### pnpm
 
-> [!NOTE]  
-> TODO Add description here of what this test suite does and what it intends to cover
+[pnpm](https://pnpm.io/) is used in this project as the Javascript package manager to install dependencies. To install it you can follow the official instructions at: [https://pnpm.io/installation](https://pnpm.io/installation)
 
-### Integration Tests
+The quickest way is via their script: `curl -fsSL https://get.pnpm.io/install.sh | sh -`
 
-> [!NOTE]  
-> TODO Add description here of what this test suite does and what it intends to cover
+## Testing Types
+
+### Dev Node Test
+
+The `storage-hub` node is run in a docker container in dev mode, so that it can be isolated and parallelized across multiple threads & runners. The purpose of this suite is verify functionality of both the RPC and runtime.
+
+> [!IMPORTANT]  
+> Provider functionality is not covered here, only how the system chain behaves.
+
+#### 1. Build Node
+
+##### Linux
+
+```sh
+cargo build --release
+```
+
+##### MacOS
+
+> [!IMPORTANT]  
+> If you are running this on a Mac, `zig` is a pre-requisite for crossbuilding the node. Instructions to install can be found [here](https://ziglang.org/learn/getting-started/).
+
+```sh
+pnpm crossbuild:mac
+```
+
+#### 2. Build Docker Image
+
+```sh
+pnpm docker:build
+```
+
+#### 3. Run Test Suite
+
+```sh
+pnpm test:node
+```
 
 ### End-To-End Tests
 
 > [!NOTE]  
-> TODO Add description here of what this test suite does and what it intends to cover
+> Please ensure the rust project is built first e.g. `cargo build --release`. 
+> This is required as currently we only support native binaries.
+
+In `/test` run: `pnpm install` to install zombienet
+
+#### 1. Run Network
 
 ```shell
 # in the /test directory
-bun i
-bun zombie:run:full:native
+pnpm i
+pnpm zombie:run:full:native
 ```
 
 Wait for zombie network to start, and then:
 
-```sh
-bun zombie:setup:native
-bun zombie:test suites/zombie
+
+#### 2. Run Setup & Tests
+
+```shell
+pnpm update-types
+pnpm zombie:setup:native
+pnpm zombie:test suites/zombie
 ```
 
-## Local Usage
+### ZombieNet
 
-### Pre-requisites
-
-#### Bun
-
-[Bun](https://bun.sh) is used in this project as the Javascript runtime to execute tests in. To install it you can follow the official instructions at: [https://bun.sh/docs/installation](https://bun.sh/docs/installation)
-
-The quickest way is via their script: `curl -fsSL https://bun.sh/install | bash`
-
-#### Kubernetes
-
-> [!IMPORTANT]  
-> Currently storage-hub on k8 is having issues due to how we are generating chain specs, you can skip directly to [Spawning ZombieNet Native](#spawning-zombienet-native)
-
-For simplicity, we can use minikube to be a local [kubernetes](https://kubernetes.io/) cluster.
-
-Visit their [docs](https://minikube.sigs.k8s.io/docs/) for a guide on GettingStarted, but once installed can be started with:
+This is the networking testing suite for topology and network stability. It is a suite of tests that run on a network of nodes, and is used to verify the network's stability and the nodes' ability to communicate with each other.
 
 ```sh
-minikube start
+pnpm zombie:test:native
 ```
 
-#### Creating Local Docker Image
+## Launching Networks
 
-_In `test/` directory:_
+### Spawning Local DevNode
 
-Run:
-
-```sh
-bun docker:build
-```
-
-to create a local Docker image `storage-hub:local`.
-
-#### Running Local built via Docker
-
-```sh
-docker compose -f docker/local-node-compose.yml up -d
-```
-
-#### Running Latest built via Docker
-
-```sh
-docker compose -f docker/latest-node-compose.yml up -d
-```
-
-#### Zombienet
-
-> [!NOTE]  
-> Please ensure the rust project is built first e.g. `cargo build --release`
-
-In `/test` run: `bun install` to install zombienet
-
-### Running Standard Tests
-
-```sh
-bun test
-```
-
-### Running ZombieNet Tests
-
-```sh
-bun zombie:test:native
-```
+- Native launch: `../target/release/storage-hub --dev`
+- Docker launch (local): `pnpm docker:start` / `pnpm docker:stop`
+- Docker launch (latest): `pnpm docker:start:latest` / `pnpm docker:stop:latest`
 
 ### Spawning ZombieNet Native
 
 > [!TIP]  
 > Polkadot binaries are required to run a zombienet network.
-> For Linux you can run the script: `bun scripts/downloadPolkadot.ts <version>`
+> For Linux you can run the script: `pnpm tsx scripts/downloadPolkadot.ts <version>`
 > For macOS you will have to [compile from source](https://github.com/paritytech/polkadot-sdk/tree/master/polkadot#build-from-source).
 
 To launch a non-ephemeral ZombieNetwork by executing the following in: `/test` directory:
 
 ```sh
-bun install
-bun zombie:run:native
+pnpm install
+pnpm zombie:run:native
 ```
 
 From here you should see in the terminal, the different nodes being spun up. When the network is fully launched, you should see something like this:
@@ -120,24 +113,14 @@ From here you can interact via the websockets exposed in the direct links, in th
 - Bob (relay): `37613`
 - Collator (storage-hub): `45615`
 
-### Generating new Type Interfaces
+## Generating new Type Interfaces
 
 This repo uses Parity's [polkadot-api](https://github.com/polkadot-api/polkadot-api) AKA PAPI.
 To generate new type interfaces run the following in `/test`:
 
 ```sh
-bun zombie:run:native
+pnpm update-types
 ```
-
-In another terminal window in `/test`:
-
-```sh
-bun scalegen
-bun typegen
-```
-
-This will update the scale files, and create type interfaces from them into the `/typegen` directory.
-These generated descriptors are used throughout the tests to interact with relay and StorageHub chain.
 
 ## Troubleshooting
 
@@ -173,6 +156,6 @@ This is caused by the decorated API referring to a different version of the wasm
 > [!TIP]  
 > This can be fixed by running the following:
 >
-> 1. running a local network: `bun zombie:run:native`
-> 2. in a separate terminal, generating new metadata blob: `bun scalegen`
-> 3. generating new types bundle: `bun typegen`
+> 1. running a local network: `pnpm zombie:run:native`
+> 2. in a separate terminal, generating new metadata blob: `pnpm scalegen`
+> 3. generating new types bundle: `pnpm typegen`

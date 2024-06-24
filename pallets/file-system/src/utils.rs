@@ -6,27 +6,25 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
-use shp_traits::{MutateProvidersInterface, ReadProvidersInterface};
-use sp_core::Hasher;
+use shp_traits::{
+    MutateProvidersInterface, ReadProvidersInterface, TrieAddMutation, TrieRemoveMutation,
+};
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
 };
-use sp_std::{vec, vec::Vec};
+use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
 
 use crate::{
     pallet,
     types::{
-        BucketIdFor, BucketNameLimitFor, CollectionIdFor, FileKeyHasher, FileLocation, Fingerprint,
-        ForestProof, KeyProof, MaxBspsPerStorageRequest, MultiAddresses, PeerIds, StorageData,
-        StorageRequestBspsMetadata, StorageRequestMetadata,
+        BucketIdFor, BucketNameLimitFor, CollectionConfigFor, CollectionIdFor, FileKeyHasher,
+        FileLocation, Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest, MerkleHash,
+        MultiAddresses, PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
+        StorageRequestMetadata, TargetBspsRequired,
     },
-    Error, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps,
-    StorageRequestExpirations, StorageRequests,
-};
-use crate::{
-    types::{CollectionConfigFor, FileKey, ProviderIdFor, TargetBspsRequired},
-    BspsAssignmentThreshold,
+    BspsAssignmentThreshold, Error, NextAvailableExpirationInsertionBlock, Pallet,
+    StorageRequestBsps, StorageRequestExpirations, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -59,10 +57,7 @@ macro_rules! expect_or_err {
     }};
 }
 
-impl<T> Pallet<T>
-where
-    T: pallet::Config,
-{
+impl<T: pallet::Config> Pallet<T> {
     /// Create a bucket for a owner (user) under a given MSP account.
     pub(crate) fn do_create_bucket(
         sender: T::AccountId,
@@ -384,10 +379,10 @@ where
     pub(crate) fn do_bsp_confirm_storing(
         sender: T::AccountId,
         location: FileLocation<T>,
-        root: FileKey<T>,
-        forest_proof: ForestProof<T>,
-        key_proof: KeyProof<T>,
-    ) -> Result<ProviderIdFor<T>, DispatchError> {
+        root: MerkleHash<T>,
+        non_inclusion_forest_proof: ForestProof<T>,
+        added_file_key_proof: KeyProof<T>,
+    ) -> Result<(ProviderIdFor<T>, MerkleHash<T>, MerkleHash<T>), DispatchError> {
         let bsp_id =
             <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
@@ -403,11 +398,11 @@ where
             <StorageRequests<T>>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         expect_or_err!(
-                    file_metadata.bsps_confirmed < file_metadata.bsps_required,
-                    "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
-                    Error::<T>::StorageRequestBspsRequiredFulfilled,
-                    bool
-                );
+            file_metadata.bsps_confirmed < file_metadata.bsps_required,
+            "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
+            Error::<T>::StorageRequestBspsRequiredFulfilled,
+            bool
+        );
 
         // Check that the BSP has volunteered for the storage request.
         ensure!(
@@ -445,16 +440,28 @@ where
             }
         }
 
-        // TODO: Initialise challenges properly constructing the key for this particular file.
-        let file_key = FileKeyHasher::<T>::hash(&location.encode());
-        let challenges = vec![file_key];
+        // Compute the file key hash.
+        let file_key = Self::compute_file_key(
+            file_metadata.owner.clone(),
+            location.clone(),
+            file_metadata.size,
+            file_metadata.fingerprint,
+        );
 
-        // Check that the forest proof is valid.
-        <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
-            &bsp_id,
-            challenges.as_slice(),
-            &forest_proof,
-        )?;
+        // Verify the proof of non-inclusion.
+        let proven_keys: BTreeSet<MerkleHash<T>> =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+                &bsp_id,
+                &[file_key],
+                &non_inclusion_forest_proof,
+            )?;
+
+        // Ensure that the file key IS NOT part of the BSP's forest.
+        // Note: The runtime is responsible for adding and removing keys, computing the new root and updating the BSP's root.
+        ensure!(
+            !proven_keys.contains(&file_key),
+            Error::<T>::ExpectedNonInclusionProof
+        );
 
         // TODO: Generate challenges for the key proof properly.
         let challenges = vec![];
@@ -463,7 +470,7 @@ where
         <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
             &file_key,
             &challenges,
-            &key_proof,
+            &added_file_key_proof,
         )?;
 
         // TODO: Check if this is the first file added to the BSP's Forest. If so, initialise
@@ -481,11 +488,12 @@ where
                 .map_err(|_| Error::<T>::FailedTypeConversion)?;
 
             // Remove storage request bsps
-            let removed = <StorageRequestBsps<T>>::clear_prefix(&location, remove_limit, None);
+            let removed =
+                <StorageRequestBsps<T>>::drain_prefix(&location).fold(0, |acc, _| acc + 1);
 
             // Make sure that the expected number of bsps were removed.
             expect_or_err!(
-                removed.backend == remove_limit,
+                removed == remove_limit,
                 "Number of volunteered bsps for storage request should have been removed",
                 Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
                 bool
@@ -502,8 +510,15 @@ where
             });
         }
 
-        // Update root of bsp.
-        <T::Providers as shp_traits::MutateProvidersInterface>::change_root_bsp(bsp_id, root)?;
+        // Compute new root after inserting new file key in forest partial trie.
+        let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
+            &root,
+            &[(file_key, TrieAddMutation::default().into())],
+            &non_inclusion_forest_proof,
+        )?;
+
+        // Update root of BSP.
+        <T::Providers as shp_traits::ProvidersInterface>::update_root(bsp_id, new_root)?;
 
         // Add data to storage provider.
         <T::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
@@ -511,7 +526,7 @@ where
             file_metadata.size,
         )?;
 
-        Ok(bsp_id)
+        Ok((bsp_id, file_key, new_root))
     }
 
     /// Revoke a storage request.
@@ -525,7 +540,7 @@ where
     pub(crate) fn do_revoke_storage_request(
         sender: T::AccountId,
         location: FileLocation<T>,
-        file_key: FileKey<T>,
+        file_key: MerkleHash<T>,
     ) -> DispatchResult {
         // Check that the storage request exists.
         ensure!(
@@ -548,9 +563,10 @@ where
 
         // Check if there are already BSPs who have confirmed to store the file.
         if file_metadata.bsps_confirmed >= T::StorageRequestBspsRequiredType::zero() {
-            // Issue a challenge to force the BSPs to update their storage root.
+            // Apply Remove mutation of the file key to the BSPs that have confirmed storing the file (proofs of inclusion).
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &file_key,
+                Some(TrieRemoveMutation),
             )?;
         }
 
@@ -561,11 +577,11 @@ where
             .map_err(|_| Error::<T>::FailedTypeConversion)?;
 
         // Remove storage request bsps
-        let removed = <StorageRequestBsps<T>>::clear_prefix(&location, remove_limit, None);
+        let removed = <StorageRequestBsps<T>>::drain_prefix(&location).fold(0, |acc, _| acc + 1);
 
         // Make sure that the expected number of bsps were removed.
         expect_or_err!(
-            removed.backend == remove_limit,
+            removed == remove_limit,
             "Number of volunteered bsps for storage request should have been removed",
             Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
             bool
@@ -586,7 +602,7 @@ where
     /// 1. The BSP has volunteered and confirmed storing the file and wants to stop storing it while the storage request is still open.
     ///
     /// > In this case, the BSP has volunteered and confirmed storing the file for an existing storage request.
-    ///     Therefore, we decrement the `bsps_confirmed` by 1.  
+    ///     Therefore, we decrement the `bsps_confirmed` by 1.
     ///
     /// 2. The BSP stops storing a file that has an opened storage request but is not a volunteer.
     ///
@@ -601,23 +617,25 @@ where
     ///
     /// *This function does not give BSPs the possibility to remove themselves from being a __volunteer__ of a storage request.*
     ///
-    /// A proof of storing the file is required to record the new root of the BSPs merkle patricia trie. First we validate the proof
-    /// and ensure the `file_key` is indeed part of the merkle patricia trie. Then finally we re-compute the new merkle patricia trie root
-    /// without the `file_key` and update the root of the BSP.
+    /// A proof of inclusion is required to record the new root of the BSPs merkle patricia trie. First we validate the proof
+    /// and ensure the `file_key` is indeed part of the merkle patricia trie. Then finally compute the new merkle patricia trie root
+    /// by removing the `file_key` and update the root of the BSP.
     ///
     /// `can_serve`: A flag that indicates if the BSP can serve the file to other BSPs. If the BSP can serve the file, then
     /// they are added to the storage request as a data server.
     pub(crate) fn do_bsp_stop_storing(
         sender: T::AccountId,
-        _file_key: FileKey<T>,
+        file_key: MerkleHash<T>,
         location: FileLocation<T>,
         owner: T::AccountId,
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         can_serve: bool,
-    ) -> Result<ProviderIdFor<T>, DispatchError> {
-        let bsp_id = <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender)
-            .ok_or(Error::<T>::NotABsp)?;
+        inclusion_forest_proof: ForestProof<T>,
+    ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
+        let bsp_id =
+            <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
+                .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
@@ -626,8 +644,17 @@ where
         );
 
         // TODO: charge SP for this action.
-        // TODO: Require & verify proof that the file key is indeed stored by the BSP.
-        // TODO: Check that the hash of all the metadata is equal to the `file_key` hash.
+
+        // Compute the file key hash.
+        let computed_file_key =
+            Self::compute_file_key(owner.clone(), location.clone(), size, fingerprint);
+
+        // Check that the metadata corresponds to the expected file key.
+        ensure!(
+            file_key == computed_file_key,
+            Error::<T>::InvalidFileKeyMetadata
+        );
+
         match <StorageRequests<T>>::get(&location) {
             Some(mut metadata) => {
                 match <StorageRequestBsps<T>>::get(&location, &bsp_id) {
@@ -679,9 +706,39 @@ where
             }
         };
 
-        // TODO: compute new root from proof and update the storage root of bsp.
+        // Verify the proof of inclusion.
+        let proven_keys =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+                &bsp_id,
+                &[file_key],
+                &inclusion_forest_proof,
+            )?;
 
-        Ok(bsp_id)
+        // Ensure that the file key IS part of the BSP's forest.
+        // The runtime is responsible for adding and removing keys, computing the new root and updating the BSP's root.
+        ensure!(
+            proven_keys.contains(&file_key),
+            Error::<T>::ExpectedInclusionProof
+        );
+
+        // Get the current root of the BSP.
+        let root = <T::Providers as shp_traits::ProvidersInterface>::get_root(bsp_id)
+            .ok_or(Error::<T>::ProviderRootNotFound)?;
+
+        // Compute new root after removing file key from forest partial trie.
+        let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
+            &root,
+            &[(file_key, TrieRemoveMutation::default().into())],
+            &inclusion_forest_proof,
+        )?;
+
+        // Update root of BSP.
+        <T::Providers as shp_traits::ProvidersInterface>::update_root(bsp_id, new_root)?;
+
+        // Decrease data used by the BSP.
+        <T::Providers as shp_traits::MutateProvidersInterface>::decrease_data_used(&bsp_id, size)?;
+
+        Ok((bsp_id, new_root))
     }
 
     /// Create a collection.
@@ -704,7 +761,7 @@ where
 
     /// Get the block number at which the storage request will expire.
     ///
-    /// This will also update the [`CurrentExpirationBlock`] if the current expiration block pointer is lower then the [`crate::Config::StorageRequestTtl`].
+    /// This will also update the [`NextAvailableExpirationInsertionBlock`] if the current expiration block pointer is lower then the [`crate::Config::StorageRequestTtl`].
     pub(crate) fn next_expiration_insertion_block_number() -> BlockNumberFor<T> {
         let current_block_number = <frame_system::Pallet<T>>::block_number();
         let min_expiration_block = current_block_number + T::StorageRequestTtl::get().into();
@@ -750,6 +807,27 @@ where
 
         T::ThresholdType::decode(&mut &xor_result[..])
             .map_err(|_| Error::<T>::FailedToDecodeThreshold)
+    }
+
+    pub(crate) fn compute_file_key(
+        owner: T::AccountId,
+        location: FileLocation<T>,
+        size: StorageData<T>,
+        fingerprint: Fingerprint<T>,
+    ) -> MerkleHash<T> {
+        let size: u32 = size.into();
+
+        shp_file_key_verifier::types::FileMetadata::<
+            { shp_file_key_verifier::consts::H_LENGTH },
+            { shp_file_key_verifier::consts::FILE_CHUNK_SIZE },
+            { shp_file_key_verifier::consts::FILE_SIZE_TO_CHALLENGES },
+        > {
+            owner: owner.encode(),
+            location: location.clone().to_vec(),
+            size: size.into(),
+            fingerprint: fingerprint.as_ref().into(),
+        }
+        .file_key::<FileKeyHasher<T>>()
     }
 }
 
