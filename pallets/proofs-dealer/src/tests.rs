@@ -19,11 +19,9 @@ use frame_support::{
     traits::{fungible::Mutate, OnPoll},
     weights::WeightMeter,
 };
-use shp_traits::{ProofsDealerInterface, ProvidersInterface};
-use shp_traits::{ProvidersInterface, TrieRemoveMutation};
+use shp_traits::{ProofsDealerInterface, ProvidersInterface, TrieRemoveMutation};
 use sp_core::{blake2_256, Get, Hasher, H256};
-use sp_runtime::BoundedVec;
-use sp_runtime::{traits::BlakeTwo256, DispatchError};
+use sp_runtime::{traits::BlakeTwo256, BoundedVec, DispatchError};
 use sp_trie::CompactProof;
 
 fn run_to_block(n: u64) {
@@ -716,14 +714,15 @@ fn submit_proof_with_checkpoint_challenges_success() {
             },
         );
 
-        // Set Provider's last submitted proof block.
+        // Set Provider's last submitted proof tick.
+        let last_tick_provider_submitted_proof = System::block_number();
         LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         run_to_block(challenge_ticks_tolerance - 1);
 
-        // Get the seed for block 2.
+        // Get the seed for block 3 (after custom challenges).
         let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
@@ -733,8 +732,9 @@ fn submit_proof_with_checkpoint_challenges_success() {
             RandomChallengesPerBlockFor::<Test>::get(),
         );
 
-        // Set last checkpoint challenge block.
-        let checkpoint_challenge_block = System::block_number() + 1;
+        // Set last checkpoint challenge block to be equal to the last tick this provider has submitted
+        // a proof for, so that custom challenges will be taken into account in proof verification.
+        let checkpoint_challenge_block = last_tick_provider_submitted_proof;
         LastCheckpointTick::<Test>::set(checkpoint_challenge_block);
 
         // Make up custom challenges.
@@ -755,9 +755,9 @@ fn submit_proof_with_checkpoint_challenges_success() {
 
         // Creating a vec of proofs with some content to pass verification.
         let mut key_proofs = BTreeMap::new();
-        for challenge in challenges {
+        for challenge in &challenges {
             key_proofs.insert(
-                challenge,
+                challenge.clone(),
                 KeyProof::<Test> {
                     proof: CompactProof {
                         encoded_nodes: vec![vec![0]],
@@ -788,7 +788,7 @@ fn submit_proof_with_checkpoint_challenges_success() {
 fn submit_proof_with_checkpoint_challenges_mutations_success() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
-        System::set_block_number(1);
+        run_to_block(1);
 
         // Create user and add funds to the account.
         let user = RuntimeOrigin::signed(1);
@@ -816,13 +816,16 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
             },
         );
 
-        // Set Provider's last submitted proof block.
-        LastBlockProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        // Set Provider's last submitted proof tick.
+        let last_tick_provider_submitted_proof = System::block_number();
+        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
-        // Set random seed for this block challenges.
-        let seed = BlakeTwo256::hash(b"seed");
-        println!("Block number: {:?}", System::block_number());
-        BlockToChallengesSeed::<Test>::insert(System::block_number(), seed);
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        run_to_block(challenge_ticks_tolerance - 1);
+
+        // Get the seed for block 3 (after custom challenges).
+        let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
         let mut challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
@@ -831,19 +834,26 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
             RandomChallengesPerBlockFor::<Test>::get(),
         );
 
-        // Set last checkpoint challenge block.
-        let checkpoint_challenge_block = System::block_number() + 1;
-        LastCheckpointBlock::<Test>::set(checkpoint_challenge_block);
+        // Set last checkpoint challenge block to be equal to the last tick this provider has submitted
+        // a proof for, so that custom challenges will be taken into account in proof verification.
+        let checkpoint_challenge_block = last_tick_provider_submitted_proof;
+        LastCheckpointTick::<Test>::set(checkpoint_challenge_block);
 
         // Make up custom challenges.
-        let custom_challenges = BoundedVec::try_from(vec![(
-            BlakeTwo256::hash(b"custom_challenge_1"),
-            Some(TrieRemoveMutation::default()),
-        )])
+        let custom_challenges = BoundedVec::try_from(vec![
+            (
+                BlakeTwo256::hash(b"custom_challenge_1"),
+                Some(TrieRemoveMutation::default()),
+            ),
+            (
+                BlakeTwo256::hash(b"custom_challenge_2"),
+                Some(TrieRemoveMutation::default()),
+            ),
+        ])
         .unwrap();
 
         // Set custom challenges in checkpoint block.
-        BlockToCheckpointChallenges::<Test>::insert(
+        TickToCheckpointChallenges::<Test>::insert(
             checkpoint_challenge_block,
             custom_challenges.clone(),
         );
@@ -851,11 +861,11 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         // Add custom challenges to the challenges vector.
         challenges.extend(custom_challenges.iter().map(|(challenge, _)| *challenge));
 
-        // Creating a vec of empty key proofs for each challenge, to fail verification.
+        // Creating a vec of proofs with some content to pass verification.
         let mut key_proofs = BTreeMap::new();
         for challenge in &challenges {
             key_proofs.insert(
-                *challenge,
+                challenge.clone(),
                 KeyProof::<Test> {
                     proof: CompactProof {
                         encoded_nodes: vec![vec![0]],
@@ -868,14 +878,10 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         // Mock a proof.
         let proof = Proof::<Test> {
             forest_proof: CompactProof {
-                encoded_nodes: challenges.iter().map(|c| c.as_ref().to_vec()).collect(),
+                encoded_nodes: vec![vec![0]],
             },
             key_proofs,
         };
-
-        // Advance less than `ChallengeHistoryLength` blocks.
-        let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
-        run_n_blocks(challenge_history_length - 1);
 
         // Dispatch challenge extrinsic.
         assert_ok!(ProofsDealer::submit_proof(
@@ -1811,10 +1817,11 @@ fn new_challenges_round_checkpoint_challenges_with_custom_challenges() {
         ));
 
         // Add priority challenge to the challenges vector.
-        let priority_key_challenged = BlakeTwo256::hash(b"key_challenged");
+        let priority_key_challenged = BlakeTwo256::hash(b"priority_key_challenged");
         assert_ok!(
             <crate::Pallet<Test> as ProofsDealerInterface>::challenge_with_priority(
-                &priority_key_challenged
+                &priority_key_challenged,
+                Some(TrieRemoveMutation::default())
             )
         );
 
@@ -1827,8 +1834,11 @@ fn new_challenges_round_checkpoint_challenges_with_custom_challenges() {
         let checkpoint_challenges =
             TickToCheckpointChallenges::<Test>::get(challenges_ticker).unwrap();
         assert_eq!(checkpoint_challenges.len(), 2);
-        assert_eq!(checkpoint_challenges[0], priority_key_challenged);
-        assert_eq!(checkpoint_challenges[1], key_challenged);
+        assert_eq!(
+            checkpoint_challenges[0],
+            (priority_key_challenged, Some(TrieRemoveMutation::default()))
+        );
+        assert_eq!(checkpoint_challenges[1], (key_challenged, None));
     });
 }
 
@@ -1861,7 +1871,8 @@ fn new_challenges_round_max_custom_challenges() {
             let key_challenged = BlakeTwo256::hash(&(i as usize).to_le_bytes());
             assert_ok!(
                 <crate::Pallet<Test> as ProofsDealerInterface>::challenge_with_priority(
-                    &key_challenged
+                    &key_challenged,
+                    Some(TrieRemoveMutation::default())
                 )
             );
         }
@@ -1869,7 +1880,8 @@ fn new_challenges_round_max_custom_challenges() {
         // Add another priority challenge. It should fail.
         assert_err!(
             <crate::Pallet<Test> as ProofsDealerInterface>::challenge_with_priority(
-                &BlakeTwo256::hash(b"key_challenged")
+                &BlakeTwo256::hash(b"key_challenged"),
+                Some(TrieRemoveMutation::default())
             ),
             crate::Error::<Test>::PriorityChallengesQueueOverflow
         );
@@ -1896,7 +1908,10 @@ fn new_challenges_round_max_custom_challenges() {
         );
         for i in 0..checkpoint_challenges.len() {
             let key_challenged = BlakeTwo256::hash(&(i as usize).to_le_bytes());
-            assert_eq!(checkpoint_challenges[i], key_challenged);
+            assert_eq!(
+                checkpoint_challenges[i],
+                (key_challenged, Some(TrieRemoveMutation::default()))
+            );
         }
 
         // Run until the needed checkpoint challenge block.
@@ -1913,7 +1928,7 @@ fn new_challenges_round_max_custom_challenges() {
             custom_challenges_per_round as usize
         );
 
-        // Expect the last priority challenge to be emitted first.
+        // Expect the last priority challenges in the priority queue to be emitted first.
         let last_priority_challenges_amount = if queue_length % custom_challenges_per_round == 0 {
             custom_challenges_per_round
         } else {
@@ -1925,17 +1940,14 @@ fn new_challenges_round_max_custom_challenges() {
             let key_challenged = BlakeTwo256::hash(
                 &((last_priority_challenges_start_index + i) as usize).to_le_bytes(),
             );
-            assert_eq!(checkpoint_challenges[i as usize], key_challenged);
+            assert_eq!(
+                checkpoint_challenges[i as usize],
+                (key_challenged, Some(TrieRemoveMutation::default()))
+            );
         }
 
-        // Calculate the custom challenges that were included in the last checkpoint challenge.
-        let last_checkpoint_challenges_amount = if queue_length % custom_challenges_per_round == 0 {
-            0
-        } else {
-            custom_challenges_per_round - (queue_length % custom_challenges_per_round)
-        };
-
-        // Check that the last checkpoint challenges contain the custom challenges.
+        // Check that the last checkpoint challenges contain the custom challenges, if there was
+        // enough space in this challenge round.
         let checkpoint_challenges_start_index = if queue_length % custom_challenges_per_round == 0 {
             custom_challenges_per_round
         } else {
@@ -1947,7 +1959,7 @@ fn new_challenges_round_max_custom_challenges() {
             let key_challenged = BlakeTwo256::hash(&(i as usize).to_le_bytes());
             assert_eq!(
                 checkpoint_challenges[(checkpoint_challenges_start_index + i) as usize],
-                key_challenged
+                (key_challenged, None)
             );
         }
 
@@ -1962,10 +1974,13 @@ fn new_challenges_round_max_custom_challenges() {
         let challenges_ticker = ChallengesTicker::<Test>::get();
         let checkpoint_challenges =
             TickToCheckpointChallenges::<Test>::get(challenges_ticker).unwrap();
-        let last_checkpoint_challenge = checkpoint_challenges[checkpoint_challenges.len() - 1];
+        let last_checkpoint_challenge = &checkpoint_challenges[checkpoint_challenges.len() - 1];
         assert_eq!(
             last_checkpoint_challenge,
-            BlakeTwo256::hash(&((queue_length - 1) as usize).to_le_bytes())
+            &(
+                BlakeTwo256::hash(&((queue_length - 1) as usize).to_le_bytes()),
+                None
+            )
         )
     });
 }

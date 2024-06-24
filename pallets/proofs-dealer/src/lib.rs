@@ -301,7 +301,10 @@ pub mod pallet {
         /// A new checkpoint challenge was generated.
         NewCheckpointChallenge {
             challenges_ticker: BlockNumberFor<T>,
-            challenges: BoundedVec<KeyFor<T>, MaxCustomChallengesPerBlockFor<T>>,
+            challenges: BoundedVec<
+                (KeyFor<T>, Option<TrieRemoveMutation>),
+                MaxCustomChallengesPerBlockFor<T>,
+            >,
         },
 
         /// A slashable provider was found.

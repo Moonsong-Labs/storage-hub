@@ -6,7 +6,6 @@ use frame_support::{
     weights::WeightMeter,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-use scale_info::prelude::vec::Vec;
 use shp_traits::{
     CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, TrieMutation,
     TrieProofDeltaApplier, TrieRemoveMutation,
@@ -421,7 +420,7 @@ where
         weight: &mut WeightMeter,
     ) {
         let mut new_checkpoint_challenges: BoundedVec<
-            KeyFor<T>,
+            (KeyFor<T>, Option<TrieRemoveMutation>),
             MaxCustomChallengesPerBlockFor<T>,
         > = BoundedVec::new();
 
@@ -449,14 +448,16 @@ where
         }
 
         // Convert priority_challenges_queue back to a bounded vector.
-        let new_priority_challenges_queue: BoundedVec<KeyFor<T>, ChallengesQueueLengthFor<T>> =
-            match Vec::from(priority_challenges_queue).try_into() {
-                Ok(new_priority_challenges_queue) => new_priority_challenges_queue,
-                // This should not happen, as `priority_challenges_queue` would now have equal or less elements
-                // than what was originally in `PriorityChallengesQueue`, but we add this to be safe.
-                // In here we care that no priority challenges are ever lost.
-                Err(_) => original_priority_challenges_queue,
-            };
+        let new_priority_challenges_queue: BoundedVec<
+            (KeyFor<T>, Option<TrieRemoveMutation>),
+            ChallengesQueueLengthFor<T>,
+        > = match Vec::from(priority_challenges_queue).try_into() {
+            Ok(new_priority_challenges_queue) => new_priority_challenges_queue,
+            // This should not happen, as `priority_challenges_queue` would now have equal or less elements
+            // than what was originally in `PriorityChallengesQueue`, but we add this to be safe.
+            // In here we care that no priority challenges are ever lost.
+            Err(_) => original_priority_challenges_queue,
+        };
 
         // Reset the priority challenges queue with the leftovers.
         PriorityChallengesQueue::<T>::set(new_priority_challenges_queue);
@@ -476,7 +477,10 @@ where
                 None => break,
             };
 
-            if new_checkpoint_challenges.try_push(challenge).is_err() {
+            if new_checkpoint_challenges
+                .try_push((challenge, None))
+                .is_err()
+            {
                 // This should not happen, as we check that new_checkpoint_challenges is not full
                 // in the while condition above, but we add this to be safe.
                 break;
