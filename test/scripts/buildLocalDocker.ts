@@ -1,8 +1,6 @@
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import dotenv from "dotenv";
-dotenv.config();
 
 async function main() {
   process.chdir("..");
