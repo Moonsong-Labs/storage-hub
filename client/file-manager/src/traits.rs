@@ -76,7 +76,7 @@ pub trait FileDataTrie<T: TrieLayout> {
     ) -> Result<(), FileStorageWriteError>;
 
     /// Removes all chunks from storage.
-    fn delete(&mut self) -> Result<(), FileStorageError>;
+    fn delete(&mut self, chunk_count: u64) -> Result<(), FileStorageError>;
 }
 
 /// Storage interface to be implemented by the storage providers.

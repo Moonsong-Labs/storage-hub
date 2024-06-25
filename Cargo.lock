@@ -12386,6 +12386,7 @@ dependencies = [
  "log",
  "parity-scale-codec",
  "reference-trie",
+ "serde_json",
  "shc-actors-framework",
  "shc-common",
  "shp-traits",

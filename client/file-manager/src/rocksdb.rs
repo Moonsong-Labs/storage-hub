@@ -19,9 +19,6 @@ use crate::{
     LOG_TARGET,
 };
 
-// TODO: Add documentation
-// TODO: improve error handling
-
 pub(crate) fn other_io_error(err: String) -> io::Error {
     io::Error::new(io::ErrorKind::Other, err)
 }
@@ -50,6 +47,21 @@ pub struct StorageDb<Hasher> {
     pub _marker: std::marker::PhantomData<Hasher>,
 }
 
+impl<H: Hasher> StorageDb<H> {
+    /// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
+    pub fn as_rocksdb_storage(db_path: String) -> Result<StorageDb<H>, FileStorageError> {
+        let db = open_or_creating_rocksdb(db_path).map_err(|e| {
+            warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
+            FileStorageError::FailedToReadStorage
+        })?;
+
+        Ok(StorageDb {
+            db: Arc::new(db),
+            _marker: Default::default(),
+        })
+    }
+}
+
 impl<H: Hasher> Storage<H> for StorageDb<H> {
     fn get(&self, key: &H::Out, prefix: Prefix) -> Result<Option<DBValue>, String> {
         let prefixed_key = prefixed_key::<H>(key, prefix);
@@ -66,6 +78,9 @@ where
 {
     /// Write the transaction to the storage.
     fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>>;
+
+    //// Read from storage.
+    fn read(&self, key: HasherOutT<T>) -> Result<Option<Vec<u8>>, ErrorT<T>>;
 }
 
 impl<T: TrieLayout + Send + Sync> Backend<T> for StorageDb<HashT<T>>
@@ -80,6 +95,31 @@ where
 
         Ok(())
     }
+
+    fn read(&self, key: HasherOutT<T>) -> Result<Option<Vec<u8>>, ErrorT<T>> {
+        let value = self.db.get(0, key.as_ref()).map_err(|e| {
+            warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
+            FileStorageError::FailedToReadStorage
+        })?;
+
+        Ok(value)
+    }
+}
+
+fn convert_raw_bytes_to_hasher_out<T: TrieLayout>(key: Vec<u8>) -> Result<HasherOutT<T>, ErrorT<T>>
+where
+    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
+{
+    let key: [u8; 32] = key
+        .try_into()
+        .map_err(|_| FileStorageError::FailedToParseKey)?;
+
+    let key = HasherOutT::<T>::try_from(key).map_err(|_| {
+        warn!(target: LOG_TARGET, "Failed to parse root from DB");
+        FileStorageError::FailedToParseKey
+    })?;
+
+    Ok(key)
 }
 
 pub struct RocksDbFileDataTrie<T: TrieLayout> {
@@ -87,10 +127,8 @@ pub struct RocksDbFileDataTrie<T: TrieLayout> {
     storage: Box<dyn Backend<T>>,
     // In memory overlay used for Trie operations.
     overlay: PrefixedMemoryDB<HashT<T>>,
-    // Root of the file Trie, which is a file key.
+    // Root of the file Trie, which is the file fingerprint.
     root: HasherOutT<T>,
-    // Number of chunks in this file.
-    chunk_count: u64,
 }
 
 impl<T: TrieLayout + Send + Sync + 'static> Default for RocksDbFileDataTrie<T>
@@ -98,14 +136,14 @@ where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn default() -> Self {
-        let default_storage =
-            Self::rocksdb_storage("/tmp".to_string()).expect("Failed to create RocksDB");
+        let default_storage = StorageDb::<T::Hash>::as_rocksdb_storage("/tmp".to_string())
+            .expect("Failed to create RocksDB");
 
         Self::new(Box::new(default_storage))
     }
 }
 
-impl<T: TrieLayout + Send + Sync> RocksDbFileDataTrie<T>
+impl<T: TrieLayout + Send + Sync + 'static> RocksDbFileDataTrie<T>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
@@ -115,7 +153,6 @@ where
             storage,
             root,
             overlay: Default::default(),
-            chunk_count: 0,
         };
         let db = rocksdb_file_data_trie.as_hash_db_mut();
         let trie = TrieDBMutBuilder::<T>::new(db, &mut root).build();
@@ -124,7 +161,21 @@ where
 
         rocksdb_file_data_trie.root = root;
 
-        debug!(target: LOG_TARGET, "New root: {:?}", rocksdb_file_data_trie.root);
+        rocksdb_file_data_trie
+    }
+
+    fn from_existing(root: &mut HasherOutT<T>) -> Self {
+        let mut rocksdb_file_data_trie = RocksDbFileDataTrie::<T> {
+            root: *root,
+            ..Default::default()
+        };
+
+        let db = rocksdb_file_data_trie.as_hash_db_mut();
+        let trie = TrieDBMutBuilder::<T>::from_existing(db, root).build();
+
+        drop(trie);
+
+        rocksdb_file_data_trie.root = *root;
 
         rocksdb_file_data_trie
     }
@@ -166,24 +217,11 @@ where
 
         transaction
     }
-
-    /// Open the RocksDB database at `dp_path` and return a new instance of [`StorageDb`].
-    pub fn rocksdb_storage(dp_path: String) -> Result<StorageDb<HashT<T>>, ErrorT<T>> {
-        let db = open_or_creating_rocksdb(dp_path).map_err(|e| {
-            warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
-            FileStorageError::FailedToReadStorage
-        })?;
-
-        Ok(StorageDb {
-            db: Arc::new(db),
-            _marker: Default::default(),
-        })
-    }
 }
 
 // Dropping the trie (either by calling `drop()` or by the end of the scope)
 // automatically commits to the underlying db.
-impl<T: TrieLayout + Send + Sync> FileDataTrie<T> for RocksDbFileDataTrie<T>
+impl<T: TrieLayout + Send + Sync + 'static> FileDataTrie<T> for RocksDbFileDataTrie<T>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
@@ -215,7 +253,8 @@ where
             .with_recorder(&mut trie_recorder)
             .build();
 
-        // Read all the chunks to prove from the trie.
+        // We Read all the chunks to prove from the trie.
+        // This is step is required to actually record the proof.
         let mut chunks = Vec::new();
         for chunk_id in chunk_ids {
             let chunk: Option<Vec<u8>> = trie
@@ -225,7 +264,6 @@ where
             let chunk = chunk.ok_or(FileStorageError::FileChunkDoesNotExist)?;
             chunks.push((*chunk_id, chunk));
         }
-
         // Drop the `trie_recorder` to release the `recorder`
         drop(trie_recorder);
 
@@ -233,7 +271,7 @@ where
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<T::Hash>(self.root)
-            .map_err(|_| FileStorageError::FailedToGenerateCompactProof)?;
+            .map_err(|e| FileStorageError::FailedToGenerateCompactProof)?;
 
         Ok(FileProof {
             proof: proof.into(),
@@ -286,18 +324,13 @@ where
             FileStorageWriteError::FailedToInsertFileChunk
         })?;
 
-        self.chunk_count += 1;
-
         Ok(())
     }
 
     // Deletes itself from the underlying db.
-    fn delete(&mut self) -> Result<(), FileStorageError> {
+    fn delete(&mut self, chunk_count: u64) -> Result<(), FileStorageError> {
         let mut root = self.root;
-        let chunk_count = self.chunk_count;
         let db = self.as_hash_db_mut();
-        // Need to clone because we cannot have a immutable borrow after mutably borrowing
-        // in the next step.
         let trie_root_key = root;
         let mut trie = TrieDBMutBuilder::<T>::from_existing(db, &mut root).build();
 
@@ -326,10 +359,8 @@ where
             FileStorageError::FailedToWriteToStorage
         })?;
 
-        // Set new internal root (emptry trie root)
+        // Set new internal root (empty trie root)
         self.root = new_root;
-
-        self.chunk_count = 0;
 
         Ok(())
     }
@@ -377,22 +408,25 @@ where
     }
 }
 
+use std::sync::RwLock;
 pub struct RocksDbFileStorage<T: TrieLayout + 'static>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
-    pub metadata: HashMap<HasherOutT<T>, FileMetadata>,
-    pub file_data: HashMap<HasherOutT<T>, RocksDbFileDataTrie<T>>,
+    storage: Arc<RwLock<dyn Backend<T>>>,
 }
 
-impl<T: TrieLayout + 'static> RocksDbFileStorage<T>
+impl<T: TrieLayout + Send + Sync + 'static> RocksDbFileStorage<T>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     pub fn new() -> Self {
+        let default_storage =
+            StorageDb::<T::Hash>::as_rocksdb_storage("/tmp/file_storage".to_string())
+                .expect("Failed to create RocksDB");
+
         Self {
-            metadata: HashMap::new(),
-            file_data: HashMap::new(),
+            storage: Arc::new(RwLock::new(default_storage)),
         }
     }
 }
@@ -408,19 +442,13 @@ where
         key: &HasherOutT<T>,
         chunk_id: &ChunkId,
     ) -> Result<Chunk, FileStorageError> {
-        let file_data = self
-            .file_data
-            .get(key)
-            .ok_or(FileStorageError::FileDoesNotExist)?;
+        let raw_metadata = self.storage.read().unwrap().read(*key).unwrap().unwrap();
+        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).unwrap();
+        let raw_root = metadata.fingerprint.as_ref();
+        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).unwrap();
+        let file_trie = RocksDbFileDataTrie::<T>::from_existing(&mut root);
 
-        file_data.get_chunk(chunk_id)
-    }
-
-    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError> {
-        self.metadata
-            .get(key)
-            .cloned()
-            .ok_or(FileStorageError::FileDoesNotExist)
+        file_trie.get_chunk(chunk_id)
     }
 
     fn write_chunk(
@@ -429,34 +457,13 @@ where
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
-        let file_data = self
-            .file_data
-            .get_mut(key)
-            .ok_or(FileStorageWriteError::FileDoesNotExist)?;
+        let raw_metadata = self.storage.read().unwrap().read(*key).unwrap().unwrap();
+        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).unwrap();
+        let raw_root = metadata.fingerprint.as_ref();
+        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).unwrap();
+        let mut file_trie = RocksDbFileDataTrie::<T>::from_existing(&mut root);
 
-        file_data.write_chunk(chunk_id, data)?;
-
-        let metadata = self.metadata.get(key).expect(
-                format!(
-                    "Key {:?} already associated with File Trie, but not with File Metadata. Possible inconsistency between them.",                
-                    key
-            )
-                .as_str(),
-            );
-
-        // Check if we have all the chunks for the file.
-        let stored_chunks = file_data
-            .stored_chunks_count()
-            .map_err(|_| FileStorageWriteError::FailedToConstructTrieIter)?;
-        if metadata.chunks_count() != stored_chunks {
-            return Ok(FileStorageWriteOutcome::FileIncomplete);
-        }
-
-        // If we have all the chunks, check if the file metadata fingerprint and the file trie
-        // root matches.
-        if metadata.fingerprint != file_data.root.as_ref().into() {
-            return Err(FileStorageWriteError::FingerprintAndStoredFileMismatch);
-        }
+        file_trie.write_chunk(chunk_id, data)?;
 
         Ok(FileStorageWriteOutcome::FileComplete)
     }
@@ -466,15 +473,10 @@ where
         key: HasherOutT<T>,
         metadata: FileMetadata,
     ) -> Result<(), FileStorageError> {
-        if self.metadata.contains_key(&key) {
-            return Err(FileStorageError::FileAlreadyExists);
-        }
-        self.metadata.insert(key, metadata);
-
-        let maybe_file_data = self.file_data.insert(key, RocksDbFileDataTrie::default());
-        if maybe_file_data.is_some() {
-            panic!("Key already associated with File Trie, but not with File Metadata. Possible inconsistency between them.");
-        }
+        let mut transaction = DBTransaction::new();
+        let serialized_metadata = serde_json::to_vec(&metadata).unwrap();
+        transaction.put(0, key.as_ref(), &serialized_metadata);
+        self.storage.write().unwrap().write(transaction);
 
         Ok(())
     }
@@ -485,17 +487,19 @@ where
         metadata: FileMetadata,
         file_data: Self::FileDataTrie,
     ) -> Result<(), FileStorageError> {
-        if self.metadata.contains_key(&key) {
-            return Err(FileStorageError::FileAlreadyExists);
-        }
-        self.metadata.insert(key, metadata);
-
-        let maybe_file_data = self.file_data.insert(key, file_data);
-        if maybe_file_data.is_some() {
-            panic!("Key already associated with File Trie, but not with File Metadata. Possible inconsistency between them.");
-        }
+        let mut transaction = DBTransaction::new();
+        let raw_metadata = serde_json::to_vec(&metadata).unwrap();
+        transaction.put(0, key.as_ref(), &raw_metadata);
+        self.storage.write().unwrap().write(transaction);
 
         Ok(())
+    }
+
+    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError> {
+        let raw_metadata = self.storage.read().unwrap().read(*key).unwrap().unwrap();
+        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).unwrap();
+
+        Ok(metadata)
     }
 
     fn generate_proof(
@@ -503,48 +507,26 @@ where
         key: &HasherOutT<T>,
         chunk_ids: &Vec<ChunkId>,
     ) -> Result<FileKeyProof, FileStorageError> {
-        let metadata = self
-            .metadata
-            .get(key)
-            .ok_or(FileStorageError::FileDoesNotExist)?;
+        let raw_metadata = self.storage.read().unwrap().read(*key).unwrap().unwrap();
+        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).unwrap();
+        let raw_root = metadata.fingerprint.as_ref();
+        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).unwrap();
+        let file_trie = RocksDbFileDataTrie::<T>::from_existing(&mut root);
 
-        // TODO: use better error
-        let file_data = self.file_data.get(key).expect(
-            format!("Key {:?} already associated with File Metadata, but not with File Trie. Possible inconsistency between them.",
-                key
-            )
-            .as_str(),
-        );
-
-        let stored_chunks = file_data.stored_chunks_count()?;
-        if metadata.chunks_count() != stored_chunks {
-            return Err(FileStorageError::IncompleteFile);
-        }
-
-        if metadata.fingerprint
-            != file_data
-                .root
-                .as_ref()
-                .try_into()
-                .expect("Hasher output mismatch")
-        {
-            return Err(FileStorageError::FingerprintAndStoredFileMismatch);
-        }
-
-        Ok(file_data
+        Ok(file_trie
             .generate_proof(chunk_ids)?
             .to_file_key_proof(metadata.clone()))
     }
 
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError> {
-        let file_trie = self.file_data.get_mut(key).expect("No File data found");
+        let raw_metadata = self.storage.read().unwrap().read(*key).unwrap().unwrap();
+        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).unwrap();
+        let raw_root = metadata.fingerprint.as_ref();
+        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).unwrap();
+        let mut file_trie = RocksDbFileDataTrie::<T>::from_existing(&mut root);
+        let chunk_count = metadata.chunks_count();
 
-        file_trie.delete()?;
-
-        self.metadata.remove(key);
-        self.file_data.remove(key);
-
-        Ok(())
+        file_trie.delete(chunk_count)
     }
 }
 
@@ -594,6 +576,12 @@ mod tests {
             }
 
             Ok(())
+        }
+
+        fn read(&self, key: HasherOutT<T>) -> Result<Option<Vec<u8>>, ErrorT<T>> {
+            let value = self.data.get(&key.as_ref().to_vec());
+
+            Ok(value.cloned())
         }
     }
 
@@ -734,7 +722,7 @@ mod tests {
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
-        file_trie.delete().unwrap();
+        file_trie.delete(chunks.len() as u64).unwrap();
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_err());
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_err());
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_err());
@@ -787,8 +775,7 @@ mod tests {
             .insert_file_with_data(key, file_metadata, file_trie)
             .unwrap();
 
-        assert!(file_storage.file_data.contains_key(&key));
-        assert!(file_storage.metadata.contains_key(&key));
+        assert!(file_storage.get_metadata(&key).is_ok());
     }
 
     #[test]
@@ -836,8 +823,7 @@ mod tests {
             .insert_file_with_data(key, file_metadata, file_trie)
             .unwrap();
 
-        assert!(file_storage.file_data.contains_key(&key));
-        assert!(file_storage.metadata.contains_key(&key));
+        assert!(file_storage.get_metadata(&key).is_ok());
 
         file_storage.delete_file(&key).unwrap();
 
@@ -889,8 +875,7 @@ mod tests {
             .insert_file_with_data(key, file_metadata, file_trie)
             .unwrap();
 
-        assert!(file_storage.file_data.contains_key(&key));
-        assert!(file_storage.metadata.contains_key(&key));
+        assert!(file_storage.get_metadata(&key).is_ok());
 
         let file_proof = file_storage.generate_proof(&key, &chunk_ids).unwrap();
         let proven_leaves = file_proof.proven::<LayoutV1<BlakeTwo256>>().unwrap();
@@ -901,7 +886,7 @@ mod tests {
     }
 
     #[test]
-    fn same_chunk_id_different_data_gives_different_roots() {
+    fn same_chunk_id_different_data_produce_different_roots() {
         use sp_trie::MemoryDB;
 
         let mut memdb = MemoryDB::<BlakeTwo256>::default();
