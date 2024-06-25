@@ -70,7 +70,7 @@ where
             event.location,
         );
 
-        // TODO: REMOVE ME
+        // TODO: FIND A BETTER WORKAROUND FOR THIS
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
         let file_metadata = FileMetadata {
