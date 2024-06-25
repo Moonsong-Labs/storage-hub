@@ -640,7 +640,7 @@ pub mod pallet {
                 file_key,
                 new_root,
                 owner,
-                location
+                location,
             });
 
             Ok(())
