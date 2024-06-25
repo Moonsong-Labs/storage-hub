@@ -2019,10 +2019,10 @@ fn new_challenges_round_provider_marked_as_slashable() {
 
         // Set Provider's last submitted proof block.
         let current_tick = ChallengesTicker::<Test>::get();
-        let last_tick_provider_submitted_proof = current_tick;
+        let prev_tick_provider_submitted_proof = current_tick;
         LastTickProviderSubmittedProofFor::<Test>::insert(
             &provider_id,
-            last_tick_provider_submitted_proof,
+            prev_tick_provider_submitted_proof,
         );
 
         // Set Provider's deadline for submitting a proof.
@@ -2053,17 +2053,17 @@ fn new_challenges_round_provider_marked_as_slashable() {
         assert!(SlashableProviders::<Test>::contains_key(&provider_id));
 
         // Check the new last time this provider submitted a proof.
-        let expected_new_tick = last_tick_provider_submitted_proof + challenge_period;
+        let current_tick_provider_submitted_proof = prev_tick_provider_submitted_proof + challenge_period;
         let new_last_tick_provider_submitted_proof =
             LastTickProviderSubmittedProofFor::<Test>::get(provider_id).unwrap();
-        assert_eq!(expected_new_tick, new_last_tick_provider_submitted_proof);
+        assert_eq!(current_tick_provider_submitted_proof, new_last_tick_provider_submitted_proof);
 
         // Check that the Provider's deadline was pushed forward.
         assert_eq!(
             ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id),
             None
         );
-        let new_deadline = expected_new_tick + challenge_period + challenge_ticks_tolerance;
+        let new_deadline = current_tick_provider_submitted_proof + challenge_period + challenge_ticks_tolerance;
         assert_eq!(
             ChallengeTickToChallengedProviders::<Test>::get(new_deadline, provider_id),
             Some(()),

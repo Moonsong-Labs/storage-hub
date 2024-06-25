@@ -494,5 +494,13 @@ pub mod pallet {
 
             Self::do_new_challenges_round(n, weight);
         }
+
+        // TODO: Document why we need to do this.
+        // TODO: This is related to the limitation of `CheckpointChallengePeriod` having to be greater or equal
+        // TODO: to the largest period of a Provider. The provider with largest period would be the one with the
+        // TODO: smallest stake.
+        fn integrity_test() {
+            // TODO: Check that the `CheckpointChallengePeriod` is greater or equal to the largest period of a Provider.
+        }
     }
 }

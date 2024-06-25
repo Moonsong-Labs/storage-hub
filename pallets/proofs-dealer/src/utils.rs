@@ -240,6 +240,8 @@ where
                     // Remove the key from the list of `forest_keys_proven` to avoid having to verify the key proof.
                     forest_keys_proven.remove(&mutation.0);
 
+                    // TODO: Reduce the storage used by the Provider with some interface exposed by the Providers pallet.
+
                     <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
                         &acc_root,
                         &[(mutation.0, mutation.1.clone().into())],
@@ -297,6 +299,8 @@ where
             Some(()),
         );
 
+        // TODO: Register this block as the last block that this provider can charge for in the payment stream.
+
         Ok(())
     }
 
@@ -306,7 +310,7 @@ where
     /// randomness, and are added to `TickToChallengesSeed`, for this block's number.
     ///
     /// It also takes care of including the challenges from the `ChallengesQueue` and
-    /// `PriorityChallengesQueue`. This custom challenges are only included in "checkpoint"
+    /// `PriorityChallengesQueue`. These custom challenges are only included in "checkpoint"
     /// blocks
     ///
     /// Additionally, it takes care of checking if there are Providers that have
@@ -356,17 +360,14 @@ where
 
         // If there are providers left in `ChallengeTickToChallengedProviders` for this tick,
         // they are marked as slashable.
-        let slashable_providers: Vec<_> =
-            ChallengeTickToChallengedProviders::<T>::iter_key_prefix(challenges_ticker).collect();
-        let slashable_providers_len = slashable_providers.len();
-        weight.consume(T::DbWeight::get().reads_writes(slashable_providers_len as u64, 0));
-        for provider in slashable_providers {
+        let mut slashable_providers =
+            ChallengeTickToChallengedProviders::<T>::drain_prefix(challenges_ticker);
+        while let Some((provider, _)) = slashable_providers.next() {
+            // One read for every provider in the prefix, and one write as we're consuming and deleting the entry.
+            weight.consume(T::DbWeight::get().reads_writes(1, 1));
+
             // Mark this provider as slashable.
             SlashableProviders::<T>::set(provider, Some(()));
-            weight.consume(T::DbWeight::get().reads_writes(0, 1));
-
-            // Remove this tick entry from `ChallengeTickToChallengedProviders`.
-            ChallengeTickToChallengedProviders::<T>::remove(challenges_ticker, provider);
             weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
             // Get the stake for this Provider, to know its challenge period.
@@ -684,4 +685,9 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             .1,
         )
     }
+
+    // TODO: Add `initialise_provider` method to be called by the FileSystem pallet.
+    // TODO: when a file is first uploaded to a BSP or bucket.
+    // TODO: It would set `LastTickProviderSubmittedProofFor` to the current tick and
+    // TODO: the deadline for submitting a proof in `ChallengeTickToChallengedProviders`.
 }
