@@ -69,6 +69,7 @@ import type {
   PolkadotPrimitivesV6PersistedValidationData,
   PolkadotPrimitivesV6UpgradeGoAhead,
   PolkadotPrimitivesV6UpgradeRestriction,
+  ShpTraitsTrieRemoveMutation,
   SpConsensusAuraSr25519AppSr25519Public,
   SpCoreCryptoKeyTypeId,
   SpRuntimeDigest,
@@ -310,7 +311,7 @@ declare module "@polkadot/api-base/types/storage" {
       nextStartingBlockToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A double map of [`storage request`](FileLocation) to BSP `AccountId`s that volunteered to store data.
+       * A double map from storage request to BSP `AccountId`s that volunteered to store the file.
        *
        * Any BSP under a storage request prefix is considered to be a volunteer and can be removed at any time.
        * Once a BSP submits a valid proof to the via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
@@ -320,29 +321,29 @@ declare module "@polkadot/api-base/types/storage" {
       storageRequestBsps: AugmentedQuery<
         ApiType,
         (
-          arg1: Bytes | string | Uint8Array,
+          arg1: H256 | string | Uint8Array,
           arg2: H256 | string | Uint8Array
         ) => Observable<Option<PalletFileSystemStorageRequestBspsMetadata>>,
-        [Bytes, H256]
+        [H256, H256]
       > &
-        QueryableStorageEntry<ApiType, [Bytes, H256]>;
+        QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
        * A map of blocks to expired storage requests.
        **/
       storageRequestExpirations: AugmentedQuery<
         ApiType,
-        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<Bytes>>,
+        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<H256>>,
         [u32]
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       storageRequests: AugmentedQuery<
         ApiType,
         (
-          arg: Bytes | string | Uint8Array
+          arg: H256 | string | Uint8Array
         ) => Observable<Option<PalletFileSystemStorageRequestMetadata>>,
-        [Bytes]
+        [H256]
       > &
-        QueryableStorageEntry<ApiType, [Bytes]>;
+        QueryableStorageEntry<ApiType, [H256]>;
       /**
        * Generic query
        **/
@@ -1064,7 +1065,9 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       blockToCheckpointChallenges: AugmentedQuery<
         ApiType,
-        (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<Vec<H256>>>,
+        (
+          arg: u32 | AnyNumber | Uint8Array
+        ) => Observable<Option<Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>>>,
         [u32]
       > &
         QueryableStorageEntry<ApiType, [u32]>;
@@ -1111,7 +1114,11 @@ declare module "@polkadot/api-base/types/storage" {
        * A `BoundedVec` is used because the `parity_scale_codec::MaxEncodedLen` trait
        * is required, but using a `VecDeque` would be more efficient as this is a FIFO queue.
        **/
-      priorityChallengesQueue: AugmentedQuery<ApiType, () => Observable<Vec<H256>>, []> &
+      priorityChallengesQueue: AugmentedQuery<
+        ApiType,
+        () => Observable<Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>>,
+        []
+      > &
         QueryableStorageEntry<ApiType, []>;
       /**
        * Generic query

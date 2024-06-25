@@ -390,16 +390,16 @@ declare module "@polkadot/api-base/types/events" {
        **/
       BspConfirmedStoring: AugmentedEvent<
         ApiType,
-        [bspId: H256, location: Bytes],
-        { bspId: H256; location: Bytes }
+        [bspId: H256, fileKey: H256, newRoot: H256],
+        { bspId: H256; fileKey: H256; newRoot: H256 }
       >;
       /**
        * Notifies that a BSP has stopped storing a file.
        **/
       BspStoppedStoring: AugmentedEvent<
         ApiType,
-        [bspId: H256, fileKey: H256, owner: AccountId32, location: Bytes],
-        { bspId: H256; fileKey: H256; owner: AccountId32; location: Bytes }
+        [bspId: H256, fileKey: H256, newRoot: H256],
+        { bspId: H256; fileKey: H256; newRoot: H256 }
       >;
       /**
        * Notifies that a bucket's privacy has been updated.
@@ -444,17 +444,31 @@ declare module "@polkadot/api-base/types/events" {
        **/
       NewStorageRequest: AugmentedEvent<
         ApiType,
-        [who: AccountId32, location: Bytes, fingerprint: H256, size_: u32, peerIds: Vec<Bytes>],
-        { who: AccountId32; location: Bytes; fingerprint: H256; size_: u32; peerIds: Vec<Bytes> }
+        [
+          who: AccountId32,
+          fileKey: H256,
+          location: Bytes,
+          fingerprint: H256,
+          size_: u32,
+          peerIds: Vec<Bytes>,
+        ],
+        {
+          who: AccountId32;
+          fileKey: H256;
+          location: Bytes;
+          fingerprint: H256;
+          size_: u32;
+          peerIds: Vec<Bytes>;
+        }
       >;
       /**
        * Notifies the expiration of a storage request.
        **/
-      StorageRequestExpired: AugmentedEvent<ApiType, [location: Bytes], { location: Bytes }>;
+      StorageRequestExpired: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
       /**
        * Notifies that a storage request has been revoked by the user who initiated it.
        **/
-      StorageRequestRevoked: AugmentedEvent<ApiType, [location: Bytes], { location: Bytes }>;
+      StorageRequestRevoked: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
       /**
        * Generic event
        **/

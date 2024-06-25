@@ -283,12 +283,12 @@ declare module '@polkadot/api-base/types/submittable' {
             /**
              * Used by a BSP to confirm they are storing data of a storage request.
              **/
-            bspConfirmStoring: AugmentedSubmittable<(location: Bytes | string | Uint8Array, root: H256 | string | Uint8Array, nonInclusionForestProof: SpTrieStorageProofCompactProof | {
+            bspConfirmStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, root: H256 | string | Uint8Array, nonInclusionForestProof: SpTrieStorageProofCompactProof | {
                 encodedNodes?: any;
             } | string | Uint8Array, addedFileKeyProof: ShpFileKeyVerifierFileKeyProof | {
                 fileMetadata?: any;
                 proof?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes, H256, SpTrieStorageProofCompactProof, ShpFileKeyVerifierFileKeyProof]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, H256, SpTrieStorageProofCompactProof, ShpFileKeyVerifierFileKeyProof]>;
             /**
              * Executed by a BSP to stop storing a file.
              *
@@ -299,7 +299,9 @@ declare module '@polkadot/api-base/types/submittable' {
              * This metadata is necessary since it is needed to reconstruct the leaf node key in the storage
              * provider's Merkle Forest.
              **/
-            bspStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId32 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u32 | AnyNumber | Uint8Array, canServe: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, Bytes, AccountId32, H256, u32, bool]>;
+            bspStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId32 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u32 | AnyNumber | Uint8Array, canServe: bool | boolean | Uint8Array, inclusionForestProof: SpTrieStorageProofCompactProof | {
+                encodedNodes?: any;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, Bytes, AccountId32, H256, u32, bool, SpTrieStorageProofCompactProof]>;
             /**
              * Used by a BSP to volunteer for storing a file.
              *
@@ -308,7 +310,7 @@ declare module '@polkadot/api-base/types/submittable' {
              * if the maximum number of BSPs has been reached. A successful assignment as BSP means
              * that some of the collateral tokens of that MSP are frozen.
              **/
-            bspVolunteer: AugmentedSubmittable<(location: Bytes | string | Uint8Array, fingerprint: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes, H256]>;
+            bspVolunteer: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * Create and associate a collection with a bucket.
              **/
@@ -321,7 +323,7 @@ declare module '@polkadot/api-base/types/submittable' {
             /**
              * Revoke storage request
              **/
-            revokeStorageRequest: AugmentedSubmittable<(location: Bytes | string | Uint8Array, fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes, H256]>;
+            revokeStorageRequest: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             updateBucketPrivacy: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, private: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, bool]>;
             /**
              * Generic tx

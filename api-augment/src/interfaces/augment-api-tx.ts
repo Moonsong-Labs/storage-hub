@@ -404,7 +404,7 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       bspConfirmStoring: AugmentedSubmittable<
         (
-          location: Bytes | string | Uint8Array,
+          fileKey: H256 | string | Uint8Array,
           root: H256 | string | Uint8Array,
           nonInclusionForestProof:
             | SpTrieStorageProofCompactProof
@@ -417,7 +417,7 @@ declare module "@polkadot/api-base/types/submittable" {
             | string
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [Bytes, H256, SpTrieStorageProofCompactProof, ShpFileKeyVerifierFileKeyProof]
+        [H256, H256, SpTrieStorageProofCompactProof, ShpFileKeyVerifierFileKeyProof]
       >;
       /**
        * Executed by a BSP to stop storing a file.
@@ -436,9 +436,14 @@ declare module "@polkadot/api-base/types/submittable" {
           owner: AccountId32 | string | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
           size: u32 | AnyNumber | Uint8Array,
-          canServe: bool | boolean | Uint8Array
+          canServe: bool | boolean | Uint8Array,
+          inclusionForestProof:
+            | SpTrieStorageProofCompactProof
+            | { encodedNodes?: any }
+            | string
+            | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, AccountId32, H256, u32, bool]
+        [H256, Bytes, AccountId32, H256, u32, bool, SpTrieStorageProofCompactProof]
       >;
       /**
        * Used by a BSP to volunteer for storing a file.
@@ -449,11 +454,8 @@ declare module "@polkadot/api-base/types/submittable" {
        * that some of the collateral tokens of that MSP are frozen.
        **/
       bspVolunteer: AugmentedSubmittable<
-        (
-          location: Bytes | string | Uint8Array,
-          fingerprint: H256 | string | Uint8Array
-        ) => SubmittableExtrinsic<ApiType>,
-        [Bytes, H256]
+        (fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
       >;
       /**
        * Create and associate a collection with a bucket.
@@ -487,11 +489,8 @@ declare module "@polkadot/api-base/types/submittable" {
        * Revoke storage request
        **/
       revokeStorageRequest: AugmentedSubmittable<
-        (
-          location: Bytes | string | Uint8Array,
-          fileKey: H256 | string | Uint8Array
-        ) => SubmittableExtrinsic<ApiType>,
-        [Bytes, H256]
+        (fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
       >;
       updateBucketPrivacy: AugmentedSubmittable<
         (

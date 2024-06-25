@@ -199,6 +199,14 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       DividedByZero: AugmentedError<ApiType>;
       /**
+       * Failed to verify proof: required to provide a proof of inclusion.
+       **/
+      ExpectedInclusionProof: AugmentedError<ApiType>;
+      /**
+       * Failed to verify proof: required to provide a proof of non-inclusion.
+       **/
+      ExpectedNonInclusionProof: AugmentedError<ApiType>;
+      /**
        * Failed to convert block number to threshold.
        **/
       FailedToConvertBlockNumber: AugmentedError<ApiType>;
@@ -223,6 +231,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
       /**
+       * Metadata does not correspond to expected file key.
+       **/
+      InvalidFileKeyMetadata: AugmentedError<ApiType>;
+      /**
        * Error created in 2024. If you see this, you are well beyond the singularity and should
        * probably stop using this pallet.
        **/
@@ -235,6 +247,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Account is not a MSP.
        **/
       NotAMsp: AugmentedError<ApiType>;
+      /**
+       * Root of the provider not found.
+       **/
+      ProviderRootNotFound: AugmentedError<ApiType>;
       /**
        * Storage request already registered for the given file.
        **/
@@ -739,6 +755,10 @@ declare module "@polkadot/api-base/types/errors" {
        * There are no key proofs submitted.
        **/
       EmptyKeyProofs: AugmentedError<ApiType>;
+      /**
+       * Failed to apply delta to the forest proof partial trie.
+       **/
+      FailedToApplyDelta: AugmentedError<ApiType>;
       /**
        * The fee for submitting a challenge could not be charged.
        **/
