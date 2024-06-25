@@ -3697,6 +3697,23 @@ declare module "@polkadot/types/lookup" {
     readonly asAddValueProp: {
       readonly newValueProp: PalletStorageProvidersValueProposition;
     } & Struct;
+    readonly isForceMspSignUp: boolean;
+    readonly asForceMspSignUp: {
+      readonly who: AccountId32;
+      readonly mspId: H256;
+      readonly capacity: u32;
+      readonly multiaddresses: Vec<Bytes>;
+      readonly valueProp: PalletStorageProvidersValueProposition;
+      readonly paymentAccount: AccountId32;
+    } & Struct;
+    readonly isForceBspSignUp: boolean;
+    readonly asForceBspSignUp: {
+      readonly who: AccountId32;
+      readonly bspId: H256;
+      readonly capacity: u32;
+      readonly multiaddresses: Vec<Bytes>;
+      readonly paymentAccount: AccountId32;
+    } & Struct;
     readonly type:
       | "RequestMspSignUp"
       | "RequestBspSignUp"
@@ -3705,7 +3722,9 @@ declare module "@polkadot/types/lookup" {
       | "MspSignOff"
       | "BspSignOff"
       | "ChangeCapacity"
-      | "AddValueProp";
+      | "AddValueProp"
+      | "ForceMspSignUp"
+      | "ForceBspSignUp";
   }
 
   /** @name PalletFileSystemCall (292) */
