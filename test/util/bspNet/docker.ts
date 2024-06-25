@@ -7,6 +7,7 @@ export const checkBspForFile = async (filePath: string) => {
 
   for (let i = 0; i < 10; i++) {
     try {
+      // TODO: Replace with dockerode
       execSync(`docker exec ${containerId} ls ${loc}`, { stdio: "ignore" });
       return;
     } catch {
@@ -25,6 +26,7 @@ export const checkFileChecksum = async (filePath: string) => {
 
 export const showContainers = () => {
   try {
+    // TODO: Replace with dockerode
     execSync("docker ps -a", { stdio: "inherit" });
   } catch (e) {
     console.log(e);

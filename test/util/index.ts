@@ -6,3 +6,4 @@ export * from "./zombieHelpers";
 export * from "./extrinsics";
 export * from "./bspNet";
 export * from "./asserts";
+export * from "./docker";

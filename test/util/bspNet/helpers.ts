@@ -15,7 +15,6 @@ import { execSync } from "node:child_process";
 import { showContainers } from "./docker";
 import { isExtSuccess } from "../extrinsics";
 import type { BspNetApi } from "./types";
-import inquirer from "inquirer";
 const exec = util.promisify(child_process.exec);
 
 export const sendFileSendRpc = async (
@@ -51,6 +50,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
   for (let i = 0; i < maxRetries; i++) {
     verbose && console.log(`Waiting for ${containerName} to launch...`);
 
+    // TODO: Replace with dockerode command
     try {
       const { stdout } = await exec(
         `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`
@@ -60,6 +60,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
       await new Promise((resolve) => setTimeout(resolve, sleepTime));
     }
   }
+  // TODO: Replace with dockerode
   execSync("docker ps -a", { stdio: "inherit" });
   try {
     execSync("docker logs docker-sh-bsp-1", { stdio: "inherit" });

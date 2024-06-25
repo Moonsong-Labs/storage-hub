@@ -37,6 +37,7 @@ async function main() {
   fs.copyFileSync(BINARY_PATH, path.join(buildDir, path.basename(BINARY_PATH)));
 
   try {
+    // TODO: Replace with dockerode
     execSync("docker build -t storage-hub:local -f docker/storage-hub-node.Dockerfile --load .", {
       stdio: "inherit",
     });

@@ -46,6 +46,7 @@ async function main() {
     throw new Error("File not found");
   }
 
+  // TODO: replace with dockerode
   spawn(
     "docker",
     [

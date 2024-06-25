@@ -81,6 +81,9 @@ importers:
       '@storagehub/api-augment':
         specifier: link:../api-augment
         version: link:../api-augment
+      '@types/dockerode':
+        specifier: 3.3.29
+        version: 3.3.29
       '@types/inquirer':
         specifier: 9.0.7
         version: 9.0.7
