@@ -18,7 +18,7 @@ on:
 jobs:
   prepare:
     name: Prepare artifacts
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, pc-sk]
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
@@ -50,7 +50,7 @@ jobs:
 
   all-rust-tests:
     name: Run all tests (/w partitioning)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, pc-sk]
     needs: prepare
     strategy:
       fail-fast: false
