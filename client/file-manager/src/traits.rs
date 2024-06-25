@@ -65,6 +65,7 @@ pub trait FileDataTrie<T: TrieLayout> {
     /// Generate proof for a chunk of a file. Returns error if the chunk does not exist.
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError>;
 
+    // TODO: Return Result<Option> instead of Result only
     /// Get a file chunk from storage. Returns error if the chunk does not exist.
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError>;
 
@@ -94,6 +95,7 @@ pub trait FileStorage<T: TrieLayout>: 'static {
     /// Remove a file from storage.
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError>;
 
+    // TODO: Return Result<Option> instead of Result only
     /// Get metadata for a file.
     fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError>;
 
@@ -116,6 +118,7 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         file_data: Self::FileDataTrie,
     ) -> Result<(), FileStorageError>;
 
+    // TODO: Return Result<Option> instead of Result only
     /// Get a file chunk from storage.
     fn get_chunk(&self, key: &HasherOutT<T>, chunk_id: &ChunkId)
         -> Result<Chunk, FileStorageError>;

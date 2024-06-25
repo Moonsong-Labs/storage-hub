@@ -9,7 +9,9 @@ use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
 use shc_file_manager::{
-    in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage, traits::FileStorage,
+    in_memory::InMemoryFileStorage,
+    rocksdb::{RocksDbFileStorage, StorageDb},
+    traits::FileStorage,
 };
 use shc_forest_manager::{
     in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
@@ -175,13 +177,17 @@ where
             .provider_pub_key
             .expect("Provider public key not set before building the storage layer.");
         let storage_path = hex::encode(provider_pub_key);
-        let storage = RocksDBForestStorage::<T>::rocksdb_storage(storage_path)
+        let forest_storage = RocksDBForestStorage::<T>::rocksdb_storage(storage_path.clone())
+            .expect("Failed to create RocksDB");
+        let file_storage = RocksDbFileStorage::<T>::rocksdb_storage(storage_path)
             .expect("Failed to create RocksDB");
 
-        self.with_file_storage(Arc::new(RwLock::new(RocksDbFileStorage::<T>::new())))
-            .with_forest_storage(Arc::new(RwLock::new(
-                RocksDBForestStorage::<T>::new(Box::new(storage))
-                    .expect("Failed to create RocksDB"),
-            )))
+        self.with_file_storage(Arc::new(RwLock::new(RocksDbFileStorage::<T>::new(
+            Arc::new(std::sync::RwLock::new(file_storage)),
+        ))))
+        .with_forest_storage(Arc::new(RwLock::new(
+            RocksDBForestStorage::<T>::new(Box::new(forest_storage))
+                .expect("Failed to create RocksDB"),
+        )))
     }
 }

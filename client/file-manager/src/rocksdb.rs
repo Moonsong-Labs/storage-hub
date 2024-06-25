@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io, path::PathBuf, sync::Arc};
+use std::{io, path::PathBuf, sync::Arc, sync::RwLock};
 
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
@@ -47,21 +47,6 @@ pub struct StorageDb<Hasher> {
     pub _marker: std::marker::PhantomData<Hasher>,
 }
 
-impl<H: Hasher> StorageDb<H> {
-    /// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
-    pub fn as_rocksdb_storage(db_path: String) -> Result<StorageDb<H>, FileStorageError> {
-        let db = open_or_creating_rocksdb(db_path).map_err(|e| {
-            warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
-            FileStorageError::FailedToReadStorage
-        })?;
-
-        Ok(StorageDb {
-            db: Arc::new(db),
-            _marker: Default::default(),
-        })
-    }
-}
-
 impl<H: Hasher> Storage<H> for StorageDb<H> {
     fn get(&self, key: &H::Out, prefix: Prefix) -> Result<Option<DBValue>, String> {
         let prefixed_key = prefixed_key::<H>(key, prefix);
@@ -79,7 +64,7 @@ where
     /// Write the transaction to the storage.
     fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>>;
 
-    //// Read from storage.
+    /// Read from storage.
     fn read(&self, key: HasherOutT<T>) -> Result<Option<Vec<u8>>, ErrorT<T>>;
 }
 
@@ -124,7 +109,7 @@ where
 
 pub struct RocksDbFileDataTrie<T: TrieLayout> {
     // Persistent storage.
-    storage: Box<dyn Backend<T>>,
+    storage: Arc<RwLock<dyn Backend<T>>>,
     // In memory overlay used for Trie operations.
     overlay: PrefixedMemoryDB<HashT<T>>,
     // Root of the file Trie, which is the file fingerprint.
@@ -136,10 +121,10 @@ where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn default() -> Self {
-        let default_storage = StorageDb::<T::Hash>::as_rocksdb_storage("/tmp".to_string())
+        let default_storage = RocksDbFileDataTrie::<T>::rocksdb_storage("/tmp".to_string())
             .expect("Failed to create RocksDB");
 
-        Self::new(Box::new(default_storage))
+        Self::new(Arc::new(RwLock::new(default_storage)))
     }
 }
 
@@ -147,7 +132,7 @@ impl<T: TrieLayout + Send + Sync + 'static> RocksDbFileDataTrie<T>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
-    fn new(storage: Box<dyn Backend<T>>) -> Self {
+    fn new(storage: Arc<RwLock<dyn Backend<T>>>) -> Self {
         let mut root = HasherOutT::<T>::default();
         let mut rocksdb_file_data_trie = RocksDbFileDataTrie::<T> {
             storage,
@@ -164,18 +149,21 @@ where
         rocksdb_file_data_trie
     }
 
-    fn from_existing(root: &mut HasherOutT<T>) -> Self {
+    fn from_existing(storage: Arc<RwLock<dyn Backend<T>>>, root: &mut HasherOutT<T>) -> Self {
         let mut rocksdb_file_data_trie = RocksDbFileDataTrie::<T> {
             root: *root,
+            storage,
             ..Default::default()
         };
 
         let db = rocksdb_file_data_trie.as_hash_db_mut();
-        let trie = TrieDBMutBuilder::<T>::from_existing(db, root).build();
+        let mut trie = TrieDBMutBuilder::<T>::from_existing(db, root).build();
+
+        let new_root = *trie.root();
 
         drop(trie);
 
-        rocksdb_file_data_trie.root = *root;
+        rocksdb_file_data_trie.root = new_root;
 
         rocksdb_file_data_trie
     }
@@ -194,7 +182,7 @@ where
         let transaction = self.changes();
 
         // Write the changes to storage
-        self.storage.write(transaction)?;
+        self.storage.write().unwrap().write(transaction)?;
 
         self.root = new_root;
 
@@ -216,6 +204,19 @@ where
         }
 
         transaction
+    }
+
+    /// Open the RocksDB database at `dp_path` and return a new instance of [`StorageDb`].
+    pub fn rocksdb_storage(dp_path: String) -> Result<StorageDb<HashT<T>>, ErrorT<T>> {
+        let db = open_or_creating_rocksdb(dp_path).map_err(|e| {
+            warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
+            FileStorageError::FailedToReadStorage
+        })?;
+
+        Ok(StorageDb {
+            db: Arc::new(db),
+            _marker: Default::default(),
+        })
     }
 }
 
@@ -271,7 +272,7 @@ where
         let proof = recorder
             .drain_storage_proof()
             .to_compact_proof::<T::Hash>(self.root)
-            .map_err(|e| FileStorageError::FailedToGenerateCompactProof)?;
+            .map_err(|_| FileStorageError::FailedToGenerateCompactProof)?;
 
         Ok(FileProof {
             proof: proof.into(),
@@ -279,13 +280,12 @@ where
         })
     }
 
-    // TODO: Return Result<Option> instead of Result only
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError> {
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
 
         trie.get(&chunk_id.as_trie_key())
-            .map_err(|_| FileStorageError::FailedToGetFileChunk)?
+            .map_err(|e| FileStorageError::FailedToGetFileChunk)?
             .ok_or(FileStorageError::FileChunkDoesNotExist)
     }
 
@@ -334,8 +334,8 @@ where
         let trie_root_key = root;
         let mut trie = TrieDBMutBuilder::<T>::from_existing(db, &mut root).build();
 
-        for i in 0..chunk_count {
-            trie.remove(&ChunkId::new(i as u64).as_trie_key())
+        for chunk_id in 0..chunk_count {
+            trie.remove(&ChunkId::new(chunk_id as u64).as_trie_key())
                 .map_err(|e| {
                     error!(target: LOG_TARGET, "Failed to delete chunk from RocksDb: {}", e);
                     FileStorageError::FailedToWriteToStorage
@@ -384,10 +384,14 @@ where
 {
     fn get(&self, key: &HasherOutT<T>, prefix: Prefix) -> Option<DBValue> {
         HashDB::get(&self.overlay, key, prefix).or_else(|| {
-            self.storage.get(key, prefix).unwrap_or_else(|e| {
-                warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
-                None
-            })
+            self.storage
+                .read()
+                .unwrap()
+                .get(key, prefix)
+                .unwrap_or_else(|e| {
+                    warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
+                    None
+                })
         })
     }
 
@@ -408,7 +412,6 @@ where
     }
 }
 
-use std::sync::RwLock;
 pub struct RocksDbFileStorage<T: TrieLayout + 'static>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
@@ -416,18 +419,38 @@ where
     storage: Arc<RwLock<dyn Backend<T>>>,
 }
 
+impl<T: TrieLayout + Send + Sync + 'static> Default for RocksDbFileStorage<T>
+where
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+{
+    fn default() -> Self {
+        let default_storage =
+            RocksDbFileStorage::<T>::rocksdb_storage("/tmp/file_storage".to_string())
+                .expect("Failed to create RocksDB");
+
+        Self::new(Arc::new(RwLock::new(default_storage)))
+    }
+}
+
 impl<T: TrieLayout + Send + Sync + 'static> RocksDbFileStorage<T>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
-    pub fn new() -> Self {
-        let default_storage =
-            StorageDb::<T::Hash>::as_rocksdb_storage("/tmp/file_storage".to_string())
-                .expect("Failed to create RocksDB");
+    pub fn new(storage: Arc<RwLock<dyn Backend<T>>>) -> Self {
+        Self { storage }
+    }
 
-        Self {
-            storage: Arc::new(RwLock::new(default_storage)),
-        }
+    /// Open the RocksDB database at `dp_path` and return a new instance of [`StorageDb`].
+    pub fn rocksdb_storage(dp_path: String) -> Result<StorageDb<HashT<T>>, ErrorT<T>> {
+        let db = open_or_creating_rocksdb(dp_path).map_err(|e| {
+            warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
+            FileStorageError::FailedToReadStorage
+        })?;
+
+        Ok(StorageDb {
+            db: Arc::new(db),
+            _marker: Default::default(),
+        })
     }
 }
 
@@ -446,7 +469,7 @@ where
         let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).unwrap();
         let raw_root = metadata.fingerprint.as_ref();
         let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).unwrap();
-        let file_trie = RocksDbFileDataTrie::<T>::from_existing(&mut root);
+        let file_trie = RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
 
         file_trie.get_chunk(chunk_id)
     }
@@ -461,7 +484,8 @@ where
         let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).unwrap();
         let raw_root = metadata.fingerprint.as_ref();
         let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).unwrap();
-        let mut file_trie = RocksDbFileDataTrie::<T>::from_existing(&mut root);
+        let mut file_trie =
+            RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
 
         file_trie.write_chunk(chunk_id, data)?;
 
@@ -511,7 +535,7 @@ where
         let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).unwrap();
         let raw_root = metadata.fingerprint.as_ref();
         let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).unwrap();
-        let file_trie = RocksDbFileDataTrie::<T>::from_existing(&mut root);
+        let file_trie = RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
 
         Ok(file_trie
             .generate_proof(chunk_ids)?
@@ -523,14 +547,21 @@ where
         let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).unwrap();
         let raw_root = metadata.fingerprint.as_ref();
         let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).unwrap();
-        let mut file_trie = RocksDbFileDataTrie::<T>::from_existing(&mut root);
+        let mut file_trie =
+            RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
         let chunk_count = metadata.chunks_count();
 
-        file_trie.delete(chunk_count)
+        file_trie.delete(chunk_count);
+        let mut transaction = DBTransaction::new();
+        transaction.delete(0, key.as_ref());
+        self.storage.write().unwrap().write(transaction);
+
+        Ok(())
     }
 }
 
 mod tests {
+    use serial_test::serial;
     use shc_common::types::Chunk;
     use shc_common::types::ChunkId;
     use sp_core::H256;
@@ -541,6 +572,7 @@ mod tests {
     use super::*;
 
     /// Mock that simulates the backend for testing purposes.
+    #[derive(Clone)]
     struct MockStorageDb {
         pub data: std::collections::HashMap<Vec<u8>, Vec<u8>>,
     }
@@ -586,10 +618,10 @@ mod tests {
     }
 
     #[test]
-    fn file_trie_creating_empty_works() {
-        let storage = Box::new(MockStorageDb {
+    fn file_trie_create_empty_works() {
+        let storage = Arc::new(RwLock::new(MockStorageDb {
             data: Default::default(),
-        });
+        }));
 
         let file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
 
@@ -608,10 +640,10 @@ mod tests {
     }
 
     #[test]
-    fn file_trie_writing_chunk_works() {
-        let storage = Box::new(MockStorageDb {
+    fn file_trie_write_chunk_works() {
+        let storage = Arc::new(RwLock::new(MockStorageDb {
             data: Default::default(),
-        });
+        }));
 
         let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
         let old_root = file_trie.get_root().clone();
@@ -626,10 +658,10 @@ mod tests {
     }
 
     #[test]
-    fn file_trie_getting_chunk_works() {
-        let storage = Box::new(MockStorageDb {
+    fn file_trie_get_chunk_works() {
+        let storage = Arc::new(RwLock::new(MockStorageDb {
             data: Default::default(),
-        });
+        }));
 
         let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
 
@@ -641,10 +673,10 @@ mod tests {
     }
 
     #[test]
-    fn file_trie_getting_stored_chunks_works() {
-        let storage = Box::new(MockStorageDb {
+    fn file_trie_stored_chunks_count_works() {
+        let storage = Arc::new(RwLock::new(MockStorageDb {
             data: Default::default(),
-        });
+        }));
         let chunk_ids = vec![ChunkId::new(0u64), ChunkId::new(1u64)];
         let chunks = vec![Chunk::from([0u8; 1024]), Chunk::from([1u8; 1024])];
         let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
@@ -659,10 +691,10 @@ mod tests {
     }
 
     #[test]
-    fn file_trie_generating_proof_works() {
-        let storage = Box::new(MockStorageDb {
+    fn file_trie_generate_proof_works() {
+        let storage = Arc::new(RwLock::new(MockStorageDb {
             data: Default::default(),
-        });
+        }));
 
         let chunk_ids = vec![ChunkId::new(0u64), ChunkId::new(1u64), ChunkId::new(2u64)];
 
@@ -695,10 +727,10 @@ mod tests {
     }
 
     #[test]
-    fn file_trie_deleting_works() {
-        let storage = Box::new(MockStorageDb {
+    fn file_trie_delete_works() {
+        let storage = Arc::new(RwLock::new(MockStorageDb {
             data: Default::default(),
-        });
+        }));
 
         let chunk_ids = vec![ChunkId::new(0u64), ChunkId::new(1u64), ChunkId::new(2u64)];
 
@@ -731,10 +763,11 @@ mod tests {
     }
 
     #[test]
-    fn file_storage_inserting_whole_file_works() {
-        let storage = Box::new(MockStorageDb {
+    #[serial]
+    fn file_storage_insert_file_works() {
+        let storage = Arc::new(RwLock::new(MockStorageDb {
             data: Default::default(),
-        });
+        }));
 
         let chunks = vec![
             Chunk::from([5u8; 32]),
@@ -748,7 +781,7 @@ mod tests {
             .map(|(id, _)| ChunkId::new(id as u64))
             .collect();
 
-        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage.clone());
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
@@ -770,19 +803,23 @@ mod tests {
         };
 
         let key = file_metadata.file_key::<BlakeTwo256>();
-        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new();
-        file_storage
-            .insert_file_with_data(key, file_metadata, file_trie)
-            .unwrap();
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new(storage);
+        file_storage.insert_file(key, file_metadata).unwrap();
 
         assert!(file_storage.get_metadata(&key).is_ok());
+        assert!(file_storage.get_chunk(&key, &chunk_ids[0]).is_ok());
+        assert!(file_storage.get_chunk(&key, &chunk_ids[1]).is_ok());
+        assert!(file_storage.get_chunk(&key, &chunk_ids[2]).is_ok());
     }
 
+    // TODO: deal with unwraps and use Errors
     #[test]
-    fn file_storage_deleting_whole_file_works() {
-        let storage = Box::new(MockStorageDb {
+    #[should_panic]
+    #[serial]
+    fn file_storage_delete_file_works() {
+        let storage = Arc::new(RwLock::new(MockStorageDb {
             data: Default::default(),
-        });
+        }));
 
         let chunks = vec![
             Chunk::from([5u8; 32]),
@@ -796,8 +833,7 @@ mod tests {
             .map(|(id, _)| ChunkId::new(id as u64))
             .collect();
 
-        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
-
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage.clone());
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
@@ -818,7 +854,7 @@ mod tests {
         };
 
         let key = file_metadata.file_key::<BlakeTwo256>();
-        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new();
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new(storage);
         file_storage
             .insert_file_with_data(key, file_metadata, file_trie)
             .unwrap();
@@ -827,19 +863,20 @@ mod tests {
 
         file_storage.delete_file(&key).unwrap();
 
-        assert!(file_storage.get_metadata(&key).is_err());
+        file_storage.get_metadata(&key);
     }
 
     #[test]
-    fn file_storage_proof_generation_works() {
-        let storage = Box::new(MockStorageDb {
+    #[serial]
+    fn file_storage_generate_proof_works() {
+        let storage = Arc::new(RwLock::new(MockStorageDb {
             data: Default::default(),
-        });
+        }));
 
         let chunks = vec![
-            Chunk::from([8u8; 1024]),
-            Chunk::from([9u8; 1024]),
-            Chunk::from([10u8; 1024]),
+            Chunk::from([0u8; 1024]),
+            Chunk::from([1u8; 1024]),
+            Chunk::from([2u8; 1024]),
         ];
 
         let chunk_ids: Vec<ChunkId> = chunks
@@ -848,8 +885,7 @@ mod tests {
             .map(|(id, _)| ChunkId::new(id as u64))
             .collect();
 
-        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
-
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage.clone());
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
@@ -870,7 +906,7 @@ mod tests {
         };
 
         let key = file_metadata.file_key::<BlakeTwo256>();
-        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new();
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new(storage);
         file_storage
             .insert_file_with_data(key, file_metadata, file_trie)
             .unwrap();

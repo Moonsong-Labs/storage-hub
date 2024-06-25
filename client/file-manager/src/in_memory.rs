@@ -192,8 +192,6 @@ where
     }
 
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError> {
-        // No need to return any errors here since
-        // removing from internal HashMap shouldn't fail.
         self.metadata.remove(key);
         self.file_data.remove(key);
 
