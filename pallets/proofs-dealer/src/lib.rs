@@ -114,12 +114,9 @@ pub mod pallet {
         #[pallet::constant]
         type MaxCustomChallengesPerBlock: Get<u32>;
 
-        /// The maximum number of Providers that can be challenged in block.
-        #[pallet::constant]
-        type MaxProvidersChallengedPerBlock: Get<u32>;
-
-        /// The number of blocks that challenges history is kept for.
-        /// After this many blocks, challenges are removed from `BlockToChallengesSeed` StorageMap.
+        /// The number of ticks that challenges history is kept for.
+        /// After this many ticks, challenges are removed from `TickToChallengesSeed` StorageMap.
+        /// A "tick" is usually one block, but some blocks may be skipped due to migrations.
         #[pallet::constant]
         type ChallengeHistoryLength: Get<BlockNumberFor<Self>>;
 
@@ -134,14 +131,28 @@ pub mod pallet {
         /// `PriorityChallengesQueue` in the `BlockToChallenges` StorageMap. These checkpoint challenge
         /// rounds have to be answered by ALL Providers, and this is enforced by the `submit_proof`
         /// extrinsic.
+        ///
+        /// WARNING: This period needs to be equal or larger than the challenge period of the smallest
+        /// Provider in the network. If the smallest Provider has a challenge period of 10 ticks (blocks),
+        /// then the checkpoint challenge period needs to be at least 10 ticks.
         #[pallet::constant]
-        type CheckpointChallengePeriod: Get<u32>;
+        type CheckpointChallengePeriod: Get<BlockNumberFor<Self>>;
 
         /// The ratio to convert staked balance to block period.
         /// This is used to determine the period in which a Provider should submit a proof, based on
         /// their stake. The period is calculated as `stake / StakeToBlockPeriod`, saturating at 1.
         #[pallet::constant]
         type StakeToChallengePeriod: Get<BalanceFor<Self>>;
+
+        /// The tolerance in number of ticks (almost equivalent to blocks, but skipping MBM) that
+        /// a Provider has to submit a proof, counting from the tick the challenge is emitted for
+        /// that Provider.
+        ///
+        /// For example, if a Provider is supposed to submit a proof for tick `n`, and the tolerance
+        /// is set to `t`, then the Provider has to submit a proof for challenges in tick `n`, before
+        /// `n + t`.
+        #[pallet::constant]
+        type ChallengeTicksTolerance: Get<BlockNumberFor<Self>>;
 
         /// The fee charged for submitting a challenge.
         /// This fee goes to the Treasury, and is used to prevent spam. Registered Providers are
@@ -160,62 +171,65 @@ pub mod pallet {
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
-    /// A mapping from block number to a vector of challenged file keys for that block.
+    /// A mapping from challenges tick to a random seed used for generating the challenges in that block.
     ///
     /// This is used to keep track of the challenges' seed in the past.
     /// This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
     #[pallet::storage]
-    #[pallet::getter(fn block_to_challenges)]
-    pub type BlockToChallengesSeed<T: Config> =
-        StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, MerkleHashFor<T>>;
+    #[pallet::getter(fn tick_to_challenges)]
+    pub type TickToChallengesSeed<T: Config> =
+        StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, RandomnessOutputFor<T>>;
 
-    /// A mapping from block number to a vector of custom challenged file keys for that block.
+    /// A mapping from challenges tick to a vector of custom challenged file keys for that block.
     ///
     /// This is used to keep track of the challenges that have been made in the past, specifically
     /// in the checkpoint challenge rounds.
     /// The vector is bounded by `MaxCustomChallengesPerBlockFor`.
     /// This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
     #[pallet::storage]
-    #[pallet::getter(fn block_to_checkpoint_challenges)]
-    pub type BlockToCheckpointChallenges<T: Config> = StorageMap<
+    #[pallet::getter(fn tick_to_checkpoint_challenges)]
+    pub type TickToCheckpointChallenges<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
         BoundedVec<(KeyFor<T>, Option<TrieRemoveMutation>), MaxCustomChallengesPerBlockFor<T>>,
     >;
 
-    /// The block number of the last checkpoint challenge round.
+    /// The challenge tick of the last checkpoint challenge round.
     ///
     /// This is used to determine when to include the challenges from the `ChallengesQueue` and
-    /// `PriorityChallengesQueue` in the `BlockToChallenges` StorageMap. These checkpoint challenge
-    /// rounds have to be answered by ALL Providers, and this is enforced by the
+    /// `PriorityChallengesQueue` in the `TickToCheckpointChallenges` StorageMap. These checkpoint
+    /// challenge rounds have to be answered by ALL Providers, and this is enforced by the
     /// `submit_proof` extrinsic.
     #[pallet::storage]
-    #[pallet::getter(fn last_checkpoint_block)]
-    pub type LastCheckpointBlock<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    #[pallet::getter(fn last_checkpoint_tick)]
+    pub type LastCheckpointTick<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
-    /// A mapping from block number to a vector of challenged Providers for that block.
+    /// A mapping from challenge tick to a vector of challenged Providers for that tick.
     ///
     /// This is used to keep track of the Providers that have been challenged, and should
-    /// submit a proof by the time of the block used as the key. Providers who do submit
-    /// a proof are removed from their respective entry and pushed forward to the next block in
-    /// which they should submit a proof. Those who are still in the entry by the time the block
-    /// is reached are considered to have failed to submit a proof and subject to slashing.
+    /// submit a proof by the time of the [`ChallengesTicker`] reaches the number used as
+    /// key in the mapping. Providers who do submit a proof are removed from their respective
+    /// entry and pushed forward to the next tick in which they should submit a proof.
+    /// Those who are still in the entry by the time the tick is reached are considered to
+    /// have failed to submit a proof and subject to slashing.
     #[pallet::storage]
-    #[pallet::getter(fn block_to_challenged_providers)]
-    pub type BlockToChallengedProviders<T: Config> = StorageMap<
+    #[pallet::getter(fn tick_to_challenged_providers)]
+    pub type ChallengeTickToChallengedProviders<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
-        BoundedVec<ProviderFor<T>, MaxProvidersChallengedPerBlockFor<T>>,
+        Blake2_128Concat,
+        ProviderFor<T>,
+        (),
     >;
 
-    /// A mapping from a Provider to the last block number they submitted a proof for.
-    /// If for a Provider `p`, `LastBlockProviderSubmittedProofFor[p]` is `n`, then the
-    /// Provider should submit a proof for block `n + stake_to_challenge_period(p)`.
+    /// A mapping from a Provider to the last challenge tick they submitted a proof for.
+    /// If for a Provider `p`, `LastTickProviderSubmittedProofFor[p]` is `n`, then the
+    /// Provider should submit a proof for tick `n + stake_to_challenge_period(p)`.
     #[pallet::storage]
-    #[pallet::getter(fn last_block_provider_submitted_proof_for)]
-    pub type LastBlockProviderSubmittedProofFor<T: Config> =
+    #[pallet::getter(fn last_tick_provider_submitted_proof_for)]
+    pub type LastTickProviderSubmittedProofFor<T: Config> =
         StorageMap<_, Blake2_128Concat, ProviderFor<T>, BlockNumberFor<T>>;
 
     /// A queue of file keys that have been challenged manually.
@@ -247,6 +261,20 @@ pub mod pallet {
         ValueQuery,
     >;
 
+    /// A counter of blocks in which challenges were distributed.
+    ///
+    /// This counter is not necessarily the same as the block number, as challenges are
+    /// distributed in the `on_poll` hook, which happens at the beginning of every block,
+    /// so long as the block is not part of a [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
+    /// During MBMsm, the block number increases, but `ChallengesTicker` does not.
+    #[pallet::storage]
+    #[pallet::getter(fn challenges_ticker)]
+    pub type ChallengesTicker<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
+    #[pallet::storage]
+    #[pallet::getter(fn slashable_providers)]
+    pub type SlashableProviders<T: Config> = StorageMap<_, Blake2_128Concat, ProviderFor<T>, ()>;
+
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
     #[pallet::event]
@@ -263,6 +291,24 @@ pub mod pallet {
             provider: ProviderFor<T>,
             proof: Proof<T>,
         },
+
+        /// A new challenge seed was generated.
+        NewChallengeSeed {
+            challenges_ticker: BlockNumberFor<T>,
+            seed: RandomnessOutputFor<T>,
+        },
+
+        /// A new checkpoint challenge was generated.
+        NewCheckpointChallenge {
+            challenges_ticker: BlockNumberFor<T>,
+            challenges: BoundedVec<
+                (KeyFor<T>, Option<TrieRemoveMutation>),
+                MaxCustomChallengesPerBlockFor<T>,
+            >,
+        },
+
+        /// A slashable provider was found.
+        SlashableProvider { provider: ProviderFor<T> },
     }
 
     // Errors inform users that something went wrong.
@@ -299,10 +345,10 @@ pub mod pallet {
         /// submitting proofs.
         ZeroRoot,
 
-        /// Provider is submitting a proof but there is no record of the last block they
+        /// Provider is submitting a proof but there is no record of the last tick they
         /// submitted a proof for.
         /// Providers who are required to submit proofs should always have a record of the
-        /// last block they submitted a proof for, otherwise it means they haven't started
+        /// last tick they submitted a proof for, otherwise it means they haven't started
         /// providing service for any user yet.
         NoRecordOfLastSubmittedProof,
 
@@ -316,21 +362,25 @@ pub mod pallet {
         /// This should not be possible, as the `Balance` type should be an unsigned integer type.
         StakeCouldNotBeConverted,
 
-        /// Provider is submitting a proof for a block in the future.
-        ChallengesBlockNotReached,
+        /// Provider is submitting a proof for a tick in the future.
+        ChallengesTickNotReached,
 
-        /// Provider is submitting a proof for a block before the last block this pallet registers
+        /// Provider is submitting a proof for a tick before the last tick this pallet registers
         /// challenges for.
-        ChallengesBlockTooOld,
+        ChallengesTickTooOld,
 
-        /// The seed for the block could not be found.
-        /// This should not be possible for a block within the `ChallengeHistoryLength` range, as
-        /// seeds are generated for all blocks, and stored within this range.
+        /// Provider is submitting a proof for a tick too late, i.e. that the challenges tick
+        /// is greater or equal than `challenges_tick` + `T::ChallengeTicksTolerance::get()`.
+        ChallengesTickTooLate,
+
+        /// The seed for the tick could not be found.
+        /// This should not be possible for a tick within the `ChallengeHistoryLength` range, as
+        /// seeds are generated for all ticks, and stored within this range.
         SeedNotFound,
 
         /// Checkpoint challenges not found in block.
-        /// This should only be possible if `BlockToCheckpointChallenges` is dereferenced for a block
-        /// that is not a checkpoint block.
+        /// This should only be possible if `TickToCheckpointChallenges` is dereferenced for a tick
+        /// that is not a checkpoint tick.
         CheckpointChallengesNotFound,
 
         /// The forest proof submitted by the Provider is invalid.
@@ -385,19 +435,19 @@ pub mod pallet {
         /// is provided, the proof submitter is considered to be the Provider.
         /// Relies on a Providers pallet to get the root for the Provider.
         /// Validates that the proof corresponds to a challenge that was made in the past,
-        /// by checking the `BlockToChallengesSeed` StorageMap. The block number that the
-        /// Provider should have submitted a proof is calculated based on the last block they
-        /// submitted a proof for (`LastBlockProviderSubmittedProofFor`), and the proving period for
+        /// by checking the `TickToChallengesSeed` StorageMap. The challenge tick that the
+        /// Provider should have submitted a proof is calculated based on the last tick they
+        /// submitted a proof for (`LastTickProviderSubmittedProofFor`), and the proving period for
         /// that Provider, which is a function of their stake.
         /// This extrinsic also checks that there hasn't been a checkpoint challenge round
-        /// in between the last time the Provider submitted a proof for and the block
+        /// in between the last time the Provider submitted a proof for and the tick
         /// for which the proof is being submitted. If there has been, the Provider is
         /// subject to slashing.
         ///
         /// If valid:
-        /// - Pushes forward the Provider in the `BlockToChallengedProviders` StorageMap a number
-        /// of blocks corresponding to the stake of the Provider.
-        /// - Registers this block as the last block in which the Provider submitted a proof.
+        /// - Pushes forward the Provider in the `ChallengeTickToChallengedProviders` StorageMap a number
+        /// of ticks corresponding to the stake of the Provider.
+        /// - Registers this tick as the last tick in which the Provider submitted a proof.
         ///
         /// Execution of this extrinsic should be refunded if the proof is valid.
         #[pallet::call_index(1)]
@@ -429,37 +479,28 @@ pub mod pallet {
             // If the proof is valid, the execution of this extrinsic should be refunded.
             Ok(Pays::No.into())
         }
+    }
 
-        /// Extrinsic to register a new round of challenges.
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        /// This hook is used to generate new challenges.
         ///
-        /// This function is called by the block producer to register a new round of challenges.
-        /// Random challenges are automatically generated based on some external source of
-        /// randomness, and are added to `BlockToChallenges`, for this block's number.
-        ///
-        /// It also takes care of including the challenges from the `ChallengesQueue` and
-        /// `PriorityChallengesQueue`. This custom challenges are only included in "checkpoint"
-        /// blocks
-        ///
-        /// Additionally, it takes care of checking if there are Providers that have
-        /// failed to submit a proof, and should have submitted one by this block. It does so
-        /// by checking the `BlockToChallengedProviders` StorageMap. If a Provider is found
-        /// to have failed to submit a proof, it is subject to slashing.
-        ///
-        /// Finally, it cleans up:
-        /// - The `BlockToChallenges` StorageMap, removing entries older than `ChallengeHistoryLength`.
-        /// - The `BlockToChallengedProviders` StorageMap, removing entries for the current block number.
-        #[pallet::call_index(2)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn new_challenges_round(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
-            ensure_none(origin)?;
+        /// It will be called at the beginning of every block, if the block is not being part of a
+        /// [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
+        /// For more information on the lifecycle of the block and its hooks, see the [Substrate
+        /// documentation](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#method.on_poll).
+        fn on_poll(n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
+            // TODO: Benchmark computational weight cost of this hook.
 
-            // TODO: Handle result of verification.
-            Self::do_new_challenges_round()?;
+            Self::do_new_challenges_round(n, weight);
+        }
 
-            // TODO: Emit events.
-
-            // Return a successful DispatchResultWithPostInfo
-            Ok(().into())
+        // TODO: Document why we need to do this.
+        // TODO: This is related to the limitation of `CheckpointChallengePeriod` having to be greater or equal
+        // TODO: to the largest period of a Provider. The provider with largest period would be the one with the
+        // TODO: smallest stake.
+        fn integrity_test() {
+            // TODO: Check that the `CheckpointChallengePeriod` is greater or equal to the largest period of a Provider.
         }
     }
 }
