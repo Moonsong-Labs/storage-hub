@@ -27,6 +27,7 @@ cargo build --release
 > If you are running this on a Mac, `zig` is a pre-requisite for crossbuilding the node. Instructions to install can be found [here](https://ziglang.org/learn/getting-started/).
 
 ```sh
+pnpm i
 pnpm crossbuild:mac
 ```
 
@@ -80,7 +81,7 @@ Wait for zombie network to start, and then:
 ```shell
 pnpm typegen
 pnpm zombie:setup:native
-pnpm zombie:test suites/zombie
+pnpm test:full
 ```
 
 ### ZombieNet
@@ -98,6 +99,17 @@ pnpm zombie:test:native
 - Native launch: `../target/release/storage-hub --dev`
 - Docker launch (local): `pnpm docker:start` / `pnpm docker:stop`
 - Docker launch (latest): `pnpm docker:start:latest` / `pnpm docker:stop:latest`
+
+### Spawning BSPNet
+
+```sh
+pnpm docker:start:bspnet
+```
+
+This will start a BSPNet network with a BSP and a User node. As part of the setup it will force onboard a MSP and BSP, and then upload a file from user node.
+
+> [!NOTE]  
+> The BSP id is chosen to be the fingerprint of a file that is uploaded by the user node. This is to "game the system" to ensure that the BSP is guaranteed to be selected to store the file.
 
 ### Spawning ZombieNet Native
 
@@ -131,6 +143,9 @@ To generate new type interfaces run the following in `/test`:
 ```sh
 pnpm typegen
 ```
+
+> [!TIP]  
+> Like with other commands, this assumes you have built a node binary and docker image before executing this activity.
 
 ## Misc
 

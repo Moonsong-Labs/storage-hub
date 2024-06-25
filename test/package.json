@@ -27,7 +27,7 @@
     "zombie:run:full:native": "pnpm  tsx scripts/downloadPolkadot.ts 1.9.0  && pnpm zombienet spawn configs/fullNetworkNative.toml",
     "zombie:setup:native": "pnpm  tsx scripts/fullNetworkSetup.ts",
     "zombie:test:native": "pnpm  tsx scripts/downloadPolkadot.ts 1.9.0  && pnpm zombienet test --provider native configs/simpleNative.zndsl",
-    "zome:test:local": "SH_IMAGE=storage-hub:local pnpm zombienet test configs/simple.zndsl",
+    "zombie:test:local": "SH_IMAGE=storage-hub:local pnpm zombienet test configs/simple.zndsl",
     "zombie:test:latest": "SH_IMAGE=docker.io/moonsonglabs/storage-hub:latest pnpm zombienet test configs/simple.zndsl",
     "test:full": "node --no-deprecation --import tsx --test ./suites/zombie/**.spec.ts",
     "test:bspnet": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --import tsx --test ./suites/integration/**.test.ts",
