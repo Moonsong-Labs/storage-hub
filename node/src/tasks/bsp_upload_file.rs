@@ -271,7 +271,7 @@ where
                 .file_transfer
                 .register_new_file_peer(peer_id, file_key)
                 .await
-                .map_err(|_| anyhow!("Failed to register peer file."))?;
+                .map_err(|e| anyhow!("Failed to register new file peer: {:?}", e))?;
         }
 
         // Build extrinsic.
@@ -359,7 +359,12 @@ where
             String::from_utf8(metadata.location.clone())
                 .expect("File location should be an utf8 string"),
         );
-        info!("Saving file to: {:?}", file_path);
+        dbg!(
+            "Current dir: {}",
+            std::env::current_dir().unwrap().display()
+        );
+        info!("Intended file path: {:?}", file_path);
+
         create_dir_all(&file_path.parent().unwrap()).expect("Failed to create directory");
         let mut file = File::create(file_path)
             .await

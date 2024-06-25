@@ -1978,6 +1978,57 @@ declare module '@polkadot/api-base/types/submittable' {
              **/
             confirmSignUp: AugmentedSubmittable<(providerAccount: Option<AccountId32> | null | Uint8Array | AccountId32 | string) => SubmittableExtrinsic<ApiType>, [Option<AccountId32>]>;
             /**
+             * Dispatchable extrinsic that allows to forcefully and automatically sing up a Backup Storage Provider.
+             *
+             * The dispatch origin for this call must be Root.
+             * The `who` parameter is the account that wants to sign up as a Backup Storage Provider.
+             *
+             * Funds proportional to the capacity requested are reserved (held) from the account passed as the `who` parameter.
+             *
+             * Parameters:
+             * - `who`: The account that wants to sign up as a Backup Storage Provider.
+             * - `bsp_id`: The Backup Storage Provider ID that the account passed as the `who` parameter is requesting to sign up as.
+             * - `capacity`: The total amount of data that the Backup Storage Provider will be able to store.
+             * - `multiaddresses`: The vector of multiaddresses that the signer wants to register (according to the
+             * [Multiaddr spec](https://github.com/multiformats/multiaddr))
+             *
+             * This extrinsic will perform the steps of:
+             * 1. [request_bsp_sign_up](crate::dispatchables::request_bsp_sign_up)
+             * 2. [confirm_sign_up](crate::dispatchables::confirm_sign_up)
+             *
+             * Emits `BspRequestSignUpSuccess` and `BspSignUpSuccess` events when successful.
+             **/
+            forceBspSignUp: AugmentedSubmittable<(who: AccountId32 | string | Uint8Array, bspId: H256 | string | Uint8Array, capacity: u32 | AnyNumber | Uint8Array, multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[], paymentAccount: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [AccountId32, H256, u32, Vec<Bytes>, AccountId32]>;
+            /**
+             * Dispatchable extrinsic that allows to forcefully and automatically sing up a Main Storage Provider.
+             *
+             * The dispatch origin for this call must be Root.
+             * The `who` parameter is the account that wants to sign up as a Main Storage Provider.
+             *
+             * Funds proportional to the capacity requested are reserved (held) from the account passed as the `who` parameter.
+             *
+             * Parameters:
+             * - `who`: The account that wants to sign up as a Main Storage Provider.
+             * - `msp_id`: The Main Storage Provider ID that the account passed as the `who` parameter is requesting to sign up as.
+             * - `capacity`: The total amount of data that the Main Storage Provider will be able to store.
+             * - `multiaddresses`: The vector of multiaddresses that the signer wants to register (according to the
+             * [Multiaddr spec](https://github.com/multiformats/multiaddr))
+             * - `value_prop`: The value proposition that the signer will provide as a Main Storage Provider to
+             * users and wants to register on-chain. It could be data limits, communication protocols to access the user's
+             * data, and more.
+             *
+             * This extrinsic will perform the steps of:
+             * 1. [request_msp_sign_up](crate::dispatchables::request_msp_sign_up)
+             * 2. [confirm_sign_up](crate::dispatchables::confirm_sign_up)
+             *
+             * Emits `MspRequestSignUpSuccess` and `MspSignUpSuccess` events when successful.
+             **/
+            forceMspSignUp: AugmentedSubmittable<(who: AccountId32 | string | Uint8Array, mspId: H256 | string | Uint8Array, capacity: u32 | AnyNumber | Uint8Array, multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[], valueProp: PalletStorageProvidersValueProposition | {
+                identifier?: any;
+                dataLimit?: any;
+                protocols?: any;
+            } | string | Uint8Array, paymentAccount: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [AccountId32, H256, u32, Vec<Bytes>, PalletStorageProvidersValueProposition, AccountId32]>;
+            /**
              * Dispatchable extrinsic that allows users to sign off as a Main Storage Provider.
              *
              * The dispatch origin for this call must be Signed.
