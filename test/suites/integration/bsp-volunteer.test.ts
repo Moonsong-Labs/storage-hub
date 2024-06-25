@@ -13,6 +13,7 @@ import {
   checkFileChecksum,
   type BspNetApi,
   cleardownTest,
+  sleep,
 } from "../../util";
 import { hexToString } from "@polkadot/util";
 
@@ -67,6 +68,7 @@ describe("BSPNet: BSP Volunteer", () => {
       ]),
       shUser
     );
+    await sleep(500); // wait for the bsp to volunteer
 
     const { event } = api.assertEvent("fileSystem", "NewStorageRequest", result.events);
 
@@ -100,6 +102,7 @@ describe("BSPNet: BSP Volunteer", () => {
       shUser
     );
 
+    await sleep(500); // wait for the bsp to volunteer
     const pending = await api.rpc.author.pendingExtrinsics();
     strictEqual(pending.length, 1, "There should be one pending extrinsic from BSP");
 

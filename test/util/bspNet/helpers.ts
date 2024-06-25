@@ -235,6 +235,8 @@ export const sealBlock = async (
   call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
   signer?: KeyringPair
 ): Promise<SealedBlock> => {
+  const initialHeight = (await api.rpc.chain.getHeader()).number.toNumber();
+
   const results: {
     hash?: Hash;
     events?: EventRecord[];
@@ -268,6 +270,17 @@ export const sealBlock = async (
     results.blockData = blockData;
     results.events = extEvents;
     results.success = isExtSuccess(extEvents);
+  }
+
+  // Allow time for chain to settle
+  for (let i = 0; i < 20; i++) {
+    const currentHeight = (await api.rpc.chain.getHeader()).number.toNumber();
+    if (currentHeight > initialHeight) {
+      break;
+    }
+    console.log("Waiting for block to be finalized...");
+    console.log("You shouldn't see this message often, if you do, something is wrong");
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   return Object.assign(sealedResults, {
