@@ -342,6 +342,7 @@ pub mod pallet {
             bsp_id: ProviderIdFor<T>,
             file_key: MerkleHash<T>,
             new_root: MerkleHash<T>,
+            owner: T::AccountId,
         },
     }
 
@@ -637,6 +638,7 @@ pub mod pallet {
                 bsp_id,
                 file_key,
                 new_root,
+                owner,
             });
 
             Ok(())

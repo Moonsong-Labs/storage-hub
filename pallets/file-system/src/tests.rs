@@ -1637,6 +1637,7 @@ fn bsp_stop_storing_success() {
                 bsp_id,
                 file_key,
                 new_root,
+                owner: owner_account_id,
             }
             .into(),
         );
@@ -1754,6 +1755,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
                 bsp_id,
                 file_key,
                 new_root,
+                owner: owner_account_id,
             }
             .into(),
         );
@@ -1848,6 +1850,7 @@ fn bsp_stop_storing_not_volunteered_success() {
                 bsp_id,
                 file_key,
                 new_root,
+                owner: owner_account_id,
             }
             .into(),
         );
@@ -1924,6 +1927,7 @@ fn bsp_stop_storing_no_storage_request_success() {
                 bsp_id,
                 file_key,
                 new_root,
+                owner: owner_account_id,
             }
             .into(),
         );
