@@ -2,9 +2,6 @@
 #![allow(unused_variables)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-/// Edit this file to define custom logic or remove it if it is not needed.
-/// Learn more about FRAME and the core library of Substrate FRAME pallets:
-/// <https://docs.substrate.io/v3/runtime/frame>
 pub use pallet::*;
 
 #[cfg(test)]
@@ -82,7 +79,7 @@ pub mod pallet {
         type RandomnessProvider: Randomness<Self::Hash, BlockNumberFor<Self>>;
 
         /// The type for the hashes of Merkle Patricia Forest nodes.
-        /// Applies to file keys (leaf nodes) and root hashes (root nodes).
+        /// Applies to keys (leaf nodes) and root hashes (root nodes).
         /// Generally a hash (the output of a Hasher).
         type MerkleTrieHash: Parameter
             + Member
@@ -171,7 +168,7 @@ pub mod pallet {
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
-    /// A mapping from challenges tick to a random seed used for generating the challenges in that block.
+    /// A mapping from challenges tick to a random seed used for generating the challenges in that tick.
     ///
     /// This is used to keep track of the challenges' seed in the past.
     /// This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
@@ -180,12 +177,12 @@ pub mod pallet {
     pub type TickToChallengesSeed<T: Config> =
         StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, RandomnessOutputFor<T>>;
 
-    /// A mapping from challenges tick to a vector of custom challenged file keys for that block.
+    /// A mapping from challenges tick to a vector of custom challenged keys for that tick.
     ///
     /// This is used to keep track of the challenges that have been made in the past, specifically
     /// in the checkpoint challenge rounds.
     /// The vector is bounded by `MaxCustomChallengesPerBlockFor`.
-    /// This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
+    /// This mapping goes back only `ChallengeHistoryLength` ticks. Previous challenges are removed.
     #[pallet::storage]
     #[pallet::getter(fn tick_to_checkpoint_challenges)]
     pub type TickToCheckpointChallenges<T: Config> = StorageMap<
@@ -232,7 +229,7 @@ pub mod pallet {
     pub type LastTickProviderSubmittedProofFor<T: Config> =
         StorageMap<_, Blake2_128Concat, ProviderFor<T>, BlockNumberFor<T>>;
 
-    /// A queue of file keys that have been challenged manually.
+    /// A queue of keys that have been challenged manually.
     ///
     /// The elements in this queue will be challenged in the coming blocks,
     /// always ensuring that the maximum number of challenges per block is not exceeded.
@@ -243,7 +240,7 @@ pub mod pallet {
     pub type ChallengesQueue<T: Config> =
         StorageValue<_, BoundedVec<KeyFor<T>, ChallengesQueueLengthFor<T>>, ValueQuery>;
 
-    /// A priority queue of file keys that have been challenged manually.
+    /// A priority queue of keys that have been challenged manually.
     ///
     /// The difference between this and `ChallengesQueue` is that the challenges
     /// in this queue are given priority over the others. So this queue should be
