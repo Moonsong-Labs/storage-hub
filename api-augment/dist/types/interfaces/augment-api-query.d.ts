@@ -3,7 +3,7 @@ import type { ApiTypes, AugmentedQuery, QueryableStorageEntry } from '@polkadot/
 import type { BTreeMap, BTreeSet, Bytes, Null, Option, Struct, Vec, bool, u128, u16, u32, u64, u8 } from '@polkadot/types-codec';
 import type { AnyNumber, ITuple } from '@polkadot/types-codec/types';
 import type { AccountId32, H256 } from '@polkadot/types/interfaces/runtime';
-import type { CumulusPalletParachainSystemRelayStateSnapshotMessagingStateSnapshot, CumulusPalletParachainSystemUnincludedSegmentAncestor, CumulusPalletParachainSystemUnincludedSegmentSegmentTracker, CumulusPalletXcmpQueueOutboundChannelDetails, CumulusPalletXcmpQueueQueueConfigData, CumulusPrimitivesCoreAggregateMessageOrigin, FrameSupportDispatchPerDispatchClassWeight, FrameSystemAccountInfo, FrameSystemCodeUpgradeAuthorization, FrameSystemEventRecord, FrameSystemLastRuntimeUpgradeInfo, FrameSystemPhase, PalletBalancesAccountData, PalletBalancesBalanceLock, PalletBalancesIdAmount, PalletBalancesReserveData, PalletCollatorSelectionCandidateInfo, PalletFileSystemStorageRequestBspsMetadata, PalletFileSystemStorageRequestMetadata, PalletMessageQueueBookState, PalletMessageQueuePage, PalletNftsAttributeDeposit, PalletNftsAttributeNamespace, PalletNftsCollectionConfig, PalletNftsCollectionDetails, PalletNftsCollectionMetadata, PalletNftsItemConfig, PalletNftsItemDetails, PalletNftsItemMetadata, PalletNftsPendingSwap, PalletPaymentStreamsDynamicRatePaymentStream, PalletPaymentStreamsFixedRatePaymentStream, PalletStorageProvidersBackupStorageProvider, PalletStorageProvidersBucket, PalletStorageProvidersMainStorageProvider, PalletStorageProvidersStorageProvider, PalletTransactionPaymentReleases, PalletXcmQueryStatus, PalletXcmRemoteLockedFungibleRecord, PalletXcmVersionMigrationStage, PolkadotCorePrimitivesOutboundHrmpMessage, PolkadotPrimitivesV6AbridgedHostConfiguration, PolkadotPrimitivesV6PersistedValidationData, PolkadotPrimitivesV6UpgradeGoAhead, PolkadotPrimitivesV6UpgradeRestriction, SpConsensusAuraSr25519AppSr25519Public, SpCoreCryptoKeyTypeId, SpRuntimeDigest, SpTrieStorageProof, SpWeightsWeightV2Weight, StorageHubRuntimeRuntimeHoldReason, StorageHubRuntimeSessionKeys, XcmVersionedAssetId, XcmVersionedLocation } from '@polkadot/types/lookup';
+import type { CumulusPalletParachainSystemRelayStateSnapshotMessagingStateSnapshot, CumulusPalletParachainSystemUnincludedSegmentAncestor, CumulusPalletParachainSystemUnincludedSegmentSegmentTracker, CumulusPalletXcmpQueueOutboundChannelDetails, CumulusPalletXcmpQueueQueueConfigData, CumulusPrimitivesCoreAggregateMessageOrigin, FrameSupportDispatchPerDispatchClassWeight, FrameSystemAccountInfo, FrameSystemCodeUpgradeAuthorization, FrameSystemEventRecord, FrameSystemLastRuntimeUpgradeInfo, FrameSystemPhase, PalletBalancesAccountData, PalletBalancesBalanceLock, PalletBalancesIdAmount, PalletBalancesReserveData, PalletCollatorSelectionCandidateInfo, PalletFileSystemStorageRequestBspsMetadata, PalletFileSystemStorageRequestMetadata, PalletMessageQueueBookState, PalletMessageQueuePage, PalletNftsAttributeDeposit, PalletNftsAttributeNamespace, PalletNftsCollectionConfig, PalletNftsCollectionDetails, PalletNftsCollectionMetadata, PalletNftsItemConfig, PalletNftsItemDetails, PalletNftsItemMetadata, PalletNftsPendingSwap, PalletPaymentStreamsDynamicRatePaymentStream, PalletPaymentStreamsFixedRatePaymentStream, PalletStorageProvidersBackupStorageProvider, PalletStorageProvidersBucket, PalletStorageProvidersMainStorageProvider, PalletStorageProvidersStorageProvider, PalletTransactionPaymentReleases, PalletXcmQueryStatus, PalletXcmRemoteLockedFungibleRecord, PalletXcmVersionMigrationStage, PolkadotCorePrimitivesOutboundHrmpMessage, PolkadotPrimitivesV6AbridgedHostConfiguration, PolkadotPrimitivesV6PersistedValidationData, PolkadotPrimitivesV6UpgradeGoAhead, PolkadotPrimitivesV6UpgradeRestriction, ShpTraitsTrieRemoveMutation, SpConsensusAuraSr25519AppSr25519Public, SpCoreCryptoKeyTypeId, SpRuntimeDigest, SpTrieStorageProof, SpWeightsWeightV2Weight, StorageHubRuntimeRuntimeHoldReason, StorageHubRuntimeSessionKeys, XcmVersionedAssetId, XcmVersionedLocation } from '@polkadot/types/lookup';
 import type { Observable } from '@polkadot/types/types';
 export type __AugmentedQuery<ApiType extends ApiTypes> = AugmentedQuery<ApiType, () => unknown>;
 export type __QueryableStorageEntry<ApiType extends ApiTypes> = QueryableStorageEntry<ApiType>;
@@ -173,19 +173,19 @@ declare module '@polkadot/api-base/types/storage' {
              **/
             nextStartingBlockToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
             /**
-             * A double map of [`storage request`](FileLocation) to BSP `AccountId`s that volunteered to store data.
+             * A double map from storage request to BSP `AccountId`s that volunteered to store the file.
              *
              * Any BSP under a storage request prefix is considered to be a volunteer and can be removed at any time.
              * Once a BSP submits a valid proof to the via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
              *
              * When a storage request is expired or removed, the corresponding storage request prefix in this map is removed.
              **/
-            storageRequestBsps: AugmentedQuery<ApiType, (arg1: Bytes | string | Uint8Array, arg2: H256 | string | Uint8Array) => Observable<Option<PalletFileSystemStorageRequestBspsMetadata>>, [Bytes, H256]> & QueryableStorageEntry<ApiType, [Bytes, H256]>;
+            storageRequestBsps: AugmentedQuery<ApiType, (arg1: H256 | string | Uint8Array, arg2: H256 | string | Uint8Array) => Observable<Option<PalletFileSystemStorageRequestBspsMetadata>>, [H256, H256]> & QueryableStorageEntry<ApiType, [H256, H256]>;
             /**
              * A map of blocks to expired storage requests.
              **/
-            storageRequestExpirations: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<Bytes>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
-            storageRequests: AugmentedQuery<ApiType, (arg: Bytes | string | Uint8Array) => Observable<Option<PalletFileSystemStorageRequestMetadata>>, [Bytes]> & QueryableStorageEntry<ApiType, [Bytes]>;
+            storageRequestExpirations: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<H256>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
+            storageRequests: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<PalletFileSystemStorageRequestMetadata>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
             /**
              * Generic query
              **/
@@ -614,32 +614,6 @@ declare module '@polkadot/api-base/types/storage' {
         };
         proofsDealer: {
             /**
-             * A mapping from block number to a vector of challenged Providers for that block.
-             *
-             * This is used to keep track of the Providers that have been challenged, and should
-             * submit a proof by the time of the block used as the key. Providers who do submit
-             * a proof are removed from their respective entry and pushed forward to the next block in
-             * which they should submit a proof. Those who are still in the entry by the time the block
-             * is reached are considered to have failed to submit a proof and subject to slashing.
-             **/
-            blockToChallengedProviders: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<Vec<H256>>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
-            /**
-             * A mapping from block number to a vector of challenged file keys for that block.
-             *
-             * This is used to keep track of the challenges' seed in the past.
-             * This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
-             **/
-            blockToChallengesSeed: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<H256>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
-            /**
-             * A mapping from block number to a vector of custom challenged file keys for that block.
-             *
-             * This is used to keep track of the challenges that have been made in the past, specifically
-             * in the checkpoint challenge rounds.
-             * The vector is bounded by `MaxCustomChallengesPerBlockFor`.
-             * This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
-             **/
-            blockToCheckpointChallenges: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<Vec<H256>>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
-            /**
              * A queue of file keys that have been challenged manually.
              *
              * The elements in this queue will be challenged in the coming blocks,
@@ -649,20 +623,40 @@ declare module '@polkadot/api-base/types/storage' {
              **/
             challengesQueue: AugmentedQuery<ApiType, () => Observable<Vec<H256>>, []> & QueryableStorageEntry<ApiType, []>;
             /**
-             * A mapping from a Provider to the last block number they submitted a proof for.
-             * If for a Provider `p`, `LastBlockProviderSubmittedProofFor[p]` is `n`, then the
-             * Provider should submit a proof for block `n + stake_to_challenge_period(p)`.
+             * A counter of blocks in which challenges were distributed.
+             *
+             * This counter is not necessarily the same as the block number, as challenges are
+             * distributed in the `on_poll` hook, which happens at the beginning of every block,
+             * so long as the block is not part of a [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
+             * During MBMsm, the block number increases, but `ChallengesTicker` does not.
              **/
-            lastBlockProviderSubmittedProofFor: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<u32>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
+            challengesTicker: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
             /**
-             * The block number of the last checkpoint challenge round.
+             * A mapping from challenge tick to a vector of challenged Providers for that tick.
+             *
+             * This is used to keep track of the Providers that have been challenged, and should
+             * submit a proof by the time of the [`ChallengesTicker`] reaches the number used as
+             * key in the mapping. Providers who do submit a proof are removed from their respective
+             * entry and pushed forward to the next tick in which they should submit a proof.
+             * Those who are still in the entry by the time the tick is reached are considered to
+             * have failed to submit a proof and subject to slashing.
+             **/
+            challengeTickToChallengedProviders: AugmentedQuery<ApiType, (arg1: u32 | AnyNumber | Uint8Array, arg2: H256 | string | Uint8Array) => Observable<Option<Null>>, [u32, H256]> & QueryableStorageEntry<ApiType, [u32, H256]>;
+            /**
+             * The challenge tick of the last checkpoint challenge round.
              *
              * This is used to determine when to include the challenges from the `ChallengesQueue` and
-             * `PriorityChallengesQueue` in the `BlockToChallenges` StorageMap. These checkpoint challenge
-             * rounds have to be answered by ALL Providers, and this is enforced by the
+             * `PriorityChallengesQueue` in the `TickToCheckpointChallenges` StorageMap. These checkpoint
+             * challenge rounds have to be answered by ALL Providers, and this is enforced by the
              * `submit_proof` extrinsic.
              **/
-            lastCheckpointBlock: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
+            lastCheckpointTick: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
+            /**
+             * A mapping from a Provider to the last challenge tick they submitted a proof for.
+             * If for a Provider `p`, `LastTickProviderSubmittedProofFor[p]` is `n`, then the
+             * Provider should submit a proof for tick `n + stake_to_challenge_period(p)`.
+             **/
+            lastTickProviderSubmittedProofFor: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<u32>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
             /**
              * A priority queue of file keys that have been challenged manually.
              *
@@ -675,7 +669,24 @@ declare module '@polkadot/api-base/types/storage' {
              * A `BoundedVec` is used because the `parity_scale_codec::MaxEncodedLen` trait
              * is required, but using a `VecDeque` would be more efficient as this is a FIFO queue.
              **/
-            priorityChallengesQueue: AugmentedQuery<ApiType, () => Observable<Vec<H256>>, []> & QueryableStorageEntry<ApiType, []>;
+            priorityChallengesQueue: AugmentedQuery<ApiType, () => Observable<Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>>, []> & QueryableStorageEntry<ApiType, []>;
+            slashableProviders: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<Null>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
+            /**
+             * A mapping from challenges tick to a random seed used for generating the challenges in that block.
+             *
+             * This is used to keep track of the challenges' seed in the past.
+             * This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
+             **/
+            tickToChallengesSeed: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<H256>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
+            /**
+             * A mapping from challenges tick to a vector of custom challenged file keys for that block.
+             *
+             * This is used to keep track of the challenges that have been made in the past, specifically
+             * in the checkpoint challenge rounds.
+             * The vector is bounded by `MaxCustomChallengesPerBlockFor`.
+             * This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
+             **/
+            tickToCheckpointChallenges: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
             /**
              * Generic query
              **/

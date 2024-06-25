@@ -58,7 +58,7 @@ macro_rules! expect_or_err {
 }
 
 impl<T: pallet::Config> Pallet<T> {
-    /// Create a bucket for a owner (user) under a given MSP account.
+    /// Create a bucket for an owner (user) under a given MSP account.
     pub(crate) fn do_create_bucket(
         sender: T::AccountId,
         msp_id: ProviderIdFor<T>,
@@ -69,7 +69,7 @@ impl<T: pallet::Config> Pallet<T> {
 
         // Check if the MSP is indeed an MSP.
         ensure!(
-            <T::Providers as shp_traits::ReadProvidersInterface>::is_msp(&msp_id),
+            <T::Providers as ReadProvidersInterface>::is_msp(&msp_id),
             Error::<T>::NotAMsp
         );
 
@@ -100,7 +100,7 @@ impl<T: pallet::Config> Pallet<T> {
     /// If the bucket is set to private and no collection exists,
     /// a new collection will be created. If the bucket is set to public and
     /// an associated collection exists, the collection remains but the privacy setting is updated to public.
-    /// If the bucket has an associated collection and it does not exist in storage, a new collection will be created.
+    /// If the bucket has an associated collection, and it does not exist in storage, a new collection will be created.
     pub(crate) fn do_update_bucket_privacy(
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
@@ -141,7 +141,7 @@ impl<T: pallet::Config> Pallet<T> {
     /// *Callable only by the owner of the bucket. The bucket must be private.*
     ///
     /// It is possible to have a bucket that is private but does not have a collection associated with it. This can happen if
-    /// a user destroys the collection associated with the bucket by calling the nfts pallet directly.
+    /// a user destroys the collection associated with the bucket by calling the NFTs pallet directly.
     ///
     /// In any case, we will set a new collection the bucket even if there is an existing one associated with it.
     pub(crate) fn do_create_and_associate_collection_with_bucket(
@@ -175,14 +175,14 @@ impl<T: pallet::Config> Pallet<T> {
         bsps_required: Option<T::StorageRequestBspsRequiredType>,
         user_peer_ids: Option<PeerIds<T>>,
         data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>,
-    ) -> DispatchResult {
+    ) -> Result<MerkleHash<T>, DispatchError> {
         // TODO: Check user funds and lock them for the storage request.
         // TODO: Check storage capacity of chosen MSP (when we support MSPs)
         // TODO: Return error if the file is already stored and overwrite is false.
 
         if let Some(ref msp) = msp {
             ensure!(
-                <T::Providers as shp_traits::ReadProvidersInterface>::is_msp(msp),
+                <T::Providers as ReadProvidersInterface>::is_msp(msp),
                 Error::<T>::NotAMsp
             );
         }
@@ -197,9 +197,10 @@ impl<T: pallet::Config> Pallet<T> {
             return Err(Error::<T>::BspsRequiredExceedsMax)?;
         }
 
-        let file_metadata = StorageRequestMetadata::<T> {
+        let storage_request_metadata = StorageRequestMetadata::<T> {
             requested_at: <frame_system::Pallet<T>>::block_number(),
-            owner: sender,
+            owner: sender.clone(),
+            location: location.clone(),
             fingerprint,
             size,
             msp,
@@ -210,15 +211,17 @@ impl<T: pallet::Config> Pallet<T> {
             bsps_volunteered: T::StorageRequestBspsRequiredType::zero(),
         };
 
-        // TODO: if we add the overwrite flag, this would only fail if the overwrite flag is false.
-        // Check that storage request is not already registered.
+        // Compute the file key used throughout this file's lifespan.
+        let file_key = Self::compute_file_key(sender.clone(), location.clone(), size, fingerprint);
+
+        // Check a storage request does not already exist for this file key.
         ensure!(
-            !<StorageRequests<T>>::contains_key(&location),
+            !<StorageRequests<T>>::contains_key(&file_key),
             Error::<T>::StorageRequestAlreadyRegistered
         );
 
         // Register storage request.
-        <StorageRequests<T>>::insert(&location, file_metadata);
+        <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
 
         let mut block_to_insert_expiration = Self::next_expiration_insertion_block_number();
 
@@ -241,12 +244,12 @@ impl<T: pallet::Config> Pallet<T> {
         // Add storage request expiration at next available block.
         expect_or_err!(
             // TODO: Verify that try_append gets an empty BoundedVec when appending a first element.
-            <StorageRequestExpirations<T>>::try_append(block_to_insert_expiration, location).ok(),
+            <StorageRequestExpirations<T>>::try_append(block_to_insert_expiration, file_key).ok(),
             "Storage request expiration should have enough slots available since it was just checked.",
             Error::<T>::StorageRequestExpiredNoSlotAvailable
         );
 
-        Ok(())
+        Ok(file_key)
     }
 
     /// Volunteer to store a file.
@@ -261,14 +264,12 @@ impl<T: pallet::Config> Pallet<T> {
     /// ensure that the storage request is fulfilled by opening up the opportunity for more BSPs to volunteer.
     pub(crate) fn do_bsp_volunteer(
         sender: T::AccountId,
-        location: FileLocation<T>,
-        fingerprint: Fingerprint<T>,
+        file_key: MerkleHash<T>,
     ) -> Result<
         (
             ProviderIdFor<T>,
             MultiAddresses<T>,
-            StorageData<T>,
-            T::AccountId,
+            StorageRequestMetadata<T>,
         ),
         DispatchError,
     > {
@@ -278,18 +279,18 @@ impl<T: pallet::Config> Pallet<T> {
 
         // Check that the provider is indeed a BSP.
         ensure!(
-            <T::Providers as shp_traits::ReadProvidersInterface>::is_bsp(&bsp_id),
+            <T::Providers as ReadProvidersInterface>::is_bsp(&bsp_id),
             Error::<T>::NotABsp
         );
 
         // TODO: Verify BSP has enough storage capacity to store the file
 
         // Check that the storage request exists.
-        let mut file_metadata =
-            <StorageRequests<T>>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
+        let mut storage_request_metadata =
+            <StorageRequests<T>>::get(&file_key).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         expect_or_err!(
-            file_metadata.bsps_confirmed < file_metadata.bsps_required,
+            storage_request_metadata.bsps_confirmed < storage_request_metadata.bsps_required,
             "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
             Error::<T>::StorageRequestBspsRequiredFulfilled,
             bool
@@ -297,13 +298,14 @@ impl<T: pallet::Config> Pallet<T> {
 
         // Check if the BSP is already volunteered for this storage request.
         ensure!(
-            !<StorageRequestBsps<T>>::contains_key(&location, &bsp_id),
+            !<StorageRequestBsps<T>>::contains_key(&file_key, &bsp_id),
             Error::<T>::BspAlreadyVolunteered
         );
 
         // Compute BSP's threshold
         let bsp_threshold: T::ThresholdType = Self::compute_bsp_xor(
-            fingerprint
+            storage_request_metadata
+                .fingerprint
                 .as_ref()
                 .try_into()
                 .map_err(|_| Error::<T>::FailedToEncodeFingerprint)?,
@@ -315,7 +317,7 @@ impl<T: pallet::Config> Pallet<T> {
 
         // Get number of blocks since the storage request was issued.
         let blocks_since_requested: u128 = <frame_system::Pallet<T>>::block_number()
-            .saturating_sub(file_metadata.requested_at)
+            .saturating_sub(storage_request_metadata.requested_at)
             .try_into()
             .map_err(|_| Error::<T>::FailedToConvertBlockNumber)?;
 
@@ -336,7 +338,7 @@ impl<T: pallet::Config> Pallet<T> {
 
         // Add BSP to storage request metadata.
         <StorageRequestBsps<T>>::insert(
-            &location,
+            &file_key,
             &bsp_id,
             StorageRequestBspsMetadata::<T> {
                 confirmed: false,
@@ -345,25 +347,24 @@ impl<T: pallet::Config> Pallet<T> {
         );
 
         // Increment the number of bsps volunteered.
-        match file_metadata
+        match storage_request_metadata
             .bsps_volunteered
             .checked_add(&T::StorageRequestBspsRequiredType::one())
         {
             Some(inc_bsps_volunteered) => {
-                file_metadata.bsps_volunteered = inc_bsps_volunteered;
+                storage_request_metadata.bsps_volunteered = inc_bsps_volunteered;
             }
             None => {
                 return Err(ArithmeticError::Overflow.into());
             }
         }
 
-        <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
+        // Update storage request metadata.
+        <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata.clone()));
 
         let multiaddresses = T::Providers::get_bsp_multiaddresses(&bsp_id)?;
-        let size = file_metadata.size;
-        let owner = file_metadata.owner;
 
-        Ok((bsp_id, multiaddresses, size, owner))
+        Ok((bsp_id, multiaddresses, storage_request_metadata))
     }
 
     /// Confirm storing a file.
@@ -374,28 +375,28 @@ impl<T: pallet::Config> Pallet<T> {
     /// and a proof of inclusion of the `file_key` in their merkle patricia trie.
     ///
     /// If the proof is valid, the root of the BSP is updated to reflect the new root of the merkle patricia trie and the number of `bsps_confirmed` is
-    /// incremented. If the number of `bsps_confirmed` reaches the number of `bsps_required`, the storage request is deleted. Finally the BSP's data
+    /// incremented. If the number of `bsps_confirmed` reaches the number of `bsps_required`, the storage request is deleted. Finally, the BSP's data
     /// used is incremented by the size of the file.
     pub(crate) fn do_bsp_confirm_storing(
         sender: T::AccountId,
-        location: FileLocation<T>,
+        file_key: MerkleHash<T>,
         root: MerkleHash<T>,
         non_inclusion_forest_proof: ForestProof<T>,
         added_file_key_proof: KeyProof<T>,
-    ) -> Result<(ProviderIdFor<T>, MerkleHash<T>, MerkleHash<T>), DispatchError> {
+    ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
         let bsp_id =
             <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
-            <T::Providers as shp_traits::ReadProvidersInterface>::is_bsp(&bsp_id),
+            <T::Providers as ReadProvidersInterface>::is_bsp(&bsp_id),
             Error::<T>::NotABsp
         );
 
         // Check that the storage request exists.
         let mut file_metadata =
-            <StorageRequests<T>>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
+            <StorageRequests<T>>::get(&file_key).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         expect_or_err!(
             file_metadata.bsps_confirmed < file_metadata.bsps_required,
@@ -406,12 +407,12 @@ impl<T: pallet::Config> Pallet<T> {
 
         // Check that the BSP has volunteered for the storage request.
         ensure!(
-            <StorageRequestBsps<T>>::contains_key(&location, &bsp_id),
+            <StorageRequestBsps<T>>::contains_key(&file_key, &bsp_id),
             Error::<T>::BspNotVolunteered
         );
 
         let requests = expect_or_err!(
-            <StorageRequestBsps<T>>::get(&location, &bsp_id),
+            <StorageRequestBsps<T>>::get(&file_key, &bsp_id),
             "BSP should exist since we checked it above",
             Error::<T>::ImpossibleFailedToGetValue
         );
@@ -439,14 +440,6 @@ impl<T: pallet::Config> Pallet<T> {
                 return Err(ArithmeticError::Overflow.into());
             }
         }
-
-        // Compute the file key hash.
-        let file_key = Self::compute_file_key(
-            file_metadata.owner.clone(),
-            location.clone(),
-            file_metadata.size,
-            file_metadata.fingerprint,
-        );
 
         // Verify the proof of non-inclusion.
         let proven_keys: BTreeSet<MerkleHash<T>> =
@@ -478,8 +471,9 @@ impl<T: pallet::Config> Pallet<T> {
 
         // Remove storage request if we reached the required number of bsps.
         if file_metadata.bsps_confirmed == file_metadata.bsps_required {
+            // TODO: we should only delete if the MSP also confirmed to store the file (this is not implemented yet).
             // Remove storage request metadata.
-            <StorageRequests<T>>::remove(&location);
+            <StorageRequests<T>>::remove(&file_key);
 
             // There should only be the number of bsps volunteered under the storage request prefix.
             let remove_limit: u32 = file_metadata
@@ -489,7 +483,7 @@ impl<T: pallet::Config> Pallet<T> {
 
             // Remove storage request bsps
             let removed =
-                <StorageRequestBsps<T>>::drain_prefix(&location).fold(0, |acc, _| acc + 1);
+                <StorageRequestBsps<T>>::drain_prefix(&file_key).fold(0, |acc, _| acc + 1);
 
             // Make sure that the expected number of bsps were removed.
             expect_or_err!(
@@ -500,10 +494,10 @@ impl<T: pallet::Config> Pallet<T> {
             );
         } else {
             // Update storage request metadata.
-            <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
+            <StorageRequests<T>>::set(&file_key, Some(file_metadata.clone()));
 
             // Update bsp for storage request.
-            <StorageRequestBsps<T>>::mutate(&location, &bsp_id, |bsp| {
+            <StorageRequestBsps<T>>::mutate(&file_key, &bsp_id, |bsp| {
                 if let Some(bsp) = bsp {
                     bsp.confirmed = true;
                 }
@@ -521,12 +515,12 @@ impl<T: pallet::Config> Pallet<T> {
         <T::Providers as shp_traits::ProvidersInterface>::update_root(bsp_id, new_root)?;
 
         // Add data to storage provider.
-        <T::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
+        <T::Providers as MutateProvidersInterface>::increase_data_used(
             &bsp_id,
             file_metadata.size,
         )?;
 
-        Ok((bsp_id, file_key, new_root))
+        Ok((bsp_id, new_root))
     }
 
     /// Revoke a storage request.
@@ -539,30 +533,29 @@ impl<T: pallet::Config> Pallet<T> {
     /// All BSPs that have volunteered to store the file are removed from the storage request and the storage request is deleted.
     pub(crate) fn do_revoke_storage_request(
         sender: T::AccountId,
-        location: FileLocation<T>,
         file_key: MerkleHash<T>,
     ) -> DispatchResult {
         // Check that the storage request exists.
         ensure!(
-            <StorageRequests<T>>::contains_key(&location),
+            <StorageRequests<T>>::contains_key(&file_key),
             Error::<T>::StorageRequestNotFound
         );
 
         // Get storage request metadata.
-        let file_metadata = expect_or_err!(
-            <StorageRequests<T>>::get(&location),
+        let storage_request_metadata = expect_or_err!(
+            <StorageRequests<T>>::get(&file_key),
             "Storage request should exist",
             Error::<T>::StorageRequestNotFound
         );
 
         // Check that the sender is the same as the one who requested the storage.
         ensure!(
-            file_metadata.owner == sender,
+            storage_request_metadata.owner == sender,
             Error::<T>::StorageRequestNotAuthorized
         );
 
         // Check if there are already BSPs who have confirmed to store the file.
-        if file_metadata.bsps_confirmed >= T::StorageRequestBspsRequiredType::zero() {
+        if storage_request_metadata.bsps_confirmed >= T::StorageRequestBspsRequiredType::zero() {
             // Apply Remove mutation of the file key to the BSPs that have confirmed storing the file (proofs of inclusion).
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &file_key,
@@ -571,13 +564,13 @@ impl<T: pallet::Config> Pallet<T> {
         }
 
         // There should only be the number of bsps volunteered under the storage request prefix.
-        let remove_limit: u32 = file_metadata
+        let remove_limit: u32 = storage_request_metadata
             .bsps_volunteered
             .try_into()
             .map_err(|_| Error::<T>::FailedTypeConversion)?;
 
         // Remove storage request bsps
-        let removed = <StorageRequestBsps<T>>::drain_prefix(&location).fold(0, |acc, _| acc + 1);
+        let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key).fold(0, |acc, _| acc + 1);
 
         // Make sure that the expected number of bsps were removed.
         expect_or_err!(
@@ -588,7 +581,7 @@ impl<T: pallet::Config> Pallet<T> {
         );
 
         // Remove storage request.
-        <StorageRequests<T>>::remove(&location);
+        <StorageRequests<T>>::remove(&file_key);
 
         Ok(())
     }
@@ -608,7 +601,7 @@ impl<T: pallet::Config> Pallet<T> {
     ///
     /// > In this case, the storage request was probably created by another BSP for some reason (e.g. that BSP lost the file)
     ///     and the current BSP is not a volunteer for this since it is already storing it. But since they to have stopped storing it,
-    ///     we increment the `bsps_requred` by 1.
+    ///     we increment the `bsps_required` by 1.
     ///
     /// 3. The BSP stops storing a file that no longer has an opened storage request.
     ///
@@ -639,7 +632,7 @@ impl<T: pallet::Config> Pallet<T> {
 
         // Check that the provider is indeed a BSP.
         ensure!(
-            <T::Providers as shp_traits::ReadProvidersInterface>::is_bsp(&bsp_id),
+            <T::Providers as ReadProvidersInterface>::is_bsp(&bsp_id),
             Error::<T>::NotABsp
         );
 
@@ -655,9 +648,9 @@ impl<T: pallet::Config> Pallet<T> {
             Error::<T>::InvalidFileKeyMetadata
         );
 
-        match <StorageRequests<T>>::get(&location) {
-            Some(mut metadata) => {
-                match <StorageRequestBsps<T>>::get(&location, &bsp_id) {
+        match <StorageRequests<T>>::get(&file_key) {
+            Some(mut storage_request_metadata) => {
+                match <StorageRequestBsps<T>>::get(&file_key, &bsp_id) {
                     // We hit scenario 1. The BSP is a volunteer and has confirmed storing the file.
                     // We need to decrement the number of bsps confirmed and volunteered and remove the BSP from the storage request.
                     Some(bsp) => {
@@ -668,23 +661,27 @@ impl<T: pallet::Config> Pallet<T> {
                             bool
                         );
 
-                        metadata.bsps_confirmed =
-                            metadata.bsps_confirmed.saturating_sub(1u32.into());
+                        storage_request_metadata.bsps_confirmed = storage_request_metadata
+                            .bsps_confirmed
+                            .saturating_sub(1u32.into());
 
-                        metadata.bsps_volunteered =
-                            metadata.bsps_volunteered.saturating_sub(1u32.into());
+                        storage_request_metadata.bsps_volunteered = storage_request_metadata
+                            .bsps_volunteered
+                            .saturating_sub(1u32.into());
 
-                        <StorageRequestBsps<T>>::remove(&location, &bsp_id);
+                        <StorageRequestBsps<T>>::remove(&file_key, &bsp_id);
                     }
                     // We hit scenario 2. There is an open storage request but the BSP is not a volunteer.
                     // We need to increment the number of bsps required.
                     None => {
-                        metadata.bsps_required = metadata.bsps_required.saturating_add(1u32.into())
+                        storage_request_metadata.bsps_required = storage_request_metadata
+                            .bsps_required
+                            .saturating_add(1u32.into())
                     }
                 }
 
                 // Update storage request metadata.
-                <StorageRequests<T>>::set(&location, Some(metadata));
+                <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata));
             }
             // We hit scenario 3. There is no storage request opened for the file.
             // We need to create a new storage request with a single bsp required.
@@ -736,7 +733,7 @@ impl<T: pallet::Config> Pallet<T> {
         <T::Providers as shp_traits::ProvidersInterface>::update_root(bsp_id, new_root)?;
 
         // Decrease data used by the BSP.
-        <T::Providers as shp_traits::MutateProvidersInterface>::decrease_data_used(&bsp_id, size)?;
+        <T::Providers as MutateProvidersInterface>::decrease_data_used(&bsp_id, size)?;
 
         Ok((bsp_id, new_root))
     }
@@ -761,12 +758,12 @@ impl<T: pallet::Config> Pallet<T> {
 
     /// Get the block number at which the storage request will expire.
     ///
-    /// This will also update the [`NextAvailableExpirationInsertionBlock`] if the current expiration block pointer is lower then the [`crate::Config::StorageRequestTtl`].
+    /// This will also update the [`NextAvailableExpirationInsertionBlock`] if the current expiration block pointer is lower than the [`crate::Config::StorageRequestTtl`].
     pub(crate) fn next_expiration_insertion_block_number() -> BlockNumberFor<T> {
         let current_block_number = <frame_system::Pallet<T>>::block_number();
         let min_expiration_block = current_block_number + T::StorageRequestTtl::get().into();
 
-        // Reset the current expiration block pointer if it is lower then the minimum storage request TTL.
+        // Reset the current expiration block pointer if it is lower than the minimum storage request TTL.
         if <NextAvailableExpirationInsertionBlock<T>>::get() < min_expiration_block {
             <NextAvailableExpirationInsertionBlock<T>>::set(min_expiration_block);
         }
@@ -781,7 +778,7 @@ impl<T: pallet::Config> Pallet<T> {
     /// Compute the asymptotic threshold point for the given number of total BSPs.
     ///
     /// This function calculates the threshold at which the decay factor stabilizes,
-    /// representing an horizontal asymptote.
+    /// representing a horizontal asymptote.
     pub(crate) fn compute_asymptotic_threshold_point(
         total_bsps: u32,
     ) -> Result<T::ThresholdType, Error<T>> {
@@ -834,22 +831,6 @@ impl<T: pallet::Config> Pallet<T> {
 impl<T: crate::Config> shp_traits::SubscribeProvidersInterface for Pallet<T> {
     type ProviderId = ProviderIdFor<T>;
 
-    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
-        // Adjust bsp assignment threshold by applying the decay function after removing the asymptote
-        let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
-        let base_threshold =
-            bsp_assignment_threshold.saturating_sub(T::AssignmentThresholdAsymptote::get());
-
-        bsp_assignment_threshold = base_threshold
-            .checked_mul(&T::AssignmentThresholdDecayFactor::get())
-            .ok_or(Error::<T>::ThresholdArithmeticError)?
-            .saturating_add(T::AssignmentThresholdAsymptote::get());
-
-        BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
-
-        Ok(())
-    }
-
     fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
         // Adjust bsp assignment threshold by applying the inverse of the decay function after removing the asymptote
         let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
@@ -858,6 +839,22 @@ impl<T: crate::Config> shp_traits::SubscribeProvidersInterface for Pallet<T> {
 
         bsp_assignment_threshold = base_threshold
             .checked_div(&T::AssignmentThresholdDecayFactor::get())
+            .ok_or(Error::<T>::ThresholdArithmeticError)?
+            .saturating_add(T::AssignmentThresholdAsymptote::get());
+
+        BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
+
+        Ok(())
+    }
+
+    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
+        // Adjust bsp assignment threshold by applying the decay function after removing the asymptote
+        let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
+        let base_threshold =
+            bsp_assignment_threshold.saturating_sub(T::AssignmentThresholdAsymptote::get());
+
+        bsp_assignment_threshold = base_threshold
+            .checked_mul(&T::AssignmentThresholdDecayFactor::get())
             .ok_or(Error::<T>::ThresholdArithmeticError)?
             .saturating_add(T::AssignmentThresholdAsymptote::get());
 
