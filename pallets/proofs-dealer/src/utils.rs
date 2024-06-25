@@ -12,7 +12,7 @@ use shp_traits::{
 };
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedSub, Convert, Hash, Zero},
-    ArithmeticError, BoundedVec, DispatchError, Saturating,
+    ArithmeticError, BoundedVec, DispatchError, SaturatedConversion, Saturating,
 };
 use sp_std::{
     collections::{btree_set::BTreeSet, vec_deque::VecDeque},
@@ -23,10 +23,11 @@ use crate::{
     pallet,
     types::{
         AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor, ChallengesFeeFor,
-        ChallengesQueueLengthFor, ForestRootFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor,
-        KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor, Proof, ProviderFor,
-        ProvidersPalletFor, RandomChallengesPerBlockFor, RandomnessOutputFor,
-        RandomnessProviderFor, StakeToChallengePeriodFor, TreasuryAccountFor,
+        ChallengesQueueLengthFor, CheckpointChallengePeriodFor, ForestRootFor, ForestVerifierFor,
+        ForestVerifierProofFor, KeyFor, KeyVerifierFor, KeyVerifierProofFor,
+        MaxCustomChallengesPerBlockFor, Proof, ProviderFor, ProvidersPalletFor,
+        RandomChallengesPerBlockFor, RandomnessOutputFor, RandomnessProviderFor,
+        StakeToChallengePeriodFor, TreasuryAccountFor,
     },
     ChallengeTickToChallengedProviders, ChallengesQueue, ChallengesTicker, Error, Event,
     LastCheckpointTick, LastTickProviderSubmittedProofFor, Pallet, PriorityChallengesQueue,
@@ -373,10 +374,12 @@ where
             let stake = match ProvidersPalletFor::<T>::get_stake(provider) {
                 Some(stake) => stake,
                 // But to avoid panics, in the odd case of a Provider not being registered, we
-                // arbitrarily set the stake to be that which would result in 10 ticks of challenge period.
+                // arbitrarily set the stake to be that which would result in `CheckpointChallengePeriod` ticks of challenge period.
                 None => {
                     weight.consume(T::DbWeight::get().reads_writes(1, 0));
-                    StakeToChallengePeriodFor::<T>::get() * 10u32.into()
+                    let checkpoint_challenge_period =
+                        CheckpointChallengePeriodFor::<T>::get().saturated_into::<u32>();
+                    StakeToChallengePeriodFor::<T>::get() * checkpoint_challenge_period.into()
                 }
             };
             weight.consume(T::DbWeight::get().reads_writes(1, 0));
