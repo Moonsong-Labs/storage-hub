@@ -343,6 +343,7 @@ pub mod pallet {
             file_key: MerkleHash<T>,
             new_root: MerkleHash<T>,
             owner: T::AccountId,
+            location: FileLocation<T>,
         },
     }
 
@@ -639,6 +640,7 @@ pub mod pallet {
                 file_key,
                 new_root,
                 owner,
+                location
             });
 
             Ok(())

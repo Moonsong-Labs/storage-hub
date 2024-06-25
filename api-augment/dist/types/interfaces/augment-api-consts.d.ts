@@ -210,8 +210,9 @@ declare module '@polkadot/api-base/types/consts' {
         };
         proofsDealer: {
             /**
-             * The number of blocks that challenges history is kept for.
-             * After this many blocks, challenges are removed from `BlockToChallengesSeed` StorageMap.
+             * The number of ticks that challenges history is kept for.
+             * After this many ticks, challenges are removed from `TickToChallengesSeed` StorageMap.
+             * A "tick" is usually one block, but some blocks may be skipped due to migrations.
              **/
             challengeHistoryLength: u32 & AugmentedConst<ApiType>;
             /**
@@ -227,21 +228,31 @@ declare module '@polkadot/api-base/types/consts' {
              **/
             challengesQueueLength: u32 & AugmentedConst<ApiType>;
             /**
+             * The tolerance in number of ticks (almost equivalent to blocks, but skipping MBM) that
+             * a Provider has to submit a proof, counting from the tick the challenge is emitted for
+             * that Provider.
+             *
+             * For example, if a Provider is supposed to submit a proof for tick `n`, and the tolerance
+             * is set to `t`, then the Provider has to submit a proof for challenges in tick `n`, before
+             * `n + t`.
+             **/
+            challengeTicksTolerance: u32 & AugmentedConst<ApiType>;
+            /**
              * The number of blocks in between a checkpoint challenges round (i.e. with custom challenges).
              * This is used to determine when to include the challenges from the `ChallengesQueue` and
              * `PriorityChallengesQueue` in the `BlockToChallenges` StorageMap. These checkpoint challenge
              * rounds have to be answered by ALL Providers, and this is enforced by the `submit_proof`
              * extrinsic.
+             *
+             * WARNING: This period needs to be equal or larger than the challenge period of the smallest
+             * Provider in the network. If the smallest Provider has a challenge period of 10 ticks (blocks),
+             * then the checkpoint challenge period needs to be at least 10 ticks.
              **/
             checkpointChallengePeriod: u32 & AugmentedConst<ApiType>;
             /**
              * The maximum number of custom challenges that can be made in a single checkpoint block.
              **/
             maxCustomChallengesPerBlock: u32 & AugmentedConst<ApiType>;
-            /**
-             * The maximum number of Providers that can be challenged in block.
-             **/
-            maxProvidersChallengedPerBlock: u32 & AugmentedConst<ApiType>;
             /**
              * The number of random challenges that are generated per block, using the random seed
              * generated for that block.

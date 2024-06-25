@@ -19,6 +19,7 @@ import type {
   u64,
   u8,
 } from "@polkadot/types-codec";
+import type { ITuple } from "@polkadot/types-codec/types";
 import type { AccountId32, H256 } from "@polkadot/types/interfaces/runtime";
 import type {
   CumulusPrimitivesCoreAggregateMessageOrigin,
@@ -30,6 +31,7 @@ import type {
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
   PalletStorageProvidersValueProposition,
+  ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
   SpWeightsWeightV2Weight,
   StagingXcmV4AssetAssets,
@@ -398,8 +400,8 @@ declare module "@polkadot/api-base/types/events" {
        **/
       BspStoppedStoring: AugmentedEvent<
         ApiType,
-        [bspId: H256, fileKey: H256, newRoot: H256],
-        { bspId: H256; fileKey: H256; newRoot: H256 }
+        [bspId: H256, fileKey: H256, newRoot: H256, owner: AccountId32, location: Bytes],
+        { bspId: H256; fileKey: H256; newRoot: H256; owner: AccountId32; location: Bytes }
       >;
       /**
        * Notifies that a bucket's privacy has been updated.
@@ -1333,6 +1335,28 @@ declare module "@polkadot/api-base/types/events" {
         { who: AccountId32; keyChallenged: H256 }
       >;
       /**
+       * A new challenge seed was generated.
+       **/
+      NewChallengeSeed: AugmentedEvent<
+        ApiType,
+        [challengesTicker: u32, seed: H256],
+        { challengesTicker: u32; seed: H256 }
+      >;
+      /**
+       * A new checkpoint challenge was generated.
+       **/
+      NewCheckpointChallenge: AugmentedEvent<
+        ApiType,
+        [
+          challengesTicker: u32,
+          challenges: Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>,
+        ],
+        {
+          challengesTicker: u32;
+          challenges: Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>;
+        }
+      >;
+      /**
        * A proof was accepted.
        **/
       ProofAccepted: AugmentedEvent<
@@ -1340,6 +1364,10 @@ declare module "@polkadot/api-base/types/events" {
         [provider: H256, proof: PalletProofsDealerProof],
         { provider: H256; proof: PalletProofsDealerProof }
       >;
+      /**
+       * A slashable provider was found.
+       **/
+      SlashableProvider: AugmentedEvent<ApiType, [provider: H256], { provider: H256 }>;
       /**
        * Generic event
        **/

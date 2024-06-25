@@ -614,32 +614,6 @@ declare module '@polkadot/api-base/types/storage' {
         };
         proofsDealer: {
             /**
-             * A mapping from block number to a vector of challenged Providers for that block.
-             *
-             * This is used to keep track of the Providers that have been challenged, and should
-             * submit a proof by the time of the block used as the key. Providers who do submit
-             * a proof are removed from their respective entry and pushed forward to the next block in
-             * which they should submit a proof. Those who are still in the entry by the time the block
-             * is reached are considered to have failed to submit a proof and subject to slashing.
-             **/
-            blockToChallengedProviders: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<Vec<H256>>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
-            /**
-             * A mapping from block number to a vector of challenged file keys for that block.
-             *
-             * This is used to keep track of the challenges' seed in the past.
-             * This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
-             **/
-            blockToChallengesSeed: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<H256>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
-            /**
-             * A mapping from block number to a vector of custom challenged file keys for that block.
-             *
-             * This is used to keep track of the challenges that have been made in the past, specifically
-             * in the checkpoint challenge rounds.
-             * The vector is bounded by `MaxCustomChallengesPerBlockFor`.
-             * This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
-             **/
-            blockToCheckpointChallenges: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
-            /**
              * A queue of file keys that have been challenged manually.
              *
              * The elements in this queue will be challenged in the coming blocks,
@@ -649,20 +623,40 @@ declare module '@polkadot/api-base/types/storage' {
              **/
             challengesQueue: AugmentedQuery<ApiType, () => Observable<Vec<H256>>, []> & QueryableStorageEntry<ApiType, []>;
             /**
-             * A mapping from a Provider to the last block number they submitted a proof for.
-             * If for a Provider `p`, `LastBlockProviderSubmittedProofFor[p]` is `n`, then the
-             * Provider should submit a proof for block `n + stake_to_challenge_period(p)`.
+             * A counter of blocks in which challenges were distributed.
+             *
+             * This counter is not necessarily the same as the block number, as challenges are
+             * distributed in the `on_poll` hook, which happens at the beginning of every block,
+             * so long as the block is not part of a [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
+             * During MBMsm, the block number increases, but `ChallengesTicker` does not.
              **/
-            lastBlockProviderSubmittedProofFor: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<u32>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
+            challengesTicker: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
             /**
-             * The block number of the last checkpoint challenge round.
+             * A mapping from challenge tick to a vector of challenged Providers for that tick.
+             *
+             * This is used to keep track of the Providers that have been challenged, and should
+             * submit a proof by the time of the [`ChallengesTicker`] reaches the number used as
+             * key in the mapping. Providers who do submit a proof are removed from their respective
+             * entry and pushed forward to the next tick in which they should submit a proof.
+             * Those who are still in the entry by the time the tick is reached are considered to
+             * have failed to submit a proof and subject to slashing.
+             **/
+            challengeTickToChallengedProviders: AugmentedQuery<ApiType, (arg1: u32 | AnyNumber | Uint8Array, arg2: H256 | string | Uint8Array) => Observable<Option<Null>>, [u32, H256]> & QueryableStorageEntry<ApiType, [u32, H256]>;
+            /**
+             * The challenge tick of the last checkpoint challenge round.
              *
              * This is used to determine when to include the challenges from the `ChallengesQueue` and
-             * `PriorityChallengesQueue` in the `BlockToChallenges` StorageMap. These checkpoint challenge
-             * rounds have to be answered by ALL Providers, and this is enforced by the
+             * `PriorityChallengesQueue` in the `TickToCheckpointChallenges` StorageMap. These checkpoint
+             * challenge rounds have to be answered by ALL Providers, and this is enforced by the
              * `submit_proof` extrinsic.
              **/
-            lastCheckpointBlock: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
+            lastCheckpointTick: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
+            /**
+             * A mapping from a Provider to the last challenge tick they submitted a proof for.
+             * If for a Provider `p`, `LastTickProviderSubmittedProofFor[p]` is `n`, then the
+             * Provider should submit a proof for tick `n + stake_to_challenge_period(p)`.
+             **/
+            lastTickProviderSubmittedProofFor: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<u32>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
             /**
              * A priority queue of file keys that have been challenged manually.
              *
@@ -676,6 +670,23 @@ declare module '@polkadot/api-base/types/storage' {
              * is required, but using a `VecDeque` would be more efficient as this is a FIFO queue.
              **/
             priorityChallengesQueue: AugmentedQuery<ApiType, () => Observable<Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>>, []> & QueryableStorageEntry<ApiType, []>;
+            slashableProviders: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<Null>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
+            /**
+             * A mapping from challenges tick to a random seed used for generating the challenges in that block.
+             *
+             * This is used to keep track of the challenges' seed in the past.
+             * This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
+             **/
+            tickToChallengesSeed: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<H256>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
+            /**
+             * A mapping from challenges tick to a vector of custom challenged file keys for that block.
+             *
+             * This is used to keep track of the challenges that have been made in the past, specifically
+             * in the checkpoint challenge rounds.
+             * The vector is bounded by `MaxCustomChallengesPerBlockFor`.
+             * This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
+             **/
+            tickToCheckpointChallenges: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
             /**
              * Generic query
              **/

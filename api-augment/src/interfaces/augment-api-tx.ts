@@ -2407,46 +2407,25 @@ declare module "@polkadot/api-base/types/submittable" {
         [H256]
       >;
       /**
-       * Extrinsic to register a new round of challenges.
-       *
-       * This function is called by the block producer to register a new round of challenges.
-       * Random challenges are automatically generated based on some external source of
-       * randomness, and are added to `BlockToChallenges`, for this block's number.
-       *
-       * It also takes care of including the challenges from the `ChallengesQueue` and
-       * `PriorityChallengesQueue`. This custom challenges are only included in "checkpoint"
-       * blocks
-       *
-       * Additionally, it takes care of checking if there are Providers that have
-       * failed to submit a proof, and should have submitted one by this block. It does so
-       * by checking the `BlockToChallengedProviders` StorageMap. If a Provider is found
-       * to have failed to submit a proof, it is subject to slashing.
-       *
-       * Finally, it cleans up:
-       * - The `BlockToChallenges` StorageMap, removing entries older than `ChallengeHistoryLength`.
-       * - The `BlockToChallengedProviders` StorageMap, removing entries for the current block number.
-       **/
-      newChallengesRound: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
-      /**
        * For a Provider to submit a proof.
        *
        * Checks that `provider` is a registered Provider. If none
        * is provided, the proof submitter is considered to be the Provider.
        * Relies on a Providers pallet to get the root for the Provider.
        * Validates that the proof corresponds to a challenge that was made in the past,
-       * by checking the `BlockToChallengesSeed` StorageMap. The block number that the
-       * Provider should have submitted a proof is calculated based on the last block they
-       * submitted a proof for (`LastBlockProviderSubmittedProofFor`), and the proving period for
+       * by checking the `TickToChallengesSeed` StorageMap. The challenge tick that the
+       * Provider should have submitted a proof is calculated based on the last tick they
+       * submitted a proof for (`LastTickProviderSubmittedProofFor`), and the proving period for
        * that Provider, which is a function of their stake.
        * This extrinsic also checks that there hasn't been a checkpoint challenge round
-       * in between the last time the Provider submitted a proof for and the block
+       * in between the last time the Provider submitted a proof for and the tick
        * for which the proof is being submitted. If there has been, the Provider is
        * subject to slashing.
        *
        * If valid:
-       * - Pushes forward the Provider in the `BlockToChallengedProviders` StorageMap a number
-       * of blocks corresponding to the stake of the Provider.
-       * - Registers this block as the last block in which the Provider submitted a proof.
+       * - Pushes forward the Provider in the `ChallengeTickToChallengedProviders` StorageMap a number
+       * of ticks corresponding to the stake of the Provider.
+       * - Registers this tick as the last tick in which the Provider submitted a proof.
        *
        * Execution of this extrinsic should be refunded if the proof is valid.
        **/

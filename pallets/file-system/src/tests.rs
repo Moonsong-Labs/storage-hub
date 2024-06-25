@@ -1613,7 +1613,7 @@ fn bsp_stop_storing_success() {
             Some(StorageRequestMetadata {
                 requested_at: 1,
                 owner: owner_account_id.clone(),
-                location,
+                location: location.clone(),
                 fingerprint,
                 size,
                 msp: Some(msp_id),
@@ -1638,6 +1638,7 @@ fn bsp_stop_storing_success() {
                 file_key,
                 new_root,
                 owner: owner_account_id,
+                location
             }
             .into(),
         );
@@ -1731,7 +1732,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
             Some(StorageRequestMetadata {
                 requested_at: 1,
                 owner: owner_account_id.clone(),
-                location,
+                location: location.clone(),
                 fingerprint: H256::zero(),
                 size,
                 msp: Some(msp_id),
@@ -1756,6 +1757,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
                 file_key,
                 new_root,
                 owner: owner_account_id,
+                location
             }
             .into(),
         );
@@ -1826,7 +1828,7 @@ fn bsp_stop_storing_not_volunteered_success() {
             Some(StorageRequestMetadata {
                 requested_at: 1,
                 owner: owner_account_id.clone(),
-                location,
+                location: location.clone(),
                 fingerprint,
                 size,
                 msp: Some(msp_id),
@@ -1851,6 +1853,7 @@ fn bsp_stop_storing_not_volunteered_success() {
                 file_key,
                 new_root,
                 owner: owner_account_id,
+                location
             }
             .into(),
         );
@@ -1903,7 +1906,7 @@ fn bsp_stop_storing_no_storage_request_success() {
             Some(StorageRequestMetadata {
                 requested_at: 5,
                 owner: owner_account_id.clone(),
-                location,
+                location: location.clone(),
                 fingerprint,
                 size,
                 msp: None,
@@ -1928,6 +1931,7 @@ fn bsp_stop_storing_no_storage_request_success() {
                 file_key,
                 new_root,
                 owner: owner_account_id,
+                location
             }
             .into(),
         );

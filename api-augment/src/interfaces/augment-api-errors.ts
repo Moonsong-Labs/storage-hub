@@ -730,24 +730,29 @@ declare module "@polkadot/api-base/types/errors" {
     };
     proofsDealer: {
       /**
-       * Provider is submitting a proof for a block in the future.
-       **/
-      ChallengesBlockNotReached: AugmentedError<ApiType>;
-      /**
-       * Provider is submitting a proof for a block before the last block this pallet registers
-       * challenges for.
-       **/
-      ChallengesBlockTooOld: AugmentedError<ApiType>;
-      /**
        * `challenge` extrinsic errors
        * The ChallengesQueue is full. No more manual challenges can be made
        * until some of the challenges in the queue are dispatched.
        **/
       ChallengesQueueOverflow: AugmentedError<ApiType>;
       /**
+       * Provider is submitting a proof for a tick in the future.
+       **/
+      ChallengesTickNotReached: AugmentedError<ApiType>;
+      /**
+       * Provider is submitting a proof for a tick too late, i.e. that the challenges tick
+       * is greater or equal than `challenges_tick` + `T::ChallengeTicksTolerance::get()`.
+       **/
+      ChallengesTickTooLate: AugmentedError<ApiType>;
+      /**
+       * Provider is submitting a proof for a tick before the last tick this pallet registers
+       * challenges for.
+       **/
+      ChallengesTickTooOld: AugmentedError<ApiType>;
+      /**
        * Checkpoint challenges not found in block.
-       * This should only be possible if `BlockToCheckpointChallenges` is dereferenced for a block
-       * that is not a checkpoint block.
+       * This should only be possible if `TickToCheckpointChallenges` is dereferenced for a tick
+       * that is not a checkpoint tick.
        **/
       CheckpointChallengesNotFound: AugmentedError<ApiType>;
       /**
@@ -781,10 +786,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       KeyProofVerificationFailed: AugmentedError<ApiType>;
       /**
-       * Provider is submitting a proof but there is no record of the last block they
+       * Provider is submitting a proof but there is no record of the last tick they
        * submitted a proof for.
        * Providers who are required to submit proofs should always have a record of the
-       * last block they submitted a proof for, otherwise it means they haven't started
+       * last tick they submitted a proof for, otherwise it means they haven't started
        * providing service for any user yet.
        **/
       NoRecordOfLastSubmittedProof: AugmentedError<ApiType>;
@@ -807,9 +812,9 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ProviderStakeNotFound: AugmentedError<ApiType>;
       /**
-       * The seed for the block could not be found.
-       * This should not be possible for a block within the `ChallengeHistoryLength` range, as
-       * seeds are generated for all blocks, and stored within this range.
+       * The seed for the tick could not be found.
+       * This should not be possible for a tick within the `ChallengeHistoryLength` range, as
+       * seeds are generated for all ticks, and stored within this range.
        **/
       SeedNotFound: AugmentedError<ApiType>;
       /**
