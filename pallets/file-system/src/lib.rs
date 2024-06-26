@@ -409,6 +409,8 @@ pub mod pallet {
         ExpectedInclusionProof,
         /// Metadata does not correspond to expected file key.
         InvalidFileKeyMetadata,
+        /// BSPs assignment threshold cannot be below asymptote.
+        ThresholdBelowAsymptote,
     }
 
     #[pallet::call]
@@ -644,6 +646,25 @@ pub mod pallet {
             });
 
             Ok(())
+        }
+
+        #[pallet::call_index(8)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn force_update_bsps_assignment_threshold(
+            origin: OriginFor<T>,
+            bsp_assignment_threshold: T::ThresholdType,
+        ) -> DispatchResult {
+            // Check that the extrinsic was sent with root origin.
+            ensure_root(origin)?;
+
+            ensure!(
+                bsp_assignment_threshold >= T::AssignmentThresholdAsymptote::get(),
+                Error::<T>::ThresholdBelowAsymptote
+            );
+
+            BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
+
+            Ok(().into())
         }
     }
 
