@@ -611,7 +611,11 @@ where
 
                         let current_block_randomness = BlakeTwo256::hash(timestamp.encode().as_slice());
 
-                        let additional_keys = vec![(para_head_key, para_head_data), (relay_slot_key, Slot::from(u64::from(*relay_slot)).encode()), (current_block_randomness_key, current_block_randomness.encode())];
+                        let additional_keys = vec![
+                            (para_head_key, para_head_data),
+                            (relay_slot_key, Slot::from(u64::from(*relay_slot)).encode()),
+                            (current_block_randomness_key, current_block_randomness.encode())
+                        ];
 
                         let time = MockTimestampInherentDataProvider;
 
