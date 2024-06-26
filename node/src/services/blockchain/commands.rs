@@ -1,7 +1,10 @@
 use anyhow::Result;
 use serde_json::Number;
+use sp_core::{ConstU32, H256, U256};
+
+use pallet_file_system_runtime_api::QueryFileEarliestVolunteerBlockError;
 use shc_actors_framework::actor::ActorHandle;
-use sp_core::{H256, U256};
+use sp_runtime::BoundedVec;
 
 use super::{
     handler::BlockchainService,
@@ -29,6 +32,14 @@ pub enum BlockchainServiceCommand {
         block_number: U256,
         callback: tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<()>>,
     },
+    QueryFileEarliestVolunteerBlock {
+        bsp_id: sp_core::sr25519::Public,
+        file_location: BoundedVec<u8, ConstU32<512>>,
+        callback: tokio::sync::oneshot::Sender<Result<U256, QueryFileEarliestVolunteerBlockError>>,
+    },
+    GetNodePublicKey {
+        callback: tokio::sync::oneshot::Sender<sp_core::sr25519::Public>,
+    },
 }
 
 /// Interface for interacting with the BlockchainService actor.
@@ -54,6 +65,16 @@ pub trait BlockchainServiceInterface {
 
     /// Wait for a block number.
     async fn wait_for_block(&self, block_number: U256) -> Result<()>;
+
+    /// Query the earliest block number that a file was volunteered for storage.
+    async fn query_file_earliest_volunteer_block(
+        &self,
+        bsp_id: sp_core::sr25519::Public,
+        file_location: BoundedVec<u8, ConstU32<512>>,
+    ) -> Result<U256, QueryFileEarliestVolunteerBlockError>;
+
+    /// Get the node's public key.
+    async fn get_node_public_key(&self) -> sp_core::sr25519::Public;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -138,5 +159,30 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         let rx = rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.");
         rx.await.expect("Failed to wait for block");
         Ok(())
+    }
+
+    async fn query_file_earliest_volunteer_block(
+        &self,
+        bsp_id: sp_core::sr25519::Public,
+        file_location: BoundedVec<u8, ConstU32<512>>,
+    ) -> Result<U256, QueryFileEarliestVolunteerBlockError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::QueryFileEarliestVolunteerBlock {
+            bsp_id,
+            file_location,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    /// Get the node's public key.
+    async fn get_node_public_key(&self) -> sp_core::sr25519::Public {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::GetNodePublicKey { callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 }

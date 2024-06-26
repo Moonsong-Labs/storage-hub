@@ -51,6 +51,7 @@ use crate::{
     service::ParachainClient,
     services::blockchain::{events::AcceptedBspVolunteer, transaction::SubmittedTransaction},
 };
+use pallet_file_system_runtime_api::{FileSystemApi, QueryFileEarliestVolunteerBlockError};
 
 use crate::services::blockchain::{
     commands::BlockchainServiceCommand,
@@ -217,6 +218,45 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryFileEarliestVolunteerBlock {
+                    bsp_id,
+                    file_location,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let earliest_block_to_volunteer = self
+                        .client
+                        .runtime_api()
+                        .query_earliest_file_volunteer_block(
+                            current_block_hash,
+                            bsp_id.into(),
+                            file_location,
+                        )
+                        .unwrap_or_else(|_| {
+                            Err(QueryFileEarliestVolunteerBlockError::InternalError)
+                        });
+
+                    match callback.send(earliest_block_to_volunteer.map(U256::from)) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Earliest block to volunteer result sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::GetNodePublicKey { callback } => {
+                    let pub_key = Self::caller_pub_key(self.keystore.clone());
+                    match callback.send(pub_key) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Node's public key sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }
@@ -357,7 +397,7 @@ impl BlockchainService {
             .expect("Fetching account nonce works; qed");
         if latest_nonce > self.nonce_counter {
             self.nonce_counter = latest_nonce
-        };
+        }
 
         // Get events from storage.
         match self.get_events_storage_element(block_hash) {

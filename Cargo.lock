@@ -6926,6 +6926,7 @@ dependencies = [
  "frame-system 28.0.0",
  "pallet-balances 28.0.0",
  "pallet-bucket-nfts",
+ "pallet-file-system-runtime-api",
  "pallet-nfts",
  "pallet-proofs-dealer",
  "pallet-storage-providers",
@@ -6939,6 +6940,16 @@ dependencies = [
  "sp-runtime 31.0.1",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
+]
+
+[[package]]
+name = "pallet-file-system-runtime-api"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "sp-api 26.0.0",
+ "sp-runtime 31.0.1",
 ]
 
 [[package]]
@@ -14556,6 +14567,7 @@ dependencies = [
  "libp2p-identity",
  "log",
  "pallet-file-system",
+ "pallet-file-system-runtime-api",
  "pallet-proofs-dealer",
  "pallet-transaction-payment 28.0.0",
  "pallet-transaction-payment-rpc",
@@ -14644,6 +14656,7 @@ dependencies = [
  "pallet-bucket-nfts",
  "pallet-collator-selection",
  "pallet-file-system",
+ "pallet-file-system-runtime-api",
  "pallet-message-queue 31.0.0",
  "pallet-nfts",
  "pallet-payment-streams",

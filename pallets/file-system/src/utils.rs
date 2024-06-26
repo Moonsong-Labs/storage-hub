@@ -1,15 +1,18 @@
 use core::cmp::max;
 
+use crate::pallet::{FromU256, IntoU256};
 use codec::{Decode, Encode};
 use frame_support::{
     ensure, pallet_prelude::DispatchResult, traits::nonfungibles_v2::Create, traits::Get,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
+use pallet_file_system_runtime_api::QueryFileEarliestVolunteerBlockError;
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_traits::{MutateProvidersInterface, ReadProvidersInterface};
 use sp_core::Hasher;
+use sp_core::U256;
 use sp_runtime::{
-    traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
+    traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
 };
 use sp_std::{vec, vec::Vec};
@@ -63,6 +66,80 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
+    pub fn query_earliest_file_volunteer_block(
+        bsp_id: ProviderIdFor<T>,
+        file_location: FileLocation<T>,
+    ) -> Result<BlockNumberFor<T>, QueryFileEarliestVolunteerBlockError>
+    where
+        T: frame_system::Config,
+        T::ThresholdType: From<u128>,
+    {
+        // Get the block number at which the storage request was created.
+        let (storage_request_block, fingerprint) = match <StorageRequests<T>>::get(&file_location) {
+            Some(storage_request) => (storage_request.requested_at, storage_request.fingerprint),
+            None => {
+                return Err(QueryFileEarliestVolunteerBlockError::StorageRequestNotFound);
+            }
+        };
+
+        let bsp_threshold = Self::compute_bsp_xor(
+            fingerprint
+                .as_ref()
+                .try_into()
+                .map_err(|_| QueryFileEarliestVolunteerBlockError::FailedToEncodeFingerprint)?,
+            &bsp_id
+                .encode()
+                .try_into()
+                .map_err(|_| QueryFileEarliestVolunteerBlockError::FailedToEncodeBsp)?,
+        )
+        .map_err(|_| QueryFileEarliestVolunteerBlockError::ThresholdArithmeticError)?;
+
+        // Compute the block number at which the BSP should send the volunteer request.
+        let volunteer_block_number =
+            match Self::compute_volunteer_block_number(bsp_threshold, storage_request_block) {
+                Ok(Some(volunteer_block_number)) => volunteer_block_number,
+                _ => Zero::zero(),
+            };
+
+        Ok(volunteer_block_number)
+    }
+
+    fn compute_volunteer_block_number(
+        bsp_threshold: T::ThresholdType,
+        storage_request_block: BlockNumberFor<T>,
+    ) -> Result<Option<BlockNumberFor<T>>, DispatchError>
+    where
+        T: frame_system::Config,
+        T::ThresholdType: From<u128>,
+    {
+        // Calculate the difference between BSP's threshold and the current threshold.
+        let threshold_diff = match bsp_threshold.checked_sub(&BspsAssignmentThreshold::<T>::get()) {
+            Some(diff) => diff,
+            None => {
+                // The BSP's threshold is less than the current threshold.
+                return Ok(None);
+            }
+        };
+
+        // Calculate the number of blocks required to exceed the difference in thresholds.
+        let blocks_to_wait =
+            match threshold_diff.checked_div(&T::AssignmentThresholdMultiplier::get()) {
+                Some(blocks) => blocks,
+                None => {
+                    return Err(Error::<T>::ThresholdArithmeticError.into());
+                }
+            };
+
+        // Compute the block number at which the BSP should send the volunteer request.
+        let blocks_to_wait: U256 = blocks_to_wait.into_u256();
+        let volunteer_block_number = storage_request_block.saturating_add(
+            BlockNumberFor::<T>::try_from(blocks_to_wait)
+                .map_err(|_| Error::<T>::FailedToConvertBlockNumber)?,
+        );
+
+        Ok(Some(volunteer_block_number))
+    }
+
     /// Create a bucket for a owner (user) under a given MSP account.
     pub(crate) fn do_create_bucket(
         sender: T::AccountId,
@@ -280,7 +357,6 @@ where
         let bsp_id =
             <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
-
         // Check that the provider is indeed a BSP.
         ensure!(
             <T::Providers as shp_traits::ReadProvidersInterface>::is_bsp(&bsp_id),
@@ -290,11 +366,11 @@ where
         // TODO: Verify BSP has enough storage capacity to store the file
 
         // Check that the storage request exists.
-        let mut file_metadata =
+        let mut storage_request_metadata =
             <StorageRequests<T>>::get(&location).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         expect_or_err!(
-            file_metadata.bsps_confirmed < file_metadata.bsps_required,
+            storage_request_metadata.bsps_confirmed < storage_request_metadata.bsps_required,
             "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
             Error::<T>::StorageRequestBspsRequiredFulfilled,
             bool
@@ -318,16 +394,16 @@ where
                 .map_err(|_| Error::<T>::FailedToEncodeBsp)?,
         )?;
 
+        let current_block_number: U256 = <frame_system::Pallet<T>>::block_number().into();
+
         // Get number of blocks since the storage request was issued.
-        let blocks_since_requested: u128 = <frame_system::Pallet<T>>::block_number()
-            .saturating_sub(file_metadata.requested_at)
-            .try_into()
-            .map_err(|_| Error::<T>::FailedToConvertBlockNumber)?;
+        let blocks_since_requested: U256 = current_block_number
+            .saturating_sub(storage_request_metadata.requested_at.into())
+            .into();
 
         // Note. This should never fail since the storage request expiration would never reach such a high number.
         // Storage requests are cleared after reaching `StorageRequestTtl` blocks which is defined in the pallet Config.
-        let blocks_since_requested: T::ThresholdType =
-            T::ThresholdType::ensure_from(blocks_since_requested)?;
+        let blocks_since_requested = T::ThresholdType::from_u256(blocks_since_requested);
 
         // Compute the threshold increasing rate.
         let rate_increase =
@@ -350,23 +426,23 @@ where
         );
 
         // Increment the number of bsps volunteered.
-        match file_metadata
+        match storage_request_metadata
             .bsps_volunteered
             .checked_add(&T::StorageRequestBspsRequiredType::one())
         {
             Some(inc_bsps_volunteered) => {
-                file_metadata.bsps_volunteered = inc_bsps_volunteered;
+                storage_request_metadata.bsps_volunteered = inc_bsps_volunteered;
             }
             None => {
                 return Err(ArithmeticError::Overflow.into());
             }
         }
 
-        <StorageRequests<T>>::set(&location, Some(file_metadata.clone()));
+        <StorageRequests<T>>::set(&location, Some(storage_request_metadata.clone()));
 
         let multiaddresses = T::Providers::get_bsp_multiaddresses(&bsp_id)?;
-        let size = file_metadata.size;
-        let owner = file_metadata.owner;
+        let size = storage_request_metadata.size;
+        let owner = storage_request_metadata.owner;
 
         Ok((bsp_id, multiaddresses, size, owner))
     }
@@ -738,7 +814,7 @@ where
     }
 
     /// Calculate the XOR of the fingerprint and the BSP.
-    fn compute_bsp_xor(
+    pub fn compute_bsp_xor(
         fingerprint: &[u8; 32],
         bsp: &[u8; 32],
     ) -> Result<T::ThresholdType, Error<T>> {
