@@ -15,7 +15,7 @@ use shc_forest_manager::{
     in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
 };
 
-use polkadot_primitives::{BlakeTwo256, HeadData, ValidationCode};
+use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
 use shc_common::types::HasherOutT;
@@ -592,10 +592,11 @@ where
 
                     let para_head_key = RelayChainWellKnownKeys::para_head(para_id);
                     let relay_slot_key = RelayChainWellKnownKeys::CURRENT_SLOT.to_vec();
+                    let current_block_randomness_key = RelayChainWellKnownKeys::CURRENT_BLOCK_RANDOMNESS.to_vec();
 
                     async move {
                         let mut timestamp = 0u64;
-                        // This allows us to create multiple blocks without considering the actualy slot duration wait time. We increment the timestamp by slot_duration in inherent data.
+                        // This allows us to create multiple blocks without considering the actual slot duration wait time. We increment the timestamp by slot_duration in inherent data.
                         TIMESTAMP.with(|x| {
                             timestamp = x.clone().take();
                         });
@@ -608,7 +609,13 @@ where
 							slot_duration,
 						);
 
-                        let additional_keys = vec![(para_head_key, para_head_data), (relay_slot_key, Slot::from(u64::from(*relay_slot)).encode())];
+                        let current_block_randomness = BlakeTwo256::hash(timestamp.encode().as_slice());
+
+                        let additional_keys = vec![
+                            (para_head_key, para_head_data),
+                            (relay_slot_key, Slot::from(u64::from(*relay_slot)).encode()),
+                            (current_block_randomness_key, current_block_randomness.encode())
+                        ];
 
                         let time = MockTimestampInherentDataProvider;
 
