@@ -19,6 +19,12 @@ use crate::{
     LOG_TARGET,
 };
 
+use serial_test::serial;
+use sp_core::H256;
+use sp_runtime::traits::BlakeTwo256;
+use sp_runtime::AccountId32;
+use sp_trie::LayoutV1;
+
 pub(crate) fn other_io_error(err: String) -> io::Error {
     io::Error::new(io::ErrorKind::Other, err)
 }
@@ -636,14 +642,6 @@ where
 }
 
 mod tests {
-    use serial_test::serial;
-    use shc_common::types::Chunk;
-    use shc_common::types::ChunkId;
-    use sp_core::H256;
-    use sp_runtime::traits::BlakeTwo256;
-    use sp_runtime::AccountId32;
-    use sp_trie::LayoutV1;
-
     use super::*;
 
     /// Mock that simulates the backend for testing purposes.
