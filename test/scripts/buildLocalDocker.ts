@@ -1,8 +1,6 @@
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import dotenv from "dotenv";
-dotenv.config();
 
 async function main() {
   process.chdir("..");
@@ -37,6 +35,7 @@ async function main() {
   fs.copyFileSync(BINARY_PATH, path.join(buildDir, path.basename(BINARY_PATH)));
 
   try {
+    // TODO: Replace with dockerode
     execSync("docker build -t storage-hub:local -f docker/storage-hub-node.Dockerfile --load .", {
       stdio: "inherit",
     });

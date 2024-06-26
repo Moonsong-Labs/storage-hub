@@ -11,10 +11,11 @@ mod weights;
 
 use smallvec::smallvec;
 use sp_api::impl_runtime_apis;
+use sp_core::H256;
 use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
     traits::{BlakeTwo256, IdentifyAccount, Verify},
-    BoundedVec, MultiSignature,
+    MultiSignature,
 };
 
 use sp_std::prelude::*;
@@ -34,7 +35,7 @@ pub use parachains_common::BlockNumber;
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
 use sp_runtime::{
-    traits::{Block as BlockT, ConstU32},
+    traits::Block as BlockT,
     transaction_validity::{TransactionSource, TransactionValidity},
     ApplyExtrinsicResult, ExtrinsicInclusionMode,
 };
@@ -47,9 +48,6 @@ use pallet_file_system_runtime_api::QueryFileEarliestVolunteerBlockError;
 pub use sp_runtime::BuildStorage;
 
 use weights::ExtrinsicBaseWeight;
-
-/// Export H_LENGTH for the clients to use.
-pub use configs::H_LENGTH;
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
@@ -107,15 +105,6 @@ pub type Executive = frame_executive::Executive<
     Runtime,
     AllPalletsWithSystem,
 >;
-
-/// The file chunk size in bytes. This is the size of the leaf nodes in the Merkle
-/// Patricia Trie that is constructed for each file.
-/// Each chunk is 1 kB.
-pub const FILE_CHUNK_SIZE: u64 = 2u64.pow(10);
-
-/// The number of challenges for a file, depending on the size of the file.
-/// For every 512 kB, there is a challenge.
-pub const FILE_SIZE_TO_CHALLENGES: u64 = 2u64.pow(25);
 
 /// Handles converting a weight scalar to a fee value, based on the scale and granularity of the
 /// node's balance type.
@@ -393,9 +382,9 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_file_system_runtime_api::FileSystemApi<Block, Hash, BoundedVec<u8, ConstU32<512u32>>, BlockNumber> for Runtime {
-        fn query_earliest_file_volunteer_block(bsp_id: Hash, file_location: BoundedVec<u8, ConstU32<512u32>>) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
-            FileSystem::query_earliest_file_volunteer_block(bsp_id, file_location)
+    impl pallet_file_system_runtime_api::FileSystemApi<Block, Hash, H256, BlockNumber> for Runtime {
+        fn query_earliest_file_volunteer_block(bsp_id: Hash, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
+            FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key)
         }
     }
 

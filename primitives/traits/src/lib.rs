@@ -6,10 +6,12 @@ use frame_support::pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Me
 use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
 use frame_support::traits::{fungible, Incrementable};
 use frame_support::Parameter;
-use scale_info::prelude::{fmt::Debug, vec::Vec};
+use scale_info::prelude::fmt::Debug;
+use scale_info::TypeInfo;
 use sp_core::Get;
 use sp_runtime::traits::{AtLeast32BitUnsigned, Hash, Saturating};
 use sp_runtime::{BoundedVec, DispatchError};
+use sp_std::collections::btree_set::BTreeSet;
 
 #[cfg(feature = "std")]
 pub trait MaybeDebug: Debug {}
@@ -63,6 +65,9 @@ pub trait ProvidersInterface {
 
     /// Get the root for a registered Provider.
     fn get_root(who: Self::ProviderId) -> Option<Self::MerkleHash>;
+
+    /// Update the root for a registered Provider.
+    fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult;
 
     /// Get the stake for a registered  Provider.
     fn get_stake(
@@ -168,7 +173,8 @@ pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
         + AtLeast32BitUnsigned
         + Copy
         + MaxEncodedLen
-        + HasCompact;
+        + HasCompact
+        + Into<u32>;
     /// The type of the Merkle Patricia Root of the storage trie for BSPs and MSPs' buckets (a hash).
     type MerklePatriciaRoot: Parameter
         + Member
@@ -193,7 +199,7 @@ pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
 
     /// Add a new Bucket as a Provider
     fn add_bucket(
-        msp_id: Self::ProviderId,
+        provider_id: Self::ProviderId,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,
@@ -212,12 +218,6 @@ pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
     /// Change the root of a bucket
     fn change_root_bucket(
         bucket_id: Self::BucketId,
-        new_root: Self::MerklePatriciaRoot,
-    ) -> DispatchResult;
-
-    /// Change the root of a BSP
-    fn change_root_bsp(
-        bsp_id: Self::ProviderId,
         new_root: Self::MerklePatriciaRoot,
     ) -> DispatchResult;
 
@@ -276,7 +276,7 @@ pub trait ProofsDealerInterface {
         who: &Self::ProviderId,
         challenges: &[Self::MerkleHash],
         proof: &Self::ForestProof,
-    ) -> Result<Vec<Self::MerkleHash>, DispatchError>;
+    ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError>;
 
     /// Verify a proof for a key within the Merkle Patricia Forest of a Provider.
     ///
@@ -286,13 +286,25 @@ pub trait ProofsDealerInterface {
         key: &Self::MerkleHash,
         challenges: &[Self::MerkleHash],
         proof: &Self::KeyProof,
-    ) -> Result<Vec<Self::MerkleHash>, DispatchError>;
+    ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError>;
 
     /// Submit a new proof challenge.
     fn challenge(key_challenged: &Self::MerkleHash) -> DispatchResult;
 
     /// Submit a new challenge with priority.
-    fn challenge_with_priority(key_challenged: &Self::MerkleHash) -> DispatchResult;
+    fn challenge_with_priority(
+        key_challenged: &Self::MerkleHash,
+        mutation: Option<TrieRemoveMutation>,
+    ) -> DispatchResult;
+
+    /// Apply delta (mutations) to the partial trie based on the proof and the commitment.
+    ///
+    /// The new root is returned.
+    fn apply_delta(
+        commitment: &Self::MerkleHash,
+        mutations: &[(Self::MerkleHash, TrieMutation)],
+        proof: &Self::ForestProof,
+    ) -> Result<Self::MerkleHash, DispatchError>;
 }
 
 /// A trait to verify proofs based on commitments and challenges.
@@ -314,7 +326,49 @@ pub trait CommitmentVerifier {
         commitment: &Self::Commitment,
         challenges: &[Self::Challenge],
         proof: &Self::Proof,
-    ) -> Result<Vec<Self::Challenge>, DispatchError>;
+    ) -> Result<BTreeSet<Self::Challenge>, DispatchError>;
+}
+
+/// Enum representing the type of mutation (addition or removal of a key).
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug)]
+pub enum TrieMutation {
+    Add(TrieAddMutation),
+    Remove(TrieRemoveMutation),
+}
+
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug, Default)]
+pub struct TrieAddMutation;
+
+impl Into<TrieMutation> for TrieAddMutation {
+    fn into(self) -> TrieMutation {
+        TrieMutation::Add(self)
+    }
+}
+
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Clone, PartialEq, Debug, Default)]
+pub struct TrieRemoveMutation;
+
+impl Into<TrieMutation> for TrieRemoveMutation {
+    fn into(self) -> TrieMutation {
+        TrieMutation::Remove(self)
+    }
+}
+
+/// A trait to apply mutations (delta) to a partial trie based on a proof and a commitment.
+pub trait TrieProofDeltaApplier<H: sp_core::Hasher> {
+    /// The type that represents the proof.
+    type Proof: Parameter + Member + Debug;
+    /// The type that represents the keys (e.g. a Merkle root, node keys, etc.)
+    type Key: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>;
+
+    /// Apply mutations (delta) to a partial trie based on a proof and a commitment.
+    ///
+    /// Returns the new root computed after applying the mutations.
+    fn apply_delta(
+        root: &Self::Key,
+        mutations: &[(Self::Key, TrieMutation)],
+        proof: &Self::Proof,
+    ) -> Result<(sp_trie::MemoryDB<H>, Self::Key), DispatchError>;
 }
 
 /// Interface used by the file system pallet in order to read storage from NFTs pallet (avoiding tigth coupling).

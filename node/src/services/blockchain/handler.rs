@@ -36,6 +36,7 @@ use sc_tracing::tracing::{error, info};
 use serde_json::Number;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::Fingerprint;
+use shp_file_key_verifier::types::FileKey;
 use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Hasher, H256, U256};
 use sp_keystore::{Keystore, KeystorePtr};
@@ -220,7 +221,7 @@ impl Actor for BlockchainService {
                 }
                 BlockchainServiceCommand::QueryFileEarliestVolunteerBlock {
                     bsp_id,
-                    file_location,
+                    file_key,
                     callback,
                 } => {
                     let current_block_hash = self.client.info().best_hash;
@@ -231,7 +232,7 @@ impl Actor for BlockchainService {
                         .query_earliest_file_volunteer_block(
                             current_block_hash,
                             bsp_id.into(),
-                            file_location,
+                            file_key,
                         )
                         .unwrap_or_else(|_| {
                             Err(QueryFileEarliestVolunteerBlockError::InternalError)
@@ -409,6 +410,7 @@ impl BlockchainService {
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::NewStorageRequest {
                                 who,
+                                file_key,
                                 location,
                                 fingerprint,
                                 size,
@@ -416,6 +418,7 @@ impl BlockchainService {
                             },
                         ) => self.emit(NewStorageRequest {
                             who,
+                            file_key: FileKey::from(file_key.as_ref()),
                             location,
                             fingerprint: fingerprint.as_ref().into(),
                             size,

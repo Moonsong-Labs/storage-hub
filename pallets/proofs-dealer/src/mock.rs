@@ -6,13 +6,17 @@ use frame_support::{
     weights::constants::RocksDbWeight,
 };
 use frame_system as system;
-use shp_traits::{CommitmentVerifier, MaybeDebug, SubscribeProvidersInterface};
-use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256};
+use shp_traits::{
+    CommitmentVerifier, MaybeDebug, SubscribeProvidersInterface, TrieMutation,
+    TrieProofDeltaApplier,
+};
+use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, IdentityLookup},
     BuildStorage, DispatchError, DispatchResult, SaturatedConversion,
 };
-use sp_trie::CompactProof;
+use sp_std::collections::btree_set::BTreeSet;
+use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieLayout};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -21,7 +25,7 @@ type AccountId = u64;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
 const UNITS: Balance = 1_000_000_000_000;
-const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
+pub(crate) const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumberFor<Test> = 3;
@@ -122,7 +126,7 @@ impl pallet_storage_providers::Config for Test {
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type BucketNameLimit = ConstU32<100>;
-    type SpMinDeposit = ConstU128<10>;
+    type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
     type Subscribers = MockedProvidersSubscriber;
@@ -136,19 +140,19 @@ impl crate::Config for Test {
     type NativeBalance = Balances;
     type MerkleTrieHash = H256;
     type MerkleTrieHashing = BlakeTwo256;
-    type ForestVerifier = MockVerifier<H256>;
-    type KeyVerifier = MockVerifier<H256>;
+    type ForestVerifier = MockVerifier<H256, LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
+    type KeyVerifier = MockVerifier<H256, LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
-    type MaxProvidersChallengedPerBlock = ConstU32<10>;
-    type ChallengeHistoryLength = ConstU64<10>;
-    type ChallengesQueueLength = ConstU32<10>;
-    type CheckpointChallengePeriod = ConstU32<2>;
+    type ChallengeHistoryLength = ConstU64<30>;
+    type ChallengesQueueLength = ConstU32<25>;
+    type CheckpointChallengePeriod = ConstU64<10>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = ConstU64<181222>;
     type RandomnessProvider = MockRandomness;
     type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
+    type ChallengeTicksTolerance = ConstU64<20>;
 }
 
 pub struct MockedProvidersSubscriber;
@@ -165,12 +169,12 @@ impl SubscribeProvidersInterface for MockedProvidersSubscriber {
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
 /// and `false` otherwise.
-pub struct MockVerifier<C> {
-    _phantom: core::marker::PhantomData<C>,
+pub struct MockVerifier<C, T: TrieLayout, const H_LENGTH: usize> {
+    _phantom: core::marker::PhantomData<(C, T)>,
 }
 
-/// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl<C> CommitmentVerifier for MockVerifier<C>
+/// Implement the `TrieVerifier` trait for the `MockForestManager` struct.
+impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifier<C, T, H_LENGTH>
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
@@ -182,12 +186,35 @@ where
         _root: &Self::Commitment,
         challenges: &[Self::Challenge],
         proof: &CompactProof,
-    ) -> Result<Vec<Self::Challenge>, DispatchError> {
+    ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            Ok(challenges.to_vec())
+            let challenges: BTreeSet<Self::Challenge> = challenges.iter().cloned().collect();
+            Ok(challenges)
         } else {
             Err("Proof is empty".into())
         }
+    }
+}
+
+impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
+    for MockVerifier<C, T, H_LENGTH>
+where
+    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
+{
+    type Proof = CompactProof;
+    type Key = <T::Hash as sp_core::Hasher>::Out;
+
+    fn apply_delta(
+        root: &Self::Key,
+        mutations: &[(Self::Key, TrieMutation)],
+        proof: &Self::Proof,
+    ) -> Result<(MemoryDB<T::Hash>, Self::Key), DispatchError> {
+        let last_key = mutations.last().unwrap().0;
+
+        let db = MemoryDB::<T::Hash>::default();
+
+        // Return default db and the last key in mutations, so it is deterministic for testing.
+        Ok((db, last_key))
     }
 }
 

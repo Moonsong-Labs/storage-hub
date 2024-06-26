@@ -1,10 +1,10 @@
 import fs from "node:fs";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import path from "node:path";
 
-let nodeProcess: ChildProcess | undefined = undefined;
-
 const fetchMetadata = async () => {
+  const maxRetries = 60;
+  const sleepTime = 500;
   const url = "http://localhost:9944";
   const payload = {
     id: "1",
@@ -13,7 +13,7 @@ const fetchMetadata = async () => {
     params: [],
   };
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < maxRetries; i++) {
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -30,9 +30,10 @@ const fetchMetadata = async () => {
       return response.arrayBuffer();
     } catch {
       console.log("Waiting for node to launch...");
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, sleepTime));
     }
   }
+  console.log(`Error fetching container IP  after ${(maxRetries * sleepTime) / 1000} seconds`);
   throw new Error("Error fetching metadata");
 };
 
@@ -45,19 +46,20 @@ async function main() {
     throw new Error("File not found");
   }
 
-  nodeProcess = spawn("docker", ["compose", "-f=../docker/local-node-compose.yml", "up"]);
-
-  const onProcessExit = () => {
-    nodeProcess?.kill();
-  };
-
-  process.once("exit", onProcessExit);
-  process.once("SIGINT", onProcessExit);
-
-  nodeProcess.once("exit", () => {
-    process.removeListener("exit", onProcessExit);
-    process.removeListener("SIGINT", onProcessExit);
-  });
+  // TODO: replace with dockerode
+  spawn(
+    "docker",
+    [
+      "compose",
+      "-f=../docker/local-node-compose.yml",
+      "up",
+      "--remove-orphans",
+      "--renew-anon-volumes",
+    ],
+    {
+      stdio: "inherit",
+    }
+  );
 
   const metadata = await fetchMetadata();
   fs.writeFileSync(metadataPath, Buffer.from(metadata));
@@ -68,10 +70,8 @@ async function main() {
 main()
   .catch((error) => {
     console.error(error);
-    nodeProcess?.kill();
-    process.exit(1);
+    process.exitCode = 1;
   })
-  .then(() => {
-    nodeProcess?.kill();
-    process.exit(0);
+  .finally(() => {
+    execSync("docker compose -f=../docker/local-node-compose.yml down --remove-orphans --volumes");
   });

@@ -76,6 +76,7 @@ pub mod pallet {
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: shp_traits::ProofsDealerInterface<
             ProviderId = <Self::Providers as shp_traits::ProvidersInterface>::ProviderId,
+            MerkleHash = <Self::Providers as shp_traits::ProvidersInterface>::MerkleHash,
         >;
 
         /// Type for identifying a file, generally a hash.
@@ -199,9 +200,9 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn storage_requests)]
     pub type StorageRequests<T: Config> =
-        StorageMap<_, Blake2_128Concat, FileLocation<T>, StorageRequestMetadata<T>>;
+        StorageMap<_, Blake2_128Concat, MerkleHash<T>, StorageRequestMetadata<T>>;
 
-    /// A double map of [`storage request`](FileLocation) to BSP `AccountId`s that volunteered to store data.
+    /// A double map from storage request to BSP `AccountId`s that volunteered to store the file.
     ///
     /// Any BSP under a storage request prefix is considered to be a volunteer and can be removed at any time.
     /// Once a BSP submits a valid proof to the via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
@@ -212,7 +213,7 @@ pub mod pallet {
     pub type StorageRequestBsps<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
-        FileLocation<T>,
+        MerkleHash<T>,
         Blake2_128Concat,
         ProviderIdFor<T>,
         StorageRequestBspsMetadata<T>,
@@ -226,7 +227,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
-        BoundedVec<FileLocation<T>, T::MaxExpiredStorageRequests>,
+        BoundedVec<MerkleHash<T>, T::MaxExpiredStorageRequests>,
         ValueQuery,
     >;
 
@@ -314,6 +315,7 @@ pub mod pallet {
         /// Notifies that a new file has been requested to be stored.
         NewStorageRequest {
             who: T::AccountId,
+            file_key: MerkleHash<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
@@ -331,16 +333,18 @@ pub mod pallet {
         /// Notifies that a BSP confirmed storing a file.
         BspConfirmedStoring {
             bsp_id: ProviderIdFor<T>,
-            location: FileLocation<T>,
+            file_key: MerkleHash<T>,
+            new_root: MerkleHash<T>,
         },
         /// Notifies the expiration of a storage request.
-        StorageRequestExpired { location: FileLocation<T> },
+        StorageRequestExpired { file_key: MerkleHash<T> },
         /// Notifies that a storage request has been revoked by the user who initiated it.
-        StorageRequestRevoked { location: FileLocation<T> },
+        StorageRequestRevoked { file_key: MerkleHash<T> },
         /// Notifies that a BSP has stopped storing a file.
         BspStoppedStoring {
             bsp_id: ProviderIdFor<T>,
-            file_key: FileKey<T>,
+            file_key: MerkleHash<T>,
+            new_root: MerkleHash<T>,
             owner: T::AccountId,
             location: FileLocation<T>,
         },
@@ -400,6 +404,14 @@ pub mod pallet {
         ImpossibleFailedToGetValue,
         /// Bucket is not private. Call `update_bucket_privacy` to make it private.
         BucketIsNotPrivate,
+        /// Root of the provider not found.
+        ProviderRootNotFound,
+        /// Failed to verify proof: required to provide a proof of non-inclusion.
+        ExpectedNonInclusionProof,
+        /// Failed to verify proof: required to provide a proof of inclusion.
+        ExpectedInclusionProof,
+        /// Metadata does not correspond to expected file key.
+        InvalidFileKeyMetadata,
     }
 
     #[pallet::call]
@@ -487,7 +499,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and register storage request
-            Self::do_request_storage(
+            let file_key = Self::do_request_storage(
                 who.clone(),
                 location.clone(),
                 fingerprint,
@@ -501,6 +513,7 @@ pub mod pallet {
             // BSPs listen to this event and volunteer to store the file
             Self::deposit_event(Event::NewStorageRequest {
                 who,
+                file_key,
                 location,
                 fingerprint,
                 size,
@@ -515,17 +528,16 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn revoke_storage_request(
             origin: OriginFor<T>,
-            location: FileLocation<T>,
-            file_key: FileKey<T>,
+            file_key: MerkleHash<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
 
             // Perform validations and revoke storage request
-            Self::do_revoke_storage_request(who, location.clone(), file_key)?;
+            Self::do_revoke_storage_request(who, file_key)?;
 
             // Emit event.
-            Self::deposit_event(Event::StorageRequestRevoked { location });
+            Self::deposit_event(Event::StorageRequestRevoked { file_key });
 
             Ok(())
         }
@@ -538,26 +550,22 @@ pub mod pallet {
         /// that some of the collateral tokens of that MSP are frozen.
         #[pallet::call_index(5)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
-        pub fn bsp_volunteer(
-            origin: OriginFor<T>,
-            location: FileLocation<T>,
-            fingerprint: Fingerprint<T>,
-        ) -> DispatchResult {
+        pub fn bsp_volunteer(origin: OriginFor<T>, file_key: MerkleHash<T>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
             // Perform validations and register Storage Provider as BSP for file.
-            let (bsp_id, multiaddresses, size, owner) =
-                Self::do_bsp_volunteer(who.clone(), location.clone(), fingerprint)?;
+            let (bsp_id, multiaddresses, storage_request_metadata) =
+                Self::do_bsp_volunteer(who.clone(), file_key)?;
 
             // Emit new BSP volunteer event.
             Self::deposit_event(Event::AcceptedBspVolunteer {
                 bsp_id,
                 multiaddresses,
-                location,
-                fingerprint,
-                owner,
-                size,
+                location: storage_request_metadata.location,
+                fingerprint: storage_request_metadata.fingerprint,
+                owner: storage_request_metadata.owner,
+                size: storage_request_metadata.size,
             });
 
             Ok(())
@@ -568,8 +576,8 @@ pub mod pallet {
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_confirm_storing(
             origin: OriginFor<T>,
-            location: FileLocation<T>,
-            root: FileKey<T>,
+            file_key: MerkleHash<T>,
+            root: MerkleHash<T>,
             non_inclusion_forest_proof: ForestProof<T>,
             added_file_key_proof: KeyProof<T>,
         ) -> DispatchResult {
@@ -577,16 +585,20 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // Perform validations and confirm storage.
-            let bsp_id = Self::do_bsp_confirm_storing(
+            let (bsp_id, new_root) = Self::do_bsp_confirm_storing(
                 who.clone(),
-                location.clone(),
+                file_key,
                 root,
                 non_inclusion_forest_proof.clone(),
                 added_file_key_proof.clone(),
             )?;
 
             // Emit event.
-            Self::deposit_event(Event::BspConfirmedStoring { bsp_id, location });
+            Self::deposit_event(Event::BspConfirmedStoring {
+                bsp_id,
+                file_key,
+                new_root,
+            });
 
             Ok(())
         }
@@ -603,17 +615,18 @@ pub mod pallet {
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_stop_storing(
             origin: OriginFor<T>,
-            file_key: FileKey<T>,
+            file_key: MerkleHash<T>,
             location: FileLocation<T>,
             owner: T::AccountId,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
             can_serve: bool,
+            inclusion_forest_proof: ForestProof<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
             // Perform validations and stop storing the file.
-            let bsp_id = Self::do_bsp_stop_storing(
+            let (bsp_id, new_root) = Self::do_bsp_stop_storing(
                 who.clone(),
                 file_key,
                 location.clone(),
@@ -621,12 +634,14 @@ pub mod pallet {
                 fingerprint,
                 size,
                 can_serve,
+                inclusion_forest_proof,
             )?;
 
             // Emit event.
             Self::deposit_event(Event::BspStoppedStoring {
                 bsp_id,
                 file_key,
+                new_root,
                 owner,
                 location,
             });
@@ -671,10 +686,16 @@ pub mod pallet {
                 let expired_requests = StorageRequestExpirations::<T>::take(&block_to_clean);
 
                 // Remove expired storage requests for the block
-                for location in expired_requests {
-                    StorageRequests::<T>::remove(&location);
+                for file_key in expired_requests {
+                    // Remove storage request
+                    StorageRequests::<T>::remove(&file_key);
+
+                    // Remove storage request bsps
+                    let _ =
+                        <StorageRequestBsps<T>>::drain_prefix(&file_key).fold(0, |acc, _| acc + 1);
+
                     used_weight += db_weight.writes(1);
-                    Self::deposit_event(Event::StorageRequestExpired { location });
+                    Self::deposit_event(Event::StorageRequestExpired { file_key });
                 }
 
                 // Accumulate the weight used for cleanup operations

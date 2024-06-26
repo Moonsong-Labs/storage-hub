@@ -1,10 +1,9 @@
 use anyhow::Result;
 use serde_json::Number;
-use sp_core::{ConstU32, H256, U256};
+use sp_core::{H256, U256};
 
 use pallet_file_system_runtime_api::QueryFileEarliestVolunteerBlockError;
 use shc_actors_framework::actor::ActorHandle;
-use sp_runtime::BoundedVec;
 
 use super::{
     handler::BlockchainService,
@@ -34,7 +33,7 @@ pub enum BlockchainServiceCommand {
     },
     QueryFileEarliestVolunteerBlock {
         bsp_id: sp_core::sr25519::Public,
-        file_location: BoundedVec<u8, ConstU32<512>>,
+        file_key: H256,
         callback: tokio::sync::oneshot::Sender<Result<U256, QueryFileEarliestVolunteerBlockError>>,
     },
     GetNodePublicKey {
@@ -70,7 +69,7 @@ pub trait BlockchainServiceInterface {
     async fn query_file_earliest_volunteer_block(
         &self,
         bsp_id: sp_core::sr25519::Public,
-        file_location: BoundedVec<u8, ConstU32<512>>,
+        file_key: H256,
     ) -> Result<U256, QueryFileEarliestVolunteerBlockError>;
 
     /// Get the node's public key.
@@ -164,13 +163,13 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn query_file_earliest_volunteer_block(
         &self,
         bsp_id: sp_core::sr25519::Public,
-        file_location: BoundedVec<u8, ConstU32<512>>,
+        file_key: H256,
     ) -> Result<U256, QueryFileEarliestVolunteerBlockError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         // Build command to send to blockchain service.
         let message = BlockchainServiceCommand::QueryFileEarliestVolunteerBlock {
             bsp_id,
-            file_location,
+            file_key,
             callback,
         };
         self.send(message).await;

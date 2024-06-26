@@ -78,7 +78,8 @@ pub mod pallet {
             + Copy
             + MaxEncodedLen
             + HasCompact
-            + Into<BalanceOf<Self>>;
+            + Into<BalanceOf<Self>>
+            + Into<u32>;
 
         /// Type that represents the total number of registered Storage Providers.
         type SpCount: Parameter
