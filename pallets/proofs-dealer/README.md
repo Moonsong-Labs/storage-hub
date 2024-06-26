@@ -10,11 +10,50 @@ Once a Provider is registered and correctly initialised (a process which likely 
 
 ### Target Audience
 
-This pallet is intended for blockchain developers interested in a complex and optimised challenge distribution algorithm for their Substrate-based blockchain. It provides the tools, data structures and extrinsics needed for such purpose. Although developed for the StorageHub codebase it is highly abstracted and configurable, making it suitable for other use cases as well.
+This pallet is intended for blockchain developers interested in a complex and optimised challenge distribution algorithm for their Substrate-based blockchain. It provides the tools, data structures and extrinsics needed for such purpose. Although developed for the StorageHub codebase, it is highly abstracted and configurable, making it suitable for other use cases as well.
 
 ## Design
 
-### Challenge Distribution
+![Random Challenges Distribution](./resources/challengesDiagram.png)
+
+### Ticks vs Blocks
+
+One important distinction that needs to be made is that the challenges are distributed in "ticks". Ticks are like blocks, except that the tick counter is skipped during Multi Block Migrations. A `ChallengesTicker` counter is incremented on every block, when the `on_poll` hook is called. `on_poll` is always called at the beginning of every block, except during Multi Block Migrations, and the challenges ticker is always incremented by 1. Therefore if there are no Multi Block Migrations, the challenges ticker will always be equal to the block number.
+
+The reason for this distinction can be found in the [PR](https://github.com/paritytech/polkadot-sdk/pull/1781) that introduced the poll hook. During Multi Block Migrations, `on_poll` is not called, therefore the challenges ticker wouldn't be incremented. That is a desirable behaviour, since during Multi Block Migrations, Providers wouldn't have the opportunity to submit proofs. By not incrementing the challenges ticker, we ensure that no Provider is slashed during Multi Block Migrations.
+
+```mermaid
+  graph LR
+    Optional --> Mandatory
+    Mandatory --> ExtrinsicsMandatory
+    ExtrinsicsMandatory --> Poll
+    Poll --> Extrinsics
+    Extrinsics --> AfterMandatory
+    AfterMandatory --> onIdle
+
+  subgraph Optional
+    OnRuntimeUpgrade
+  end
+
+  subgraph Mandatory
+    OnInitialize
+  end
+
+  subgraph ExtrinsicsMandatory
+    Inherent1 --> Inherent2
+  end
+
+  subgraph Extrinsics
+    direction TB
+    Extrinsic1 --> Extrinsic2
+  end
+
+  subgraph AfterMandatory
+    OnFinalize
+  end
+```
+
+### Random Challenge Distribution and Enforcement
 
 #### Priority and Custom Challenges
 
