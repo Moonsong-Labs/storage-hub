@@ -9,9 +9,7 @@ use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
 use shc_file_manager::{
-    in_memory::InMemoryFileStorage,
-    rocksdb::{RocksDbFileStorage, StorageDb},
-    traits::FileStorage,
+    in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage, traits::FileStorage,
 };
 use shc_forest_manager::{
     in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,

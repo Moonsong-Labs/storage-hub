@@ -485,7 +485,7 @@ where
             .map_err(|_| FileStorageError::FailedToParseFileMetadata)?;
         let raw_root = metadata.fingerprint.as_ref();
         let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec())
-            .map_err(|e| FileStorageError::FailedToParseFingerprint)?;
+            .map_err(|_| FileStorageError::FailedToParseFingerprint)?;
         let file_trie = RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
 
         file_trie.get_chunk(chunk_id)
