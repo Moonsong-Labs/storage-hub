@@ -1,8 +1,9 @@
 import '@polkadot/api-base/types/events';
 import type { ApiTypes, AugmentedEvent } from '@polkadot/api-base/types';
 import type { Bytes, Null, Option, Result, U8aFixed, Vec, bool, u128, u32, u64, u8 } from '@polkadot/types-codec';
+import type { ITuple } from '@polkadot/types-codec/types';
 import type { AccountId32, H256 } from '@polkadot/types/interfaces/runtime';
-import type { CumulusPrimitivesCoreAggregateMessageOrigin, FrameSupportDispatchDispatchInfo, FrameSupportMessagesProcessMessageError, FrameSupportTokensMiscBalanceStatus, PalletNftsAttributeNamespace, PalletNftsPalletAttributes, PalletNftsPriceWithDirection, PalletProofsDealerProof, PalletStorageProvidersValueProposition, SpRuntimeDispatchError, SpWeightsWeightV2Weight, StagingXcmV4AssetAssets, StagingXcmV4Location, StagingXcmV4Response, StagingXcmV4TraitsOutcome, StagingXcmV4Xcm, XcmV3TraitsError, XcmVersionedAssets, XcmVersionedLocation } from '@polkadot/types/lookup';
+import type { CumulusPrimitivesCoreAggregateMessageOrigin, FrameSupportDispatchDispatchInfo, FrameSupportMessagesProcessMessageError, FrameSupportTokensMiscBalanceStatus, PalletNftsAttributeNamespace, PalletNftsPalletAttributes, PalletNftsPriceWithDirection, PalletProofsDealerProof, PalletStorageProvidersValueProposition, ShpTraitsTrieRemoveMutation, SpRuntimeDispatchError, SpWeightsWeightV2Weight, StagingXcmV4AssetAssets, StagingXcmV4Location, StagingXcmV4Response, StagingXcmV4TraitsOutcome, StagingXcmV4Xcm, XcmV3TraitsError, XcmVersionedAssets, XcmVersionedLocation } from '@polkadot/types/lookup';
 export type __AugmentedEvent<ApiType extends ApiTypes> = AugmentedEvent<ApiType>;
 declare module '@polkadot/api-base/types/events' {
     interface AugmentedEvents<ApiType extends ApiTypes> {
@@ -304,16 +305,18 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a BSP confirmed storing a file.
              **/
-            BspConfirmedStoring: AugmentedEvent<ApiType, [bspId: H256, location: Bytes], {
+            BspConfirmedStoring: AugmentedEvent<ApiType, [bspId: H256, fileKey: H256, newRoot: H256], {
                 bspId: H256;
-                location: Bytes;
+                fileKey: H256;
+                newRoot: H256;
             }>;
             /**
              * Notifies that a BSP has stopped storing a file.
              **/
-            BspStoppedStoring: AugmentedEvent<ApiType, [bspId: H256, fileKey: H256, owner: AccountId32, location: Bytes], {
+            BspStoppedStoring: AugmentedEvent<ApiType, [bspId: H256, fileKey: H256, newRoot: H256, owner: AccountId32, location: Bytes], {
                 bspId: H256;
                 fileKey: H256;
+                newRoot: H256;
                 owner: AccountId32;
                 location: Bytes;
             }>;
@@ -348,8 +351,9 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a new file has been requested to be stored.
              **/
-            NewStorageRequest: AugmentedEvent<ApiType, [who: AccountId32, location: Bytes, fingerprint: H256, size_: u32, peerIds: Vec<Bytes>], {
+            NewStorageRequest: AugmentedEvent<ApiType, [who: AccountId32, fileKey: H256, location: Bytes, fingerprint: H256, size_: u32, peerIds: Vec<Bytes>], {
                 who: AccountId32;
+                fileKey: H256;
                 location: Bytes;
                 fingerprint: H256;
                 size_: u32;
@@ -358,14 +362,14 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies the expiration of a storage request.
              **/
-            StorageRequestExpired: AugmentedEvent<ApiType, [location: Bytes], {
-                location: Bytes;
+            StorageRequestExpired: AugmentedEvent<ApiType, [fileKey: H256], {
+                fileKey: H256;
             }>;
             /**
              * Notifies that a storage request has been revoked by the user who initiated it.
              **/
-            StorageRequestRevoked: AugmentedEvent<ApiType, [location: Bytes], {
-                location: Bytes;
+            StorageRequestRevoked: AugmentedEvent<ApiType, [fileKey: H256], {
+                fileKey: H256;
             }>;
             /**
              * Generic event
@@ -1080,11 +1084,31 @@ declare module '@polkadot/api-base/types/events' {
                 keyChallenged: H256;
             }>;
             /**
+             * A new challenge seed was generated.
+             **/
+            NewChallengeSeed: AugmentedEvent<ApiType, [challengesTicker: u32, seed: H256], {
+                challengesTicker: u32;
+                seed: H256;
+            }>;
+            /**
+             * A new checkpoint challenge was generated.
+             **/
+            NewCheckpointChallenge: AugmentedEvent<ApiType, [challengesTicker: u32, challenges: Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>], {
+                challengesTicker: u32;
+                challenges: Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>;
+            }>;
+            /**
              * A proof was accepted.
              **/
             ProofAccepted: AugmentedEvent<ApiType, [provider: H256, proof: PalletProofsDealerProof], {
                 provider: H256;
                 proof: PalletProofsDealerProof;
+            }>;
+            /**
+             * A slashable provider was found.
+             **/
+            SlashableProvider: AugmentedEvent<ApiType, [provider: H256], {
+                provider: H256;
             }>;
             /**
              * Generic event

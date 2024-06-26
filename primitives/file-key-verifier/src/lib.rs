@@ -3,7 +3,7 @@
 use frame_support::sp_runtime::DispatchError;
 use num_bigint::BigUint;
 use shp_traits::CommitmentVerifier;
-use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
+use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{TrieDBBuilder, TrieLayout};
 use trie_db::Trie;
 use types::{ChunkId, FileKeyProof};
@@ -11,6 +11,7 @@ use types::{ChunkId, FileKeyProof};
 #[cfg(test)]
 mod tests;
 
+pub mod consts;
 pub mod types;
 
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment
@@ -50,7 +51,7 @@ where
         expected_file_key: &Self::Commitment,
         challenges: &[Self::Challenge],
         proof: &Self::Proof,
-    ) -> Result<Vec<Self::Challenge>, DispatchError> {
+    ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
         // Check that `challenges` is not empty.
         if challenges.is_empty() {
             return Err("No challenges provided.".into());
@@ -124,6 +125,6 @@ where
             proven_challenges.insert(*challenge);
         }
 
-        return Ok(Vec::from_iter(proven_challenges));
+        Ok(proven_challenges)
     }
 }

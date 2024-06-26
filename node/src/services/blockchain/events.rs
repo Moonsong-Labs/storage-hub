@@ -1,6 +1,6 @@
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
-use shc_common::types::Fingerprint;
+use shc_common::types::{FileKey, Fingerprint};
 use sp_core::H256;
 use sp_runtime::AccountId32;
 
@@ -23,13 +23,15 @@ impl EventBusMessage for ChallengeRequest {}
 pub struct NewStorageRequest {
     /// Account ID of the requester.
     pub who: AccountId32,
+    /// Computed file key for the file.
+    pub file_key: FileKey,
     /// Location of the file (as a file path).
     pub location: FileLocation,
-    /// Fingerprint of the file (root hash of the merklised file).
+    /// Fingerprint of the file (root hash of the merkelized file).
     pub fingerprint: Fingerprint,
     /// Size of the file.
     pub size: StorageData,
-    /// lib2p peer IDs from where the user would send the file.
+    /// libp2p peer IDs from where the user would send the file.
     pub user_peer_ids: PeerIds,
 }
 

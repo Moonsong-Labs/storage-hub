@@ -21,6 +21,8 @@ pub struct StorageRequestMetadata<T: Config> {
     pub requested_at: BlockNumberFor<T>,
     /// AccountId of the user who owns the data being stored.
     pub owner: T::AccountId,
+    /// User defined name of the file being stored.
+    pub location: FileLocation<T>,
     /// Identifier of the data being stored.
     pub fingerprint: Fingerprint<T>,
     /// Size of the data being stored.
@@ -75,8 +77,8 @@ pub enum BucketPrivacy {
     Private,
 }
 
-/// Alias for the `MerkleHash` type used in the ProofsDealerInterface.
-pub type FileKey<T> =
+/// Alias for the `MerkleHash` type used in the ProofsDealerInterface representing file keys.
+pub type MerkleHash<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash;
 
 /// Alias for the `ForestProof` type used in the ProofsDealerInterface.

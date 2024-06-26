@@ -81,10 +81,6 @@ pub type RandomChallengesPerBlockFor<T> = <T as crate::Config>::RandomChallenges
 /// Syntactic sugar for the MaxCustomChallengesPerBlock type used in the proofs pallet.
 pub type MaxCustomChallengesPerBlockFor<T> = <T as crate::Config>::MaxCustomChallengesPerBlock;
 
-/// Syntactic sugar for the MaxProvidersChallengedPerBlock type used in the proofs pallet.
-pub type MaxProvidersChallengedPerBlockFor<T> =
-    <T as crate::Config>::MaxProvidersChallengedPerBlock;
-
 /// Syntactic sugar for the ChallengesQueueLength type used in the proofs pallet.
 pub type ChallengesQueueLengthFor<T> = <T as crate::Config>::ChallengesQueueLength;
 
@@ -96,6 +92,12 @@ pub type StakeToChallengePeriodFor<T> = <T as crate::Config>::StakeToChallengePe
 
 /// Syntactic sugar for the ChallengeHistoryLength type used in the proofs pallet.
 pub type ChallengeHistoryLengthFor<T> = <T as crate::Config>::ChallengeHistoryLength;
+
+/// Syntactic sugar for the CheckpointChallengePeriod type used in the proofs pallet.
+pub type CheckpointChallengePeriodFor<T> = <T as crate::Config>::CheckpointChallengePeriod;
+
+/// Syntactic sugar for the ChallengeTicksTolerance type used in the proofs pallet.
+pub type ChallengeTicksToleranceFor<T> = <T as crate::Config>::ChallengeTicksTolerance;
 
 /// Syntactic sugar for the Treasury type used in the proofs pallet.
 pub type TreasuryAccountFor<T> = <T as crate::Config>::Treasury;

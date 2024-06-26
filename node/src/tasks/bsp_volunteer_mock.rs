@@ -4,6 +4,7 @@ use log::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
+use sp_core::H256;
 use sp_trie::TrieLayout;
 
 use crate::services::{
@@ -57,22 +58,14 @@ where
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Initiating BSP volunteer mock for location: {:?}, fingerprint: {:?}",
-            event.location,
-            event.fingerprint
+            "Initiating BSP volunteer mock for file key: {:?}",
+            event.file_key
         );
-
-        let fingerprint: [u8; 32] = event
-            .fingerprint
-            .as_ref()
-            .try_into()
-            .expect("Fingerprint should be 32 bytes; qed");
 
         // Build extrinsic.
         let call =
             storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
-                location: event.location.clone(),
-                fingerprint: fingerprint.into(),
+                file_key: H256(event.file_key.into()),
             });
 
         self.storage_hub_handler
