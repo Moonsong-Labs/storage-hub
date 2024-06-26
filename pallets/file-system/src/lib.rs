@@ -657,9 +657,10 @@ pub mod pallet {
             // Check that the extrinsic was sent with root origin.
             ensure_root(origin)?;
 
-            if bsp_assignment_threshold < T::AssignmentThresholdAsymptote::get() {
-                return Err(Error::<T>::ThresholdBelowAsymptote.into());
-            }
+            ensure!(
+                bsp_assignment_threshold >= T::AssignmentThresholdAsymptote::get(),
+                Error::<T>::ThresholdBelowAsymptote
+            );
 
             BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
 
