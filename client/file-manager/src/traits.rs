@@ -15,6 +15,16 @@ pub enum FileStorageWriteError {
     FingerprintAndStoredFileMismatch,
     /// Failed to construct iterator for trie.
     FailedToConstructTrieIter,
+    /// Failed to commit changes in overlay to disk.
+    FailedToPersistChanges,
+    /// Failed to delete chunk.
+    FailedToDeleteChunk,
+    /// Failed to convert raw bytes into [`FileMetadata`].
+    FailedToParseFileMetadata,
+    /// Failed to access storage for reading.
+    FailedToReadStorage,
+    /// Failed to convert raw bytes into [`Fingerprint`].
+    FailedToParseFingerprint,
 }
 
 #[derive(Debug)]
@@ -37,13 +47,20 @@ pub enum FileStorageError {
     FingerprintAndStoredFileMismatch,
     /// The requested file is incomplete and a proof is impossible to generate.
     IncompleteFile,
-
+    /// Failed to access storage for reading.
     FailedToReadStorage,
+    /// Failed to access storage for writing.
     FailedToWriteToStorage,
+    /// Failed to convert raw bytes into [`FileKey`].
     FailedToParseKey,
-    ExpectingRootToBeInStorage,
     /// Failed to construct iterator for trie.
     FailedToConstructTrieIter,
+    /// Failed to convert raw bytes into [`FileMetadata`].
+    FailedToParseFileMetadata,
+    /// Failed to convert raw bytes into [`Fingerprint`].
+    FailedToParseFingerprint,
+    /// Failed to delete chunk from storage.
+    FailedToDeleteFileChunk,
 }
 
 #[derive(Debug)]
@@ -65,10 +82,12 @@ pub trait FileDataTrie<T: TrieLayout> {
     /// Generate proof for a chunk of a file. Returns error if the chunk does not exist.
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError>;
 
+    // TODO: make it accept a list of chunks to be retrieved
     // TODO: Return Result<Option> instead of Result only
     /// Get a file chunk from storage. Returns error if the chunk does not exist.
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError>;
 
+    // TODO: make it accept a list of chunks to be retrieved
     /// Write a file chunk in storage updating the root hash of the trie.
     fn write_chunk(
         &mut self,
@@ -76,8 +95,9 @@ pub trait FileDataTrie<T: TrieLayout> {
         data: &Chunk,
     ) -> Result<(), FileStorageWriteError>;
 
-    /// Removes all chunks from storage.
-    fn delete(&mut self, chunk_count: u64) -> Result<(), FileStorageError>;
+    /// Removes all references to chunks in the trie data and removes
+    /// chunks themselves from storage.
+    fn delete(&mut self, chunk_count: u64) -> Result<(), FileStorageWriteError>;
 }
 
 /// Storage interface to be implemented by the storage providers.

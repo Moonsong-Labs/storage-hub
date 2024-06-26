@@ -119,7 +119,7 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
         Ok(())
     }
 
-    fn delete(&mut self, _chunk_count: u64) -> Result<(), FileStorageError> {
+    fn delete(&mut self, _chunk_count: u64) -> Result<(), FileStorageWriteError> {
         self.root = HasherOutT::<T>::default();
         self.memdb.clear();
 

@@ -182,7 +182,10 @@ where
         let transaction = self.changes();
 
         // Write the changes to storage
-        self.storage.write().unwrap().write(transaction)?;
+        self.storage
+            .write()
+            .expect("Failed to acquire write lock")
+            .write(transaction)?;
 
         self.root = new_root;
 
@@ -220,16 +223,18 @@ where
     }
 }
 
-// Dropping the trie (either by calling `drop()` or by the end of the scope)
+// As a reminder, dropping the trie (either by calling `drop()` or by the end of the scope)
 // automatically commits to the underlying db.
 impl<T: TrieLayout + Send + Sync + 'static> FileDataTrie<T> for RocksDbFileDataTrie<T>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
+    // Returns internal root representation kept for immediate access.
     fn get_root(&self) -> &HasherOutT<T> {
         &self.root
     }
 
+    // Returns the amount of chunks currently in storage.
     fn stored_chunks_count(&self) -> Result<u64, FileStorageError> {
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
@@ -243,6 +248,7 @@ where
         Ok(count)
     }
 
+    // Generates a [`FileProof`] for requested chunks.
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError> {
         let db = self.as_hash_db();
         let recorder: Recorder<T::Hash> = Recorder::default();
@@ -280,15 +286,17 @@ where
         })
     }
 
+    // TODO: make it accept a list of chunks to be retrieved
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError> {
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
 
         trie.get(&chunk_id.as_trie_key())
-            .map_err(|e| FileStorageError::FailedToGetFileChunk)?
+            .map_err(|_| FileStorageError::FailedToGetFileChunk)?
             .ok_or(FileStorageError::FileChunkDoesNotExist)
     }
 
+    // TODO: make it accept a list of chunks to be written
     fn write_chunk(
         &mut self,
         chunk_id: &ChunkId,
@@ -321,14 +329,14 @@ where
         // Commit the changes to disk.
         self.commit(new_root).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to commit changes to persistent storage: {}", e);
-            FileStorageWriteError::FailedToInsertFileChunk
+            FileStorageWriteError::FailedToPersistChanges
         })?;
 
         Ok(())
     }
 
     // Deletes itself from the underlying db.
-    fn delete(&mut self, chunk_count: u64) -> Result<(), FileStorageError> {
+    fn delete(&mut self, chunk_count: u64) -> Result<(), FileStorageWriteError> {
         let mut root = self.root;
         let db = self.as_hash_db_mut();
         let trie_root_key = root;
@@ -338,14 +346,14 @@ where
             trie.remove(&ChunkId::new(chunk_id as u64).as_trie_key())
                 .map_err(|e| {
                     error!(target: LOG_TARGET, "Failed to delete chunk from RocksDb: {}", e);
-                    FileStorageError::FailedToWriteToStorage
+                    FileStorageWriteError::FailedToDeleteChunk
                 })?;
         }
 
         // Remove the root from the trie.
         trie.remove(trie_root_key.as_ref()).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to delete root from RocksDb: {}", e);
-            FileStorageError::FailedToWriteToStorage
+            FileStorageWriteError::FailedToDeleteChunk
         })?;
 
         let new_root = *trie.root();
@@ -356,7 +364,7 @@ where
         // Commit the changes to disk.
         self.commit(trie_root_key).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to commit changes to persistent storage: {}", e);
-            FileStorageError::FailedToWriteToStorage
+            FileStorageWriteError::FailedToPersistChanges
         })?;
 
         // Set new internal root (empty trie root)
@@ -386,7 +394,7 @@ where
         HashDB::get(&self.overlay, key, prefix).or_else(|| {
             self.storage
                 .read()
-                .unwrap()
+                .expect("Failed to acquire read lock")
                 .get(key, prefix)
                 .unwrap_or_else(|e| {
                     warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
@@ -465,10 +473,19 @@ where
         key: &HasherOutT<T>,
         chunk_id: &ChunkId,
     ) -> Result<Chunk, FileStorageError> {
-        let raw_metadata = self.storage.read().unwrap().read(*key).unwrap().unwrap();
-        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).unwrap();
+        let raw_metadata = self
+            .storage
+            .read()
+            .expect("Failed to acquire read lock")
+            .read(*key)
+            .map_err(|_| FileStorageError::FailedToReadStorage)?
+            .expect("Failed to find File Metadata");
+
+        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata)
+            .map_err(|_| FileStorageError::FailedToParseFileMetadata)?;
         let raw_root = metadata.fingerprint.as_ref();
-        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).unwrap();
+        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec())
+            .map_err(|e| FileStorageError::FailedToParseFingerprint)?;
         let file_trie = RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
 
         file_trie.get_chunk(chunk_id)
@@ -480,14 +497,25 @@ where
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
-        let raw_metadata = self.storage.read().unwrap().read(*key).unwrap().unwrap();
-        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).unwrap();
+        let raw_metadata = self
+            .storage
+            .read()
+            .expect("Failed to acquire read lock")
+            .read(*key)
+            .map_err(|_| FileStorageWriteError::FailedToReadStorage)?
+            .expect("Failed to find File Metadata");
+
+        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata)
+            .map_err(|_| FileStorageWriteError::FailedToParseFileMetadata)?;
         let raw_root = metadata.fingerprint.as_ref();
-        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).unwrap();
+        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec())
+            .map_err(|_| FileStorageWriteError::FailedToParseFingerprint)?;
         let mut file_trie =
             RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
 
-        file_trie.write_chunk(chunk_id, data)?;
+        file_trie
+            .write_chunk(chunk_id, data)
+            .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
 
         Ok(FileStorageWriteOutcome::FileComplete)
     }
@@ -498,9 +526,16 @@ where
         metadata: FileMetadata,
     ) -> Result<(), FileStorageError> {
         let mut transaction = DBTransaction::new();
-        let serialized_metadata = serde_json::to_vec(&metadata).unwrap();
+        let serialized_metadata = serde_json::to_vec(&metadata)
+            .map_err(|_| FileStorageError::FailedToParseFileMetadata)?;
+
         transaction.put(0, key.as_ref(), &serialized_metadata);
-        self.storage.write().unwrap().write(transaction);
+
+        self.storage
+            .write()
+            .expect("Failed to acquire write lock")
+            .write(transaction)
+            .map_err(|_| FileStorageError::FailedToWriteToStorage)?;
 
         Ok(())
     }
@@ -509,19 +544,34 @@ where
         &mut self,
         key: HasherOutT<T>,
         metadata: FileMetadata,
-        file_data: Self::FileDataTrie,
+        _file_data: Self::FileDataTrie,
     ) -> Result<(), FileStorageError> {
         let mut transaction = DBTransaction::new();
-        let raw_metadata = serde_json::to_vec(&metadata).unwrap();
+        let raw_metadata = serde_json::to_vec(&metadata)
+            .map_err(|_| FileStorageError::FailedToParseFileMetadata)?;
+
         transaction.put(0, key.as_ref(), &raw_metadata);
-        self.storage.write().unwrap().write(transaction);
+
+        self.storage
+            .write()
+            .expect("Failed to acquire write lock")
+            .write(transaction)
+            .map_err(|_| FileStorageError::FailedToWriteToStorage)?;
 
         Ok(())
     }
 
     fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError> {
-        let raw_metadata = self.storage.read().unwrap().read(*key).unwrap().unwrap();
-        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).unwrap();
+        let raw_metadata = self
+            .storage
+            .read()
+            .expect("Failed to acquire read lock")
+            .read(*key)
+            .map_err(|_| FileStorageError::FailedToReadStorage)?
+            .expect("Failed to find File Metadata");
+
+        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata)
+            .map_err(|_| FileStorageError::FailedToParseFileMetadata)?;
 
         Ok(metadata)
     }
@@ -531,10 +581,18 @@ where
         key: &HasherOutT<T>,
         chunk_ids: &Vec<ChunkId>,
     ) -> Result<FileKeyProof, FileStorageError> {
-        let raw_metadata = self.storage.read().unwrap().read(*key).unwrap().unwrap();
-        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).unwrap();
+        let raw_metadata = self
+            .storage
+            .read()
+            .expect("Failed to acquire read lock")
+            .read(*key)
+            .map_err(|_| FileStorageError::FailedToReadStorage)?
+            .expect("Failed to find File Metadata");
+        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata)
+            .map_err(|_| FileStorageError::FailedToParseFileMetadata)?;
         let raw_root = metadata.fingerprint.as_ref();
-        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).unwrap();
+        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec())
+            .map_err(|_| FileStorageError::FailedToParseFingerprint)?;
         let file_trie = RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
 
         Ok(file_trie
@@ -543,18 +601,35 @@ where
     }
 
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError> {
-        let raw_metadata = self.storage.read().unwrap().read(*key).unwrap().unwrap();
-        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).unwrap();
+        let raw_metadata = self
+            .storage
+            .read()
+            .expect("Failed to acquire read lock")
+            .read(*key)
+            .map_err(|_| FileStorageError::FailedToReadStorage)?
+            .expect("Failed to find File Metadata");
+        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata)
+            .map_err(|_| FileStorageError::FailedToParseFileMetadata)?;
         let raw_root = metadata.fingerprint.as_ref();
-        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).unwrap();
+        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec())
+            .map_err(|_| FileStorageError::FailedToParseFingerprint)?;
         let mut file_trie =
             RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
         let chunk_count = metadata.chunks_count();
 
-        file_trie.delete(chunk_count);
+        file_trie
+            .delete(chunk_count)
+            .map_err(|_| FileStorageError::FailedToDeleteFileChunk)?;
+
         let mut transaction = DBTransaction::new();
+
         transaction.delete(0, key.as_ref());
-        self.storage.write().unwrap().write(transaction);
+
+        self.storage
+            .write()
+            .expect("Failed to acquire write lock")
+            .write(transaction)
+            .map_err(|_| FileStorageError::FailedToWriteToStorage)?;
 
         Ok(())
     }
@@ -863,7 +938,10 @@ mod tests {
 
         file_storage.delete_file(&key).unwrap();
 
-        file_storage.get_metadata(&key);
+        file_storage.get_metadata(&key).unwrap();
+        assert!(file_storage.get_chunk(&key, &chunk_ids[0]).is_err());
+        assert!(file_storage.get_chunk(&key, &chunk_ids[1]).is_err());
+        assert!(file_storage.get_chunk(&key, &chunk_ids[2]).is_err());
     }
 
     #[test]
@@ -922,7 +1000,7 @@ mod tests {
     }
 
     #[test]
-    fn same_chunk_id_different_data_produce_different_roots() {
+    fn same_chunk_id_with_different_data_produces_different_roots() {
         use sp_trie::MemoryDB;
 
         let mut memdb = MemoryDB::<BlakeTwo256>::default();
