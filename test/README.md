@@ -127,7 +127,7 @@ pnpm zombie:run:native
 
 From here you should see in the terminal, the different nodes being spun up. When the network is fully launched, you should see something like this:
 
-![success](../resources/zombieSuccess.png)
+![success](../resource/zombieSuccess.png)
 
 From here you can interact via the websockets exposed in the direct links, in the example above we have:
 
@@ -151,4 +151,4 @@ pnpm typegen
 
 ### Why do we use Docker so much?
 
-![docker](scripts/docker.jpg)
+![docker](../resource/docker.jpg)

@@ -32,7 +32,7 @@ services:
       - "30444:30444"
     volumes:
       - ./dev-keystores/user:/keystore:ro
-      - ./resource:/res:ro
+      - ../resource:/res:ro
     command:
       [
         "--dev",

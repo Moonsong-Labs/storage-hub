@@ -23,23 +23,34 @@ add_to_bootnodes = true
 id = 2000
 
 [[parachains.collators]]
-image = "moonsonglabs/storage-hub:test-local"
+image = "moonsonglabs/storage-hub:latest"
 command = "storage-hub-node"
-name = "sh-collator"
-ws_port = 32000
-args = ["--no-hardware-benchmarks", "-lparachain=debug"]
-
-[[parachains.collators]]
 name = "sh-BSP"
-validator = false
-ws_port = 35000
-image = "moonsonglabs/storage-hub:test-local"
-command = "storage-hub-node"
+ws_port = 32000
 args = [
     "--no-hardware-benchmarks",
     "-lparachain=debug",
     "--provider",
-    "--provider-type bsp",
+    "--provider-type=bsp",
+    "--name=sh-bsp",
+    "--unsafe-rpc-external",
+    "--rpc-cors=all",
+]
+
+[[parachains.collators]]
+name = "sh-User"
+validator = false
+ws_port = 35000
+image = "moonsonglabs/storage-hub:latest"
+command = "storage-hub-node"
+args = [
+    "--no-hardware-benchmarks",
+    "-lparachain=debug",
+    "--name=sh-user",
+    "--provider",
+    "--provider-type=user",
+    "--unsafe-rpc-external",
+    "--rpc-cors=all",
 ]
 
 [types.Header]

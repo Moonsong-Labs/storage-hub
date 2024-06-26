@@ -19,18 +19,11 @@ name = "relay-1"
 validator = true
 add_to_bootnodes = true
 
-
 [[parachains]]
 id = 2000
 
 [[parachains.collators]]
-command = "../target/release/storage-hub-node"
-name = "sh-collator"
-ws_port = 32000
-args = ["--no-hardware-benchmarks", "-lparachain=debug"]
-
-
-[[parachains.collators]]
+# Capitalization intentional here as it matches injected key
 name = "sh-BSP"
 validator = false
 ws_port = 35000
@@ -39,10 +32,11 @@ args = [
     "--no-hardware-benchmarks",
     "-lparachain=debug",
     "--provider",
-    "--provider-type bsp",
+    "--provider-type=bsp",
 ]
 
 [[parachains.collators]]
+# Capitalization intentional here as it matches injected key
 name = "sh-User"
 ws_port = 36000
 command = "../target/release/storage-hub-node"
@@ -50,7 +44,7 @@ args = [
     "--no-hardware-benchmarks",
     "-lparachain=debug",
     "--provider",
-    "--provider-type user",
+    "--provider-type=user",
 ]
 
 [types.Header]

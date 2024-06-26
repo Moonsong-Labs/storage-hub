@@ -11,13 +11,15 @@ import {
   ferdie,
   getZombieClients,
   sendTransaction,
+  ZOMBIE_RELAY_URL,
+  ZOMBIE_SH_URL,
 } from "../../util";
 import { strictEqual } from "node:assert";
 
 describe("Full Network Suite", { concurrency: 2 }, async () => {
   const { relayApi, storageApi } = await getZombieClients({
-    relayWs: "ws://127.0.0.1:31000",
-    shWs: "ws://127.0.0.1:32000",
+    relayWs: ZOMBIE_RELAY_URL,
+    shWs: ZOMBIE_SH_URL,
   });
 
   after(() => {

@@ -2,11 +2,17 @@ import _ from "lodash";
 import {
   alice,
   bsp,
+  CAPACITY_512,
   collator,
+  DUMMY_MSP_ID,
   getZombieClients,
   sendTransaction,
+  shUser,
+  VALUE_PROP,
   waitForChain,
   waitForRandomness,
+  ZOMBIE_RELAY_URL,
+  ZOMBIE_SH_URL,
 } from "../util";
 
 const idealExecutorParams = [
@@ -17,9 +23,8 @@ const idealExecutorParams = [
 
 async function main() {
   await using resources = await getZombieClients({
-    relayWs: "ws://127.0.0.1:31000",
-    // relayWs: "wss://rococo-rpc.polkadot.io",
-    shWs: "ws://127.0.0.1:32000",
+    relayWs: ZOMBIE_RELAY_URL,
+    shWs: ZOMBIE_SH_URL,
   });
 
   await waitForChain(resources.relayApi);
@@ -29,8 +34,10 @@ async function main() {
   if (_.isEqual(executorParams, idealExecutorParams)) {
     console.log("Executor parameters are already set to ideal values ✅");
   } else {
-    // @ts-expect-error - ApiAugment issue
-    const setConfig = resources.relayApi.tx.configuration.setExecutorParams(idealExecutorParams);
+    const setConfig = resources.relayApi.tx.configuration.setExecutorParams(
+      // @ts-expect-error - ApiAugment issue
+      idealExecutorParams
+    );
 
     // Setting Async Config
     process.stdout.write("Setting Executor Parameters config for relay chain... ");
@@ -55,6 +62,11 @@ async function main() {
       1000_000_000_000_000_000n
     );
 
+    const setBal3 = resources.storageApi.tx.balances.forceSetBalance(
+      shUser.address,
+      1000_000_000_000_000_000n
+    );
+
     process.stdout.write("Using sudo to increase BSP account balance... ");
 
     const { nonce } = await resources.storageApi.query.system.account(alice.address);
@@ -65,8 +77,11 @@ async function main() {
     const tx2 = sendTransaction(resources.storageApi.tx.sudo.sudo(setBal2), {
       nonce: nonce.toNumber() + 1,
     });
+    const tx3 = sendTransaction(resources.storageApi.tx.sudo.sudo(setBal3), {
+      nonce: nonce.toNumber() + 2,
+    });
 
-    await Promise.all([tx1, tx2]);
+    await Promise.all([tx1, tx2, tx3]);
 
     process.stdout.write("✅\n");
     const {
@@ -81,13 +96,21 @@ async function main() {
   }
 
   // Enrolling BSP
-  const string = "0x8e6a748e6d787260f47f61df1e2cac065db8c1d41428eb178102177876071c6b";
-  const buffer = Buffer.from(string, "utf8");
-  const uint8Array = new Uint8Array(buffer);
+  const bspMultiAddress = (await resources.storageApi.rpc.system.localListenAddresses()).find(
+    (peer) => peer.includes("127.0.0.1")
+  );
+
+  if (!bspMultiAddress) {
+    throw new Error("BSP MultiAddress not found");
+  }
 
   process.stdout.write(`Requesting sign up for ${bsp.address} ...`);
   await sendTransaction(
-    resources.storageApi.tx.providers.requestBspSignUp(5000000, [uint8Array], bsp.address),
+    resources.storageApi.tx.providers.requestBspSignUp(
+      CAPACITY_512,
+      [bspMultiAddress.toString()],
+      bsp.address
+    ),
     {
       signer: bsp,
     }
@@ -102,6 +125,24 @@ async function main() {
     signer: bsp,
   });
   process.stdout.write("✅\n");
+
+  // TODO: Remove Sudo and use proper flow
+  await sendTransaction(
+    resources.storageApi.tx.sudo.sudo(
+      resources.storageApi.tx.providers.forceMspSignUp(
+        alice.address,
+        DUMMY_MSP_ID,
+        CAPACITY_512,
+        [bspMultiAddress.toString()],
+        {
+          identifier: VALUE_PROP,
+          dataLimit: 500,
+          protocols: ["https", "ssh", "telnet"],
+        },
+        alice.address
+      )
+    )
+  );
 
   // Confirm providers added
   const providers = await resources.storageApi.query.providers.backupStorageProviders.entries();

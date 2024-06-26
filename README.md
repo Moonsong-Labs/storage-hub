@@ -21,7 +21,7 @@ It is organized:
 ├── node                   <---- storage-hub node implementation
 ├── pallets                <---- storage-hub pallets
 ├── primitives             <---- storage-hub primitives
-├── resources
+├── resource
 ├── runtime                <---- storage-hub runtime
 ├── support                <---- Traits and implementations used by storage-hub
 ├── test                   <---- Testing module for storage-hub, including Zombienet and TypeScript tests

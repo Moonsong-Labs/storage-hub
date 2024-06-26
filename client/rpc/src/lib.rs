@@ -18,6 +18,7 @@ use shc_file_manager::traits::FileStorage;
 use log::debug;
 use log::error;
 
+use std::env;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::Read;
@@ -75,7 +76,14 @@ where
         location: String,
         owner: AccountId32,
     ) -> RpcResult<FileMetadata> {
-        // Open file in the local file system.
+        // Print current working directory and executable path
+          println!("Current working directory: {:?}", env::current_dir().unwrap());
+          println!("Executable path: {:?}", env::current_exe().unwrap());
+          println!("Attempting to open file at: {:?}", PathBuf::from(&file_path));
+      
+          // Open file in the local file system.
+          dbg!("Opening file...");
+          dbg!(file_path.clone());
         let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
 
         // Instantiate an "empty" [`FileDataTrie`] so we can write the file chunks into it.
