@@ -3046,7 +3046,11 @@ declare module '@polkadot/types/lookup' {
             readonly canServe: bool;
             readonly inclusionForestProof: SpTrieStorageProofCompactProof;
         } & Struct;
-        readonly type: 'CreateBucket' | 'UpdateBucketPrivacy' | 'CreateAndAssociateCollectionWithBucket' | 'IssueStorageRequest' | 'RevokeStorageRequest' | 'BspVolunteer' | 'BspConfirmStoring' | 'BspStopStoring';
+        readonly isForceUpdateBspsAssignmentThreshold: boolean;
+        readonly asForceUpdateBspsAssignmentThreshold: {
+            readonly bspAssignmentThreshold: u128;
+        } & Struct;
+        readonly type: 'CreateBucket' | 'UpdateBucketPrivacy' | 'CreateAndAssociateCollectionWithBucket' | 'IssueStorageRequest' | 'RevokeStorageRequest' | 'BspVolunteer' | 'BspConfirmStoring' | 'BspStopStoring' | 'ForceUpdateBspsAssignmentThreshold';
     }
     /** @name PalletProofsDealerCall (298) */
     interface PalletProofsDealerCall extends Enum {
@@ -3766,7 +3770,8 @@ declare module '@polkadot/types/lookup' {
         readonly isExpectedNonInclusionProof: boolean;
         readonly isExpectedInclusionProof: boolean;
         readonly isInvalidFileKeyMetadata: boolean;
-        readonly type: 'StorageRequestAlreadyRegistered' | 'StorageRequestNotFound' | 'BspsRequiredCannotBeZero' | 'BspsRequiredExceedsMax' | 'NotABsp' | 'NotAMsp' | 'BspNotVolunteered' | 'BspNotConfirmed' | 'BspAlreadyConfirmed' | 'StorageRequestBspsRequiredFulfilled' | 'BspAlreadyVolunteered' | 'UnexpectedNumberOfRemovedVolunteeredBsps' | 'StorageRequestExpiredNoSlotAvailable' | 'StorageRequestNotAuthorized' | 'MaxBlockNumberReached' | 'FailedToEncodeBsp' | 'FailedToEncodeFingerprint' | 'FailedToDecodeThreshold' | 'AboveThreshold' | 'FailedToConvertBlockNumber' | 'ThresholdArithmeticError' | 'FailedTypeConversion' | 'DividedByZero' | 'ImpossibleFailedToGetValue' | 'BucketIsNotPrivate' | 'BucketNotFound' | 'NotBucketOwner' | 'ProviderRootNotFound' | 'ExpectedNonInclusionProof' | 'ExpectedInclusionProof' | 'InvalidFileKeyMetadata';
+        readonly isThresholdBelowAsymptote: boolean;
+        readonly type: 'StorageRequestAlreadyRegistered' | 'StorageRequestNotFound' | 'BspsRequiredCannotBeZero' | 'BspsRequiredExceedsMax' | 'NotABsp' | 'NotAMsp' | 'BspNotVolunteered' | 'BspNotConfirmed' | 'BspAlreadyConfirmed' | 'StorageRequestBspsRequiredFulfilled' | 'BspAlreadyVolunteered' | 'UnexpectedNumberOfRemovedVolunteeredBsps' | 'StorageRequestExpiredNoSlotAvailable' | 'StorageRequestNotAuthorized' | 'MaxBlockNumberReached' | 'FailedToEncodeBsp' | 'FailedToEncodeFingerprint' | 'FailedToDecodeThreshold' | 'AboveThreshold' | 'FailedToConvertBlockNumber' | 'ThresholdArithmeticError' | 'FailedTypeConversion' | 'DividedByZero' | 'ImpossibleFailedToGetValue' | 'BucketIsNotPrivate' | 'BucketNotFound' | 'NotBucketOwner' | 'ProviderRootNotFound' | 'ExpectedNonInclusionProof' | 'ExpectedInclusionProof' | 'InvalidFileKeyMetadata' | 'ThresholdBelowAsymptote';
     }
     /** @name PalletProofsDealerError (399) */
     interface PalletProofsDealerError extends Enum {

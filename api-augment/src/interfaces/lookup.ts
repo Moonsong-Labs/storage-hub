@@ -3047,6 +3047,9 @@ export default {
         canServe: "bool",
         inclusionForestProof: "SpTrieStorageProofCompactProof",
       },
+      force_update_bsps_assignment_threshold: {
+        bspAssignmentThreshold: "u128",
+      },
     },
   },
   /**
@@ -3819,6 +3822,7 @@ export default {
       "ExpectedNonInclusionProof",
       "ExpectedInclusionProof",
       "InvalidFileKeyMetadata",
+      "ThresholdBelowAsymptote",
     ],
   },
   /**

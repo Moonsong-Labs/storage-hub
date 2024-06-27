@@ -16,7 +16,6 @@ import {
   sleep,
 } from "../../util";
 import { hexToString } from "@polkadot/util";
-import {randomBytes} from "node:crypto";
 
 describe("BSPNet: BSP Volunteer", () => {
   let api: BspNetApi;
@@ -27,7 +26,7 @@ describe("BSPNet: BSP Volunteer", () => {
   });
 
   after(async () => {
-    // await cleardownTest(api);
+    await cleardownTest(api);
   });
 
   it("Network launches and can be queried", async () => {
@@ -43,12 +42,16 @@ describe("BSPNet: BSP Volunteer", () => {
   it("file is finger printed correctly", async () => {
     const source = "res/adolphus.jpg";
     const destination = "test/adolphus.jpg";
-    const bucketId = randomBytes(16).toString('hex');
+    const bucketName = "nothingmuch-0";
+
+    const newBucketEventDataBlob = await createBucket(bucketName);
+    const bucketId = newBucketEventDataBlob.bucketId;
+
     const { fingerprint, size, location } = await api.sendFile(
       source,
       destination,
       NODE_INFOS.user.AddressId,
-        bucketId
+      bucketId
     );
 
     strictEqual(hexToString(location), destination);
@@ -78,7 +81,7 @@ describe("BSPNet: BSP Volunteer", () => {
     const bucketName = "nothingmuch-1";
 
     const newBucketEventDataBlob = await createBucket(bucketName);
-    const bucketId = newBucketEventDataBlob.bucketId.toString();
+    const bucketId = newBucketEventDataBlob.bucketId;
 
     const { fingerprint, size, location } = await api.sendFile(
       source,
@@ -117,7 +120,7 @@ describe("BSPNet: BSP Volunteer", () => {
     const bucketName = "nothingmuch-2";
 
     const newBucketEventDataBlob = await createBucket(bucketName);
-    const bucketId = newBucketEventDataBlob.bucketId.toString();
+    const bucketId = newBucketEventDataBlob.bucketId;
 
     const { fingerprint, size, location } = await api.sendFile(
       source,
@@ -144,7 +147,7 @@ describe("BSPNet: BSP Volunteer", () => {
     );
 
     strictEqual(resBspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
-    strictEqual(resBucketId.toString(), bucketId);
+    strictEqual(resBucketId.toString(), bucketId.toString());
     strictEqual(resLoc.toHuman(), destination);
     strictEqual(resFinger.toString(), fingerprint);
     strictEqual(resMulti.length, 1);

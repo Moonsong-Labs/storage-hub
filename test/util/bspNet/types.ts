@@ -3,7 +3,7 @@ import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
 import type { FileSendResponse, SealedBlock } from "./helpers";
-import type { EventRecord, Event } from "@polkadot/types/interfaces";
+import type {EventRecord, Event, H256} from "@polkadot/types/interfaces";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -31,7 +31,7 @@ export type BspNetApi = ApiPromise & {
    * @param bucketId - The bucket ID associated with the file transfer.
    * @returns A promise that resolves to a file send response.
    */
-  sendFile: (localPath: string, remotePath: string, addressId: string, bucketId: string) => Promise<FileSendResponse>;
+  sendFile: (localPath: string, remotePath: string, addressId: string, bucketId: H256) => Promise<FileSendResponse>;
 
   /**
    * @description Asserts that a specific event occurred in a list of events.

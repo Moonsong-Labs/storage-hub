@@ -2998,6 +2998,9 @@ declare const _default: {
                 canServe: string;
                 inclusionForestProof: string;
             };
+            force_update_bsps_assignment_threshold: {
+                bspAssignmentThreshold: string;
+            };
         };
     };
     /**

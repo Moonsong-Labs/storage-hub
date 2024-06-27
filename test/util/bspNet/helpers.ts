@@ -10,7 +10,7 @@ import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import * as util from "node:util";
 import * as child_process from "node:child_process";
-import type { CreatedBlock, EventRecord, Hash, SignedBlock } from "@polkadot/types/interfaces";
+import type {CreatedBlock, EventRecord, H256, Hash, SignedBlock} from "@polkadot/types/interfaces";
 import { execSync } from "node:child_process";
 import { showContainers } from "./docker";
 import { isExtSuccess } from "../extrinsics";
@@ -22,7 +22,7 @@ export const sendFileSendRpc = async (
   filePath: string,
   remotePath: string,
   userNodeAccountId: string,
-  bucket: string
+  bucket: H256
 ): Promise<FileSendResponse> => {
   try {
     // @ts-expect-error - rpc provider not officially exposed
@@ -35,7 +35,7 @@ export const sendFileSendRpc = async (
     const { owner, bucket_id, location, size, fingerprint } = resp;
     return {
       owner: u8aToHex(owner),
-      bucket_id: u8aToHex(bucket_id),
+      bucket_id,
       location: u8aToHex(location),
       size: BigInt(size),
       fingerprint: u8aToHex(fingerprint),
@@ -202,6 +202,15 @@ export const runBspNet = async () => {
           alice.address
         )
       )
+    );
+
+    // u128 max value
+    const u128Max = (BigInt(1) << BigInt(128)) - BigInt(1);
+
+    await api.sealBlock(
+        api.tx.sudo.sudo(
+            api.tx.fileSystem.forceUpdateBspsAssignmentThreshold(u128Max)
+        )
     );
   } catch (e) {
     console.error("Error ", e);

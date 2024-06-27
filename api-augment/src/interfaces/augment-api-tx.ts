@@ -473,6 +473,10 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [H256, Bytes, bool]
       >;
+      forceUpdateBspsAssignmentThreshold: AugmentedSubmittable<
+        (bspAssignmentThreshold: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [u128]
+      >;
       /**
        * Issue a new storage request for a file
        **/

@@ -3807,6 +3807,10 @@ declare module "@polkadot/types/lookup" {
       readonly canServe: bool;
       readonly inclusionForestProof: SpTrieStorageProofCompactProof;
     } & Struct;
+    readonly isForceUpdateBspsAssignmentThreshold: boolean;
+    readonly asForceUpdateBspsAssignmentThreshold: {
+      readonly bspAssignmentThreshold: u128;
+    } & Struct;
     readonly type:
       | "CreateBucket"
       | "UpdateBucketPrivacy"
@@ -3815,7 +3819,8 @@ declare module "@polkadot/types/lookup" {
       | "RevokeStorageRequest"
       | "BspVolunteer"
       | "BspConfirmStoring"
-      | "BspStopStoring";
+      | "BspStopStoring"
+      | "ForceUpdateBspsAssignmentThreshold";
   }
 
   /** @name PalletProofsDealerCall (298) */
@@ -4713,6 +4718,7 @@ declare module "@polkadot/types/lookup" {
     readonly isExpectedNonInclusionProof: boolean;
     readonly isExpectedInclusionProof: boolean;
     readonly isInvalidFileKeyMetadata: boolean;
+    readonly isThresholdBelowAsymptote: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -4744,7 +4750,8 @@ declare module "@polkadot/types/lookup" {
       | "ProviderRootNotFound"
       | "ExpectedNonInclusionProof"
       | "ExpectedInclusionProof"
-      | "InvalidFileKeyMetadata";
+      | "InvalidFileKeyMetadata"
+      | "ThresholdBelowAsymptote";
   }
 
   /** @name PalletProofsDealerError (399) */

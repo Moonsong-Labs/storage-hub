@@ -5,7 +5,7 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import { sealBlock, sendFileSendRpc } from "./helpers";
 import { assertEventPresent } from "../asserts";
-import type { EventRecord } from "@polkadot/types/interfaces";
+import type {EventRecord, H256} from "@polkadot/types/interfaces";
 
 export const createApiObject = async (uri: string): Promise<BspNetApi> => {
   const baseApi = await ApiPromise.create({
@@ -19,7 +19,7 @@ export const createApiObject = async (uri: string): Promise<BspNetApi> => {
       signer?: KeyringPair
     ) => sealBlock(baseApi, call, signer),
 
-    sendFile: async (localPath: string, remotePath: string, addressId: string, bucket: string) =>
+    sendFile: async (localPath: string, remotePath: string, addressId: string, bucket: H256) =>
       sendFileSendRpc(baseApi, localPath, remotePath, addressId, bucket),
 
     assertEvent: (module: string, method: string, events?: EventRecord[]) =>

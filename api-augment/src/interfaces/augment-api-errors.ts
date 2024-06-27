@@ -284,6 +284,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ThresholdArithmeticError: AugmentedError<ApiType>;
       /**
+       * BSPs assignment threshold cannot be below asymptote.
+       **/
+      ThresholdBelowAsymptote: AugmentedError<ApiType>;
+      /**
        * Number of removed BSPs volunteered from storage request prefix did not match the expected number.
        **/
       UnexpectedNumberOfRemovedVolunteeredBsps: AugmentedError<ApiType>;

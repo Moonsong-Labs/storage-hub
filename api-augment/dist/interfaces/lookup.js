@@ -2999,7 +2999,10 @@ export default {
                 fingerprint: 'H256',
                 size_: 'u32',
                 canServe: 'bool',
-                inclusionForestProof: 'SpTrieStorageProofCompactProof'
+                inclusionForestProof: 'SpTrieStorageProofCompactProof',
+            },
+            force_update_bsps_assignment_threshold: {
+                bspAssignmentThreshold: 'u128'
             }
         }
     },
@@ -3645,7 +3648,7 @@ export default {
      * Lookup395: pallet_file_system::pallet::Error<T>
      **/
     PalletFileSystemError: {
-        _enum: ['StorageRequestAlreadyRegistered', 'StorageRequestNotFound', 'BspsRequiredCannotBeZero', 'BspsRequiredExceedsMax', 'NotABsp', 'NotAMsp', 'BspNotVolunteered', 'BspNotConfirmed', 'BspAlreadyConfirmed', 'StorageRequestBspsRequiredFulfilled', 'BspAlreadyVolunteered', 'UnexpectedNumberOfRemovedVolunteeredBsps', 'StorageRequestExpiredNoSlotAvailable', 'StorageRequestNotAuthorized', 'MaxBlockNumberReached', 'FailedToEncodeBsp', 'FailedToEncodeFingerprint', 'FailedToDecodeThreshold', 'AboveThreshold', 'FailedToConvertBlockNumber', 'ThresholdArithmeticError', 'FailedTypeConversion', 'DividedByZero', 'ImpossibleFailedToGetValue', 'BucketIsNotPrivate', 'BucketNotFound', 'NotBucketOwner', 'ProviderRootNotFound', 'ExpectedNonInclusionProof', 'ExpectedInclusionProof', 'InvalidFileKeyMetadata']
+        _enum: ['StorageRequestAlreadyRegistered', 'StorageRequestNotFound', 'BspsRequiredCannotBeZero', 'BspsRequiredExceedsMax', 'NotABsp', 'NotAMsp', 'BspNotVolunteered', 'BspNotConfirmed', 'BspAlreadyConfirmed', 'StorageRequestBspsRequiredFulfilled', 'BspAlreadyVolunteered', 'UnexpectedNumberOfRemovedVolunteeredBsps', 'StorageRequestExpiredNoSlotAvailable', 'StorageRequestNotAuthorized', 'MaxBlockNumberReached', 'FailedToEncodeBsp', 'FailedToEncodeFingerprint', 'FailedToDecodeThreshold', 'AboveThreshold', 'FailedToConvertBlockNumber', 'ThresholdArithmeticError', 'FailedTypeConversion', 'DividedByZero', 'ImpossibleFailedToGetValue', 'BucketIsNotPrivate', 'BucketNotFound', 'NotBucketOwner', 'ProviderRootNotFound', 'ExpectedNonInclusionProof', 'ExpectedInclusionProof', 'InvalidFileKeyMetadata', 'ThresholdBelowAsymptote']
     },
     /**
      * Lookup399: pallet_proofs_dealer::pallet::Error<T>
