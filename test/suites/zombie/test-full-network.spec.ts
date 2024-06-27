@@ -88,7 +88,7 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
           console.log(`✅ Account ${signer.address} ${signer.meta.name} has ${free} balance`);
 
           return { free, address: signer.address, name: signer.meta.name };
-        }
+        },
       );
 
       const failures = (await Promise.all(promises)).filter(({ free }) => free.toBigInt() < 1n);

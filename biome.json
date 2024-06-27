@@ -18,7 +18,6 @@
   },
   "javascript": {
     "formatter": {
-      "trailingComma": "es5",
       "semicolons": "always",
       "indentStyle": "space",
       "lineWidth": 100

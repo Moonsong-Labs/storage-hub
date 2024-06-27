@@ -34,7 +34,7 @@ export const sendCustomRpc = async (url: string, method: string, params = [], ve
   console.log(
     `Error fetching ${method} / ${params} from ${url} after ${
       (maxRetries * sleepTime) / 1000
-    } seconds`
+    } seconds`,
   );
   throw new Error(`Error sending custom RPC to ${url}`);
 };

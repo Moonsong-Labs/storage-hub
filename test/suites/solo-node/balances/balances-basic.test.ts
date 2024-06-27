@@ -52,7 +52,7 @@ describe("Balances Pallet: Basic", {}, async () => {
     const accountEntries = await api.query.system.account.entries();
     const balancesTotal = accountEntries.reduce(
       (acc, [, { data }]) => acc + data.free.toBigInt() + data.reserved.toBigInt(),
-      0n
+      0n,
     );
     const totalSupply = await api.query.balances.totalIssuance();
 

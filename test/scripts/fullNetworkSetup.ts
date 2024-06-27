@@ -48,11 +48,11 @@ async function main() {
   if (free.toBigInt() < 1_000_000_000_000n) {
     const setBal = resources.storageApi.tx.balances.forceSetBalance(
       bsp.address,
-      1000_000_000_000_000_000n
+      1000_000_000_000_000_000n,
     );
     const setBal2 = resources.storageApi.tx.balances.forceSetBalance(
       collator.address,
-      1000_000_000_000_000_000n
+      1000_000_000_000_000_000n,
     );
 
     process.stdout.write("Using sudo to increase BSP account balance... ");
@@ -74,7 +74,7 @@ async function main() {
     } = await resources.storageApi.query.system.account(bsp.address);
 
     console.log(
-      `BSP account balance reset by sudo, new free is ${free.toBigInt() / 10n ** 12n} balance ✅`
+      `BSP account balance reset by sudo, new free is ${free.toBigInt() / 10n ** 12n} balance ✅`,
     );
   } else {
     console.log(`BSP account balance is  already ${free.toBigInt() / 10n ** 12n} balance ✅`);
@@ -90,7 +90,7 @@ async function main() {
     resources.storageApi.tx.providers.requestBspSignUp(5000000, [uint8Array], bsp.address),
     {
       signer: bsp,
-    }
+    },
   );
   process.stdout.write("✅\n");
 

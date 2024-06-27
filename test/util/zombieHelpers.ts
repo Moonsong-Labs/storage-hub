@@ -32,14 +32,14 @@ export const waitForChain = async (
   options?: {
     timeoutMs?: number;
     blocks?: number;
-  }
+  },
 ) => {
   const startTime = performance.now();
 
   process.stdout.write(
     `Waiting a maximum of ${
       options?.timeoutMs || 60_000 / 1000
-    } seconds for ${await api.rpc.system.chain()} chain to be ready...`
+    } seconds for ${await api.rpc.system.chain()} chain to be ready...`,
   );
   const startingHeight = (await api.rpc.chain.getHeader()).number.toNumber();
 

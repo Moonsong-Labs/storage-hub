@@ -23,7 +23,7 @@ export const sendFileSendRpc = async (
   api: ApiPromise,
   filePath: string,
   remotePath: string,
-  userNodeAccountId: string
+  userNodeAccountId: string,
 ): Promise<FileSendResponse> => {
   try {
     // @ts-expect-error - rpc provider not officially exposed
@@ -55,7 +55,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
     // TODO: Replace with dockerode command
     try {
       const { stdout } = await exec(
-        `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`
+        `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`,
       );
       return stdout.trim();
     } catch {
@@ -73,7 +73,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
   console.log(
     `Error fetching container IP for ${containerName} after ${
       (maxRetries * sleepTime) / 1000
-    } seconds`
+    } seconds`,
   );
   showContainers();
   throw new Error("Error fetching container IP");
@@ -132,7 +132,7 @@ export const runBspNet = async () => {
       process.cwd(),
       "..",
       "docker",
-      "local-dev-bsp-compose.yml"
+      "local-dev-bsp-compose.yml",
     );
 
     await compose.upOne("sh-bsp", { config: composeFilePath, log: true });
@@ -179,9 +179,9 @@ export const runBspNet = async () => {
           DUMMY_BSP_ID,
           CAPACITY_512,
           [multiAddressBsp],
-          bsp.address
-        )
-      )
+          bsp.address,
+        ),
+      ),
     );
 
     // Make MSP
@@ -197,9 +197,9 @@ export const runBspNet = async () => {
             dataLimit: 500,
             protocols: ["https", "ssh", "telnet"],
           },
-          alice.address
-        )
-      )
+          alice.address,
+        ),
+      ),
     );
   } catch (e) {
     console.error("Error ", e);
@@ -236,7 +236,7 @@ export interface SealedBlock {
 export const sealBlock = async (
   api: ApiPromise,
   call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
-  signer?: KeyringPair
+  signer?: KeyringPair,
 ): Promise<SealedBlock> => {
   const initialHeight = (await api.rpc.chain.getHeader()).number.toNumber();
 
@@ -268,7 +268,7 @@ export const sealBlock = async (
     const extIndex = getExtIndex(results.hash);
     const extEvents = allEvents.filter(
       ({ phase }) =>
-        phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex
+        phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex,
     );
     results.blockData = blockData;
     results.events = extEvents;

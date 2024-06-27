@@ -32,7 +32,7 @@ async function main() {
   if (!isCommandAvailable("zig")) {
     console.error("Zig is not installed. Please install Zig to proceed.");
     console.error(
-      "Instructions to install can be found here: https://ziglang.org/learn/getting-started/"
+      "Instructions to install can be found here: https://ziglang.org/learn/getting-started/",
     );
     process.exit(1);
   }
