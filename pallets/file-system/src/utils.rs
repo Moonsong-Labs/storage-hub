@@ -81,7 +81,7 @@ where
             }
         };
 
-        let bsp_threshold = Self::compute_bsp_xor(
+        let bsp_xor = Self::compute_bsp_xor(
             fingerprint
                 .as_ref()
                 .try_into()
@@ -94,33 +94,30 @@ where
         .map_err(|_| QueryFileEarliestVolunteerBlockError::ThresholdArithmeticError)?;
 
         // Compute the block number at which the BSP should send the volunteer request.
-        let volunteer_block_number =
-            match Self::compute_volunteer_block_number(bsp_threshold, storage_request_block) {
-                Ok(Some(volunteer_block_number)) => volunteer_block_number,
-                _ => Zero::zero(),
-            };
-
-        Ok(volunteer_block_number)
+        Ok(
+            Self::compute_volunteer_block_number(bsp_xor, storage_request_block)
+                .map_err(|_| QueryFileEarliestVolunteerBlockError::ThresholdArithmeticError)?,
+        )
     }
 
     fn compute_volunteer_block_number(
-        bsp_threshold: T::ThresholdType,
+        bsp_xor: T::ThresholdType,
         storage_request_block: BlockNumberFor<T>,
-    ) -> Result<Option<BlockNumberFor<T>>, DispatchError>
+    ) -> Result<BlockNumberFor<T>, DispatchError>
     where
         T: frame_system::Config,
         T::ThresholdType: From<u128>,
     {
-        // Calculate the difference between BSP's threshold and the current threshold.
-        let threshold_diff = match bsp_threshold.checked_sub(&BspsAssignmentThreshold::<T>::get()) {
+        // Calculate the difference between BSP's XOR and the starting threshold value.
+        let threshold_diff = match bsp_xor.checked_sub(&BspsAssignmentThreshold::<T>::get()) {
             Some(diff) => diff,
             None => {
                 // The BSP's threshold is less than the current threshold.
-                return Ok(None);
+                return Ok(<frame_system::Pallet<T>>::block_number());
             }
         };
 
-        // Calculate the number of blocks required to exceed the difference in thresholds.
+        // Calculate the number of blocks required to be below the threshold.
         let blocks_to_wait =
             match threshold_diff.checked_div(&T::AssignmentThresholdMultiplier::get()) {
                 Some(blocks) => blocks,
@@ -136,7 +133,7 @@ where
                 .map_err(|_| Error::<T>::FailedToConvertBlockNumber)?,
         );
 
-        Ok(Some(volunteer_block_number))
+        Ok(volunteer_block_number)
     }
 
     /// Create a bucket for an owner (user) under a given MSP account.
@@ -382,8 +379,8 @@ where
             Error::<T>::BspAlreadyVolunteered
         );
 
-        // Compute BSP's threshold
-        let bsp_threshold: T::ThresholdType = Self::compute_bsp_xor(
+        // Compute BSP's xor
+        let bsp_xor: T::ThresholdType = Self::compute_bsp_xor(
             storage_request_metadata
                 .fingerprint
                 .as_ref()
@@ -414,7 +411,7 @@ where
         let threshold = rate_increase.saturating_add(BspsAssignmentThreshold::<T>::get());
 
         // Check that the BSP's threshold is under the threshold required to qualify as BSP for the storage request.
-        ensure!(bsp_threshold <= (threshold), Error::<T>::AboveThreshold);
+        ensure!(bsp_xor <= (threshold), Error::<T>::AboveThreshold);
 
         // Add BSP to storage request metadata.
         <StorageRequestBsps<T>>::insert(
@@ -872,7 +869,7 @@ where
     }
 
     /// Calculate the XOR of the fingerprint and the BSP.
-    pub fn compute_bsp_xor(
+    fn compute_bsp_xor(
         fingerprint: &[u8; 32],
         bsp: &[u8; 32],
     ) -> Result<T::ThresholdType, Error<T>> {
