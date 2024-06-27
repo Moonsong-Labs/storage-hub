@@ -270,14 +270,12 @@ where
             .await
             .map_err(|e| anyhow!("Failed to query file earliest volunteer block: {:?}", e))?;
 
-        // If earliest_volunteer_block is 0 it means that we can volunteer right away.
-        if earliest_volunteer_block > 0 {
-            // TODO: if the earliest block is too far away, we should drop the task.
-            self.storage_hub_handler
-                .blockchain
-                .wait_for_block(earliest_volunteer_block)
-                .await?;
-        }
+        // TODO: if the earliest block is too far away, we should drop the task.
+        // TODO: based on the limit above, also add a timeout for the task.
+        self.storage_hub_handler
+            .blockchain
+            .wait_for_block(earliest_volunteer_block)
+            .await?;
 
         // Optimistically register the file for upload in the file transfer service.
         // This solves the race condition between the user and the BSP, where the user could react faster

@@ -205,11 +205,23 @@ impl Actor for BlockchainService {
                     block_number,
                     callback,
                 } => {
+                    let current_block_number = self.client.info().best_number;
+
                     let (tx, rx) = tokio::sync::oneshot::channel();
-                    self.wait_for_block_request_by_number
-                        .entry(block_number)
-                        .or_insert_with(Vec::new)
-                        .push(tx);
+
+                    if current_block_number >= block_number {
+                        match tx.send(()) {
+                            Ok(_) => {}
+                            Err(_) => {
+                                error!(target: LOG_TARGET, "Failed to notify task about waiting block number.");
+                            }
+                        }
+                    } else {
+                        self.wait_for_block_request_by_number
+                            .entry(block_number)
+                            .or_insert_with(Vec::new)
+                            .push(tx);
+                    }
 
                     match callback.send(rx) {
                         Ok(_) => {
