@@ -59,7 +59,7 @@ describe("BSPNet: BSP Volunteer", () => {
   it("issueStorageRequest sent correctly", async () => {
     const source = "res/smile.jpg";
     const destination = "test/smile.jpg";
-    const bucketName = "smile";
+    const bucketName = "nothingmuch";
 
     const createBucketResult = await api.sealBlock(
         api.tx.fileSystem.createBucket(DUMMY_MSP_ID, bucketName, false),
@@ -106,7 +106,7 @@ describe("BSPNet: BSP Volunteer", () => {
   it("bsp volunteers when issueStorageRequest sent", async () => {
     const source = "res/whatsup.jpg";
     const destination = "test/whatsup.jpg";
-    const bucketName = "smile";
+    const bucketName = "nothingmuch";
 
     const createBucketResult = await api.sealBlock(
         api.tx.fileSystem.createBucket(DUMMY_MSP_ID, bucketName, false),

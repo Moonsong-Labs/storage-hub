@@ -37,13 +37,14 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
 {
     pub fn new(
         owner: Vec<u8>,
+        bucket_id: Vec<u8>,
         location: Vec<u8>,
         size: u64,
         fingerprint: Fingerprint<H_LENGTH>,
         proof: CompactProof,
     ) -> Self {
         Self {
-            file_metadata: FileMetadata::new(owner, location, size, fingerprint),
+            file_metadata: FileMetadata::new(owner, bucket_id, location, size, fingerprint),
             proof,
         }
     }
@@ -252,6 +253,7 @@ impl<const H_LENGTH: usize> AsRef<[u8; H_LENGTH]> for FileKey<H_LENGTH> {
 pub struct FileMetadata<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
 {
     pub owner: Vec<u8>,
+    pub bucket_id: Vec<u8>,
     pub location: Vec<u8>,
     #[codec(compact)]
     pub size: u64,
@@ -264,12 +266,14 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     pub fn new(
         owner: Vec<u8>,
         location: Vec<u8>,
+        bucket_id: Vec<u8>,
         size: u64,
         fingerprint: Fingerprint<H_LENGTH>,
     ) -> Self {
         Self {
             owner,
             location,
+            bucket_id,
             size,
             fingerprint,
         }

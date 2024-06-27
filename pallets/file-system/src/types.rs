@@ -21,6 +21,8 @@ pub struct StorageRequestMetadata<T: Config> {
     pub requested_at: BlockNumberFor<T>,
     /// AccountId of the user who owns the data being stored.
     pub owner: T::AccountId,
+    /// Bucket id where this file is stored.
+    pub bucket_id: BucketIdFor<T>,
     /// User defined name of the file being stored.
     pub location: FileLocation<T>,
     /// Identifier of the data being stored.
@@ -158,3 +160,6 @@ pub(crate) type BucketIdFor<T> =
 
 /// Alias for the `ProviderId` type used in the ProvidersInterface.
 pub type ProviderIdFor<T> = <<T as crate::Config>::Providers as ProvidersInterface>::ProviderId;
+
+/// Alias for the bucket name.
+pub type BucketNameFor<T> = BoundedVec<u8, BucketNameLimitFor<T>>;

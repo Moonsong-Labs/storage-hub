@@ -187,6 +187,10 @@ declare module '@polkadot/api-base/types/errors' {
              **/
             BucketIsNotPrivate: AugmentedError<ApiType>;
             /**
+             * Bucket does not exist
+             **/
+            BucketNotFound: AugmentedError<ApiType>;
+            /**
              * Divided by 0
              **/
             DividedByZero: AugmentedError<ApiType>;
@@ -239,6 +243,10 @@ declare module '@polkadot/api-base/types/errors' {
              * Account is not a MSP.
              **/
             NotAMsp: AugmentedError<ApiType>;
+            /**
+             * Operation failed because the account is not the owner of the bucket.
+             **/
+            NotBucketOwner: AugmentedError<ApiType>;
             /**
              * Root of the provider not found.
              **/

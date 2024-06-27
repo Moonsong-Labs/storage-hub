@@ -1881,6 +1881,7 @@ declare module "@polkadot/types/lookup" {
     readonly asNewStorageRequest: {
       readonly who: AccountId32;
       readonly fileKey: H256;
+      readonly bucketId: H256;
       readonly location: Bytes;
       readonly fingerprint: H256;
       readonly size_: u32;
@@ -1889,6 +1890,7 @@ declare module "@polkadot/types/lookup" {
     readonly isAcceptedBspVolunteer: boolean;
     readonly asAcceptedBspVolunteer: {
       readonly bspId: H256;
+      readonly bucketId: H256;
       readonly location: Bytes;
       readonly fingerprint: H256;
       readonly multiaddresses: Vec<Bytes>;
@@ -1989,6 +1991,7 @@ declare module "@polkadot/types/lookup" {
   /** @name ShpFileKeyVerifierFileMetadata (140) */
   interface ShpFileKeyVerifierFileMetadata extends Struct {
     readonly owner: Bytes;
+    readonly bucketId: Bytes;
     readonly location: Bytes;
     readonly size_: Compact<u64>;
     readonly fingerprint: ShpFileKeyVerifierFingerprint;
@@ -3771,6 +3774,7 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isIssueStorageRequest: boolean;
     readonly asIssueStorageRequest: {
+      readonly bucketId: H256;
       readonly location: Bytes;
       readonly fingerprint: H256;
       readonly size_: u32;
@@ -3795,6 +3799,7 @@ declare module "@polkadot/types/lookup" {
     readonly isBspStopStoring: boolean;
     readonly asBspStopStoring: {
       readonly fileKey: H256;
+      readonly bucketId: H256;
       readonly location: Bytes;
       readonly owner: AccountId32;
       readonly fingerprint: H256;
@@ -4658,6 +4663,7 @@ declare module "@polkadot/types/lookup" {
   interface PalletFileSystemStorageRequestMetadata extends Struct {
     readonly requestedAt: u32;
     readonly owner: AccountId32;
+    readonly bucketId: H256;
     readonly location: Bytes;
     readonly fingerprint: H256;
     readonly size_: u32;
@@ -4701,6 +4707,8 @@ declare module "@polkadot/types/lookup" {
     readonly isDividedByZero: boolean;
     readonly isImpossibleFailedToGetValue: boolean;
     readonly isBucketIsNotPrivate: boolean;
+    readonly isBucketNotFound: boolean;
+    readonly isNotBucketOwner: boolean;
     readonly isProviderRootNotFound: boolean;
     readonly isExpectedNonInclusionProof: boolean;
     readonly isExpectedInclusionProof: boolean;
@@ -4731,6 +4739,8 @@ declare module "@polkadot/types/lookup" {
       | "DividedByZero"
       | "ImpossibleFailedToGetValue"
       | "BucketIsNotPrivate"
+      | "BucketNotFound"
+      | "NotBucketOwner"
       | "ProviderRootNotFound"
       | "ExpectedNonInclusionProof"
       | "ExpectedInclusionProof"

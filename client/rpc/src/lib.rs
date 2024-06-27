@@ -41,6 +41,7 @@ pub trait FileStorageApi {
         file_path: String,
         location: String,
         owner: AccountId32,
+        bucket_id: String,
     ) -> RpcResult<FileMetadata>;
 }
 
@@ -74,6 +75,7 @@ where
         file_path: String,
         location: String,
         owner: AccountId32,
+        bucket_id: String,
     ) -> RpcResult<FileMetadata> {
         // Open file in the local file system.
         let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
@@ -119,6 +121,7 @@ where
 
         // Build StorageHub's [`FileMetadata`]
         let file_metadata = FileMetadata {
+            bucket_id: bucket_id.into(),
             size: fs_metadata.len(),
             fingerprint: root.as_ref().into(),
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&owner).to_vec(),

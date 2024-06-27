@@ -432,6 +432,7 @@ declare module "@polkadot/api-base/types/submittable" {
       bspStopStoring: AugmentedSubmittable<
         (
           fileKey: H256 | string | Uint8Array,
+          bucketId: H256 | string | Uint8Array,
           location: Bytes | string | Uint8Array,
           owner: AccountId32 | string | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
@@ -443,7 +444,7 @@ declare module "@polkadot/api-base/types/submittable" {
             | string
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, AccountId32, H256, u32, bool, SpTrieStorageProofCompactProof]
+        [H256, H256, Bytes, AccountId32, H256, u32, bool, SpTrieStorageProofCompactProof]
       >;
       /**
        * Used by a BSP to volunteer for storing a file.
@@ -477,13 +478,14 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       issueStorageRequest: AugmentedSubmittable<
         (
+          bucketId: H256 | string | Uint8Array,
           location: Bytes | string | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
           size: u32 | AnyNumber | Uint8Array,
           mspId: H256 | string | Uint8Array,
           peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[]
         ) => SubmittableExtrinsic<ApiType>,
-        [Bytes, H256, u32, H256, Vec<Bytes>]
+        [H256, Bytes, H256, u32, H256, Vec<Bytes>]
       >;
       /**
        * Revoke storage request
