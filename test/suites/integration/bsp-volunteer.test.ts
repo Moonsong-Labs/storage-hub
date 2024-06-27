@@ -27,7 +27,7 @@ describe("BSPNet: BSP Volunteer", () => {
   });
 
   after(async () => {
-    await cleardownTest(api);
+    // await cleardownTest(api);
   });
 
   it("Network launches and can be queried", async () => {
@@ -56,15 +56,12 @@ describe("BSPNet: BSP Volunteer", () => {
     strictEqual(size, TEST_ARTEFACTS[source].size);
   });
 
-  it("issueStorageRequest sent correctly", async () => {
-    const source = "res/smile.jpg";
-    const destination = "test/smile.jpg";
-    const bucketName = "nothingmuch";
-
+  async function createBucket(bucketName: string) {
     const createBucketResult = await api.sealBlock(
         api.tx.fileSystem.createBucket(DUMMY_MSP_ID, bucketName, false),
+        shUser
     );
-    const { event: newBucketEvent } = api.assertEvent("fileSystem", "NewBucket", createBucketResult.events);
+    const {event: newBucketEvent} = api.assertEvent("fileSystem", "NewBucket", createBucketResult.events);
 
     const newBucketEventDataBlob = api.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
 
@@ -72,15 +69,26 @@ describe("BSPNet: BSP Volunteer", () => {
       throw new Error("Event doesn't match Type");
     }
 
+    return newBucketEventDataBlob;
+  }
+
+  it("issueStorageRequest sent correctly", async () => {
+    const source = "res/smile.jpg";
+    const destination = "test/smile.jpg";
+    const bucketName = "nothingmuch-1";
+
+    const newBucketEventDataBlob = await createBucket(bucketName);
+    const bucketId = newBucketEventDataBlob.bucketId.toString();
+
     const { fingerprint, size, location } = await api.sendFile(
       source,
       destination,
       NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId.toString()
+      bucketId
     );
 
     const issueStorageRequestResult = await api.sealBlock(
-      api.tx.fileSystem.issueStorageRequest(newBucketEventDataBlob.bucketId.toString(), location, fingerprint, size, DUMMY_MSP_ID, [
+      api.tx.fileSystem.issueStorageRequest(bucketId, location, fingerprint, size, DUMMY_MSP_ID, [
         NODE_INFOS.user.expectedPeerId,
       ]),
       shUser
@@ -106,28 +114,20 @@ describe("BSPNet: BSP Volunteer", () => {
   it("bsp volunteers when issueStorageRequest sent", async () => {
     const source = "res/whatsup.jpg";
     const destination = "test/whatsup.jpg";
-    const bucketName = "nothingmuch";
+    const bucketName = "nothingmuch-2";
 
-    const createBucketResult = await api.sealBlock(
-        api.tx.fileSystem.createBucket(DUMMY_MSP_ID, bucketName, false),
-    );
-    const { event: newBucketEvent } = api.assertEvent("fileSystem", "NewBucket", createBucketResult.events);
-
-    const newBucketEventDataBlob = api.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
-
-    if (!newBucketEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
+    const newBucketEventDataBlob = await createBucket(bucketName);
+    const bucketId = newBucketEventDataBlob.bucketId.toString();
 
     const { fingerprint, size, location } = await api.sendFile(
       source,
       destination,
       NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId.toString()
+      bucketId
     );
 
     await api.sealBlock(
-      api.tx.fileSystem.issueStorageRequest(newBucketEventDataBlob.bucketId.toString(), location, fingerprint, size, DUMMY_MSP_ID, [
+      api.tx.fileSystem.issueStorageRequest(bucketId, location, fingerprint, size, DUMMY_MSP_ID, [
         NODE_INFOS.user.expectedPeerId,
       ]),
       shUser
@@ -138,12 +138,13 @@ describe("BSPNet: BSP Volunteer", () => {
     strictEqual(pending.length, 1, "There should be one pending extrinsic from BSP");
 
     await api.sealBlock();
-    const [resBspId, resLoc, resFinger, resMulti, _, resSize] = fetchEventData(
+    const [resBspId, resBucketId, resLoc, resFinger, resMulti, _, resSize] = fetchEventData(
       api.events.fileSystem.AcceptedBspVolunteer,
       await api.query.system.events()
     );
 
     strictEqual(resBspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
+    strictEqual(resBucketId.toString(), bucketId);
     strictEqual(resLoc.toHuman(), destination);
     strictEqual(resFinger.toString(), fingerprint);
     strictEqual(resMulti.length, 1);

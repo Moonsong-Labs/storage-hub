@@ -28,6 +28,7 @@ export type BspNetApi = ApiPromise & {
    * @param localPath - The local file path.
    * @param remotePath - The destination path on the blockchain.
    * @param addressId - The address ID associated with the file transfer.
+   * @param bucketId - The bucket ID associated with the file transfer.
    * @returns A promise that resolves to a file send response.
    */
   sendFile: (localPath: string, remotePath: string, addressId: string, bucketId: string) => Promise<FileSendResponse>;
