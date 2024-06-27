@@ -1,24 +1,8 @@
 import "@storagehub/api-augment";
-import { strictEqual } from "node:assert";
-import { after, before, describe, it } from "node:test";
-import {
-  DUMMY_MSP_ID,
-  NODE_INFOS,
-  TEST_ARTEFACTS,
-  createApiObject,
-  fetchEventData,
-  runBspNet,
-  shUser,
-  checkBspForFile,
-  checkFileChecksum,
-  type BspNetApi,
-  cleardownTest,
-  sleep,
-  addBspContainer,
-} from "../../util";
-import { hexToString } from "@polkadot/util";
+import {after, before, describe, it} from "node:test";
+import {addBspContainer, type BspNetApi, cleardownTest, createApiObject, NODE_INFOS, runBspNet,} from "../../util";
 
-describe("BSPNet: BSP Onboarding", () => {
+describe("BSPNet: Adding new BSPs", () => {
   let api: BspNetApi;
 
   before(async () => {
@@ -27,11 +11,16 @@ describe("BSPNet: BSP Onboarding", () => {
   });
 
   after(async () => {
-    // await new Promise((resolve) => setTimeout(resolve, 5_000_000));
-    await cleardownTest(api);
+    // await cleardownTest(api);
   });
 
   it("New BSP can be created", async () => {
     await addBspContainer();
+
+    // new bsp can be connected to API
+
+    // new bsp is peer of other nodes
   });
+
+  // multiple new bsps
 });

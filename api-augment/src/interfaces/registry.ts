@@ -157,7 +157,6 @@ import type {
   ShpFileKeyVerifierFileKeyProof,
   ShpFileKeyVerifierFileMetadata,
   ShpFileKeyVerifierFingerprint,
-  ShpTraitsTrieRemoveMutation,
   SpArithmeticArithmeticError,
   SpConsensusAuraSr25519AppSr25519Public,
   SpCoreCryptoKeyTypeId,
@@ -402,7 +401,6 @@ declare module "@polkadot/types/types/registry" {
     ShpFileKeyVerifierFileKeyProof: ShpFileKeyVerifierFileKeyProof;
     ShpFileKeyVerifierFileMetadata: ShpFileKeyVerifierFileMetadata;
     ShpFileKeyVerifierFingerprint: ShpFileKeyVerifierFingerprint;
-    ShpTraitsTrieRemoveMutation: ShpTraitsTrieRemoveMutation;
     SpArithmeticArithmeticError: SpArithmeticArithmeticError;
     SpConsensusAuraSr25519AppSr25519Public: SpConsensusAuraSr25519AppSr25519Public;
     SpCoreCryptoKeyTypeId: SpCoreCryptoKeyTypeId;

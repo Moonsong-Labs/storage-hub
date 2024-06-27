@@ -1,11 +1,9 @@
 import path from "node:path";
-import { execSync } from "node:child_process";
+import {execSync} from "node:child_process";
 import Docker from "dockerode";
-import { DOCKER_IMAGE } from "../constants";
-import type { BspNetApi } from "./types";
-import { createApiObject } from "./api";
-import { getContainerPeerId } from "./helpers";
-import { sendCustomRpc } from "../rpc";
+import {DOCKER_IMAGE} from "../constants";
+import {createApiObject} from "./api";
+import {sendCustomRpc} from "../rpc";
 
 export const checkBspForFile = async (filePath: string) => {
   const containerId = "docker-sh-bsp-1";
@@ -95,6 +93,7 @@ export const addBspContainer = async (options?: {
       `--name=sh-bsp-${bspNum + 1}`,
       "--no-hardware-benchmarks",
       "--unsafe-rpc-external",
+      "--rpc-methods=unsafe",
       "--rpc-cors=all",
       `--port=${p2pPort}`,
       "--base-path=/data",

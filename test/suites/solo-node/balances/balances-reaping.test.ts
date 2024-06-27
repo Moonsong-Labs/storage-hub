@@ -58,7 +58,7 @@ describe("Balances Pallet: Reaping", { only: true }, async () => {
     strictEqual(randomBal.toBigInt() > 0n, true);
   });
 
-  it("Bal below ED kills account", async (t) => {
+  it("Bal below ED kills account", async () => {
     const randomAccount = await createSr25519Account();
     const amount = 10n * UNIT;
 

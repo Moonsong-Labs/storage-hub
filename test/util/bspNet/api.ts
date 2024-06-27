@@ -1,11 +1,11 @@
-import { ApiPromise, WsProvider } from "@polkadot/api";
-import type { BspNetApi } from "./types";
-import type { SubmittableExtrinsic } from "@polkadot/api/types";
-import type { ISubmittableResult } from "@polkadot/types/types";
-import type { KeyringPair } from "@polkadot/keyring/types";
-import { sealBlock, sendFileSendRpc } from "./helpers";
-import { assertEventPresent } from "../asserts";
-import type { EventRecord } from "@polkadot/types/interfaces";
+import {ApiPromise, WsProvider} from "@polkadot/api";
+import type {BspNetApi} from "./types";
+import type {SubmittableExtrinsic} from "@polkadot/api/types";
+import type {ISubmittableResult} from "@polkadot/types/types";
+import type {KeyringPair} from "@polkadot/keyring/types";
+import {sealBlock, sendFileSendRpc} from "./helpers";
+import {assertEventPresent} from "../asserts";
+import type {EventRecord} from "@polkadot/types/interfaces";
 
 //TODO: Maybe make this a resource?
 export const createApiObject = async (uri: string): Promise<BspNetApi> => {
@@ -14,18 +14,16 @@ export const createApiObject = async (uri: string): Promise<BspNetApi> => {
     noInitWarn: true,
   });
 
-  const extendedApi = Object.assign(baseApi, {
+  return Object.assign(baseApi, {
     sealBlock: async (
-      call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
-      signer?: KeyringPair
+        call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
+        signer?: KeyringPair
     ) => sealBlock(baseApi, call, signer),
 
     sendFile: async (localPath: string, remotePath: string, addressId: string) =>
-      sendFileSendRpc(baseApi, localPath, remotePath, addressId),
+        sendFileSendRpc(baseApi, localPath, remotePath, addressId),
 
     assertEvent: (module: string, method: string, events?: EventRecord[]) =>
-      assertEventPresent(baseApi, module, method, events),
+        assertEventPresent(baseApi, module, method, events),
   });
-
-  return extendedApi;
 };
