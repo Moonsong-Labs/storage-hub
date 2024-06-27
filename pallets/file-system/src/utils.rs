@@ -1,14 +1,12 @@
 use core::cmp::max;
 
-use crate::pallet::{FromU256, IntoU256};
 use codec::{Decode, Encode};
 use frame_support::{
     ensure, pallet_prelude::DispatchResult, traits::nonfungibles_v2::Create, traits::Get,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-use sp_core::U256;
 use sp_runtime::{
-    traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
+    traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
@@ -71,7 +69,6 @@ where
     ) -> Result<BlockNumberFor<T>, QueryFileEarliestVolunteerBlockError>
     where
         T: frame_system::Config,
-        T::ThresholdType: From<u128>,
     {
         // Get the block number at which the storage request was created.
         let (storage_request_block, fingerprint) = match <StorageRequests<T>>::get(&file_key) {
@@ -94,10 +91,8 @@ where
         .map_err(|_| QueryFileEarliestVolunteerBlockError::ThresholdArithmeticError)?;
 
         // Compute the block number at which the BSP should send the volunteer request.
-        Ok(
-            Self::compute_volunteer_block_number(bsp_xor, storage_request_block)
-                .map_err(|_| QueryFileEarliestVolunteerBlockError::ThresholdArithmeticError)?,
-        )
+        Self::compute_volunteer_block_number(bsp_xor, storage_request_block)
+            .map_err(|_| QueryFileEarliestVolunteerBlockError::ThresholdArithmeticError)
     }
 
     fn compute_volunteer_block_number(
@@ -106,7 +101,6 @@ where
     ) -> Result<BlockNumberFor<T>, DispatchError>
     where
         T: frame_system::Config,
-        T::ThresholdType: From<u128>,
     {
         // Calculate the difference between BSP's XOR and the starting threshold value.
         let threshold_diff = match bsp_xor.checked_sub(&BspsAssignmentThreshold::<T>::get()) {
@@ -127,11 +121,8 @@ where
             };
 
         // Compute the block number at which the BSP should send the volunteer request.
-        let blocks_to_wait: U256 = blocks_to_wait.into_u256();
-        let volunteer_block_number = storage_request_block.saturating_add(
-            BlockNumberFor::<T>::try_from(blocks_to_wait)
-                .map_err(|_| Error::<T>::FailedToConvertBlockNumber)?,
-        );
+        let volunteer_block_number = storage_request_block
+            .saturating_add(T::ThresholdTypeToBlockNumber::convert(blocks_to_wait));
 
         Ok(volunteer_block_number)
     }
@@ -392,16 +383,15 @@ where
                 .map_err(|_| Error::<T>::FailedToEncodeBsp)?,
         )?;
 
-        let current_block_number: U256 = <frame_system::Pallet<T>>::block_number().into();
+        let current_block_number = <frame_system::Pallet<T>>::block_number();
 
         // Get number of blocks since the storage request was issued.
-        let blocks_since_requested: U256 = current_block_number
-            .saturating_sub(storage_request_metadata.requested_at.into())
-            .into();
+        let blocks_since_requested =
+            current_block_number.saturating_sub(storage_request_metadata.requested_at);
 
         // Note. This should never fail since the storage request expiration would never reach such a high number.
         // Storage requests are cleared after reaching `StorageRequestTtl` blocks which is defined in the pallet Config.
-        let blocks_since_requested = T::ThresholdType::from_u256(blocks_since_requested);
+        let blocks_since_requested = T::BlockNumberToThresholdType::convert(blocks_since_requested);
 
         // Compute the threshold increasing rate.
         let rate_increase =

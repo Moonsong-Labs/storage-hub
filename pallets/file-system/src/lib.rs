@@ -56,9 +56,8 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use sp_core::U256;
+    use sp_runtime::traits::Convert;
     use sp_runtime::BoundedVec;
-    use sp_runtime::FixedU128;
     use sp_runtime::{
         traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
         FixedPointNumber,
@@ -127,9 +126,13 @@ pub mod pallet {
             + CheckedAdd
             + CheckedSub
             + PartialOrd
-            + FixedPointNumber
-            + FromU256
-            + IntoU256;
+            + FixedPointNumber;
+
+        /// The type to convert a threshold to a block number.
+        type ThresholdTypeToBlockNumber: Convert<Self::ThresholdType, BlockNumberFor<Self>>;
+
+        /// The type to convert a block number to a threshold.
+        type BlockNumberToThresholdType: Convert<BlockNumberFor<Self>, Self::ThresholdType>;
 
         /// The currency mechanism, used for paying for reserves.
         type Currency: Currency<Self::AccountId>;
@@ -737,28 +740,6 @@ pub mod pallet {
             }
 
             total_used_weight
-        }
-    }
-
-    pub trait IntoU256 {
-        fn into_u256(self) -> U256;
-    }
-
-    impl IntoU256 for FixedU128 {
-        fn into_u256(self) -> U256 {
-            use sp_runtime::FixedPointNumber;
-
-            U256::from(self.into_inner() / Self::accuracy())
-        }
-    }
-
-    pub trait FromU256 {
-        fn from_u256(value: U256) -> Self;
-    }
-
-    impl FromU256 for FixedU128 {
-        fn from_u256(value: U256) -> Self {
-            FixedU128::from_inner(value.as_u128() * Self::accuracy())
         }
     }
 }
