@@ -45,7 +45,8 @@ describe("BSPNet: BSP Volunteer", () => {
     const bucketName = "nothingmuch-0";
 
     const newBucketEventEvent = await api.createBucket(bucketName);
-    const newBucketEventDataBlob = api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+    const newBucketEventDataBlob =
+      api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
     if (!newBucketEventDataBlob) {
       throw new Error("Event doesn't match Type");
@@ -69,7 +70,8 @@ describe("BSPNet: BSP Volunteer", () => {
     const bucketName = "nothingmuch-1";
 
     const newBucketEventEvent = await api.createBucket(bucketName);
-    const newBucketEventDataBlob = api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+    const newBucketEventDataBlob =
+      api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
     if (!newBucketEventDataBlob) {
       throw new Error("Event doesn't match Type");
@@ -83,14 +85,23 @@ describe("BSPNet: BSP Volunteer", () => {
     );
 
     const issueStorageRequestResult = await api.sealBlock(
-      api.tx.fileSystem.issueStorageRequest(newBucketEventDataBlob.bucketId, location, fingerprint, size, DUMMY_MSP_ID, [
-        NODE_INFOS.user.expectedPeerId,
-      ]),
+      api.tx.fileSystem.issueStorageRequest(
+        newBucketEventDataBlob.bucketId,
+        location,
+        fingerprint,
+        size,
+        DUMMY_MSP_ID,
+        [NODE_INFOS.user.expectedPeerId]
+      ),
       shUser
     );
     await sleep(500); // wait for the bsp to volunteer
 
-    const { event } = api.assertEvent("fileSystem", "NewStorageRequest", issueStorageRequestResult.events);
+    const { event } = api.assertEvent(
+      "fileSystem",
+      "NewStorageRequest",
+      issueStorageRequestResult.events
+    );
 
     const dataBlob = api.events.fileSystem.NewStorageRequest.is(event) && event.data;
 
@@ -112,12 +123,12 @@ describe("BSPNet: BSP Volunteer", () => {
     const bucketName = "nothingmuch-2";
 
     const newBucketEventEvent = await api.createBucket(bucketName);
-    const newBucketEventDataBlob = api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+    const newBucketEventDataBlob =
+      api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
     if (!newBucketEventDataBlob) {
       throw new Error("Event doesn't match Type");
     }
-
 
     const { fingerprint, size, location } = await api.sendFile(
       source,
@@ -127,9 +138,14 @@ describe("BSPNet: BSP Volunteer", () => {
     );
 
     await api.sealBlock(
-      api.tx.fileSystem.issueStorageRequest(newBucketEventDataBlob.bucketId, location, fingerprint, size, DUMMY_MSP_ID, [
-        NODE_INFOS.user.expectedPeerId,
-      ]),
+      api.tx.fileSystem.issueStorageRequest(
+        newBucketEventDataBlob.bucketId,
+        location,
+        fingerprint,
+        size,
+        DUMMY_MSP_ID,
+        [NODE_INFOS.user.expectedPeerId]
+      ),
       shUser
     );
 

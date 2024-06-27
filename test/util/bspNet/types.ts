@@ -31,7 +31,12 @@ export type BspNetApi = ApiPromise & {
    * @param bucketId - The bucket ID associated with the file transfer.
    * @returns A promise that resolves to a file send response.
    */
-  sendFile: (localPath: string, remotePath: string, addressId: string, bucketId: H256) => Promise<FileSendResponse>;
+  sendFile: (
+    localPath: string,
+    remotePath: string,
+    addressId: string,
+    bucketId: H256
+  ) => Promise<FileSendResponse>;
 
   /** @description Creates a new bucket.
    *

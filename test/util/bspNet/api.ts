@@ -3,9 +3,9 @@ import type { BspNetApi } from "./types";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import {createBucket, sealBlock, sendFileSendRpc} from "./helpers";
+import { createBucket, sealBlock, sendFileSendRpc } from "./helpers";
 import { assertEventPresent } from "../asserts";
-import type {EventRecord, H256} from "@polkadot/types/interfaces";
+import type { EventRecord, H256 } from "@polkadot/types/interfaces";
 
 export const createApiObject = async (uri: string): Promise<BspNetApi> => {
   const baseApi = await ApiPromise.create({
@@ -22,8 +22,7 @@ export const createApiObject = async (uri: string): Promise<BspNetApi> => {
     sendFile: async (localPath: string, remotePath: string, addressId: string, bucket: H256) =>
       sendFileSendRpc(baseApi, localPath, remotePath, addressId, bucket),
 
-    createBucket: async (bucketName: string) =>
-      createBucket(baseApi, bucketName),
+    createBucket: async (bucketName: string) => createBucket(baseApi, bucketName),
 
     assertEvent: (module: string, method: string, events?: EventRecord[]) =>
       assertEventPresent(baseApi, module, method, events),

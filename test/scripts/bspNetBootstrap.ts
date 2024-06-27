@@ -18,7 +18,8 @@ async function bootStrapNetwork() {
 
     const bucketName = "nothingmuch-0";
     const newBucketEventEvent = await api.createBucket(bucketName);
-    const newBucketEventDataBlob = api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+    const newBucketEventDataBlob =
+      api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
     if (!newBucketEventDataBlob) {
       throw new Error("Event doesn't match Type");

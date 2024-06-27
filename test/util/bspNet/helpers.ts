@@ -10,12 +10,18 @@ import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import * as util from "node:util";
 import * as child_process from "node:child_process";
-import type {CreatedBlock, EventRecord, H256, Hash, SignedBlock} from "@polkadot/types/interfaces";
+import type {
+  CreatedBlock,
+  EventRecord,
+  H256,
+  Hash,
+  SignedBlock,
+} from "@polkadot/types/interfaces";
 import { execSync } from "node:child_process";
 import { showContainers } from "./docker";
 import { isExtSuccess } from "../extrinsics";
 import type { BspNetApi } from "./types";
-import {assertEventPresent} from "../asserts.ts";
+import { assertEventPresent } from "../asserts.ts";
 const exec = util.promisify(child_process.exec);
 
 export const sendFileSendRpc = async (
@@ -28,11 +34,11 @@ export const sendFileSendRpc = async (
   try {
     // @ts-expect-error - rpc provider not officially exposed
     const resp = await api._rpcCore.provider.send("filestorage_loadFileInStorage", [
-          filePath,
-          remotePath,
-          userNodeAccountId,
-          bucket
-        ]);
+      filePath,
+      remotePath,
+      userNodeAccountId,
+      bucket,
+    ]);
     const { owner, bucket_id, location, size, fingerprint } = resp;
     return {
       owner: u8aToHex(owner),
@@ -209,9 +215,7 @@ export const runBspNet = async () => {
     const u128Max = (BigInt(1) << BigInt(128)) - BigInt(1);
 
     await api.sealBlock(
-        api.tx.sudo.sudo(
-            api.tx.fileSystem.forceUpdateBspsAssignmentThreshold(u128Max)
-        )
+      api.tx.sudo.sudo(api.tx.fileSystem.forceUpdateBspsAssignmentThreshold(u128Max))
     );
   } catch (e) {
     console.error("Error ", e);
@@ -304,15 +308,15 @@ export const sealBlock = async (
 };
 
 export const createBucket = async (api: ApiPromise, bucketName: string) => {
-    const createBucketResult = await sealBlock(
-        api,
-        api.tx.fileSystem.createBucket(DUMMY_MSP_ID, bucketName, false),
-        shUser
-    );
-    const {event} = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
+  const createBucketResult = await sealBlock(
+    api,
+    api.tx.fileSystem.createBucket(DUMMY_MSP_ID, bucketName, false),
+    shUser
+  );
+  const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
 
-    return event;
-}
+  return event;
+};
 
 export const cleardownTest = async (api: BspNetApi) => {
   await api.disconnect();
