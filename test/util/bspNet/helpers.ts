@@ -15,6 +15,7 @@ import { execSync } from "node:child_process";
 import { showContainers } from "./docker";
 import { isExtSuccess } from "../extrinsics";
 import type { BspNetApi } from "./types";
+import {assertEventPresent} from "../asserts.ts";
 const exec = util.promisify(child_process.exec);
 
 export const sendFileSendRpc = async (
@@ -301,6 +302,17 @@ export const sealBlock = async (
     extSuccess: results.success,
   }) satisfies SealedBlock;
 };
+
+export const createBucket = async (api: ApiPromise, bucketName: string) => {
+    const createBucketResult = await sealBlock(
+        api,
+        api.tx.fileSystem.createBucket(DUMMY_MSP_ID, bucketName, false),
+        shUser
+    );
+    const {event} = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
+
+    return event;
+}
 
 export const cleardownTest = async (api: BspNetApi) => {
   await api.disconnect();
