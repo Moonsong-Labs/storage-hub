@@ -16,8 +16,8 @@ use sp_trie::TrieLayout;
 use shc_file_manager::traits::FileDataTrie;
 use shc_file_manager::traits::FileStorage;
 
+use log::debug;
 use log::error;
-use log::{debug, info};
 
 use std::fmt::Debug;
 use std::fs::File;

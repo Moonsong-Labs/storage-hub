@@ -801,6 +801,71 @@ fn request_storage_clear_old_expirations_success() {
 }
 
 #[test]
+fn request_storage_bucket_does_not_exist_fail() {
+    new_test_ext().execute_with(|| {
+        let owner = Keyring::Alice.to_account_id();
+        let origin = RuntimeOrigin::signed(owner.clone());
+        let msp = Keyring::Charlie.to_account_id();
+        let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+        let file_content = b"test".to_vec();
+        let fingerprint = BlakeTwo256::hash(&file_content);
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+        let msp_id = add_msp_to_provider_storage(&msp);
+
+        let name: BucketNameFor<Test> = BoundedVec::try_from([0u8; 32].to_vec()).unwrap();
+        let bucket_id = H256::from_slice(&name);
+
+        assert_noop!(
+            FileSystem::issue_storage_request(
+                origin,
+                bucket_id,
+                location.clone(),
+                fingerprint,
+                4,
+                msp_id,
+                peer_ids.clone(),
+            ),
+            pallet_storage_providers::Error::<Test>::BucketNotFound
+        );
+    });
+}
+
+#[test]
+fn request_storage_not_bucket_owner_fail() {
+    new_test_ext().execute_with(|| {
+        let owner = Keyring::Alice.to_account_id();
+        let not_owner = Keyring::Bob.to_account_id();
+        let origin = RuntimeOrigin::signed(not_owner.clone());
+        let msp = Keyring::Charlie.to_account_id();
+        let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+        let file_content = b"test".to_vec();
+        let fingerprint = BlakeTwo256::hash(&file_content);
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+        let msp_id = add_msp_to_provider_storage(&msp);
+
+        let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+        let bucket_id = create_bucket(&owner, name.clone(), msp_id);
+
+        assert_noop!(
+            FileSystem::issue_storage_request(
+                origin,
+                bucket_id,
+                location.clone(),
+                fingerprint,
+                4,
+                msp_id,
+                peer_ids.clone(),
+            ),
+            Error::<Test>::NotBucketOwner
+        );
+    });
+}
+
+#[test]
 fn revoke_request_storage_success() {
     new_test_ext().execute_with(|| {
         let owner_account_id = Keyring::Alice.to_account_id();
