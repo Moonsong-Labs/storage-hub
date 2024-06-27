@@ -21,7 +21,8 @@ async function bootStrapNetwork() {
       api,
       "/res/whatsup.jpg",
       "cat/whatsup.jpg",
-      NODE_INFOS.user.AddressId
+      NODE_INFOS.user.AddressId,
+        "bucket"
     );
     console.log(rpcResponse);
 
@@ -31,6 +32,7 @@ async function bootStrapNetwork() {
     await api.sealBlock(
       api.tx.fileSystem.issueStorageRequest(
         "cat/whatsup.jpg",
+        rpcResponse.bucket_id,
         rpcResponse.fingerprint,
         rpcResponse.size,
         DUMMY_MSP_ID,

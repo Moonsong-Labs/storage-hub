@@ -19,8 +19,8 @@ export const createApiObject = async (uri: string): Promise<BspNetApi> => {
       signer?: KeyringPair
     ) => sealBlock(baseApi, call, signer),
 
-    sendFile: async (localPath: string, remotePath: string, addressId: string) =>
-      sendFileSendRpc(baseApi, localPath, remotePath, addressId),
+    sendFile: async (localPath: string, remotePath: string, addressId: string, bucket: string) =>
+      sendFileSendRpc(baseApi, localPath, remotePath, addressId, bucket),
 
     assertEvent: (module: string, method: string, events?: EventRecord[]) =>
       assertEventPresent(baseApi, module, method, events),

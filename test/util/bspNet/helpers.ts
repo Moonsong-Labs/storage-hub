@@ -21,18 +21,21 @@ export const sendFileSendRpc = async (
   api: ApiPromise,
   filePath: string,
   remotePath: string,
-  userNodeAccountId: string
+  userNodeAccountId: string,
+  bucket: string
 ): Promise<FileSendResponse> => {
   try {
     // @ts-expect-error - rpc provider not officially exposed
     const resp = await api._rpcCore.provider.send("filestorage_loadFileInStorage", [
-      filePath,
-      remotePath,
-      userNodeAccountId,
-    ]);
-    const { owner, location, size, fingerprint } = resp;
+          filePath,
+          remotePath,
+          userNodeAccountId,
+          bucket
+        ]);
+    const { owner, bucket_id, location, size, fingerprint } = resp;
     return {
       owner: u8aToHex(owner),
+      bucket_id: u8aToHex(bucket_id),
       location: u8aToHex(location),
       size: BigInt(size),
       fingerprint: u8aToHex(fingerprint),
@@ -79,6 +82,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
 
 export interface FileSendResponse {
   owner: string;
+  bucket_id: string;
   location: string;
   size: bigint;
   fingerprint: string;

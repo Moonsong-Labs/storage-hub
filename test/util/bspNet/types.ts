@@ -30,7 +30,7 @@ export type BspNetApi = ApiPromise & {
    * @param addressId - The address ID associated with the file transfer.
    * @returns A promise that resolves to a file send response.
    */
-  sendFile: (localPath: string, remotePath: string, addressId: string) => Promise<FileSendResponse>;
+  sendFile: (localPath: string, remotePath: string, addressId: string, bucketId: string) => Promise<FileSendResponse>;
 
   /**
    * @description Asserts that a specific event occurred in a list of events.
