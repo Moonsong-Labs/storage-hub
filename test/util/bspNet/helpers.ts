@@ -1,4 +1,4 @@
-import type { ApiPromise } from "@polkadot/api";
+import { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
@@ -14,7 +14,9 @@ import type { CreatedBlock, EventRecord, Hash, SignedBlock } from "@polkadot/typ
 import { execSync } from "node:child_process";
 import { showContainers } from "./docker";
 import { isExtSuccess } from "../extrinsics";
+import Docker from "dockerode";
 import type { BspNetApi } from "./types";
+import { DOCKER_IMAGE } from "../constants";
 const exec = util.promisify(child_process.exec);
 
 export const sendFileSendRpc = async (
@@ -208,18 +210,19 @@ export const runBspNet = async () => {
 };
 
 export const closeBspNet = async () => {
-  const composeFilePath = path.resolve(process.cwd(), "..", "docker", "local-dev-bsp-compose.yml");
+  const docker = new Docker();
 
-  return compose.down({
-    config: composeFilePath,
-    log: true,
-    commandOptions: ["--volumes", "--remove-orphans"],
+  const existingNodes = await docker.listContainers({
+    filters: { ancestor: [DOCKER_IMAGE] },
   });
+
+  const promises = existingNodes.map(async (node) => docker.getContainer(node.Id).stop());
+  await Promise.all(promises);
+
+  await docker.pruneContainers();
+  await docker.pruneVolumes();
 };
 
-// TODO: Add a succesful flag to track whether ext was successful or not
-//        Determine whether extrinsic was successful or not based on the
-//        ExtrinsicSucess event
 export interface SealedBlock {
   blockReceipt: CreatedBlock;
   txHash?: string;

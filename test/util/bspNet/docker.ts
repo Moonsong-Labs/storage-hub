@@ -1,5 +1,11 @@
 import path from "node:path";
 import { execSync } from "node:child_process";
+import Docker from "dockerode";
+import { DOCKER_IMAGE } from "../constants";
+import type { BspNetApi } from "./types";
+import { createApiObject } from "./api";
+import { getContainerPeerId } from "./helpers";
+import { sendCustomRpc } from "../rpc";
 
 export const checkBspForFile = async (filePath: string) => {
   const containerId = "docker-sh-bsp-1";
@@ -32,4 +38,96 @@ export const showContainers = () => {
     console.log(e);
     console.log("Error displaying docker containers");
   }
+};
+
+export const addBspContainer = async (options?: {
+  name?: string;
+  connectToPeer?: boolean;
+}) => {
+  const docker = new Docker();
+
+  const existingBsps = (
+    await docker.listContainers({
+      filters: { ancestor: [DOCKER_IMAGE] },
+    })
+  )
+    .flatMap(({ Names }) => Names)
+    .filter((name) => name.includes("docker-sh-bsp-"));
+
+  const bspNum = existingBsps.length;
+
+  if (bspNum < 1) {
+    throw new Error("No existing BSP containers");
+  }
+  const p2pPort = 30350 + bspNum;
+  const rpcPort = 9977 + bspNum * 3;
+  const containerName = options?.name || `docker-sh-bsp-${bspNum + 1}`;
+  // get bootnode from docker args
+
+  const { Args } = await docker.getContainer("docker-sh-user-1").inspect();
+
+  const bootNodeArg = Args.find((arg) => arg.includes("--bootnodes="));
+
+  if (!bootNodeArg) {
+    throw new Error("No bootnode found in docker args");
+  }
+
+  const container = await docker.createContainer({
+    Image: DOCKER_IMAGE,
+    name: containerName,
+    platform: "linux/amd64",
+    NetworkingConfig: {
+      EndpointsConfig: {
+        docker_default: {},
+      },
+    },
+    HostConfig: {
+      PortBindings: {
+        "9944/tcp": [{ HostPort: rpcPort.toString() }],
+        [`${p2pPort}/tcp`]: [{ HostPort: p2pPort.toString() }],
+      },
+    },
+    Cmd: [
+      "--dev",
+      "--sealing=manual",
+      "--provider",
+      "--provider-type=bsp",
+      `--name=sh-bsp-${bspNum + 1}`,
+      "--no-hardware-benchmarks",
+      "--unsafe-rpc-external",
+      "--rpc-cors=all",
+      `--port=${p2pPort}`,
+      "--base-path=/data",
+      bootNodeArg,
+    ],
+  });
+  await container.start();
+  console.log(
+    `▶️ BSP container started with name: docker-sh-bsp-${
+      bspNum + 1
+    }, rpc port: ${rpcPort}, p2p port: ${p2pPort}`
+  );
+
+  let peerId: string | undefined;
+  for (let i = 0; i < 20; i++) {
+    try {
+      peerId = await sendCustomRpc(`http://127.0.0.1:${rpcPort}`, "system_localPeerId");
+      break;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+
+  if (!peerId) {
+    console.error("Failed to connect after 10s. Exiting...");
+    throw new Error("Failed to connect to the new BSP container");
+  }
+
+  const api = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
+
+  console.log(api.consts.system.version.specName.toString());
+
+  await api.disconnect();
+
+  return { containerName, rpcPort, p2pPort };
 };

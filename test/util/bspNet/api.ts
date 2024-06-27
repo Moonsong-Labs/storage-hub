@@ -7,6 +7,7 @@ import { sealBlock, sendFileSendRpc } from "./helpers";
 import { assertEventPresent } from "../asserts";
 import type { EventRecord } from "@polkadot/types/interfaces";
 
+//TODO: Maybe make this a resource?
 export const createApiObject = async (uri: string): Promise<BspNetApi> => {
   const baseApi = await ApiPromise.create({
     provider: new WsProvider(uri),
