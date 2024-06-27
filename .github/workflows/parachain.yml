@@ -183,7 +183,7 @@ jobs:
         run: |
           docker pull moonsonglabs/storage-hub:latest
           docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
-          docker cp temp_storage_hub:/storage-hub/storage-hub-node target/release/storage-hub-node
+          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
           docker rm temp_storage_hub
       - name: Run Zombienet network
         run: |

@@ -10,14 +10,14 @@ import {
   eve,
   ferdie,
   getZombieClients,
-  sendTransaction,
+  sendTransaction
 } from "../../util";
 import { strictEqual } from "node:assert";
 
 describe("Full Network Suite", { concurrency: 2 }, async () => {
   const { relayApi, storageApi } = await getZombieClients({
     relayWs: "ws://127.0.0.1:31000",
-    shWs: "ws://127.0.0.1:32000",
+    shWs: "ws://127.0.0.1:32000"
   });
 
   after(() => {
@@ -40,7 +40,7 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
     test("Check test accounts have balance", async () => {
       const promises = [alice, bob, charlie, dave, eve, ferdie].map(async (signer) => {
         const {
-          data: { free },
+          data: { free }
         } = await relayApi.query.system.account(signer.address);
         console.log(`✅ Account ${signer.address} ${signer.meta.name} has ${free} balance`);
 
@@ -64,7 +64,7 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
       await sendTransaction(relayApi.tx.balances.transferAllowDeath(randomId, amount));
 
       const {
-        data: { free: balAfter },
+        data: { free: balAfter }
       } = await relayApi.query.system.account(randomId);
 
       strictEqual(balAfter.toBigInt(), amount);
@@ -83,12 +83,12 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
       const promises = [alice, bob, charlie, dave, eve, ferdie, bsp, collator].map(
         async (signer) => {
           const {
-            data: { free },
+            data: { free }
           } = await storageApi.query.system.account(signer.address);
           console.log(`✅ Account ${signer.address} ${signer.meta.name} has ${free} balance`);
 
           return { free, address: signer.address, name: signer.meta.name };
-        },
+        }
       );
 
       const failures = (await Promise.all(promises)).filter(({ free }) => free.toBigInt() < 1n);
@@ -108,7 +108,7 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
       await sendTransaction(storageApi.tx.balances.transferAllowDeath(randomId, amount));
 
       const {
-        data: { free: balAfter },
+        data: { free: balAfter }
       } = await storageApi.query.system.account(randomId);
 
       strictEqual(balAfter.toBigInt(), amount);

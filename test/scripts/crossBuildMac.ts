@@ -6,7 +6,7 @@ async function main() {
     type: "confirm",
     name: "confirm",
     message: "This script will build the project for Linux. Continue?",
-    default: true,
+    default: true
   });
 
   if (!confirm) {
@@ -22,7 +22,7 @@ async function main() {
       name: "wrongArch",
       message:
         "⚠️ This script is intended for Apple Silicon devices ⚠️\nℹ️ You can probably just run 'cargo build --release' to build the node.\n Are you sure you want to crossbuild?",
-      default: false,
+      default: false
     });
     if (!wrongArch) {
       return;
@@ -32,7 +32,7 @@ async function main() {
   if (!isCommandAvailable("zig")) {
     console.error("Zig is not installed. Please install Zig to proceed.");
     console.error(
-      "Instructions to install can be found here: https://ziglang.org/learn/getting-started/",
+      "Instructions to install can be found here: https://ziglang.org/learn/getting-started/"
     );
     process.exit(1);
   }

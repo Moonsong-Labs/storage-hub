@@ -5,7 +5,7 @@ import {
   getContainerPeerId,
   runBspNet,
   sendFileSendRpc,
-  shUser,
+  shUser
 } from "../util";
 import { setTimeout } from "node:timers/promises";
 
@@ -21,7 +21,7 @@ async function bootStrapNetwork() {
       api,
       "/res/whatsup.jpg",
       "cat/whatsup.jpg",
-      NODE_INFOS.user.AddressId,
+      NODE_INFOS.user.AddressId
     );
     console.log(rpcResponse);
 
@@ -34,9 +34,9 @@ async function bootStrapNetwork() {
         rpcResponse.fingerprint,
         rpcResponse.size,
         DUMMY_MSP_ID,
-        [peerIDUser],
+        [peerIDUser]
       ),
-      shUser,
+      shUser
     );
 
     // Seal the block from BSP volunteer

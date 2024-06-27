@@ -45,7 +45,7 @@ export const addBspContainer = async (options?: {
   const docker = new Docker();
   const existingBsps = (
     await docker.listContainers({
-      filters: { ancestor: [DOCKER_IMAGE] },
+      filters: { ancestor: [DOCKER_IMAGE] }
     })
   )
     .flatMap(({ Command }) => Command)
@@ -75,14 +75,14 @@ export const addBspContainer = async (options?: {
     platform: "linux/amd64",
     NetworkingConfig: {
       EndpointsConfig: {
-        docker_default: {},
-      },
+        docker_default: {}
+      }
     },
     HostConfig: {
       PortBindings: {
         "9944/tcp": [{ HostPort: rpcPort.toString() }],
-        [`${p2pPort}/tcp`]: [{ HostPort: p2pPort.toString() }],
-      },
+        [`${p2pPort}/tcp`]: [{ HostPort: p2pPort.toString() }]
+      }
     },
     Cmd: [
       "--dev",
@@ -96,8 +96,8 @@ export const addBspContainer = async (options?: {
       "--rpc-cors=all",
       `--port=${p2pPort}`,
       "--base-path=/data",
-      bootNodeArg,
-    ],
+      bootNodeArg
+    ]
   });
   await container.start();
 
@@ -127,7 +127,7 @@ export const addBspContainer = async (options?: {
   await api.disconnect();
 
   console.log(
-    `▶️ BSP container started with name: docker-sh-bsp-${bspNum + 1}, rpc port: ${rpcPort}, p2p port: ${p2pPort}, peerId: ${peerId}`,
+    `▶️ BSP container started with name: docker-sh-bsp-${bspNum + 1}, rpc port: ${rpcPort}, p2p port: ${p2pPort}, peerId: ${peerId}`
   );
 
   return { containerName, rpcPort, p2pPort, peerId };

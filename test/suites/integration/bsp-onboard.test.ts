@@ -7,7 +7,7 @@ import {
   createApiObject,
   DOCKER_IMAGE,
   NODE_INFOS,
-  runBspNet,
+  runBspNet
 } from "../../util";
 import Docker from "dockerode";
 import { strictEqual } from "node:assert";
@@ -30,7 +30,7 @@ describe("BSPNet: Adding new BSPs", () => {
     await it("is in a running container", async () => {
       const docker = new Docker();
       const {
-        State: { Status },
+        State: { Status }
       } = await docker.getContainer(containerName).inspect();
       strictEqual(Status, "running");
     });
@@ -51,10 +51,10 @@ describe("BSPNet: Adding new BSPs", () => {
 
       await it("is listening on the correct P2P port", async () => {
         const listenAddresses = (await newApi.rpc.system.localListenAddresses()).map((address) =>
-          address.toString(),
+          address.toString()
         );
         const matchingAddress = listenAddresses.filter((address) =>
-          address.includes(`/tcp/${p2pPort}/p2p/`),
+          address.includes(`/tcp/${p2pPort}/p2p/`)
         );
         strictEqual(matchingAddress.length > 1, true);
       });
@@ -76,7 +76,7 @@ describe("BSPNet: Adding new BSPs", () => {
     const docker = new Docker();
     const sh_nodes = (
       await docker.listContainers({
-        filters: { ancestor: [DOCKER_IMAGE] },
+        filters: { ancestor: [DOCKER_IMAGE] }
       })
     ).flatMap(({ Names }) => Names);
 

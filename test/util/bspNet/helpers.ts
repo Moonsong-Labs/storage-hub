@@ -23,21 +23,21 @@ export const sendFileSendRpc = async (
   api: ApiPromise,
   filePath: string,
   remotePath: string,
-  userNodeAccountId: string,
+  userNodeAccountId: string
 ): Promise<FileSendResponse> => {
   try {
     // @ts-expect-error - rpc provider not officially exposed
     const resp = await api._rpcCore.provider.send("filestorage_loadFileInStorage", [
       filePath,
       remotePath,
-      userNodeAccountId,
+      userNodeAccountId
     ]);
     const { owner, location, size, fingerprint } = resp;
     return {
       owner: u8aToHex(owner),
       location: u8aToHex(location),
       size: BigInt(size),
-      fingerprint: u8aToHex(fingerprint),
+      fingerprint: u8aToHex(fingerprint)
     };
   } catch (e) {
     console.error("Error sending file to user node:", e);
@@ -55,7 +55,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
     // TODO: Replace with dockerode command
     try {
       const { stdout } = await exec(
-        `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`,
+        `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerName}`
       );
       return stdout.trim();
     } catch {
@@ -73,7 +73,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
   console.log(
     `Error fetching container IP for ${containerName} after ${
       (maxRetries * sleepTime) / 1000
-    } seconds`,
+    } seconds`
   );
   showContainers();
   throw new Error("Error fetching container IP");
@@ -94,7 +94,7 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
     id: "1",
     jsonrpc: "2.0",
     method: "system_localPeerId",
-    params: [],
+    params: []
   };
 
   for (let i = 0; i < maxRetries; i++) {
@@ -104,9 +104,9 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -132,7 +132,7 @@ export const runBspNet = async () => {
       process.cwd(),
       "..",
       "docker",
-      "local-dev-bsp-compose.yml",
+      "local-dev-bsp-compose.yml"
     );
 
     await compose.upOne("sh-bsp", { config: composeFilePath, log: true });
@@ -152,8 +152,8 @@ export const runBspNet = async () => {
       env: {
         ...process.env,
         BSP_IP: bspIp,
-        BSP_PEER_ID: bspPeerId,
-      },
+        BSP_PEER_ID: bspPeerId
+      }
     });
 
     const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
@@ -179,9 +179,9 @@ export const runBspNet = async () => {
           DUMMY_BSP_ID,
           CAPACITY_512,
           [multiAddressBsp],
-          bsp.address,
-        ),
-      ),
+          bsp.address
+        )
+      )
     );
 
     // Make MSP
@@ -195,11 +195,11 @@ export const runBspNet = async () => {
           {
             identifier: VALUE_PROP,
             dataLimit: 500,
-            protocols: ["https", "ssh", "telnet"],
+            protocols: ["https", "ssh", "telnet"]
           },
-          alice.address,
-        ),
-      ),
+          alice.address
+        )
+      )
     );
   } catch (e) {
     console.error("Error ", e);
@@ -213,7 +213,7 @@ export const closeBspNet = async () => {
   const docker = new Docker();
 
   const existingNodes = await docker.listContainers({
-    filters: { ancestor: [DOCKER_IMAGE] },
+    filters: { ancestor: [DOCKER_IMAGE] }
   });
 
   const promises = existingNodes.map(async (node) => docker.getContainer(node.Id).stop());
@@ -236,7 +236,7 @@ export interface SealedBlock {
 export const sealBlock = async (
   api: ApiPromise,
   call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
-  signer?: KeyringPair,
+  signer?: KeyringPair
 ): Promise<SealedBlock> => {
   const initialHeight = (await api.rpc.chain.getHeader()).number.toNumber();
 
@@ -255,7 +255,7 @@ export const sealBlock = async (
 
   const sealedResults = {
     blockReceipt: await api.rpc.engine.createBlock(true, true),
-    txHash: results.hash?.toString(),
+    txHash: results.hash?.toString()
   };
 
   if (results.hash) {
@@ -268,7 +268,7 @@ export const sealBlock = async (
     const extIndex = getExtIndex(results.hash);
     const extEvents = allEvents.filter(
       ({ phase }) =>
-        phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex,
+        phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex
     );
     results.blockData = blockData;
     results.events = extEvents;
@@ -288,7 +288,7 @@ export const sealBlock = async (
 
   return Object.assign(sealedResults, {
     events: results.events,
-    extSuccess: results.success,
+    extSuccess: results.success
   }) satisfies SealedBlock;
 };
 

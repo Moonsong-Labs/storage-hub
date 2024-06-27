@@ -11,19 +11,19 @@ import type { EventRecord } from "@polkadot/types/interfaces";
 export const createApiObject = async (uri: string): Promise<BspNetApi> => {
   const baseApi = await ApiPromise.create({
     provider: new WsProvider(uri),
-    noInitWarn: true,
+    noInitWarn: true
   });
 
   return Object.assign(baseApi, {
     sealBlock: async (
       call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
-      signer?: KeyringPair,
+      signer?: KeyringPair
     ) => sealBlock(baseApi, call, signer),
 
     sendFile: async (localPath: string, remotePath: string, addressId: string) =>
       sendFileSendRpc(baseApi, localPath, remotePath, addressId),
 
     assertEvent: (module: string, method: string, events?: EventRecord[]) =>
-      assertEventPresent(baseApi, module, method, events),
+      assertEventPresent(baseApi, module, method, events)
   });
 };

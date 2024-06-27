@@ -18,7 +18,7 @@ export type BspNetApi = ApiPromise & {
    */
   sealBlock: (
     call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
-    signer?: KeyringPair,
+    signer?: KeyringPair
   ) => Promise<SealedBlock>;
 
   /**
@@ -43,7 +43,7 @@ export type BspNetApi = ApiPromise & {
   assertEvent: (
     module: string,
     method: string,
-    events?: EventRecord[],
+    events?: EventRecord[]
   ) => { event: Event; data: Codec[] & IEventData };
 
   /**

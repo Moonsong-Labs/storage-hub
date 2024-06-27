@@ -10,7 +10,7 @@ const fetchMetadata = async () => {
     id: "1",
     jsonrpc: "2.0",
     method: "state_getMetadata",
-    params: [],
+    params: []
   };
 
   for (let i = 0; i < maxRetries; i++) {
@@ -18,9 +18,9 @@ const fetchMetadata = async () => {
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -54,11 +54,11 @@ async function main() {
       "-f=../docker/local-node-compose.yml",
       "up",
       "--remove-orphans",
-      "--renew-anon-volumes",
+      "--renew-anon-volumes"
     ],
     {
-      stdio: "inherit",
-    },
+      stdio: "inherit"
+    }
   );
 
   const metadata = await fetchMetadata();

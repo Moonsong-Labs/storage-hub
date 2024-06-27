@@ -23,7 +23,7 @@ import type {
   u16,
   u32,
   u64,
-  u8,
+  u8
 } from "@polkadot/types-codec";
 import type { ITuple } from "@polkadot/types-codec/types";
 import type { AccountId32, Call, H256, MultiAddress } from "@polkadot/types/interfaces/runtime";
@@ -1385,7 +1385,7 @@ declare module "@polkadot/types/lookup" {
         XcmV2Junction,
         XcmV2Junction,
         XcmV2Junction,
-        XcmV2Junction,
+        XcmV2Junction
       ]
     >;
     readonly isX8: boolean;
@@ -1398,7 +1398,7 @@ declare module "@polkadot/types/lookup" {
         XcmV2Junction,
         XcmV2Junction,
         XcmV2Junction,
-        XcmV2Junction,
+        XcmV2Junction
       ]
     >;
     readonly type: "Here" | "X1" | "X2" | "X3" | "X4" | "X5" | "X6" | "X7" | "X8";
@@ -1588,7 +1588,7 @@ declare module "@polkadot/types/lookup" {
         XcmV3Junction,
         XcmV3Junction,
         XcmV3Junction,
-        XcmV3Junction,
+        XcmV3Junction
       ]
     >;
     readonly isX8: boolean;
@@ -1601,7 +1601,7 @@ declare module "@polkadot/types/lookup" {
         XcmV3Junction,
         XcmV3Junction,
         XcmV3Junction,
-        XcmV3Junction,
+        XcmV3Junction
       ]
     >;
     readonly type: "Here" | "X1" | "X2" | "X3" | "X4" | "X5" | "X6" | "X7" | "X8";

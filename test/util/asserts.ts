@@ -7,7 +7,7 @@ export const assertEventPresent = (
   api: ApiPromise,
   module: string,
   method: string,
-  events?: EventRecord[],
+  events?: EventRecord[]
 ) => {
   strictEqual(events && events.length > 0, true, "No events emitted in block");
   if (!events) {
@@ -33,7 +33,7 @@ type EventData<T extends AugmentedEvent<"promise">> = T extends AugmentedEvent<"
 
 export const fetchEventData = <T extends AugmentedEvent<"promise">>(
   matcher: T,
-  events?: EventRecord[],
+  events?: EventRecord[]
 ): EventData<T> => {
   strictEqual(events && events.length > 0, true, "No events emitted in block");
   if (!events) {

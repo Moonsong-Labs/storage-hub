@@ -30,8 +30,8 @@ export class DevTestContext implements AsyncDisposable {
       console.log("⏯️ 'keepOpen' is set to true, not disposing");
       console.log(
         `🏃 Container still running at: ws://${this.container.getHost()}:${this.container.getMappedPort(
-          9944,
-        )}`,
+          9944
+        )}`
       );
       return;
     }
@@ -102,7 +102,7 @@ export const devnodeSetup = async (options?: TestOptions): Promise<TestApis> => 
       "--no-telemetry",
       "--no-prometheus",
       "--unsafe-rpc-external",
-      "--sealing=manual",
+      "--sealing=manual"
     ])
     // replace with a health check
     .withWaitStrategy(Wait.forLogMessage("Development Service Ready"));
@@ -120,7 +120,7 @@ export const devnodeSetup = async (options?: TestOptions): Promise<TestApis> => 
   options?.keepOpen && console.log("Keep Node Open = true");
 
   const connectString = `ws://${runningContainer.getHost()}:${runningContainer.getMappedPort(
-    9944,
+    9944
   )}`;
   process.stdout.write(`Connecting APIs at ${connectString}... `);
   const connectedApi = await ApiPromise.create({
@@ -128,12 +128,12 @@ export const devnodeSetup = async (options?: TestOptions): Promise<TestApis> => 
     throwOnConnect: true,
     // noInitWarn: true,
     rpc: {},
-    provider: new WsProvider(connectString),
+    provider: new WsProvider(connectString)
   });
   process.stdout.write("✅\n");
 
   const extendedApi = Object.assign(connectedApi, {
-    createBlock: () => createBlock(connectedApi),
+    createBlock: () => createBlock(connectedApi)
   });
 
   return { extendedApi, runningContainer };

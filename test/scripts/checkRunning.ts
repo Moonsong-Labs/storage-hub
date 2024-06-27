@@ -15,8 +15,8 @@ async function main() {
       name: "proceed",
       default: false,
       message:
-        "⚠️ Local StorageHub nodes are already running on this machine.\n Are you sure you would like to proceed (may give inconsistent behaviour)?",
-    },
+        "⚠️ Local StorageHub nodes are already running on this machine.\n Are you sure you would like to proceed (may give inconsistent behaviour)?"
+    }
   ]);
 
   if (!proceed) {

@@ -13,7 +13,7 @@ import {
   checkFileChecksum,
   type BspNetApi,
   cleardownTest,
-  sleep,
+  sleep
 } from "../../util";
 import { hexToString } from "@polkadot/util";
 
@@ -45,7 +45,7 @@ describe("BSPNet: BSP Volunteer", () => {
     const { fingerprint, size, location } = await api.sendFile(
       source,
       destination,
-      NODE_INFOS.user.AddressId,
+      NODE_INFOS.user.AddressId
     );
 
     strictEqual(hexToString(location), destination);
@@ -59,14 +59,14 @@ describe("BSPNet: BSP Volunteer", () => {
     const { fingerprint, size, location } = await api.sendFile(
       source,
       destination,
-      NODE_INFOS.user.AddressId,
+      NODE_INFOS.user.AddressId
     );
 
     const result = await api.sealBlock(
       api.tx.fileSystem.issueStorageRequest(location, fingerprint, size, DUMMY_MSP_ID, [
-        NODE_INFOS.user.expectedPeerId,
+        NODE_INFOS.user.expectedPeerId
       ]),
-      shUser,
+      shUser
     );
     await sleep(500); // wait for the bsp to volunteer
 
@@ -92,14 +92,14 @@ describe("BSPNet: BSP Volunteer", () => {
     const { fingerprint, size, location } = await api.sendFile(
       source,
       destination,
-      NODE_INFOS.user.AddressId,
+      NODE_INFOS.user.AddressId
     );
 
     await api.sealBlock(
       api.tx.fileSystem.issueStorageRequest(location, fingerprint, size, DUMMY_MSP_ID, [
-        NODE_INFOS.user.expectedPeerId,
+        NODE_INFOS.user.expectedPeerId
       ]),
-      shUser,
+      shUser
     );
 
     await sleep(500); // wait for the bsp to volunteer
@@ -109,7 +109,7 @@ describe("BSPNet: BSP Volunteer", () => {
     await api.sealBlock();
     const [resBspId, resLoc, resFinger, resMulti, _, resSize] = fetchEventData(
       api.events.fileSystem.AcceptedBspVolunteer,
-      await api.query.system.events(),
+      await api.query.system.events()
     );
 
     strictEqual(resBspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);

@@ -14,7 +14,7 @@ import type {
   FrameSystemLimitsBlockWeights,
   SpVersionRuntimeVersion,
   SpWeightsRuntimeDbWeight,
-  SpWeightsWeightV2Weight,
+  SpWeightsWeightV2Weight
 } from "@polkadot/types/lookup";
 
 export type __AugmentedConst<ApiType extends ApiTypes> = AugmentedConst<ApiType>;

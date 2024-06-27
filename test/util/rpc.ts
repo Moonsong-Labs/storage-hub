@@ -6,7 +6,7 @@ export const sendCustomRpc = async (url: string, method: string, params = [], ve
     id: "1",
     jsonrpc: "2.0",
     method,
-    params,
+    params
   };
 
   for (let i = 0; i < maxRetries; i++) {
@@ -16,9 +16,9 @@ export const sendCustomRpc = async (url: string, method: string, params = [], ve
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -34,7 +34,7 @@ export const sendCustomRpc = async (url: string, method: string, params = [], ve
   console.log(
     `Error fetching ${method} / ${params} from ${url} after ${
       (maxRetries * sleepTime) / 1000
-    } seconds`,
+    } seconds`
   );
   throw new Error(`Error sending custom RPC to ${url}`);
 };
