@@ -10,18 +10,26 @@ import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import * as util from "node:util";
 import * as child_process from "node:child_process";
-import type { CreatedBlock, EventRecord, Hash, SignedBlock } from "@polkadot/types/interfaces";
+import type {
+  CreatedBlock,
+  EventRecord,
+  H256,
+  Hash,
+  SignedBlock,
+} from "@polkadot/types/interfaces";
 import { execSync } from "node:child_process";
 import { showContainers } from "./docker";
 import { isExtSuccess } from "../extrinsics";
 import type { BspNetApi } from "./types";
+import { assertEventPresent } from "../asserts.ts";
 const exec = util.promisify(child_process.exec);
 
 export const sendFileSendRpc = async (
   api: ApiPromise,
   filePath: string,
   remotePath: string,
-  userNodeAccountId: string
+  userNodeAccountId: string,
+  bucket: H256
 ): Promise<FileSendResponse> => {
   try {
     // @ts-expect-error - rpc provider not officially exposed
@@ -29,10 +37,12 @@ export const sendFileSendRpc = async (
       filePath,
       remotePath,
       userNodeAccountId,
+      bucket,
     ]);
-    const { owner, location, size, fingerprint } = resp;
+    const { owner, bucket_id, location, size, fingerprint } = resp;
     return {
       owner: u8aToHex(owner),
+      bucket_id,
       location: u8aToHex(location),
       size: BigInt(size),
       fingerprint: u8aToHex(fingerprint),
@@ -79,6 +89,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
 
 export interface FileSendResponse {
   owner: string;
+  bucket_id: string;
   location: string;
   size: bigint;
   fingerprint: string;
@@ -199,6 +210,13 @@ export const runBspNet = async () => {
         )
       )
     );
+
+    // u128 max value
+    const u128Max = (BigInt(1) << BigInt(128)) - BigInt(1);
+
+    await api.sealBlock(
+      api.tx.sudo.sudo(api.tx.fileSystem.forceUpdateBspsAssignmentThreshold(u128Max))
+    );
   } catch (e) {
     console.error("Error ", e);
   } finally {
@@ -287,6 +305,17 @@ export const sealBlock = async (
     events: results.events,
     extSuccess: results.success,
   }) satisfies SealedBlock;
+};
+
+export const createBucket = async (api: ApiPromise, bucketName: string) => {
+  const createBucketResult = await sealBlock(
+    api,
+    api.tx.fileSystem.createBucket(DUMMY_MSP_ID, bucketName, false),
+    shUser
+  );
+  const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
+
+  return event;
 };
 
 export const cleardownTest = async (api: BspNetApi) => {
