@@ -18,8 +18,8 @@ use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface, TrieRemove
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
-    traits::{BlakeTwo256, Get, Zero},
-    BoundedVec, FixedU128,
+    traits::{BlakeTwo256, Get, One, Zero},
+    BoundedVec, DispatchError, FixedU128,
 };
 
 mod create_bucket_tests {
@@ -2130,6 +2130,59 @@ fn subscribe_bsp_sign_off_increases_threshold_success() {
             "Threshold should increase after BSP sign off"
         );
     });
+}
+
+mod force_bsps_assignment_threshold_tests {
+    use super::*;
+
+    #[test]
+    fn force_bsps_assignment_threshold_non_root_signer_fail() {
+        new_test_ext().execute_with(|| {
+            let non_root = Keyring::Bob.to_account_id();
+            let non_root_signed = RuntimeOrigin::signed(non_root.clone());
+
+            // Assert BadOrigin error when non-root account tries to set the threshold
+            assert_noop!(
+                FileSystem::force_update_bsps_assignment_threshold(
+                    non_root_signed,
+                    FixedU128::zero()
+                ),
+                DispatchError::BadOrigin
+            );
+        });
+    }
+
+    #[test]
+    fn force_bsps_assignment_threshold_below_asymptote_fail() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                FileSystem::force_update_bsps_assignment_threshold(
+                    RuntimeOrigin::root(),
+                    <Test as Config>::AssignmentThresholdAsymptote::get() - FixedU128::one()
+                ),
+                Error::<Test>::ThresholdBelowAsymptote
+            );
+        });
+    }
+
+    #[test]
+    fn force_bsps_assignment_threshold_above_asymptote_success() {
+        new_test_ext().execute_with(|| {
+            let new_threshold = <Test as crate::Config>::AssignmentThresholdAsymptote::get();
+
+            FileSystem::force_update_bsps_assignment_threshold(
+                RuntimeOrigin::root(),
+                new_threshold,
+            )
+            .expect("Threshold should be set successfully");
+
+            // Verify that the threshold increased
+            assert!(
+                FileSystem::bsps_assignment_threshold() == new_threshold,
+                "Threshold should be set to one"
+            );
+        });
+    }
 }
 
 #[test]
