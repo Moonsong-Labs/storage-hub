@@ -321,7 +321,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: Bytes | string | Uint8Array,
-          arg2: H256 | string | Uint8Array
+          arg2: H256 | string | Uint8Array,
         ) => Observable<Option<PalletFileSystemStorageRequestBspsMetadata>>,
         [Bytes, H256]
       > &
@@ -338,7 +338,7 @@ declare module "@polkadot/api-base/types/storage" {
       storageRequests: AugmentedQuery<
         ApiType,
         (
-          arg: Bytes | string | Uint8Array
+          arg: Bytes | string | Uint8Array,
         ) => Observable<Option<PalletFileSystemStorageRequestMetadata>>,
         [Bytes]
       > &
@@ -361,7 +361,7 @@ declare module "@polkadot/api-base/types/storage" {
             | { Parent: any }
             | { Sibling: any }
             | string
-            | Uint8Array
+            | Uint8Array,
         ) => Observable<PalletMessageQueueBookState>,
         [CumulusPrimitivesCoreAggregateMessageOrigin]
       > &
@@ -379,7 +379,7 @@ declare module "@polkadot/api-base/types/storage" {
             | { Sibling: any }
             | string
             | Uint8Array,
-          arg2: u32 | AnyNumber | Uint8Array
+          arg2: u32 | AnyNumber | Uint8Array,
         ) => Observable<Option<PalletMessageQueuePage>>,
         [CumulusPrimitivesCoreAggregateMessageOrigin, u32]
       > &
@@ -408,7 +408,7 @@ declare module "@polkadot/api-base/types/storage" {
         (
           arg1: AccountId32 | string | Uint8Array,
           arg2: u32 | AnyNumber | Uint8Array,
-          arg3: u32 | AnyNumber | Uint8Array
+          arg3: u32 | AnyNumber | Uint8Array,
         ) => Observable<Option<Null>>,
         [AccountId32, u32, u32]
       > &
@@ -429,7 +429,7 @@ declare module "@polkadot/api-base/types/storage" {
             | { Account: any }
             | string
             | Uint8Array,
-          arg4: Bytes | string | Uint8Array
+          arg4: Bytes | string | Uint8Array,
         ) => Observable<Option<ITuple<[Bytes, PalletNftsAttributeDeposit]>>>,
         [u32, Option<u32>, PalletNftsAttributeNamespace, Bytes]
       > &
@@ -451,7 +451,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: AccountId32 | string | Uint8Array,
-          arg2: u32 | AnyNumber | Uint8Array
+          arg2: u32 | AnyNumber | Uint8Array,
         ) => Observable<Option<Null>>,
         [AccountId32, u32]
       > &
@@ -482,7 +482,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: u32 | AnyNumber | Uint8Array,
-          arg2: AccountId32 | string | Uint8Array
+          arg2: AccountId32 | string | Uint8Array,
         ) => Observable<Option<u8>>,
         [u32, AccountId32]
       > &
@@ -494,7 +494,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: u32 | AnyNumber | Uint8Array,
-          arg2: u32 | AnyNumber | Uint8Array
+          arg2: u32 | AnyNumber | Uint8Array,
         ) => Observable<Option<PalletNftsItemDetails>>,
         [u32, u32]
       > &
@@ -506,7 +506,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: u32 | AnyNumber | Uint8Array,
-          arg2: u32 | AnyNumber | Uint8Array
+          arg2: u32 | AnyNumber | Uint8Array,
         ) => Observable<BTreeSet<AccountId32>>,
         [u32, u32]
       > &
@@ -518,7 +518,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: u32 | AnyNumber | Uint8Array,
-          arg2: u32 | AnyNumber | Uint8Array
+          arg2: u32 | AnyNumber | Uint8Array,
         ) => Observable<Option<PalletNftsItemConfig>>,
         [u32, u32]
       > &
@@ -530,7 +530,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: u32 | AnyNumber | Uint8Array,
-          arg2: u32 | AnyNumber | Uint8Array
+          arg2: u32 | AnyNumber | Uint8Array,
         ) => Observable<Option<PalletNftsItemMetadata>>,
         [u32, u32]
       > &
@@ -542,7 +542,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: u32 | AnyNumber | Uint8Array,
-          arg2: u32 | AnyNumber | Uint8Array
+          arg2: u32 | AnyNumber | Uint8Array,
         ) => Observable<Option<ITuple<[u128, Option<AccountId32>]>>>,
         [u32, u32]
       > &
@@ -569,7 +569,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: u32 | AnyNumber | Uint8Array,
-          arg2: u32 | AnyNumber | Uint8Array
+          arg2: u32 | AnyNumber | Uint8Array,
         ) => Observable<Option<PalletNftsPendingSwap>>,
         [u32, u32]
       > &
@@ -837,7 +837,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: H256 | string | Uint8Array,
-          arg2: AccountId32 | string | Uint8Array
+          arg2: AccountId32 | string | Uint8Array,
         ) => Observable<Option<PalletPaymentStreamsDynamicRatePaymentStream>>,
         [H256, AccountId32]
       > &
@@ -858,7 +858,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: H256 | string | Uint8Array,
-          arg2: AccountId32 | string | Uint8Array
+          arg2: AccountId32 | string | Uint8Array,
         ) => Observable<Option<PalletPaymentStreamsFixedRatePaymentStream>>,
         [H256, AccountId32]
       > &
@@ -930,7 +930,7 @@ declare module "@polkadot/api-base/types/storage" {
       lockedFungibles: AugmentedQuery<
         ApiType,
         (
-          arg: AccountId32 | string | Uint8Array
+          arg: AccountId32 | string | Uint8Array,
         ) => Observable<Option<Vec<ITuple<[u128, XcmVersionedLocation]>>>>,
         [AccountId32]
       > &
@@ -957,7 +957,7 @@ declare module "@polkadot/api-base/types/storage" {
         (
           arg1: u32 | AnyNumber | Uint8Array,
           arg2: AccountId32 | string | Uint8Array,
-          arg3: XcmVersionedAssetId | { V3: any } | { V4: any } | string | Uint8Array
+          arg3: XcmVersionedAssetId | { V3: any } | { V4: any } | string | Uint8Array,
         ) => Observable<Option<PalletXcmRemoteLockedFungibleRecord>>,
         [u32, AccountId32, XcmVersionedAssetId]
       > &
@@ -975,7 +975,13 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: u32 | AnyNumber | Uint8Array,
-          arg2: XcmVersionedLocation | { V2: any } | { V3: any } | { V4: any } | string | Uint8Array
+          arg2:
+            | XcmVersionedLocation
+            | { V2: any }
+            | { V3: any }
+            | { V4: any }
+            | string
+            | Uint8Array,
         ) => Observable<Option<u32>>,
         [u32, XcmVersionedLocation]
       > &
@@ -998,7 +1004,13 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: u32 | AnyNumber | Uint8Array,
-          arg2: XcmVersionedLocation | { V2: any } | { V3: any } | { V4: any } | string | Uint8Array
+          arg2:
+            | XcmVersionedLocation
+            | { V2: any }
+            | { V3: any }
+            | { V4: any }
+            | string
+            | Uint8Array,
         ) => Observable<Option<u64>>,
         [u32, XcmVersionedLocation]
       > &
@@ -1011,7 +1023,13 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: u32 | AnyNumber | Uint8Array,
-          arg2: XcmVersionedLocation | { V2: any } | { V3: any } | { V4: any } | string | Uint8Array
+          arg2:
+            | XcmVersionedLocation
+            | { V2: any }
+            | { V3: any }
+            | { V4: any }
+            | string
+            | Uint8Array,
         ) => Observable<Option<ITuple<[u64, SpWeightsWeightV2Weight, u32]>>>,
         [u32, XcmVersionedLocation]
       > &
@@ -1164,7 +1182,7 @@ declare module "@polkadot/api-base/types/storage" {
       backupStorageProviders: AugmentedQuery<
         ApiType,
         (
-          arg: H256 | string | Uint8Array
+          arg: H256 | string | Uint8Array,
         ) => Observable<Option<PalletStorageProvidersBackupStorageProvider>>,
         [H256]
       > &
@@ -1212,7 +1230,7 @@ declare module "@polkadot/api-base/types/storage" {
       mainStorageProviders: AugmentedQuery<
         ApiType,
         (
-          arg: H256 | string | Uint8Array
+          arg: H256 | string | Uint8Array,
         ) => Observable<Option<PalletStorageProvidersMainStorageProvider>>,
         [H256]
       > &
@@ -1243,7 +1261,7 @@ declare module "@polkadot/api-base/types/storage" {
       signUpRequests: AugmentedQuery<
         ApiType,
         (
-          arg: AccountId32 | string | Uint8Array
+          arg: AccountId32 | string | Uint8Array,
         ) => Observable<Option<ITuple<[PalletStorageProvidersStorageProvider, u32]>>>,
         [AccountId32]
       > &
@@ -1322,7 +1340,7 @@ declare module "@polkadot/api-base/types/storage" {
         (
           arg:
             | ITuple<[SpCoreCryptoKeyTypeId, Bytes]>
-            | [SpCoreCryptoKeyTypeId | string | Uint8Array, Bytes | string | Uint8Array]
+            | [SpCoreCryptoKeyTypeId | string | Uint8Array, Bytes | string | Uint8Array],
         ) => Observable<Option<AccountId32>>,
         [ITuple<[SpCoreCryptoKeyTypeId, Bytes]>]
       > &
@@ -1333,7 +1351,7 @@ declare module "@polkadot/api-base/types/storage" {
       nextKeys: AugmentedQuery<
         ApiType,
         (
-          arg: AccountId32 | string | Uint8Array
+          arg: AccountId32 | string | Uint8Array,
         ) => Observable<Option<StorageHubRuntimeSessionKeys>>,
         [AccountId32]
       > &
@@ -1576,7 +1594,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: u32 | AnyNumber | Uint8Array,
-          arg2: u16 | AnyNumber | Uint8Array
+          arg2: u16 | AnyNumber | Uint8Array,
         ) => Observable<Bytes>,
         [u32, u16]
       > &

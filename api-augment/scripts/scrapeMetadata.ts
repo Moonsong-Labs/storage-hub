@@ -58,7 +58,7 @@ async function main() {
     ],
     {
       stdio: "inherit",
-    }
+    },
   );
 
   const metadata = await fetchMetadata();
