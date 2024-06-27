@@ -1,10 +1,6 @@
 import "@polkadot/api-augment/kusama";
 import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
-import type { SubmittableExtrinsic } from "@polkadot/api/types";
-import type { ISubmittableResult } from "@polkadot/types/types";
-import type { KeyringPair } from "@polkadot/keyring/types";
-import { alice } from "./pjsKeyring";
 
 export type ZombieClients = Promise<{
   [Symbol.asyncDispose]: () => Promise<void>;
@@ -104,43 +100,4 @@ export const waitForRandomness = async (api: ApiPromise, timeoutMs = 60_000) => 
     process.stdout.write("❌\n");
     console.error("An error occurred:", error);
   }
-};
-
-export const sendTransaction = async (
-  call: SubmittableExtrinsic<"promise", ISubmittableResult>,
-  options?: { nonce?: number; signer?: KeyringPair }
-) => {
-  return new Promise(async (resolve, reject) => {
-    const unsub = await call.signAndSend(
-      options?.signer || alice,
-      { nonce: options?.nonce || -1 },
-      (result) => {
-        switch (result.status.type) {
-          case "Finalized": {
-            unsub();
-            resolve(result);
-            break;
-          }
-
-          case "Dropped": {
-            unsub();
-            reject("Transaction dropped");
-            break;
-          }
-
-          // case "Invalid": {
-          //   unsub()
-          //   reject("Invalid transaction")
-          //   break
-          // }
-
-          case "Usurped": {
-            unsub();
-            reject("Transaction was usurped");
-            break;
-          }
-        }
-      }
-    );
-  });
 };

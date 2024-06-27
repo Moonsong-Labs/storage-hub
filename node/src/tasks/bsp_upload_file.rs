@@ -3,10 +3,11 @@ use std::{fs::create_dir_all, path::Path, str::FromStr, time::Duration};
 use anyhow::anyhow;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
+use shp_file_key_verifier::consts::H_LENGTH;
 use shp_file_key_verifier::types::ChunkId;
+use sp_core::H256;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
-use storage_hub_runtime::H_LENGTH;
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use shc_actors_framework::event_bus::EventHandler;
@@ -238,12 +239,6 @@ where
     where
         HasherOutT<T>: TryFrom<[u8; 32]>,
     {
-        let fingerprint: [u8; 32] = event
-            .fingerprint
-            .as_ref()
-            .try_into()
-            .expect("Fingerprint should be 32 bytes; qed");
-
         // Construct file metadata.
         let metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
@@ -281,14 +276,13 @@ where
                 .file_transfer
                 .register_new_file_peer(peer_id, file_key)
                 .await
-                .map_err(|_| anyhow!("Failed to register peer file."))?;
+                .map_err(|e| anyhow!("Failed to register new file peer: {:?}", e))?;
         }
 
         // Build extrinsic.
         let call =
             storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
-                location: event.location.clone(),
-                fingerprint: fingerprint.into(),
+                file_key: H256(file_key.into()),
             });
 
         // Send extrinsic and wait for it to be included in the block.
@@ -372,7 +366,12 @@ where
             String::from_utf8(metadata.location.clone())
                 .expect("File location should be an utf8 string"),
         );
-        info!("Saving file to: {:?}", file_path);
+        dbg!(
+            "Current dir: {}",
+            std::env::current_dir().unwrap().display()
+        );
+        info!("Intended file path: {:?}", file_path);
+
         create_dir_all(&file_path.parent().unwrap()).expect("Failed to create directory");
         let mut file = File::create(file_path)
             .await

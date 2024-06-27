@@ -5,13 +5,16 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
-use shp_traits::{ProofsDealerInterface, SubscribeProvidersInterface};
+use shp_traits::{
+    ProofsDealerInterface, SubscribeProvidersInterface, TrieMutation, TrieRemoveMutation,
+};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, IdentifyAccount, IdentityLookup, Verify},
     BuildStorage, DispatchResult, FixedU128, MultiSignature, SaturatedConversion,
 };
+use sp_std::collections::btree_set::BTreeSet;
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -131,6 +134,7 @@ impl ProofsDealerInterface for MockProofsDealer {
 
     fn challenge_with_priority(
         _key_challenged: &Self::MerkleHash,
+        _mutation: Option<TrieRemoveMutation>,
     ) -> frame_support::dispatch::DispatchResult {
         Ok(())
     }
@@ -139,16 +143,24 @@ impl ProofsDealerInterface for MockProofsDealer {
         _who: &Self::ProviderId,
         _challenges: &[Self::MerkleHash],
         _proof: &Self::ForestProof,
-    ) -> Result<Vec<Self::MerkleHash>, sp_runtime::DispatchError> {
-        Ok(vec![])
+    ) -> Result<BTreeSet<Self::MerkleHash>, sp_runtime::DispatchError> {
+        Ok(BTreeSet::new())
     }
 
     fn verify_key_proof(
         _key: &Self::MerkleHash,
         _challenges: &[Self::MerkleHash],
         _proof: &Self::KeyProof,
-    ) -> Result<Vec<Self::MerkleHash>, sp_runtime::DispatchError> {
-        Ok(vec![])
+    ) -> Result<BTreeSet<Self::MerkleHash>, sp_runtime::DispatchError> {
+        Ok(BTreeSet::new())
+    }
+
+    fn apply_delta(
+        _commitment: &Self::MerkleHash,
+        _mutations: &[(Self::MerkleHash, TrieMutation)],
+        _proof: &Self::ForestProof,
+    ) -> Result<Self::MerkleHash, sp_runtime::DispatchError> {
+        Ok(H256::default())
     }
 }
 

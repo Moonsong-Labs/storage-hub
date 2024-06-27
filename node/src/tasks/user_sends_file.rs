@@ -70,6 +70,9 @@ where
             event.location,
         );
 
+        // TODO: FIND A BETTER WORKAROUND FOR THIS
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
         let file_metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),
             size: event.size.into(),
