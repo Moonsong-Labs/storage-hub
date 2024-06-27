@@ -35,17 +35,28 @@ describe("BSPNet: BSP Volunteer", () => {
 
     const bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
     const bspNodePeerId = await bspApi.rpc.system.localPeerId();
-    bspApi.disconnect();
+    await bspApi.disconnect();
     strictEqual(bspNodePeerId.toString(), NODE_INFOS.bsp.expectedPeerId);
   });
 
   it("file is finger printed correctly", async () => {
     const source = "res/adolphus.jpg";
     const destination = "test/adolphus.jpg";
+    const bucketName = "nothingmuch-0";
+
+    const newBucketEventEvent = await api.createBucket(bucketName);
+    const newBucketEventDataBlob =
+      api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+
+    if (!newBucketEventDataBlob) {
+      throw new Error("Event doesn't match Type");
+    }
+
     const { fingerprint, size, location } = await api.sendFile(
       source,
       destination,
-      NODE_INFOS.user.AddressId
+      NODE_INFOS.user.AddressId,
+      newBucketEventDataBlob.bucketId
     );
 
     strictEqual(hexToString(location), destination);
@@ -56,21 +67,41 @@ describe("BSPNet: BSP Volunteer", () => {
   it("issueStorageRequest sent correctly", async () => {
     const source = "res/smile.jpg";
     const destination = "test/smile.jpg";
+    const bucketName = "nothingmuch-1";
+
+    const newBucketEventEvent = await api.createBucket(bucketName);
+    const newBucketEventDataBlob =
+      api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+
+    if (!newBucketEventDataBlob) {
+      throw new Error("Event doesn't match Type");
+    }
+
     const { fingerprint, size, location } = await api.sendFile(
       source,
       destination,
-      NODE_INFOS.user.AddressId
+      NODE_INFOS.user.AddressId,
+      newBucketEventDataBlob.bucketId
     );
 
-    const result = await api.sealBlock(
-      api.tx.fileSystem.issueStorageRequest(location, fingerprint, size, DUMMY_MSP_ID, [
-        NODE_INFOS.user.expectedPeerId,
-      ]),
+    const issueStorageRequestResult = await api.sealBlock(
+      api.tx.fileSystem.issueStorageRequest(
+        newBucketEventDataBlob.bucketId,
+        location,
+        fingerprint,
+        size,
+        DUMMY_MSP_ID,
+        [NODE_INFOS.user.expectedPeerId]
+      ),
       shUser
     );
     await sleep(500); // wait for the bsp to volunteer
 
-    const { event } = api.assertEvent("fileSystem", "NewStorageRequest", result.events);
+    const { event } = api.assertEvent(
+      "fileSystem",
+      "NewStorageRequest",
+      issueStorageRequestResult.events
+    );
 
     const dataBlob = api.events.fileSystem.NewStorageRequest.is(event) && event.data;
 
@@ -89,16 +120,32 @@ describe("BSPNet: BSP Volunteer", () => {
   it("bsp volunteers when issueStorageRequest sent", async () => {
     const source = "res/whatsup.jpg";
     const destination = "test/whatsup.jpg";
+    const bucketName = "nothingmuch-2";
+
+    const newBucketEventEvent = await api.createBucket(bucketName);
+    const newBucketEventDataBlob =
+      api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+
+    if (!newBucketEventDataBlob) {
+      throw new Error("Event doesn't match Type");
+    }
+
     const { fingerprint, size, location } = await api.sendFile(
       source,
       destination,
-      NODE_INFOS.user.AddressId
+      NODE_INFOS.user.AddressId,
+      newBucketEventDataBlob.bucketId
     );
 
     await api.sealBlock(
-      api.tx.fileSystem.issueStorageRequest(location, fingerprint, size, DUMMY_MSP_ID, [
-        NODE_INFOS.user.expectedPeerId,
-      ]),
+      api.tx.fileSystem.issueStorageRequest(
+        newBucketEventDataBlob.bucketId,
+        location,
+        fingerprint,
+        size,
+        DUMMY_MSP_ID,
+        [NODE_INFOS.user.expectedPeerId]
+      ),
       shUser
     );
 
@@ -107,12 +154,13 @@ describe("BSPNet: BSP Volunteer", () => {
     strictEqual(pending.length, 1, "There should be one pending extrinsic from BSP");
 
     await api.sealBlock();
-    const [resBspId, resLoc, resFinger, resMulti, _, resSize] = fetchEventData(
+    const [resBspId, resBucketId, resLoc, resFinger, resMulti, _, resSize] = fetchEventData(
       api.events.fileSystem.AcceptedBspVolunteer,
       await api.query.system.events()
     );
 
     strictEqual(resBspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
+    strictEqual(resBucketId.toString(), newBucketEventDataBlob.bucketId.toString());
     strictEqual(resLoc.toHuman(), destination);
     strictEqual(resFinger.toString(), fingerprint);
     strictEqual(resMulti.length, 1);
