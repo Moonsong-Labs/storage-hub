@@ -265,15 +265,15 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
 {
     pub fn new(
         owner: Vec<u8>,
-        location: Vec<u8>,
         bucket_id: Vec<u8>,
+        location: Vec<u8>,
         size: u64,
         fingerprint: Fingerprint<H_LENGTH>,
     ) -> Self {
         Self {
             owner,
-            location,
             bucket_id,
+            location,
             size,
             fingerprint,
         }
