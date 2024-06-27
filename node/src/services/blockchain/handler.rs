@@ -424,6 +424,7 @@ impl BlockchainService {
                             pallet_file_system::Event::NewStorageRequest {
                                 who,
                                 file_key,
+                                bucket_id,
                                 location,
                                 fingerprint,
                                 size,
@@ -432,6 +433,7 @@ impl BlockchainService {
                         ) => self.emit(NewStorageRequest {
                             who,
                             file_key: FileKey::from(file_key.as_ref()),
+                            bucket_id,
                             location,
                             fingerprint: fingerprint.as_ref().into(),
                             size,
@@ -441,6 +443,7 @@ impl BlockchainService {
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::AcceptedBspVolunteer {
                                 bsp_id,
+                                bucket_id,
                                 location,
                                 fingerprint,
                                 multiaddresses,
@@ -475,6 +478,7 @@ impl BlockchainService {
 
                             self.emit(AcceptedBspVolunteer {
                                 bsp_id,
+                                bucket_id,
                                 location,
                                 fingerprint,
                                 multiaddresses: multiaddress_vec,

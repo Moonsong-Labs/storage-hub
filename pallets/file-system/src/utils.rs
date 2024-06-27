@@ -17,13 +17,14 @@ use shp_traits::{
     MutateProvidersInterface, ReadProvidersInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
+use crate::types::BucketNameFor;
 use crate::{
     pallet,
     types::{
-        BucketIdFor, BucketNameLimitFor, CollectionConfigFor, CollectionIdFor, FileKeyHasher,
-        FileLocation, Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest, MerkleHash,
-        MultiAddresses, PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, TargetBspsRequired,
+        BucketIdFor, CollectionConfigFor, CollectionIdFor, FileKeyHasher, FileLocation,
+        Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest, MerkleHash, MultiAddresses,
+        PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        TargetBspsRequired,
     },
     BspsAssignmentThreshold, Error, NextAvailableExpirationInsertionBlock, Pallet,
     StorageRequestBsps, StorageRequestExpirations, StorageRequests,
@@ -131,7 +132,7 @@ where
     pub(crate) fn do_create_bucket(
         sender: T::AccountId,
         msp_id: ProviderIdFor<T>,
-        name: BoundedVec<u8, BucketNameLimitFor<T>>,
+        name: BucketNameFor<T>,
         private: bool,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
         // TODO: Hold user funds for the bucket creation.
@@ -237,6 +238,7 @@ where
     /// transaction to the chain to add themselves as a data server for the storage request.
     pub(crate) fn do_request_storage(
         sender: T::AccountId,
+        bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
@@ -256,6 +258,12 @@ where
             );
         }
 
+        // Check that bucket exists and that the sender is the owner of the bucket.
+        ensure!(
+            <T::Providers as ReadProvidersInterface>::is_bucket_owner(&sender, &bucket_id)?,
+            Error::<T>::NotBucketOwner
+        );
+
         let bsps_required = bsps_required.unwrap_or(TargetBspsRequired::<T>::get());
 
         if bsps_required.is_zero() {
@@ -269,6 +277,7 @@ where
         let storage_request_metadata = StorageRequestMetadata::<T> {
             requested_at: <frame_system::Pallet<T>>::block_number(),
             owner: sender.clone(),
+            bucket_id,
             location: location.clone(),
             fingerprint,
             size,
@@ -281,7 +290,13 @@ where
         };
 
         // Compute the file key used throughout this file's lifespan.
-        let file_key = Self::compute_file_key(sender.clone(), location.clone(), size, fingerprint);
+        let file_key = Self::compute_file_key(
+            sender.clone(),
+            bucket_id,
+            location.clone(),
+            size,
+            fingerprint,
+        );
 
         // Check a storage request does not already exist for this file key.
         ensure!(
@@ -686,6 +701,7 @@ where
     pub(crate) fn do_bsp_stop_storing(
         sender: T::AccountId,
         file_key: MerkleHash<T>,
+        bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,
         owner: T::AccountId,
         fingerprint: Fingerprint<T>,
@@ -706,8 +722,13 @@ where
         // TODO: charge SP for this action.
 
         // Compute the file key hash.
-        let computed_file_key =
-            Self::compute_file_key(owner.clone(), location.clone(), size, fingerprint);
+        let computed_file_key = Self::compute_file_key(
+            owner.clone(),
+            bucket_id,
+            location.clone(),
+            size,
+            fingerprint,
+        );
 
         // Check that the metadata corresponds to the expected file key.
         ensure!(
@@ -755,6 +776,7 @@ where
             None => {
                 Self::do_request_storage(
                     owner,
+                    bucket_id,
                     location.clone(),
                     fingerprint,
                     size,
@@ -875,6 +897,7 @@ where
 
     pub(crate) fn compute_file_key(
         owner: T::AccountId,
+        bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,
         size: StorageData<T>,
         fingerprint: Fingerprint<T>,
@@ -887,6 +910,7 @@ where
             { shp_file_key_verifier::consts::FILE_SIZE_TO_CHALLENGES },
         > {
             owner: owner.encode(),
+            bucket_id: bucket_id.as_ref().to_vec(),
             location: location.clone().to_vec(),
             size: size.into(),
             fingerprint: fingerprint.as_ref().into(),

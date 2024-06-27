@@ -237,6 +237,7 @@ where
         // Construct file metadata.
         let metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            bucket_id: event.bucket_id.as_ref().to_vec(),
             size: event.size as u64,
             fingerprint: event.fingerprint,
             location: event.location.to_vec(),

@@ -7,6 +7,7 @@ use sp_runtime::AccountId32;
 type StorageData = pallet_file_system::types::StorageData<storage_hub_runtime::Runtime>;
 type FileLocation = pallet_file_system::types::FileLocation<storage_hub_runtime::Runtime>;
 type PeerIds = pallet_file_system::types::PeerIds<storage_hub_runtime::Runtime>;
+type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<storage_hub_runtime::Runtime>;
 
 // TODO: use proper types
 #[derive(Clone)]
@@ -25,6 +26,8 @@ pub struct NewStorageRequest {
     pub who: AccountId32,
     /// Computed file key for the file.
     pub file_key: FileKey,
+    /// Bucket ID of the file.
+    pub bucket_id: BucketId,
     /// Location of the file (as a file path).
     pub location: FileLocation,
     /// Fingerprint of the file (root hash of the merkelized file).
@@ -41,6 +44,7 @@ impl EventBusMessage for NewStorageRequest {}
 #[derive(Debug, Clone)]
 pub struct AcceptedBspVolunteer {
     pub bsp_id: H256,
+    pub bucket_id: BucketId,
     pub location: FileLocation,
     pub fingerprint: Fingerprint,
     pub multiaddresses: Vec<Multiaddr>,

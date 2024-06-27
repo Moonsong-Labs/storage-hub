@@ -425,9 +425,15 @@ mod tests {
     }
 
     // Reused function to create metadata with variable parameters.
-    fn create_metadata(owner: Vec<u8>, location: Vec<u8>, size: u64) -> FileMetadata {
+    fn create_metadata(
+        owner: Vec<u8>,
+        bucket_id: Vec<u8>,
+        location: Vec<u8>,
+        size: u64,
+    ) -> FileMetadata {
         FileMetadata {
             owner,
+            bucket_id,
             location,
             size,
             fingerprint: Fingerprint::default(),
@@ -438,6 +444,7 @@ mod tests {
     fn create_and_insert_metadata<T>(
         forest_storage: &mut RocksDBForestStorage<T>,
         owner: Vec<u8>,
+        bucket_id: Vec<u8>,
         location: Vec<u8>,
         size: u64,
     ) -> HasherOutT<T>
@@ -445,7 +452,7 @@ mod tests {
         T: TrieLayout + Send + Sync,
         HasherOutT<T>: TryFrom<[u8; 32]>,
     {
-        let metadata = create_metadata(owner, location.clone(), size);
+        let metadata = create_metadata(owner, bucket_id, location.clone(), size);
         let file_key = forest_storage.insert_metadata(&metadata).unwrap();
         file_key
     }
@@ -471,6 +478,7 @@ mod tests {
 
         let file_key = create_and_insert_metadata(
             &mut forest_storage,
+            "bucket".as_bytes().to_vec(),
             "Bob".as_bytes().to_vec(),
             vec![7, 8, 9],
             200,
@@ -485,6 +493,7 @@ mod tests {
 
         let file_key = create_and_insert_metadata(
             &mut forest_storage,
+            "bucket".as_bytes().to_vec(),
             "Bob".as_bytes().to_vec(),
             vec![7, 8, 9],
             200,
@@ -508,6 +517,7 @@ mod tests {
         for i in 0..50 {
             let file_key = create_and_insert_metadata(
                 &mut forest_storage,
+                "bucket".as_bytes().to_vec(),
                 "Alice".as_bytes().to_vec(),
                 vec![i],
                 200,
@@ -533,6 +543,7 @@ mod tests {
         for i in 0..50 {
             let file_key = create_and_insert_metadata(
                 &mut forest_storage,
+                "bucket".as_bytes().to_vec(),
                 "Alice".as_bytes().to_vec(),
                 vec![i],
                 200,
@@ -570,12 +581,14 @@ mod tests {
 
         let file_key1 = create_and_insert_metadata(
             &mut forest_storage,
+            "bucket".as_bytes().to_vec(),
             "Alice".as_bytes().to_vec(),
             vec![10],
             200,
         );
         let file_key2 = create_and_insert_metadata(
             &mut forest_storage,
+            "bucket".as_bytes().to_vec(),
             "Alice".as_bytes().to_vec(),
             vec![11],
             200,
@@ -609,6 +622,7 @@ mod tests {
         for i in 0..50 {
             let file_key = create_and_insert_metadata(
                 &mut forest_storage,
+                "bucket".as_bytes().to_vec(),
                 "Alice".as_bytes().to_vec(),
                 vec![i],
                 200,
@@ -637,6 +651,7 @@ mod tests {
         for i in 0..50 {
             let file_key = create_and_insert_metadata(
                 &mut forest_storage,
+                "bucket".as_bytes().to_vec(),
                 "Alice".as_bytes().to_vec(),
                 vec![i],
                 200,

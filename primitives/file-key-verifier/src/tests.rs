@@ -63,6 +63,7 @@ where
 
     let file_metadata = FileMetadata {
         owner: user_id.to_vec(),
+        bucket_id: bucket.to_vec(),
         location: file_path.as_bytes().to_vec(),
         size: file_size,
         fingerprint: fingerprint
