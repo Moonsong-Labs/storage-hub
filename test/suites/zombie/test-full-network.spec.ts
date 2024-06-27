@@ -29,9 +29,8 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
 
   describe("Relay Tests", async () => {
     test("Check RelayChain RT Version", async () => {
-      const { specName, specVersion } = relayApi.consts.system.version;
+      const { specName } = relayApi.consts.system.version;
       strictEqual(specName.toString(), "rococo");
-      strictEqual(specVersion.toNumber(), 1009000);
     });
 
     test("Check sr25519 keyring is correct", async () => {

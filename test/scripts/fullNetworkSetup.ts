@@ -10,7 +10,6 @@ import {
   shUser,
   VALUE_PROP,
   waitForChain,
-  waitForRandomness,
   ZOMBIE_RELAY_URL,
   ZOMBIE_SH_URL,
 } from "../util";
@@ -43,6 +42,26 @@ async function main() {
     process.stdout.write("Setting Executor Parameters config for relay chain... ");
     await sendTransaction(resources.relayApi.tx.sudo.sudo(setConfig));
     process.stdout.write("✅\n");
+
+    process.stdout.write("Waiting for config params to come active... ");
+
+    let pendingConfig: number | undefined;
+
+    for (let i = 0; i < 50; i++) {
+      pendingConfig = (await resources.relayApi.query.configuration.pendingConfigs()).length;
+      if (pendingConfig === 0) {
+        process.stdout.write(`(after ${i} blocks) `);
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 6500));
+    }
+
+    if (pendingConfig === 0) {
+      process.stdout.write("✅\n");
+    } else {
+      process.stdout.write("❌\n");
+      throw new Error("Relay Config params did not come active");
+    }
   }
 
   await waitForChain(resources.storageApi);
@@ -95,7 +114,7 @@ async function main() {
     console.log(`BSP account balance is  already ${free.toBigInt() / 10n ** 12n} balance ✅`);
   }
 
-  // This is the fingerprint of  "../resource/whatsup.jpg" which is adjusted for native runner
+  // This is the fingerprint of  "whatsup.jpg" which is adjusted for native runner
   const bspId = "0x002aaf768af5b738eea96084f10dac7ad4f6efa257782bdb9823994ffb233300";
 
   // Enrolling BSP
@@ -110,18 +129,20 @@ async function main() {
   // TODO: Remove Sudo and use proper flow
   process.stdout.write(`Forcing BSP sign up for ${bsp.address} ...`);
   await sendTransaction(
-    resources.storageApi.tx.providers.forceBspSignUp(
-      bsp.address,
-      bspId,
-      CAPACITY_512,
-      [bspMultiAddress.toString()],
-      bsp.address
+    resources.storageApi.tx.sudo.sudo(
+      resources.storageApi.tx.providers.forceBspSignUp(
+        bsp.address,
+        bspId,
+        CAPACITY_512,
+        [bspMultiAddress.toString()],
+        bsp.address
+      )
     )
   );
   process.stdout.write("✅\n");
 
   // TODO: Remove Sudo and use proper flow
-  process.stdout.write(`Forcing BSP sign up for ${bsp.address} ...`);
+  process.stdout.write(`Forcing MSP sign up for ${bsp.address} ...`);
   await sendTransaction(
     resources.storageApi.tx.sudo.sudo(
       resources.storageApi.tx.providers.forceMspSignUp(
@@ -149,8 +170,8 @@ async function main() {
     console.log("💫 Providers added correctly");
   } else {
     console.error("🪦 Providers not added correctly");
-    console.error("BSps: ", bsps);
-    console.error("MSps: ", msps);
+    console.error("BSps: ", bsps.length);
+    console.error("MSps: ", msps.length);
   }
 }
 
