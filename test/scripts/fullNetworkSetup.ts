@@ -95,6 +95,9 @@ async function main() {
     console.log(`BSP account balance is  already ${free.toBigInt() / 10n ** 12n} balance ✅`);
   }
 
+  // This is the fingerprint of  "../resource/whatsup.jpg" which is adjusted for native runner
+  const bspId = "0x002aaf768af5b738eea96084f10dac7ad4f6efa257782bdb9823994ffb233300";
+
   // Enrolling BSP
   const bspMultiAddress = (await resources.storageApi.rpc.system.localListenAddresses()).find(
     (peer) => peer.includes("127.0.0.1")
@@ -104,29 +107,21 @@ async function main() {
     throw new Error("BSP MultiAddress not found");
   }
 
-  process.stdout.write(`Requesting sign up for ${bsp.address} ...`);
+  // TODO: Remove Sudo and use proper flow
+  process.stdout.write(`Forcing BSP sign up for ${bsp.address} ...`);
   await sendTransaction(
-    resources.storageApi.tx.providers.requestBspSignUp(
+    resources.storageApi.tx.providers.forceBspSignUp(
+      bsp.address,
+      bspId,
       CAPACITY_512,
       [bspMultiAddress.toString()],
       bsp.address
-    ),
-    {
-      signer: bsp,
-    }
+    )
   );
   process.stdout.write("✅\n");
 
-  await waitForRandomness(resources.storageApi);
-
-  // Confirm sign up
-  process.stdout.write(`Confirming sign up for ${bsp.address} ...`);
-  await sendTransaction(resources.storageApi.tx.providers.confirmSignUp(bsp.address), {
-    signer: bsp,
-  });
-  process.stdout.write("✅\n");
-
   // TODO: Remove Sudo and use proper flow
+  process.stdout.write(`Forcing BSP sign up for ${bsp.address} ...`);
   await sendTransaction(
     resources.storageApi.tx.sudo.sudo(
       resources.storageApi.tx.providers.forceMspSignUp(
@@ -143,14 +138,19 @@ async function main() {
       )
     )
   );
+  process.stdout.write("✅\n");
 
   // Confirm providers added
-  const providers = await resources.storageApi.query.providers.backupStorageProviders.entries();
+  const bsps = await resources.storageApi.query.providers.backupStorageProviders.entries();
 
-  if (providers.length === 1) {
-    console.log("💫 Provider added correctly");
+  const msps = await resources.storageApi.query.providers.mainStorageProviders.entries();
+
+  if (bsps.length === 1 && msps.length === 1) {
+    console.log("💫 Providers added correctly");
   } else {
-    console.error("🪦 Provider not added correctly");
+    console.error("🪦 Providers not added correctly");
+    console.error("BSps: ", bsps);
+    console.error("MSps: ", msps);
   }
 }
 
