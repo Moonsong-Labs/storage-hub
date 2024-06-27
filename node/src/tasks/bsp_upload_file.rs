@@ -5,7 +5,7 @@ use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shp_file_key_verifier::consts::H_LENGTH;
 use shp_file_key_verifier::types::ChunkId;
-use sp_core::{H256, U256};
+use sp_core::H256;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
 use tokio::{fs::File, io::AsyncWriteExt};
@@ -271,7 +271,7 @@ where
             .map_err(|e| anyhow!("Failed to query file earliest volunteer block: {:?}", e))?;
 
         // If earliest_volunteer_block is 0 it means that we can volunteer right away.
-        if earliest_volunteer_block > U256::zero() {
+        if earliest_volunteer_block > 0 {
             // TODO: if the earliest block is too far away, we should drop the task.
             self.storage_hub_handler
                 .blockchain

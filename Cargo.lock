@@ -12383,6 +12383,7 @@ name = "shc-common"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "frame-system 28.0.0",
  "pallet-proofs-dealer",
  "parity-scale-codec",
  "polkadot-primitives 7.0.0",

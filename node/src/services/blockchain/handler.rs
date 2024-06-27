@@ -38,7 +38,7 @@ use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::Fingerprint;
 use shp_file_key_verifier::types::FileKey;
 use sp_api::ProvideRuntimeApi;
-use sp_core::{Blake2Hasher, Hasher, H256, U256};
+use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{
     generic::{self, SignedPayload},
@@ -53,6 +53,7 @@ use crate::{
     services::blockchain::{events::AcceptedBspVolunteer, transaction::SubmittedTransaction},
 };
 use pallet_file_system_runtime_api::{FileSystemApi, QueryFileEarliestVolunteerBlockError};
+use shc_common::types::BlockNumber;
 
 use crate::services::blockchain::{
     commands::BlockchainServiceCommand,
@@ -96,7 +97,7 @@ pub struct BlockchainService {
     /// Nonce counter for the extrinsics.
     nonce_counter: u32,
     /// A registry of waiters for a block number.
-    wait_for_block_request_by_number: BTreeMap<U256, Vec<tokio::sync::oneshot::Sender<()>>>,
+    wait_for_block_request_by_number: BTreeMap<BlockNumber, Vec<tokio::sync::oneshot::Sender<()>>>,
 }
 
 /// Implement the Actor trait for the BlockchainService actor.
@@ -238,7 +239,7 @@ impl Actor for BlockchainService {
                             Err(QueryFileEarliestVolunteerBlockError::InternalError)
                         });
 
-                    match callback.send(earliest_block_to_volunteer.map(U256::from)) {
+                    match callback.send(earliest_block_to_volunteer) {
                         Ok(_) => {
                             trace!(target: LOG_TARGET, "Earliest block to volunteer result sent successfully");
                         }
@@ -362,7 +363,7 @@ impl BlockchainService {
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
         let block_hash: H256 = notification.hash;
-        let block_number: U256 = (*notification.header.number()).into();
+        let block_number: BlockNumber = (*notification.header.number()).saturated_into();
 
         debug!(target: LOG_TARGET, "Import notification #{}: {}", block_number, block_hash);
 
