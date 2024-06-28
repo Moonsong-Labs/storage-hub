@@ -69,9 +69,9 @@ describe("BSPNet: Adding new BSPs", () => {
   });
 
   it("Lots of BSPs can be created", async () => {
-    await addBspContainer({ name: "timbo1" });
-    await addBspContainer({ name: "timbo2" });
-    await addBspContainer({ name: "timbo3" });
+    await addBspContainer({ name: "timbo1", additionalArgs: ["--database=rocksdb"] });
+    await addBspContainer({ name: "timbo2", additionalArgs: ["--database=paritydb"] });
+    await addBspContainer({ name: "timbo3", additionalArgs: ["--database=auto"] });
 
     const docker = new Docker();
     const sh_nodes = (

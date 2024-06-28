@@ -41,6 +41,7 @@ export const showContainers = () => {
 export const addBspContainer = async (options?: {
   name?: string;
   connectToPeer?: boolean;
+  additionalArgs?: string[];
 }) => {
   const docker = new Docker();
   const existingBsps = (
@@ -96,7 +97,8 @@ export const addBspContainer = async (options?: {
       "--rpc-cors=all",
       `--port=${p2pPort}`,
       "--base-path=/data",
-      bootNodeArg
+      bootNodeArg,
+      ...(options?.additionalArgs || [])
     ]
   });
   await container.start();
