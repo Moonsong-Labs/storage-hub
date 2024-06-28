@@ -22,7 +22,7 @@ name: Storage Hub Parachain CI/CD
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -60,7 +60,7 @@ jobs:
           fi
 
   build_image:
-    needs: [setup]
+    needs: [ setup ]
     if: needs.setup.outputs.node_changed == 'true'
     name: "Build node image"
     runs-on: ubuntu-latest
@@ -163,7 +163,7 @@ jobs:
   #         pnpm  zombienet test configs/simple.zndsl
 
   network_test:
-    needs: [build_image, setup]
+    needs: [ build_image, setup ]
     if: always()
     name: "Run Para & Relay Network Test"
     runs-on: ubuntu-latest
@@ -204,7 +204,7 @@ jobs:
           pnpm test:full
 
   zombie_test:
-    needs: [build_image, setup]
+    needs: [ build_image, setup ]
     if: always()
     name: "Run Zombienet Tests"
     timeout-minutes: 30
@@ -238,7 +238,7 @@ jobs:
           pnpm  zombienet test --provider native configs/simpleNative.zndsl
 
   dev_node_test:
-    needs: [build_image, setup]
+    needs: [ build_image, setup ]
     timeout-minutes: 30
     if: always()
     name: "Run Dev Node Tests"
@@ -246,7 +246,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [ 1, 2, 3, 4 ]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -285,55 +285,59 @@ jobs:
                --test-reporter-destination=stdout   \
                --test-shard=${{ matrix.shard }}/4   \
                ./suites/solo-node/**/**.test.ts
-               
+
   bsp_net:
-      needs: [build_image, setup]
-      if: always()
-      name: "Run BSPNet Tests"
-      runs-on: ubuntu-latest
-      timeout-minutes: 30
-      strategy:
-        fail-fast: false
-        matrix:
-          shard: [1, 2, 3, 4]
-      steps:
-        - uses: actions/checkout@v4
-        - uses: ./.github/workflow-templates/setup-pnpm
-          with:
-            node_version: 22
-        - run: mkdir -p target/release/
-        - name: Get Node Binary if changed
-          if: needs.setup.outputs.node_changed == 'true'
-          uses: actions/download-artifact@v4
-          with:
-            name: node
-            path: target/release/
-        - name: Get Latest Node Binary if not changed
-          if: needs.setup.outputs.node_changed == 'false'
-          run: |
-            docker pull moonsonglabs/storage-hub:latest
-            docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
-            docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
-            docker rm temp_storage_hub
-        - name: Build Local Docker Image
-          run: |
-            chmod +x target/release/storage-hub-node
-            cd test
-            pnpm install
-            pnpm docker:build
-        - name: Run Typegen
-          run: |
-            cd test
-            pnpm typegen
-        - name: Run BSPNet Tests
-          run: |
-            cd test
-            node --import tsx                        \
-                --test                               \
-                --test-reporter=@reporters/github    \
-                --test-reporter-destination=stdout   \
-                --test-reporter=spec                 \
-                --test-reporter-destination=stdout   \
-                --test-shard=${{ matrix.shard }}/4   \
-                --test-force-exit                    \
-                ./suites/integration/**/**.test.ts
+    needs: [ build_image, setup ]
+    if: always()
+    name: "Run BSPNet Tests"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [ 1, 2, 3, 4 ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflow-templates/setup-pnpm
+        with:
+          node_version: 22
+      - run: mkdir -p target/release/
+      - name: Get Node Binary if changed
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: target/release/
+      - name: Get Latest Node Binary if not changed
+        if: needs.setup.outputs.node_changed == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub:latest
+          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+      - name: Build Local Docker Image
+        run: |
+          chmod +x target/release/storage-hub-node
+          cd test
+          pnpm install
+          pnpm docker:build
+      - name: Run Typegen
+        run: |
+          cd test
+          pnpm typegen
+      - name: Run BSPNet Tests
+        run: |
+          cd test
+          node --import tsx                        \
+              --test                               \
+              --test-reporter=@reporters/github    \
+              --test-reporter-destination=stdout   \
+              --test-reporter=spec                 \
+              --test-reporter-destination=stdout   \
+              --test-shard=${{ matrix.shard }}/4   \
+              --test-force-exit                    \
+              ./suites/integration/**/**.test.ts
+
+
+# TODO: Add a typescript generation check for tests
+# This will catch any issues with interfaces not being up-to-date
