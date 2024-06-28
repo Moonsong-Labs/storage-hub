@@ -1,5 +1,3 @@
-use core::cmp::max;
-
 use codec::{Decode, Encode};
 use frame_support::{
     ensure, pallet_prelude::DispatchResult, traits::nonfungibles_v2::Create, traits::Get,
@@ -11,11 +9,11 @@ use shp_traits::{
 };
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
-    ArithmeticError, BoundedVec, DispatchError,
+    ArithmeticError, BoundedVec, DispatchError, SaturatedConversion,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
 
-use crate::types::BucketNameFor;
+use crate::types::{BucketNameFor, ExpiredItems};
 use crate::{
     pallet,
     types::{
@@ -24,8 +22,8 @@ use crate::{
         PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
         TargetBspsRequired,
     },
-    BspsAssignmentThreshold, Error, NextAvailableExpirationInsertionBlock, Pallet,
-    StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+    BspsAssignmentThreshold, Error, ItemExpirations, NextAvailableExpirationInsertionBlock, Pallet,
+    StorageRequestBsps, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -238,28 +236,13 @@ impl<T: pallet::Config> Pallet<T> {
         // Register storage request.
         <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
 
-        let mut block_to_insert_expiration = Self::next_expiration_insertion_block_number();
-
-        // Get current storage request expirations vec.
-        let storage_request_expirations =
-            <StorageRequestExpirations<T>>::get(block_to_insert_expiration);
-
-        // Check size of storage request expirations vec.
-        if storage_request_expirations.len() >= T::MaxExpiredStorageRequests::get() as usize {
-            block_to_insert_expiration = match block_to_insert_expiration.checked_add(&1u8.into()) {
-                Some(block) => block,
-                None => {
-                    return Err(Error::<T>::MaxBlockNumberReached.into());
-                }
-            };
-
-            <NextAvailableExpirationInsertionBlock<T>>::set(block_to_insert_expiration);
-        }
+        let block_to_insert_expiration =
+            Self::next_expiration_insertion_block_number(T::StorageRequestTtl::get().into())?;
 
         // Add storage request expiration at next available block.
         expect_or_err!(
             // TODO: Verify that try_append gets an empty BoundedVec when appending a first element.
-            <StorageRequestExpirations<T>>::try_append(block_to_insert_expiration, file_key).ok(),
+            <ItemExpirations<T>>::try_append(block_to_insert_expiration, ExpiredItems::StorageRequest(file_key)).ok(),
             "Storage request expiration should have enough slots available since it was just checked.",
             Error::<T>::StorageRequestExpiredNoSlotAvailable
         );
@@ -760,6 +743,54 @@ impl<T: pallet::Config> Pallet<T> {
         Ok((bsp_id, new_root))
     }
 
+    pub(crate) fn do_delete_file(
+        sender: T::AccountId,
+        msp_id: ProviderIdFor<T>,
+        file_key: MerkleHash<T>,
+        bucket_id: BucketIdFor<T>,
+        location: FileLocation<T>,
+        fingerprint: Fingerprint<T>,
+        size: StorageData<T>,
+        inclusion_forest_proof: Option<ForestProof<T>>,
+    ) -> DispatchResult {
+        // Compute the file key hash.
+        let computed_file_key =
+            Self::compute_file_key(sender, bucket_id, location.clone(), size, fingerprint);
+
+        // Check that the metadata corresponds to the expected file key.
+        ensure!(
+            file_key == computed_file_key,
+            Error::<T>::InvalidFileKeyMetadata
+        );
+
+        match inclusion_forest_proof {
+            None => {}
+            Some(inclusion_forest_proof) => {
+                // Verify the proof of inclusion.
+                let proven_keys =
+                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+                        &msp_id,
+                        &[file_key],
+                        &inclusion_forest_proof,
+                    )?;
+
+                // Ensure that the file key IS part of the owner's forest.
+                ensure!(
+                    proven_keys.contains(&file_key),
+                    Error::<T>::ExpectedInclusionProof
+                );
+
+                // Initiate the priority challenge to remove the file key from all the providers.
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
+                    &file_key,
+                    Some(TrieRemoveMutation),
+                )?;
+            }
+        };
+
+        Ok(())
+    }
+
     /// Create a collection.
     fn create_collection(owner: T::AccountId) -> Result<CollectionIdFor<T>, DispatchError> {
         // TODO: Parametrize the collection settings.
@@ -778,23 +809,31 @@ impl<T: pallet::Config> Pallet<T> {
         T::Nfts::create_collection(&owner, &owner, &config)
     }
 
-    /// Get the block number at which the storage request will expire.
+    /// Compute the next block number to insert an expiration after a given TTL.
     ///
-    /// This will also update the [`NextAvailableExpirationInsertionBlock`] if the current expiration block pointer is lower than the [`crate::Config::StorageRequestTtl`].
-    pub(crate) fn next_expiration_insertion_block_number() -> BlockNumberFor<T> {
-        let current_block_number = <frame_system::Pallet<T>>::block_number();
-        let min_expiration_block = current_block_number + T::StorageRequestTtl::get().into();
+    /// This function calculates the next block number to insert an expiration for an expiration item and updates
+    /// [`NextAvailableExpirationInsertionBlock`] accordingly.
+    pub(crate) fn next_expiration_insertion_block_number(
+        expiration_item_ttl: BlockNumberFor<T>,
+    ) -> Result<BlockNumberFor<T>, DispatchError> {
+        let mut expiration_block = NextAvailableExpirationInsertionBlock::<T>::get()
+            .checked_add(&expiration_item_ttl)
+            .ok_or(Error::<T>::MaxBlockNumberReached)?;
 
-        // Reset the current expiration block pointer if it is lower than the minimum storage request TTL.
-        if <NextAvailableExpirationInsertionBlock<T>>::get() < min_expiration_block {
-            <NextAvailableExpirationInsertionBlock<T>>::set(min_expiration_block);
+        let mut item_expirations = <ItemExpirations<T>>::get(expiration_block);
+
+        // Find the next available block to insert the expiration.
+        while item_expirations.len() > T::MaxExpiredItemsInBlock::get().saturated_into() {
+            expiration_block = expiration_block
+                .checked_add(&1u8.into())
+                .ok_or(Error::<T>::MaxBlockNumberReached)?;
+
+            item_expirations = <ItemExpirations<T>>::get(expiration_block);
         }
 
-        let block_to_insert_expiration = max(
-            min_expiration_block,
-            <NextAvailableExpirationInsertionBlock<T>>::get(),
-        );
-        block_to_insert_expiration
+        <NextAvailableExpirationInsertionBlock<T>>::set(expiration_block);
+
+        Ok(expiration_block)
     }
 
     /// Compute the asymptotic threshold point for the given number of total BSPs.
@@ -885,5 +924,120 @@ impl<T: crate::Config> shp_traits::SubscribeProvidersInterface for Pallet<T> {
         BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
 
         Ok(())
+    }
+}
+
+mod hooks {
+    use crate::types::{ExpiredItems, MerkleHash};
+    use crate::{
+        pallet, Event, ItemExpirations, NextStartingBlockToCleanUp, Pallet,
+        PendingFileDeletionRequests, StorageRequestBsps, StorageRequests,
+    };
+    use frame_support::weights::Weight;
+    use frame_system::pallet_prelude::BlockNumberFor;
+    use sp_runtime::traits::{Get, One, Zero};
+    use sp_runtime::Saturating;
+
+    impl<T: pallet::Config> Pallet<T> {
+        pub(crate) fn do_on_idle(
+            current_block: BlockNumberFor<T>,
+            mut remaining_weight: &mut Weight,
+        ) -> &mut Weight {
+            let db_weight = T::DbWeight::get();
+            let mut block_to_clean = NextStartingBlockToCleanUp::<T>::get();
+
+            while block_to_clean <= current_block && !remaining_weight.is_zero() {
+                Self::process_block_expired_items(block_to_clean, &mut remaining_weight);
+
+                if remaining_weight.is_zero() {
+                    break;
+                }
+
+                block_to_clean.saturating_accrue(BlockNumberFor::<T>::one());
+            }
+
+            // Update the next starting block for cleanup
+            if block_to_clean > NextStartingBlockToCleanUp::<T>::get() {
+                NextStartingBlockToCleanUp::<T>::put(block_to_clean);
+                remaining_weight.saturating_reduce(db_weight.writes(1));
+            }
+
+            remaining_weight
+        }
+
+        fn process_block_expired_items(block: BlockNumberFor<T>, remaining_weight: &mut Weight) {
+            let db_weight = T::DbWeight::get();
+            let minimum_required_weight = db_weight.reads_writes(1, 1);
+
+            if !remaining_weight.all_gte(minimum_required_weight) {
+                return;
+            }
+
+            // Remove expired items if any existed and process them.
+            let mut expired_items = ItemExpirations::<T>::take(&block);
+            remaining_weight.saturating_reduce(minimum_required_weight);
+
+            while let Some(expired) = expired_items.pop() {
+                match expired {
+                    ExpiredItems::StorageRequest(file_key) => {
+                        Self::process_expired_storage_request(file_key, remaining_weight)
+                    }
+                    ExpiredItems::PendingFileDeletionRequests((who, file_key)) => {
+                        Self::process_expired_pending_file_deletion(who, file_key, remaining_weight)
+                    }
+                };
+            }
+
+            // If there are remaining items which were not processed, put them back in storage
+            if !expired_items.is_empty() {
+                ItemExpirations::<T>::insert(&block, expired_items);
+                remaining_weight.saturating_reduce(db_weight.writes(1));
+            }
+        }
+
+        fn process_expired_storage_request(file_key: MerkleHash<T>, remaining_weight: &mut Weight) {
+            let db_weight = T::DbWeight::get();
+
+            // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `TargetBspsRequired`.
+            // We could increase this potential weight to account for potentially more volunteers.
+            let potential_weight = db_weight.writes(
+                Into::<u32>::into(T::TargetBspsRequired::get())
+                    .saturating_add(1)
+                    .into(),
+            );
+
+            if !remaining_weight.all_gte(potential_weight) {
+                return;
+            }
+
+            // Remove storage request and all bsps that volunteered for it.
+            StorageRequests::<T>::remove(&file_key);
+            let removed =
+                StorageRequestBsps::<T>::drain_prefix(&file_key).fold(0, |acc, _| acc + 1u32);
+
+            remaining_weight.saturating_reduce(db_weight.writes(1.saturating_add(removed.into())));
+
+            Self::deposit_event(Event::StorageRequestExpired { file_key });
+        }
+
+        fn process_expired_pending_file_deletion(
+            who: T::AccountId,
+            file_key: MerkleHash<T>,
+            remaining_weight: &mut Weight,
+        ) {
+            let db_weight = T::DbWeight::get();
+            let potential_weight = db_weight.writes(1);
+
+            if remaining_weight.all_gte(potential_weight) {
+                return;
+            }
+
+            // Remove the pending file deletion request.
+            PendingFileDeletionRequests::<T>::mutate(&who, |requests| {
+                requests.retain(|(key, _)| key != &file_key);
+            });
+
+            remaining_weight.saturating_reduce(db_weight.writes(1));
+        }
     }
 }

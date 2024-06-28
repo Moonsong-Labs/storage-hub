@@ -1,11 +1,11 @@
-use crate::types::{BucketIdFor, BucketNameFor};
+use crate::types::{BucketIdFor, BucketNameFor, ExpiredItems};
 use crate::{
     mock::*,
     types::{
         FileLocation, PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, TargetBspsRequired,
+        StorageRequestMetadata, StorageRequestTtl, TargetBspsRequired,
     },
-    Config, Error, Event, StorageRequestExpirations,
+    Config, Error, Event, ItemExpirations,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -13,6 +13,7 @@ use frame_support::{
     traits::{nonfungibles_v2::Destroy, Hooks, OriginTrait},
     weights::Weight,
 };
+use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::PriorityChallengesQueue;
 use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface, TrieRemoveMutation};
 use sp_core::{ByteArray, Hasher, H256};
@@ -615,22 +616,28 @@ fn request_storage_expiration_clear_success() {
             fingerprint,
         );
 
-        let expected_expiration_inserted_at_block_number: BlockNumber =
-            FileSystem::next_expiration_insertion_block_number().into();
+        let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
+        let storage_request_ttl: BlockNumberFor<Test> = storage_request_ttl.into();
+
+        // Assert that the next starting block to clean up is set to 0 initially
+        assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
+
+        // Assert that the next expiration block number is the storage request ttl since a single storage request was made
+        assert_eq!(
+            FileSystem::next_available_expiration_insertion_block(),
+            storage_request_ttl
+        );
 
         // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_inserted_at_block_number),
-            vec![file_key]
+            FileSystem::item_expirations(storage_request_ttl),
+            vec![ExpiredItems::StorageRequest(file_key)]
         );
 
-        roll_to(expected_expiration_inserted_at_block_number + 1);
+        roll_to(storage_request_ttl + 1);
 
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
-        assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_inserted_at_block_number),
-            vec![]
-        );
+        assert_eq!(FileSystem::item_expirations(storage_request_ttl), vec![]);
     });
 }
 
@@ -651,8 +658,12 @@ fn request_storage_expiration_current_block_increment_success() {
         let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
         let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
 
-        let mut expected_expiration_block_number: BlockNumber =
-            FileSystem::next_expiration_insertion_block_number().into();
+        let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
+
+        let expected_expiration_block_number: BlockNumberFor<Test> =
+            FileSystem::next_expiration_insertion_block_number(storage_request_ttl.into())
+                .unwrap()
+                .into();
 
         let file_key = FileSystem::compute_file_key(
             owner_account_id.clone(),
@@ -663,11 +674,11 @@ fn request_storage_expiration_current_block_increment_success() {
         );
 
         // Append storage request expiration to the list at `StorageRequestTtl`
-        let max_storage_request_expiry: u32 = <Test as Config>::MaxExpiredStorageRequests::get();
-        for _ in 0..(max_storage_request_expiry - 1) {
-            assert_ok!(StorageRequestExpirations::<Test>::try_append(
+        let max_expired_items_in_block: u32 = <Test as Config>::MaxExpiredItemsInBlock::get();
+        for _ in 0..max_expired_items_in_block {
+            assert_ok!(ItemExpirations::<Test>::try_append(
                 expected_expiration_block_number,
-                file_key
+                ExpiredItems::StorageRequest(file_key)
             ));
         }
 
@@ -684,12 +695,14 @@ fn request_storage_expiration_current_block_increment_success() {
 
         // Assert that the storage request expirations storage is at max capacity
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
-            max_storage_request_expiry as usize
+            FileSystem::item_expirations(expected_expiration_block_number).len(),
+            max_expired_items_in_block as usize
         );
 
-        expected_expiration_block_number =
-            FileSystem::next_expiration_insertion_block_number().into();
+        let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
+
+        let expected_expiration_block_number: BlockNumberFor<Test> =
+            FileSystem::next_expiration_insertion_block_number(storage_request_ttl.into()).unwrap();
 
         // Assert that the `CurrentExpirationBlock` storage is incremented by 1
         assert_eq!(
@@ -702,7 +715,7 @@ fn request_storage_expiration_current_block_increment_success() {
 
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number),
+            FileSystem::item_expirations(expected_expiration_block_number),
             vec![]
         );
     });
@@ -725,11 +738,15 @@ fn request_storage_clear_old_expirations_success() {
         let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
         let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
 
-        let expected_expiration_block_number: BlockNumber =
-            FileSystem::next_expiration_insertion_block_number().into();
+        let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
+
+        let expected_expiration_block_number: BlockNumberFor<Test> =
+            FileSystem::next_expiration_insertion_block_number(storage_request_ttl.into())
+                .unwrap()
+                .into();
 
         // Append storage request expiration to the list at `StorageRequestTtl`
-        let max_storage_request_expiry: u32 = <Test as Config>::MaxExpiredStorageRequests::get();
+        let max_storage_request_expiry: u32 = <Test as Config>::MaxExpiredItemsInBlock::get();
 
         let file_key = FileSystem::compute_file_key(
             owner_account_id.clone(),
@@ -739,10 +756,10 @@ fn request_storage_clear_old_expirations_success() {
             fingerprint,
         );
 
-        for _ in 0..(max_storage_request_expiry - 1) {
-            assert_ok!(StorageRequestExpirations::<Test>::try_append(
+        for _ in 0..max_storage_request_expiry {
+            assert_ok!(ItemExpirations::<Test>::try_append(
                 expected_expiration_block_number,
-                file_key
+                ExpiredItems::StorageRequest(file_key)
             ));
         }
 
@@ -764,7 +781,7 @@ fn request_storage_clear_old_expirations_success() {
 
         // Assert that the storage request expirations storage is at max capacity
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
+            FileSystem::item_expirations(expected_expiration_block_number).len(),
             max_storage_request_expiry as usize
         );
 
@@ -776,7 +793,7 @@ fn request_storage_clear_old_expirations_success() {
         // Assert that the storage request expirations storage is at max capacity
         // TODO: Fix this test...
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
+            FileSystem::item_expirations(expected_expiration_block_number).len(),
             max_storage_request_expiry as usize
         );
 
@@ -788,7 +805,7 @@ fn request_storage_clear_old_expirations_success() {
 
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number),
+            FileSystem::item_expirations(expected_expiration_block_number),
             vec![]
         );
 
@@ -899,12 +916,16 @@ fn revoke_request_storage_success() {
             fingerprint,
         );
 
+        let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
+        let storage_request_ttl: BlockNumberFor<Test> = storage_request_ttl.into();
+
+        // Assert that the NextExpirationInsertionBlockNumber storage is set to 0 initially
+        assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
+
         // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
         assert_eq!(
-            FileSystem::storage_request_expirations(
-                FileSystem::next_expiration_insertion_block_number()
-            ),
-            vec![file_key]
+            FileSystem::item_expirations(storage_request_ttl),
+            vec![ExpiredItems::StorageRequest(file_key)]
         );
 
         assert_ok!(FileSystem::revoke_storage_request(owner.clone(), file_key));
