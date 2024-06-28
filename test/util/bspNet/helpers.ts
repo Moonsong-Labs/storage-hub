@@ -26,7 +26,7 @@ import Docker from "dockerode";
 import { DOCKER_IMAGE } from "../constants.ts";
 const exec = util.promisify(child_process.exec);
 
-export const sendFileSendRpc = async (
+export const sendLoadFileRpc = async (
   api: ApiPromise,
   filePath: string,
   remotePath: string,

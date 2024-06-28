@@ -52,7 +52,7 @@ describe("BSPNet: BSP Volunteer", () => {
       throw new Error("Event doesn't match Type");
     }
 
-    const { fingerprint, size, location } = await api.sendFile(
+    const { fingerprint, size, location } = await api.loadFile(
       source,
       destination,
       NODE_INFOS.user.AddressId,
@@ -65,7 +65,7 @@ describe("BSPNet: BSP Volunteer", () => {
   });
 
   it("issueStorageRequest sent correctly", async () => {
-    const source = "res/smile.jpg";
+    // const source = "res/smile.jpg";
     const destination = "test/smile.jpg";
     const bucketName = "nothingmuch-1";
 
@@ -77,19 +77,12 @@ describe("BSPNet: BSP Volunteer", () => {
       throw new Error("Event doesn't match Type");
     }
 
-    const { fingerprint, size, location } = await api.sendFile(
-      source,
-      destination,
-      NODE_INFOS.user.AddressId,
-      newBucketEventDataBlob.bucketId
-    );
-
     const issueStorageRequestResult = await api.sealBlock(
       api.tx.fileSystem.issueStorageRequest(
         newBucketEventDataBlob.bucketId,
-        location,
-        fingerprint,
-        size,
+        destination,
+        TEST_ARTEFACTS["res/smile.jpg"].fingerprint,
+        TEST_ARTEFACTS["res/smile.jpg"].size,
         DUMMY_MSP_ID,
         [NODE_INFOS.user.expectedPeerId]
       ),
@@ -111,8 +104,8 @@ describe("BSPNet: BSP Volunteer", () => {
 
     strictEqual(dataBlob.who.toString(), NODE_INFOS.user.AddressId);
     strictEqual(dataBlob.location.toHuman(), destination);
-    strictEqual(dataBlob.fingerprint.toString(), fingerprint);
-    strictEqual(dataBlob.size_.toBigInt(), size);
+    strictEqual(dataBlob.fingerprint.toString(), TEST_ARTEFACTS["res/smile.jpg"].fingerprint);
+    strictEqual(dataBlob.size_.toBigInt(), TEST_ARTEFACTS["res/smile.jpg"].size);
     strictEqual(dataBlob.peerIds.length, 1);
     strictEqual(dataBlob.peerIds[0].toHuman(), NODE_INFOS.user.expectedPeerId);
   });
@@ -130,7 +123,7 @@ describe("BSPNet: BSP Volunteer", () => {
       throw new Error("Event doesn't match Type");
     }
 
-    const { fingerprint, size, location } = await api.sendFile(
+    const { fingerprint, size, location } = await api.loadFile(
       source,
       destination,
       NODE_INFOS.user.AddressId,
