@@ -22,6 +22,8 @@ import { showContainers } from "./docker";
 import { isExtSuccess } from "../extrinsics";
 import type { BspNetApi } from "./types";
 import { assertEventPresent } from "../asserts.ts";
+import Docker from "dockerode"
+import {DOCKER_IMAGE} from "../constants.ts";
 const exec = util.promisify(child_process.exec);
 
 export const sendFileSendRpc = async (
