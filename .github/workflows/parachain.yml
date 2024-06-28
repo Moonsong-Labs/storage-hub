@@ -299,6 +299,8 @@ jobs:
       steps:
         - uses: actions/checkout@v4
         - uses: ./.github/workflow-templates/setup-pnpm
+          with:
+            node_version: 22
         - run: mkdir -p target/release/
         - name: Get Node Binary if changed
           if: needs.setup.outputs.node_changed == 'true'
