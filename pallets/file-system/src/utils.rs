@@ -14,17 +14,12 @@ use sp_runtime::{
 use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
 
 use crate::types::{BucketNameFor, ExpiredItems};
-use crate::{
-    pallet,
-    types::{
-        BucketIdFor, CollectionConfigFor, CollectionIdFor, FileKeyHasher, FileLocation,
-        Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest, MerkleHash, MultiAddresses,
-        PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
-        TargetBspsRequired,
-    },
-    BspsAssignmentThreshold, Error, ItemExpirations, NextAvailableExpirationInsertionBlock, Pallet,
-    StorageRequestBsps, StorageRequests,
-};
+use crate::{pallet, types::{
+    BucketIdFor, CollectionConfigFor, CollectionIdFor, FileKeyHasher, FileLocation,
+    Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest, MerkleHash, MultiAddresses,
+    PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+    TargetBspsRequired,
+}, BspsAssignmentThreshold, Error, ItemExpirations, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps, StorageRequests, PendingFileDeletionRequests};
 
 macro_rules! expect_or_err {
     // Handle Option type
@@ -742,7 +737,7 @@ impl<T: pallet::Config> Pallet<T> {
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
-        inclusion_forest_proof: Option<ForestProof<T>>,
+        maybe_inclusion_forest_proof: Option<ForestProof<T>>,
     ) -> DispatchResult {
         // Compute the file key hash.
         let computed_file_key =
@@ -754,10 +749,14 @@ impl<T: pallet::Config> Pallet<T> {
             Error::<T>::InvalidFileKeyMetadata
         );
 
-        match inclusion_forest_proof {
+        match maybe_inclusion_forest_proof {
+            // If the user did not supply a proof of inclusion, queue a pending deletion file request.
+            // This will leave a window of time for the MSP to provide the proof of (non-)inclusion.
+            // If the proof is not provided within the TTL, the hook will queue a priority challenge to remove the file key from all the providers.
             None => {
                 Self::queue_expiration_item(T::PendingFileDeletionRequestTtl::get().into(), ExpiredItems::PendingFileDeletionRequests((sender, file_key)))?;
             }
+            // If the user supplied a proof of inclusion, verify the proof and queue a priority challenge to remove the file key from all the providers.
             Some(inclusion_forest_proof) => {
                 // Verify the proof of inclusion.
                 let proven_keys =
@@ -780,6 +779,36 @@ impl<T: pallet::Config> Pallet<T> {
                 )?;
             }
         };
+
+        Ok(())
+    }
+
+    pub(crate) fn do_pending_file_deletion_request_submit_proof(
+        sender: T::AccountId,
+        user: T::AccountId,
+        file_key: MerkleHash<T>,
+        forest_proof: ForestProof<T>,
+    ) -> DispatchResult {
+        // Verify the proof of inclusion.
+        let proven_keys =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+                &sender,
+                &[file_key],
+                &forest_proof,
+            )?;
+
+        if proven_keys.contains(&file_key) {
+            // Initiate the priority challenge to remove the file key from all the providers.
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
+                &file_key,
+                Some(TrieRemoveMutation),
+            )?;
+        }
+
+        // Delete the pending deletion request.
+        <PendingFileDeletionRequests<T>>::mutate(&user, |requests| {
+            requests.retain(|(key, _)| key != &file_key);
+        });
 
         Ok(())
     }
@@ -1022,19 +1051,22 @@ mod hooks {
                 return;
             }
 
-            // Initiate the priority challenge to remove the file key from all the providers.
-            if let Err(_) = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                &file_key,
-                Some(TrieRemoveMutation),
-            ) {
-                Self::deposit_event(Event::FailedToQueuePriorityChallenge { user, file_key });
-                return;
-            }
+            PendingFileDeletionRequests::<T>::try_mutate(&user, |requests| -> Result<(), ()> {
+                if let Some(index) = requests.iter().position(|(key, _)| key == &file_key) {
+                    let (removed_key, _) = requests.remove(index);
 
-            // Remove the pending file deletion request.
-            PendingFileDeletionRequests::<T>::mutate(&user, |requests| {
-                requests.retain(|(key, _)| key != &file_key);
-            });
+                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
+                        &removed_key,
+                        Some(TrieRemoveMutation),
+                    ).map_err(|_| {
+                        Self::deposit_event(Event::FailedToQueuePriorityChallenge { user, file_key: removed_key });
+                    })?;
+                    Ok(())
+                } else {
+                    // We can assume the pending file deletion request was already processed before the TTL.
+                    return;
+                }
+            })?;
 
             remaining_weight.saturating_reduce(db_weight.writes(1));
         }

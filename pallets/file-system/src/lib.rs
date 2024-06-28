@@ -694,7 +694,7 @@ pub mod pallet {
             location: FileLocation<T>,
             size: StorageData<T>,
             fingerprint: Fingerprint<T>,
-            proof_of_inclusion: Option<ForestProof<T>>,
+            maybe_inclusion_forest_proof: Option<ForestProof<T>>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -706,7 +706,27 @@ pub mod pallet {
                 location,
                 fingerprint,
                 size,
-                proof_of_inclusion,
+                maybe_inclusion_forest_proof,
+            )?;
+
+            Ok(())
+        }
+
+        #[pallet::call_index(9)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn pending_file_deletion_request_submit_proof(
+            origin: OriginFor<T>,
+            user: T::AccountId,
+            file_key: MerkleHash<T>,
+            forest_proof: ForestProof<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            Self::do_pending_file_deletion_request_submit_proof(
+                who.clone(),
+                user,
+                file_key,
+                forest_proof,
             )?;
 
             Ok(())
