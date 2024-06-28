@@ -160,6 +160,7 @@ parachain-info = { package = "staging-parachain-info", git = "https://github.com
 # Local Pallets
 pallet-storage-providers = { path = "pallets/providers", default-features = false }
 pallet-file-system = { path = "pallets/file-system", default-features = false }
+pallet-file-system-runtime-api = { path = "pallets/file-system/runtime-api", default-features = false }
 pallet-proofs-dealer = { path = "pallets/proofs-dealer", default-features = false }
 pallet-randomness = { path = "pallets/randomness", default-features = false }
 pallet-bucket-nfts = { path = "pallets/bucket-nfts", default-features = false }

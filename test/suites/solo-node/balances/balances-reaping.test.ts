@@ -8,7 +8,7 @@ import {
   ferdie,
   type ExtendedApiPromise,
   ROUGH_TRANSFER_FEE,
-  DevTestContext,
+  DevTestContext
 } from "../../../util";
 
 // TODO: Figure out why only isn't working here
@@ -33,12 +33,12 @@ describe("Balances Pallet: Reaping", { only: true }, async () => {
     await api.createBlock();
 
     const {
-      data: { free: eveBal },
+      data: { free: eveBal }
     } = await api.query.system.account(eve.address);
     strictEqual(eveBal.toBigInt(), 0n);
 
     const {
-      data: { free: randomBal },
+      data: { free: randomBal }
     } = await api.query.system.account(randomId);
     strictEqual(randomBal.toBigInt() > 0n, true);
   });
@@ -48,17 +48,17 @@ describe("Balances Pallet: Reaping", { only: true }, async () => {
     await api.tx.balances.transferAll(randomId, true).signAndSend(ferdie);
     await api.createBlock();
     const {
-      data: { free: ferdieBal },
+      data: { free: ferdieBal }
     } = await api.query.system.account(ferdie.address);
     strictEqual(ferdieBal.toBigInt() > 0n, true);
 
     const {
-      data: { free: randomBal },
+      data: { free: randomBal }
     } = await api.query.system.account(randomId);
     strictEqual(randomBal.toBigInt() > 0n, true);
   });
 
-  it("Bal below ED kills account", async (t) => {
+  it("Bal below ED kills account", async () => {
     const randomAccount = await createSr25519Account();
     const amount = 10n * UNIT;
 
@@ -66,7 +66,7 @@ describe("Balances Pallet: Reaping", { only: true }, async () => {
     await api.createBlock();
 
     const {
-      data: { free: balAvail },
+      data: { free: balAvail }
     } = await api.query.system.account(randomAccount.address);
     console.log(balAvail.toHuman());
 
@@ -76,7 +76,7 @@ describe("Balances Pallet: Reaping", { only: true }, async () => {
     await api.createBlock();
 
     const {
-      data: { free: randBal },
+      data: { free: randBal }
     } = await api.query.system.account(randomAccount.address);
 
     strictEqual(randBal.toBigInt(), 0n);

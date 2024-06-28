@@ -8,6 +8,7 @@ use pallet_nfts::PalletFeatures;
 use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
+use sp_runtime::FixedPointNumber;
 use sp_runtime::{
     traits::{BlakeTwo256, Bounded, Convert, IdentifyAccount, IdentityLookup, Verify},
     BuildStorage, DispatchError, FixedU128, MultiSignature, SaturatedConversion,
@@ -303,6 +304,8 @@ impl crate::Config for Test {
     type Fingerprint = H256;
     type StorageRequestBspsRequiredType = u32;
     type ThresholdType = ThresholdType;
+    type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
+    type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
     type Currency = Balances;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
@@ -362,5 +365,26 @@ pub struct SaturatingBalanceToBlockNumber;
 impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
     fn convert(block_number: Balance) -> BlockNumberFor<Test> {
         block_number.saturated_into()
+    }
+}
+
+// Converter from the ThresholdType type (FixedU128) to the BlockNumber type (u64).
+// It performs a saturated conversion, so that the result is always a valid BlockNumber.
+pub struct SaturatingThresholdTypeToBlockNumberConverter;
+
+impl Convert<ThresholdType, BlockNumberFor<Test>>
+    for SaturatingThresholdTypeToBlockNumberConverter
+{
+    fn convert(threshold: ThresholdType) -> BlockNumberFor<Test> {
+        (threshold.into_inner() / FixedU128::accuracy()).saturated_into()
+    }
+}
+
+// Converter from the BlockNumber type (u64) to the ThresholdType type (FixedU128).
+pub struct BlockNumberToThresholdTypeConverter;
+
+impl Convert<BlockNumberFor<Test>, ThresholdType> for BlockNumberToThresholdTypeConverter {
+    fn convert(block_number: BlockNumberFor<Test>) -> ThresholdType {
+        FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
     }
 }

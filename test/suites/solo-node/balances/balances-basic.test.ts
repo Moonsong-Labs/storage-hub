@@ -5,7 +5,7 @@ import {
   UNIT,
   type ExtendedApiPromise,
   bob,
-  DevTestContext,
+  DevTestContext
 } from "../../../util";
 import { strictEqual } from "node:assert";
 
@@ -23,7 +23,7 @@ describe("Balances Pallet: Basic", {}, async () => {
 
   it("Can query balance", async () => {
     const {
-      data: { free },
+      data: { free }
     } = await api.query.system.account(alice.address);
     console.log("Alice balance: ", free.toHuman());
     strictEqual(free.toBigInt() > 0n, true);
@@ -33,7 +33,7 @@ describe("Balances Pallet: Basic", {}, async () => {
     const { address: randomId } = await createSr25519Account();
     const amount = 10n * UNIT;
     const {
-      data: { free: balBefore },
+      data: { free: balBefore }
     } = await api.query.system.account(randomId);
     strictEqual(balBefore.toBigInt(), 0n);
 
@@ -43,7 +43,7 @@ describe("Balances Pallet: Basic", {}, async () => {
     await api.createBlock();
 
     const {
-      data: { free: balAfter },
+      data: { free: balAfter }
     } = await api.query.system.account(randomId);
     strictEqual(balAfter.toBigInt(), amount);
   });
@@ -62,14 +62,14 @@ describe("Balances Pallet: Basic", {}, async () => {
   it("SetBalance fails when called without sudo", async () => {
     const { address: randomId } = await createSr25519Account();
     const {
-      data: { free: balBefore },
+      data: { free: balBefore }
     } = await api.query.system.account(randomId);
 
     await api.tx.balances.forceSetBalance(bob.address, 1337n).signAndSend(alice);
     await api.createBlock();
 
     const {
-      data: { free: balAfter },
+      data: { free: balAfter }
     } = await api.query.system.account(randomId);
 
     strictEqual(balBefore.sub(balAfter).toNumber(), 0);
@@ -83,7 +83,7 @@ describe("Balances Pallet: Basic", {}, async () => {
     await api.createBlock();
 
     const {
-      data: { free: balAfter },
+      data: { free: balAfter }
     } = await api.query.system.account(randomId);
 
     strictEqual(balAfter.toBigInt(), UNIT);

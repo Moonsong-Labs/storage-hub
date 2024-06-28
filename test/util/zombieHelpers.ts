@@ -23,7 +23,7 @@ export const getZombieClients = async (options: {
       await shApi.disconnect();
     },
     relayApi,
-    storageApi: shApi,
+    storageApi: shApi
   };
 };
 

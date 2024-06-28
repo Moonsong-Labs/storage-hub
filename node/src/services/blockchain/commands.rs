@@ -1,7 +1,10 @@
 use anyhow::Result;
 use serde_json::Number;
-use shc_actors_framework::actor::ActorHandle;
 use sp_core::H256;
+
+use pallet_file_system_runtime_api::QueryFileEarliestVolunteerBlockError;
+use shc_actors_framework::actor::ActorHandle;
+use shc_common::types::BlockNumber;
 
 use super::{
     handler::BlockchainService,
@@ -25,6 +28,19 @@ pub enum BlockchainServiceCommand {
         subscription_id: Number,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
     },
+    WaitForBlock {
+        block_number: BlockNumber,
+        callback: tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<()>>,
+    },
+    QueryFileEarliestVolunteerBlock {
+        bsp_id: sp_core::sr25519::Public,
+        file_key: H256,
+        callback:
+            tokio::sync::oneshot::Sender<Result<BlockNumber, QueryFileEarliestVolunteerBlockError>>,
+    },
+    GetNodePublicKey {
+        callback: tokio::sync::oneshot::Sender<sp_core::sr25519::Public>,
+    },
 }
 
 /// Interface for interacting with the BlockchainService actor.
@@ -47,6 +63,19 @@ pub trait BlockchainServiceInterface {
 
     /// Helper function to check if an extrinsic failed or succeeded in a block.
     fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult>;
+
+    /// Wait for a block number.
+    async fn wait_for_block(&self, block_number: BlockNumber) -> Result<()>;
+
+    /// Query the earliest block number that a file was volunteered for storage.
+    async fn query_file_earliest_volunteer_block(
+        &self,
+        bsp_id: sp_core::sr25519::Public,
+        file_key: H256,
+    ) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError>;
+
+    /// Get the node's public key.
+    async fn get_node_public_key(&self) -> sp_core::sr25519::Public;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -118,5 +147,43 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         Err(anyhow::anyhow!(
             "Extrinsic does not contain an ExtrinsicFailed event."
         ))
+    }
+
+    async fn wait_for_block(&self, block_number: BlockNumber) -> Result<()> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::WaitForBlock {
+            block_number,
+            callback,
+        };
+        self.send(message).await;
+        let rx = rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.");
+        rx.await.expect("Failed to wait for block");
+        Ok(())
+    }
+
+    async fn query_file_earliest_volunteer_block(
+        &self,
+        bsp_id: sp_core::sr25519::Public,
+        file_key: H256,
+    ) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::QueryFileEarliestVolunteerBlock {
+            bsp_id,
+            file_key,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    /// Get the node's public key.
+    async fn get_node_public_key(&self) -> sp_core::sr25519::Public {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::GetNodePublicKey { callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 }
