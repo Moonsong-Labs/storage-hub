@@ -17,8 +17,9 @@ import type {
   u128,
   u32,
   u64,
-  u8
+  u8,
 } from "@polkadot/types-codec";
+import type { ITuple } from "@polkadot/types-codec/types";
 import type { AccountId32, H256 } from "@polkadot/types/interfaces/runtime";
 import type {
   CumulusPrimitivesCoreAggregateMessageOrigin,
@@ -30,6 +31,7 @@ import type {
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
   PalletStorageProvidersValueProposition,
+  ShpTraitsTrieRemoveMutation,
   SpRuntimeDispatchError,
   SpWeightsWeightV2Weight,
   StagingXcmV4AssetAssets,
@@ -39,7 +41,7 @@ import type {
   StagingXcmV4Xcm,
   XcmV3TraitsError,
   XcmVersionedAssets,
-  XcmVersionedLocation
+  XcmVersionedLocation,
 } from "@polkadot/types/lookup";
 
 export type __AugmentedEvent<ApiType extends ApiTypes> = AugmentedEvent<ApiType>;
@@ -138,7 +140,7 @@ declare module "@polkadot/api-base/types/events" {
           from: AccountId32,
           to: AccountId32,
           amount: u128,
-          destinationStatus: FrameSupportTokensMiscBalanceStatus
+          destinationStatus: FrameSupportTokensMiscBalanceStatus,
         ],
         {
           from: AccountId32;
@@ -370,14 +372,16 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [
           bspId: H256,
+          bucketId: H256,
           location: Bytes,
           fingerprint: H256,
           multiaddresses: Vec<Bytes>,
           owner: AccountId32,
-          size_: u32
+          size_: u32,
         ],
         {
           bspId: H256;
+          bucketId: H256;
           location: Bytes;
           fingerprint: H256;
           multiaddresses: Vec<Bytes>;
@@ -390,16 +394,16 @@ declare module "@polkadot/api-base/types/events" {
        **/
       BspConfirmedStoring: AugmentedEvent<
         ApiType,
-        [bspId: H256, location: Bytes],
-        { bspId: H256; location: Bytes }
+        [bspId: H256, fileKey: H256, newRoot: H256],
+        { bspId: H256; fileKey: H256; newRoot: H256 }
       >;
       /**
        * Notifies that a BSP has stopped storing a file.
        **/
       BspStoppedStoring: AugmentedEvent<
         ApiType,
-        [bspId: H256, fileKey: H256, owner: AccountId32, location: Bytes],
-        { bspId: H256; fileKey: H256; owner: AccountId32; location: Bytes }
+        [bspId: H256, fileKey: H256, newRoot: H256, owner: AccountId32, location: Bytes],
+        { bspId: H256; fileKey: H256; newRoot: H256; owner: AccountId32; location: Bytes }
       >;
       /**
        * Notifies that a bucket's privacy has been updated.
@@ -420,7 +424,7 @@ declare module "@polkadot/api-base/types/events" {
           bucketId: H256,
           name: Bytes,
           collectionId: Option<u32>,
-          private: bool
+          private: bool,
         ],
         {
           who: AccountId32;
@@ -444,17 +448,33 @@ declare module "@polkadot/api-base/types/events" {
        **/
       NewStorageRequest: AugmentedEvent<
         ApiType,
-        [who: AccountId32, location: Bytes, fingerprint: H256, size_: u32, peerIds: Vec<Bytes>],
-        { who: AccountId32; location: Bytes; fingerprint: H256; size_: u32; peerIds: Vec<Bytes> }
+        [
+          who: AccountId32,
+          fileKey: H256,
+          bucketId: H256,
+          location: Bytes,
+          fingerprint: H256,
+          size_: u32,
+          peerIds: Vec<Bytes>,
+        ],
+        {
+          who: AccountId32;
+          fileKey: H256;
+          bucketId: H256;
+          location: Bytes;
+          fingerprint: H256;
+          size_: u32;
+          peerIds: Vec<Bytes>;
+        }
       >;
       /**
        * Notifies the expiration of a storage request.
        **/
-      StorageRequestExpired: AugmentedEvent<ApiType, [location: Bytes], { location: Bytes }>;
+      StorageRequestExpired: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
       /**
        * Notifies that a storage request has been revoked by the user who initiated it.
        **/
-      StorageRequestRevoked: AugmentedEvent<ApiType, [location: Bytes], { location: Bytes }>;
+      StorageRequestRevoked: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
       /**
        * Generic event
        **/
@@ -470,7 +490,7 @@ declare module "@polkadot/api-base/types/events" {
           id: U8aFixed,
           origin: CumulusPrimitivesCoreAggregateMessageOrigin,
           pageIndex: u32,
-          messageIndex: u32
+          messageIndex: u32,
         ],
         {
           id: U8aFixed;
@@ -496,7 +516,7 @@ declare module "@polkadot/api-base/types/events" {
           id: H256,
           origin: CumulusPrimitivesCoreAggregateMessageOrigin,
           weightUsed: SpWeightsWeightV2Weight,
-          success: bool
+          success: bool,
         ],
         {
           id: H256;
@@ -513,7 +533,7 @@ declare module "@polkadot/api-base/types/events" {
         [
           id: H256,
           origin: CumulusPrimitivesCoreAggregateMessageOrigin,
-          error: FrameSupportMessagesProcessMessageError
+          error: FrameSupportMessagesProcessMessageError,
         ],
         {
           id: H256;
@@ -553,7 +573,7 @@ declare module "@polkadot/api-base/types/events" {
           collection: u32,
           maybeItem: Option<u32>,
           key: Bytes,
-          namespace: PalletNftsAttributeNamespace
+          namespace: PalletNftsAttributeNamespace,
         ],
         {
           collection: u32;
@@ -572,7 +592,7 @@ declare module "@polkadot/api-base/types/events" {
           maybeItem: Option<u32>,
           key: Bytes,
           value: Bytes,
-          namespace: PalletNftsAttributeNamespace
+          namespace: PalletNftsAttributeNamespace,
         ],
         {
           collection: u32;
@@ -794,7 +814,7 @@ declare module "@polkadot/api-base/types/events" {
           desiredCollection: u32,
           desiredItem: Option<u32>,
           price: Option<PalletNftsPriceWithDirection>,
-          deadline: u32
+          deadline: u32,
         ],
         {
           offeredCollection: u32;
@@ -818,7 +838,7 @@ declare module "@polkadot/api-base/types/events" {
           receivedItem: u32,
           receivedItemOwner: AccountId32,
           price: Option<PalletNftsPriceWithDirection>,
-          deadline: u32
+          deadline: u32,
         ],
         {
           sentCollection: u32;
@@ -842,7 +862,7 @@ declare module "@polkadot/api-base/types/events" {
           desiredCollection: u32,
           desiredItem: Option<u32>,
           price: Option<PalletNftsPriceWithDirection>,
-          deadline: u32
+          deadline: u32,
         ],
         {
           offeredCollection: u32;
@@ -862,7 +882,7 @@ declare module "@polkadot/api-base/types/events" {
           collection: u32,
           issuer: Option<AccountId32>,
           admin: Option<AccountId32>,
-          freezer: Option<AccountId32>
+          freezer: Option<AccountId32>,
         ],
         {
           collection: u32;
@@ -890,7 +910,7 @@ declare module "@polkadot/api-base/types/events" {
           item: u32,
           owner: AccountId32,
           delegate: AccountId32,
-          deadline: Option<u32>
+          deadline: Option<u32>,
         ],
         {
           collection: u32;
@@ -1081,7 +1101,7 @@ declare module "@polkadot/api-base/types/events" {
           origin: StagingXcmV4Location,
           queryId: u64,
           expectedQuerier: StagingXcmV4Location,
-          maybeActualQuerier: Option<StagingXcmV4Location>
+          maybeActualQuerier: Option<StagingXcmV4Location>,
         ],
         {
           origin: StagingXcmV4Location;
@@ -1114,7 +1134,7 @@ declare module "@polkadot/api-base/types/events" {
         [
           origin: StagingXcmV4Location,
           queryId: u64,
-          expectedLocation: Option<StagingXcmV4Location>
+          expectedLocation: Option<StagingXcmV4Location>,
         ],
         {
           origin: StagingXcmV4Location;
@@ -1176,7 +1196,7 @@ declare module "@polkadot/api-base/types/events" {
           palletIndex: u8,
           callIndex: u8,
           actualWeight: SpWeightsWeightV2Weight,
-          maxBudgetedWeight: SpWeightsWeightV2Weight
+          maxBudgetedWeight: SpWeightsWeightV2Weight,
         ],
         {
           queryId: u64;
@@ -1226,7 +1246,7 @@ declare module "@polkadot/api-base/types/events" {
           origin: StagingXcmV4Location,
           destination: StagingXcmV4Location,
           message: StagingXcmV4Xcm,
-          messageId: U8aFixed
+          messageId: U8aFixed,
         ],
         {
           origin: StagingXcmV4Location;
@@ -1265,7 +1285,7 @@ declare module "@polkadot/api-base/types/events" {
           destination: StagingXcmV4Location,
           result: u32,
           cost: StagingXcmV4AssetAssets,
-          messageId: U8aFixed
+          messageId: U8aFixed,
         ],
         {
           destination: StagingXcmV4Location;
@@ -1319,6 +1339,28 @@ declare module "@polkadot/api-base/types/events" {
         { who: AccountId32; keyChallenged: H256 }
       >;
       /**
+       * A new challenge seed was generated.
+       **/
+      NewChallengeSeed: AugmentedEvent<
+        ApiType,
+        [challengesTicker: u32, seed: H256],
+        { challengesTicker: u32; seed: H256 }
+      >;
+      /**
+       * A new checkpoint challenge was generated.
+       **/
+      NewCheckpointChallenge: AugmentedEvent<
+        ApiType,
+        [
+          challengesTicker: u32,
+          challenges: Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>,
+        ],
+        {
+          challengesTicker: u32;
+          challenges: Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>;
+        }
+      >;
+      /**
        * A proof was accepted.
        **/
       ProofAccepted: AugmentedEvent<
@@ -1326,6 +1368,10 @@ declare module "@polkadot/api-base/types/events" {
         [provider: H256, proof: PalletProofsDealerProof],
         { provider: H256; proof: PalletProofsDealerProof }
       >;
+      /**
+       * A slashable provider was found.
+       **/
+      SlashableProvider: AugmentedEvent<ApiType, [provider: H256], { provider: H256 }>;
       /**
        * Generic event
        **/
@@ -1374,7 +1420,7 @@ declare module "@polkadot/api-base/types/events" {
           who: AccountId32,
           multiaddresses: Vec<Bytes>,
           capacity: u32,
-          valueProp: PalletStorageProvidersValueProposition
+          valueProp: PalletStorageProvidersValueProposition,
         ],
         {
           who: AccountId32;
@@ -1398,7 +1444,7 @@ declare module "@polkadot/api-base/types/events" {
           who: AccountId32,
           multiaddresses: Vec<Bytes>,
           capacity: u32,
-          valueProp: PalletStorageProvidersValueProposition
+          valueProp: PalletStorageProvidersValueProposition,
         ],
         {
           who: AccountId32;

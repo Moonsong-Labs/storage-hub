@@ -16,12 +16,22 @@ async function bootStrapNetwork() {
     // biome-ignore lint/correctness/noInnerDeclarations: this is neater
     var api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
+    const bucketName = "nothingmuch-0";
+    const newBucketEventEvent = await api.createBucket(bucketName);
+    const newBucketEventDataBlob =
+      api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+
+    if (!newBucketEventDataBlob) {
+      throw new Error("Event doesn't match Type");
+    }
+
     // Issue file Storage request
     const rpcResponse = await sendFileSendRpc(
       api,
       "/res/whatsup.jpg",
       "cat/whatsup.jpg",
-      NODE_INFOS.user.AddressId
+      NODE_INFOS.user.AddressId,
+      newBucketEventDataBlob.bucketId
     );
     console.log(rpcResponse);
 
@@ -31,6 +41,7 @@ async function bootStrapNetwork() {
     await api.sealBlock(
       api.tx.fileSystem.issueStorageRequest(
         "cat/whatsup.jpg",
+        rpcResponse.bucket_id,
         rpcResponse.fingerprint,
         rpcResponse.size,
         DUMMY_MSP_ID,

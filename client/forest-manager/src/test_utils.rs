@@ -28,6 +28,7 @@ pub fn build_merkle_patricia_forest<T: TrieLayout>(
 
         let metadata = FileMetadata {
             owner: "owner".as_bytes().to_vec(),
+            bucket_id: bucket.to_vec(),
             location: file_path,
             size: 0,
             fingerprint: Fingerprint::default(),

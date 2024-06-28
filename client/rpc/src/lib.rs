@@ -9,6 +9,7 @@ use jsonrpsee::types::ErrorObjectOwned;
 use shc_common::types::ChunkId;
 use shc_common::types::FileMetadata;
 use shc_common::types::FILE_CHUNK_SIZE;
+use sp_core::H256;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
 
@@ -24,7 +25,6 @@ use std::io::Read;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::sync::Arc;
-
 use tokio::sync::RwLock;
 
 const LOG_TARGET: &str = "file-storage-rpc";
@@ -41,6 +41,7 @@ pub trait FileStorageApi {
         file_path: String,
         location: String,
         owner: AccountId32,
+        bucket_id: H256,
     ) -> RpcResult<FileMetadata>;
 }
 
@@ -74,6 +75,7 @@ where
         file_path: String,
         location: String,
         owner: AccountId32,
+        bucket_id: H256,
     ) -> RpcResult<FileMetadata> {
         // Open file in the local file system.
         let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
@@ -119,9 +121,10 @@ where
 
         // Build StorageHub's [`FileMetadata`]
         let file_metadata = FileMetadata {
+            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&owner).to_vec(),
+            bucket_id: bucket_id.as_ref().to_vec(),
             size: fs_metadata.len(),
             fingerprint: root.as_ref().into(),
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&owner).to_vec(),
             location: location.clone().into(),
         };
         let file_key = file_metadata.file_key::<T::Hash>();

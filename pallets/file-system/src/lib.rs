@@ -292,7 +292,7 @@ pub mod pallet {
             who: T::AccountId,
             msp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
-            name: BoundedVec<u8, BucketNameLimitFor<T>>,
+            name: BucketNameFor<T>,
             collection_id: Option<CollectionIdFor<T>>,
             private: bool,
         },
@@ -313,6 +313,7 @@ pub mod pallet {
         NewStorageRequest {
             who: T::AccountId,
             file_key: MerkleHash<T>,
+            bucket_id: BucketIdFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
@@ -321,6 +322,7 @@ pub mod pallet {
         /// Notifies that a BSP has been accepted to store a given file.
         AcceptedBspVolunteer {
             bsp_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             multiaddresses: MultiAddresses<T>,
@@ -401,6 +403,10 @@ pub mod pallet {
         ImpossibleFailedToGetValue,
         /// Bucket is not private. Call `update_bucket_privacy` to make it private.
         BucketIsNotPrivate,
+        /// Bucket does not exist
+        BucketNotFound,
+        /// Operation failed because the account is not the owner of the bucket.
+        NotBucketOwner,
         /// Root of the provider not found.
         ProviderRootNotFound,
         /// Failed to verify proof: required to provide a proof of non-inclusion.
@@ -420,7 +426,7 @@ pub mod pallet {
         pub fn create_bucket(
             origin: OriginFor<T>,
             msp_id: ProviderIdFor<T>,
-            name: BoundedVec<u8, BucketNameLimitFor<T>>,
+            name: BucketNameFor<T>,
             private: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -488,6 +494,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn issue_storage_request(
             origin: OriginFor<T>,
+            bucket_id: BucketIdFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
@@ -500,6 +507,7 @@ pub mod pallet {
             // Perform validations and register storage request
             let file_key = Self::do_request_storage(
                 who.clone(),
+                bucket_id,
                 location.clone(),
                 fingerprint,
                 size,
@@ -513,6 +521,7 @@ pub mod pallet {
             Self::deposit_event(Event::NewStorageRequest {
                 who,
                 file_key,
+                bucket_id,
                 location,
                 fingerprint,
                 size,
@@ -561,6 +570,7 @@ pub mod pallet {
             Self::deposit_event(Event::AcceptedBspVolunteer {
                 bsp_id,
                 multiaddresses,
+                bucket_id: storage_request_metadata.bucket_id,
                 location: storage_request_metadata.location,
                 fingerprint: storage_request_metadata.fingerprint,
                 owner: storage_request_metadata.owner,
@@ -615,6 +625,7 @@ pub mod pallet {
         pub fn bsp_stop_storing(
             origin: OriginFor<T>,
             file_key: MerkleHash<T>,
+            bucket_id: BucketIdFor<T>,
             location: FileLocation<T>,
             owner: T::AccountId,
             fingerprint: Fingerprint<T>,
@@ -628,6 +639,7 @@ pub mod pallet {
             let (bsp_id, new_root) = Self::do_bsp_stop_storing(
                 who.clone(),
                 file_key,
+                bucket_id,
                 location.clone(),
                 owner.clone(),
                 fingerprint,

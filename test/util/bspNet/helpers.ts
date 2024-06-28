@@ -10,34 +10,42 @@ import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import * as util from "node:util";
 import * as child_process from "node:child_process";
-import type { CreatedBlock, EventRecord, Hash, SignedBlock } from "@polkadot/types/interfaces";
+import type {
+  CreatedBlock,
+  EventRecord,
+  H256,
+  Hash,
+  SignedBlock,
+} from "@polkadot/types/interfaces";
 import { execSync } from "node:child_process";
 import { showContainers } from "./docker";
 import { isExtSuccess } from "../extrinsics";
-import Docker from "dockerode";
 import type { BspNetApi } from "./types";
-import { DOCKER_IMAGE } from "../constants";
+import { assertEventPresent } from "../asserts.ts";
 const exec = util.promisify(child_process.exec);
 
 export const sendFileSendRpc = async (
   api: ApiPromise,
   filePath: string,
   remotePath: string,
-  userNodeAccountId: string
+  userNodeAccountId: string,
+  bucket: H256
 ): Promise<FileSendResponse> => {
   try {
     // @ts-expect-error - rpc provider not officially exposed
     const resp = await api._rpcCore.provider.send("filestorage_loadFileInStorage", [
       filePath,
       remotePath,
-      userNodeAccountId
+      userNodeAccountId,
+      bucket,
     ]);
-    const { owner, location, size, fingerprint } = resp;
+    const { owner, bucket_id, location, size, fingerprint } = resp;
     return {
       owner: u8aToHex(owner),
+      bucket_id,
       location: u8aToHex(location),
       size: BigInt(size),
-      fingerprint: u8aToHex(fingerprint)
+      fingerprint: u8aToHex(fingerprint),
     };
   } catch (e) {
     console.error("Error sending file to user node:", e);
@@ -81,6 +89,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
 
 export interface FileSendResponse {
   owner: string;
+  bucket_id: string;
   location: string;
   size: bigint;
   fingerprint: string;
@@ -195,11 +204,18 @@ export const runBspNet = async () => {
           {
             identifier: VALUE_PROP,
             dataLimit: 500,
-            protocols: ["https", "ssh", "telnet"]
+            protocols: ["https", "ssh", "telnet"],
           },
           alice.address
         )
       )
+    );
+
+    // u128 max value
+    const u128Max = (BigInt(1) << BigInt(128)) - BigInt(1);
+
+    await api.sealBlock(
+      api.tx.sudo.sudo(api.tx.fileSystem.forceUpdateBspsAssignmentThreshold(u128Max))
     );
   } catch (e) {
     console.error("Error ", e);
@@ -223,6 +239,9 @@ export const closeBspNet = async () => {
   await docker.pruneVolumes();
 };
 
+// TODO: Add a succesful flag to track whether ext was successful or not
+//        Determine whether extrinsic was successful or not based on the
+//        ExtrinsicSucess event
 export interface SealedBlock {
   blockReceipt: CreatedBlock;
   txHash?: string;
@@ -288,8 +307,19 @@ export const sealBlock = async (
 
   return Object.assign(sealedResults, {
     events: results.events,
-    extSuccess: results.success
+    extSuccess: results.success,
   }) satisfies SealedBlock;
+};
+
+export const createBucket = async (api: ApiPromise, bucketName: string) => {
+  const createBucketResult = await sealBlock(
+    api,
+    api.tx.fileSystem.createBucket(DUMMY_MSP_ID, bucketName, false),
+    shUser
+  );
+  const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
+
+  return event;
 };
 
 export const cleardownTest = async (api: BspNetApi) => {

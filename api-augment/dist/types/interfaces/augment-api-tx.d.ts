@@ -283,12 +283,12 @@ declare module '@polkadot/api-base/types/submittable' {
             /**
              * Used by a BSP to confirm they are storing data of a storage request.
              **/
-            bspConfirmStoring: AugmentedSubmittable<(location: Bytes | string | Uint8Array, root: H256 | string | Uint8Array, nonInclusionForestProof: SpTrieStorageProofCompactProof | {
+            bspConfirmStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, root: H256 | string | Uint8Array, nonInclusionForestProof: SpTrieStorageProofCompactProof | {
                 encodedNodes?: any;
             } | string | Uint8Array, addedFileKeyProof: ShpFileKeyVerifierFileKeyProof | {
                 fileMetadata?: any;
                 proof?: any;
-            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes, H256, SpTrieStorageProofCompactProof, ShpFileKeyVerifierFileKeyProof]>;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, H256, SpTrieStorageProofCompactProof, ShpFileKeyVerifierFileKeyProof]>;
             /**
              * Executed by a BSP to stop storing a file.
              *
@@ -299,7 +299,9 @@ declare module '@polkadot/api-base/types/submittable' {
              * This metadata is necessary since it is needed to reconstruct the leaf node key in the storage
              * provider's Merkle Forest.
              **/
-            bspStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId32 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u32 | AnyNumber | Uint8Array, canServe: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, Bytes, AccountId32, H256, u32, bool]>;
+            bspStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId32 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u32 | AnyNumber | Uint8Array, canServe: bool | boolean | Uint8Array, inclusionForestProof: SpTrieStorageProofCompactProof | {
+                encodedNodes?: any;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, H256, Bytes, AccountId32, H256, u32, bool, SpTrieStorageProofCompactProof]>;
             /**
              * Used by a BSP to volunteer for storing a file.
              *
@@ -308,20 +310,21 @@ declare module '@polkadot/api-base/types/submittable' {
              * if the maximum number of BSPs has been reached. A successful assignment as BSP means
              * that some of the collateral tokens of that MSP are frozen.
              **/
-            bspVolunteer: AugmentedSubmittable<(location: Bytes | string | Uint8Array, fingerprint: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes, H256]>;
+            bspVolunteer: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * Create and associate a collection with a bucket.
              **/
             createAndAssociateCollectionWithBucket: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             createBucket: AugmentedSubmittable<(mspId: H256 | string | Uint8Array, name: Bytes | string | Uint8Array, private: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, Bytes, bool]>;
+            forceUpdateBspsAssignmentThreshold: AugmentedSubmittable<(bspAssignmentThreshold: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u128]>;
             /**
              * Issue a new storage request for a file
              **/
-            issueStorageRequest: AugmentedSubmittable<(location: Bytes | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u32 | AnyNumber | Uint8Array, mspId: H256 | string | Uint8Array, peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [Bytes, H256, u32, H256, Vec<Bytes>]>;
+            issueStorageRequest: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u32 | AnyNumber | Uint8Array, mspId: H256 | string | Uint8Array, peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [H256, Bytes, H256, u32, H256, Vec<Bytes>]>;
             /**
              * Revoke storage request
              **/
-            revokeStorageRequest: AugmentedSubmittable<(location: Bytes | string | Uint8Array, fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [Bytes, H256]>;
+            revokeStorageRequest: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             updateBucketPrivacy: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, private: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, bool]>;
             /**
              * Generic tx
@@ -1814,46 +1817,25 @@ declare module '@polkadot/api-base/types/submittable' {
              **/
             challenge: AugmentedSubmittable<(key: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
-             * Extrinsic to register a new round of challenges.
-             *
-             * This function is called by the block producer to register a new round of challenges.
-             * Random challenges are automatically generated based on some external source of
-             * randomness, and are added to `BlockToChallenges`, for this block's number.
-             *
-             * It also takes care of including the challenges from the `ChallengesQueue` and
-             * `PriorityChallengesQueue`. This custom challenges are only included in "checkpoint"
-             * blocks
-             *
-             * Additionally, it takes care of checking if there are Providers that have
-             * failed to submit a proof, and should have submitted one by this block. It does so
-             * by checking the `BlockToChallengedProviders` StorageMap. If a Provider is found
-             * to have failed to submit a proof, it is subject to slashing.
-             *
-             * Finally, it cleans up:
-             * - The `BlockToChallenges` StorageMap, removing entries older than `ChallengeHistoryLength`.
-             * - The `BlockToChallengedProviders` StorageMap, removing entries for the current block number.
-             **/
-            newChallengesRound: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
-            /**
              * For a Provider to submit a proof.
              *
              * Checks that `provider` is a registered Provider. If none
              * is provided, the proof submitter is considered to be the Provider.
              * Relies on a Providers pallet to get the root for the Provider.
              * Validates that the proof corresponds to a challenge that was made in the past,
-             * by checking the `BlockToChallengesSeed` StorageMap. The block number that the
-             * Provider should have submitted a proof is calculated based on the last block they
-             * submitted a proof for (`LastBlockProviderSubmittedProofFor`), and the proving period for
+             * by checking the `TickToChallengesSeed` StorageMap. The challenge tick that the
+             * Provider should have submitted a proof is calculated based on the last tick they
+             * submitted a proof for (`LastTickProviderSubmittedProofFor`), and the proving period for
              * that Provider, which is a function of their stake.
              * This extrinsic also checks that there hasn't been a checkpoint challenge round
-             * in between the last time the Provider submitted a proof for and the block
+             * in between the last time the Provider submitted a proof for and the tick
              * for which the proof is being submitted. If there has been, the Provider is
              * subject to slashing.
              *
              * If valid:
-             * - Pushes forward the Provider in the `BlockToChallengedProviders` StorageMap a number
-             * of blocks corresponding to the stake of the Provider.
-             * - Registers this block as the last block in which the Provider submitted a proof.
+             * - Pushes forward the Provider in the `ChallengeTickToChallengedProviders` StorageMap a number
+             * of ticks corresponding to the stake of the Provider.
+             * - Registers this tick as the last tick in which the Provider submitted a proof.
              *
              * Execution of this extrinsic should be refunded if the proof is valid.
              **/

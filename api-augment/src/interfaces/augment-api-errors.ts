@@ -195,9 +195,21 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BucketIsNotPrivate: AugmentedError<ApiType>;
       /**
+       * Bucket does not exist
+       **/
+      BucketNotFound: AugmentedError<ApiType>;
+      /**
        * Divided by 0
        **/
       DividedByZero: AugmentedError<ApiType>;
+      /**
+       * Failed to verify proof: required to provide a proof of inclusion.
+       **/
+      ExpectedInclusionProof: AugmentedError<ApiType>;
+      /**
+       * Failed to verify proof: required to provide a proof of non-inclusion.
+       **/
+      ExpectedNonInclusionProof: AugmentedError<ApiType>;
       /**
        * Failed to convert block number to threshold.
        **/
@@ -223,6 +235,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
       /**
+       * Metadata does not correspond to expected file key.
+       **/
+      InvalidFileKeyMetadata: AugmentedError<ApiType>;
+      /**
        * Error created in 2024. If you see this, you are well beyond the singularity and should
        * probably stop using this pallet.
        **/
@@ -235,6 +251,14 @@ declare module "@polkadot/api-base/types/errors" {
        * Account is not a MSP.
        **/
       NotAMsp: AugmentedError<ApiType>;
+      /**
+       * Operation failed because the account is not the owner of the bucket.
+       **/
+      NotBucketOwner: AugmentedError<ApiType>;
+      /**
+       * Root of the provider not found.
+       **/
+      ProviderRootNotFound: AugmentedError<ApiType>;
       /**
        * Storage request already registered for the given file.
        **/
@@ -259,6 +283,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Arithmetic error in threshold calculation.
        **/
       ThresholdArithmeticError: AugmentedError<ApiType>;
+      /**
+       * BSPs assignment threshold cannot be below asymptote.
+       **/
+      ThresholdBelowAsymptote: AugmentedError<ApiType>;
       /**
        * Number of removed BSPs volunteered from storage request prefix did not match the expected number.
        **/
@@ -714,24 +742,29 @@ declare module "@polkadot/api-base/types/errors" {
     };
     proofsDealer: {
       /**
-       * Provider is submitting a proof for a block in the future.
-       **/
-      ChallengesBlockNotReached: AugmentedError<ApiType>;
-      /**
-       * Provider is submitting a proof for a block before the last block this pallet registers
-       * challenges for.
-       **/
-      ChallengesBlockTooOld: AugmentedError<ApiType>;
-      /**
        * `challenge` extrinsic errors
        * The ChallengesQueue is full. No more manual challenges can be made
        * until some of the challenges in the queue are dispatched.
        **/
       ChallengesQueueOverflow: AugmentedError<ApiType>;
       /**
+       * Provider is submitting a proof for a tick in the future.
+       **/
+      ChallengesTickNotReached: AugmentedError<ApiType>;
+      /**
+       * Provider is submitting a proof for a tick too late, i.e. that the challenges tick
+       * is greater or equal than `challenges_tick` + `T::ChallengeTicksTolerance::get()`.
+       **/
+      ChallengesTickTooLate: AugmentedError<ApiType>;
+      /**
+       * Provider is submitting a proof for a tick before the last tick this pallet registers
+       * challenges for.
+       **/
+      ChallengesTickTooOld: AugmentedError<ApiType>;
+      /**
        * Checkpoint challenges not found in block.
-       * This should only be possible if `BlockToCheckpointChallenges` is dereferenced for a block
-       * that is not a checkpoint block.
+       * This should only be possible if `TickToCheckpointChallenges` is dereferenced for a tick
+       * that is not a checkpoint tick.
        **/
       CheckpointChallengesNotFound: AugmentedError<ApiType>;
       /**
@@ -739,6 +772,10 @@ declare module "@polkadot/api-base/types/errors" {
        * There are no key proofs submitted.
        **/
       EmptyKeyProofs: AugmentedError<ApiType>;
+      /**
+       * Failed to apply delta to the forest proof partial trie.
+       **/
+      FailedToApplyDelta: AugmentedError<ApiType>;
       /**
        * The fee for submitting a challenge could not be charged.
        **/
@@ -761,10 +798,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       KeyProofVerificationFailed: AugmentedError<ApiType>;
       /**
-       * Provider is submitting a proof but there is no record of the last block they
+       * Provider is submitting a proof but there is no record of the last tick they
        * submitted a proof for.
        * Providers who are required to submit proofs should always have a record of the
-       * last block they submitted a proof for, otherwise it means they haven't started
+       * last tick they submitted a proof for, otherwise it means they haven't started
        * providing service for any user yet.
        **/
       NoRecordOfLastSubmittedProof: AugmentedError<ApiType>;
@@ -787,9 +824,9 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ProviderStakeNotFound: AugmentedError<ApiType>;
       /**
-       * The seed for the block could not be found.
-       * This should not be possible for a block within the `ChallengeHistoryLength` range, as
-       * seeds are generated for all blocks, and stored within this range.
+       * The seed for the tick could not be found.
+       * This should not be possible for a tick within the `ChallengeHistoryLength` range, as
+       * seeds are generated for all ticks, and stored within this range.
        **/
       SeedNotFound: AugmentedError<ApiType>;
       /**
