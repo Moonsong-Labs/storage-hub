@@ -11,6 +11,7 @@ mod weights;
 
 use smallvec::smallvec;
 use sp_api::impl_runtime_apis;
+use sp_core::H256;
 use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
     traits::{BlakeTwo256, IdentifyAccount, Verify},
@@ -40,6 +41,8 @@ use sp_runtime::{
 };
 pub use sp_runtime::{MultiAddress, Perbill, Permill};
 use sp_std::prelude::Vec;
+
+use pallet_file_system_runtime_api::QueryFileEarliestVolunteerBlockError;
 
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
@@ -376,6 +379,12 @@ impl_runtime_apis! {
             encoded: Vec<u8>,
         ) -> Option<Vec<(Vec<u8>, KeyTypeId)>> {
             SessionKeys::decode_into_raw_public_keys(&encoded)
+        }
+    }
+
+    impl pallet_file_system_runtime_api::FileSystemApi<Block, Hash, H256, BlockNumber> for Runtime {
+        fn query_earliest_file_volunteer_block(bsp_id: Hash, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
+            FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key)
         }
     }
 

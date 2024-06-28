@@ -30,6 +30,8 @@ sp-std = { workspace = true }
 sp-trie = { workspace = true }
 
 # Local
+pallet-file-system-runtime-api = { workspace = true }
+
 shp-traits = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 

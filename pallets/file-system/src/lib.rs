@@ -56,7 +56,8 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use sp_runtime::{traits::EnsureFrom, BoundedVec};
+    use sp_runtime::traits::Convert;
+    use sp_runtime::BoundedVec;
     use sp_runtime::{
         traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
         FixedPointNumber,
@@ -125,8 +126,13 @@ pub mod pallet {
             + CheckedAdd
             + CheckedSub
             + PartialOrd
-            + FixedPointNumber
-            + EnsureFrom<u128>;
+            + FixedPointNumber;
+
+        /// The type to convert a threshold to a block number.
+        type ThresholdTypeToBlockNumber: Convert<Self::ThresholdType, BlockNumberFor<Self>>;
+
+        /// The type to convert a block number to a threshold.
+        type BlockNumberToThresholdType: Convert<BlockNumberFor<Self>, Self::ThresholdType>;
 
         /// The currency mechanism, used for paying for reserves.
         type Currency: Currency<Self::AccountId>;

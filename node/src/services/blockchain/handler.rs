@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use std::{str::FromStr, sync::Arc};
+use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 
 use anyhow::Result;
 use codec::{Decode, Encode};
@@ -42,6 +42,7 @@ use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{
     generic::{self, SignedPayload},
+    traits::Header,
     AccountId32, SaturatedConversion,
 };
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
@@ -51,6 +52,8 @@ use crate::{
     service::ParachainClient,
     services::blockchain::{events::AcceptedBspVolunteer, transaction::SubmittedTransaction},
 };
+use pallet_file_system_runtime_api::{FileSystemApi, QueryFileEarliestVolunteerBlockError};
+use shc_common::types::BlockNumber;
 
 use crate::services::blockchain::{
     commands::BlockchainServiceCommand,
@@ -93,6 +96,8 @@ pub struct BlockchainService {
     rpc_handlers: Arc<RpcHandlers>,
     /// Nonce counter for the extrinsics.
     nonce_counter: u32,
+    /// A registry of waiters for a block number.
+    wait_for_block_request_by_number: BTreeMap<BlockNumber, Vec<tokio::sync::oneshot::Sender<()>>>,
 }
 
 /// Implement the Actor trait for the BlockchainService actor.
@@ -196,6 +201,76 @@ impl Actor for BlockchainService {
                         }
                     }
                 },
+                BlockchainServiceCommand::WaitForBlock {
+                    block_number,
+                    callback,
+                } => {
+                    let current_block_number = self.client.info().best_number;
+
+                    let (tx, rx) = tokio::sync::oneshot::channel();
+
+                    if current_block_number >= block_number {
+                        match tx.send(()) {
+                            Ok(_) => {}
+                            Err(_) => {
+                                error!(target: LOG_TARGET, "Failed to notify task about waiting block number.");
+                            }
+                        }
+                    } else {
+                        self.wait_for_block_request_by_number
+                            .entry(block_number)
+                            .or_insert_with(Vec::new)
+                            .push(tx);
+                    }
+
+                    match callback.send(rx) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Receiver sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryFileEarliestVolunteerBlock {
+                    bsp_id,
+                    file_key,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let earliest_block_to_volunteer = self
+                        .client
+                        .runtime_api()
+                        .query_earliest_file_volunteer_block(
+                            current_block_hash,
+                            bsp_id.into(),
+                            file_key,
+                        )
+                        .unwrap_or_else(|_| {
+                            Err(QueryFileEarliestVolunteerBlockError::InternalError)
+                        });
+
+                    match callback.send(earliest_block_to_volunteer) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Earliest block to volunteer result sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::GetNodePublicKey { callback } => {
+                    let pub_key = Self::caller_pub_key(self.keystore.clone());
+                    match callback.send(pub_key) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Node's public key sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }
@@ -288,6 +363,7 @@ impl BlockchainService {
             keystore,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
             nonce_counter: 0,
+            wait_for_block_request_by_number: BTreeMap::new(),
         }
     }
 
@@ -299,8 +375,31 @@ impl BlockchainService {
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
         let block_hash: H256 = notification.hash;
+        let block_number: BlockNumber = (*notification.header.number()).saturated_into();
 
-        debug!(target: LOG_TARGET, "Import notification: {}", block_hash);
+        debug!(target: LOG_TARGET, "Import notification #{}: {}", block_number, block_hash);
+
+        // Notify all tasks waiting for this block number (or lower).
+        let mut keys_to_remove = Vec::new();
+
+        for (block_number, waiters) in self
+            .wait_for_block_request_by_number
+            .range_mut(..=block_number)
+        {
+            keys_to_remove.push(*block_number);
+            for waiter in waiters.drain(..) {
+                match waiter.send(()) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        error!(target: LOG_TARGET, "Failed to notify task about block number.");
+                    }
+                }
+            }
+        }
+
+        for key in keys_to_remove {
+            self.wait_for_block_request_by_number.remove(&key);
+        }
 
         // We query the [`BlockchainService`] account nonce at this height
         // and update our internal counter if it's smaller than the result.
@@ -312,7 +411,7 @@ impl BlockchainService {
             .expect("Fetching account nonce works; qed");
         if latest_nonce > self.nonce_counter {
             self.nonce_counter = latest_nonce
-        };
+        }
 
         // Get events from storage.
         match self.get_events_storage_element(block_hash) {
