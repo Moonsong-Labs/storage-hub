@@ -163,7 +163,7 @@ pub mod pallet {
         /// Maximum number of BSPs that can store a file.
         ///
         /// This is used to limit the number of BSPs storing a file and claiming rewards for it.
-        /// If this number is to high, then the reward for storing a file might be to diluted and pointless to store.
+        /// If this number is too high, then the reward for storing a file might be to diluted and pointless to store.
         #[pallet::constant]
         type MaxBspsPerStorageRequest: Get<u32>;
 
@@ -183,13 +183,17 @@ pub mod pallet {
         #[pallet::constant]
         type MaxDataServerMultiAddresses: Get<u32>;
 
+        /// Maximum number of expired storage requests to clean up in a single block.
+        #[pallet::constant]
+        type MaxExpiredItemsInBlock: Get<u32>;
+
         /// Time-to-live for a storage request.
         #[pallet::constant]
         type StorageRequestTtl: Get<u32>;
 
-        /// Maximum number of expired storage requests to clean up in a single block.
+        /// Time-to-live for a pending file deletion request.
         #[pallet::constant]
-        type MaxExpiredItemsInBlock: Get<u32>;
+        type PendingFileDeletionRequestTtl: Get<u32>;
 
         /// Maximum number of file deletion requests a user can have pending.
         #[pallet::constant]
@@ -363,6 +367,8 @@ pub mod pallet {
             owner: T::AccountId,
             location: FileLocation<T>,
         },
+        /// Notifies that a priority challenge failed to be queued for pending file deletion.
+        FailedToQueuePriorityChallenge { user: T::AccountId, file_key: MerkleHash<T> },
     }
 
     // Errors inform users that something went wrong.

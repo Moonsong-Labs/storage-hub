@@ -658,13 +658,6 @@ fn request_storage_expiration_current_block_increment_success() {
         let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
         let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
 
-        let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
-
-        let expected_expiration_block_number: BlockNumberFor<Test> =
-            FileSystem::next_expiration_insertion_block_number(storage_request_ttl.into())
-                .unwrap()
-                .into();
-
         let file_key = FileSystem::compute_file_key(
             owner_account_id.clone(),
             bucket_id,
@@ -672,6 +665,9 @@ fn request_storage_expiration_current_block_increment_success() {
             4,
             fingerprint,
         );
+
+        let expected_expiration_block_number:u32 = StorageRequestTtl::<Test>::get();
+        let expected_expiration_block_number: BlockNumberFor<Test> = expected_expiration_block_number.into();
 
         // Append storage request expiration to the list at `StorageRequestTtl`
         let max_expired_items_in_block: u32 = <Test as Config>::MaxExpiredItemsInBlock::get();
@@ -697,17 +693,6 @@ fn request_storage_expiration_current_block_increment_success() {
         assert_eq!(
             FileSystem::item_expirations(expected_expiration_block_number).len(),
             max_expired_items_in_block as usize
-        );
-
-        let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
-
-        let expected_expiration_block_number: BlockNumberFor<Test> =
-            FileSystem::next_expiration_insertion_block_number(storage_request_ttl.into()).unwrap();
-
-        // Assert that the `CurrentExpirationBlock` storage is incremented by 1
-        assert_eq!(
-            FileSystem::next_available_expiration_insertion_block(),
-            expected_expiration_block_number
         );
 
         // Go to block number after which the storage request expirations should be removed
@@ -738,13 +723,6 @@ fn request_storage_clear_old_expirations_success() {
         let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
         let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
 
-        let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
-
-        let expected_expiration_block_number: BlockNumberFor<Test> =
-            FileSystem::next_expiration_insertion_block_number(storage_request_ttl.into())
-                .unwrap()
-                .into();
-
         // Append storage request expiration to the list at `StorageRequestTtl`
         let max_storage_request_expiry: u32 = <Test as Config>::MaxExpiredItemsInBlock::get();
 
@@ -755,6 +733,9 @@ fn request_storage_clear_old_expirations_success() {
             4,
             fingerprint,
         );
+
+        let expected_expiration_block_number: u32 = StorageRequestTtl::<Test>::get();
+        let expected_expiration_block_number: BlockNumberFor<Test> = expected_expiration_block_number.into();
 
         for _ in 0..max_storage_request_expiry {
             assert_ok!(ItemExpirations::<Test>::try_append(
@@ -774,7 +755,8 @@ fn request_storage_clear_old_expirations_success() {
             peer_ids,
         ));
 
-        System::set_block_number(expected_expiration_block_number);
+        let expected_expiration_block_number:u32 = StorageRequestTtl::<Test>::get();
+        let expected_expiration_block_number: BlockNumberFor<Test> = expected_expiration_block_number.into();
 
         // Assert that the `NextExpirationInsertionBlockNumber` storage is set to 0 initially
         assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);

@@ -9,7 +9,7 @@ use shp_traits::{
 };
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, EnsureFrom, One, Saturating, Zero},
-    ArithmeticError, BoundedVec, DispatchError, SaturatedConversion,
+    ArithmeticError, BoundedVec, DispatchError,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
 
@@ -236,16 +236,7 @@ impl<T: pallet::Config> Pallet<T> {
         // Register storage request.
         <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
 
-        let block_to_insert_expiration =
-            Self::next_expiration_insertion_block_number(T::StorageRequestTtl::get().into())?;
-
-        // Add storage request expiration at next available block.
-        expect_or_err!(
-            // TODO: Verify that try_append gets an empty BoundedVec when appending a first element.
-            <ItemExpirations<T>>::try_append(block_to_insert_expiration, ExpiredItems::StorageRequest(file_key)).ok(),
-            "Storage request expiration should have enough slots available since it was just checked.",
-            Error::<T>::StorageRequestExpiredNoSlotAvailable
-        );
+        Self::queue_expiration_item(T::StorageRequestTtl::get().into(), ExpiredItems::StorageRequest(file_key))?;
 
         Ok(file_key)
     }
@@ -755,7 +746,7 @@ impl<T: pallet::Config> Pallet<T> {
     ) -> DispatchResult {
         // Compute the file key hash.
         let computed_file_key =
-            Self::compute_file_key(sender, bucket_id, location.clone(), size, fingerprint);
+            Self::compute_file_key(sender.clone(), bucket_id, location.clone(), size, fingerprint);
 
         // Check that the metadata corresponds to the expected file key.
         ensure!(
@@ -764,7 +755,9 @@ impl<T: pallet::Config> Pallet<T> {
         );
 
         match inclusion_forest_proof {
-            None => {}
+            None => {
+                Self::queue_expiration_item(T::PendingFileDeletionRequestTtl::get().into(), ExpiredItems::PendingFileDeletionRequests((sender, file_key)))?;
+            }
             Some(inclusion_forest_proof) => {
                 // Verify the proof of inclusion.
                 let proven_keys =
@@ -811,24 +804,20 @@ impl<T: pallet::Config> Pallet<T> {
 
     /// Compute the next block number to insert an expiration after a given TTL.
     ///
-    /// This function calculates the next block number to insert an expiration for an expiration item and updates
-    /// [`NextAvailableExpirationInsertionBlock`] accordingly.
-    pub(crate) fn next_expiration_insertion_block_number(
+    /// This function attempts to insert an expiration item at the next available block after the given TTL starting from
+    /// the current [`NextAvailableExpirationInsertionBlock`].
+    pub(crate) fn queue_expiration_item(
         expiration_item_ttl: BlockNumberFor<T>,
+        expiration_item: ExpiredItems<T>,
     ) -> Result<BlockNumberFor<T>, DispatchError> {
         let mut expiration_block = NextAvailableExpirationInsertionBlock::<T>::get()
             .checked_add(&expiration_item_ttl)
             .ok_or(Error::<T>::MaxBlockNumberReached)?;
 
-        let mut item_expirations = <ItemExpirations<T>>::get(expiration_block);
-
-        // Find the next available block to insert the expiration.
-        while item_expirations.len() > T::MaxExpiredItemsInBlock::get().saturated_into() {
+        while let Err(_) = <ItemExpirations<T>>::try_append(expiration_block, expiration_item.clone()) {
             expiration_block = expiration_block
                 .checked_add(&1u8.into())
                 .ok_or(Error::<T>::MaxBlockNumberReached)?;
-
-            item_expirations = <ItemExpirations<T>>::get(expiration_block);
         }
 
         <NextAvailableExpirationInsertionBlock<T>>::set(expiration_block);
@@ -937,6 +926,7 @@ mod hooks {
     use frame_system::pallet_prelude::BlockNumberFor;
     use sp_runtime::traits::{Get, One, Zero};
     use sp_runtime::Saturating;
+    use shp_traits::TrieRemoveMutation;
 
     impl<T: pallet::Config> Pallet<T> {
         pub(crate) fn do_on_idle(
@@ -982,8 +972,8 @@ mod hooks {
                     ExpiredItems::StorageRequest(file_key) => {
                         Self::process_expired_storage_request(file_key, remaining_weight)
                     }
-                    ExpiredItems::PendingFileDeletionRequests((who, file_key)) => {
-                        Self::process_expired_pending_file_deletion(who, file_key, remaining_weight)
+                    ExpiredItems::PendingFileDeletionRequests((user, file_key)) => {
+                        Self::process_expired_pending_file_deletion(user, file_key, remaining_weight)
                     }
                 };
             }
@@ -1021,7 +1011,7 @@ mod hooks {
         }
 
         fn process_expired_pending_file_deletion(
-            who: T::AccountId,
+            user: T::AccountId,
             file_key: MerkleHash<T>,
             remaining_weight: &mut Weight,
         ) {
@@ -1032,8 +1022,17 @@ mod hooks {
                 return;
             }
 
+            // Initiate the priority challenge to remove the file key from all the providers.
+            if let Err(_) = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
+                &file_key,
+                Some(TrieRemoveMutation),
+            ) {
+                Self::deposit_event(Event::FailedToQueuePriorityChallenge { user, file_key });
+                return;
+            }
+
             // Remove the pending file deletion request.
-            PendingFileDeletionRequests::<T>::mutate(&who, |requests| {
+            PendingFileDeletionRequests::<T>::mutate(&user, |requests| {
                 requests.retain(|(key, _)| key != &file_key);
             });
 
