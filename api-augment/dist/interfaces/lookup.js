@@ -1404,7 +1404,6 @@ export default {
                 },
                 who: 'AccountId32',
                 fileKey: 'H256',
-                bucketId: 'H256',
                 location: 'Bytes',
                 fingerprint: 'H256',
                 size_: 'u32',
@@ -1415,7 +1414,6 @@ export default {
                     size_: 'size',
                 },
                 bspId: 'H256',
-                bucketId: 'H256',
                 location: 'Bytes',
                 fingerprint: 'H256',
                 multiaddresses: 'Vec<Bytes>',
@@ -1503,7 +1501,6 @@ export default {
             size_: 'size'
         },
         owner: 'Bytes',
-        bucketId: 'Bytes',
         location: 'Bytes',
         size_: 'Compact<u64>',
         fingerprint: 'ShpFileKeyVerifierFingerprint'
@@ -2969,7 +2966,6 @@ export default {
                 _alias: {
                     size_: 'size',
                 },
-                bucketId: 'H256',
                 location: 'Bytes',
                 fingerprint: 'H256',
                 size_: 'u32',
@@ -2993,16 +2989,12 @@ export default {
                     size_: 'size',
                 },
                 fileKey: 'H256',
-                bucketId: 'H256',
                 location: 'Bytes',
                 owner: 'AccountId32',
                 fingerprint: 'H256',
                 size_: 'u32',
                 canServe: 'bool',
-                inclusionForestProof: 'SpTrieStorageProofCompactProof',
-            },
-            force_update_bsps_assignment_threshold: {
-                bspAssignmentThreshold: 'u128'
+                inclusionForestProof: 'SpTrieStorageProofCompactProof'
             }
         }
     },
@@ -3627,7 +3619,6 @@ export default {
         },
         requestedAt: 'u32',
         owner: 'AccountId32',
-        bucketId: 'H256',
         location: 'Bytes',
         fingerprint: 'H256',
         size_: 'u32',
@@ -3648,7 +3639,7 @@ export default {
      * Lookup395: pallet_file_system::pallet::Error<T>
      **/
     PalletFileSystemError: {
-        _enum: ['StorageRequestAlreadyRegistered', 'StorageRequestNotFound', 'BspsRequiredCannotBeZero', 'BspsRequiredExceedsMax', 'NotABsp', 'NotAMsp', 'BspNotVolunteered', 'BspNotConfirmed', 'BspAlreadyConfirmed', 'StorageRequestBspsRequiredFulfilled', 'BspAlreadyVolunteered', 'UnexpectedNumberOfRemovedVolunteeredBsps', 'StorageRequestExpiredNoSlotAvailable', 'StorageRequestNotAuthorized', 'MaxBlockNumberReached', 'FailedToEncodeBsp', 'FailedToEncodeFingerprint', 'FailedToDecodeThreshold', 'AboveThreshold', 'FailedToConvertBlockNumber', 'ThresholdArithmeticError', 'FailedTypeConversion', 'DividedByZero', 'ImpossibleFailedToGetValue', 'BucketIsNotPrivate', 'BucketNotFound', 'NotBucketOwner', 'ProviderRootNotFound', 'ExpectedNonInclusionProof', 'ExpectedInclusionProof', 'InvalidFileKeyMetadata', 'ThresholdBelowAsymptote']
+        _enum: ['StorageRequestAlreadyRegistered', 'StorageRequestNotFound', 'BspsRequiredCannotBeZero', 'BspsRequiredExceedsMax', 'NotABsp', 'NotAMsp', 'BspNotVolunteered', 'BspNotConfirmed', 'BspAlreadyConfirmed', 'StorageRequestBspsRequiredFulfilled', 'BspAlreadyVolunteered', 'UnexpectedNumberOfRemovedVolunteeredBsps', 'StorageRequestExpiredNoSlotAvailable', 'StorageRequestNotAuthorized', 'MaxBlockNumberReached', 'FailedToEncodeBsp', 'FailedToEncodeFingerprint', 'FailedToDecodeThreshold', 'AboveThreshold', 'FailedToConvertBlockNumber', 'ThresholdArithmeticError', 'FailedTypeConversion', 'DividedByZero', 'ImpossibleFailedToGetValue', 'BucketIsNotPrivate', 'ProviderRootNotFound', 'ExpectedNonInclusionProof', 'ExpectedInclusionProof', 'InvalidFileKeyMetadata']
     },
     /**
      * Lookup399: pallet_proofs_dealer::pallet::Error<T>

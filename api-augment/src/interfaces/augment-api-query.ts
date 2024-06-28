@@ -1029,7 +1029,7 @@ declare module "@polkadot/api-base/types/storage" {
     };
     proofsDealer: {
       /**
-       * A queue of keys that have been challenged manually.
+       * A queue of file keys that have been challenged manually.
        *
        * The elements in this queue will be challenged in the coming blocks,
        * always ensuring that the maximum number of challenges per block is not exceeded.
@@ -1089,7 +1089,7 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256]>;
       /**
-       * A priority queue of keys that have been challenged manually.
+       * A priority queue of file keys that have been challenged manually.
        *
        * The difference between this and `ChallengesQueue` is that the challenges
        * in this queue are given priority over the others. So this queue should be
@@ -1113,7 +1113,7 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256]>;
       /**
-       * A mapping from challenges tick to a random seed used for generating the challenges in that tick.
+       * A mapping from challenges tick to a random seed used for generating the challenges in that block.
        *
        * This is used to keep track of the challenges' seed in the past.
        * This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
@@ -1125,12 +1125,12 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
-       * A mapping from challenges tick to a vector of custom challenged keys for that tick.
+       * A mapping from challenges tick to a vector of custom challenged file keys for that block.
        *
        * This is used to keep track of the challenges that have been made in the past, specifically
        * in the checkpoint challenge rounds.
        * The vector is bounded by `MaxCustomChallengesPerBlockFor`.
-       * This mapping goes back only `ChallengeHistoryLength` ticks. Previous challenges are removed.
+       * This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
        **/
       tickToCheckpointChallenges: AugmentedQuery<
         ApiType,

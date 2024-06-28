@@ -187,10 +187,6 @@ declare module '@polkadot/api-base/types/errors' {
              **/
             BucketIsNotPrivate: AugmentedError<ApiType>;
             /**
-             * Bucket does not exist
-             **/
-            BucketNotFound: AugmentedError<ApiType>;
-            /**
              * Divided by 0
              **/
             DividedByZero: AugmentedError<ApiType>;
@@ -244,10 +240,6 @@ declare module '@polkadot/api-base/types/errors' {
              **/
             NotAMsp: AugmentedError<ApiType>;
             /**
-             * Operation failed because the account is not the owner of the bucket.
-             **/
-            NotBucketOwner: AugmentedError<ApiType>;
-            /**
              * Root of the provider not found.
              **/
             ProviderRootNotFound: AugmentedError<ApiType>;
@@ -275,10 +267,6 @@ declare module '@polkadot/api-base/types/errors' {
              * Arithmetic error in threshold calculation.
              **/
             ThresholdArithmeticError: AugmentedError<ApiType>;
-            /**
-             * BSPs assignment threshold cannot be below asymptote.
-             **/
-            ThresholdBelowAsymptote: AugmentedError<ApiType>;
             /**
              * Number of removed BSPs volunteered from storage request prefix did not match the expected number.
              **/
