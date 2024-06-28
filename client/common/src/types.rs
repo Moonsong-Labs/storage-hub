@@ -25,6 +25,8 @@ pub type FileMetadata =
     shp_file_key_verifier::types::FileMetadata<H_LENGTH, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES>;
 pub type FileKey = shp_file_key_verifier::types::FileKey<H_LENGTH>;
 
+pub type BlockNumber = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
+
 /// Proving either the exact key or the neighbour keys of the challenged key.
 pub enum Proven<K, D: Debug> {
     ExactKey(Leaf<K, D>),
