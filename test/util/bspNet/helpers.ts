@@ -15,15 +15,15 @@ import type {
   EventRecord,
   H256,
   Hash,
-  SignedBlock,
+  SignedBlock
 } from "@polkadot/types/interfaces";
 import { execSync } from "node:child_process";
 import { showContainers } from "./docker";
 import { isExtSuccess } from "../extrinsics";
 import type { BspNetApi } from "./types";
 import { assertEventPresent } from "../asserts.ts";
-import Docker from "dockerode"
-import {DOCKER_IMAGE} from "../constants.ts";
+import Docker from "dockerode";
+import { DOCKER_IMAGE } from "../constants.ts";
 const exec = util.promisify(child_process.exec);
 
 export const sendFileSendRpc = async (
@@ -39,7 +39,7 @@ export const sendFileSendRpc = async (
       filePath,
       remotePath,
       userNodeAccountId,
-      bucket,
+      bucket
     ]);
     const { owner, bucket_id, location, size, fingerprint } = resp;
     return {
@@ -47,7 +47,7 @@ export const sendFileSendRpc = async (
       bucket_id,
       location: u8aToHex(location),
       size: BigInt(size),
-      fingerprint: u8aToHex(fingerprint),
+      fingerprint: u8aToHex(fingerprint)
     };
   } catch (e) {
     console.error("Error sending file to user node:", e);
@@ -206,7 +206,7 @@ export const runBspNet = async () => {
           {
             identifier: VALUE_PROP,
             dataLimit: 500,
-            protocols: ["https", "ssh", "telnet"],
+            protocols: ["https", "ssh", "telnet"]
           },
           alice.address
         )
@@ -309,7 +309,7 @@ export const sealBlock = async (
 
   return Object.assign(sealedResults, {
     events: results.events,
-    extSuccess: results.success,
+    extSuccess: results.success
   }) satisfies SealedBlock;
 };
 

@@ -13,7 +13,7 @@ import {
   checkFileChecksum,
   type BspNetApi,
   cleardownTest,
-  sleep,
+  sleep
 } from "../../util";
 import { hexToString } from "@polkadot/util";
 
