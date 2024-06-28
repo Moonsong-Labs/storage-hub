@@ -6,6 +6,9 @@ use frame_support::{
     weights::WeightMeter,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
+use pallet_proofs_dealer_runtime_api::{
+    GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+};
 use shp_traits::{
     CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, TrieMutation,
     TrieProofDeltaApplier, TrieRemoveMutation,
@@ -690,4 +693,40 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     // TODO: when a file is first uploaded to a BSP or bucket.
     // TODO: It would set `LastTickProviderSubmittedProofFor` to the current tick and
     // TODO: the deadline for submitting a proof in `ChallengeTickToChallengedProviders`.
+}
+
+/// Runtime API implementation for the ProofsDealer pallet.
+impl<T> Pallet<T>
+where
+    T: pallet::Config,
+{
+    pub fn get_last_tick_provider_submitted_proof(
+        who: &ProviderFor<T>,
+    ) -> Result<BlockNumberFor<T>, GetLastTickProviderSubmittedProofError> {
+        // Check if submitter is a registered Provider.
+        if !ProvidersPalletFor::<T>::is_provider(*who) {
+            return Err(GetLastTickProviderSubmittedProofError::ProviderNotRegistered);
+        }
+
+        LastTickProviderSubmittedProofFor::<T>::get(who)
+            .ok_or(GetLastTickProviderSubmittedProofError::ProviderNeverSubmittedProof)
+    }
+
+    pub fn get_last_checkpoint_challenge_tick() -> BlockNumberFor<T> {
+        LastCheckpointTick::<T>::get()
+    }
+
+    pub fn get_checkpoint_challenges(
+        tick: BlockNumberFor<T>,
+    ) -> Result<Vec<(KeyFor<T>, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError> {
+        // Check that the tick is smaller than the last checkpoint tick.
+        if LastCheckpointTick::<T>::get() >= tick {
+            return Err(GetCheckpointChallengesError::TickGreaterThanLastCheckpointTick);
+        }
+
+        let checkpoint_challenges = TickToCheckpointChallenges::<T>::get(tick)
+            .ok_or(GetCheckpointChallengesError::NoCheckpointChallengesInTick)?;
+
+        Ok(checkpoint_challenges.into())
+    }
 }
