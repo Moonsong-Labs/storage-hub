@@ -294,8 +294,9 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a BSP has been accepted to store a given file.
              **/
-            AcceptedBspVolunteer: AugmentedEvent<ApiType, [bspId: H256, location: Bytes, fingerprint: H256, multiaddresses: Vec<Bytes>, owner: AccountId32, size_: u32], {
+            AcceptedBspVolunteer: AugmentedEvent<ApiType, [bspId: H256, bucketId: H256, location: Bytes, fingerprint: H256, multiaddresses: Vec<Bytes>, owner: AccountId32, size_: u32], {
                 bspId: H256;
+                bucketId: H256;
                 location: Bytes;
                 fingerprint: H256;
                 multiaddresses: Vec<Bytes>;
@@ -351,9 +352,10 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a new file has been requested to be stored.
              **/
-            NewStorageRequest: AugmentedEvent<ApiType, [who: AccountId32, fileKey: H256, location: Bytes, fingerprint: H256, size_: u32, peerIds: Vec<Bytes>], {
+            NewStorageRequest: AugmentedEvent<ApiType, [who: AccountId32, fileKey: H256, bucketId: H256, location: Bytes, fingerprint: H256, size_: u32, peerIds: Vec<Bytes>], {
                 who: AccountId32;
                 fileKey: H256;
+                bucketId: H256;
                 location: Bytes;
                 fingerprint: H256;
                 size_: u32;

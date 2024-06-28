@@ -3,17 +3,18 @@
 use codec::{Decode, Encode};
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
+use sp_std::vec::Vec;
 
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait FileSystemApi<ProviderId, BlockNumber, Key, TrieRemoveMutation>
+    pub trait ProofsDealerApi<ProviderId, BlockNumber, Key, TrieRemoveMutation>
     where
         ProviderId: codec::Codec,
         BlockNumber: codec::Codec,
         Key: codec::Codec,
         TrieRemoveMutation: codec::Codec,
     {
-        fn get_last_tick_provider_submitted_proof(provider_id: ProviderId) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError>;
+        fn get_last_tick_provider_submitted_proof(provider_id: &ProviderId) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError>;
         fn get_last_checkpoint_challenge_tick() -> BlockNumber;
         fn get_checkpoint_challenges(
             tick: BlockNumber

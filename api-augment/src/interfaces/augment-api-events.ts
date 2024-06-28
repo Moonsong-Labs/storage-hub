@@ -372,6 +372,7 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [
           bspId: H256,
+          bucketId: H256,
           location: Bytes,
           fingerprint: H256,
           multiaddresses: Vec<Bytes>,
@@ -380,6 +381,7 @@ declare module "@polkadot/api-base/types/events" {
         ],
         {
           bspId: H256;
+          bucketId: H256;
           location: Bytes;
           fingerprint: H256;
           multiaddresses: Vec<Bytes>;
@@ -449,6 +451,7 @@ declare module "@polkadot/api-base/types/events" {
         [
           who: AccountId32,
           fileKey: H256,
+          bucketId: H256,
           location: Bytes,
           fingerprint: H256,
           size_: u32,
@@ -457,6 +460,7 @@ declare module "@polkadot/api-base/types/events" {
         {
           who: AccountId32;
           fileKey: H256;
+          bucketId: H256;
           location: Bytes;
           fingerprint: H256;
           size_: u32;

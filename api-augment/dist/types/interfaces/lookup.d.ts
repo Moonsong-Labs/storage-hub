@@ -1401,6 +1401,7 @@ declare const _default: {
                 };
                 who: string;
                 fileKey: string;
+                bucketId: string;
                 location: string;
                 fingerprint: string;
                 size_: string;
@@ -1411,6 +1412,7 @@ declare const _default: {
                     size_: string;
                 };
                 bspId: string;
+                bucketId: string;
                 location: string;
                 fingerprint: string;
                 multiaddresses: string;
@@ -1498,6 +1500,7 @@ declare const _default: {
             size_: string;
         };
         owner: string;
+        bucketId: string;
         location: string;
         size_: string;
         fingerprint: string;
@@ -2963,6 +2966,7 @@ declare const _default: {
                 _alias: {
                     size_: string;
                 };
+                bucketId: string;
                 location: string;
                 fingerprint: string;
                 size_: string;
@@ -2986,12 +2990,16 @@ declare const _default: {
                     size_: string;
                 };
                 fileKey: string;
+                bucketId: string;
                 location: string;
                 owner: string;
                 fingerprint: string;
                 size_: string;
                 canServe: string;
                 inclusionForestProof: string;
+            };
+            force_update_bsps_assignment_threshold: {
+                bspAssignmentThreshold: string;
             };
         };
     };
@@ -3616,6 +3624,7 @@ declare const _default: {
         };
         requestedAt: string;
         owner: string;
+        bucketId: string;
         location: string;
         fingerprint: string;
         size_: string;
