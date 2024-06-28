@@ -26,13 +26,13 @@
   },
   "license": "ISC",
   "dependencies": {
-    "@polkadot/api": "11.2.1",
-    "@polkadot/api-base": "11.2.1",
-    "@polkadot/rpc-core": "11.2.1",
-    "@polkadot/typegen": "11.2.1",
-    "@polkadot/types": "^11.2.1",
-    "@polkadot/types-codec": "11.2.1",
-    "tsx": "4.11.0",
-    "typescript": "5.4.5"
+    "@polkadot/api": "12.0.1",
+    "@polkadot/api-base": "12.0.1",
+    "@polkadot/rpc-core": "12.0.1",
+    "@polkadot/typegen": "12.0.1",
+    "@polkadot/types": "^12.0.1",
+    "@polkadot/types-codec": "12.0.1",
+    "tsx": "4.15.7",
+    "typescript": "5.5.2"
   }
 }

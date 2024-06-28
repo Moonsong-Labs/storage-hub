@@ -10,7 +10,7 @@ export const alice = keyring.addFromUri("//Alice", { name: "Alice default" });
 export const bob = keyring.addFromUri("//Bob", { name: "Bob default" });
 
 export const charlie = keyring.addFromUri("//Charlie", {
-  name: "Charlie default",
+  name: "Charlie default"
 });
 
 export const dave = keyring.addFromUri("//Dave", { name: "Dave default" });
@@ -18,17 +18,17 @@ export const dave = keyring.addFromUri("//Dave", { name: "Dave default" });
 export const eve = keyring.addFromUri("//Eve", { name: "Eve default" });
 
 export const ferdie = keyring.addFromUri("//Ferdie", {
-  name: "Ferdie default",
+  name: "Ferdie default"
 });
 
 export const bsp = keyring.addFromUri("//Sh-BSP", { name: "Sh-BSP" });
 
 export const collator = keyring.addFromUri("//Sh-collator", {
-  name: "Sh-collator",
+  name: "Sh-collator"
 });
 
 export const shUser = keyring.addFromUri("//Sh-User", {
-  name: "Sh-User",
+  name: "Sh-User"
 });
 
 export const createSr25519Account = async (privateKey?: string) => {

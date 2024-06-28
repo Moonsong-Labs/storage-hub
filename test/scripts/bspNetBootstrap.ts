@@ -4,8 +4,7 @@ import {
   createApiObject,
   getContainerPeerId,
   runBspNet,
-  sendFileSendRpc,
-  shUser,
+  shUser
 } from "../util";
 import { setTimeout } from "node:timers/promises";
 
@@ -25,11 +24,13 @@ async function bootStrapNetwork() {
       throw new Error("Event doesn't match Type");
     }
 
+    const localPath = "res/whatsup.jpg";
+    const remotePath = "cat/whatsup.jpg";
+
     // Issue file Storage request
-    const rpcResponse = await sendFileSendRpc(
-      api,
-      "/res/whatsup.jpg",
-      "cat/whatsup.jpg",
+    const rpcResponse = await api.loadFile(
+      localPath,
+      remotePath,
       NODE_INFOS.user.AddressId,
       newBucketEventDataBlob.bucketId
     );
@@ -40,8 +41,8 @@ async function bootStrapNetwork() {
 
     await api.sealBlock(
       api.tx.fileSystem.issueStorageRequest(
-        "cat/whatsup.jpg",
         rpcResponse.bucket_id,
+        remotePath,
         rpcResponse.fingerprint,
         rpcResponse.size,
         DUMMY_MSP_ID,

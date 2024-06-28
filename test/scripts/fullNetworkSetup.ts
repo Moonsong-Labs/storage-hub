@@ -6,20 +6,20 @@ import {
   getZombieClients,
   sendTransaction,
   waitForChain,
-  waitForRandomness,
+  waitForRandomness
 } from "../util";
 
 const idealExecutorParams = [
   { maxMemoryPages: 8192 },
   { pvfExecTimeout: ["Backing", 2500] },
-  { pvfExecTimeout: ["Approval", 15000] },
+  { pvfExecTimeout: ["Approval", 15000] }
 ];
 
 async function main() {
   await using resources = await getZombieClients({
     relayWs: "ws://127.0.0.1:31000",
     // relayWs: "wss://rococo-rpc.polkadot.io",
-    shWs: "ws://127.0.0.1:32000",
+    shWs: "ws://127.0.0.1:32000"
   });
 
   await waitForChain(resources.relayApi);
@@ -42,7 +42,7 @@ async function main() {
 
   // Settings Balances
   const {
-    data: { free },
+    data: { free }
   } = await resources.storageApi.query.system.account(bsp.address);
 
   if (free.toBigInt() < 1_000_000_000_000n) {
@@ -60,17 +60,17 @@ async function main() {
     const { nonce } = await resources.storageApi.query.system.account(alice.address);
 
     const tx1 = sendTransaction(resources.storageApi.tx.sudo.sudo(setBal), {
-      nonce: nonce.toNumber(),
+      nonce: nonce.toNumber()
     });
     const tx2 = sendTransaction(resources.storageApi.tx.sudo.sudo(setBal2), {
-      nonce: nonce.toNumber() + 1,
+      nonce: nonce.toNumber() + 1
     });
 
     await Promise.all([tx1, tx2]);
 
     process.stdout.write("✅\n");
     const {
-      data: { free },
+      data: { free }
     } = await resources.storageApi.query.system.account(bsp.address);
 
     console.log(
@@ -89,7 +89,7 @@ async function main() {
   await sendTransaction(
     resources.storageApi.tx.providers.requestBspSignUp(5000000, [uint8Array], bsp.address),
     {
-      signer: bsp,
+      signer: bsp
     }
   );
   process.stdout.write("✅\n");
@@ -99,7 +99,7 @@ async function main() {
   // Confirm sign up
   process.stdout.write(`Confirming sign up for ${bsp.address} ...`);
   await sendTransaction(resources.storageApi.tx.providers.confirmSignUp(bsp.address), {
-    signer: bsp,
+    signer: bsp
   });
   process.stdout.write("✅\n");
 

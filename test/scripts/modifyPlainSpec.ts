@@ -29,7 +29,7 @@ const balances = plainSpec.genesis.runtimeGenesis.patch.balances.balances;
 
 plainSpec.genesis.runtimeGenesis.patch.balances.balances = [
   ...balances,
-  ["5FHSHEFWHVGDnyiw66DoRUpLyh5RouWkXo9GT1Sjk8qw7MAg", balances[0][1]],
+  ["5FHSHEFWHVGDnyiw66DoRUpLyh5RouWkXo9GT1Sjk8qw7MAg", balances[0][1]]
 ];
 
 const patch = plainSpec.genesis.runtimeGenesis.patch;
@@ -42,10 +42,10 @@ plainSpec.genesis.runtimeGenesis.patch = {
         dataUsed: 0,
         multiaddresses: [3_333],
         root: "0x0000000000000000000000000000000000000000000000000000000000000000",
-        lastCapacityChange: 93,
-      },
-    ],
-  },
+        lastCapacityChange: 93
+      }
+    ]
+  }
 };
 
 process.stdout.write(`Writing to: ${outputPath} ...`);
