@@ -15,16 +15,18 @@ import type {
   EventRecord,
   H256,
   Hash,
-  SignedBlock,
+  SignedBlock
 } from "@polkadot/types/interfaces";
 import { execSync } from "node:child_process";
 import { showContainers } from "./docker";
 import { isExtSuccess } from "../extrinsics";
 import type { BspNetApi } from "./types";
 import { assertEventPresent } from "../asserts.ts";
+import Docker from "dockerode";
+import { DOCKER_IMAGE } from "../constants.ts";
 const exec = util.promisify(child_process.exec);
 
-export const sendFileSendRpc = async (
+export const sendLoadFileRpc = async (
   api: ApiPromise,
   filePath: string,
   remotePath: string,
@@ -37,7 +39,7 @@ export const sendFileSendRpc = async (
       filePath,
       remotePath,
       userNodeAccountId,
-      bucket,
+      bucket
     ]);
     const { owner, bucket_id, location, size, fingerprint } = resp;
     return {
@@ -45,7 +47,7 @@ export const sendFileSendRpc = async (
       bucket_id,
       location: u8aToHex(location),
       size: BigInt(size),
-      fingerprint: u8aToHex(fingerprint),
+      fingerprint: u8aToHex(fingerprint)
     };
   } catch (e) {
     console.error("Error sending file to user node:", e);
@@ -103,7 +105,7 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
     id: "1",
     jsonrpc: "2.0",
     method: "system_localPeerId",
-    params: [],
+    params: []
   };
 
   for (let i = 0; i < maxRetries; i++) {
@@ -113,9 +115,9 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -161,8 +163,8 @@ export const runBspNet = async () => {
       env: {
         ...process.env,
         BSP_IP: bspIp,
-        BSP_PEER_ID: bspPeerId,
-      },
+        BSP_PEER_ID: bspPeerId
+      }
     });
 
     const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
@@ -204,7 +206,7 @@ export const runBspNet = async () => {
           {
             identifier: VALUE_PROP,
             dataLimit: 500,
-            protocols: ["https", "ssh", "telnet"],
+            protocols: ["https", "ssh", "telnet"]
           },
           alice.address
         )
@@ -226,13 +228,17 @@ export const runBspNet = async () => {
 };
 
 export const closeBspNet = async () => {
-  const composeFilePath = path.resolve(process.cwd(), "..", "docker", "local-dev-bsp-compose.yml");
+  const docker = new Docker();
 
-  return compose.down({
-    config: composeFilePath,
-    log: true,
-    commandOptions: ["--volumes", "--remove-orphans"],
+  const existingNodes = await docker.listContainers({
+    filters: { ancestor: [DOCKER_IMAGE] }
   });
+
+  const promises = existingNodes.map(async (node) => docker.getContainer(node.Id).stop());
+  await Promise.all(promises);
+
+  await docker.pruneContainers();
+  await docker.pruneVolumes();
 };
 
 // TODO: Add a succesful flag to track whether ext was successful or not
@@ -270,7 +276,7 @@ export const sealBlock = async (
 
   const sealedResults = {
     blockReceipt: await api.rpc.engine.createBlock(true, true),
-    txHash: results.hash?.toString(),
+    txHash: results.hash?.toString()
   };
 
   if (results.hash) {
@@ -303,7 +309,7 @@ export const sealBlock = async (
 
   return Object.assign(sealedResults, {
     events: results.events,
-    extSuccess: results.success,
+    extSuccess: results.success
   }) satisfies SealedBlock;
 };
 

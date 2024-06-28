@@ -102,7 +102,7 @@ export const devnodeSetup = async (options?: TestOptions): Promise<TestApis> => 
       "--no-telemetry",
       "--no-prometheus",
       "--unsafe-rpc-external",
-      "--sealing=manual",
+      "--sealing=manual"
     ])
     // replace with a health check
     .withWaitStrategy(Wait.forLogMessage("Development Service Ready"));
@@ -128,12 +128,12 @@ export const devnodeSetup = async (options?: TestOptions): Promise<TestApis> => 
     throwOnConnect: true,
     // noInitWarn: true,
     rpc: {},
-    provider: new WsProvider(connectString),
+    provider: new WsProvider(connectString)
   });
   process.stdout.write("✅\n");
 
   const extendedApi = Object.assign(connectedApi, {
-    createBlock: () => createBlock(connectedApi),
+    createBlock: () => createBlock(connectedApi)
   });
 
   return { extendedApi, runningContainer };

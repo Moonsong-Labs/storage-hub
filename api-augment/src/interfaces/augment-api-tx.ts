@@ -9,7 +9,7 @@ import type {
   ApiTypes,
   AugmentedSubmittable,
   SubmittableExtrinsic,
-  SubmittableExtrinsicFunction,
+  SubmittableExtrinsicFunction
 } from "@polkadot/api-base/types";
 import type { Bytes, Compact, Option, Vec, bool, u128, u32, u64 } from "@polkadot/types-codec";
 import type { AnyNumber, IMethod, ITuple } from "@polkadot/types-codec/types";
@@ -40,7 +40,7 @@ import type {
   XcmV3WeightLimit,
   XcmVersionedAssets,
   XcmVersionedLocation,
-  XcmVersionedXcm,
+  XcmVersionedXcm
 } from "@polkadot/types/lookup";
 
 export type __AugmentedSubmittable = AugmentedSubmittable<() => unknown>;
