@@ -134,7 +134,7 @@ where
         ensure!(root == Self::default_forest_root(), Error::<T>::ZeroRoot);
 
         // Get last tick for which the submitter submitted a proof.
-        let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(submitter.clone())
+        let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(*submitter)
         {
             Some(tick) => tick,
             None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
@@ -276,7 +276,7 @@ where
 
         // Update `LastTickProviderSubmittedProofFor` to the challenge tick the provider has just
         // submitted a proof for.
-        LastTickProviderSubmittedProofFor::<T>::set(submitter.clone(), Some(challenges_tick));
+        LastTickProviderSubmittedProofFor::<T>::set(*submitter, Some(challenges_tick));
 
         // Remove the submitter from its current deadline registered in `ChallengeTickToChallengedProviders`.
         ChallengeTickToChallengedProviders::<T>::remove(challenges_tick_deadline, submitter);

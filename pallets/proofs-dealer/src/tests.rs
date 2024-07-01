@@ -757,7 +757,7 @@ fn submit_proof_with_checkpoint_challenges_success() {
         let mut key_proofs = BTreeMap::new();
         for challenge in &challenges {
             key_proofs.insert(
-                challenge.clone(),
+                *challenge,
                 KeyProof::<Test> {
                     proof: CompactProof {
                         encoded_nodes: vec![vec![0]],
@@ -865,7 +865,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         let mut key_proofs = BTreeMap::new();
         for challenge in &challenges {
             key_proofs.insert(
-                challenge.clone(),
+                *challenge,
                 KeyProof::<Test> {
                     proof: CompactProof {
                         encoded_nodes: vec![vec![0]],

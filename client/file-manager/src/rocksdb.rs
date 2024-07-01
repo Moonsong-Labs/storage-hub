@@ -1,4 +1,4 @@
-use std::{io, path::PathBuf, sync::Arc, sync::RwLock};
+use std::{io, path::PathBuf, sync::Arc};
 
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
@@ -74,7 +74,7 @@ impl<T> Clone for StorageDb<T> {
     fn clone(&self) -> Self {
         Self {
             db: self.db.clone(),
-            _marker: self._marker.clone(),
+            _marker: self._marker,
         }
     }
 }
@@ -480,7 +480,7 @@ where
         let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec())
             .map_err(|_| FileStorageError::FailedToParseFingerprint)?;
 
-        let mut file_trie =
+        let file_trie =
             RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
 
         file_trie.get_chunk(chunk_id)
@@ -580,7 +580,7 @@ where
         let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec())
             .map_err(|_| FileStorageError::FailedToParseFingerprint)?;
 
-        let mut file_trie =
+        let file_trie =
             RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
 
         Ok(file_trie
@@ -660,7 +660,7 @@ mod tests {
         };
 
         let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
-        let old_root = file_trie.get_root().clone();
+        let old_root = *file_trie.get_root();
         file_trie
             .write_chunk(&ChunkId::new(0u64), &Chunk::from([1u8; 1024]))
             .unwrap();
