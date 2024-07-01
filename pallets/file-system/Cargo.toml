@@ -65,6 +65,7 @@ std = [
 	"frame-benchmarking?/std",
 	"frame-support/std",
 	"frame-system/std",
+	"pallet-file-system-runtime-api/std",
 	"pallet-proofs-dealer/std",
 	"pallet-storage-providers/std",
 	"pallet-bucket-nfts/std",
