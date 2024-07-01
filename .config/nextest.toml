@@ -1,0 +1,6 @@
+[test-groups]
+rocksdb = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'test(rocksdb::tests::file_storage)'
+test-group = 'rocksdb'

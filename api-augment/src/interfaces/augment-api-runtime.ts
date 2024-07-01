@@ -27,7 +27,7 @@ import type {
   KeyTypeId,
   Slot,
   SlotDuration,
-  Weight,
+  Weight
 } from "@polkadot/types/interfaces/runtime";
 import type { RuntimeVersion } from "@polkadot/types/interfaces/state";
 import type { ApplyExtrinsicResult } from "@polkadot/types/interfaces/system";

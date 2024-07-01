@@ -6942,6 +6942,7 @@ dependencies = [
  "frame-system 28.0.0",
  "pallet-balances 28.0.0",
  "pallet-bucket-nfts",
+ "pallet-file-system-runtime-api",
  "pallet-nfts",
  "pallet-proofs-dealer",
  "pallet-storage-providers",
@@ -6957,6 +6958,16 @@ dependencies = [
  "sp-runtime 31.0.1 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
+]
+
+[[package]]
+name = "pallet-file-system-runtime-api"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "sp-api 26.0.0",
+ "sp-runtime 31.0.1 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
 ]
 
 [[package]]
@@ -12075,6 +12086,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "scc"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76ad2bbb0ae5100a07b7a6f2ed7ab5fd0045551a4c507989b7a620046ea3efdc"
+dependencies = [
+ "sdd",
+]
+
+[[package]]
 name = "schannel"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12150,6 +12170,12 @@ dependencies = [
  "ring 0.17.8",
  "untrusted 0.9.0",
 ]
+
+[[package]]
+name = "sdd"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b84345e4c9bd703274a082fb80caaa99b7612be48dfaa1dd9266577ec412309d"
 
 [[package]]
 name = "sec1"
@@ -12306,6 +12332,31 @@ checksum = "a84f14a19e9a014bb9f4512488d9829a68e04ecabffb0f9904cd1ace94598177"
 dependencies = [
  "base16ct",
  "serde",
+]
+
+[[package]]
+name = "serial_test"
+version = "3.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b4b487fe2acf240a021cf57c6b2b4903b1e78ca0ecd862a71b71d2a51fed77d"
+dependencies = [
+ "futures",
+ "log",
+ "once_cell",
+ "parking_lot 0.12.3",
+ "scc",
+ "serial_test_derive",
+]
+
+[[package]]
+name = "serial_test_derive"
+version = "3.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82fe9db325bcef1fbcde82e078a5cc4efdf787e96b3b9cf45b50b529f2083d67"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.67",
 ]
 
 [[package]]
@@ -12475,6 +12526,7 @@ name = "shc-common"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "frame-system 28.0.0",
  "pallet-proofs-dealer",
  "parity-scale-codec",
  "polkadot-primitives 7.0.0",
@@ -12495,13 +12547,22 @@ name = "shc-file-manager"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "hash-db",
+ "kvdb",
+ "kvdb-rocksdb",
+ "log",
  "parity-scale-codec",
  "reference-trie",
+ "serde_json",
+ "serial_test",
  "shc-actors-framework",
  "shc-common",
  "shp-traits",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-runtime 31.0.1 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-state-machine 0.35.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
+ "thiserror",
  "trie-db 0.29.1",
 ]
 
@@ -14980,6 +15041,7 @@ dependencies = [
  "libp2p-identity",
  "log",
  "pallet-file-system",
+ "pallet-file-system-runtime-api",
  "pallet-proofs-dealer",
  "pallet-storage-providers",
  "pallet-transaction-payment 28.0.0",
@@ -15069,6 +15131,7 @@ dependencies = [
  "pallet-bucket-nfts",
  "pallet-collator-selection",
  "pallet-file-system",
+ "pallet-file-system-runtime-api",
  "pallet-message-queue 31.0.0",
  "pallet-nfts",
  "pallet-payment-streams",

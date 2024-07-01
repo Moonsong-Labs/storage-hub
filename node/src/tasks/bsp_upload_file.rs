@@ -178,7 +178,12 @@ where
                     return Err(anyhow::anyhow!(format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key)));
                 }
                 FileStorageWriteError::FailedToGetFileChunk
-                | FileStorageWriteError::FailedToInsertFileChunk => {
+                | FileStorageWriteError::FailedToInsertFileChunk
+                | FileStorageWriteError::FailedToDeleteChunk
+                | FileStorageWriteError::FailedToPersistChanges
+                | FileStorageWriteError::FailedToParseFileMetadata
+                | FileStorageWriteError::FailedToParseFingerprint
+                | FileStorageWriteError::FailedToReadStorage => {
                     // This internal error should not happen.
 
                     // Unvolunteer the file.
@@ -253,6 +258,31 @@ where
             .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
         self.file_key_cleanup = Some(file_key_hash);
 
+        // Get the node's public key needed for threshold calculation.
+        let node_public_key = self
+            .storage_hub_handler
+            .blockchain
+            .get_node_public_key()
+            .await;
+
+        // Query runtime for the earliest block where the BSP can volunteer for the file.
+        let earliest_volunteer_block = self
+            .storage_hub_handler
+            .blockchain
+            .query_file_earliest_volunteer_block(
+                node_public_key,
+                H256::from_slice(file_key.as_ref()),
+            )
+            .await
+            .map_err(|e| anyhow!("Failed to query file earliest volunteer block: {:?}", e))?;
+
+        // TODO: if the earliest block is too far away, we should drop the task.
+        // TODO: based on the limit above, also add a timeout for the task.
+        self.storage_hub_handler
+            .blockchain
+            .wait_for_block(earliest_volunteer_block)
+            .await?;
+
         // Optimistically register the file for upload in the file transfer service.
         // This solves the race condition between the user and the BSP, where the user could react faster
         // to the BSP volunteering than the BSP, and therefore initiate a new upload request before the
@@ -313,7 +343,9 @@ where
 
         // Delete the file from the file storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        write_file_storage.delete_file(&file_key);
+
+        // TODO: Handle error
+        let _ = write_file_storage.delete_file(&file_key);
 
         // TODO: Send transaction to runtime to unvolunteer the file.
 
