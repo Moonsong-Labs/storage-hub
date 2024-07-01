@@ -181,11 +181,10 @@ where
             .expect("Failed to create RocksDB");
 
         self.with_file_storage(Arc::new(RwLock::new(RocksDbFileStorage::<T>::new(
-            Arc::new(std::sync::RwLock::new(file_storage)),
+            file_storage,
         ))))
         .with_forest_storage(Arc::new(RwLock::new(
-            RocksDBForestStorage::<T>::new(Box::new(forest_storage))
-                .expect("Failed to create RocksDB"),
+            RocksDBForestStorage::<T>::new(forest_storage).expect("Failed to create RocksDB"),
         )))
     }
 }
