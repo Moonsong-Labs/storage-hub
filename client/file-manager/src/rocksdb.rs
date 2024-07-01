@@ -152,7 +152,7 @@ where
         let mut rocksdb_file_data_trie = RocksDbFileDataTrie::<T> {
             root: *root,
             storage,
-            ..Default::default()
+            overlay: Default::default(),
         };
 
         let db = rocksdb_file_data_trie.as_hash_db_mut();
@@ -624,7 +624,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serial_test::serial;
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_runtime::AccountId32;
@@ -783,7 +782,6 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn file_storage_insert_file_works() {
         let storage = StorageDb {
             db: Arc::new(kvdb_memorydb::create(1)),
@@ -836,7 +834,6 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[serial]
     fn file_storage_delete_file_works() {
         let storage = StorageDb {
             db: Arc::new(kvdb_memorydb::create(1)),
@@ -893,7 +890,6 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn file_storage_generate_proof_works() {
         let storage = StorageDb {
             db: Arc::new(kvdb_memorydb::create(1)),
