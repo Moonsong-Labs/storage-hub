@@ -15,6 +15,16 @@ pub enum FileStorageWriteError {
     FingerprintAndStoredFileMismatch,
     /// Failed to construct iterator for trie.
     FailedToConstructTrieIter,
+    /// Failed to commit changes in overlay to disk.
+    FailedToPersistChanges,
+    /// Failed to delete chunk.
+    FailedToDeleteChunk,
+    /// Failed to convert raw bytes into [`FileMetadata`].
+    FailedToParseFileMetadata,
+    /// Failed to access storage for reading.
+    FailedToReadStorage,
+    /// Failed to convert raw bytes into [`Fingerprint`].
+    FailedToParseFingerprint,
 }
 
 #[derive(Debug)]
@@ -37,8 +47,20 @@ pub enum FileStorageError {
     FingerprintAndStoredFileMismatch,
     /// The requested file is incomplete and a proof is impossible to generate.
     IncompleteFile,
+    /// Failed to access storage for reading.
+    FailedToReadStorage,
+    /// Failed to access storage for writing.
+    FailedToWriteToStorage,
+    /// Failed to convert raw bytes into [`FileKey`].
+    FailedToParseKey,
     /// Failed to construct iterator for trie.
     FailedToConstructTrieIter,
+    /// Failed to convert raw bytes into [`FileMetadata`].
+    FailedToParseFileMetadata,
+    /// Failed to convert raw bytes into [`Fingerprint`].
+    FailedToParseFingerprint,
+    /// Failed to delete chunk from storage.
+    FailedToDeleteFileChunk,
 }
 
 #[derive(Debug)]
@@ -58,17 +80,24 @@ pub trait FileDataTrie<T: TrieLayout> {
     fn stored_chunks_count(&self) -> Result<u64, FileStorageError>;
 
     /// Generate proof for a chunk of a file. Returns error if the chunk does not exist.
-    fn generate_proof(&self, chunk_id: &Vec<ChunkId>) -> Result<FileProof, FileStorageError>;
+    fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError>;
 
+    // TODO: make it accept a list of chunks to be retrieved
+    // TODO: Return Result<Option> instead of Result only
     /// Get a file chunk from storage. Returns error if the chunk does not exist.
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError>;
 
+    // TODO: make it accept a list of chunks to be retrieved
     /// Write a file chunk in storage updating the root hash of the trie.
     fn write_chunk(
         &mut self,
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<(), FileStorageWriteError>;
+
+    /// Removes all references to chunks in the trie data and removes
+    /// chunks themselves from storage.
+    fn delete(&mut self, chunk_count: u64) -> Result<(), FileStorageWriteError>;
 }
 
 /// Storage interface to be implemented by the storage providers.
@@ -80,18 +109,20 @@ pub trait FileStorage<T: TrieLayout>: 'static {
     fn generate_proof(
         &self,
         key: &HasherOutT<T>,
-        chunk_id: &Vec<ChunkId>,
+        chunk_ids: &Vec<ChunkId>,
     ) -> Result<FileKeyProof, FileStorageError>;
 
     /// Remove a file from storage.
-    fn delete_file(&mut self, key: &HasherOutT<T>);
+    fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError>;
 
+    // TODO: Return Result<Option> instead of Result only
     /// Get metadata for a file.
     fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError>;
 
+    // TODO: check if this method is necessary and what is its use case.
     /// Inserts a new file. If the file already exists, it will return an error.
     /// It is expected that the file key is indeed computed from the [Metadata].
-    /// This method does not require the actual data, file [Chunk]s being inserted separately.
+    /// This method does not require the actual data, file [`Chunk`]s being inserted separately.
     fn insert_file(
         &mut self,
         key: HasherOutT<T>,
@@ -107,6 +138,7 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         file_data: Self::FileDataTrie,
     ) -> Result<(), FileStorageError>;
 
+    // TODO: Return Result<Option> instead of Result only
     /// Get a file chunk from storage.
     fn get_chunk(&self, key: &HasherOutT<T>, chunk_id: &ChunkId)
         -> Result<Chunk, FileStorageError>;
