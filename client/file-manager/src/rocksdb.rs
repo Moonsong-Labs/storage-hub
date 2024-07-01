@@ -108,6 +108,7 @@ where
 }
 
 pub struct RocksDbFileDataTrie<T: TrieLayout> {
+    // TODO: remove RwLock to allow for multiple writes.
     // Persistent storage.
     storage: Arc<RwLock<dyn Backend<T>>>,
     // In memory overlay used for Trie operations.
@@ -120,6 +121,7 @@ impl<T: TrieLayout + Send + Sync + 'static> Default for RocksDbFileDataTrie<T>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
+    // TODO: parametrize rocksdb path
     fn default() -> Self {
         let default_storage = RocksDbFileDataTrie::<T>::rocksdb_storage("/tmp".to_string())
             .expect("Failed to create RocksDB");
@@ -873,6 +875,7 @@ mod tests {
             fingerprint: file_trie.get_root().as_ref().into(),
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
             location: "location".to_string().into_bytes(),
+            bucket_id: [1u8; 32].to_vec(),
         };
 
         let key = file_metadata.file_key::<BlakeTwo256>();
@@ -924,6 +927,7 @@ mod tests {
             fingerprint: file_trie.get_root().as_ref().into(),
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
             location: "location".to_string().into_bytes(),
+            bucket_id: [1u8; 32].to_vec(),
         };
 
         let key = file_metadata.file_key::<BlakeTwo256>();
@@ -979,6 +983,7 @@ mod tests {
             fingerprint: file_trie.get_root().as_ref().into(),
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
             location: "location".to_string().into_bytes(),
+            bucket_id: [1u8; 32].to_vec(),
         };
 
         let key = file_metadata.file_key::<BlakeTwo256>();
