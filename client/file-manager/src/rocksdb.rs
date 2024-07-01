@@ -831,7 +831,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "Failed to find File Metadata")]
     fn file_storage_delete_file_works() {
         let storage = StorageDb {
             db: Arc::new(kvdb_memorydb::create(1)),
@@ -876,11 +876,11 @@ mod tests {
         file_storage
             .insert_file_with_data(key, file_metadata, file_trie)
             .unwrap();
-
         assert!(file_storage.get_metadata(&key).is_ok());
 
-        file_storage.delete_file(&key).unwrap();
+        assert!(file_storage.delete_file(&key).is_ok());
 
+        // Should panic here when trying to get File Metadata.
         file_storage.get_metadata(&key).unwrap();
         assert!(file_storage.get_chunk(&key, &chunk_ids[0]).is_err());
         assert!(file_storage.get_chunk(&key, &chunk_ids[1]).is_err());

@@ -86,42 +86,6 @@ impl<T: TrieLayout + Send + Sync> Storage<HashT<T>> for StorageDb<T> {
     }
 }
 
-/// Trait that [`RocksDBForestStorage`] requires to interact with the storage backend.
-pub trait Backend<T: TrieLayout>: Storage<HashT<T>>
-where
-    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
-{
-    /// Write the transaction to the storage.
-    fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>>;
-    /// Get the [`ROOT`](`well_known_keys::ROOT`) from storage.
-    fn storage_root(&self) -> Result<Option<HasherOutT<T>>, ErrorT<T>>;
-}
-
-// impl<T: TrieLayout> Backend<T> for StorageDb<HashT<T>>
-// where
-//     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
-// {
-//     fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>> {
-//         self.db.write(transaction).map_err(|e| {
-//             warn!(target: LOG_TARGET, "Failed to write to DB: {}", e);
-//             ForestStorageError::FailedToWriteToStorage.into()
-//         })
-//     }
-
-//     fn storage_root(&self) -> Result<Option<HasherOutT<T>>, ErrorT<T>> {
-//         let maybe_root = self.db.get(0, well_known_keys::ROOT).map_err(|e| {
-//             warn!(target: LOG_TARGET, "Failed to read root from DB: {}", e);
-//             ForestStorageError::FailedToReadStorage
-//         })?;
-
-//         let root = maybe_root
-//             .map(|root| convert_raw_bytes_to_hasher_out::<T>(root))
-//             .transpose()?;
-
-//         Ok(root)
-//     }
-// }
-
 /// RocksDB based [`ForestStorage`] implementation.
 pub struct RocksDBForestStorage<T: TrieLayout> {
     /// RocksDB storage backend.
