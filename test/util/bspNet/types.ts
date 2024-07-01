@@ -67,3 +67,33 @@ export type BspNetApi = ApiPromise & {
    */
   // fetchEvent: () => void;
 };
+
+/**
+ * Represents information about a network toxicity.
+ * This interface is used to describe a Toxic "debuff" that can be applied to a running toxiproxy.
+ *
+ * @interface
+ * @property {("latency"|"down"|"bandwidth"|"slow_close"|"timeout"|"reset_peer"|"slicer"|"limit_data")} type - The type of network toxic.
+ * @property {string} name - The name of the network toxic.
+ * @property {("upstream"|"downstream")} stream - The link direction of the network toxic.
+ * @property {number} toxicity - The probability of the toxic being applied to a link (defaults to 1.0, 100%)
+ * @property {Object} attributes - A map of toxic-specific attributes
+ */
+export interface ToxicInfo {
+  type:
+    | "latency"
+    | "down"
+    | "bandwidth"
+    | "slow_close"
+    | "timeout"
+    | "reset_peer"
+    | "slicer"
+    | "limit_data";
+  name: string;
+  stream: "upstream" | "downstream";
+  toxicity: number;
+  attributes: {
+    latency: number;
+    jitter: number;
+  };
+}

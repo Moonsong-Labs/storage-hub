@@ -4,12 +4,13 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import compose from "docker-compose";
 import { alice, bsp, shUser } from "../pjsKeyring";
-import { DUMMY_MSP_ID, VALUE_PROP, NODE_INFOS, DUMMY_BSP_ID, CAPACITY_512 } from "./consts";
+import { CAPACITY_512, DUMMY_BSP_ID, DUMMY_MSP_ID, NODE_INFOS, VALUE_PROP } from "./consts";
 import { createApiObject } from "./api";
 import path from "node:path";
 import { u8aToHex } from "@polkadot/util";
 import * as util from "node:util";
 import * as child_process from "node:child_process";
+import { execSync } from "node:child_process";
 import type {
   CreatedBlock,
   EventRecord,
@@ -17,13 +18,13 @@ import type {
   Hash,
   SignedBlock
 } from "@polkadot/types/interfaces";
-import { execSync } from "node:child_process";
 import { showContainers } from "./docker";
 import { isExtSuccess } from "../extrinsics";
 import type { BspNetApi } from "./types";
 import { assertEventPresent } from "../asserts.ts";
 import Docker from "dockerode";
 import { DOCKER_IMAGE } from "../constants.ts";
+
 const exec = util.promisify(child_process.exec);
 
 export const sendLoadFileRpc = async (
@@ -135,7 +136,7 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
   throw new Error(`Error fetching peerId from ${url}`);
 };
 
-export const runBspNet = async () => {
+export const runBspNet = async (noisy = false) => {
   try {
     console.log(`sh user id: ${shUser.address}`);
     console.log(`sh bsp id: ${bsp.address}`);
@@ -143,13 +144,22 @@ export const runBspNet = async () => {
       process.cwd(),
       "..",
       "docker",
-      "local-dev-bsp-compose.yml"
+      noisy ? "noisy-bsp-compose.yml" : "local-dev-bsp-compose.yml"
     );
+
+    if (noisy) {
+      await compose.upOne("toxiproxy", { config: composeFilePath, log: true });
+    }
 
     await compose.upOne("sh-bsp", { config: composeFilePath, log: true });
 
-    const bspIp = await getContainerIp(NODE_INFOS.bsp.containerName);
-    console.log(`sh-bsp IP: ${bspIp}`);
+    const bspIp = await getContainerIp(noisy ? "toxiproxy" : NODE_INFOS.bsp.containerName);
+
+    if (noisy) {
+      console.log(`toxiproxy IP: ${bspIp}`);
+    } else {
+      console.log(`sh-bsp IP: ${bspIp}`);
+    }
 
     const bspPeerId = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.bsp.port}`, true);
     console.log(`sh-bsp Peer ID: ${bspPeerId}`);
@@ -175,7 +185,7 @@ export const runBspNet = async () => {
     // Create Connection API Object to User Node
     // biome-ignore lint/style/noVar: <explanation>
     // biome-ignore lint/correctness/noInnerDeclarations: <explanation>
-    var api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+    var api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
 
     // Give Balances
     const amount = 10000n * 10n ** 12n;
