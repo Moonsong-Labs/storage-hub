@@ -185,7 +185,7 @@ export const runBspNet = async (noisy = false) => {
     // Create Connection API Object to User Node
     // biome-ignore lint/style/noVar: <explanation>
     // biome-ignore lint/correctness/noInnerDeclarations: <explanation>
-    var api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
+    var api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
     // Give Balances
     const amount = 10000n * 10n ** 12n;
@@ -251,9 +251,9 @@ export const closeBspNet = async () => {
   await docker.pruneVolumes();
 };
 
-// TODO: Add a succesful flag to track whether ext was successful or not
+// TODO: Add a successful flag to track whether ext was successful or not
 //        Determine whether extrinsic was successful or not based on the
-//        ExtrinsicSucess event
+//        ExtrinsicSuccess event
 export interface SealedBlock {
   blockReceipt: CreatedBlock;
   txHash?: string;
