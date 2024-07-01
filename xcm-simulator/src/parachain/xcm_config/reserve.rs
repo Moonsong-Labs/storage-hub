@@ -14,8 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::parachain::teleporter::TrustedTeleporters;
-use frame_support::traits::EverythingBut;
 use xcm_builder::NativeAsset;
 
-pub type TrustedReserves = (NativeAsset, EverythingBut<TrustedTeleporters>);
+// We trust each chain as a reserve for their native asset
+pub type TrustedReserves = NativeAsset;

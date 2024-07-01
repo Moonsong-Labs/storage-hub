@@ -11,6 +11,7 @@ mod mock_message_queue;
 mod parachain;
 mod relay_chain;
 mod storagehub;
+mod system_chain;
 
 #[cfg(test)]
 mod tests;
@@ -27,11 +28,20 @@ decl_test_parachain! {
 }
 
 decl_test_parachain! {
-    pub struct MockPara {
+    pub struct MockSystemChain {
+        Runtime = system_chain::Runtime,
+        XcmpMessageHandler = system_chain::MsgQueue,
+        DmpMessageHandler = system_chain::MsgQueue,
+        new_ext = para_ext(2),
+    }
+}
+
+decl_test_parachain! {
+    pub struct MockParachain {
         Runtime = parachain::Runtime,
         XcmpMessageHandler = parachain::MsgQueue,
         DmpMessageHandler = parachain::MsgQueue,
-        new_ext = para_ext(2),
+        new_ext = para_ext(2004),
     }
 }
 
@@ -52,7 +62,8 @@ decl_test_network! {
         relay_chain = Relay,
         parachains = vec![
             (1, StorageHub),
-            (2, MockPara),
+            (2, MockSystemChain),
+            (2004, MockParachain),
         ],
     }
 }
@@ -60,6 +71,11 @@ decl_test_network! {
 pub fn parent_account_id() -> parachain::AccountId {
     let location = (Parent,);
     parachain::location_converter::LocationConverter::convert_location(&location.into()).unwrap()
+}
+
+pub fn sys_parent_account_id() -> system_chain::AccountId {
+    let location = (Parent,);
+    system_chain::location_converter::LocationConverter::convert_location(&location.into()).unwrap()
 }
 
 pub fn sh_parent_account_id() -> storagehub::AccountId {
@@ -96,6 +112,21 @@ pub fn sibling_account_account_id(para: u32, who: sp_runtime::AccountId32) -> pa
     parachain::location_converter::LocationConverter::convert_location(&location.into()).unwrap()
 }
 
+pub fn sys_sibling_account_account_id(
+    para: u32,
+    who: sp_runtime::AccountId32,
+) -> system_chain::AccountId {
+    let location = (
+        Parent,
+        Parachain(para),
+        AccountId32 {
+            network: None,
+            id: who.into(),
+        },
+    );
+    system_chain::location_converter::LocationConverter::convert_location(&location.into()).unwrap()
+}
+
 pub fn sh_sibling_account_account_id(
     para: u32,
     who: sp_runtime::AccountId32,
@@ -123,6 +154,17 @@ pub fn parent_account_account_id(who: sp_runtime::AccountId32) -> parachain::Acc
     parachain::location_converter::LocationConverter::convert_location(&location.into()).unwrap()
 }
 
+pub fn sys_parent_account_account_id(who: sp_runtime::AccountId32) -> system_chain::AccountId {
+    let location = (
+        Parent,
+        AccountId32 {
+            network: None,
+            id: who.into(),
+        },
+    );
+    system_chain::location_converter::LocationConverter::convert_location(&location.into()).unwrap()
+}
+
 pub fn sh_parent_account_account_id(who: sp_runtime::AccountId32) -> storagehub::AccountId {
     let location = (
         Parent,
@@ -146,6 +188,31 @@ pub fn para_ext(para_id: u32) -> sp_io::TestExternalities {
         balances: vec![
             (ALICE, INITIAL_BALANCE),
             (parent_account_id(), INITIAL_BALANCE),
+        ],
+    }
+    .assimilate_storage(&mut t)
+    .unwrap();
+
+    let mut ext = sp_io::TestExternalities::new(t);
+    ext.execute_with(|| {
+        sp_tracing::try_init_simple();
+        System::set_block_number(1);
+        MsgQueue::set_para_id(para_id.into());
+    });
+    ext
+}
+
+pub fn sys_ext(para_id: u32) -> sp_io::TestExternalities {
+    use system_chain::{MsgQueue, Runtime, System};
+
+    let mut t = frame_system::GenesisConfig::<Runtime>::default()
+        .build_storage()
+        .unwrap();
+
+    pallet_balances::GenesisConfig::<Runtime> {
+        balances: vec![
+            (ALICE, INITIAL_BALANCE),
+            (sys_parent_account_id(), INITIAL_BALANCE),
         ],
     }
     .assimilate_storage(&mut t)
@@ -197,6 +264,7 @@ pub fn relay_ext() -> sp_io::TestExternalities {
             (ALICE, INITIAL_BALANCE),
             (child_account_id(1), INITIAL_BALANCE),
             (child_account_id(2), INITIAL_BALANCE),
+            (child_account_id(2004), INITIAL_BALANCE),
         ],
     }
     .assimilate_storage(&mut t)
@@ -220,3 +288,4 @@ pub fn relay_ext() -> sp_io::TestExternalities {
 pub type RelayChainPalletXcm = pallet_xcm::Pallet<relay_chain::Runtime>;
 pub type StorageHubPalletXcm = pallet_xcm::Pallet<storagehub::Runtime>;
 pub type ParachainPalletXcm = pallet_xcm::Pallet<parachain::Runtime>;
+pub type SystemChainPalletXcm = pallet_xcm::Pallet<system_chain::Runtime>;
