@@ -624,7 +624,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kvdb_memorydb::InMemory;
     use serial_test::serial;
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
