@@ -134,8 +134,7 @@ where
         ensure!(root == Self::default_forest_root(), Error::<T>::ZeroRoot);
 
         // Get last tick for which the submitter submitted a proof.
-        let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(*submitter)
-        {
+        let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(*submitter) {
             Some(tick) => tick,
             None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
         };

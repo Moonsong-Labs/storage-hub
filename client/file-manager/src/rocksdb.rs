@@ -480,8 +480,7 @@ where
         let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec())
             .map_err(|_| FileStorageError::FailedToParseFingerprint)?;
 
-        let file_trie =
-            RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
+        let file_trie = RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
 
         file_trie.get_chunk(chunk_id)
     }
@@ -580,8 +579,7 @@ where
         let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec())
             .map_err(|_| FileStorageError::FailedToParseFingerprint)?;
 
-        let file_trie =
-            RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
+        let file_trie = RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
 
         Ok(file_trie
             .generate_proof(chunk_ids)?
