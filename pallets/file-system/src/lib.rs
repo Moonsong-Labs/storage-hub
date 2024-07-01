@@ -69,7 +69,7 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         /// The trait for reading and mutating storage provider data.
-        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId>
+        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId> + shp_traits::ProvidersInterface<AccountId = Self::AccountId>
             + shp_traits::MutateProvidersInterface<AccountId = Self::AccountId, ReadAccessGroupId = CollectionIdFor<Self>, MerklePatriciaRoot = <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash>;
 
         /// The trait for issuing challenges and verifying proofs.
@@ -423,6 +423,8 @@ pub mod pallet {
         InvalidFileKeyMetadata,
         /// BSPs assignment threshold cannot be below asymptote.
         ThresholdBelowAsymptote,
+        /// The BSP provided a root and not a non-inclusion proof or viceversa when confirming storing.
+        MissingRootOrProof,
     }
 
     #[pallet::call]
@@ -592,8 +594,8 @@ pub mod pallet {
         pub fn bsp_confirm_storing(
             origin: OriginFor<T>,
             file_key: MerkleHash<T>,
-            root: MerkleHash<T>,
-            non_inclusion_forest_proof: ForestProof<T>,
+            root: Option<MerkleHash<T>>,
+            non_inclusion_forest_proof: Option<ForestProof<T>>,
             added_file_key_proof: KeyProof<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.

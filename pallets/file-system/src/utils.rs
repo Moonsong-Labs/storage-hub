@@ -14,7 +14,8 @@ use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
 use pallet_file_system_runtime_api::QueryFileEarliestVolunteerBlockError;
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_traits::{
-    MutateProvidersInterface, ReadProvidersInterface, TrieAddMutation, TrieRemoveMutation,
+    MutateProvidersInterface, ProvidersInterface, ReadProvidersInterface, TrieAddMutation,
+    TrieRemoveMutation,
 };
 
 use crate::types::BucketNameFor;
@@ -462,8 +463,8 @@ where
     pub(crate) fn do_bsp_confirm_storing(
         sender: T::AccountId,
         file_key: MerkleHash<T>,
-        root: MerkleHash<T>,
-        non_inclusion_forest_proof: ForestProof<T>,
+        root: Option<MerkleHash<T>>,
+        non_inclusion_forest_proof: Option<ForestProof<T>>,
         added_file_key_proof: KeyProof<T>,
     ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
         let bsp_id =
@@ -523,20 +524,35 @@ where
             }
         }
 
-        // Verify the proof of non-inclusion.
-        let proven_keys: BTreeSet<MerkleHash<T>> =
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
-                &bsp_id,
-                &[file_key],
-                &non_inclusion_forest_proof,
-            )?;
-
-        // Ensure that the file key IS NOT part of the BSP's forest.
-        // Note: The runtime is responsible for adding and removing keys, computing the new root and updating the BSP's root.
+        // Check if the BSP has provided a root and a non-inclusion proof.
+        // If it hasn't, it means this is its first time storing a file.
+        let provider_current_root = <T::Providers as ProvidersInterface>::get_root(bsp_id);
         ensure!(
-            !proven_keys.contains(&file_key),
-            Error::<T>::ExpectedNonInclusionProof
+            (root.is_some() && non_inclusion_forest_proof.is_some())
+                || (root.is_none()
+                    && non_inclusion_forest_proof.is_none()
+                    && provider_current_root.is_none()),
+            Error::<T>::MissingRootOrProof
         );
+
+        // Verify the proof of non-inclusion (if it exists, don't have to do anything if it doesn't)
+        if non_inclusion_forest_proof.is_some() {
+            let proven_keys: BTreeSet<MerkleHash<T>> =
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+                    &bsp_id,
+                    &[file_key],
+                    &non_inclusion_forest_proof
+                        .clone()
+                        .expect("Non inclusion proof should exist, we checked before. q.e.d."),
+                )?;
+
+            // Ensure that the file key IS NOT part of the BSP's forest.
+            // Note: The runtime is responsible for adding and removing keys, computing the new root and updating the BSP's root.
+            ensure!(
+                !proven_keys.contains(&file_key),
+                Error::<T>::ExpectedNonInclusionProof
+            );
+        }
 
         // TODO: Generate challenges for the key proof properly.
         let challenges = vec![];
@@ -587,11 +603,20 @@ where
         }
 
         // Compute new root after inserting new file key in forest partial trie.
-        let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
-            &root,
-            &[(file_key, TrieAddMutation::default().into())],
-            &non_inclusion_forest_proof,
-        )?;
+        // If the BSP had already stored files, we need to apply the delta to the previous root.
+        // If not, then the new root is just the file key. TODO: Check if this reasoning is correct
+        let new_root: MerkleHash<T>;
+        if let Some(root) = root {
+            new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
+                &root,
+                &[(file_key, TrieAddMutation::default().into())],
+                &non_inclusion_forest_proof.expect(
+                    "Non inclusion proof should exist if root exists, we checked before. q.e.d.",
+                ),
+            )?;
+        } else {
+            new_root = file_key;
+        }
 
         // Update root of BSP.
         <T::Providers as shp_traits::ProvidersInterface>::update_root(bsp_id, new_root)?;

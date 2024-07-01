@@ -773,7 +773,7 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
             capacity: msp.capacity,
             data_used: msp.data_used,
             multiaddresses: msp.multiaddresses,
-            root: MerklePatriciaRoot::<T>::default(),
+            root: None,
             last_capacity_change: msp.last_capacity_change,
             payment_account: msp.payment_account,
         }
@@ -1007,7 +1007,7 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
         if let Some(bucket) = Buckets::<T>::get(&who) {
             Some(bucket.root)
         } else if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
-            Some(bsp.root)
+            bsp.root
         } else {
             None
         }
@@ -1038,7 +1038,7 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
             BackupStorageProviders::<T>::insert(
                 &who,
                 BackupStorageProvider {
-                    root: new_root,
+                    root: Some(new_root),
                     ..bsp
                 },
             );

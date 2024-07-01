@@ -40,7 +40,7 @@ pub struct BackupStorageProvider<T: Config> {
     pub capacity: StorageData<T>,
     pub data_used: StorageData<T>,
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
-    pub root: MerklePatriciaRoot<T>,
+    pub root: Option<MerklePatriciaRoot<T>>,
     pub last_capacity_change: BlockNumberFor<T>,
     pub payment_account: T::AccountId,
 }

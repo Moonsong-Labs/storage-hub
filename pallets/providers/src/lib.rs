@@ -544,7 +544,7 @@ pub mod pallet {
                 capacity,
                 data_used: StorageData::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
-                root: MerklePatriciaRoot::<T>::default(),
+                root: None,
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 payment_account,
             };
@@ -878,7 +878,7 @@ pub mod pallet {
                 capacity,
                 data_used: StorageData::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
-                root: MerklePatriciaRoot::<T>::default(),
+                root: None,
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 payment_account,
             };

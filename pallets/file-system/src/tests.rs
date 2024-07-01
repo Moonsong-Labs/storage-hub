@@ -1084,10 +1084,8 @@ fn revoke_storage_request_with_confirmed_bsps_success() {
         assert_ok!(FileSystem::bsp_confirm_storing(
             bsp_signed.clone(),
             file_key,
-            H256::zero(),
-            ForestProof {
-                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-            },
+            None,
+            None,
             KeyProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             }
@@ -1370,10 +1368,8 @@ fn bsp_confirm_storing_success() {
         assert_ok!(FileSystem::bsp_confirm_storing(
             bsp_signed.clone(),
             file_key,
-            H256::zero(), // TODO construct a real proof
-            ForestProof {
-                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-            },
+            None, // TODO construct a real proof
+            None,
             KeyProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             }
@@ -1456,10 +1452,8 @@ fn bsp_confirm_storing_storage_request_not_found_fail() {
             FileSystem::bsp_confirm_storing(
                 bsp_signed.clone(),
                 file_key,
-                H256::zero(),
-                ForestProof {
-                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                },
+                None,
+                None,
                 KeyProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 }
@@ -1516,10 +1510,8 @@ fn bsp_confirm_storing_not_volunteered_fail() {
             FileSystem::bsp_confirm_storing(
                 bsp_signed.clone(),
                 file_key,
-                H256::zero(), // TODO construct a real proof
-                ForestProof {
-                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                },
+                None, // TODO construct a real proof
+                None,
                 KeyProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 }
@@ -1579,10 +1571,8 @@ fn bsp_already_confirmed_fail() {
         assert_ok!(FileSystem::bsp_confirm_storing(
             bsp_signed.clone(),
             file_key,
-            H256::zero(), // TODO construct a real proof
-            ForestProof {
-                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-            },
+            None, // TODO construct a real proof
+            None,
             KeyProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             }
@@ -1592,10 +1582,10 @@ fn bsp_already_confirmed_fail() {
             FileSystem::bsp_confirm_storing(
                 bsp_signed.clone(),
                 file_key,
-                H256::zero(), // TODO construct a real proof
-                ForestProof {
+                Some(file_key), // TODO construct a real proof
+                Some(ForestProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                },
+                }),
                 KeyProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 }
@@ -1652,10 +1642,8 @@ fn bsp_actions_not_a_bsp_fail() {
             FileSystem::bsp_confirm_storing(
                 bsp_signed.clone(),
                 file_key,
-                H256::zero(), // TODO construct a real proof
-                ForestProof {
-                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                },
+                None, // TODO construct a real proof
+                None,
                 KeyProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 }
@@ -1721,10 +1709,8 @@ fn bsp_stop_storing_success() {
         assert_ok!(FileSystem::bsp_confirm_storing(
             bsp_signed.clone(),
             file_key,
-            H256::zero(), // TODO construct a real proof
-            ForestProof {
-                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-            },
+            None, // TODO construct a real proof
+            None,
             KeyProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             }
@@ -1877,10 +1863,8 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         assert_ok!(FileSystem::bsp_confirm_storing(
             bsp_signed.clone(),
             file_key,
-            H256::zero(),
-            ForestProof {
-                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-            },
+            None,
+            None,
             KeyProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             }
@@ -1989,6 +1973,43 @@ fn bsp_stop_storing_not_volunteered_success() {
             )
             .unwrap();
 
+        // Register a file to the BSP so it has a root and a trie.
+        let other_file_fingerprint = H256::repeat_byte(1);
+        // Dispatch storage request.
+        assert_ok!(FileSystem::issue_storage_request(
+            owner.clone(),
+            bucket_id,
+            location.clone(),
+            other_file_fingerprint,
+            size,
+            msp_id,
+            Default::default(),
+        ));
+        let other_file_key = FileSystem::compute_file_key(
+            owner_account_id.clone(),
+            bucket_id,
+            location.clone(),
+            size,
+            other_file_fingerprint,
+        );
+
+        // Dispatch BSP volunteer (for another file).
+        assert_ok!(FileSystem::bsp_volunteer(
+            bsp_signed.clone(),
+            other_file_key
+        ));
+
+        // Dispatch BSP confirm storing.
+        assert_ok!(FileSystem::bsp_confirm_storing(
+            bsp_signed.clone(),
+            other_file_key,
+            None,
+            None,
+            KeyProof {
+                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+            }
+        ));
+
         let file_key = FileSystem::compute_file_key(
             owner_account_id.clone(),
             bucket_id,
@@ -2057,6 +2078,8 @@ fn bsp_stop_storing_not_volunteered_success() {
 #[test]
 fn bsp_stop_storing_no_storage_request_success() {
     new_test_ext().execute_with(|| {
+        let owner_account_id = Keyring::Alice.to_account_id();
+        let owner = RuntimeOrigin::signed(owner_account_id.clone());
         let bsp_account_id = Keyring::Bob.to_account_id();
         let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
         let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
@@ -2080,6 +2103,43 @@ fn bsp_stop_storing_no_storage_request_success() {
                 bsp_account_id,
             )
             .unwrap();
+
+        // Register a file to the BSP so it has a root and a trie.
+        let other_file_fingerprint = H256::repeat_byte(1);
+        // Dispatch storage request.
+        assert_ok!(FileSystem::issue_storage_request(
+            owner.clone(),
+            bucket_id,
+            location.clone(),
+            other_file_fingerprint,
+            size,
+            msp_id,
+            Default::default(),
+        ));
+        let other_file_key = FileSystem::compute_file_key(
+            owner_account_id.clone(),
+            bucket_id,
+            location.clone(),
+            size,
+            other_file_fingerprint,
+        );
+
+        // Dispatch BSP volunteer (for another file).
+        assert_ok!(FileSystem::bsp_volunteer(
+            bsp_signed.clone(),
+            other_file_key
+        ));
+
+        // Dispatch BSP confirm storing.
+        assert_ok!(FileSystem::bsp_confirm_storing(
+            bsp_signed.clone(),
+            other_file_key,
+            None,
+            None,
+            KeyProof {
+                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+            }
+        ));
 
         let file_key = FileSystem::compute_file_key(
             owner_account_id.clone(),
