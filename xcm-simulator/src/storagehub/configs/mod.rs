@@ -61,7 +61,7 @@ use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, Verify},
-    AccountId32, DispatchError, FixedU128, Perbill, SaturatedConversion,
+    AccountId32, DispatchError, FixedPointNumber, FixedU128, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::CompactProof;
@@ -583,6 +583,8 @@ impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
+    type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
+    type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
     type ThresholdType = ThresholdType;
     type Currency = Balances;
     type Nfts = Nfts;
@@ -617,4 +619,25 @@ impl pallet_bucket_nfts::Config for Runtime {
     type Providers = Providers;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
+}
+
+// Converter from the ThresholdType type (FixedU128) to the BlockNumber type (u64).
+// It performs a saturated conversion, so that the result is always a valid BlockNumber.
+pub struct SaturatingThresholdTypeToBlockNumberConverter;
+
+impl Convert<ThresholdType, BlockNumberFor<Runtime>>
+    for SaturatingThresholdTypeToBlockNumberConverter
+{
+    fn convert(threshold: ThresholdType) -> BlockNumberFor<Runtime> {
+        (threshold.into_inner() / FixedU128::accuracy()).saturated_into()
+    }
+}
+
+// Converter from the BlockNumber type (u64) to the ThresholdType type (FixedU128).
+pub struct BlockNumberToThresholdTypeConverter;
+
+impl Convert<BlockNumberFor<Runtime>, ThresholdType> for BlockNumberToThresholdTypeConverter {
+    fn convert(block_number: BlockNumberFor<Runtime>) -> ThresholdType {
+        FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
+    }
 }

@@ -18,9 +18,10 @@ use xcm_builder::{
     AllowSubscriptionsFrom, AllowTopLevelPaidExecutionFrom, DenyReserveTransferToRelayChain,
     DenyThenTry, DescribeAllTerminal, DescribeFamily, EnsureXcmOrigin, FixedWeightBounds,
     FrameTransactionalProcessor, FungibleAdapter, HashedDescription, IsConcrete, NativeAsset,
-    ParentIsPreset, RelayChainAsNative, SiblingParachainAsNative, SiblingParachainConvertsVia,
-    SignedAccountId32AsNative, SignedToAccountId32, SovereignSignedViaLocation, TakeWeightCredit,
-    TrailingSetTopicAsId, UsingComponents, WithComputedOrigin, WithUniqueTopic,
+    ParentAsSuperuser, ParentIsPreset, RelayChainAsNative, SiblingParachainAsNative,
+    SiblingParachainConvertsVia, SignedAccountId32AsNative, SignedToAccountId32,
+    SovereignSignedViaLocation, TakeWeightCredit, TrailingSetTopicAsId, UsingComponents,
+    WithComputedOrigin, WithUniqueTopic,
 };
 use xcm_executor::XcmExecutor;
 
