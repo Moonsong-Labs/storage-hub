@@ -83,7 +83,6 @@ pub trait FileDataTrie<T: TrieLayout> {
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError>;
 
     // TODO: make it accept a list of chunks to be retrieved
-    // TODO: Return Result<Option> instead of Result only
     /// Get a file chunk from storage. Returns error if the chunk does not exist.
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError>;
 
