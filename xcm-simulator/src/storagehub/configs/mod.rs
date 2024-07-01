@@ -23,12 +23,15 @@
 //
 // For more information, please refer to <http://unlicense.org>
 
-mod xcm_config;
+pub mod xcm_config;
 
 // Substrate and Polkadot dependencies
+use crate::mock_message_queue;
+use crate::storagehub::configs::xcm_config::XcmConfig;
+use crate::storagehub::MessageQueue;
+use crate::storagehub::PolkadotXcm;
 use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
 use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
-use crate::PolkadotXcm;
 use frame_support::{
     derive_impl,
     dispatch::DispatchClass,
@@ -65,16 +68,17 @@ use sp_trie::CompactProof;
 use sp_trie::LayoutV1;
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
+use xcm_simulator::XcmExecutor;
 
 // Local module imports
 use super::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection,
-    FileSystem, Hash, MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem,
-    ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
-    RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
-    WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS,
-    EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
+    FileSystem, Hash, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, ProofsDealer,
+    Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason,
+    RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System, WeightToFee, XcmpQueue,
+    AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS, EXISTENTIAL_DEPOSIT, HOURS,
+    MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
     RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
@@ -196,6 +200,11 @@ impl pallet_sudo::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type RuntimeCall = RuntimeCall;
     type WeightInfo = ();
+}
+
+impl mock_message_queue::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type XcmExecutor = XcmExecutor<XcmConfig>;
 }
 
 parameter_types! {

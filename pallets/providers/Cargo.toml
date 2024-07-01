@@ -52,9 +52,11 @@ std = [
 	"frame-support/std",
 	"frame-system/std",
 	"scale-info/std",
+	"shp-traits/std",
 	"sp-core/std",
 	"sp-io/std",
 	"sp-runtime/std",
+	"pallet-balances/std",
 ]
 try-runtime = [
 	"frame-support/try-runtime",
