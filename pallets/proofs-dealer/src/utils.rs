@@ -746,11 +746,6 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
         Ok(())
     }
-
-    // TODO: Add `initialise_provider` method to be called by the FileSystem pallet.
-    // TODO: when a file is first uploaded to a BSP or bucket.
-    // TODO: It would set `LastTickProviderSubmittedProofFor` to the current tick and
-    // TODO: the deadline for submitting a proof in `ChallengeTickToChallengedProviders`.
 }
 
 /// Runtime API implementation for the ProofsDealer pallet.
