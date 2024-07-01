@@ -13,6 +13,8 @@ use crate::{
 use codec::Encode;
 use frame_support::dispatch::GetDispatchInfo;
 use pallet_balances;
+use pallet_storage_providers::types::MultiAddress;
+use shp_traits::ProvidersInterface;
 
 mod relay_token {
     use super::*;
@@ -358,7 +360,7 @@ mod root {
     use super::*;
 
     #[test]
-    fn relay_chain_is_root_origin() {
+    fn relay_chain_can_be_root_origin() {
         // Scenario:
         // The Relay Chain (and its executive body) should be able to execute extrinsics as the root origin in StorageHub.
 
@@ -409,5 +411,88 @@ mod root {
     }
 }
 mod providers {
+    use pallet_storage_providers::types::MaxMultiAddressAmount;
+    use sp_runtime::BoundedVec;
+
+    use crate::sh_sibling_account_id;
+
     use super::*;
+
+    #[test]
+    fn parachain_should_be_able_to_request_to_register_as_provider() {
+        // Scenario:
+        // A parachain should be able to request to register as a provider in StorageHub.
+
+        // We reset storage and messages.
+        MockNet::reset();
+
+        // We check that the parachain is not a provider in the StorageHub and it has some balance
+        StorageHub::execute_with(|| {
+            assert!(storagehub::Providers::get_provider_id(sh_sibling_account_id(2004)).is_none());
+            assert_eq!(
+                storagehub::Balances::balance(&sh_sibling_account_id(2004)),
+                10 * INITIAL_BALANCE
+            );
+        });
+
+        // The parachain requests to register as a provider in the StorageHub.
+        // It has to have balance on StorageHub, which could be easily achieved by teleporting some tokens from the Relay Chain.
+        // TODO: Maybe we should allow reserve transfer using the Relay Chain as reserve? It gets a bit messy but would make it easier
+        // for parachains to interact with StorageHub
+        MockParachain::execute_with(|| {
+            let destination: Location = (Parent, Parachain(1)).into();
+            let mut multiaddresses: BoundedVec<
+                MultiAddress<storagehub::Runtime>,
+                MaxMultiAddressAmount<storagehub::Runtime>,
+            > = BoundedVec::new();
+            multiaddresses.force_push(
+                "/ip4/127.0.0.1/udp/1234"
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .unwrap(),
+            );
+
+            let call = storagehub::RuntimeCall::Providers(pallet_storage_providers::Call::<
+                storagehub::Runtime,
+            >::request_bsp_sign_up {
+                capacity: 10,
+                multiaddresses,
+                payment_account: sh_sibling_account_id(2004),
+            });
+            let estimated_weight = call.get_dispatch_info().weight;
+            // Remember, this message will be executed from the context of StorageHub
+            let message: Xcm<()> = vec![
+                WithdrawAsset((Parent, 100 * CENTS).into()),
+                BuyExecution {
+                    fees: (Parent, 100 * CENTS).into(),
+                    weight_limit: Unlimited,
+                },
+                Transact {
+                    origin_kind: OriginKind::SovereignAccount,
+                    require_weight_at_most: estimated_weight,
+                    call: call.encode().into(),
+                },
+                RefundSurplus,
+                DepositAsset {
+                    assets: Wild(All),
+                    beneficiary: (Parent, Parachain(2004)).into(),
+                },
+            ]
+            .into();
+            assert_ok!(parachain::PolkadotXcm::send_xcm(Here, destination, message));
+        });
+
+        StorageHub::execute_with(|| {
+            // We check that the parachain has correctly requested to sign up as BSP in StorageHub.
+            assert!(
+                storagehub::Providers::get_sign_up_request(&sh_sibling_account_id(2004)).is_ok()
+            );
+
+            // And that it's balance has changed
+            assert!(
+                storagehub::Balances::balance(&sh_sibling_account_id(2004)) != 10 * INITIAL_BALANCE
+            );
+        });
+    }
 }

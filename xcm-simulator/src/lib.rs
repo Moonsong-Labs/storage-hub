@@ -23,7 +23,7 @@ decl_test_parachain! {
         Runtime = storagehub::Runtime,
         XcmpMessageHandler = storagehub::MsgQueue,
         DmpMessageHandler = storagehub::MsgQueue,
-        new_ext = para_ext(1),
+        new_ext = sh_ext(),
     }
 }
 
@@ -32,7 +32,7 @@ decl_test_parachain! {
         Runtime = system_chain::Runtime,
         XcmpMessageHandler = system_chain::MsgQueue,
         DmpMessageHandler = system_chain::MsgQueue,
-        new_ext = para_ext(2),
+        new_ext = sys_ext(2),
     }
 }
 
@@ -98,6 +98,22 @@ pub fn child_account_account_id(para: u32, who: sp_runtime::AccountId32) -> rela
         },
     );
     relay_chain::location_converter::LocationConverter::convert_location(&location.into()).unwrap()
+}
+
+pub fn sibling_account_id(para: u32) -> parachain::AccountId {
+    let location = (Parent, Parachain(para));
+    parachain::location_converter::LocationConverter::convert_location(&location.into()).unwrap()
+}
+
+pub fn sys_sibling_account_id(para: u32) -> system_chain::AccountId {
+    let location = (Parent, Parachain(para));
+    system_chain::location_converter::LocationConverter::convert_location(&location.into()).unwrap()
+}
+
+pub fn sh_sibling_account_id(para: u32) -> storagehub::AccountId {
+    let location = (Parent, Parachain(para));
+    storagehub::configs::xcm_config::LocationToAccountId::convert_location(&location.into())
+        .unwrap()
 }
 
 pub fn sibling_account_account_id(para: u32, who: sp_runtime::AccountId32) -> parachain::AccountId {
@@ -188,6 +204,8 @@ pub fn para_ext(para_id: u32) -> sp_io::TestExternalities {
         balances: vec![
             (ALICE, INITIAL_BALANCE),
             (parent_account_id(), INITIAL_BALANCE),
+            (sibling_account_id(1), 10 * INITIAL_BALANCE),
+            (sibling_account_id(2), 10 * INITIAL_BALANCE),
         ],
     }
     .assimilate_storage(&mut t)
@@ -213,6 +231,7 @@ pub fn sys_ext(para_id: u32) -> sp_io::TestExternalities {
         balances: vec![
             (ALICE, INITIAL_BALANCE),
             (sys_parent_account_id(), INITIAL_BALANCE),
+            (sys_sibling_account_id(2004), 10 * INITIAL_BALANCE),
         ],
     }
     .assimilate_storage(&mut t)
@@ -237,7 +256,8 @@ pub fn sh_ext() -> sp_io::TestExternalities {
     pallet_balances::GenesisConfig::<Runtime> {
         balances: vec![
             (ALICE, INITIAL_BALANCE),
-            (parent_account_id(), INITIAL_BALANCE),
+            (sh_parent_account_id(), INITIAL_BALANCE),
+            (sh_sibling_account_id(2004), 10 * INITIAL_BALANCE),
         ],
     }
     .assimilate_storage(&mut t)
