@@ -23,14 +23,14 @@ export const NODE_INFOS = {
 
 export const TEST_ARTEFACTS = {
   "res/adolphus.jpg": {
-    size: 416400n,
+    size: 416396n,
     checksum: "739fb97f7c2b8e7f192b608722a60dc67ee0797c85ff1ea849c41333a40194f2",
-    fingerprint: "0x9e86ecad3f86f52891acf9c0d47c5c5243a3592fc7bcf99811eb7db078997dcb"
+    fingerprint: "0x564c33c2f4cb3417b2dbd69451be58cfce5bd2844786581278b32f939e3e4226"
   },
   "res/smile.jpg": {
     size: 633160n,
     checksum: "12094d47c2fdf1a984c0b950c2c0ede733722bea3bee22fef312e017383b410c",
-    fingerprint: "0x00d6e8c6410561b5e59266706b7e82dc1148735c93cbc33bd6d7b6d62d435200"
+    fingerprint: "0xa2d6e8c6410561b5e59266706b7e82dc1148735c93cbc33bd6d7b6d62d435271"
   },
   "res/whatsup.jpg": {
     size: 216211n,
@@ -40,7 +40,7 @@ export const TEST_ARTEFACTS = {
   "res/cloud.jpg": {
     size: 346248n,
     checksum: "8e06811883fc3e5e6a0331825b365e4bd7b83ba7683fa9da17e4daea25d7a9f5",
-    fingerprint: "0x00b122b1b40969f3b6ce9277d511d7f771f8a4e213fa1a8a2951662bd3044000"
+    fingerprint: "0xcfb122b1b40969f3b6ce9277d511d7f771f8a4e213fa1a8a2951662bd3044016"
   }
 } as const;
 
