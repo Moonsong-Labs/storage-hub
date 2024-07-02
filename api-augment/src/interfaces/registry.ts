@@ -70,6 +70,7 @@ import type {
   PalletFileSystemCall,
   PalletFileSystemError,
   PalletFileSystemEvent,
+  PalletFileSystemExpiredItems,
   PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletMessageQueueBookState,
@@ -315,6 +316,7 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemCall: PalletFileSystemCall;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
+    PalletFileSystemExpiredItems: PalletFileSystemExpiredItems;
     PalletFileSystemStorageRequestBspsMetadata: PalletFileSystemStorageRequestBspsMetadata;
     PalletFileSystemStorageRequestMetadata: PalletFileSystemStorageRequestMetadata;
     PalletMessageQueueBookState: PalletMessageQueueBookState;

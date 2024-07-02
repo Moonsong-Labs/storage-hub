@@ -211,6 +211,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ExpectedNonInclusionProof: AugmentedError<ApiType>;
       /**
+       * Failed to add file key to pending deletion requests.
+       **/
+      FailedToAddFileKeyToPendingDeletionRequests: AugmentedError<ApiType>;
+      /**
        * Failed to convert block number to threshold.
        **/
       FailedToConvertBlockNumber: AugmentedError<ApiType>;
@@ -231,6 +235,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FailedTypeConversion: AugmentedError<ApiType>;
       /**
+       * File key already pending deletion.
+       **/
+      FileKeyAlreadyPendingDeletion: AugmentedError<ApiType>;
+      /**
        * Failed to get value when just checked it existed.
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
@@ -244,6 +252,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       MaxBlockNumberReached: AugmentedError<ApiType>;
       /**
+       * Unauthorized operation, signer is not an MSP of the bucket id.
+       **/
+      MspNotStoringBucket: AugmentedError<ApiType>;
+      /**
        * Account is not a BSP.
        **/
       NotABsp: AugmentedError<ApiType>;
@@ -255,6 +267,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Operation failed because the account is not the owner of the bucket.
        **/
       NotBucketOwner: AugmentedError<ApiType>;
+      /**
+       * Unauthorized operation, signer does not own the file.
+       **/
+      NotFileOwner: AugmentedError<ApiType>;
       /**
        * Root of the provider not found.
        **/

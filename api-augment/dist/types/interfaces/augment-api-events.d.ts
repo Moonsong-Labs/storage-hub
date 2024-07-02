@@ -331,6 +331,13 @@ declare module '@polkadot/api-base/types/events' {
                 private: bool;
             }>;
             /**
+             * Notifies that a priority challenge failed to be queued for pending file deletion.
+             **/
+            FailedToQueuePriorityChallenge: AugmentedEvent<ApiType, [user: AccountId32, fileKey: H256], {
+                user: AccountId32;
+                fileKey: H256;
+            }>;
+            /**
              * Notifies that a new bucket has been created.
              **/
             NewBucket: AugmentedEvent<ApiType, [who: AccountId32, mspId: H256, bucketId: H256, name: Bytes, collectionId: Option<u32>, private: bool], {
