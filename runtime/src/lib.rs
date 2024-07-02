@@ -532,9 +532,11 @@ impl_runtime_apis! {
         fn get_last_tick_provider_submitted_proof(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
             ProofsDealer::get_last_tick_provider_submitted_proof(provider_id)
         }
+
         fn get_last_checkpoint_challenge_tick() -> BlockNumber {
             ProofsDealer::get_last_checkpoint_challenge_tick()
         }
+
         fn get_checkpoint_challenges(
             tick: BlockNumber
         ) -> Result<Vec<(KeyFor<Runtime>, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError> {

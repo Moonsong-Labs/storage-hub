@@ -67,8 +67,6 @@ std = [
     "frame-support/std",
     "frame-system/std",
     "pallet-file-system-runtime-api/std",
-    "pallet-bucket-nfts/std",
-    "pallet-nfts/std",
     "pallet-proofs-dealer/std",
     "pallet-storage-providers/std",
     "scale-info/std",

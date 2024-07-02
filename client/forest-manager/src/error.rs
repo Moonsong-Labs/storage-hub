@@ -29,7 +29,7 @@ impl<H, CodecError> From<ForestStorageError<H>> for Error<H, CodecError> {
     }
 }
 
-/// Error type for the in-memory forest storage.
+/// Error type for the forest storage implementations.
 #[derive(thiserror::Error, Debug, PartialEq)]
 pub enum ForestStorageError<H> {
     #[error("Failed to create trie iterator")]

@@ -178,7 +178,12 @@ where
                     return Err(anyhow::anyhow!(format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key)));
                 }
                 FileStorageWriteError::FailedToGetFileChunk
-                | FileStorageWriteError::FailedToInsertFileChunk => {
+                | FileStorageWriteError::FailedToInsertFileChunk
+                | FileStorageWriteError::FailedToDeleteChunk
+                | FileStorageWriteError::FailedToPersistChanges
+                | FileStorageWriteError::FailedToParseFileMetadata
+                | FileStorageWriteError::FailedToParseFingerprint
+                | FileStorageWriteError::FailedToReadStorage => {
                     // This internal error should not happen.
 
                     // Unvolunteer the file.
@@ -338,7 +343,9 @@ where
 
         // Delete the file from the file storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        write_file_storage.delete_file(&file_key);
+
+        // TODO: Handle error
+        let _ = write_file_storage.delete_file(&file_key);
 
         // TODO: Send transaction to runtime to unvolunteer the file.
 

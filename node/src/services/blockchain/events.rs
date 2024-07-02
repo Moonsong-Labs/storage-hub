@@ -1,16 +1,11 @@
 use frame_system::pallet_prelude::BlockNumberFor;
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
-use shc_common::types::{FileKey, Fingerprint};
+use shc_common::types::{
+    BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, PeerIds, RandomSeed, StorageData,
+};
 use sp_core::H256;
 use sp_runtime::AccountId32;
-
-type StorageData = pallet_file_system::types::StorageData<storage_hub_runtime::Runtime>;
-type FileLocation = pallet_file_system::types::FileLocation<storage_hub_runtime::Runtime>;
-type PeerIds = pallet_file_system::types::PeerIds<storage_hub_runtime::Runtime>;
-type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<storage_hub_runtime::Runtime>;
-type BlockNumber = BlockNumberFor<storage_hub_runtime::Runtime>;
-type RandomSeed = pallet_proofs_dealer::types::RandomnessOutputFor<storage_hub_runtime::Runtime>;
 
 /// New random challenge emitted by the StorageHub runtime.
 ///
