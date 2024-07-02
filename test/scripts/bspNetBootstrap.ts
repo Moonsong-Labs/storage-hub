@@ -1,68 +1,66 @@
+import { setTimeout } from "node:timers/promises";
 import {
   DUMMY_MSP_ID,
   NODE_INFOS,
   createApiObject,
+  createCheckBucket,
   getContainerPeerId,
   runBspNet,
-  shUser
+  shUser,
+  type BspNetApi
 } from "../util";
-import { setTimeout } from "node:timers/promises";
+
+let api: BspNetApi | undefined;
+
+const CONFIG = {
+  bucketName: "nothingmuch-0",
+  localPath: "res/whatsup.jpg",
+  remotePath: "cat/whatsup.jpg"
+};
 
 async function bootStrapNetwork() {
-  try {
-    await runBspNet();
-    // biome-ignore lint/style/noVar: this is neater
-    // biome-ignore lint/correctness/noInnerDeclarations: this is neater
-    var api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+  await runBspNet();
+  api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
-    const bucketName = "nothingmuch-0";
-    const newBucketEventEvent = await api.createBucket(bucketName);
-    const newBucketEventDataBlob =
-      api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+  const newBucketEventDataBlob = await createCheckBucket(api, CONFIG.bucketName);
 
-    if (!newBucketEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
+  const localPath = CONFIG.localPath;
+  const remotePath = CONFIG.remotePath;
 
-    const localPath = "res/whatsup.jpg";
-    const remotePath = "cat/whatsup.jpg";
+  // Issue file Storage request
+  const rpcResponse = await api.loadFile(
+    localPath,
+    remotePath,
+    NODE_INFOS.user.AddressId,
+    newBucketEventDataBlob.bucketId
+  );
+  console.log(rpcResponse);
 
-    // Issue file Storage request
-    const rpcResponse = await api.loadFile(
-      localPath,
+  const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
+  console.log(`sh-user Peer ID: ${peerIDUser}`);
+
+  await api.sealBlock(
+    api.tx.fileSystem.issueStorageRequest(
+      rpcResponse.bucket_id,
       remotePath,
-      NODE_INFOS.user.AddressId,
-      newBucketEventDataBlob.bucketId
-    );
-    console.log(rpcResponse);
+      rpcResponse.fingerprint,
+      rpcResponse.size,
+      DUMMY_MSP_ID,
+      [peerIDUser]
+    ),
+    shUser
+  );
 
-    const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
-    console.log(`sh-user Peer ID: ${peerIDUser}`);
+  // Seal the block from BSP volunteer
+  await setTimeout(1000);
+  await api.sealBlock();
+  console.log("✅ BSPNet Bootstrap success");
+}
 
-    await api.sealBlock(
-      api.tx.fileSystem.issueStorageRequest(
-        rpcResponse.bucket_id,
-        remotePath,
-        rpcResponse.fingerprint,
-        rpcResponse.size,
-        DUMMY_MSP_ID,
-        [peerIDUser]
-      ),
-      shUser
-    );
-
-    // Seal the block from BSP volunteer
-    await setTimeout(1000);
-    await api.sealBlock();
-    console.log("✅ BSPNet Bootstrap success");
-  } catch (e) {
+bootStrapNetwork()
+  .catch((e) => {
     console.error("Error running bootstrap script:", e);
     console.log("❌ BSPNet Bootstrap failure");
     process.exitCode = 1;
-  }
-
-  // @ts-expect-error - bug in tsc
-  await api.disconnect();
-}
-
-bootStrapNetwork();
+  })
+  .finally(async () => await api?.disconnect());

@@ -1,16 +1,6 @@
 import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
-import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import compose from "docker-compose";
-import { alice, bsp, shUser } from "../pjsKeyring";
-import { CAPACITY_512, DUMMY_BSP_ID, DUMMY_MSP_ID, NODE_INFOS, VALUE_PROP } from "./consts";
-import { createApiObject } from "./api";
-import path from "node:path";
-import { u8aToHex } from "@polkadot/util";
-import * as util from "node:util";
-import * as child_process from "node:child_process";
-import { execSync } from "node:child_process";
 import type {
   CreatedBlock,
   EventRecord,
@@ -18,12 +8,22 @@ import type {
   Hash,
   SignedBlock
 } from "@polkadot/types/interfaces";
-import { showContainers } from "./docker";
-import { isExtSuccess } from "../extrinsics";
-import type { BspNetApi } from "./types";
-import { assertEventPresent } from "../asserts.ts";
+import type { ISubmittableResult } from "@polkadot/types/types";
+import { u8aToHex } from "@polkadot/util";
+import compose from "docker-compose";
 import Docker from "dockerode";
+import * as child_process from "node:child_process";
+import { execSync } from "node:child_process";
+import path from "node:path";
+import * as util from "node:util";
+import { assertEventPresent } from "../asserts.ts";
 import { DOCKER_IMAGE } from "../constants.ts";
+import { isExtSuccess } from "../extrinsics";
+import { alice, bsp, shUser } from "../pjsKeyring";
+import { createApiObject } from "./api";
+import { CAPACITY_512, DUMMY_BSP_ID, DUMMY_MSP_ID, NODE_INFOS, VALUE_PROP } from "./consts";
+import { showContainers } from "./docker";
+import type { BspNetApi } from "./types";
 
 const exec = util.promisify(child_process.exec);
 
@@ -337,4 +337,15 @@ export const createBucket = async (api: ApiPromise, bucketName: string) => {
 export const cleardownTest = async (api: BspNetApi) => {
   await api.disconnect();
   await closeBspNet();
+};
+
+export const createCheckBucket = async (api: BspNetApi, bucketName: string) => {
+  const newBucketEventEvent = await api.createBucket(bucketName);
+  const newBucketEventDataBlob =
+    api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+
+  if (!newBucketEventDataBlob) {
+    throw new Error("Event doesn't match Type");
+  }
+  return newBucketEventDataBlob;
 };

@@ -1,133 +1,99 @@
+import { setTimeout } from "node:timers/promises";
 import {
   createApiObject,
+  createCheckBucket,
   DUMMY_MSP_ID,
   getContainerPeerId,
   NODE_INFOS,
+  registerToxics,
   runBspNet,
   shUser,
+  type BspNetApi,
   type ToxicInfo
 } from "../util";
-import { setTimeout } from "node:timers/promises";
 
-const registerToxic = async (toxicDef: ToxicInfo) => {
-  const url = `http://localhost:${NODE_INFOS.toxiproxy.port}/proxies/sh-bsp-proxy/toxics`;
+let api: BspNetApi | undefined;
 
-  const options: RequestInit = {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(toxicDef)
-  };
-
-  const resp = await fetch(url, options);
-
-  return resp.json();
-};
-
-const getToxics = async () => {
-  const url = `http://localhost:${NODE_INFOS.toxiproxy.port}/proxies/sh-bsp-proxy/toxics`;
-  const resp = await fetch(url);
-  return resp.json();
+const CONFIG = {
+  bucketName: "nothingmuch-0",
+  localPath: "res/whatsup.jpg",
+  remotePath: "cat/whatsup.jpg"
 };
 
 async function bootStrapNetwork() {
-  try {
-    await runBspNet(true);
+  await runBspNet(true);
 
-    // For more info on the kind of toxics you can register,
-    // see: https://github.com/Shopify/toxiproxy?tab=readme-ov-file#toxics
-    const reqToxics = [
-      {
-        type: "latency",
-        name: "lag-down",
-        stream: "upstream",
-        toxicity: 0.8,
-        attributes: {
-          latency: 25,
-          jitter: 7
-        }
-      },
-      {
-        type: "bandwidth",
-        name: "low-band",
-        // Setting as upstream simulates slow user connection
-        stream: "upstream",
-        // 50% of the time, the toxic will be applied
-        toxicity: 0.5,
-        attributes: {
-          // 10kbps
-          rate: 10
-        }
+  // For more info on the kind of toxics you can register,
+  // see: https://github.com/Shopify/toxiproxy?tab=readme-ov-file#toxics
+  const reqToxics = [
+    {
+      type: "latency",
+      name: "lag-down",
+      stream: "upstream",
+      toxicity: 0.8,
+      attributes: {
+        latency: 25,
+        jitter: 7
       }
-    ] satisfies ToxicInfo[];
-
-    // Register toxics with proxy server
-    const promises = reqToxics.map(registerToxic);
-    await Promise.all(promises);
-
-    // Verify each toxic is registered
-    const receivedToxics: any = await getToxics();
-
-    if (receivedToxics.length !== reqToxics.length) {
-      console.log("❌ Toxic registration failed");
-      console.log(receivedToxics);
-      throw new Error("Toxic registration failed");
+    },
+    {
+      type: "bandwidth",
+      name: "low-band",
+      // Setting as upstream simulates slow user connection
+      stream: "upstream",
+      // 50% of the time, the toxic will be applied
+      toxicity: 0.5,
+      attributes: {
+        // 10kbps
+        rate: 10
+      }
     }
+  ] satisfies ToxicInfo[];
 
-    // biome-ignore lint/style/noVar: this is neater
-    // biome-ignore lint/correctness/noInnerDeclarations: this is neater
-    var api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+  await registerToxics(reqToxics);
 
-    const bucketName = "nothingmuch-0";
-    const newBucketEventEvent = await api.createBucket(bucketName);
-    const newBucketEventDataBlob =
-      api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+  api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
-    if (!newBucketEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
+  const newBucketEventDataBlob = await createCheckBucket(api, CONFIG.bucketName);
 
-    const localPath = "res/whatsup.jpg";
-    const remotePath = "cat/whatsup.jpg";
+  const localPath = CONFIG.localPath;
+  const remotePath = CONFIG.remotePath;
 
-    // Issue file Storage request
-    const rpcResponse = await api.loadFile(
-      localPath,
+  // Issue file Storage request
+  const rpcResponse = await api.loadFile(
+    localPath,
+    remotePath,
+    NODE_INFOS.user.AddressId,
+    newBucketEventDataBlob.bucketId
+  );
+  console.log(rpcResponse);
+
+  const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
+  console.log(`sh-user Peer ID: ${peerIDUser}`);
+
+  await api.sealBlock(
+    api.tx.fileSystem.issueStorageRequest(
+      rpcResponse.bucket_id,
       remotePath,
-      NODE_INFOS.user.AddressId,
-      newBucketEventDataBlob.bucketId
-    );
-    console.log(rpcResponse);
+      rpcResponse.fingerprint,
+      rpcResponse.size,
+      DUMMY_MSP_ID,
+      [peerIDUser]
+    ),
+    shUser
+  );
 
-    const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
-    console.log(`sh-user Peer ID: ${peerIDUser}`);
+  // Seal the block from BSP volunteer
+  await setTimeout(1000);
+  await api.sealBlock();
 
-    await api.sealBlock(
-      api.tx.fileSystem.issueStorageRequest(
-        rpcResponse.bucket_id,
-        remotePath,
-        rpcResponse.fingerprint,
-        rpcResponse.size,
-        DUMMY_MSP_ID,
-        [peerIDUser]
-      ),
-      shUser
-    );
+  console.log("✅ NoisyNet Bootstrap success");
+}
 
-    // Seal the block from BSP volunteer
-    await setTimeout(1000);
-    await api.sealBlock();
-
-    console.log("✅ NoisyNet Bootstrap success");
-  } catch (e) {
+bootStrapNetwork()
+  .catch((e) => {
     console.error("Error running bootstrap script:", e);
     console.log("❌ BSPNet Bootstrap failure");
     process.exitCode = 1;
-  }
-
-  // @ts-expect-error - bug in tsc
-  await api.disconnect();
-}
-
-bootStrapNetwork();
+  })
+  .finally(async () => await api?.disconnect());
