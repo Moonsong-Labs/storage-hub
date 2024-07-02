@@ -41,21 +41,23 @@ async function bootStrapNetwork() {
       {
         type: "latency",
         name: "lag-down",
-        stream: "downstream",
-        toxicity: 1,
+        stream: "upstream",
+        toxicity: 0.8,
         attributes: {
-          latency: 50,
-          jitter: 10
+          latency: 25,
+          jitter: 7
         }
       },
       {
-        type: "latency",
-        name: "lag-up",
+        type: "bandwidth",
+        name: "low-band",
+        // Setting as upstream simulates slow user connection
         stream: "upstream",
-        toxicity: 1,
+        // 50% of the time, the toxic will be applied
+        toxicity: 0.5,
         attributes: {
-          latency: 50,
-          jitter: 10
+          // 10kbps
+          rate: 10
         }
       }
     ] satisfies ToxicInfo[];

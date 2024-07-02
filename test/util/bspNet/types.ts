@@ -93,7 +93,6 @@ export interface ToxicInfo {
   stream: "upstream" | "downstream";
   toxicity: number;
   attributes: {
-    latency: number;
-    jitter: number;
+    [key: string]: string | number | undefined;
   };
 }
