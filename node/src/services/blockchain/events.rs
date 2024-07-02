@@ -1,4 +1,3 @@
-use frame_system::pallet_prelude::BlockNumberFor;
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
