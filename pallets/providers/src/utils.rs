@@ -1049,4 +1049,8 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
         }
         Ok(())
     }
+
+    fn get_default_root() -> Self::MerkleHash {
+        MerklePatriciaRootDefault::<T>::default().0
+    }
 }

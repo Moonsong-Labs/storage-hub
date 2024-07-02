@@ -26,7 +26,7 @@ use crate::{
     pallet,
     types::{
         AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor, ChallengesFeeFor,
-        ChallengesQueueLengthFor, CheckpointChallengePeriodFor, ForestRootFor, ForestVerifierFor,
+        ChallengesQueueLengthFor, CheckpointChallengePeriodFor, ForestVerifierFor,
         ForestVerifierProofFor, KeyFor, KeyVerifierFor, KeyVerifierProofFor,
         MaxCustomChallengesPerBlockFor, Proof, ProviderIdFor, ProvidersPalletFor,
         RandomChallengesPerBlockFor, RandomnessOutputFor, RandomnessProviderFor,
@@ -134,7 +134,10 @@ where
         // Check that the root is not the default root.
         // A default root means that the Provider is not providing any service yet, so he shouldn't be
         // submitting any proofs.
-        ensure!(root != Self::default_forest_root(), Error::<T>::ZeroRoot);
+        ensure!(
+            root != ProvidersPalletFor::<T>::get_default_root(),
+            Error::<T>::ZeroRoot
+        );
 
         // Get last tick for which the submitter submitted a proof.
         let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(submitter.clone())
@@ -617,12 +620,6 @@ where
         }
 
         challenges
-    }
-
-    /// Returns the default forest root.
-    fn default_forest_root() -> ForestRootFor<T> {
-        // TODO: Check that this returns the root for an empty forest and change if necessary.
-        ForestRootFor::<T>::default()
     }
 }
 
