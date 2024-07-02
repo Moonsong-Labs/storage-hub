@@ -689,7 +689,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         )
     }
 
-    fn initialise_provider(who: &Self::ProviderId) -> DispatchResult {
+    fn initialise_challenge_cycle(who: &Self::ProviderId) -> DispatchResult {
         // Check that `who` is a registered Provider.
         if !ProvidersPalletFor::<T>::is_provider(who.clone()) {
             return Err(Error::<T>::NotProvider.into());

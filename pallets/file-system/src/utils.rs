@@ -556,7 +556,9 @@ where
         );
         if old_root == Default::default() {
             // This means that this is the first file added to the BSP's Forest.
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::initialise_provider(&bsp_id)?;
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::initialise_challenge_cycle(
+                &bsp_id,
+            )?;
         }
 
         // Compute new root after inserting new file key in forest partial trie.
