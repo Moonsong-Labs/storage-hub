@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use trie_db::TrieDBMutBuilder;
 
 use shc_common::types::{
-    Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HasherOutT, H_LENGTH,
+    Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
 };
 
 use crate::traits::{
@@ -23,10 +23,9 @@ impl<T: TrieLayout> Default for InMemoryFileDataTrie<T> {
 
 impl<T: TrieLayout + 'static> InMemoryFileDataTrie<T> {
     fn new() -> Self {
-        Self {
-            root: Default::default(),
-            memdb: MemoryDB::default(),
-        }
+        let (memdb, root) = MemoryDB::<HashT<T>>::default_with_root();
+
+        Self { root, memdb }
     }
 }
 
@@ -37,11 +36,17 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
 
     fn stored_chunks_count(&self) -> Result<u64, FileStorageError> {
         let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
-        let trie_iter = trie
-            .iter()
-            .map_err(|_| FileStorageError::FailedToConstructTrieIter)?;
-        let stored_chunks = trie_iter.count() as u64;
-        Ok(stored_chunks)
+
+        let mut iter = trie.iter().map_err(|e| {
+            dbg!(e);
+            FileStorageError::FailedToConstructTrieIter
+        })?;
+        let mut count = 0u64;
+        while let Some(_) = iter.next() {
+            count += 1
+        }
+
+        Ok(count)
     }
 
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError> {
@@ -120,8 +125,9 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
     }
 
     fn delete(&mut self, _chunk_count: u64) -> Result<(), FileStorageWriteError> {
-        self.root = HasherOutT::<T>::default();
-        self.memdb.clear();
+        let (memdb, root) = MemoryDB::<HashT<T>>::default_with_root();
+        self.root = root;
+        self.memdb = memdb;
 
         Ok(())
     }
@@ -288,5 +294,288 @@ where
         }
 
         Ok(FileStorageWriteOutcome::FileComplete)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sp_core::H256;
+    use sp_runtime::traits::BlakeTwo256;
+    use sp_runtime::AccountId32;
+    use sp_trie::LayoutV1;
+
+    #[test]
+    fn file_trie_create_empty_works() {
+        let file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+
+        // expected hash is the root hash of an empty tree.
+        let expected_hash = HasherOutT::<LayoutV1<BlakeTwo256>>::try_from([
+            3, 23, 10, 46, 117, 151, 183, 183, 227, 216, 76, 5, 57, 29, 19, 154, 98, 177, 87, 231,
+            135, 134, 216, 192, 130, 242, 157, 207, 76, 17, 19, 20,
+        ])
+        .unwrap();
+
+        assert_eq!(
+            H256::from(*file_trie.get_root()),
+            expected_hash,
+            "Root should be initialized to default."
+        );
+    }
+
+    #[test]
+    fn file_trie_write_chunk_works() {
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+        let old_root = *file_trie.get_root();
+        file_trie
+            .write_chunk(&ChunkId::new(0u64), &Chunk::from([1u8; 1024]))
+            .unwrap();
+        let new_root = file_trie.get_root();
+        assert_ne!(&old_root, new_root);
+
+        let chunk = file_trie.get_chunk(&ChunkId::new(0u64)).unwrap();
+        assert_eq!(chunk.as_slice(), [1u8; 1024]);
+    }
+
+    #[test]
+    fn file_trie_get_chunk_works() {
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+
+        let chunk = Chunk::from([3u8; 32]);
+        let chunk_id = ChunkId::new(3);
+        file_trie.write_chunk(&chunk_id, &chunk).unwrap();
+        let chunk = file_trie.get_chunk(&chunk_id).unwrap();
+        assert_eq!(chunk.as_slice(), [3u8; 32]);
+    }
+
+    #[test]
+    fn file_trie_stored_chunks_count_works() {
+        let chunk_ids = vec![ChunkId::new(0u64), ChunkId::new(1u64)];
+        let chunks = vec![Chunk::from([0u8; 1024]), Chunk::from([1u8; 1024])];
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+
+        file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
+    }
+
+    #[test]
+    fn file_trie_generate_proof_works() {
+        let chunk_ids = vec![ChunkId::new(0u64), ChunkId::new(1u64), ChunkId::new(2u64)];
+
+        let chunks = vec![
+            Chunk::from([0u8; 1024]),
+            Chunk::from([1u8; 1024]),
+            Chunk::from([2u8; 1024]),
+        ];
+
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+
+        file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
+        assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
+
+        let file_proof = file_trie.generate_proof(&chunk_ids).unwrap();
+
+        assert_eq!(
+            file_proof.fingerprint.as_ref(),
+            file_trie.get_root().as_ref()
+        );
+    }
+
+    #[test]
+    fn file_trie_delete_works() {
+        let chunk_ids = vec![ChunkId::new(0u64), ChunkId::new(1u64), ChunkId::new(2u64)];
+
+        let chunks = vec![
+            Chunk::from([0u8; 1024]),
+            Chunk::from([1u8; 1024]),
+            Chunk::from([2u8; 1024]),
+        ];
+
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+
+        file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
+        assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
+
+        file_trie.delete(chunks.len() as u64).unwrap();
+        assert!(file_trie.get_chunk(&chunk_ids[0]).is_err());
+        assert!(file_trie.get_chunk(&chunk_ids[1]).is_err());
+        assert!(file_trie.get_chunk(&chunk_ids[2]).is_err());
+
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 0);
+    }
+
+    #[test]
+    fn file_storage_insert_file_works() {
+        let chunks = vec![
+            Chunk::from([5u8; 32]),
+            Chunk::from([6u8; 32]),
+            Chunk::from([7u8; 32]),
+        ];
+
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::new(id as u64))
+            .collect();
+
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+
+        file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
+        assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
+
+        let file_metadata = FileMetadata {
+            size: 32u64 * chunks.len() as u64,
+            fingerprint: file_trie.get_root().as_ref().into(),
+            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            location: "location".to_string().into_bytes(),
+            bucket_id: [1u8; 32].to_vec(),
+        };
+
+        let key = file_metadata.file_key::<BlakeTwo256>();
+        let mut file_storage = InMemoryFileStorage::<LayoutV1<BlakeTwo256>>::new();
+        file_storage
+            .insert_file_with_data(key, file_metadata, file_trie)
+            .unwrap();
+
+        assert!(file_storage.get_metadata(&key).is_ok());
+        dbg!(file_storage.get_chunk(&key, &chunk_ids[0]));
+        assert!(file_storage.get_chunk(&key, &chunk_ids[0]).is_ok());
+        assert!(file_storage.get_chunk(&key, &chunk_ids[1]).is_ok());
+        assert!(file_storage.get_chunk(&key, &chunk_ids[2]).is_ok());
+    }
+
+    #[test]
+    fn file_storage_delete_file_works() {
+        let chunks = vec![
+            Chunk::from([5u8; 32]),
+            Chunk::from([6u8; 32]),
+            Chunk::from([7u8; 32]),
+        ];
+
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::new(id as u64))
+            .collect();
+
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+        file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
+        assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
+
+        let file_metadata = FileMetadata {
+            size: 32u64 * chunks.len() as u64,
+            fingerprint: file_trie.get_root().as_ref().into(),
+            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            location: "location".to_string().into_bytes(),
+            bucket_id: [1u8; 32].to_vec(),
+        };
+
+        let key = file_metadata.file_key::<BlakeTwo256>();
+        let mut file_storage = InMemoryFileStorage::<LayoutV1<BlakeTwo256>>::new();
+        file_storage
+            .insert_file_with_data(key, file_metadata, file_trie)
+            .unwrap();
+        assert!(file_storage.get_metadata(&key).is_ok());
+
+        assert!(file_storage.delete_file(&key).is_ok());
+
+        // Should panic here when trying to get File Metadata.
+        assert!(file_storage.get_metadata(&key).is_err());
+        assert!(file_storage.get_chunk(&key, &chunk_ids[0]).is_err());
+        assert!(file_storage.get_chunk(&key, &chunk_ids[1]).is_err());
+        assert!(file_storage.get_chunk(&key, &chunk_ids[2]).is_err());
+    }
+
+    #[test]
+    fn file_storage_generate_proof_works() {
+        let chunks = vec![
+            Chunk::from([0u8; 1024]),
+            Chunk::from([1u8; 1024]),
+            Chunk::from([2u8; 1024]),
+        ];
+
+        let chunk_ids: Vec<ChunkId> = chunks
+            .iter()
+            .enumerate()
+            .map(|(id, _)| ChunkId::new(id as u64))
+            .collect();
+
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+        file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
+
+        file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
+        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
+        assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
+
+        let file_metadata = FileMetadata {
+            size: 1024u64 * chunks.len() as u64,
+            fingerprint: file_trie.get_root().as_ref().into(),
+            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            location: "location".to_string().into_bytes(),
+            bucket_id: [1u8; 32].to_vec(),
+        };
+
+        let key = file_metadata.file_key::<BlakeTwo256>();
+        let mut file_storage = InMemoryFileStorage::<LayoutV1<BlakeTwo256>>::new();
+
+        file_storage
+            .insert_file_with_data(key, file_metadata, file_trie)
+            .unwrap();
+
+        assert!(file_storage.get_metadata(&key).is_ok());
+
+        let file_proof = file_storage.generate_proof(&key, &chunk_ids).unwrap();
+        let proven_leaves = file_proof.proven::<LayoutV1<BlakeTwo256>>().unwrap();
+        for (id, leaf) in proven_leaves.iter().enumerate() {
+            assert_eq!(chunk_ids[id], leaf.key);
+            assert_eq!(chunks[id], leaf.data);
+        }
     }
 }
