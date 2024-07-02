@@ -113,7 +113,15 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
         trie.insert(&chunk_id.as_trie_key(), &data)
             .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
 
+        // dropping the trie automatically commits changes to the underlying db
         drop(trie);
+
+        Ok(())
+    }
+
+    fn delete(&mut self, _chunk_count: u64) -> Result<(), FileStorageWriteError> {
+        self.root = HasherOutT::<T>::default();
+        self.memdb.clear();
 
         Ok(())
     }
@@ -183,9 +191,11 @@ where
             .to_file_key_proof(metadata.clone()))
     }
 
-    fn delete_file(&mut self, file_key: &HasherOutT<T>) {
-        self.metadata.remove(file_key);
-        self.file_data.remove(file_key);
+    fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError> {
+        self.metadata.remove(key);
+        self.file_data.remove(key);
+
+        Ok(())
     }
 
     fn get_metadata(&self, file_key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError> {
@@ -207,7 +217,7 @@ where
 
         let previous = self.file_data.insert(key, InMemoryFileDataTrie::default());
         if previous.is_some() {
-            panic!("Invariant broken! Inconsistent metadata and file data storage.");
+            panic!("Key already associated with File Data, but not with File Metadata. Possible inconsistency between them.");
         }
 
         Ok(())
@@ -226,7 +236,7 @@ where
 
         let previous = self.file_data.insert(key, file_data);
         if previous.is_some() {
-            panic!("Invariant broken! Inconsistent metadata and file data storage.");
+            panic!("Key already associated with File Data, but not with File Metadata. Possible inconsistency between them.");
         }
 
         Ok(())
@@ -257,8 +267,7 @@ where
         file_data.write_chunk(chunk_id, data)?;
 
         let metadata = self.metadata.get(file_key).expect(
-            format!(
-            "Invariant broken! Metadata for file key {:?} not found but associated trie is present",
+            format!("Key {:?} already associated with File Trie, but no File Metadata. Possible inconsistency between them.",
             file_key
         )
             .as_str(),

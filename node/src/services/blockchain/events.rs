@@ -1,21 +1,23 @@
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
-use shc_common::types::{FileKey, Fingerprint};
+use shc_common::types::{
+    BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, PeerIds, RandomSeed, StorageData,
+};
 use sp_core::H256;
 use sp_runtime::AccountId32;
 
-type StorageData = pallet_file_system::types::StorageData<storage_hub_runtime::Runtime>;
-type FileLocation = pallet_file_system::types::FileLocation<storage_hub_runtime::Runtime>;
-type PeerIds = pallet_file_system::types::PeerIds<storage_hub_runtime::Runtime>;
-type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<storage_hub_runtime::Runtime>;
-
-// TODO: use proper types
+/// New random challenge emitted by the StorageHub runtime.
+///
+/// This event is emitted when there's a new random challenge seed that affects this
+/// BSP. In other words, it only pays attention to the random seeds in the challenge
+/// period of this BSP.
 #[derive(Clone)]
-pub struct ChallengeRequest {
-    pub location: String,
+pub struct NewChallengeSeed {
+    pub tick: BlockNumber,
+    pub seed: RandomSeed,
 }
 
-impl EventBusMessage for ChallengeRequest {}
+impl EventBusMessage for NewChallengeSeed {}
 
 /// New storage request event.
 ///
@@ -64,7 +66,7 @@ impl EventBusMessage for StorageRequestRevoked {}
 
 #[derive(Clone, Default)]
 pub struct BlockchainServiceEventBusProvider {
-    challenge_request_event_bus: EventBus<ChallengeRequest>,
+    new_challenge_seed_event_bus: EventBus<NewChallengeSeed>,
     new_storage_request_event_bus: EventBus<NewStorageRequest>,
     accepted_bsp_volunteer_event_bus: EventBus<AcceptedBspVolunteer>,
     storage_request_revoked_event_bus: EventBus<StorageRequestRevoked>,
@@ -73,7 +75,7 @@ pub struct BlockchainServiceEventBusProvider {
 impl BlockchainServiceEventBusProvider {
     pub fn new() -> Self {
         Self {
-            challenge_request_event_bus: EventBus::new(),
+            new_challenge_seed_event_bus: EventBus::new(),
             new_storage_request_event_bus: EventBus::new(),
             accepted_bsp_volunteer_event_bus: EventBus::new(),
             storage_request_revoked_event_bus: EventBus::new(),
@@ -81,9 +83,9 @@ impl BlockchainServiceEventBusProvider {
     }
 }
 
-impl ProvidesEventBus<ChallengeRequest> for BlockchainServiceEventBusProvider {
-    fn event_bus(&self) -> &EventBus<ChallengeRequest> {
-        &self.challenge_request_event_bus
+impl ProvidesEventBus<NewChallengeSeed> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<NewChallengeSeed> {
+        &self.new_challenge_seed_event_bus
     }
 }
 

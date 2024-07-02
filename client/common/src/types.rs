@@ -18,14 +18,17 @@ pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 /// here to be used by the node/client.
 pub type FileKeyVerifier = <Runtime as pallet_proofs_dealer::Config>::KeyVerifier;
 pub type FileKeyProof = <FileKeyVerifier as CommitmentVerifier>::Proof;
-
 pub type Hash = shp_file_key_verifier::types::Hash<H_LENGTH>;
 pub type Fingerprint = shp_file_key_verifier::types::Fingerprint<H_LENGTH>;
 pub type FileMetadata =
     shp_file_key_verifier::types::FileMetadata<H_LENGTH, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES>;
 pub type FileKey = shp_file_key_verifier::types::FileKey<H_LENGTH>;
-
 pub type BlockNumber = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
+pub type StorageData = pallet_file_system::types::StorageData<Runtime>;
+pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
+pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
+pub type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<Runtime>;
+pub type RandomSeed = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
 
 /// Proving either the exact key or the neighbour keys of the challenged key.
 pub enum Proven<K, D: Debug> {
