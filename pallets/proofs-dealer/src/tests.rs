@@ -481,7 +481,7 @@ fn proofs_dealer_trait_challenge_with_priority_overflow_challenges_queue_fail() 
 }
 
 #[test]
-fn proofs_dealer_trait_initialise_provider_success() {
+fn proofs_dealer_trait_initialise_challenge_cycle_success() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
         run_to_block(1);
@@ -515,7 +515,7 @@ fn proofs_dealer_trait_initialise_provider_success() {
         );
 
         // Dispatch initialise provider extrinsic.
-        assert_ok!(ProofsDealer::initialise_provider(&provider_id));
+        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id));
 
         // Check that the Provider's last tick was set to 1.
         let last_tick_provider_submitted_proof =
@@ -538,7 +538,7 @@ fn proofs_dealer_trait_initialise_provider_success() {
 }
 
 #[test]
-fn proofs_dealer_trait_initialise_provider_already_initialised_success() {
+fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
         run_to_block(1);
@@ -572,7 +572,7 @@ fn proofs_dealer_trait_initialise_provider_already_initialised_success() {
         );
 
         // Dispatch initialise provider extrinsic.
-        assert_ok!(ProofsDealer::initialise_provider(&provider_id));
+        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id));
 
         // Check that the Provider's last tick was set to 1.
         let last_tick_provider_submitted_proof =
@@ -595,7 +595,7 @@ fn proofs_dealer_trait_initialise_provider_already_initialised_success() {
         run_to_block(current_block + challenge_ticks_tolerance - 1);
 
         // Re-initialise the provider.
-        assert_ok!(ProofsDealer::initialise_provider(&provider_id));
+        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id));
 
         // Check that the Provider's last tick is the current now.
         let last_tick_provider_submitted_proof =
@@ -627,7 +627,7 @@ fn proofs_dealer_trait_initialise_provider_already_initialised_success() {
 }
 
 #[test]
-fn proofs_dealer_trait_initialise_provider_already_initialised_and_new_success() {
+fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_success() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
         run_to_block(1);
@@ -683,8 +683,8 @@ fn proofs_dealer_trait_initialise_provider_already_initialised_and_new_success()
         );
 
         // Initialise providers
-        assert_ok!(ProofsDealer::initialise_provider(&provider_id_1));
-        assert_ok!(ProofsDealer::initialise_provider(&provider_id_2));
+        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id_1));
+        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id_2));
 
         // Check that the Providers' last tick was set to 1.
         let last_tick_provider_submitted_proof =
@@ -711,7 +711,7 @@ fn proofs_dealer_trait_initialise_provider_already_initialised_and_new_success()
         run_to_block(current_block + challenge_ticks_tolerance - 1);
 
         // Re-initialise the provider.
-        assert_ok!(ProofsDealer::initialise_provider(&provider_id_1));
+        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id_1));
 
         // Check that the Provider's last tick is the current now.
         let last_tick_provider_submitted_proof =
@@ -744,7 +744,7 @@ fn proofs_dealer_trait_initialise_provider_already_initialised_and_new_success()
 }
 
 #[test]
-fn proofs_dealer_trait_initialise_provider_not_provider_fail() {
+fn proofs_dealer_trait_initialise_challenge_cycle_not_provider_fail() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
         run_to_block(1);
@@ -762,7 +762,7 @@ fn proofs_dealer_trait_initialise_provider_not_provider_fail() {
 
         // Expect failure since the user is not a provider.
         assert_noop!(
-            ProofsDealer::initialise_provider(&provider_id),
+            ProofsDealer::initialise_challenge_cycle(&provider_id),
             crate::Error::<Test>::NotProvider
         );
     });
