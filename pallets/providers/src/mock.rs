@@ -115,6 +115,7 @@ impl crate::Config for Test {
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
+    type MerkleTrieHashing = BlakeTwo256;
     type ValuePropId = H256;
     type ReadAccessGroupId = u32;
     type MaxMultiAddressSize = ConstU32<100>;

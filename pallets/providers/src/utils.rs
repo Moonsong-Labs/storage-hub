@@ -1,4 +1,6 @@
-use crate::types::{Bucket, MainStorageProvider, MultiAddress, StorageProvider};
+use crate::types::{
+    Bucket, MainStorageProvider, MerklePatriciaRootDefault, MultiAddress, StorageProvider,
+};
 use codec::Encode;
 use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
@@ -773,7 +775,7 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
             capacity: msp.capacity,
             data_used: msp.data_used,
             multiaddresses: msp.multiaddresses,
-            root: MerklePatriciaRoot::<T>::default(),
+            root: MerklePatriciaRootDefault::<T>::default(),
             last_capacity_change: msp.last_capacity_change,
             payment_account: msp.payment_account,
         }
@@ -842,7 +844,7 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
         );
 
         let bucket = Bucket {
-            root: MerklePatriciaRoot::<T>::default(),
+            root: MerklePatriciaRootDefault::<T>::default(),
             user_id,
             msp_id,
             private,
@@ -884,7 +886,7 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
             Buckets::<T>::insert(
                 &bucket_id,
                 Bucket {
-                    root: new_root,
+                    root: MerklePatriciaRootDefault(new_root),
                     ..bucket
                 },
             );
@@ -1005,9 +1007,9 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
 
     fn get_root(who: Self::ProviderId) -> Option<Self::MerkleHash> {
         if let Some(bucket) = Buckets::<T>::get(&who) {
-            Some(bucket.root)
+            Some(bucket.root.0)
         } else if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
-            Some(bsp.root)
+            Some(bsp.root.0)
         } else {
             None
         }
@@ -1030,7 +1032,7 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
             Buckets::<T>::insert(
                 &who,
                 Bucket {
-                    root: new_root,
+                    root: MerklePatriciaRootDefault(new_root),
                     ..bucket
                 },
             );
@@ -1038,7 +1040,7 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
             BackupStorageProviders::<T>::insert(
                 &who,
                 BackupStorageProvider {
-                    root: new_root,
+                    root: MerklePatriciaRootDefault(new_root),
                     ..bsp
                 },
             );
