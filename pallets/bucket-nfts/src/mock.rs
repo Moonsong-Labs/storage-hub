@@ -162,6 +162,12 @@ impl ProofsDealerInterface for MockProofsDealer {
     ) -> Result<Self::MerkleHash, sp_runtime::DispatchError> {
         Ok(H256::default())
     }
+
+    fn initialise_challenge_cycle(
+        _who: &Self::ProviderId,
+    ) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
 }
 
 impl pallet_file_system::Config for Test {
