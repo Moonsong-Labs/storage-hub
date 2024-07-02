@@ -548,8 +548,34 @@ where
             &added_file_key_proof,
         )?;
 
-        // TODO: Check if this is the first file added to the BSP's Forest. If so, initialise
-        // TODO: last block proven by this BSP accordingly.
+        // Check if this is the first file added to the BSP's Forest. If so, initialise last block proven by this BSP.
+        let old_root = expect_or_err!(
+            <T::Providers as shp_traits::ProvidersInterface>::get_root(bsp_id),
+            "Failed to get root for BSP, when it was already checked to be a BSP",
+            Error::<T>::NotABsp
+        );
+        if old_root == Default::default() {
+            // This means that this is the first file added to the BSP's Forest.
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::initialise_challenge_cycle(
+                &bsp_id,
+            )?;
+        }
+
+        // Compute new root after inserting new file key in forest partial trie.
+        let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
+            &root,
+            &[(file_key, TrieAddMutation::default().into())],
+            &non_inclusion_forest_proof,
+        )?;
+
+        // Update root of BSP.
+        <T::Providers as shp_traits::ProvidersInterface>::update_root(bsp_id, new_root)?;
+
+        // Add data to storage provider.
+        <T::Providers as MutateProvidersInterface>::increase_data_used(
+            &bsp_id,
+            file_metadata.size,
+        )?;
 
         // Remove storage request if we reached the required number of bsps.
         if file_metadata.bsps_confirmed == file_metadata.bsps_required {
@@ -585,22 +611,6 @@ where
                 }
             });
         }
-
-        // Compute new root after inserting new file key in forest partial trie.
-        let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
-            &root,
-            &[(file_key, TrieAddMutation::default().into())],
-            &non_inclusion_forest_proof,
-        )?;
-
-        // Update root of BSP.
-        <T::Providers as shp_traits::ProvidersInterface>::update_root(bsp_id, new_root)?;
-
-        // Add data to storage provider.
-        <T::Providers as MutateProvidersInterface>::increase_data_used(
-            &bsp_id,
-            file_metadata.size,
-        )?;
 
         Ok((bsp_id, new_root))
     }

@@ -305,6 +305,13 @@ pub trait ProofsDealerInterface {
         mutations: &[(Self::MerkleHash, TrieMutation)],
         proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, DispatchError>;
+
+    /// Initialise a Provider's challenge cycle.
+    ///
+    /// Sets the last tick the Provider submitted a proof for to the current tick and sets the
+    /// deadline for submitting a proof to the current tick + the Provider's period (based on its
+    /// stake) + the challenges tick tolerance.
+    fn initialise_challenge_cycle(who: &Self::ProviderId) -> DispatchResult;
 }
 
 /// A trait to verify proofs based on commitments and challenges.
