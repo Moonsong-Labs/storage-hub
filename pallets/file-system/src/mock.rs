@@ -1,7 +1,7 @@
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
     traits::{AsEnsureOriginWithArg, Everything, Hooks, Randomness},
-    weights::{constants::RocksDbWeight, Weight},
+    weights::{constants::RocksDbWeight, Weight, WeightMeter},
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
@@ -71,6 +71,7 @@ pub(crate) fn roll_to(n: BlockNumber) -> BlockNumber {
 // Rolls forward one block. Returns the new block number.
 fn roll_one_block() -> BlockNumber {
     System::set_block_number(System::block_number() + 1);
+    ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
     FileSystem::on_idle(System::block_number(), Weight::MAX);
     System::block_number()
 }
