@@ -14,7 +14,7 @@ use frame_support::{
     weights::Weight,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-use pallet_proofs_dealer::PriorityChallengesQueue;
+use pallet_proofs_dealer::{LastTickProviderSubmittedProofFor, PriorityChallengesQueue};
 use pallet_storage_providers::types::Bucket;
 use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface, TrieRemoveMutation};
 use sp_core::{ByteArray, Hasher, H256};
@@ -1373,6 +1373,10 @@ fn bsp_confirm_storing_success() {
         // Dispatch BSP volunteer.
         assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
+        // In this case, the tick number is going to be equal to the current block number
+        // minus one (on_poll hook not executed in first block)
+        let tick_when_confirming = System::block_number() - 1;
+
         // Dispatch BSP confirm storing.
         assert_ok!(FileSystem::bsp_confirm_storing(
             bsp_signed.clone(),
@@ -1438,6 +1442,11 @@ fn bsp_confirm_storing_success() {
             }
             .into(),
         );
+
+        // Assert that the proving cycle was initialised for this BSP.
+        let last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedProofFor::<Test>::get(&bsp_id).unwrap();
+        assert_eq!(last_tick_provider_submitted_proof, tick_when_confirming);
     });
 }
 
