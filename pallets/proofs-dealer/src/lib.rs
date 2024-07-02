@@ -30,7 +30,7 @@ pub mod pallet {
         CommitmentVerifier, ProvidersInterface, TrieProofDeltaApplier, TrieRemoveMutation,
     };
     use sp_runtime::traits::Convert;
-    use types::{KeyFor, ProviderFor};
+    use types::{KeyFor, ProviderIdFor};
 
     use crate::types::*;
     use crate::*;
@@ -217,7 +217,7 @@ pub mod pallet {
         Blake2_128Concat,
         BlockNumberFor<T>,
         Blake2_128Concat,
-        ProviderFor<T>,
+        ProviderIdFor<T>,
         (),
     >;
 
@@ -227,7 +227,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn last_tick_provider_submitted_proof_for)]
     pub type LastTickProviderSubmittedProofFor<T: Config> =
-        StorageMap<_, Blake2_128Concat, ProviderFor<T>, BlockNumberFor<T>>;
+        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, BlockNumberFor<T>>;
 
     /// A queue of keys that have been challenged manually.
     ///
@@ -270,7 +270,7 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn slashable_providers)]
-    pub type SlashableProviders<T: Config> = StorageMap<_, Blake2_128Concat, ProviderFor<T>, ()>;
+    pub type SlashableProviders<T: Config> = StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, ()>;
 
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
@@ -285,7 +285,7 @@ pub mod pallet {
 
         /// A proof was accepted.
         ProofAccepted {
-            provider: ProviderFor<T>,
+            provider: ProviderIdFor<T>,
             proof: Proof<T>,
         },
 
@@ -305,7 +305,7 @@ pub mod pallet {
         },
 
         /// A slashable provider was found.
-        SlashableProvider { provider: ProviderFor<T> },
+        SlashableProvider { provider: ProviderIdFor<T> },
     }
 
     // Errors inform users that something went wrong.
@@ -452,7 +452,7 @@ pub mod pallet {
         pub fn submit_proof(
             origin: OriginFor<T>,
             proof: Proof<T>,
-            provider: Option<ProviderFor<T>>,
+            provider: Option<ProviderIdFor<T>>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
