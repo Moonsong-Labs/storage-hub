@@ -720,7 +720,7 @@ where
         tick: BlockNumberFor<T>,
     ) -> Result<Vec<(KeyFor<T>, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError> {
         // Check that the tick is smaller than the last checkpoint tick.
-        if LastCheckpointTick::<T>::get() >= tick {
+        if LastCheckpointTick::<T>::get() < tick {
             return Err(GetCheckpointChallengesError::TickGreaterThanLastCheckpointTick);
         }
 
