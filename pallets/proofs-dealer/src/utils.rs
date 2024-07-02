@@ -25,12 +25,12 @@ use sp_std::{
 use crate::{
     pallet,
     types::{
-        AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor, ChallengesFeeFor,
-        ChallengesQueueLengthFor, CheckpointChallengePeriodFor, ForestVerifierFor,
-        ForestVerifierProofFor, KeyFor, KeyVerifierFor, KeyVerifierProofFor,
-        MaxCustomChallengesPerBlockFor, Proof, ProviderIdFor, ProvidersPalletFor,
-        RandomChallengesPerBlockFor, RandomnessOutputFor, RandomnessProviderFor,
-        StakeToChallengePeriodFor, TreasuryAccountFor,
+        AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor,
+        ChallengeTicksToleranceFor, ChallengesFeeFor, ChallengesQueueLengthFor,
+        CheckpointChallengePeriodFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor,
+        KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor, Proof, ProviderIdFor,
+        ProvidersPalletFor, RandomChallengesPerBlockFor, RandomnessOutputFor,
+        RandomnessProviderFor, StakeToChallengePeriodFor, TreasuryAccountFor,
     },
     ChallengeTickToChallengedProviders, ChallengesQueue, ChallengesTicker, Error, Event,
     LastCheckpointTick, LastTickProviderSubmittedProofFor, Pallet, PriorityChallengesQueue,
@@ -686,10 +686,63 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         )
     }
 
-    // TODO: Add `initialise_provider` method to be called by the FileSystem pallet.
-    // TODO: when a file is first uploaded to a BSP or bucket.
-    // TODO: It would set `LastTickProviderSubmittedProofFor` to the current tick and
-    // TODO: the deadline for submitting a proof in `ChallengeTickToChallengedProviders`.
+    fn initialise_challenge_cycle(who: &Self::ProviderId) -> DispatchResult {
+        // Check that `who` is a registered Provider.
+        if !ProvidersPalletFor::<T>::is_provider(who.clone()) {
+            return Err(Error::<T>::NotProvider.into());
+        }
+
+        // Get stake for submitter.
+        // If a submitter is a registered Provider, it must have a stake, so this shouldn't happen.
+        // However, since the implementation of that is not up to this pallet, we need to check.
+        let stake = ProvidersPalletFor::<T>::get_stake(who.clone())
+            .ok_or(Error::<T>::ProviderStakeNotFound)?;
+
+        // Check that the stake is non-zero.
+        ensure!(stake > BalanceFor::<T>::zero(), Error::<T>::ZeroStake);
+
+        // Check if this Provider previously had a challenge cycle initialised.
+        if let Some(last_tick_proven) = LastTickProviderSubmittedProofFor::<T>::get(who.clone()) {
+            // Compute the next tick for which the Provider should have been submitting a proof.
+            let old_next_challenge_tick = last_tick_proven
+                .checked_add(&Self::stake_to_challenge_period(stake))
+                .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+            // Calculate the deadline for submitting a proof. Should be the next challenge tick + the challenges tick tolerance.
+            let old_next_challenge_deadline = old_next_challenge_tick
+                .checked_add(&ChallengeTicksToleranceFor::<T>::get())
+                .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+            // Remove the old deadline.
+            ChallengeTickToChallengedProviders::<T>::remove(
+                old_next_challenge_deadline,
+                who.clone(),
+            );
+        }
+
+        // Set `LastTickProviderSubmittedProofFor` to the current tick.
+        let current_tick = ChallengesTicker::<T>::get();
+        LastTickProviderSubmittedProofFor::<T>::set(who.clone(), Some(current_tick));
+
+        // Compute the next tick for which the Provider should be submitting a proof.
+        let next_challenge_tick = current_tick
+            .checked_add(&Self::stake_to_challenge_period(stake))
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Calculate the deadline for submitting a proof. Should be the next challenge tick + the challenges tick tolerance.
+        let next_challenge_deadline = next_challenge_tick
+            .checked_add(&ChallengeTicksToleranceFor::<T>::get())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Set the deadline for submitting a proof.
+        ChallengeTickToChallengedProviders::<T>::set(
+            next_challenge_deadline,
+            who.clone(),
+            Some(()),
+        );
+
+        Ok(())
+    }
 }
 
 /// Runtime API implementation for the ProofsDealer pallet.
