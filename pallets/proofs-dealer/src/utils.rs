@@ -131,8 +131,8 @@ where
         let root = ProvidersPalletFor::<T>::get_root(*submitter)
             .ok_or(Error::<T>::ProviderRootNotFound)?;
 
-        // Check if root is non-zero.
-        // A zero root means that the Provider is not providing any service yet, so he shouldn't be
+        // Check that the root is not the default root.
+        // A default root means that the Provider is not providing any service yet, so he shouldn't be
         // submitting any proofs.
         ensure!(root != Self::default_forest_root(), Error::<T>::ZeroRoot);
 
