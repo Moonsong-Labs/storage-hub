@@ -121,6 +121,9 @@ pub type TargetBspsRequired<T> = <T as crate::Config>::TargetBspsRequired;
 /// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
 pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;
 
+/// Alias for the `PendingFileDeletionRequestTtl` type used in the FileSystem pallet.
+pub type PendingFileDeletionRequestTtl<T> = <T as crate::Config>::PendingFileDeletionRequestTtl;
+
 /// Byte array representing the file path.
 pub type FileLocation<T> = BoundedVec<u8, MaxFilePathSize<T>>;
 

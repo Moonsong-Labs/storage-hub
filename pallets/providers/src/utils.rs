@@ -959,6 +959,14 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         Ok(bucket.private)
     }
 
+    fn is_bucket_stored_by_msp(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId) -> bool {
+        if let Some(bucket) = Buckets::<T>::get(bucket_id) {
+            bucket.msp_id == *msp_id
+        } else {
+            false
+        }
+    }
+
     fn get_read_access_group_id_of_bucket(
         bucket_id: &<Self as ProvidersConfig>::BucketId,
     ) -> Result<Option<<Self as ProvidersConfig>::ReadAccessGroupId>, DispatchError> {

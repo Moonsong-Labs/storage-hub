@@ -69,8 +69,9 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         /// The trait for reading and mutating storage provider data.
-        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId>
-            + shp_traits::MutateProvidersInterface<AccountId = Self::AccountId, ReadAccessGroupId = CollectionIdFor<Self>, MerklePatriciaRoot = <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash>;
+        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId, BucketId = <Self::Providers as shp_traits::ProvidersInterface>::ProviderId>
+            + shp_traits::MutateProvidersInterface<AccountId = Self::AccountId, ReadAccessGroupId = CollectionIdFor<Self>,
+            MerklePatriciaRoot = <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash>;
 
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: shp_traits::ProofsDealerInterface<
@@ -447,6 +448,12 @@ pub mod pallet {
         ThresholdBelowAsymptote,
         /// Unauthorized operation, signer does not own the file.
         NotFileOwner,
+        /// File key already pending deletion.
+        FileKeyAlreadyPendingDeletion,
+        /// Failed to add file key to pending deletion requests.
+        FailedToAddFileKeyToPendingDeletionRequests,
+        /// Unauthorized operation, signer is not an MSP of the bucket id.
+        MspNotStoringBucket
     }
 
     #[pallet::call]
@@ -694,9 +701,8 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn delete_file(
             origin: OriginFor<T>,
-            msp_id: ProviderIdFor<T>,
+            bucket_id: ProviderIdFor<T>,
             file_key: MerkleHash<T>,
-            bucket_id: BucketIdFor<T>,
             location: FileLocation<T>,
             size: StorageData<T>,
             fingerprint: Fingerprint<T>,
@@ -706,9 +712,8 @@ pub mod pallet {
 
             Self::do_delete_file(
                 who.clone(),
-                msp_id,
-                file_key,
                 bucket_id,
+                file_key,
                 location,
                 fingerprint,
                 size,
@@ -724,6 +729,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             user: T::AccountId,
             file_key: MerkleHash<T>,
+            bucket_id: ProviderIdFor<T>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -732,6 +738,7 @@ pub mod pallet {
                 who.clone(),
                 user,
                 file_key,
+                bucket_id,
                 forest_proof,
             )?;
 

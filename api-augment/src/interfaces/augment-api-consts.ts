@@ -69,7 +69,7 @@ declare module "@polkadot/api-base/types/consts" {
        * Maximum number of BSPs that can store a file.
        *
        * This is used to limit the number of BSPs storing a file and claiming rewards for it.
-       * If this number is to high, then the reward for storing a file might be to diluted and pointless to store.
+       * If this number is too high, then the reward for storing a file might be to diluted and pointless to store.
        **/
       maxBspsPerStorageRequest: u32 & AugmentedConst<ApiType>;
       /**
@@ -79,7 +79,7 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * Maximum number of expired storage requests to clean up in a single block.
        **/
-      maxExpiredStorageRequests: u32 & AugmentedConst<ApiType>;
+      maxExpiredItemsInBlock: u32 & AugmentedConst<ApiType>;
       /**
        * Maximum byte size of a file path.
        **/
@@ -92,6 +92,14 @@ declare module "@polkadot/api-base/types/consts" {
        * Maximum byte size of a peer id.
        **/
       maxPeerIdSize: u32 & AugmentedConst<ApiType>;
+      /**
+       * Maximum number of file deletion requests a user can have pending.
+       **/
+      maxUserPendingDeletionRequests: u32 & AugmentedConst<ApiType>;
+      /**
+       * Time-to-live for a pending file deletion request.
+       **/
+      pendingFileDeletionRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
        * Time-to-live for a storage request.
        **/
