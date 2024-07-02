@@ -19,6 +19,7 @@ use frame_support::{
     traits::{fungible::Mutate, OnPoll},
     weights::WeightMeter,
 };
+use pallet_storage_providers::types::MerklePatriciaRootDefault;
 use shp_traits::{ProofsDealerInterface, ProvidersInterface, TrieRemoveMutation};
 use sp_core::{blake2_256, Get, Hasher, H256};
 use sp_runtime::{traits::BlakeTwo256, BoundedVec, DispatchError};
@@ -2200,6 +2201,20 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
         };
 
         // Have Alice submit a proof.
+        // First set a root for the provider, to simulate that it is actually storing a file
+        // NOTE: This is actually not necessary, because currently the "default" root for
+        // this pallet is zero, while the default root of every provider is different, for this
+        // pallet ALL providers are considered to be storing files as soon as they register.
+        // There's a TODO to fix that, I leave this code as an example of how to set a root since
+        // after that TODO is fixed, this will be necessary for each test.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &alice_provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
+            },
+        );
         assert_ok!(ProofsDealer::submit_proof(
             RuntimeOrigin::signed(1),
             proof.clone(),

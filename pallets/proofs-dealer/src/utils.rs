@@ -134,7 +134,7 @@ where
         // Check if root is non-zero.
         // A zero root means that the Provider is not providing any service yet, so he shouldn't be
         // submitting any proofs.
-        ensure!(root == Self::default_forest_root(), Error::<T>::ZeroRoot);
+        ensure!(root != Self::default_forest_root(), Error::<T>::ZeroRoot);
 
         // Get last tick for which the submitter submitted a proof.
         let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(submitter.clone())
