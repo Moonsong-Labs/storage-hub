@@ -73,7 +73,8 @@ async function bootStrapNetwork() {
       throw new Error("Toxic registration failed");
     }
 
-    // Send file
+    // biome-ignore lint/style/noVar: this is neater
+    // biome-ignore lint/correctness/noInnerDeclarations: this is neater
     var api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
     const bucketName = "nothingmuch-0";
