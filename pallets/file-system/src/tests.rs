@@ -2,8 +2,8 @@ use crate::types::{BucketIdFor, BucketNameFor, ExpiredItems};
 use crate::{
     mock::*,
     types::{
-        FileLocation, PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestTtl, TargetBspsRequired, PendingFileDeletionRequestTtl
+        FileLocation, PeerIds, PendingFileDeletionRequestTtl, ProviderIdFor, StorageData,
+        StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestTtl, TargetBspsRequired,
     },
     Config, Error, Event, ItemExpirations,
 };
@@ -15,6 +15,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::PriorityChallengesQueue;
+use pallet_storage_providers::types::Bucket;
 use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface, TrieRemoveMutation};
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
@@ -22,7 +23,6 @@ use sp_runtime::{
     traits::{BlakeTwo256, Get, One, Zero},
     BoundedVec, DispatchError, FixedU128,
 };
-use pallet_storage_providers::types::Bucket;
 
 mod create_bucket_tests {
     use super::*;
@@ -667,8 +667,9 @@ fn request_storage_expiration_current_block_increment_success() {
             fingerprint,
         );
 
-        let expected_expiration_block_number:u32 = StorageRequestTtl::<Test>::get();
-        let expected_expiration_block_number: BlockNumberFor<Test> = expected_expiration_block_number.into();
+        let expected_expiration_block_number: u32 = StorageRequestTtl::<Test>::get();
+        let expected_expiration_block_number: BlockNumberFor<Test> =
+            expected_expiration_block_number.into();
 
         // Append storage request expiration to the list at `StorageRequestTtl`
         let max_expired_items_in_block: u32 = <Test as Config>::MaxExpiredItemsInBlock::get();
@@ -736,7 +737,8 @@ fn request_storage_clear_old_expirations_success() {
         );
 
         let expected_expiration_block_number: u32 = StorageRequestTtl::<Test>::get();
-        let expected_expiration_block_number: BlockNumberFor<Test> = expected_expiration_block_number.into();
+        let expected_expiration_block_number: BlockNumberFor<Test> =
+            expected_expiration_block_number.into();
 
         for _ in 0..max_storage_request_expiry {
             assert_ok!(ItemExpirations::<Test>::try_append(
@@ -756,8 +758,9 @@ fn request_storage_clear_old_expirations_success() {
             peer_ids,
         ));
 
-        let expected_expiration_block_number:u32 = StorageRequestTtl::<Test>::get();
-        let expected_expiration_block_number: BlockNumberFor<Test> = expected_expiration_block_number.into();
+        let expected_expiration_block_number: u32 = StorageRequestTtl::<Test>::get();
+        let expected_expiration_block_number: BlockNumberFor<Test> =
+            expected_expiration_block_number.into();
 
         // Assert that the `NextExpirationInsertionBlockNumber` storage is set to 0 initially
         assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
@@ -2327,7 +2330,6 @@ mod delete_file_tests {
         });
     }
 
-
     #[test]
     fn delete_file_expired_pending_file_deletion_request_success() {
         new_test_ext().execute_with(|| {
@@ -2366,16 +2368,24 @@ mod delete_file_tests {
             // Assert that the pending file deletion request was added to storage
             assert_eq!(
                 FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
-                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(vec![(file_key, bucket_id)]).unwrap()
+                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    vec![(file_key, bucket_id)]
+                )
+                .unwrap()
             );
 
-            let pending_file_deletion_request_ttl: u32 = PendingFileDeletionRequestTtl::<Test>::get();
-            let pending_file_deletion_request_ttl: BlockNumberFor<Test> = pending_file_deletion_request_ttl.into();
+            let pending_file_deletion_request_ttl: u32 =
+                PendingFileDeletionRequestTtl::<Test>::get();
+            let pending_file_deletion_request_ttl: BlockNumberFor<Test> =
+                pending_file_deletion_request_ttl.into();
 
             // Assert that the pending file deletion request was added to storage
             assert_eq!(
                 FileSystem::item_expirations(pending_file_deletion_request_ttl),
-                vec![ExpiredItems::PendingFileDeletionRequests((owner_account_id.clone(), file_key))]
+                vec![ExpiredItems::PendingFileDeletionRequests((
+                    owner_account_id.clone(),
+                    file_key
+                ))]
             );
 
             // Roll past the expiration block
@@ -2436,7 +2446,10 @@ mod delete_file_tests {
             // Assert that the pending file deletion request was added to storage
             assert_eq!(
                 FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
-                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(vec![(file_key, bucket_id)]).unwrap()
+                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    vec![(file_key, bucket_id)]
+                )
+                .unwrap()
             );
 
             let forest_proof = ForestProof {
@@ -2445,15 +2458,13 @@ mod delete_file_tests {
 
             let msp_origin = RuntimeOrigin::signed(msp.clone());
 
-            assert_ok!(
-                FileSystem::pending_file_deletion_request_submit_proof(
-                    msp_origin,
-                    owner_account_id.clone(),
-                    file_key,
-                    bucket_id,
-                    forest_proof
-                )
-            );
+            assert_ok!(FileSystem::pending_file_deletion_request_submit_proof(
+                msp_origin,
+                owner_account_id.clone(),
+                file_key,
+                bucket_id,
+                forest_proof
+            ));
 
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
             assert!(
@@ -2510,24 +2521,25 @@ mod delete_file_tests {
             // Assert that the pending file deletion request was added to storage
             assert_eq!(
                 FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
-                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(vec![(file_key, bucket_id)]).unwrap()
+                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    vec![(file_key, bucket_id)]
+                )
+                .unwrap()
             );
 
             let forest_proof = ForestProof {
-                encoded_nodes: vec![]
+                encoded_nodes: vec![],
             };
 
             let msp_origin = RuntimeOrigin::signed(msp.clone());
 
-            assert_ok!(
-                FileSystem::pending_file_deletion_request_submit_proof(
-                    msp_origin,
-                    owner_account_id.clone(),
-                    file_key,
-                    bucket_id,
-                    forest_proof
-                )
-            );
+            assert_ok!(FileSystem::pending_file_deletion_request_submit_proof(
+                msp_origin,
+                owner_account_id.clone(),
+                file_key,
+                bucket_id,
+                forest_proof
+            ));
 
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
             assert!(
@@ -2584,11 +2596,14 @@ mod delete_file_tests {
             // Assert that the pending file deletion request was added to storage
             assert_eq!(
                 FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
-                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(vec![(file_key, bucket_id)]).unwrap()
+                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    vec![(file_key, bucket_id)]
+                )
+                .unwrap()
             );
 
             let forest_proof = ForestProof {
-                encoded_nodes: vec![]
+                encoded_nodes: vec![],
             };
 
             let msp_dave = Keyring::Dave.to_account_id();
@@ -2609,10 +2624,12 @@ mod delete_file_tests {
             // Assert that the pending file deletion request was not removed from storage
             assert_eq!(
                 FileSystem::pending_file_deletion_requests(owner_account_id),
-                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(vec![(file_key, bucket_id)]).unwrap()
+                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    vec![(file_key, bucket_id)]
+                )
+                .unwrap()
             );
         });
-
     }
 }
 

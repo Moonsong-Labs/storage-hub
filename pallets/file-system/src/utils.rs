@@ -16,12 +16,17 @@ use shp_traits::{
 };
 
 use crate::types::{BucketNameFor, ExpiredItems};
-use crate::{pallet, types::{
-    BucketIdFor, CollectionConfigFor, CollectionIdFor, FileKeyHasher, FileLocation,
-    Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest, MerkleHash, MultiAddresses,
-    PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
-    TargetBspsRequired,
-}, BspsAssignmentThreshold, Error, ItemExpirations, NextAvailableExpirationInsertionBlock, Pallet, StorageRequestBsps, StorageRequests, PendingFileDeletionRequests};
+use crate::{
+    pallet,
+    types::{
+        BucketIdFor, CollectionConfigFor, CollectionIdFor, FileKeyHasher, FileLocation,
+        Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest, MerkleHash, MultiAddresses,
+        PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        TargetBspsRequired,
+    },
+    BspsAssignmentThreshold, Error, ItemExpirations, NextAvailableExpirationInsertionBlock, Pallet,
+    PendingFileDeletionRequests, StorageRequestBsps, StorageRequests,
+};
 
 macro_rules! expect_or_err {
     // Handle Option type
@@ -300,7 +305,10 @@ where
         // Register storage request.
         <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
 
-        Self::queue_expiration_item(T::StorageRequestTtl::get().into(), ExpiredItems::StorageRequest(file_key))?;
+        Self::queue_expiration_item(
+            T::StorageRequestTtl::get().into(),
+            ExpiredItems::StorageRequest(file_key),
+        )?;
 
         Ok(file_key)
     }
@@ -806,8 +814,13 @@ where
         maybe_inclusion_forest_proof: Option<ForestProof<T>>,
     ) -> DispatchResult {
         // Compute the file key hash.
-        let computed_file_key =
-            Self::compute_file_key(sender.clone(), bucket_id, location.clone(), size, fingerprint);
+        let computed_file_key = Self::compute_file_key(
+            sender.clone(),
+            bucket_id,
+            location.clone(),
+            size,
+            fingerprint,
+        );
 
         // Check that the metadata corresponds to the expected file key.
         ensure!(
@@ -831,11 +844,17 @@ where
                 );
 
                 // Add the file key to the pending deletion requests.
-                PendingFileDeletionRequests::<T>::try_append(&sender, (file_key.clone(), bucket_id.clone()))
-                    .map_err(|_| Error::<T>::FailedToAddFileKeyToPendingDeletionRequests)?;
+                PendingFileDeletionRequests::<T>::try_append(
+                    &sender,
+                    (file_key.clone(), bucket_id.clone()),
+                )
+                .map_err(|_| Error::<T>::FailedToAddFileKeyToPendingDeletionRequests)?;
 
                 // Queue the expiration item.
-                Self::queue_expiration_item(T::PendingFileDeletionRequestTtl::get().into(), ExpiredItems::PendingFileDeletionRequests((sender, file_key)))?;
+                Self::queue_expiration_item(
+                    T::PendingFileDeletionRequestTtl::get().into(),
+                    ExpiredItems::PendingFileDeletionRequests((sender, file_key)),
+                )?;
             }
             // If the user supplied a proof of inclusion, verify the proof and queue a priority challenge to remove the file key from all the providers.
             Some(inclusion_forest_proof) => {
@@ -871,8 +890,9 @@ where
         bucket_id: BucketIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
-        let msp_id = <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
-            .ok_or(Error::<T>::NotAMsp)?;
+        let msp_id =
+            <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
+                .ok_or(Error::<T>::NotAMsp)?;
 
         // Check that the provider is indeed an MSP.
         ensure!(
@@ -880,8 +900,10 @@ where
             Error::<T>::NotAMsp
         );
 
-        ensure!(<T::Providers as ReadProvidersInterface>::is_bucket_stored_by_msp(&msp_id, &bucket_id), Error::<T>::MspNotStoringBucket);
-
+        ensure!(
+            <T::Providers as ReadProvidersInterface>::is_bucket_stored_by_msp(&msp_id, &bucket_id),
+            Error::<T>::MspNotStoringBucket
+        );
 
         // Verify the proof of inclusion.
         if let Ok(proven_keys) =
@@ -889,7 +911,8 @@ where
                 &bucket_id,
                 &[file_key],
                 &forest_proof,
-            ) {
+            )
+        {
             if proven_keys.contains(&file_key) {
                 // Initiate the priority challenge to remove the file key from all the providers.
                 <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
@@ -937,7 +960,9 @@ where
             .checked_add(&expiration_item_ttl)
             .ok_or(Error::<T>::MaxBlockNumberReached)?;
 
-        while let Err(_) = <ItemExpirations<T>>::try_append(expiration_block, expiration_item.clone()) {
+        while let Err(_) =
+            <ItemExpirations<T>>::try_append(expiration_block, expiration_item.clone())
+        {
             expiration_block = expiration_block
                 .checked_add(&1u8.into())
                 .ok_or(Error::<T>::MaxBlockNumberReached)?;
@@ -1047,9 +1072,9 @@ mod hooks {
     };
     use frame_support::weights::Weight;
     use frame_system::pallet_prelude::BlockNumberFor;
+    use shp_traits::TrieRemoveMutation;
     use sp_runtime::traits::{Get, One, Zero};
     use sp_runtime::Saturating;
-    use shp_traits::TrieRemoveMutation;
 
     impl<T: pallet::Config> Pallet<T> {
         pub(crate) fn do_on_idle(
@@ -1096,7 +1121,11 @@ mod hooks {
                         Self::process_expired_storage_request(file_key, remaining_weight)
                     }
                     ExpiredItems::PendingFileDeletionRequests((user, file_key)) => {
-                        Self::process_expired_pending_file_deletion(user, file_key, remaining_weight)
+                        Self::process_expired_pending_file_deletion(
+                            user,
+                            file_key,
+                            remaining_weight,
+                        )
                     }
                 };
             }

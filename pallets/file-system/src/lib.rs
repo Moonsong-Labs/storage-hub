@@ -375,7 +375,10 @@ pub mod pallet {
             location: FileLocation<T>,
         },
         /// Notifies that a priority challenge failed to be queued for pending file deletion.
-        FailedToQueuePriorityChallenge { user: T::AccountId, file_key: MerkleHash<T> },
+        FailedToQueuePriorityChallenge {
+            user: T::AccountId,
+            file_key: MerkleHash<T>,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -453,7 +456,7 @@ pub mod pallet {
         /// Failed to add file key to pending deletion requests.
         FailedToAddFileKeyToPendingDeletionRequests,
         /// Unauthorized operation, signer is not an MSP of the bucket id.
-        MspNotStoringBucket
+        MspNotStoringBucket,
     }
 
     #[pallet::call]
