@@ -36,17 +36,12 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
 
     fn stored_chunks_count(&self) -> Result<u64, FileStorageError> {
         let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
+        let trie_iter = trie
+            .iter()
+            .map_err(|_| FileStorageError::FailedToConstructTrieIter)?;
+        let stored_chunks = trie_iter.count() as u64;
 
-        let mut iter = trie.iter().map_err(|e| {
-            dbg!(e);
-            FileStorageError::FailedToConstructTrieIter
-        })?;
-        let mut count = 0u64;
-        while let Some(_) = iter.next() {
-            count += 1
-        }
-
-        Ok(count)
+        Ok(stored_chunks)
     }
 
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError> {
@@ -470,7 +465,6 @@ mod tests {
             .unwrap();
 
         assert!(file_storage.get_metadata(&key).is_ok());
-        dbg!(file_storage.get_chunk(&key, &chunk_ids[0]));
         assert!(file_storage.get_chunk(&key, &chunk_ids[0]).is_ok());
         assert!(file_storage.get_chunk(&key, &chunk_ids[1]).is_ok());
         assert!(file_storage.get_chunk(&key, &chunk_ids[2]).is_ok());
