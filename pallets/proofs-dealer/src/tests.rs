@@ -19,6 +19,7 @@ use frame_support::{
     traits::{fungible::Mutate, OnPoll},
     weights::WeightMeter,
 };
+use pallet_storage_providers::types::MerklePatriciaRootDefault;
 use shp_traits::{ProofsDealerInterface, ProvidersInterface, TrieRemoveMutation};
 use sp_core::{blake2_256, Get, Hasher, H256};
 use sp_runtime::{traits::BlakeTwo256, BoundedVec, DispatchError};
@@ -287,6 +288,17 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
             },
         );
 
@@ -800,6 +812,17 @@ fn submit_proof_success() {
             },
         );
 
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
+            },
+        );
+
         // Set Provider's last submitted proof block.
         let current_tick = ChallengesTicker::<Test>::get();
         let last_tick_provider_submitted_proof = current_tick;
@@ -922,6 +945,17 @@ fn submit_proof_submitted_by_not_a_provider_success() {
             },
         );
 
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
+            },
+        );
+
         // Set Provider's last submitted proof block.
         LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
@@ -999,6 +1033,17 @@ fn submit_proof_with_checkpoint_challenges_success() {
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
             },
         );
 
@@ -1101,6 +1146,17 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
             },
         );
 
@@ -1291,6 +1347,17 @@ fn submit_proof_empty_key_proofs_fail() {
             },
         );
 
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
+            },
+        );
+
         // Dispatch challenge extrinsic.
         assert_noop!(
             ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
@@ -1350,6 +1417,17 @@ fn submit_proof_no_record_of_last_proof_fail() {
             },
         );
 
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
+            },
+        );
+
         // Dispatch challenge extrinsic.
         assert_noop!(
             ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
@@ -1406,6 +1484,17 @@ fn submit_proof_challenges_block_not_reached_fail() {
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
             },
         );
 
@@ -1475,6 +1564,17 @@ fn submit_proof_challenges_block_too_old_fail() {
             },
         );
 
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
+            },
+        );
+
         // Set Provider's last submitted proof block.
         LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, 1);
 
@@ -1538,6 +1638,17 @@ fn submit_proof_seed_not_found_fail() {
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
             },
         );
 
@@ -1607,6 +1718,17 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
             },
         );
 
@@ -1684,6 +1806,17 @@ fn submit_proof_forest_proof_verification_fail() {
             },
         );
 
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
+            },
+        );
+
         // Set Provider's last submitted proof block.
         LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
@@ -1756,6 +1889,17 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
             },
         );
 
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
+            },
+        );
+
         // Set Provider's last submitted proof block.
         LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
 
@@ -1808,6 +1952,17 @@ fn submit_proof_out_checkpoint_challenges_fail() {
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
             },
         );
 
@@ -1910,6 +2065,17 @@ fn submit_proof_key_proof_verification_fail() {
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
             },
         );
 
@@ -2305,6 +2471,17 @@ fn new_challenges_round_provider_marked_as_slashable() {
             },
         );
 
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
+            },
+        );
+
         // Set Provider's last submitted proof block.
         let current_tick = ChallengesTicker::<Test>::get();
         let prev_tick_provider_submitted_proof = current_tick;
@@ -2419,6 +2596,24 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Alice and Bob's root to be an arbitrary value, different than the default root,
+        // to simulate that they are actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &alice_provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
+            },
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &bob_provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root =
+                    MerklePatriciaRootDefault(root);
             },
         );
 

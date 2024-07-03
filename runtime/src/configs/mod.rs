@@ -445,6 +445,7 @@ impl pallet_storage_providers::Config for Runtime {
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
+    type MerkleTrieHashing = BlakeTwo256;
     type ValuePropId = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = ConstU32<100>;
