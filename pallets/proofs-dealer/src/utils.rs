@@ -7,7 +7,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer_runtime_api::{
-    GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+    GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
 };
 use shp_traits::{
     CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, TrieMutation,
@@ -778,5 +778,18 @@ where
             .ok_or(GetCheckpointChallengesError::NoCheckpointChallengesInTick)?;
 
         Ok(checkpoint_challenges.into())
+    }
+
+    pub fn get_challenge_period(
+        provider_id: &ProviderIdFor<T>,
+    ) -> Result<BlockNumberFor<T>, GetChallengePeriodError> {
+        let stake = ProvidersPalletFor::<T>::get_stake(provider_id.clone())
+            .ok_or(GetChallengePeriodError::ProviderNotRegistered)?;
+
+        Ok(Self::stake_to_challenge_period(stake))
+    }
+
+    pub fn get_checkpoint_challenge_period() -> BlockNumberFor<T> {
+        CheckpointChallengePeriodFor::<T>::get()
     }
 }
