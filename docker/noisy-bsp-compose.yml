@@ -1,0 +1,78 @@
+services:
+  sh-bsp:
+    image: storage-hub:local
+    container_name: docker-sh-bsp-1
+    platform: linux/amd64
+    ports:
+      - "9966:9944"
+    volumes:
+      - ./dev-keystores/bsp:/keystore:ro
+    command:
+      [
+        "--dev",
+        "--provider",
+        "--provider-type=bsp",
+        "--name=sh-bsp",
+        "--no-hardware-benchmarks",
+        "--unsafe-rpc-external",
+        "--rpc-methods=unsafe",
+        "--port=30350",
+        "--rpc-cors=all",
+        "--node-key=0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be",
+        "--keystore-path=/keystore",
+        "--sealing=manual",
+        "--base-path=/data",
+      ]
+    networks:
+      storage-hub-network:
+        aliases:
+          - sh-bsp
+
+  sh-user:
+    image: storage-hub:local
+    platform: linux/amd64
+    container_name: docker-sh-user-1
+    ports:
+      - "9977:9944"
+    volumes:
+      - ./dev-keystores/user:/keystore:ro
+      - ./resource:/res:ro
+    command:
+      [
+        "--dev",
+        "--name=sh-user",
+        "--provider",
+        "--provider-type=user",
+        "--no-hardware-benchmarks",
+        "--unsafe-rpc-external",
+        "--rpc-methods=unsafe",
+        "--port=30444",
+        "--rpc-cors=all",
+        "--node-key=0x13b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b314",
+        "--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}",
+        "--keystore-path=/keystore",
+        "--sealing=manual",
+        "--base-path=/data",
+      ]
+    networks:
+      - storage-hub-network
+    depends_on:
+      - toxiproxy
+
+  toxiproxy:
+    image: shopify/toxiproxy
+    container_name: toxiproxy
+    ports:
+      - "8474:8474"
+      - "30350:30350"
+    volumes:
+      - ./toxiproxy.json:/etc/toxiproxy.json
+    command: -config /etc/toxiproxy.json -host=0.0.0.0
+    networks:
+      storage-hub-network:
+        aliases:
+          - toxiproxy
+
+networks:
+  storage-hub-network:
+    driver: bridge

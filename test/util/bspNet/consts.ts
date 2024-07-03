@@ -18,6 +18,10 @@ export const NODE_INFOS = {
     port: 9955,
     p2pPort: 30333,
     AddressId: "5C8NC6YuAivp3knYC58Taycx2scQoDcDd3MCEEgyw36Gh1R4"
+  },
+  toxiproxy: {
+    containerName: "toxiproxy",
+    port: 8474
   }
 } as const;
 
