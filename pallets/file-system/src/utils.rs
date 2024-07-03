@@ -1204,8 +1204,12 @@ mod hooks {
             let _ = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &file_key,
                 Some(TrieRemoveMutation),
-            ).map_err(|_| {
-                Self::deposit_event(Event::FailedToQueuePriorityChallenge { user: user.clone(), file_key });
+            )
+            .map_err(|_| {
+                Self::deposit_event(Event::FailedToQueuePriorityChallenge {
+                    user: user.clone(),
+                    file_key,
+                });
             });
 
             remaining_weight.saturating_reduce(potential_weight);

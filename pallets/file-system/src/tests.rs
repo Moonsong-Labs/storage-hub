@@ -2413,12 +2413,10 @@ mod delete_file_tests {
             );
 
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
-            assert!(
-                pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
-                    .iter()
-                    .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
-                    .is_some(),
-            );
+            assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
+                .iter()
+                .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
+                .is_some(),);
         });
     }
 
@@ -2481,12 +2479,10 @@ mod delete_file_tests {
             ));
 
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
-            assert!(
-                pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
-                    .iter()
-                    .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
-                    .is_some(),
-            );
+            assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
+                .iter()
+                .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
+                .is_some(),);
 
             // Assert that the pending file deletion request was removed from storage
             assert_eq!(
@@ -2555,12 +2551,10 @@ mod delete_file_tests {
             ));
 
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
-            assert!(
-                pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
-                    .iter()
-                    .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
-                    .is_none(),
-            );
+            assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
+                .iter()
+                .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
+                .is_none(),);
 
             // Assert that the pending file deletion request was removed from storage
             assert_eq!(
