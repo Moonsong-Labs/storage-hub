@@ -328,7 +328,7 @@ where
     /// - The `TickToChallengesSeed` StorageMap, removing entries older than `ChallengeHistoryLength`.
     /// - The `TickToCheckpointChallenges` StorageMap, removing the previous checkpoint challenge block.
     /// - The `ChallengeTickToChallengedProviders` StorageMap, removing entries for the current challenges tick.
-    pub fn do_new_challenges_round(n: BlockNumberFor<T>, weight: &mut WeightMeter) {
+    pub fn do_new_challenges_round(weight: &mut WeightMeter) {
         // Increment the challenges ticker.
         let mut challenges_ticker = ChallengesTicker::<T>::get();
         challenges_ticker.saturating_inc();
@@ -740,6 +740,12 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             who.clone(),
             Some(()),
         );
+
+        // Emit event.
+        Self::deposit_event(Event::<T>::NewChallengeCycleInitialised {
+            provider: who.clone(),
+            current_tick,
+        });
 
         Ok(())
     }

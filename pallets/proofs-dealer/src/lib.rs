@@ -1,5 +1,3 @@
-// TODO: Remove this attribute.
-#![allow(unused_variables)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
@@ -306,6 +304,12 @@ pub mod pallet {
 
         /// A slashable provider was found.
         SlashableProvider { provider: ProviderIdFor<T> },
+
+        /// A Provider's challenge cycle was initialised.
+        NewChallengeCycleInitialised {
+            provider: ProviderIdFor<T>,
+            current_tick: BlockNumberFor<T>,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -486,10 +490,10 @@ pub mod pallet {
         /// [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
         /// For more information on the lifecycle of the block and its hooks, see the [Substrate
         /// documentation](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#method.on_poll).
-        fn on_poll(n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
+        fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
             // TODO: Benchmark computational weight cost of this hook.
 
-            Self::do_new_challenges_round(n, weight);
+            Self::do_new_challenges_round(weight);
         }
 
         // TODO: Document why we need to do this.
