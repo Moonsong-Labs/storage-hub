@@ -10,7 +10,7 @@ import type {
 } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import { u8aToHex } from "@polkadot/util";
-import compose from "docker-compose";
+import { v2 as compose } from "docker-compose";
 import Docker from "dockerode";
 import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
@@ -137,6 +137,7 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
 };
 
 export const runBspNet = async (noisy = false) => {
+  let api: BspNetApi | undefined;
   try {
     console.log(`sh user id: ${shUser.address}`);
     console.log(`sh bsp id: ${bsp.address}`);
@@ -183,9 +184,7 @@ export const runBspNet = async (noisy = false) => {
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
     // Create Connection API Object to User Node
-    // biome-ignore lint/style/noVar: <explanation>
-    // biome-ignore lint/correctness/noInnerDeclarations: <explanation>
-    var api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+    api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
     // Give Balances
     const amount = 10000n * 10n ** 12n;
@@ -232,7 +231,6 @@ export const runBspNet = async (noisy = false) => {
   } catch (e) {
     console.error("Error ", e);
   } finally {
-    // @ts-expect-error - bug in tsc
     api?.disconnect();
   }
 };

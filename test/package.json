@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "engines": {
-    "node": "21.x.x"
+    "node": "22.x.x"
   },
   "scripts": {
     "typegen": "cd ../api-augment && pnpm scrape && pnpm generate:all && pnpm build && pnpm fmt:fix; cd ../test",
