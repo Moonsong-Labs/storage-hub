@@ -1,0 +1,8 @@
+[
+  {
+    "name": "sh-bsp-proxy",
+    "listen": "[::]:30350",
+    "upstream": "sh-bsp:30350",
+    "enabled": true
+  }
+]
