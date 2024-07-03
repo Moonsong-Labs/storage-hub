@@ -2400,6 +2400,12 @@ mod delete_file_tests {
             // Roll past the expiration block
             roll_to(pending_file_deletion_request_ttl + 1);
 
+            // Item expiration should be removed
+            assert_eq!(
+                FileSystem::item_expirations(pending_file_deletion_request_ttl),
+                vec![]
+            );
+
             // Asser that the pending file deletion request was removed from storage
             assert_eq!(
                 FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
@@ -2408,7 +2414,6 @@ mod delete_file_tests {
 
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
             assert!(
-                // Find file key in vec of queued priority challenges
                 pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                     .iter()
                     .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
@@ -2477,7 +2482,6 @@ mod delete_file_tests {
 
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
             assert!(
-                // Find file key in vec of queued priority challenges
                 pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                     .iter()
                     .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
@@ -2552,7 +2556,6 @@ mod delete_file_tests {
 
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
             assert!(
-                // Find file key in vec of queued priority challenges
                 pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                     .iter()
                     .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))

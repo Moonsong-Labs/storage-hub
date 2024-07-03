@@ -379,6 +379,20 @@ pub mod pallet {
             user: T::AccountId,
             file_key: MerkleHash<T>,
         },
+        /// Notifies that a file will be deleted.
+        FileDeletionRequest {
+            user: T::AccountId,
+            file_key: MerkleHash<T>,
+            bucket_id: ProviderIdFor<T>,
+            msp_id: ProviderIdFor<T>,
+        },
+        /// Notifies that a proof has been submitted for a pending file deletion request.
+        ProofSubmittedForPendingFileDeletionRequest {
+            msp_id: ProviderIdFor<T>,
+            user: T::AccountId,
+            file_key: MerkleHash<T>,
+            bucket_id: ProviderIdFor<T>,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -713,7 +727,7 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            Self::do_delete_file(
+            let msp_id = Self::do_delete_file(
                 who.clone(),
                 bucket_id,
                 file_key,
@@ -722,6 +736,13 @@ pub mod pallet {
                 size,
                 maybe_inclusion_forest_proof,
             )?;
+
+            Self::deposit_event(Event::FileDeletionRequest {
+                user: who,
+                file_key,
+                bucket_id,
+                msp_id,
+            });
 
             Ok(())
         }
@@ -737,13 +758,20 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            Self::do_pending_file_deletion_request_submit_proof(
+            let msp_id = Self::do_pending_file_deletion_request_submit_proof(
                 who.clone(),
-                user,
+                user.clone(),
                 file_key,
                 bucket_id,
                 forest_proof,
             )?;
+
+            Self::deposit_event(Event::ProofSubmittedForPendingFileDeletionRequest {
+                msp_id,
+                user,
+                file_key,
+                bucket_id,
+            });
 
             Ok(())
         }

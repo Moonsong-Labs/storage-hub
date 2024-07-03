@@ -974,6 +974,10 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         Ok(bucket.read_access_group_id)
     }
 
+    fn get_msp_of_bucket(bucket_id: &Self::BucketId) -> Option<Self::ProviderId> {
+        Buckets::<T>::get(bucket_id).map(|bucket| bucket.msp_id)
+    }
+
     fn derive_bucket_id(
         owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::BucketNameLimit>,

@@ -822,7 +822,7 @@ where
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         maybe_inclusion_forest_proof: Option<ForestProof<T>>,
-    ) -> DispatchResult {
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
         // Compute the file key hash.
         let computed_file_key = Self::compute_file_key(
             sender.clone(),
@@ -837,6 +837,9 @@ where
             file_key == computed_file_key,
             Error::<T>::InvalidFileKeyMetadata
         );
+
+        let msp_id = <T::Providers as ReadProvidersInterface>::get_msp_of_bucket(&bucket_id)
+            .ok_or(Error::<T>::BucketNotFound)?;
 
         match maybe_inclusion_forest_proof {
             // If the user did not supply a proof of inclusion, queue a pending deletion file request.
@@ -890,7 +893,7 @@ where
             }
         };
 
-        Ok(())
+        Ok(msp_id)
     }
 
     pub(crate) fn do_pending_file_deletion_request_submit_proof(
@@ -899,7 +902,7 @@ where
         file_key: MerkleHash<T>,
         bucket_id: BucketIdFor<T>,
         forest_proof: ForestProof<T>,
-    ) -> DispatchResult {
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
         let msp_id =
             <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotAMsp)?;
@@ -937,7 +940,7 @@ where
             requests.retain(|(key, _)| key != &file_key);
         });
 
-        Ok(())
+        Ok(msp_id)
     }
 
     /// Create a collection.
@@ -1178,26 +1181,34 @@ mod hooks {
             remaining_weight: &mut Weight,
         ) {
             let db_weight = T::DbWeight::get();
-            let potential_weight = db_weight.writes(1);
+            let potential_weight = db_weight.reads_writes(2, 3);
 
             if !remaining_weight.all_gte(potential_weight) {
                 return;
             }
 
-            PendingFileDeletionRequests::<T>::mutate(&user, |requests| {
-                if let Some(index) = requests.iter().position(|(key, _)| key == &file_key) {
-                    let _ = requests.remove(index);
+            let requests = PendingFileDeletionRequests::<T>::get(&user);
 
-                    let _ = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                        &file_key,
-                        Some(TrieRemoveMutation),
-                    ).map_err(|_| {
-                        Self::deposit_event(Event::FailedToQueuePriorityChallenge { user: user.clone(), file_key });
-                    });
-                }
+            // Check if the file key is still a pending deletion requests.
+            let expired_item_index = match requests.iter().position(|(key, _)| key == &file_key) {
+                Some(i) => i,
+                None => return,
+            };
+
+            // Remove the file key from the pending deletion requests.
+            PendingFileDeletionRequests::<T>::mutate(&user, |requests| {
+                requests.remove(expired_item_index);
             });
 
-            remaining_weight.saturating_reduce(db_weight.writes(1));
+            // Queue a priority challenge to remove the file key from all the providers.
+            let _ = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
+                &file_key,
+                Some(TrieRemoveMutation),
+            ).map_err(|_| {
+                Self::deposit_event(Event::FailedToQueuePriorityChallenge { user: user.clone(), file_key });
+            });
+
+            remaining_weight.saturating_reduce(potential_weight);
         }
     }
 }

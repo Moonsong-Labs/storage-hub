@@ -162,6 +162,9 @@ pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
         bucket_id: &Self::BucketId,
     ) -> Result<Option<Self::ReadAccessGroupId>, DispatchError>;
 
+    /// Get MSP storing a bucket.
+    fn get_msp_of_bucket(bucket_id: &Self::BucketId) -> Option<Self::ProviderId>;
+
     /// Check if a bucket is private.
     fn is_bucket_private(bucket_id: &Self::BucketId) -> Result<bool, DispatchError>;
 
