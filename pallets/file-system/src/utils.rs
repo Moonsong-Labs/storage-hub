@@ -554,7 +554,7 @@ where
             "Failed to get root for BSP, when it was already checked to be a BSP",
             Error::<T>::NotABsp
         );
-        if old_root == Default::default() {
+        if old_root == <T::Providers as shp_traits::ProvidersInterface>::get_default_root() {
             // This means that this is the first file added to the BSP's Forest.
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::initialise_challenge_cycle(
                 &bsp_id,
