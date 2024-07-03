@@ -1,15 +1,16 @@
 use crate as pallet_payment_streams;
 use core::marker::PhantomData;
 use frame_support::{
-    construct_runtime, derive_impl, parameter_types,
+    construct_runtime, derive_impl,
+    pallet_prelude::Get,
+    parameter_types,
     traits::{AsEnsureOriginWithArg, Everything, Randomness},
     weights::constants::RocksDbWeight,
-	pallet_prelude::Get
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
 use shp_traits::SubscribeProvidersInterface;
-use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256, Hasher};
+use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::traits::Convert;
 use sp_runtime::{
     testing::TestSignature,

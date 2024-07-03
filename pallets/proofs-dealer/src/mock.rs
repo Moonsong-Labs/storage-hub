@@ -2,10 +2,11 @@
 
 use core::marker::PhantomData;
 use frame_support::{
-    derive_impl, parameter_types,
+    derive_impl,
+    pallet_prelude::Get,
+    parameter_types,
     traits::{Everything, Randomness},
     weights::constants::RocksDbWeight,
-	pallet_prelude::Get
 };
 use frame_system as system;
 use shp_traits::{
@@ -18,7 +19,7 @@ use sp_runtime::{
     BuildStorage, DispatchError, DispatchResult, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
-use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieLayout, TrieConfiguration};
+use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;

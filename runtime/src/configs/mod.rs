@@ -26,6 +26,7 @@
 mod xcm_config;
 
 // Substrate and Polkadot dependencies
+use core::marker::PhantomData;
 use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
 use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
 use frame_support::{
@@ -60,8 +61,7 @@ use sp_runtime::{
     AccountId32, DispatchError, FixedPointNumber, FixedU128, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
-use sp_trie::CompactProof;
-use sp_trie::LayoutV1;
+use sp_trie::{CompactProof, LayoutV1, TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
 
