@@ -50,10 +50,16 @@ use substrate_frame_rpc_system::AccountNonceApi;
 
 use crate::{
     service::ParachainClient,
-    services::blockchain::{events::AcceptedBspVolunteer, transaction::SubmittedTransaction},
+    services::blockchain::{
+        events::{AcceptedBspVolunteer, NewChallengeSeed},
+        transaction::SubmittedTransaction,
+    },
 };
 use pallet_file_system_runtime_api::{FileSystemApi, QueryFileEarliestVolunteerBlockError};
-use shc_common::types::BlockNumber;
+use pallet_proofs_dealer_runtime_api::{
+    GetChallengePeriodError, GetLastTickProviderSubmittedProofError, ProofsDealerApi,
+};
+use shc_common::types::{BlockNumber, ProviderId};
 
 use crate::services::blockchain::{
     commands::BlockchainServiceCommand,
@@ -98,6 +104,9 @@ pub struct BlockchainService {
     nonce_counter: u32,
     /// A registry of waiters for a block number.
     wait_for_block_request_by_number: BTreeMap<BlockNumber, Vec<tokio::sync::oneshot::Sender<()>>>,
+    /// A list of Provider IDs that this node has to pay attention to submit proofs for.
+    /// This could be a BSP or a list of buckets that an MSP has.
+    provider_ids: Vec<ProviderId>,
 }
 
 /// Implement the Actor trait for the BlockchainService actor.
@@ -364,6 +373,7 @@ impl BlockchainService {
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
+            provider_ids: Vec::new(),
         }
     }
 
@@ -439,6 +449,31 @@ impl BlockchainService {
                             size,
                             user_peer_ids: peer_ids,
                         }),
+                        // New challenge seed event coming from pallet-proofs-dealer.
+                        RuntimeEvent::ProofsDealer(
+                            pallet_proofs_dealer::Event::NewChallengeSeed {
+                                challenges_ticker,
+                                seed,
+                            },
+                        ) => {
+                            // For each Provider ID this node monitors...
+                            for provider_id in &self.provider_ids {
+                                // ...check if the challenges tick is one that this provider has to submit a proof for.
+                                if self.should_provider_submit_proof(
+                                    &block_hash,
+                                    provider_id,
+                                    &challenges_ticker,
+                                ) {
+                                    self.emit(NewChallengeSeed {
+                                        provider_id: provider_id.clone(),
+                                        tick: challenges_ticker,
+                                        seed,
+                                    })
+                                } else {
+                                    trace!(target: LOG_TARGET, "Challenges tick is not the next one to be submitted for Provider [{:?}]", provider_id);
+                                }
+                            }
+                        }
                         // This event should only be of any use if a node is run by as a user.
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::AcceptedBspVolunteer {
@@ -744,5 +779,59 @@ impl BlockchainService {
         } else {
             return Err(anyhow::anyhow!("Failed to get Events storage element"));
         }
+    }
+
+    /// Check if the challenges tick is one that this provider has to submit a proof for,
+    /// and if so, emit a `NewChallengeSeed` event.
+    fn should_provider_submit_proof(
+        &self,
+        block_hash: &H256,
+        provider_id: &ProviderId,
+        current_tick: &BlockNumber,
+    ) -> bool {
+        let last_tick_provided = match self
+            .client
+            .runtime_api()
+            .get_last_tick_provider_submitted_proof(block_hash.clone(), provider_id)
+        {
+            Ok(last_tick_provided_result) => match last_tick_provided_result {
+                Ok(last_tick_provided) => last_tick_provided,
+                Err(e) => match e {
+                    GetLastTickProviderSubmittedProofError::ProviderNotRegistered => {
+                        debug!(target: LOG_TARGET, "Provider [{:?}] is not registered", provider_id);
+                        return false;
+                    }
+                    GetLastTickProviderSubmittedProofError::ProviderNeverSubmittedProof => {
+                        debug!(target: LOG_TARGET, "Provider [{:?}] does not have an initialised challenge cycle", provider_id);
+                        return false;
+                    }
+                },
+            },
+            Err(e) => {
+                error!(target: LOG_TARGET, "Runtime API error while getting last tick Provider [{:?}] submitted a proof for: {:?}", provider_id, e);
+                return false;
+            }
+        };
+        let provider_challenge_period = match self
+            .client
+            .runtime_api()
+            .get_challenge_period(block_hash.clone(), provider_id)
+        {
+            Ok(provider_challenge_period_result) => match provider_challenge_period_result {
+                Ok(provider_challenge_period) => provider_challenge_period,
+                Err(e) => match e {
+                    GetChallengePeriodError::ProviderNotRegistered => {
+                        debug!(target: LOG_TARGET, "Provider [{:?}] is not registered", provider_id);
+                        return false;
+                    }
+                },
+            },
+            Err(e) => {
+                debug!(target: LOG_TARGET, "Runtime API error while getting challenge period for Provider [{:?}]: {:?}", provider_id, e);
+                return false;
+            }
+        };
+
+        current_tick == &last_tick_provided.saturating_add(provider_challenge_period)
     }
 }

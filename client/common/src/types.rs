@@ -29,6 +29,8 @@ pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
 pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
 pub type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<Runtime>;
 pub type RandomSeed = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
+pub type ProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
+pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
 
 /// Proving either the exact key or the neighbour keys of the challenged key.
 pub enum Proven<K, D: Debug> {

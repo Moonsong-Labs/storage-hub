@@ -14649,6 +14649,7 @@ dependencies = [
  "pallet-file-system",
  "pallet-file-system-runtime-api",
  "pallet-proofs-dealer",
+ "pallet-proofs-dealer-runtime-api",
  "pallet-storage-providers",
  "pallet-transaction-payment 28.0.0",
  "pallet-transaction-payment-rpc",
