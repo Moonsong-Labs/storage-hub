@@ -76,6 +76,9 @@ pub trait ProvidersInterface {
     /// Update the root for a registered Provider.
     fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult;
 
+    /// Get the default value for the root of a Merkle Patricia Forest.
+    fn get_default_root() -> Self::MerkleHash;
+
     /// Get the stake for a registered  Provider.
     fn get_stake(
         who: Self::ProviderId,
