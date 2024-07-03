@@ -2398,7 +2398,7 @@ mod delete_file_tests {
             );
 
             // Roll past the expiration block
-            roll_to(pending_file_deletion_request_ttl + 1);
+            roll_to(pending_file_deletion_request_ttl);
 
             // Item expiration should be removed
             assert_eq!(
