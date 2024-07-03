@@ -37,7 +37,7 @@ pub mod pallet {
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
         sp_runtime::traits::{
-            AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps,
+            AtLeast32BitUnsigned, CheckEqual, Hash, MaybeDisplay, Saturating, SimpleBitOps,
         },
         traits::{fungible::*, Incrementable},
         Blake2_128Concat,
@@ -109,6 +109,9 @@ pub mod pallet {
             + AsMut<[u8]>
             + MaxEncodedLen
             + FullCodec;
+
+        /// The hashing system (algorithm) being used for the Merkle Patricia Forests (e.g. Blake2).
+        type MerkleTrieHashing: Hash<Output = Self::MerklePatriciaRoot> + TypeInfo;
 
         /// The type of the identifier of the value proposition of a MSP (probably a hash of that value proposition)
         type ValuePropId: Parameter
@@ -544,7 +547,7 @@ pub mod pallet {
                 capacity,
                 data_used: StorageData::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
-                root: MerklePatriciaRoot::<T>::default(),
+                root: MerklePatriciaRootDefault::<T>::default(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 payment_account,
             };
@@ -878,7 +881,7 @@ pub mod pallet {
                 capacity,
                 data_used: StorageData::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
-                root: MerklePatriciaRoot::<T>::default(),
+                root: MerklePatriciaRootDefault::<T>::default(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 payment_account,
             };

@@ -162,6 +162,12 @@ impl ProofsDealerInterface for MockProofsDealer {
     ) -> Result<Self::MerkleHash, sp_runtime::DispatchError> {
         Ok(H256::default())
     }
+
+    fn initialise_challenge_cycle(
+        _who: &Self::ProviderId,
+    ) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
 }
 
 impl pallet_file_system::Config for Test {
@@ -236,6 +242,7 @@ impl pallet_storage_providers::Config for Test {
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
+    type MerkleTrieHashing = BlakeTwo256;
     type ValuePropId = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = MaxMultiAddressSize;
