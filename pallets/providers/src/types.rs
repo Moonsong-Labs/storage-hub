@@ -40,7 +40,7 @@ pub struct BackupStorageProvider<T: Config> {
     pub capacity: StorageData<T>,
     pub data_used: StorageData<T>,
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
-    pub root: MerklePatriciaRootDefault<T>,
+    pub root: MerklePatriciaRoot<T>,
     pub last_capacity_change: BlockNumberFor<T>,
     pub payment_account: T::AccountId,
 }
@@ -50,7 +50,7 @@ pub struct BackupStorageProvider<T: Config> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct Bucket<T: Config> {
-    pub root: MerklePatriciaRootDefault<T>,
+    pub root: MerklePatriciaRoot<T>,
     pub user_id: T::AccountId,
     pub msp_id: MainStorageProviderId<T>,
     pub private: bool,
@@ -87,21 +87,7 @@ pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
 
 /// MerklePatriciaRoot is the type of the root of a Merkle Patricia Trie, either the root of a BSP or a bucket from an MSP.
 pub type MerklePatriciaRoot<T> = <T as crate::Config>::MerklePatriciaRoot;
-/// Wrapper for MerklePatriciaRoot<T> that implements a custom Default which returns the root of an empty trie.
-/// Note that it uses the LayoutV1 struct from sp_trie. Will need to be changed if the trie layout changes.
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
-#[scale_info(skip_type_params(T))]
-pub struct MerklePatriciaRootDefault<T: Config>(pub MerklePatriciaRoot<T>);
-impl<T> Default for MerklePatriciaRootDefault<T>
-where
-    T: Config,
-{
-    fn default() -> Self {
-        MerklePatriciaRootDefault(sp_trie::empty_trie_root::<
-            sp_trie::LayoutV1<T::MerkleTrieHashing>,
-        >())
-    }
-}
+
 /// HashId is the type that uniquely identifies either a Storage Provider (MSP or BSP) or a Bucket.
 pub type HashId<T> = <T as frame_system::Config>::Hash;
 

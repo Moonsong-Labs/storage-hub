@@ -1,9 +1,11 @@
 #![allow(non_camel_case_types)]
 
+use core::marker::PhantomData;
 use frame_support::{
     derive_impl, parameter_types,
     traits::{Everything, Randomness},
     weights::constants::RocksDbWeight,
+	pallet_prelude::Get
 };
 use frame_system as system;
 use shp_traits::{
@@ -16,7 +18,7 @@ use sp_runtime::{
     BuildStorage, DispatchError, DispatchResult, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
-use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieLayout};
+use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieLayout, TrieConfiguration};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -110,6 +112,13 @@ impl pallet_balances::Config for Test {
     type MaxFreezes = ConstU32<10>;
 }
 
+pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
+pub struct DefaultMerkleRoot<T>(PhantomData<T>);
+impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
+    fn get() -> HasherOutT<T> {
+        sp_trie::empty_trie_root::<T>()
+    }
+}
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -117,7 +126,7 @@ impl pallet_storage_providers::Config for Test {
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
-    type MerkleTrieHashing = BlakeTwo256;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = H256;
     type ReadAccessGroupId = u32;
     type MaxMultiAddressSize = ConstU32<100>;

@@ -439,13 +439,20 @@ impl pallet_randomness::Config for Runtime {
     type WeightInfo = ();
 }
 
+pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
+pub struct DefaultMerkleRoot<T>(PhantomData<T>);
+impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
+    fn get() -> HasherOutT<T> {
+        sp_trie::empty_trie_root::<T>()
+    }
+}
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
-    type MerkleTrieHashing = BlakeTwo256;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = ConstU32<100>;
