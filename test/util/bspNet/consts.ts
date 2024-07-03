@@ -34,7 +34,7 @@ export const TEST_ARTEFACTS = {
   },
   "res/whatsup.jpg": {
     size: 216211n,
-    checksum: "585ed00a96349499cbc8a3882b0bd6f6aec5ce3b7dbee2d8b3d33f3c09a38ec6",
+    checksum: "1cd8cf94623bffacc718269acdab04844998d84362b8a8449f4628a2ef5a77f5",
     fingerprint: "0x0e2aaf768af5b738eea96084f10dac7ad4f6efa257782bdb9823994ffb233344"
   },
   "res/cloud.jpg": {
