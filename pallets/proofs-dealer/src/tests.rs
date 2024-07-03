@@ -532,6 +532,15 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
         let deadline =
             ChallengeTickToChallengedProviders::<Test>::get(expected_deadline, provider_id);
         assert_eq!(deadline, Some(()));
+
+        // Check that the last event emitted is the correct one.
+        System::assert_last_event(
+            Event::NewChallengeCycleInitialised {
+                provider: provider_id,
+                current_tick: 1,
+            }
+            .into(),
+        );
     });
 }
 
