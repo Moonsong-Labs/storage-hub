@@ -2724,7 +2724,7 @@ fn create_bucket(
     assert_eq!(
         pallet_storage_providers::Buckets::<Test>::get(bucket_id),
         Some(Bucket {
-            root: H256::default(),
+            root: pallet_storage_providers::types::MerklePatriciaRootDefault::<Test>::default(),
             user_id: owner.clone(),
             msp_id,
             private: false,
