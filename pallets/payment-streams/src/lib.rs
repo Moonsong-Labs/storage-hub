@@ -126,6 +126,17 @@ pub mod pallet {
         DynamicRatePaymentStream<T>,
     >;
 
+    /// The mapping from a Provider to its last chargeable price index (for dynamic-rate payment streams) and last chargeable block (for fixed-rate payment streams).
+    ///
+    /// This is used to keep track of the last chargeable price index and block number for each Provider, updated by the PaymentManager, so this pallet can charge the payment streams correctly.
+    ///
+    /// This storage is updated in:
+    /// - [update_last_chargeable_block](crate::PaymentManager::update_last_chargeable_block), which updates the entry's `last_chargeable_block`.
+    /// - [update_last_chargeable_price_index](crate::PaymentManager::update_last_chargeable_price_index), which updates the entry's `last_chargeable_price_index`.
+    #[pallet::storage]
+    pub type LastChargeableInfo<T: Config> =
+        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, ProviderLastChargeable<T>, ValueQuery>;
+
     /// The mapping from a user to if it has been flagged for not having enough funds to pay for its requested services.
     ///
     /// This is used to flag users that do not have enough funds to pay for their requested services, so other Providers
@@ -202,12 +213,12 @@ pub mod pallet {
             provider_id: ProviderIdFor<T>,
             amount: BalanceOf<T>,
         },
-        /// Event emitted when a payment stream's last chargeable block is updated. Provides information about the User and Provider of the stream
-        /// and the block number of the last chargeable block.
-        LastChargeableBlockUpdated {
-            user_account: T::AccountId,
+        /// Event emitted when a Provider's last chargeable block and price index are updated. Provides information about the Provider of the stream,
+        /// the block number of the last chargeable block and the price index at that block.
+        LastChargeableInfoUpdated {
             provider_id: ProviderIdFor<T>,
             last_chargeable_block: BlockNumberFor<T>,
+            last_chargeable_price_index: BalanceOf<T>,
         },
         /// Event emitted when a Provider is correctly trying to charge a User and that User does not have enough funds to pay for their services.
         /// This event is emitted to flag the user and let the network know that the user is not paying for the requested services, so other Providers can
@@ -582,6 +593,11 @@ pub mod pallet {
 
 /// Helper functions (getters, setters, etc.) for this pallet
 impl<T: Config> Pallet<T> {
+    /// A helper function to get the information of the last chargeable block and price index of a Provider
+    pub fn get_last_chargeable_info(provider_id: &ProviderIdFor<T>) -> ProviderLastChargeable<T> {
+        LastChargeableInfo::<T>::get(provider_id)
+    }
+
     /// A helper function to get the information of a fixed-rate payment stream
     pub fn get_fixed_rate_payment_stream_info(
         provider_id: &ProviderIdFor<T>,

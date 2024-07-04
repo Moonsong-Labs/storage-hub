@@ -14,7 +14,6 @@ use shp_traits::ProvidersInterface;
 pub struct FixedRatePaymentStream<T: Config> {
     pub rate: BalanceOf<T>,
     pub last_charged_block: BlockNumberFor<T>,
-    pub last_chargeable_block: BlockNumberFor<T>,
     pub user_deposit: BalanceOf<T>,
 }
 
@@ -24,8 +23,23 @@ pub struct FixedRatePaymentStream<T: Config> {
 pub struct DynamicRatePaymentStream<T: Config> {
     pub amount_provided: UnitsProvidedFor<T>,
     pub price_index_when_last_charged: BalanceOf<T>,
-    pub price_index_at_last_chargeable_block: BalanceOf<T>,
     pub user_deposit: BalanceOf<T>,
+}
+
+/// Structure that holds the information of the last chargeable block and price index for a Provider
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct ProviderLastChargeable<T: Config> {
+    pub last_chargeable_block: BlockNumberFor<T>,
+    pub price_index: BalanceOf<T>,
+}
+impl<T: pallet::Config> Default for ProviderLastChargeable<T> {
+    fn default() -> Self {
+        Self {
+            last_chargeable_block: Default::default(),
+            price_index: Default::default(),
+        }
+    }
 }
 
 // Type aliases:

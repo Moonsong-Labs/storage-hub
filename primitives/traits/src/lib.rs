@@ -515,19 +515,11 @@ pub trait PaymentManager {
     /// The type which represents a block number.
     type BlockNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
 
-    /// Update the last valid block for which a charge of a payment can be made
-    fn update_last_chargeable_block(
+    /// Update the last valid block for which a charge of a payment stream can be made and the last accumulated price index
+    /// that corresponds to that block.
+    fn update_last_chargeable_block_and_price_index(
         provider_id: &Self::ProviderId,
-        user_account: &Self::AccountId,
         new_last_chargeable_block: Self::BlockNumber,
-    ) -> DispatchResult;
-
-    /// Update the accumulated price index that can be used to calculate the amount to be charged
-    /// TODO: The way to avoid having to have this function is to only allow `update_last_chargeable_block` to use the current
-    /// block number (that way, the price index is readily available in the Payment Streams pallet). I'd rather not do that.
-    fn update_chargeable_price_index(
-        provider_id: &Self::ProviderId,
-        user_account: &Self::AccountId,
         new_last_chargeable_price_index: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult;
 }
