@@ -28,6 +28,7 @@ type DepositPerData = <Test as crate::Config>::DepositPerData;
 type MaxMsps = <Test as crate::Config>::MaxMsps;
 type MaxBsps = <Test as crate::Config>::MaxBsps;
 type MinBlocksBetweenCapacityChanges = <Test as crate::Config>::MinBlocksBetweenCapacityChanges;
+type DefaultMerkleRoot = <Test as crate::Config>::DefaultMerkleRoot;
 
 // Runtime constants:
 // This is the duration of an epoch in blocks, a constant from the runtime configuration that we mock here
@@ -615,7 +616,7 @@ mod sign_up {
                         alice_sign_up_request.unwrap(),
                         (
                             StorageProvider::BackupStorageProvider(BackupStorageProvider {
-                                root: Default::default(),
+                                root: DefaultMerkleRoot::get(),
                                 capacity: storage_amount,
                                 data_used: 0,
                                 multiaddresses,
@@ -984,7 +985,7 @@ mod sign_up {
                             capacity: storage_amount,
                             data_used: 0,
                             multiaddresses: multiaddresses.clone(),
-                            root: Default::default(),
+                            root: DefaultMerkleRoot::get(),
                             last_capacity_change: current_block,
                             payment_account: alice
                         })));
@@ -4125,7 +4126,7 @@ fn register_account_as_bsp(
             capacity: storage_amount,
             data_used: 0,
             multiaddresses,
-            root: Default::default(),
+            root: DefaultMerkleRoot::get(),
             last_capacity_change: frame_system::Pallet::<Test>::block_number(),
             payment_account: account,
         },
