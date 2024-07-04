@@ -27,7 +27,7 @@ pub(crate) fn other_io_error(err: String) -> io::Error {
 fn open_or_creating_rocksdb(db_path: String) -> io::Result<Database> {
     // TODO: add a configuration option for the base path
     let root = PathBuf::from("/tmp/");
-    let path = root.join("storagehub").join(db_path);
+    let path = root.join("storagehub/file_storage/").join(db_path);
 
     let db_config = DatabaseConfig::with_columns(1);
 

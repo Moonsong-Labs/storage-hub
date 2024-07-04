@@ -217,6 +217,7 @@ async fn init_sh_builder<T, FL, FS>(
     task_manager: &TaskManager,
     file_transfer_request_protocol: Option<(ProtocolName, Receiver<IncomingRequest>)>,
     network: Arc<ParachainNetworkService>,
+    keystore: KeystorePtr,
 ) -> Option<StorageHubBuilder<T, FL, FS>>
 where
     StorageHubBuilder<T, FL, FS>: StorageLayerBuilder,
@@ -245,6 +246,11 @@ where
                 )
                 .await;
 
+            // Getting the caller pub key used for the blockchain service, from the keystore.
+            // Then add it to the StorageHub builder.
+            let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
+            storage_hub_builder.with_provider_pub_key(caller_pub_key);
+
             storage_hub_builder.setup_storage_layer();
             Some(storage_hub_builder)
         }
@@ -270,11 +276,6 @@ async fn finish_sh_builder_and_build<T, FL, FS>(
     sh_builder
         .with_blockchain(client.clone(), Arc::new(rpc_handlers), keystore.clone())
         .await;
-
-    // Getting the caller pub key used for the blockchain service, from the keystore.
-    // Then add it to the StorageHub builder.
-    let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-    sh_builder.with_provider_pub_key(caller_pub_key);
 
     // Finally build the StorageHubBuilder and start the Provider tasks.
     let sh_handler = sh_builder.build();
@@ -440,6 +441,7 @@ where
         &task_manager,
         file_transfer_request_protocol,
         network.clone(),
+        keystore.clone(),
     )
     .await;
 
@@ -753,6 +755,7 @@ where
         &task_manager,
         file_transfer_request_protocol,
         network.clone(),
+        keystore.clone(),
     )
     .await;
 
