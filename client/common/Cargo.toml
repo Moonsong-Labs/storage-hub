@@ -28,7 +28,9 @@ sp-trie = { workspace = true, default-features = true }
 
 polkadot-primitives = { workspace = true }
 
+pallet-file-system = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
+pallet-storage-providers = { workspace = true }
 
 storage-hub-runtime = { workspace = true }
 shp-file-key-verifier = { workspace = true, default-features = false }

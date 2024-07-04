@@ -70,6 +70,9 @@ pub trait ProvidersInterface {
     /// Update the root for a registered Provider.
     fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult;
 
+    /// Get the default value for the root of a Merkle Patricia Forest.
+    fn get_default_root() -> Self::MerkleHash;
+
     /// Get the stake for a registered  Provider.
     fn get_stake(
         who: Self::ProviderId,
@@ -315,6 +318,13 @@ pub trait ProofsDealerInterface {
         mutations: &[(Self::MerkleHash, TrieMutation)],
         proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, DispatchError>;
+
+    /// Initialise a Provider's challenge cycle.
+    ///
+    /// Sets the last tick the Provider submitted a proof for to the current tick and sets the
+    /// deadline for submitting a proof to the current tick + the Provider's period (based on its
+    /// stake) + the challenges tick tolerance.
+    fn initialise_challenge_cycle(who: &Self::ProviderId) -> DispatchResult;
 }
 
 /// A trait to verify proofs based on commitments and challenges.

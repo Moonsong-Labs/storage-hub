@@ -21,14 +21,14 @@ hash-db = { workspace = true }
 kvdb = { workspace = true }
 kvdb-rocksdb = { workspace = true }
 log = { workspace = true }
-sp-state-machine = { workspace = true }
 reference-trie = { workspace = true }
 thiserror = { workspace = true }
 trie-db = { workspace = true }
 
 sp-core = { workspace = true }
-sp-trie = { workspace = true, default-features = true }
 sp-runtime = { workspace = true }
+sp-state-machine = { workspace = true }
+sp-trie = { workspace = true, default-features = true }
 
 shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }

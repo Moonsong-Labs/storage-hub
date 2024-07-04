@@ -181,6 +181,10 @@ pub mod pallet {
         /// The minimum amount of blocks between capacity changes for a SP
         #[pallet::constant]
         type MinBlocksBetweenCapacityChanges: Get<BlockNumberFor<Self>>;
+
+        /// The default value of the root of the Merkle Patricia Trie of the runtime
+        #[pallet::constant]
+        type DefaultMerkleRoot: Get<Self::MerklePatriciaRoot>;
     }
 
     #[pallet::pallet]
@@ -544,7 +548,7 @@ pub mod pallet {
                 capacity,
                 data_used: StorageData::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
-                root: MerklePatriciaRoot::<T>::default(),
+                root: T::DefaultMerkleRoot::get(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 payment_account,
             };
@@ -878,7 +882,7 @@ pub mod pallet {
                 capacity,
                 data_used: StorageData::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
-                root: MerklePatriciaRoot::<T>::default(),
+                root: T::DefaultMerkleRoot::get(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 payment_account,
             };

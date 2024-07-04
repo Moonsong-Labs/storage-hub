@@ -46,6 +46,11 @@ use sp_std::prelude::Vec;
 use pallet_file_system_runtime_api::{
     QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
 };
+use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor};
+use pallet_proofs_dealer_runtime_api::{
+    GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+};
+use shp_traits::TrieRemoveMutation;
 
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
@@ -527,6 +532,22 @@ impl_runtime_apis! {
 
         fn build_config(config: Vec<u8>) -> sp_genesis_builder::Result {
             build_config::<RuntimeGenesisConfig>(config)
+        }
+    }
+
+    impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, TrieRemoveMutation> for Runtime {
+        fn get_last_tick_provider_submitted_proof(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
+            ProofsDealer::get_last_tick_provider_submitted_proof(provider_id)
+        }
+
+        fn get_last_checkpoint_challenge_tick() -> BlockNumber {
+            ProofsDealer::get_last_checkpoint_challenge_tick()
+        }
+
+        fn get_checkpoint_challenges(
+            tick: BlockNumber
+        ) -> Result<Vec<(KeyFor<Runtime>, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError> {
+            ProofsDealer::get_checkpoint_challenges(tick)
         }
     }
 }

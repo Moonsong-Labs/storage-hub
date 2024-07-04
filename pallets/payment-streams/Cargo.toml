@@ -37,6 +37,7 @@ pallet-storage-providers = { workspace = true }
 # Substrate
 sp-core = { workspace = true }
 sp-io = { workspace = true }
+sp-trie = { workspace = true }
 
 # Frame
 pallet-balances = { workspace = true, features = ["std"] }
@@ -55,7 +56,11 @@ std = [
 	"frame-benchmarking?/std",
 	"frame-support/std",
 	"frame-system/std",
+	"pallet-balances/std",
+	"pallet-nfts/std",
+	"pallet-storage-providers/std",
 	"scale-info/std",
+	"shp-traits/std",
 	"sp-core/std",
 	"sp-io/std",
 	"sp-runtime/std",

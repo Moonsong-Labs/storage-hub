@@ -773,7 +773,7 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
             capacity: msp.capacity,
             data_used: msp.data_used,
             multiaddresses: msp.multiaddresses,
-            root: MerklePatriciaRoot::<T>::default(),
+            root: T::DefaultMerkleRoot::get(),
             last_capacity_change: msp.last_capacity_change,
             payment_account: msp.payment_account,
         }
@@ -842,7 +842,7 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
         );
 
         let bucket = Bucket {
-            root: MerklePatriciaRoot::<T>::default(),
+            root: T::DefaultMerkleRoot::get(),
             user_id,
             msp_id,
             private,
@@ -1046,5 +1046,9 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
             return Err(Error::<T>::NotRegistered.into());
         }
         Ok(())
+    }
+
+    fn get_default_root() -> Self::MerkleHash {
+        T::DefaultMerkleRoot::get()
     }
 }
