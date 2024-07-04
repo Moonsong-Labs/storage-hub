@@ -41,6 +41,7 @@ pallet-storage-providers = { workspace = true }
 # Substrate
 sp-io = { workspace = true }
 sp-keyring = { workspace = true }
+sp-trie = { workspace = true }
 
 # Frame
 pallet-balances = { workspace = true, features = ["std"] }

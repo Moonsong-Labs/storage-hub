@@ -1,3 +1,4 @@
+use core::marker::PhantomData;
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
     traits::{AsEnsureOriginWithArg, Everything, Hooks, Randomness},
@@ -14,7 +15,7 @@ use sp_runtime::{
     BuildStorage, DispatchError, FixedU128, MultiSignature, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
-use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieLayout};
+use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -179,6 +180,13 @@ parameter_types! {
     pub const MaxMultiAddressAmount: u32 = 5;
 }
 
+pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
+pub struct DefaultMerkleRoot<T>(PhantomData<T>);
+impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
+    fn get() -> HasherOutT<T> {
+        sp_trie::empty_trie_root::<T>()
+    }
+}
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -186,7 +194,7 @@ impl pallet_storage_providers::Config for Test {
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
-    type MerkleTrieHashing = BlakeTwo256;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = MaxMultiAddressSize;
