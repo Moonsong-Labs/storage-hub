@@ -37,7 +37,7 @@ pub mod pallet {
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
         sp_runtime::traits::{
-            AtLeast32BitUnsigned, CheckEqual, Hash, MaybeDisplay, Saturating, SimpleBitOps,
+            AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps,
         },
         traits::{fungible::*, Incrementable},
         Blake2_128Concat,
@@ -110,9 +110,6 @@ pub mod pallet {
             + MaxEncodedLen
             + FullCodec;
 
-        /// The hashing system (algorithm) being used for the Merkle Patricia Forests (e.g. Blake2).
-        type MerkleTrieHashing: Hash<Output = Self::MerklePatriciaRoot> + TypeInfo;
-
         /// The type of the identifier of the value proposition of a MSP (probably a hash of that value proposition)
         type ValuePropId: Parameter
             + Member
@@ -184,6 +181,10 @@ pub mod pallet {
         /// The minimum amount of blocks between capacity changes for a SP
         #[pallet::constant]
         type MinBlocksBetweenCapacityChanges: Get<BlockNumberFor<Self>>;
+
+        /// The default value of the root of the Merkle Patricia Trie of the runtime
+        #[pallet::constant]
+        type DefaultMerkleRoot: Get<Self::MerklePatriciaRoot>;
     }
 
     #[pallet::pallet]
@@ -547,7 +548,7 @@ pub mod pallet {
                 capacity,
                 data_used: StorageData::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
-                root: MerklePatriciaRootDefault::<T>::default(),
+                root: T::DefaultMerkleRoot::get(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 payment_account,
             };
@@ -881,7 +882,7 @@ pub mod pallet {
                 capacity,
                 data_used: StorageData::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
-                root: MerklePatriciaRootDefault::<T>::default(),
+                root: T::DefaultMerkleRoot::get(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 payment_account,
             };

@@ -19,7 +19,6 @@ use frame_support::{
     traits::{fungible::Mutate, OnPoll},
     weights::WeightMeter,
 };
-use pallet_storage_providers::types::MerklePatriciaRootDefault;
 use shp_traits::{ProofsDealerInterface, ProvidersInterface, TrieRemoveMutation};
 use sp_core::{blake2_256, Get, Hasher, H256};
 use sp_runtime::{traits::BlakeTwo256, BoundedVec, DispatchError};
@@ -291,8 +290,7 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -783,8 +781,7 @@ fn submit_proof_success() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -904,8 +901,7 @@ fn submit_proof_submitted_by_not_a_provider_success() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -995,8 +991,7 @@ fn submit_proof_with_checkpoint_challenges_success() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1104,8 +1099,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1298,8 +1292,7 @@ fn submit_proof_empty_key_proofs_fail() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1368,8 +1361,7 @@ fn submit_proof_no_record_of_last_proof_fail() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1438,8 +1430,7 @@ fn submit_proof_challenges_block_not_reached_fail() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1515,8 +1506,7 @@ fn submit_proof_challenges_block_too_old_fail() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1592,8 +1582,7 @@ fn submit_proof_seed_not_found_fail() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1672,8 +1661,7 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1757,8 +1745,7 @@ fn submit_proof_forest_proof_verification_fail() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1840,8 +1827,7 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1906,8 +1892,7 @@ fn submit_proof_out_checkpoint_challenges_fail() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -2019,8 +2004,7 @@ fn submit_proof_key_proof_verification_fail() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -2414,8 +2398,7 @@ fn new_challenges_round_provider_marked_as_slashable() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -2526,15 +2509,13 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &alice_provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
             &bob_provider_id,
             |provider| {
-                provider.as_mut().expect("Provider should exist").root =
-                    MerklePatriciaRootDefault(root);
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
