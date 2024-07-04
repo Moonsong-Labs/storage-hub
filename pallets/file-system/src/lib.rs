@@ -63,6 +63,8 @@ pub mod pallet {
         FixedPointNumber,
     };
 
+    use shp_file_key_verifier::types::ChunkId;
+
     #[pallet::config]
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
@@ -133,6 +135,18 @@ pub mod pallet {
 
         /// The type to convert a block number to a threshold.
         type BlockNumberToThresholdType: Convert<BlockNumberFor<Self>, Self::ThresholdType>;
+
+        /// The type to convert a MerkleHash to a RandomnessOutput.
+        type MerkleHashToRandomnessOutput: Convert<
+            <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash,
+            <Self::ProofDealer as shp_traits::ProofsDealerInterface>::RandomnessOutput,
+        >;
+
+        /// The type to convert a ChunkId to a MerkleHash
+        type ChunkIdToMerkleHash: Convert<
+            ChunkId,
+            <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash,
+        >;
 
         /// The currency mechanism, used for paying for reserves.
         type Currency: Currency<Self::AccountId>;

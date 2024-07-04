@@ -12,6 +12,7 @@ use sp_core::Get;
 use sp_runtime::traits::{AtLeast32BitUnsigned, Hash, Saturating};
 use sp_runtime::{BoundedVec, DispatchError};
 use sp_std::collections::btree_set::BTreeSet;
+use sp_std::vec::Vec;
 
 #[cfg(feature = "std")]
 pub trait MaybeDebug: Debug {}
@@ -267,6 +268,8 @@ pub trait ProofsDealerInterface {
         + FullCodec;
     /// The hashing system (algorithm) being used for the Merkle Patricia Forests (e.g. Blake2).
     type MerkleHashing: Hash<Output = Self::MerkleHash>;
+    /// The type that represents the randomness output.
+    type RandomnessOutput: Parameter + Member + Debug;
 
     /// Verify a proof just for the Merkle Patricia Forest, for a given Provider.
     ///
@@ -296,6 +299,13 @@ pub trait ProofsDealerInterface {
         key_challenged: &Self::MerkleHash,
         mutation: Option<TrieRemoveMutation>,
     ) -> DispatchResult;
+
+    /// Given a randomness seed, a provider id and a count, generate a list of challenges.
+    fn generate_challenges_from_seed(
+        seed: Self::RandomnessOutput,
+        provider_id: &Self::ProviderId,
+        count: u32,
+    ) -> Vec<Self::MerkleHash>;
 
     /// Apply delta (mutations) to the partial trie based on the proof and the commitment.
     ///

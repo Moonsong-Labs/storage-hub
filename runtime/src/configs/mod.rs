@@ -44,12 +44,15 @@ use frame_system::{
     pallet_prelude::BlockNumberFor,
     EnsureRoot, EnsureSigned,
 };
+use num_bigint::BigUint;
+use sp_std::vec;
 use pallet_nfts::PalletFeatures;
 use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
+use shp_file_key_verifier::types::ChunkId;
 use shp_file_key_verifier::FileKeyVerifier;
 use shp_forest_verifier::ForestVerifier;
 use shp_traits::{CommitmentVerifier, MaybeDebug};
@@ -576,6 +579,8 @@ impl pallet_file_system::Config for Runtime {
     type ThresholdType = ThresholdType;
     type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
     type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
+    type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
+    type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
@@ -622,6 +627,34 @@ pub struct BlockNumberToThresholdTypeConverter;
 impl Convert<BlockNumberFor<Runtime>, ThresholdType> for BlockNumberToThresholdTypeConverter {
     fn convert(block_number: BlockNumberFor<Runtime>) -> ThresholdType {
         FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
+    }
+}
+
+// Converter from the MerkleHash (H256) type to the RandomnessOutput (H256) type.
+pub struct MerkleHashToRandomnessOutputConverter;
+
+impl Convert<H256, H256> for MerkleHashToRandomnessOutputConverter {
+    fn convert(hash: H256) -> H256 {
+        hash
+    }
+}
+
+// Converter from the ChunkId type to the MerkleHash (H256) type.
+pub struct ChunkIdToMerkleHashConverter;
+
+impl Convert<ChunkId, H256> for ChunkIdToMerkleHashConverter {
+    fn convert(chunk_id: ChunkId) -> H256 {
+        let chunk_id_biguint = BigUint::from(chunk_id.as_u64());
+        let mut bytes = chunk_id_biguint.to_bytes_be();
+
+        // Ensure the byte slice is exactly 32 bytes long by padding with leading zeros
+        if bytes.len() < 32 {
+            let mut padded_bytes = vec![0u8; 32 - bytes.len()];
+            padded_bytes.extend(bytes);
+            bytes = padded_bytes;
+        }
+
+        H256::from_slice(&bytes)
     }
 }
 

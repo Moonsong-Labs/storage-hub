@@ -627,6 +627,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     type ProviderId = ProviderFor<T>;
     type ForestProof = ForestVerifierProofFor<T>;
     type KeyProof = KeyVerifierProofFor<T>;
+    type RandomnessOutput = RandomnessOutputFor<T>;
     type MerkleHash = T::MerkleTrieHash;
     type MerkleHashing = T::MerkleTrieHashing;
 
@@ -670,6 +671,14 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         mutation: Option<TrieRemoveMutation>,
     ) -> DispatchResult {
         Self::enqueue_challenge_with_priority(key_challenged, mutation)
+    }
+
+    fn generate_challenges_from_seed(
+        seed: Self::RandomnessOutput,
+        provider_id: &Self::ProviderId,
+        count: u32,
+    ) -> Vec<Self::MerkleHash> {
+        Self::generate_challenges_from_seed(seed, provider_id, count)
     }
 
     fn apply_delta(

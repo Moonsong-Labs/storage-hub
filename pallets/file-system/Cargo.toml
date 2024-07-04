@@ -16,6 +16,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { workspace = true }
+num-bigint = { workspace = true }
 scale-info = { workspace = true }
 
 # Substrate
@@ -31,6 +32,7 @@ sp-trie = { workspace = true }
 
 # Local
 pallet-file-system-runtime-api = { workspace = true }
+pallet-proofs-dealer = { workspace = true }
 
 shp-traits = { workspace = true }
 shp-file-key-verifier = { workspace = true }
@@ -39,7 +41,6 @@ shp-file-key-verifier = { workspace = true }
 serde = { workspace = true }
 pallet-bucket-nfts = { workspace = true }
 pallet-storage-providers = { workspace = true }
-pallet-proofs-dealer = { workspace = true }
 shp-forest-verifier = { workspace = true }
 
 # Substrate
