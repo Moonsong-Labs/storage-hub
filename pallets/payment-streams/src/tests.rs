@@ -3278,7 +3278,6 @@ mod dynamic_rate_streams {
                         current_price_index
                     )
                 );
-				
 				// Get Alice's last chargeable info
 				let alice_last_chargeable_info = PaymentStreams::get_last_chargeable_info(&alice_bsp_id);
 
