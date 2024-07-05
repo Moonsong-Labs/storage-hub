@@ -23,9 +23,11 @@ kvdb-rocksdb = { workspace = true }
 kvdb-memorydb = { workspace =  true }
 log = { workspace = true }
 reference-trie = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 trie-db = { workspace = true }
+
 
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }

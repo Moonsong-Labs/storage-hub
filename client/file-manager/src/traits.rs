@@ -25,6 +25,7 @@ pub enum FileStorageWriteError {
     FailedToReadStorage,
     /// Failed to convert raw bytes into [`Fingerprint`].
     FailedToParseFingerprint,
+    FailedToUpdatePartialRoot,
 }
 
 #[derive(Debug)]
