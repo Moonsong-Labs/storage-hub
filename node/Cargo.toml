@@ -57,6 +57,7 @@ frame-benchmarking = { workspace = true, default-features = true }
 frame-benchmarking-cli = { workspace = true }
 frame-system = { workspace = true }
 frame-support = { workspace = true }
+frame-metadata = { workspace = true, default-features = true }
 pallet-transaction-payment = { workspace = true }
 pallet-transaction-payment-rpc = { workspace = true }
 sc-basic-authorship = { workspace = true }

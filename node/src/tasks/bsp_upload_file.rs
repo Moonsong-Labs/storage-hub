@@ -362,14 +362,32 @@ where
         //     .await
         //     .expect("File is not registered. This should not happen!");
 
+        // Query runtime for the chunks to prove for the file.
+        let chunks_to_prove = self
+            .storage_hub_handler
+            .blockchain
+            .query_bsp_confirm_chunks_to_prove_for_file(
+                self.storage_hub_handler
+                    .blockchain
+                    .get_node_public_key()
+                    .await,
+                H256::from_slice(file_key.as_ref()),
+            )
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to query BSP confirm chunks to prove for file: {:?}",
+                    e
+                )
+            })?;
+
         // Get the metadata for the file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let metadata = read_file_storage
             .get_metadata(file_key)
             .expect("File metadata not found");
-        // TODO: generate the file proof for proper chunk ids/challenges.
         let added_file_key_proof = read_file_storage
-            .generate_proof(file_key, &vec![ChunkId::new(0)])
+            .generate_proof(file_key, &chunks_to_prove)
             .expect("File is not in storage, or proof does not exist.");
         // Release the file storage read lock as soon as possible.
         drop(read_file_storage);
@@ -381,8 +399,6 @@ where
             .expect("Failed to generate forest proof.");
         // Release the forest storage read lock.
         drop(read_forest_storage);
-
-        // TODO: send the proof for the new file to the runtime
 
         // Build extrinsic.
         let call = storage_hub_runtime::RuntimeCall::FileSystem(

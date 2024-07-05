@@ -18,10 +18,9 @@ pub struct InMemoryForestStorage<T: TrieLayout + 'static> {
 
 impl<T: TrieLayout> InMemoryForestStorage<T> {
     pub fn new() -> Self {
-        Self {
-            root: Default::default(),
-            memdb: MemoryDB::default(),
-        }
+        let (memdb, root) = MemoryDB::default_with_root();
+
+        Self { root, memdb }
     }
 }
 

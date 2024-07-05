@@ -26,7 +26,7 @@ describe("BSPNet: BSP Volunteer", () => {
   });
 
   after(async () => {
-    await cleardownTest(api);
+    // await cleardownTest(api);
   });
 
   it("Network launches and can be queried", async () => {
@@ -110,7 +110,7 @@ describe("BSPNet: BSP Volunteer", () => {
     strictEqual(dataBlob.peerIds[0].toHuman(), NODE_INFOS.user.expectedPeerId);
   });
 
-  it("bsp volunteers when issueStorageRequest sent", async () => {
+  it.only("bsp volunteers when issueStorageRequest sent", async () => {
     const source = "res/whatsup.jpg";
     const destination = "test/whatsup.jpg";
     const bucketName = "nothingmuch-2";
@@ -143,8 +143,8 @@ describe("BSPNet: BSP Volunteer", () => {
     );
 
     await sleep(500); // wait for the bsp to volunteer
-    const pending = await api.rpc.author.pendingExtrinsics();
-    strictEqual(pending.length, 1, "There should be one pending extrinsic from BSP");
+    const volunteer_pending = await api.rpc.author.pendingExtrinsics();
+    strictEqual(volunteer_pending.length, 1, "There should be one pending extrinsic from BSP (volunteer)");
 
     await api.sealBlock();
     const [resBspId, resBucketId, resLoc, resFinger, resMulti, _, resSize] = fetchEventData(
@@ -159,6 +159,12 @@ describe("BSPNet: BSP Volunteer", () => {
     strictEqual(resMulti.length, 1);
     strictEqual((resMulti[0].toHuman() as string).includes(NODE_INFOS.bsp.expectedPeerId), true);
     strictEqual(resSize.toBigInt(), size);
+
+    await sleep(5000); // wait for the bsp to download the file
+    const confirm_pending = await api.rpc.author.pendingExtrinsics();
+    strictEqual(confirm_pending.length, 1, "There should be one pending extrinsic from BSP (confirm store)");
+
+    await api.sealBlock();
 
     await it("downloaded file passed integrity checks", async () => {
       await checkBspForFile("test/whatsup.jpg");

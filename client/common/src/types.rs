@@ -32,6 +32,7 @@ pub type RandomSeed = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
 
 /// Proving either the exact key or the neighbour keys of the challenged key.
 pub enum Proven<K, D: Debug> {
+    Empty,
     ExactKey(Leaf<K, D>),
     NeighbourKeys((Option<Leaf<K, D>>, Option<Leaf<K, D>>)),
 }

@@ -37,6 +37,7 @@ use serde_json::Number;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::Fingerprint;
 use shp_file_key_verifier::types::FileKey;
+use sp_api::Metadata;
 use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::{Keystore, KeystorePtr};
@@ -52,7 +53,9 @@ use crate::{
     service::ParachainClient,
     services::blockchain::{events::AcceptedBspVolunteer, transaction::SubmittedTransaction},
 };
-use pallet_file_system_runtime_api::{FileSystemApi, QueryFileEarliestVolunteerBlockError};
+use pallet_file_system_runtime_api::{
+    FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
+};
 use shc_common::types::BlockNumber;
 
 use crate::services::blockchain::{
@@ -268,6 +271,53 @@ impl Actor for BlockchainService {
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryBspConfirmChunksToProveForFile {
+                    bsp_id,
+                    file_key,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let chunks_to_prove = self
+                        .client
+                        .runtime_api()
+                        .query_bsp_confirm_chunks_to_prove_for_file(
+                            current_block_hash,
+                            bsp_id.into(),
+                            file_key,
+                        )
+                        .unwrap_or_else(|_| {
+                            Err(QueryBspConfirmChunksToProveForFileError::InternalError)
+                        });
+
+                    match callback.send(chunks_to_prove) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Chunks to prove file sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::GetApiMetadata {
+                    block_hash,
+                    callback,
+                } => {
+                    let metadata = self
+                        .client
+                        .runtime_api()
+                        .metadata(block_hash)
+                        .map_err(|_| anyhow::anyhow!("Failed to get metadata"));
+
+                    match callback.send(metadata) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Metadata sent successfully");
+                        }
+                        Err(_) => {
+                            error!(target: LOG_TARGET, "Failed to send to receiver");
                         }
                     }
                 }

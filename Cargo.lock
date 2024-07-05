@@ -3460,6 +3460,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "frame-metadata"
+version = "16.0.0"
+source = "git+https://github.com/paritytech/frame-metadata.git#94e7743fa454963609763cf9cccbb7f85bc96d2f"
+dependencies = [
+ "cfg-if",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+]
+
+[[package]]
 name = "frame-remote-externalities"
 version = "0.35.0"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0#3c3d6fceb82372a3019b37117aa453d564b212de"
@@ -3491,7 +3502,7 @@ dependencies = [
  "bitflags 1.3.2",
  "docify",
  "environmental",
- "frame-metadata",
+ "frame-metadata 16.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "frame-support-procedural 23.0.0",
  "impl-trait-for-tuples",
  "k256",
@@ -3533,7 +3544,7 @@ dependencies = [
  "bitflags 1.3.2",
  "docify",
  "environmental",
- "frame-metadata",
+ "frame-metadata 16.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "frame-support-procedural 24.0.0",
  "impl-trait-for-tuples",
  "k256",
@@ -13652,7 +13663,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa0b5e87e56c1bb26d9524d48dd127121d630f895bd5914a34f0b017489f7c1d"
 dependencies = [
- "frame-metadata",
+ "frame-metadata 16.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "parity-scale-codec",
  "scale-info",
  "sp-std 14.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -13663,7 +13674,7 @@ name = "sp-metadata-ir"
 version = "0.6.0"
 source = "git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0#3c3d6fceb82372a3019b37117aa453d564b212de"
 dependencies = [
- "frame-metadata",
+ "frame-metadata 16.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "parity-scale-codec",
  "scale-info",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
@@ -14644,6 +14655,7 @@ dependencies = [
  "cumulus-relay-chain-interface",
  "frame-benchmarking 28.0.0",
  "frame-benchmarking-cli",
+ "frame-metadata 16.0.0 (git+https://github.com/paritytech/frame-metadata.git)",
  "frame-support 28.0.0",
  "frame-system 28.0.0",
  "futures",
