@@ -27,9 +27,9 @@ use crate::{
     types::{
         AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor,
         ChallengeTicksToleranceFor, ChallengesFeeFor, ChallengesQueueLengthFor,
-        CheckpointChallengePeriodFor, ForestRootFor, ForestVerifierFor, ForestVerifierProofFor,
-        KeyFor, KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor, Proof,
-        ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor, RandomnessOutputFor,
+        CheckpointChallengePeriodFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor,
+        KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor, Proof, ProviderIdFor,
+        ProvidersPalletFor, RandomChallengesPerBlockFor, RandomnessOutputFor,
         RandomnessProviderFor, StakeToChallengePeriodFor, TreasuryAccountFor,
     },
     ChallengeTickToChallengedProviders, ChallengesQueue, ChallengesTicker, Error, Event,
@@ -131,10 +131,13 @@ where
         let root = ProvidersPalletFor::<T>::get_root(*submitter)
             .ok_or(Error::<T>::ProviderRootNotFound)?;
 
-        // Check if root is non-zero.
-        // A zero root means that the Provider is not providing any service yet, so he shouldn't be
+        // Check that the root is not the default root.
+        // A default root means that the Provider is not providing any service yet, so he shouldn't be
         // submitting any proofs.
-        ensure!(root == Self::default_forest_root(), Error::<T>::ZeroRoot);
+        ensure!(
+            root != ProvidersPalletFor::<T>::get_default_root(),
+            Error::<T>::ZeroRoot
+        );
 
         // Get last tick for which the submitter submitted a proof.
         let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(submitter.clone())
@@ -617,12 +620,6 @@ where
         }
 
         challenges
-    }
-
-    /// Returns the default forest root.
-    fn default_forest_root() -> ForestRootFor<T> {
-        // TODO: Check that this returns the root for an empty forest and change if necessary.
-        ForestRootFor::<T>::default()
     }
 }
 

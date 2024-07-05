@@ -26,6 +26,7 @@
 mod xcm_config;
 
 // Substrate and Polkadot dependencies
+use core::marker::PhantomData;
 use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
 use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
 use frame_support::{
@@ -60,8 +61,7 @@ use sp_runtime::{
     AccountId32, DispatchError, FixedPointNumber, FixedU128, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
-use sp_trie::CompactProof;
-use sp_trie::LayoutV1;
+use sp_trie::{CompactProof, LayoutV1, TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
 
@@ -439,12 +439,20 @@ impl pallet_randomness::Config for Runtime {
     type WeightInfo = ();
 }
 
+pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
+pub struct DefaultMerkleRoot<T>(PhantomData<T>);
+impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
+    fn get() -> HasherOutT<T> {
+        sp_trie::empty_trie_root::<T>()
+    }
+}
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = ConstU32<100>;

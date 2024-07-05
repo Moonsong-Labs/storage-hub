@@ -1,19 +1,23 @@
 use crate as pallet_payment_streams;
+use core::marker::PhantomData;
 use frame_support::{
-    construct_runtime, derive_impl, parameter_types,
+    construct_runtime, derive_impl,
+    pallet_prelude::Get,
+    parameter_types,
     traits::{AsEnsureOriginWithArg, Everything, Randomness},
     weights::constants::RocksDbWeight,
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
 use shp_traits::SubscribeProvidersInterface;
-use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256};
+use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::traits::Convert;
 use sp_runtime::{
     testing::TestSignature,
     traits::{BlakeTwo256, IdentityLookup},
     BuildStorage, DispatchResult,
 };
+use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -111,6 +115,13 @@ impl pallet_balances::Config for Test {
 parameter_types! {
     pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::StorageProviders(pallet_storage_providers::HoldReason::StorageProviderDeposit);
 }
+pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
+pub struct DefaultMerkleRoot<T>(PhantomData<T>);
+impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
+    fn get() -> HasherOutT<T> {
+        sp_trie::empty_trie_root::<T>()
+    }
+}
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -118,6 +129,7 @@ impl pallet_storage_providers::Config for Test {
     type StorageData = StorageUnit;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = ConstU32<100>;
