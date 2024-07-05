@@ -353,6 +353,13 @@ pub mod pallet {
             owner: T::AccountId,
             location: FileLocation<T>,
         },
+        /// Notifies that a BSP's challenge cycle has been initialised, adding the first file
+        /// key to the BSP's Merkle Patricia Forest.
+        BspChallengeCycleInitialised {
+            who: T::AccountId,
+            bsp_id: ProviderIdFor<T>,
+            file_key: MerkleHash<T>,
+        },
     }
 
     // Errors inform users that something went wrong.

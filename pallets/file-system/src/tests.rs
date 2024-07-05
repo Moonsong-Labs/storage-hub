@@ -1359,7 +1359,7 @@ fn bsp_confirm_storing_success() {
 
         let bsp_id =
             <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
-                bsp_account_id,
+                bsp_account_id.clone(),
             )
             .unwrap();
 
@@ -1440,6 +1440,13 @@ fn bsp_confirm_storing_success() {
         let last_tick_provider_submitted_proof =
             LastTickProviderSubmittedProofFor::<Test>::get(&bsp_id).unwrap();
         assert_eq!(last_tick_provider_submitted_proof, tick_when_confirming);
+
+        // Assert that the correct event was deposited.
+        System::assert_has_event(Event::BspChallengeCycleInitialised {
+            who: bsp_account_id,
+            bsp_id,
+            file_key,
+        }.into());
     });
 }
 

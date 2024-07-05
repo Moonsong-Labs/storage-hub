@@ -26,7 +26,7 @@ use crate::{
         PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
         TargetBspsRequired,
     },
-    BspsAssignmentThreshold, Error, NextAvailableExpirationInsertionBlock, Pallet,
+    BspsAssignmentThreshold, Error, Event, NextAvailableExpirationInsertionBlock, Pallet,
     StorageRequestBsps, StorageRequestExpirations, StorageRequests,
 };
 
@@ -559,6 +559,13 @@ where
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::initialise_challenge_cycle(
                 &bsp_id,
             )?;
+
+            // Emit the corresponding event.
+            Self::deposit_event(Event::<T>::BspChallengeCycleInitialised {
+                who: sender,
+                bsp_id,
+                file_key,
+            });
         }
 
         // Compute new root after inserting new file key in forest partial trie.
