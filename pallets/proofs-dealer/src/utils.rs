@@ -686,23 +686,25 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         )
     }
 
-    fn initialise_challenge_cycle(who: &Self::ProviderId) -> DispatchResult {
+    fn initialise_challenge_cycle(provider_id: &Self::ProviderId) -> DispatchResult {
         // Check that `who` is a registered Provider.
-        if !ProvidersPalletFor::<T>::is_provider(who.clone()) {
+        if !ProvidersPalletFor::<T>::is_provider(provider_id.clone()) {
             return Err(Error::<T>::NotProvider.into());
         }
 
         // Get stake for submitter.
         // If a submitter is a registered Provider, it must have a stake, so this shouldn't happen.
         // However, since the implementation of that is not up to this pallet, we need to check.
-        let stake = ProvidersPalletFor::<T>::get_stake(who.clone())
+        let stake = ProvidersPalletFor::<T>::get_stake(provider_id.clone())
             .ok_or(Error::<T>::ProviderStakeNotFound)?;
 
         // Check that the stake is non-zero.
         ensure!(stake > BalanceFor::<T>::zero(), Error::<T>::ZeroStake);
 
         // Check if this Provider previously had a challenge cycle initialised.
-        if let Some(last_tick_proven) = LastTickProviderSubmittedProofFor::<T>::get(who.clone()) {
+        if let Some(last_tick_proven) =
+            LastTickProviderSubmittedProofFor::<T>::get(provider_id.clone())
+        {
             // Compute the next tick for which the Provider should have been submitting a proof.
             let old_next_challenge_tick = last_tick_proven
                 .checked_add(&Self::stake_to_challenge_period(stake))
@@ -716,13 +718,13 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             // Remove the old deadline.
             ChallengeTickToChallengedProviders::<T>::remove(
                 old_next_challenge_deadline,
-                who.clone(),
+                provider_id.clone(),
             );
         }
 
         // Set `LastTickProviderSubmittedProofFor` to the current tick.
         let current_tick = ChallengesTicker::<T>::get();
-        LastTickProviderSubmittedProofFor::<T>::set(who.clone(), Some(current_tick));
+        LastTickProviderSubmittedProofFor::<T>::set(provider_id.clone(), Some(current_tick));
 
         // Compute the next tick for which the Provider should be submitting a proof.
         let next_challenge_tick = current_tick
@@ -737,13 +739,13 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         // Set the deadline for submitting a proof.
         ChallengeTickToChallengedProviders::<T>::set(
             next_challenge_deadline,
-            who.clone(),
+            provider_id.clone(),
             Some(()),
         );
 
         // Emit event.
         Self::deposit_event(Event::<T>::NewChallengeCycleInitialised {
-            provider: who.clone(),
+            provider: provider_id.clone(),
             current_tick,
         });
 
