@@ -73,9 +73,13 @@ pub struct FileProof {
 
 impl FileProof {
     pub fn to_file_key_proof(&self, file_metadata: FileMetadata) -> FileKeyProof {
-        FileKeyProof {
-            proof: self.proof.clone(),
-            file_metadata,
-        }
+        FileKeyProof::new(
+            file_metadata.owner.clone(),
+            file_metadata.bucket_id.clone(),
+            file_metadata.location.clone(),
+            file_metadata.size.clone(),
+            file_metadata.fingerprint.clone(),
+            self.proof.clone(),
+        )
     }
 }
