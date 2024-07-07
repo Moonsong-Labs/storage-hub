@@ -25,7 +25,10 @@ pub enum FileStorageWriteError {
     FailedToReadStorage,
     /// Failed to convert raw bytes into [`Fingerprint`].
     FailedToParseFingerprint,
+    /// Failed to update root after a chunk was written.
     FailedToUpdatePartialRoot,
+    /// Failed to convert raw bytes into partial root.
+    FailedToParsePartialRoot,
 }
 
 #[derive(Debug)]
@@ -62,6 +65,10 @@ pub enum FileStorageError {
     FailedToParseFingerprint,
     /// Failed to delete chunk from storage.
     FailedToDeleteFileChunk,
+    /// Failed to convert raw bytes into partial root.
+    FailedToParsePartialRoot,
+    /// Failed to convert raw bytes into [`HasherOutT`]
+    FailedToHasherOutput,
 }
 
 #[derive(Debug)]

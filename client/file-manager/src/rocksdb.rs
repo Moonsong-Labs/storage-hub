@@ -94,13 +94,14 @@ fn convert_raw_bytes_to_hasher_out<T: TrieLayout>(key: Vec<u8>) -> Result<Hasher
 where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
-    let key: [u8; 32] = key
-        .try_into()
-        .map_err(|_| FileStorageError::FailedToParseKey)?;
+    let key: [u8; 32] = key.try_into().map_err(|e| {
+        error!(target: LOG_TARGET, "{:?}", e);
+        FileStorageError::FailedToHasherOutput
+    })?;
 
     let key = HasherOutT::<T>::try_from(key).map_err(|_| {
-        warn!(target: LOG_TARGET, "Failed to parse root from DB");
-        FileStorageError::FailedToParseKey
+        error!(target: LOG_TARGET, "Failed to parse hasher output from DB");
+        FileStorageError::FailedToHasherOutput
     })?;
 
     Ok(key)
@@ -133,13 +134,11 @@ where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn new(storage: StorageDb<T>) -> Self {
-        // let (overlay, mut root) = PrefixedMemoryDB::<HashT<T>>::default_with_root();
-
-        let mut root = HasherOutT::<T>::default();
+        let (overlay, mut root) = PrefixedMemoryDB::<HashT<T>>::default_with_root();
         let mut rocksdb_file_data_trie = RocksDbFileDataTrie::<T> {
             storage,
             root,
-            overlay: Default::default(),
+            overlay,
         };
         let db = rocksdb_file_data_trie.as_hash_db_mut();
         let trie = TrieDBMutBuilder::<T>::new(db, &mut root).build();
@@ -182,6 +181,7 @@ where
 
         // Aggregate changes from the overlay
         let transaction = self.changes();
+        // transaction.put(1, self.fingerprint, new_root);
 
         // Write the changes to storage
         self.storage.write(transaction)?;
@@ -475,20 +475,28 @@ where
         let raw_metadata = self
             .storage
             .read(0, *key)
-            .map_err(|_| FileStorageError::FailedToReadStorage)?
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?
             .expect("Failed to find File Metadata");
 
-        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata)
-            .map_err(|_| FileStorageError::FailedToParseFileMetadata)?;
+        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).map_err(|e| {
+            error!(target: LOG_TARGET,"{:?}", e);
+            FileStorageError::FailedToParseFileMetadata
+        })?;
         let raw_final_root = metadata.fingerprint.as_ref();
-        let final_root = convert_raw_bytes_to_hasher_out::<T>(raw_final_root.to_vec())
-            .map_err(|_| FileStorageError::FailedToParseFingerprint)?;
+        let final_root =
+            convert_raw_bytes_to_hasher_out::<T>(raw_final_root.to_vec()).map_err(|e| {
+                error!(target: LOG_TARGET,"{:?}", e);
+                FileStorageError::FailedToParseFingerprint
+            })?;
 
         let raw_partial_root = self
             .storage
             .read(1, final_root)
             .map_err(|e| {
-                error!(target: LOG_TARGET, "{}", e);
+                error!(target: LOG_TARGET, "{:?}", e);
                 dbg!(e);
                 FileStorageError::FailedToReadStorage
             })?
@@ -496,8 +504,8 @@ where
 
         let mut partial_root =
             convert_raw_bytes_to_hasher_out::<T>(raw_partial_root).map_err(|e| {
-                error!(target: LOG_TARGET, "{}", e);
-                FileStorageError::FailedToParseFingerprint
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToParsePartialRoot
             })?;
 
         let file_trie =
@@ -516,20 +524,20 @@ where
             .storage
             .read(0, *key)
             .map_err(|e| {
-                error!(target: LOG_TARGET, "{}", e);
+                error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageWriteError::FailedToReadStorage
             })?
             .expect("Failed to find File Metadata");
 
         let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).map_err(|e| {
-            error!(target: LOG_TARGET, "{}", e);
+            error!(target: LOG_TARGET, "{:?}", e);
             FileStorageWriteError::FailedToParseFileMetadata
         })?;
 
         let raw_final_root = metadata.fingerprint.as_ref();
         let final_root =
             convert_raw_bytes_to_hasher_out::<T>(raw_final_root.to_vec()).map_err(|e| {
-                error!(target: LOG_TARGET, "{}", e);
+                error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageWriteError::FailedToParseFingerprint
             })?;
 
@@ -537,7 +545,7 @@ where
             .storage
             .read(1, final_root)
             .map_err(|e| {
-                error!(target: LOG_TARGET, "{}", e);
+                error!(target: LOG_TARGET, "{:?}", e);
                 dbg!(e);
 
                 FileStorageWriteError::FailedToReadStorage
@@ -545,9 +553,8 @@ where
             .expect("Failed to find partial root");
         let mut partial_root =
             convert_raw_bytes_to_hasher_out::<T>(raw_partial_root).map_err(|e| {
-                error!(target: LOG_TARGET, "{}", e);
-                // TODO: create proper error.
-                FileStorageWriteError::FailedToParseFingerprint
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageWriteError::FailedToParsePartialRoot
             })?;
 
         let mut file_trie =
@@ -561,14 +568,16 @@ where
         let new_partial_root = file_trie.get_root();
         let mut transaction = DBTransaction::new();
         transaction.put(1, raw_final_root, new_partial_root.as_ref());
-        self.storage
-            .write(transaction)
-            .map_err(|_| FileStorageWriteError::FailedToUpdatePartialRoot)?;
+        self.storage.write(transaction).map_err(|e| {
+            error!(target: LOG_TARGET,"{:?}", e);
+            FileStorageWriteError::FailedToUpdatePartialRoot
+        })?;
 
         // Check if we have all the chunks for the file.
-        let stored_chunks = file_trie
-            .stored_chunks_count()
-            .map_err(|_| FileStorageWriteError::FailedToConstructTrieIter)?;
+        let stored_chunks = file_trie.stored_chunks_count().map_err(|e| {
+            error!(target: LOG_TARGET,"{:?}", e);
+            FileStorageWriteError::FailedToConstructTrieIter
+        })?;
         if metadata.chunks_count() != stored_chunks {
             return Ok(FileStorageWriteOutcome::FileIncomplete);
         }
@@ -576,42 +585,59 @@ where
         Ok(FileStorageWriteOutcome::FileComplete)
     }
 
+    /// Stores file metadata and an empty root.
+    /// Should only be used if no chunks have beeen written yet.
+    /// Otherwise use [`Self::insert_file_with_data`]
     fn insert_file(
         &mut self,
         key: HasherOutT<T>,
         metadata: FileMetadata,
     ) -> Result<(), FileStorageError> {
         let mut transaction = DBTransaction::new();
-        let serialized_metadata = serde_json::to_vec(&metadata)
-            .map_err(|_| FileStorageError::FailedToParseFileMetadata)?;
+        let serialized_metadata = serde_json::to_vec(&metadata).map_err(|e| {
+            error!(target: LOG_TARGET,"{:?}", e);
+            FileStorageError::FailedToParseFileMetadata
+        })?;
 
         let (_, empty_root) = PrefixedMemoryDB::<HashT<T>>::default_with_root();
-
         transaction.put(0, key.as_ref(), &serialized_metadata);
+        // Stores an empty root to allow for later initialization of the trie.
         transaction.put(1, metadata.fingerprint.as_ref(), empty_root.as_ref());
-
-        self.storage
-            .write(transaction)
-            .map_err(|_| FileStorageError::FailedToWriteToStorage)?;
+        self.storage.write(transaction).map_err(|e| {
+            error!(target: LOG_TARGET,"{:?}", e);
+            FileStorageError::FailedToWriteToStorage
+        })?;
 
         Ok(())
     }
 
+    /// Stores file information with its (partial or final) root.
+    /// Should be used if any (or all) chunks have been written.
+    /// Otherwise use [`Self::insert_file`]
     fn insert_file_with_data(
         &mut self,
         key: HasherOutT<T>,
         metadata: FileMetadata,
-        _file_data: Self::FileDataTrie,
+        file_data: Self::FileDataTrie,
     ) -> Result<(), FileStorageError> {
+        let raw_metadata = serde_json::to_vec(&metadata).map_err(|e| {
+            error!(target: LOG_TARGET,"{:?}", e);
+            FileStorageError::FailedToParseFileMetadata
+        })?;
+
         let mut transaction = DBTransaction::new();
-        let raw_metadata = serde_json::to_vec(&metadata)
-            .map_err(|_| FileStorageError::FailedToParseFileMetadata)?;
-
         transaction.put(0, key.as_ref(), &raw_metadata);
-
-        self.storage
-            .write(transaction)
-            .map_err(|_| FileStorageError::FailedToWriteToStorage)?;
+        // Stores the current root of the trie.
+        // if the file is complete, key and value will be equal.
+        transaction.put(
+            1,
+            metadata.fingerprint.as_ref(),
+            file_data.get_root().as_ref(),
+        );
+        self.storage.write(transaction).map_err(|e| {
+            error!(target: LOG_TARGET,"{:?}", e);
+            FileStorageError::FailedToWriteToStorage
+        })?;
 
         Ok(())
     }
@@ -620,11 +646,16 @@ where
         let raw_metadata = self
             .storage
             .read(0, *key)
-            .map_err(|_| FileStorageError::FailedToReadStorage)?
+            .map_err(|e| {
+                error!(target: LOG_TARGET,"{:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?
             .expect("Failed to find File Metadata");
 
-        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata)
-            .map_err(|_| FileStorageError::FailedToParseFileMetadata)?;
+        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).map_err(|e| {
+            error!(target: LOG_TARGET,"{:?}", e);
+            FileStorageError::FailedToParseFileMetadata
+        })?;
 
         Ok(metadata)
     }
@@ -637,15 +668,39 @@ where
         let raw_metadata = self
             .storage
             .read(0, *key)
-            .map_err(|_| FileStorageError::FailedToReadStorage)?
+            .map_err(|e| {
+                error!(target: LOG_TARGET,"{:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?
             .expect("Failed to find File Metadata");
-        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata)
-            .map_err(|_| FileStorageError::FailedToParseFileMetadata)?;
-        let raw_root = metadata.fingerprint.as_ref();
-        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec())
-            .map_err(|_| FileStorageError::FailedToParseFingerprint)?;
+        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).map_err(|e| {
+            error!(target: LOG_TARGET,"{:?}", e);
+            FileStorageError::FailedToParseFileMetadata
+        })?;
+        let raw_final_root = metadata.fingerprint.as_ref();
+        let final_root =
+            convert_raw_bytes_to_hasher_out::<T>(raw_final_root.to_vec()).map_err(|e| {
+                error!(target: LOG_TARGET,"{:?}", e);
+                FileStorageError::FailedToParseFingerprint
+            })?;
+        let raw_partial_root = self
+            .storage
+            .read(1, final_root)
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                dbg!(e);
 
-        let file_trie = RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
+                FileStorageError::FailedToReadStorage
+            })?
+            .expect("Failed to find partial root");
+        let mut partial_root =
+            convert_raw_bytes_to_hasher_out::<T>(raw_partial_root).map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToParsePartialRoot
+            })?;
+
+        let file_trie =
+            RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut partial_root);
 
         Ok(file_trie
             .generate_proof(chunk_ids)?
@@ -656,31 +711,39 @@ where
         let raw_metadata = self
             .storage
             .read(0, *key)
-            .map_err(|_| FileStorageError::FailedToReadStorage)?
+            .map_err(|e| {
+                error!(target: LOG_TARGET,"{:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?
             .expect("Failed to find File Metadata");
-        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata)
-            .map_err(|_| FileStorageError::FailedToParseFileMetadata)?;
+        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).map_err(|e| {
+            error!(target: LOG_TARGET,"{:?}", e);
+            FileStorageError::FailedToParseFileMetadata
+        })?;
         let raw_root = metadata.fingerprint.as_ref();
-        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec())
-            .map_err(|_| FileStorageError::FailedToParseFingerprint)?;
+        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).map_err(|e| {
+            error!(target: LOG_TARGET,"{:?}", e);
+            FileStorageError::FailedToParseFingerprint
+        })?;
 
         let mut file_trie =
             RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
 
         let chunk_count = metadata.chunks_count();
 
-        file_trie
-            .delete(chunk_count)
-            .map_err(|_| FileStorageError::FailedToDeleteFileChunk)?;
+        file_trie.delete(chunk_count).map_err(|e| {
+            error!(target: LOG_TARGET,"{:?}", e);
+            FileStorageError::FailedToDeleteFileChunk
+        })?;
 
         let mut transaction = DBTransaction::new();
-
         transaction.delete(0, key.as_ref());
         transaction.delete(1, raw_root);
 
-        self.storage
-            .write(transaction)
-            .map_err(|_| FileStorageError::FailedToWriteToStorage)?;
+        self.storage.write(transaction).map_err(|e| {
+            error!(target: LOG_TARGET,"{:?}", e);
+            FileStorageError::FailedToWriteToStorage
+        })?;
 
         Ok(())
     }
@@ -946,7 +1009,9 @@ mod tests {
 
         let key = file_metadata.file_key::<BlakeTwo256>();
         let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new(storage);
-        file_storage.insert_file(key, file_metadata).unwrap();
+        file_storage
+            .insert_file_with_data(key, file_metadata, file_trie)
+            .unwrap();
 
         assert!(file_storage.get_metadata(&key).is_ok());
         assert!(file_storage.get_chunk(&key, &chunk_ids[0]).is_ok());

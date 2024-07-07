@@ -184,7 +184,8 @@ where
                 | FileStorageWriteError::FailedToParseFileMetadata
                 | FileStorageWriteError::FailedToParseFingerprint
                 | FileStorageWriteError::FailedToReadStorage
-                | FileStorageWriteError::FailedToUpdatePartialRoot => {
+                | FileStorageWriteError::FailedToUpdatePartialRoot
+                | FileStorageWriteError::FailedToParsePartialRoot => {
                     // This internal error should not happen.
 
                     // Unvolunteer the file.
