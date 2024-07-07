@@ -19,6 +19,10 @@ use crate::{
     LOG_TARGET,
 };
 
+const METADATA_COLUMN: u32 = 0;
+const ROOTS_COLUMN: u32 = 1;
+const CHUNKS_COLUMN: u32 = 2;
+
 pub(crate) fn other_io_error(err: String) -> io::Error {
     io::Error::new(io::ErrorKind::Other, err)
 }
@@ -29,7 +33,7 @@ fn open_or_creating_rocksdb(db_path: String) -> io::Result<Database> {
     let root = PathBuf::from("/tmp/");
     let path = root.join("storagehub/file_storage/").join(db_path);
 
-    let db_config = DatabaseConfig::with_columns(2);
+    let db_config = DatabaseConfig::with_columns(3);
 
     let path_str = path
         .to_str()
@@ -83,7 +87,7 @@ impl<T> Clone for StorageDb<T> {
 impl<T: TrieLayout + Send + Sync> Storage<HashT<T>> for StorageDb<T> {
     fn get(&self, key: &HasherOutT<T>, prefix: Prefix) -> Result<Option<DBValue>, String> {
         let prefixed_key = prefixed_key::<HashT<T>>(key, prefix);
-        self.db.get(0, &prefixed_key).map_err(|e| {
+        self.db.get(CHUNKS_COLUMN, &prefixed_key).map_err(|e| {
             warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
             format!("Failed to read from DB: {}", e)
         })
@@ -181,7 +185,6 @@ where
 
         // Aggregate changes from the overlay
         let transaction = self.changes();
-        // transaction.put(1, self.fingerprint, new_root);
 
         // Write the changes to storage
         self.storage.write(transaction)?;
@@ -199,9 +202,9 @@ where
 
         for (key, (value, rc)) in self.overlay.drain() {
             if rc <= 0 {
-                transaction.delete(0, &key);
+                transaction.delete(CHUNKS_COLUMN, &key);
             } else {
-                transaction.put_vec(0, &key, value);
+                transaction.put_vec(CHUNKS_COLUMN, &key, value);
             }
         }
 
@@ -474,7 +477,7 @@ where
     ) -> Result<Chunk, FileStorageError> {
         let raw_metadata = self
             .storage
-            .read(0, *key)
+            .read(METADATA_COLUMN, *key)
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToReadStorage
@@ -494,7 +497,7 @@ where
 
         let raw_partial_root = self
             .storage
-            .read(1, final_root)
+            .read(ROOTS_COLUMN, final_root)
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 dbg!(e);
@@ -522,7 +525,7 @@ where
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
         let raw_metadata = self
             .storage
-            .read(0, *key)
+            .read(METADATA_COLUMN, *key)
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageWriteError::FailedToReadStorage
@@ -543,7 +546,7 @@ where
 
         let raw_partial_root = self
             .storage
-            .read(1, final_root)
+            .read(ROOTS_COLUMN, final_root)
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 dbg!(e);
@@ -567,7 +570,7 @@ where
         // Update partial root.
         let new_partial_root = file_trie.get_root();
         let mut transaction = DBTransaction::new();
-        transaction.put(1, raw_final_root, new_partial_root.as_ref());
+        transaction.put(ROOTS_COLUMN, raw_final_root, new_partial_root.as_ref());
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
             FileStorageWriteError::FailedToUpdatePartialRoot
@@ -600,9 +603,13 @@ where
         })?;
 
         let (_, empty_root) = PrefixedMemoryDB::<HashT<T>>::default_with_root();
-        transaction.put(0, key.as_ref(), &serialized_metadata);
+        transaction.put(METADATA_COLUMN, key.as_ref(), &serialized_metadata);
         // Stores an empty root to allow for later initialization of the trie.
-        transaction.put(1, metadata.fingerprint.as_ref(), empty_root.as_ref());
+        transaction.put(
+            ROOTS_COLUMN,
+            metadata.fingerprint.as_ref(),
+            empty_root.as_ref(),
+        );
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
             FileStorageError::FailedToWriteToStorage
@@ -626,7 +633,7 @@ where
         })?;
 
         let mut transaction = DBTransaction::new();
-        transaction.put(0, key.as_ref(), &raw_metadata);
+        transaction.put(METADATA_COLUMN, key.as_ref(), &raw_metadata);
         // Stores the current root of the trie.
         // if the file is complete, key and value will be equal.
         transaction.put(
@@ -645,7 +652,7 @@ where
     fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError> {
         let raw_metadata = self
             .storage
-            .read(0, *key)
+            .read(METADATA_COLUMN, *key)
             .map_err(|e| {
                 error!(target: LOG_TARGET,"{:?}", e);
                 FileStorageError::FailedToReadStorage
@@ -667,7 +674,7 @@ where
     ) -> Result<FileKeyProof, FileStorageError> {
         let raw_metadata = self
             .storage
-            .read(0, *key)
+            .read(METADATA_COLUMN, *key)
             .map_err(|e| {
                 error!(target: LOG_TARGET,"{:?}", e);
                 FileStorageError::FailedToReadStorage
@@ -685,7 +692,7 @@ where
             })?;
         let raw_partial_root = self
             .storage
-            .read(1, final_root)
+            .read(ROOTS_COLUMN, final_root)
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 dbg!(e);
@@ -710,7 +717,7 @@ where
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError> {
         let raw_metadata = self
             .storage
-            .read(0, *key)
+            .read(METADATA_COLUMN, *key)
             .map_err(|e| {
                 error!(target: LOG_TARGET,"{:?}", e);
                 FileStorageError::FailedToReadStorage
@@ -737,8 +744,8 @@ where
         })?;
 
         let mut transaction = DBTransaction::new();
-        transaction.delete(0, key.as_ref());
-        transaction.delete(1, raw_root);
+        transaction.delete(METADATA_COLUMN, key.as_ref());
+        transaction.delete(ROOTS_COLUMN, raw_root);
 
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -761,7 +768,7 @@ mod tests {
     #[test]
     fn file_trie_create_empty_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(2)),
+            db: Arc::new(kvdb_memorydb::create(3)),
             _marker: Default::default(),
         };
 
@@ -784,7 +791,7 @@ mod tests {
     #[test]
     fn file_trie_write_chunk_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(2)),
+            db: Arc::new(kvdb_memorydb::create(3)),
             _marker: Default::default(),
         };
 
@@ -803,7 +810,7 @@ mod tests {
     #[test]
     fn file_trie_get_chunk_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(2)),
+            db: Arc::new(kvdb_memorydb::create(3)),
             _marker: Default::default(),
         };
 
@@ -819,7 +826,7 @@ mod tests {
     #[test]
     fn file_trie_stored_chunks_count_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(2)),
+            db: Arc::new(kvdb_memorydb::create(3)),
             _marker: Default::default(),
         };
 
@@ -839,7 +846,7 @@ mod tests {
     #[test]
     fn file_trie_generate_proof_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(2)),
+            db: Arc::new(kvdb_memorydb::create(3)),
             _marker: Default::default(),
         };
 
@@ -876,7 +883,7 @@ mod tests {
     #[test]
     fn file_trie_delete_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(2)),
+            db: Arc::new(kvdb_memorydb::create(3)),
             _marker: Default::default(),
         };
 
@@ -913,7 +920,7 @@ mod tests {
     #[test]
     fn file_storage_write_chunk_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(2)),
+            db: Arc::new(kvdb_memorydb::create(3)),
             _marker: Default::default(),
         };
 
@@ -969,7 +976,7 @@ mod tests {
     #[test]
     fn file_storage_insert_file_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(2)),
+            db: Arc::new(kvdb_memorydb::create(3)),
             _marker: Default::default(),
         };
 
@@ -1023,7 +1030,7 @@ mod tests {
     #[should_panic(expected = "Failed to find File Metadata")]
     fn file_storage_delete_file_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(2)),
+            db: Arc::new(kvdb_memorydb::create(3)),
             _marker: Default::default(),
         };
 
@@ -1079,7 +1086,7 @@ mod tests {
     #[test]
     fn file_storage_generate_proof_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(2)),
+            db: Arc::new(kvdb_memorydb::create(3)),
             _marker: Default::default(),
         };
 
