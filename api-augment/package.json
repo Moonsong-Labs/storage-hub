@@ -6,7 +6,6 @@
     "scrape": "pnpm tsx scripts/scrapeMetadata.ts",
     "fmt": "biome format .",
     "fmt:fix": "biome format . --write",
-    "lint": "biome lint .",
     "tsc": "tsc --noEmit --pretty",
     "build": "tsc -b --verbose",
     "generate:all": "pnpm generate:defs && pnpm generate:meta",
