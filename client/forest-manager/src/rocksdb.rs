@@ -152,9 +152,9 @@ where
         Ok(rocksdb_forest_storage)
     }
 
-    /// Open the RocksDB database at `dp_path` and return a new instance of [`StorageDb`].
-    pub fn rocksdb_storage(dp_path: String) -> Result<StorageDb<T>, ErrorT<T>> {
-        let db = open_or_creating_rocksdb(dp_path).map_err(|e| {
+    /// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
+    pub fn rocksdb_storage(db_path: String) -> Result<StorageDb<T>, ErrorT<T>> {
+        let db = open_or_creating_rocksdb(db_path).map_err(|e| {
             warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
             ForestStorageError::FailedToReadStorage
         })?;

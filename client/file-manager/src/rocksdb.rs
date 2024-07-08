@@ -193,9 +193,9 @@ where
         transaction
     }
 
-    /// Open the RocksDB database at `dp_path` and return a new instance of [`StorageDb`].
-    pub fn rocksdb_storage(dp_path: String) -> Result<StorageDb<T>, ErrorT<T>> {
-        let db = open_or_creating_rocksdb(dp_path).map_err(|e| {
+    /// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
+    pub fn rocksdb_storage(db_path: String) -> Result<StorageDb<T>, ErrorT<T>> {
+        let db = open_or_creating_rocksdb(db_path).map_err(|e| {
             warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
             FileStorageError::FailedToReadStorage
         })?;
@@ -296,7 +296,7 @@ where
 
         // Check that we don't have a chunk already stored.
         if trie.contains(&chunk_id.as_trie_key()).map_err(|e| {
-            error!(target: LOG_TARGET, "THE PROBLEM IS HERE: {}", e);
+            error!(target: LOG_TARGET, "Failed to fetch chunk: {}", e);
             FileStorageWriteError::FailedToGetFileChunk
         })? {
             return Err(FileStorageWriteError::FileChunkAlreadyExists);
@@ -420,9 +420,9 @@ where
         Self { storage }
     }
 
-    /// Open the RocksDB database at `dp_path` and return a new instance of [`StorageDb`].
-    pub fn rocksdb_storage(dp_path: String) -> Result<StorageDb<T>, ErrorT<T>> {
-        let db = open_or_creating_rocksdb(dp_path).map_err(|e| {
+    /// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
+    pub fn rocksdb_storage(db_path: String) -> Result<StorageDb<T>, ErrorT<T>> {
+        let db = open_or_creating_rocksdb(db_path).map_err(|e| {
             warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
             FileStorageError::FailedToReadStorage
         })?;
