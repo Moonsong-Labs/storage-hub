@@ -280,6 +280,7 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -506,6 +507,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -567,6 +569,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -655,6 +658,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -670,6 +674,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 2u64,
                 payment_account: Default::default(),
             },
         );
@@ -780,6 +785,7 @@ fn submit_proof_success() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -900,6 +906,7 @@ fn submit_proof_submitted_by_not_a_provider_success() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -990,6 +997,7 @@ fn submit_proof_with_checkpoint_challenges_success() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1098,6 +1106,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1291,6 +1300,7 @@ fn submit_proof_empty_key_proofs_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1360,6 +1370,7 @@ fn submit_proof_no_record_of_last_proof_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1429,6 +1440,7 @@ fn submit_proof_challenges_block_not_reached_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1505,6 +1517,7 @@ fn submit_proof_challenges_block_too_old_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1581,6 +1594,7 @@ fn submit_proof_seed_not_found_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1660,6 +1674,7 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1744,6 +1759,7 @@ fn submit_proof_forest_proof_verification_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1826,6 +1842,7 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1891,6 +1908,7 @@ fn submit_proof_out_checkpoint_challenges_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -2003,6 +2021,7 @@ fn submit_proof_key_proof_verification_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -2397,6 +2416,7 @@ fn new_challenges_round_provider_marked_as_slashable() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -2490,6 +2510,7 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -2508,6 +2529,7 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 2u64,
                 payment_account: Default::default(),
             },
         );

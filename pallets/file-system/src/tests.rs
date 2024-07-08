@@ -2342,6 +2342,7 @@ fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<T
             protocols: BoundedVec::default(),
         },
         last_capacity_change: frame_system::Pallet::<Test>::block_number(),
+        owner_account: msp.clone(),
         payment_account: msp.clone(),
     };
 
