@@ -115,19 +115,6 @@ pub struct RocksDbFileDataTrie<T: TrieLayout> {
     root: HasherOutT<T>,
 }
 
-impl<T: TrieLayout + Send + Sync + 'static> Default for RocksDbFileDataTrie<T>
-where
-    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
-{
-    // TODO: parametrize rocksdb path
-    fn default() -> Self {
-        let default_storage = RocksDbFileDataTrie::<T>::rocksdb_storage("/tmp".to_string())
-            .expect("Failed to create RocksDB");
-
-        Self::new(default_storage)
-    }
-}
-
 impl<T: TrieLayout + Send + Sync + 'static> RocksDbFileDataTrie<T>
 where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
@@ -261,9 +248,10 @@ where
         // This is step is required to actually record the proof.
         let mut chunks = Vec::new();
         for chunk_id in chunk_ids {
-            let chunk: Option<Vec<u8>> = trie
-                .get(&chunk_id.as_trie_key())
-                .map_err(|_| FileStorageError::FailedToGetFileChunk)?;
+            let chunk: Option<Vec<u8>> = trie.get(&chunk_id.as_trie_key()).map_err(|e| {
+                error!("{}", e);
+                FileStorageError::FailedToGetFileChunk
+            })?;
 
             let chunk = chunk.ok_or(FileStorageError::FileChunkDoesNotExist)?;
             chunks.push((*chunk_id, chunk));
@@ -452,24 +440,17 @@ where
 {
     type FileDataTrie = RocksDbFileDataTrie<T>;
 
+    fn new_empty_file_data_trie(&self) -> Self::FileDataTrie {
+        RocksDbFileDataTrie::new(self.storage.clone())
+    }
+
     fn get_chunk(
         &self,
         key: &HasherOutT<T>,
         chunk_id: &ChunkId,
     ) -> Result<Chunk, FileStorageError> {
-        let raw_metadata = self
-            .storage
-            .read(METADATA_COLUMN, *key)
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageError::FailedToReadStorage
-            })?
-            .expect("Failed to find File Metadata");
+        let metadata = self.get_metadata(key)?;
 
-        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).map_err(|e| {
-            error!(target: LOG_TARGET,"{:?}", e);
-            FileStorageError::FailedToParseFileMetadata
-        })?;
         let raw_final_root = metadata.fingerprint.as_ref();
         let final_root =
             convert_raw_bytes_to_hasher_out::<T>(raw_final_root.to_vec()).map_err(|e| {
@@ -504,19 +485,9 @@ where
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
-        let raw_metadata = self
-            .storage
-            .read(METADATA_COLUMN, *key)
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageWriteError::FailedToReadStorage
-            })?
-            .expect("Failed to find File Metadata");
-
-        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).map_err(|e| {
-            error!(target: LOG_TARGET, "{:?}", e);
-            FileStorageWriteError::FailedToParseFileMetadata
-        })?;
+        let metadata = self
+            .get_metadata(key)
+            .map_err(|_| FileStorageWriteError::FailedToParseFileMetadata)?;
 
         let raw_final_root = metadata.fingerprint.as_ref();
         let final_root =
@@ -616,7 +587,7 @@ where
         // Stores the current root of the trie.
         // if the file is complete, key and value will be equal.
         transaction.put(
-            1,
+            ROOTS_COLUMN,
             metadata.fingerprint.as_ref(),
             file_data.get_root().as_ref(),
         );
@@ -636,7 +607,7 @@ where
                 error!(target: LOG_TARGET,"{:?}", e);
                 FileStorageError::FailedToReadStorage
             })?
-            .expect("Failed to find File Metadata");
+            .ok_or(FileStorageError::FileDoesNotExist)?;
 
         let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -651,24 +622,12 @@ where
         key: &HasherOutT<T>,
         chunk_ids: &Vec<ChunkId>,
     ) -> Result<FileKeyProof, FileStorageError> {
-        let raw_metadata = self
-            .storage
-            .read(METADATA_COLUMN, *key)
-            .map_err(|e| {
-                error!(target: LOG_TARGET,"{:?}", e);
-                FileStorageError::FailedToReadStorage
-            })?
-            .expect("Failed to find File Metadata");
-
-        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).map_err(|e| {
-            error!(target: LOG_TARGET,"{:?}", e);
-            FileStorageError::FailedToParseFileMetadata
-        })?;
+        let metadata = self.get_metadata(key)?;
 
         let raw_final_root = metadata.fingerprint.as_ref();
         let final_root =
             convert_raw_bytes_to_hasher_out::<T>(raw_final_root.to_vec()).map_err(|e| {
-                error!(target: LOG_TARGET,"{:?}", e);
+                error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToParseFingerprint
             })?;
 
@@ -690,25 +649,28 @@ where
         let file_trie =
             RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut partial_root);
 
+        let stored_chunks = file_trie.stored_chunks_count()?;
+        if metadata.chunks_count() != stored_chunks {
+            return Err(FileStorageError::IncompleteFile);
+        }
+
+        if metadata.fingerprint
+            != file_trie
+                .get_root()
+                .as_ref()
+                .try_into()
+                .expect("Hasher output mismatch!")
+        {
+            return Err(FileStorageError::FingerprintAndStoredFileMismatch);
+        }
+
         Ok(file_trie
             .generate_proof(chunk_ids)?
             .to_file_key_proof(metadata.clone()))
     }
 
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError> {
-        let raw_metadata = self
-            .storage
-            .read(METADATA_COLUMN, *key)
-            .map_err(|e| {
-                error!(target: LOG_TARGET,"{:?}", e);
-                FileStorageError::FailedToReadStorage
-            })?
-            .expect("Failed to find File Metadata");
-
-        let metadata: FileMetadata = serde_json::from_slice(&raw_metadata).map_err(|e| {
-            error!(target: LOG_TARGET,"{:?}", e);
-            FileStorageError::FailedToParseFileMetadata
-        })?;
+        let metadata = self.get_metadata(key)?;
 
         let raw_root = metadata.fingerprint.as_ref();
         let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).map_err(|e| {
@@ -1074,9 +1036,9 @@ mod tests {
         };
 
         let chunks = vec![
-            Chunk::from([0u8; 1024]),
-            Chunk::from([1u8; 1024]),
-            Chunk::from([2u8; 1024]),
+            Chunk::from([5u8; 32]),
+            Chunk::from([6u8; 32]),
+            Chunk::from([7u8; 32]),
         ];
 
         let chunk_ids: Vec<ChunkId> = chunks
@@ -1085,34 +1047,38 @@ mod tests {
             .map(|(id, _)| ChunkId::new(id as u64))
             .collect();
 
-        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage.clone());
-        file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
-        assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
-
-        file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
-        assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
-
-        file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
-        assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
+        let fingerprint = Fingerprint::from([
+            190, 196, 118, 254, 134, 253, 205, 124, 200, 168, 162, 243, 230, 168, 28, 95, 248, 74,
+            107, 170, 6, 31, 30, 108, 229, 69, 238, 93, 250, 61, 178, 77,
+        ]);
 
         let file_metadata = FileMetadata {
-            size: 1024u64 * chunks.len() as u64,
-            fingerprint: file_trie.get_root().as_ref().into(),
+            size: 32u64 * chunks.len() as u64,
+            fingerprint,
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
             location: "location".to_string().into_bytes(),
             bucket_id: [1u8; 32].to_vec(),
         };
-
         let key = file_metadata.file_key::<BlakeTwo256>();
-        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new(storage);
-        file_storage
-            .insert_file_with_data(key, file_metadata, file_trie)
-            .unwrap();
 
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new(storage.clone());
+        file_storage.insert_file(key, file_metadata).unwrap();
         assert!(file_storage.get_metadata(&key).is_ok());
+
+        file_storage
+            .write_chunk(&key, &chunk_ids[0], &chunks[0])
+            .unwrap();
+        assert!(file_storage.get_chunk(&key, &chunk_ids[0]).is_ok());
+
+        file_storage
+            .write_chunk(&key, &chunk_ids[1], &chunks[1])
+            .unwrap();
+        assert!(file_storage.get_chunk(&key, &chunk_ids[1]).is_ok());
+
+        file_storage
+            .write_chunk(&key, &chunk_ids[2], &chunks[2])
+            .unwrap();
+        assert!(file_storage.get_chunk(&key, &chunk_ids[2]).is_ok());
 
         let file_proof = file_storage.generate_proof(&key, &chunk_ids).unwrap();
         let proven_leaves = file_proof.proven::<LayoutV1<BlakeTwo256>>().unwrap();
