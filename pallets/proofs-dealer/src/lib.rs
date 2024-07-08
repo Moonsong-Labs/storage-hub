@@ -25,7 +25,8 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{
-        CommitmentVerifier, ProvidersInterface, TrieProofDeltaApplier, TrieRemoveMutation,
+        CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, TrieProofDeltaApplier,
+        TrieRemoveMutation,
     };
     use sp_runtime::traits::Convert;
     use types::{KeyFor, ProviderIdFor};
@@ -478,6 +479,28 @@ pub mod pallet {
 
             // Return a successful DispatchResultWithPostInfo.
             // If the proof is valid, the execution of this extrinsic should be refunded.
+            Ok(Pays::No.into())
+        }
+
+        /// Initialise a Provider's challenge cycle.
+        ///
+        /// Only callable by sudo.
+        ///
+        /// Sets the last tick the Provider submitted a proof for to the current tick, and sets the
+        /// deadline for submitting a proof to the current tick + the Provider's period + the tolerance.
+        #[pallet::call_index(2)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn force_initialise_challenge_cycle(
+            origin: OriginFor<T>,
+            provider: ProviderIdFor<T>,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was executed by the root origin
+            ensure_root(origin)?;
+
+            // Execute checks and logic, update storage.
+            <Self as ProofsDealerInterface>::initialise_challenge_cycle(&provider)?;
+
+            // Return a successful DispatchResultWithPostInfo.
             Ok(Pays::No.into())
         }
     }

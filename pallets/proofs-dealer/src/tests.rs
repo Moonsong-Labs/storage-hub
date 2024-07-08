@@ -511,7 +511,10 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
         );
 
         // Dispatch initialise provider extrinsic.
-        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id));
+        assert_ok!(ProofsDealer::force_initialise_challenge_cycle(
+            RuntimeOrigin::root(),
+            provider_id
+        ));
 
         // Check that the Provider's last tick was set to 1.
         let last_tick_provider_submitted_proof =
@@ -569,7 +572,10 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
         );
 
         // Dispatch initialise provider extrinsic.
-        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id));
+        assert_ok!(ProofsDealer::force_initialise_challenge_cycle(
+            RuntimeOrigin::root(),
+            provider_id
+        ));
 
         // Check that the Provider's last tick was set to 1.
         let last_tick_provider_submitted_proof =
@@ -592,7 +598,10 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
         run_to_block(current_block + challenge_ticks_tolerance - 1);
 
         // Re-initialise the provider.
-        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id));
+        assert_ok!(ProofsDealer::force_initialise_challenge_cycle(
+            RuntimeOrigin::root(),
+            provider_id
+        ));
 
         // Check that the Provider's last tick is the current now.
         let last_tick_provider_submitted_proof =
