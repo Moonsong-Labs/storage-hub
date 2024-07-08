@@ -21,6 +21,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Get, One, Zero},
     BoundedVec, DispatchError, FixedU128,
 };
+use sp_trie::CompactProof;
 
 mod create_bucket_tests {
     use super::*;
@@ -1085,10 +1086,10 @@ fn revoke_storage_request_with_confirmed_bsps_success() {
             bsp_signed.clone(),
             file_key,
             H256::zero(),
-            ForestProof {
+            CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             },
-            KeyProof {
+            CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             }
         ));
@@ -1375,10 +1376,10 @@ fn bsp_confirm_storing_success() {
             bsp_signed.clone(),
             file_key,
             H256::zero(), // TODO construct a real proof
-            ForestProof {
+            CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             },
-            KeyProof {
+            CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             }
         ));
@@ -1473,10 +1474,10 @@ fn bsp_confirm_storing_storage_request_not_found_fail() {
                 bsp_signed.clone(),
                 file_key,
                 H256::zero(),
-                ForestProof {
+                CompactProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 },
-                KeyProof {
+                CompactProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 }
             ),
@@ -1533,10 +1534,10 @@ fn bsp_confirm_storing_not_volunteered_fail() {
                 bsp_signed.clone(),
                 file_key,
                 H256::zero(), // TODO construct a real proof
-                ForestProof {
+                CompactProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 },
-                KeyProof {
+                CompactProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 }
             ),
@@ -1596,10 +1597,10 @@ fn bsp_already_confirmed_fail() {
             bsp_signed.clone(),
             file_key,
             H256::zero(), // TODO construct a real proof
-            ForestProof {
+            CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             },
-            KeyProof {
+            CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             }
         ));
@@ -1609,10 +1610,10 @@ fn bsp_already_confirmed_fail() {
                 bsp_signed.clone(),
                 file_key,
                 H256::zero(), // TODO construct a real proof
-                ForestProof {
+                CompactProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 },
-                KeyProof {
+                CompactProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 }
             ),
@@ -1669,10 +1670,10 @@ fn bsp_actions_not_a_bsp_fail() {
                 bsp_signed.clone(),
                 file_key,
                 H256::zero(), // TODO construct a real proof
-                ForestProof {
+                CompactProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 },
-                KeyProof {
+                CompactProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 }
             ),
@@ -1738,10 +1739,10 @@ fn bsp_stop_storing_success() {
             bsp_signed.clone(),
             file_key,
             H256::zero(), // TODO construct a real proof
-            ForestProof {
+            CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             },
-            KeyProof {
+            CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             }
         ));
@@ -1793,7 +1794,7 @@ fn bsp_stop_storing_success() {
             fingerprint,
             size,
             false,
-            ForestProof {
+            CompactProof {
                 encoded_nodes: vec![file_key.as_ref().to_vec()],
             },
         ));
@@ -1894,10 +1895,10 @@ fn bsp_stop_storing_while_storage_request_open_success() {
             bsp_signed.clone(),
             file_key,
             H256::zero(),
-            ForestProof {
+            CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             },
-            KeyProof {
+            CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             }
         ));
@@ -1920,7 +1921,7 @@ fn bsp_stop_storing_while_storage_request_open_success() {
             H256::zero(),
             size,
             false,
-            ForestProof {
+            CompactProof {
                 encoded_nodes: vec![file_key.as_ref().to_vec()],
             },
         ));
@@ -2023,7 +2024,7 @@ fn bsp_stop_storing_not_volunteered_success() {
             fingerprint,
             size,
             false,
-            ForestProof {
+            CompactProof {
                 encoded_nodes: vec![file_key.as_ref().to_vec()],
             },
         ));
@@ -2115,7 +2116,7 @@ fn bsp_stop_storing_no_storage_request_success() {
             fingerprint,
             size,
             false,
-            ForestProof {
+            CompactProof {
                 encoded_nodes: vec![file_key.as_ref().to_vec()],
             },
         ));
