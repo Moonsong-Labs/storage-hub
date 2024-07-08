@@ -137,6 +137,9 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         file_data: Self::FileDataTrie,
     ) -> Result<(), FileStorageError>;
 
+    /// Get the number of stored chunks for a file key.
+    fn stored_chunks_count(&self, key: &HasherOutT<T>) -> Result<u64, FileStorageError>;
+
     // TODO: Return Result<Option> instead of Result only
     /// Get a file chunk from storage.
     fn get_chunk(&self, key: &HasherOutT<T>, chunk_id: &ChunkId)

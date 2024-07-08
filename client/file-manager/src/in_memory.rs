@@ -243,6 +243,13 @@ where
         Ok(())
     }
 
+    fn stored_chunks_count(&self, key: &HasherOutT<T>) -> Result<u64, FileStorageError> {
+        let file_data = self.file_data.get(key);
+        let file_data = file_data.ok_or(FileStorageError::FileDoesNotExist)?;
+
+        file_data.stored_chunks_count()
+    }
+
     fn get_chunk(
         &self,
         file_key: &HasherOutT<T>,

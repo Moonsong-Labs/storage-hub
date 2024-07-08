@@ -8,13 +8,17 @@ use jsonrpsee::types::ErrorObjectOwned;
 
 use shc_common::types::ChunkId;
 use shc_common::types::FileMetadata;
+use shc_common::types::HasherOutT;
 use shc_common::types::FILE_CHUNK_SIZE;
 use sp_core::H256;
 use sp_runtime::AccountId32;
+use sp_runtime::Deserialize;
+use sp_runtime::Serialize;
 use sp_trie::TrieLayout;
 
 use shc_file_manager::traits::FileDataTrie;
 use shc_file_manager::traits::FileStorage;
+use shc_file_manager::traits::FileStorageError;
 
 use log::debug;
 use log::error;
@@ -22,12 +26,27 @@ use log::error;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::Read;
+use std::io::Write;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 const LOG_TARGET: &str = "file-storage-rpc";
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct IncompleteFileStatus {
+    pub file_metadata: FileMetadata,
+    pub stored_chunks: u64,
+    pub total_chunks: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum SaveFileToDisk {
+    FileNotFound,
+    Success(FileMetadata),
+    IncompleteFile(IncompleteFileStatus),
+}
 
 /// Provides an interface with the desired RPC method.
 /// Used by the `rpc` macro from `jsonrpsee`
@@ -43,6 +62,13 @@ pub trait FileStorageApi {
         owner: AccountId32,
         bucket_id: H256,
     ) -> RpcResult<FileMetadata>;
+
+    #[method(name = "saveFileToDisk")]
+    async fn save_file_to_disk(
+        &self,
+        file_key: H256,
+        file_path: String,
+    ) -> RpcResult<SaveFileToDisk>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -69,6 +95,7 @@ impl<FL, T> FileStorageApiServer for FileStorageRpc<FL, T>
 where
     FL: Send + Sync + FileStorage<T>,
     T: Send + Sync + TrieLayout + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     async fn load_file_in_storage(
         &self,
@@ -91,7 +118,9 @@ where
         // https://doc.rust-lang.org/std/io/trait.Read.html#errors-1
         loop {
             let mut chunk = Vec::with_capacity(FILE_CHUNK_SIZE as usize);
-            let read_result = file.by_ref().take(FILE_CHUNK_SIZE).read_to_end(&mut chunk);
+            let read_result = <File as Read>::by_ref(&mut file)
+                .take(FILE_CHUNK_SIZE)
+                .read_to_end(&mut chunk);
             match read_result {
                 // Reached EOF, break loop.
                 Ok(0) => {
@@ -138,6 +167,53 @@ where
             .map_err(into_rpc_error)?;
 
         Ok(file_metadata)
+    }
+
+    async fn save_file_to_disk(
+        &self,
+        file_key: H256,
+        file_path: String,
+    ) -> RpcResult<SaveFileToDisk> {
+        // Acquire FileStorage read lock.
+        let read_file_storage = self.file_storage.read().await;
+
+        let file_key_hash: HasherOutT<T> = TryFrom::<[u8; 32]>::try_from(file_key.to_fixed_bytes())
+            .map_err(|_| into_rpc_error("Invalid file key hash"))?;
+
+        // Retrieve file metadata from File Storage.
+        let file_metadata = match read_file_storage.get_metadata(&file_key_hash) {
+            Ok(metadata) => metadata,
+            Err(FileStorageError::FileDoesNotExist) => return Ok(SaveFileToDisk::FileNotFound),
+            Err(e) => return Err(into_rpc_error(e)),
+        };
+
+        // Check if file is incomplete.
+        let stored_chunks = read_file_storage
+            .stored_chunks_count(&file_key_hash)
+            .map_err(into_rpc_error)?;
+        let total_chunks = file_metadata.chunks_count();
+
+        if stored_chunks < total_chunks {
+            return Ok(SaveFileToDisk::IncompleteFile(IncompleteFileStatus {
+                file_metadata,
+                stored_chunks,
+                total_chunks,
+            }));
+        }
+
+        // Open file in the local file system.
+        let mut file = File::create(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
+
+        // Write file data to disk.
+        for chunk_id in 0..total_chunks {
+            let chunk_id = ChunkId::new(chunk_id);
+            let chunk = read_file_storage
+                .get_chunk(&file_key_hash, &chunk_id)
+                .map_err(into_rpc_error)?;
+            file.write_all(&chunk).map_err(into_rpc_error)?;
+        }
+
+        Ok(SaveFileToDisk::Success(file_metadata))
     }
 }
 

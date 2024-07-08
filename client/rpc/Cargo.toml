@@ -9,6 +9,7 @@ repository = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
+serde = { workspace = true }
 log = { workspace = true }
 jsonrpsee = { workspace = true }
 tokio = { workspace = true }
@@ -20,12 +21,11 @@ sp-trie = { workspace = true }
 
 # Local
 shc-common = { workspace = true }
-shc-file-manager = { workspace =  true }
+shc-file-manager = { workspace = true }
 
 [features]
 default = ["std"]
-std = [
-]
+std = []
 
 [lints]
 workspace = true
