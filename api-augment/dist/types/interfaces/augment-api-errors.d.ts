@@ -205,7 +205,7 @@ declare module '@polkadot/api-base/types/errors' {
             /**
              * Failed to add file key to pending deletion requests.
              **/
-            FailedToAddFileKeyToPendingDeletionRequests: AugmentedError<ApiType>;
+            MaxUserPendingDeletionRequestsReached: AugmentedError<ApiType>;
             /**
              * Failed to convert block number to threshold.
              **/

@@ -385,6 +385,7 @@ pub mod pallet {
             file_key: MerkleHash<T>,
             bucket_id: ProviderIdFor<T>,
             msp_id: ProviderIdFor<T>,
+            proof_of_inclusion: bool,
         },
         /// Notifies that a proof has been submitted for a pending file deletion request.
         ProofSubmittedForPendingFileDeletionRequest {
@@ -392,6 +393,7 @@ pub mod pallet {
             user: T::AccountId,
             file_key: MerkleHash<T>,
             bucket_id: ProviderIdFor<T>,
+            proof_of_inclusion: bool,
         },
     }
 
@@ -467,8 +469,8 @@ pub mod pallet {
         NotFileOwner,
         /// File key already pending deletion.
         FileKeyAlreadyPendingDeletion,
-        /// Failed to add file key to pending deletion requests.
-        FailedToAddFileKeyToPendingDeletionRequests,
+        /// Max number of user pending deletion requests reached.
+        MaxUserPendingDeletionRequestsReached,
         /// Unauthorized operation, signer is not an MSP of the bucket id.
         MspNotStoringBucket,
     }
@@ -727,7 +729,7 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let msp_id = Self::do_delete_file(
+            let (proof_of_inclusion, msp_id) = Self::do_delete_file(
                 who.clone(),
                 bucket_id,
                 file_key,
@@ -742,6 +744,7 @@ pub mod pallet {
                 file_key,
                 bucket_id,
                 msp_id,
+                proof_of_inclusion,
             });
 
             Ok(())
@@ -758,7 +761,7 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let msp_id = Self::do_pending_file_deletion_request_submit_proof(
+            let (proof_of_inclusion, msp_id) = Self::do_pending_file_deletion_request_submit_proof(
                 who.clone(),
                 user.clone(),
                 file_key,
@@ -771,6 +774,7 @@ pub mod pallet {
                 user,
                 file_key,
                 bucket_id,
+                proof_of_inclusion,
             });
 
             Ok(())

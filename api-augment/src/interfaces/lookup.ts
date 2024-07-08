@@ -3855,7 +3855,7 @@ export default {
       "ThresholdBelowAsymptote",
       "NotFileOwner",
       "FileKeyAlreadyPendingDeletion",
-      "FailedToAddFileKeyToPendingDeletionRequests",
+      "MaxUserPendingDeletionRequestsReached",
       "MspNotStoringBucket"
     ]
   },

@@ -175,7 +175,10 @@ where
         private: bool,
     ) -> Result<Option<CollectionIdFor<T>>, DispatchError> {
         // Ensure the sender is the owner of the bucket.
-        T::Providers::is_bucket_owner(&sender, &bucket_id)?;
+        ensure!(
+            T::Providers::is_bucket_owner(&sender, &bucket_id)?,
+            Error::<T>::NotBucketOwner
+        );
 
         // Retrieve the collection ID associated with the bucket, if any.
         let maybe_collection_id = T::Providers::get_read_access_group_id_of_bucket(&bucket_id)?;
@@ -217,7 +220,10 @@ where
         bucket_id: BucketIdFor<T>,
     ) -> Result<CollectionIdFor<T>, DispatchError> {
         // Check if sender is the owner of the bucket.
-        <T::Providers as ReadProvidersInterface>::is_bucket_owner(&sender, &bucket_id)?;
+        ensure!(
+            <T::Providers as ReadProvidersInterface>::is_bucket_owner(&sender, &bucket_id)?,
+            Error::<T>::NotBucketOwner
+        );
 
         let collection_id = Self::create_collection(sender)?;
 
@@ -822,7 +828,7 @@ where
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         maybe_inclusion_forest_proof: Option<ForestProof<T>>,
-    ) -> Result<ProviderIdFor<T>, DispatchError> {
+    ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
         // Compute the file key hash.
         let computed_file_key = Self::compute_file_key(
             sender.clone(),
@@ -838,10 +844,16 @@ where
             Error::<T>::InvalidFileKeyMetadata
         );
 
+        // Check if sender is the owner of the bucket.
+        ensure!(
+            <T::Providers as ReadProvidersInterface>::is_bucket_owner(&sender, &bucket_id)?,
+            Error::<T>::NotBucketOwner
+        );
+
         let msp_id = <T::Providers as ReadProvidersInterface>::get_msp_of_bucket(&bucket_id)
             .ok_or(Error::<T>::BucketNotFound)?;
 
-        match maybe_inclusion_forest_proof {
+        let file_key_included = match maybe_inclusion_forest_proof {
             // If the user did not supply a proof of inclusion, queue a pending deletion file request.
             // This will leave a window of time for the MSP to provide the proof of (non-)inclusion.
             // If the proof is not provided within the TTL, the hook will queue a priority challenge to remove the file key from all the providers.
@@ -851,8 +863,7 @@ where
                 // Check if the file key is already in the pending deletion requests.
                 ensure!(
                     !pending_file_deletion_requests
-                        .iter()
-                        .any(|(key, b_id)| key == &file_key && *b_id == bucket_id),
+                        .contains(&(file_key.clone(), bucket_id.clone())),
                     Error::<T>::FileKeyAlreadyPendingDeletion
                 );
 
@@ -861,13 +872,15 @@ where
                     &sender,
                     (file_key.clone(), bucket_id.clone()),
                 )
-                .map_err(|_| Error::<T>::FailedToAddFileKeyToPendingDeletionRequests)?;
+                .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
 
                 // Queue the expiration item.
                 Self::queue_expiration_item(
                     T::PendingFileDeletionRequestTtl::get().into(),
                     ExpiredItems::PendingFileDeletionRequests((sender, file_key)),
                 )?;
+
+                false
             }
             // If the user supplied a proof of inclusion, verify the proof and queue a priority challenge to remove the file key from all the providers.
             Some(inclusion_forest_proof) => {
@@ -890,10 +903,12 @@ where
                     &file_key,
                     Some(TrieRemoveMutation),
                 )?;
+
+                true
             }
         };
 
-        Ok(msp_id)
+        Ok((file_key_included, msp_id))
     }
 
     pub(crate) fn do_pending_file_deletion_request_submit_proof(
@@ -902,7 +917,7 @@ where
         file_key: MerkleHash<T>,
         bucket_id: BucketIdFor<T>,
         forest_proof: ForestProof<T>,
-    ) -> Result<ProviderIdFor<T>, DispatchError> {
+    ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
         let msp_id =
             <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotAMsp)?;
@@ -918,21 +933,22 @@ where
             Error::<T>::MspNotStoringBucket
         );
 
-        // Verify the proof of inclusion.
-        if let Ok(proven_keys) =
+        // Verify the proof of inclusion.let proven_keys =
+        let proven_keys =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
                 &bucket_id,
                 &[file_key],
                 &forest_proof,
-            )
-        {
-            if proven_keys.contains(&file_key) {
-                // Initiate the priority challenge to remove the file key from all the providers.
-                <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                    &file_key,
-                    Some(TrieRemoveMutation),
-                )?;
-            }
+            )?;
+
+        let file_key_included = proven_keys.contains(&file_key);
+
+        if file_key_included {
+            // Initiate the priority challenge to remove the file key from all the providers.
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
+                &file_key,
+                Some(TrieRemoveMutation),
+            )?;
         }
 
         // Delete the pending deletion request.
@@ -940,7 +956,7 @@ where
             requests.retain(|(key, _)| key != &file_key);
         });
 
-        Ok(msp_id)
+        Ok((file_key_included, msp_id))
     }
 
     /// Create a collection.

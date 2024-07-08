@@ -2314,7 +2314,7 @@ mod delete_file_tests {
                 fingerprint,
             );
 
-            let forest_proof = ForestProof {
+            let forest_proof = CompactProof {
                 encoded_nodes: vec![file_key.as_ref().to_vec()],
             };
 
@@ -2336,6 +2336,125 @@ mod delete_file_tests {
                     .iter()
                     .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
                     .is_some(),
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::FileDeletionRequest {
+                    user: owner_account_id.clone(),
+                    file_key,
+                    bucket_id,
+                    msp_id,
+                    proof_of_inclusion: true,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn delete_file_bucket_not_owned_by_user_fail() {
+        new_test_ext().execute_with(|| {
+            let owner_account_id = Keyring::Alice.to_account_id();
+            let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let size = 4;
+            let file_content = b"test".to_vec();
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let _ = create_bucket(&owner_account_id.clone(), name.clone(), msp_id.clone());
+
+            let other_user = Keyring::Bob.to_account_id();
+            let bucket_id = create_bucket(&other_user.clone(), name, msp_id);
+
+            let file_key = FileSystem::compute_file_key(
+                owner_account_id.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            );
+
+            let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
+
+            // Assert that the user does not own the bucket
+            assert_noop!(
+                FileSystem::delete_file(
+                    owner_signed,
+                    bucket_id,
+                    file_key,
+                    location,
+                    size,
+                    fingerprint,
+                    Some(forest_proof),
+                ),
+                Error::<Test>::NotBucketOwner
+            );
+        });
+    }
+
+    #[test]
+    fn delete_file_beyond_maximum_limit_allowed_fail() {
+        new_test_ext().execute_with(|| {
+            let owner_account_id = Keyring::Alice.to_account_id();
+            let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let size = u32::MAX;
+            let file_content = b"test".to_vec();
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id.clone());
+
+            // For loop to create 1 over maximum of MaxUserPendingDeletionRequests
+            for i in 0..<Test as crate::Config>::MaxUserPendingDeletionRequests::get() {
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    i,
+                    fingerprint,
+                );
+
+                assert_ok!(FileSystem::delete_file(
+                    owner_signed.clone(),
+                    bucket_id,
+                    file_key.clone(),
+                    location.clone(),
+                    i,
+                    fingerprint,
+                    None,
+                ));
+            }
+
+            let file_key = FileSystem::compute_file_key(
+                owner_account_id.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            );
+
+            assert_noop!(
+                FileSystem::delete_file(
+                    owner_signed,
+                    bucket_id,
+                    file_key,
+                    location,
+                    size,
+                    fingerprint,
+                    None
+                ),
+                Error::<Test>::MaxUserPendingDeletionRequestsReached
             );
         });
     }
@@ -2374,6 +2493,18 @@ mod delete_file_tests {
                 fingerprint,
                 None,
             ));
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::FileDeletionRequest {
+                    user: owner_account_id.clone(),
+                    file_key,
+                    bucket_id,
+                    msp_id,
+                    proof_of_inclusion: false,
+                }
+                .into(),
+            );
 
             // Assert that the pending file deletion request was added to storage
             assert_eq!(
@@ -2465,7 +2596,7 @@ mod delete_file_tests {
                 .unwrap()
             );
 
-            let forest_proof = ForestProof {
+            let forest_proof = CompactProof {
                 encoded_nodes: vec![file_key.as_ref().to_vec()],
             };
 
@@ -2478,6 +2609,18 @@ mod delete_file_tests {
                 bucket_id,
                 forest_proof
             ));
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::ProofSubmittedForPendingFileDeletionRequest {
+                    msp_id,
+                    user: owner_account_id.clone(),
+                    file_key,
+                    bucket_id,
+                    proof_of_inclusion: true,
+                }
+                .into(),
+            );
 
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
             assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
@@ -2537,8 +2680,8 @@ mod delete_file_tests {
                 .unwrap()
             );
 
-            let forest_proof = ForestProof {
-                encoded_nodes: vec![],
+            let forest_proof = CompactProof {
+                encoded_nodes: vec![H256::zero().as_bytes().to_vec()],
             };
 
             let msp_origin = RuntimeOrigin::signed(msp.clone());
@@ -2550,6 +2693,18 @@ mod delete_file_tests {
                 bucket_id,
                 forest_proof
             ));
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::ProofSubmittedForPendingFileDeletionRequest {
+                    msp_id,
+                    user: owner_account_id.clone(),
+                    file_key,
+                    bucket_id,
+                    proof_of_inclusion: false,
+                }
+                .into(),
+            );
 
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
             assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
@@ -2609,8 +2764,8 @@ mod delete_file_tests {
                 .unwrap()
             );
 
-            let forest_proof = ForestProof {
-                encoded_nodes: vec![],
+            let forest_proof = CompactProof {
+                encoded_nodes: vec![vec![0]],
             };
 
             let msp_dave = Keyring::Dave.to_account_id();

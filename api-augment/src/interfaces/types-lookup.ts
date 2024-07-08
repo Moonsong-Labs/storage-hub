@@ -4754,7 +4754,7 @@ declare module "@polkadot/types/lookup" {
     readonly isThresholdBelowAsymptote: boolean;
     readonly isNotFileOwner: boolean;
     readonly isFileKeyAlreadyPendingDeletion: boolean;
-    readonly isFailedToAddFileKeyToPendingDeletionRequests: boolean;
+    readonly isMaxUserPendingDeletionRequestsReached: boolean;
     readonly isMspNotStoringBucket: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
@@ -4791,7 +4791,7 @@ declare module "@polkadot/types/lookup" {
       | "ThresholdBelowAsymptote"
       | "NotFileOwner"
       | "FileKeyAlreadyPendingDeletion"
-      | "FailedToAddFileKeyToPendingDeletionRequests"
+      | "MaxUserPendingDeletionRequestsReached"
       | "MspNotStoringBucket";
   }
 
