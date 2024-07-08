@@ -972,7 +972,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Failed to find File Metadata")]
     fn file_storage_delete_file_works() {
         let storage = StorageDb {
             db: Arc::new(kvdb_memorydb::create(3)),
@@ -1022,7 +1021,7 @@ mod tests {
         assert!(file_storage.delete_file(&key).is_ok());
 
         // Should panic here when trying to get File Metadata.
-        file_storage.get_metadata(&key).unwrap();
+        assert!(file_storage.get_metadata(&key).is_err());
         assert!(file_storage.get_chunk(&key, &chunk_ids[0]).is_err());
         assert!(file_storage.get_chunk(&key, &chunk_ids[1]).is_err());
         assert!(file_storage.get_chunk(&key, &chunk_ids[2]).is_err());
@@ -1036,9 +1035,9 @@ mod tests {
         };
 
         let chunks = vec![
-            Chunk::from([5u8; 32]),
-            Chunk::from([6u8; 32]),
-            Chunk::from([7u8; 32]),
+            Chunk::from([5u8; 1024]),
+            Chunk::from([6u8; 1024]),
+            Chunk::from([7u8; 1024]),
         ];
 
         let chunk_ids: Vec<ChunkId> = chunks
@@ -1048,12 +1047,12 @@ mod tests {
             .collect();
 
         let fingerprint = Fingerprint::from([
-            190, 196, 118, 254, 134, 253, 205, 124, 200, 168, 162, 243, 230, 168, 28, 95, 248, 74,
-            107, 170, 6, 31, 30, 108, 229, 69, 238, 93, 250, 61, 178, 77,
+            15, 252, 18, 97, 24, 47, 65, 165, 92, 78, 226, 44, 145, 12, 214, 13, 136, 192, 20, 12,
+            208, 83, 145, 58, 56, 16, 32, 208, 129, 195, 30, 66,
         ]);
 
         let file_metadata = FileMetadata {
-            size: 32u64 * chunks.len() as u64,
+            size: 1024u64 * chunks.len() as u64,
             fingerprint,
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
             location: "location".to_string().into_bytes(),
