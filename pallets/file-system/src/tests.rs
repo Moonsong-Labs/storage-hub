@@ -1443,11 +1443,14 @@ fn bsp_confirm_storing_success() {
         assert_eq!(last_tick_provider_submitted_proof, tick_when_confirming);
 
         // Assert that the correct event was deposited.
-        System::assert_has_event(Event::BspChallengeCycleInitialised {
-            who: bsp_account_id,
-            bsp_id,
-            file_key,
-        }.into());
+        System::assert_has_event(
+            Event::BspChallengeCycleInitialised {
+                who: bsp_account_id,
+                bsp_id,
+                file_key,
+            }
+            .into(),
+        );
     });
 }
 
