@@ -12,7 +12,7 @@ use sp_runtime::AccountId32;
 /// This event is emitted when there's a new random challenge seed that affects this
 /// BSP. In other words, it only pays attention to the random seeds in the challenge
 /// period of this BSP.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct NewChallengeSeed {
     pub provider_id: ProviderId,
     pub tick: BlockNumber,
