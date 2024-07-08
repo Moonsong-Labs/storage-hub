@@ -144,7 +144,11 @@ describe("BSPNet: BSP Volunteer", () => {
 
     await sleep(500); // wait for the bsp to volunteer
     const volunteer_pending = await api.rpc.author.pendingExtrinsics();
-    strictEqual(volunteer_pending.length, 1, "There should be one pending extrinsic from BSP (volunteer)");
+    strictEqual(
+      volunteer_pending.length,
+      1,
+      "There should be one pending extrinsic from BSP (volunteer)"
+    );
 
     await api.sealBlock();
     const [resBspId, resBucketId, resLoc, resFinger, resMulti, _, resSize] = fetchEventData(
@@ -162,7 +166,11 @@ describe("BSPNet: BSP Volunteer", () => {
 
     await sleep(5000); // wait for the bsp to download the file
     const confirm_pending = await api.rpc.author.pendingExtrinsics();
-    strictEqual(confirm_pending.length, 1, "There should be one pending extrinsic from BSP (confirm store)");
+    strictEqual(
+      confirm_pending.length,
+      1,
+      "There should be one pending extrinsic from BSP (confirm store)"
+    );
 
     await api.sealBlock();
     const [bspConfirmRes_bspId, bspConfirmRes_fileKey, bspConfirmRes_newRoot] = fetchEventData(
