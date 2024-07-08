@@ -424,19 +424,20 @@ impl pallet_randomness::GetBabeData<u64, Option<Hash>> for BabeDataGetter {
 }
 
 parameter_types! {
+    // TODO: If the next line is uncommented (which should be eventually), compilation breaks (most likely because of mismatched dependency issues)
+    // pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * runtime_constants::time::EPOCH_DURATION_IN_SLOTS, 2 * MINUTES);
     pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * HOURS, 2 * MINUTES);
 }
-
-// TODO: If the next line is uncommented (which should be eventually), compilation breaks (most likely because of mismatched dependency issues)
-/* parameter_types! {
-    pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * runtime_constants::time::EPOCH_DURATION_IN_SLOTS, 2 * MINUTES);
-} */
 
 /// Configure the randomness pallet
 impl pallet_randomness::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type BabeDataGetter = BabeDataGetter;
     type WeightInfo = ();
+}
+
+parameter_types! {
+    pub const SpMinDeposit: Balance = 20 * UNIT;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -462,7 +463,7 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type BucketNameLimit = ConstU32<100>;
-    type SpMinDeposit = ConstU128<10>;
+    type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
     type RuntimeHoldReason = RuntimeHoldReason;

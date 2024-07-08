@@ -449,6 +449,26 @@ impl BlockchainService {
                             size,
                             user_peer_ids: peer_ids,
                         }),
+                        // A Provider's challenge cycle has been initialised.
+                        RuntimeEvent::ProofsDealer(
+                            pallet_proofs_dealer::Event::NewChallengeCycleInitialised {
+                                current_tick: _,
+                                provider: provider_id,
+                                maybe_provider_account,
+                            },
+                        ) => {
+                            // This node only cares if the Provider account matches one of the accounts in the keystore.
+                            if let Some(account) = maybe_provider_account {
+                                let account: Vec<u8> =
+                                    <sp_runtime::AccountId32 as AsRef<[u8; 32]>>::as_ref(&account)
+                                        .to_vec();
+                                if self.keystore.has_keys(&[(account.clone(), KEY_TYPE)]) {
+                                    // If so, add the Provider ID to the list of Providers that this node is monitoring.
+                                    info!(target: LOG_TARGET, "New Provider ID to monitor [{:?}] for account [{:?}]", provider_id, account);
+                                    self.provider_ids.push(provider_id);
+                                }
+                            }
+                        }
                         // New challenge seed event coming from pallet-proofs-dealer.
                         RuntimeEvent::ProofsDealer(
                             pallet_proofs_dealer::Event::NewChallengeSeed {
@@ -832,6 +852,9 @@ impl BlockchainService {
             }
         };
 
+        trace!(target: LOG_TARGET, "CURRENT TICK: {:?}", current_tick);
+        trace!(target: LOG_TARGET, "LAST TICK PROVED: {:?}", last_tick_provided);
+        trace!(target: LOG_TARGET, "PROVIDER CHALLENGE PERIOD: {:?}", provider_challenge_period);
         current_tick == &last_tick_provided.saturating_add(provider_challenge_period)
     }
 }
