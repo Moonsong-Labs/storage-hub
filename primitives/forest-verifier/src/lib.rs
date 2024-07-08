@@ -34,6 +34,11 @@ where
         challenges: &[Self::Challenge],
         proof: &Self::Proof,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
+        // Check that `challenges` is not empty.
+        if challenges.is_empty() {
+            return Err("No challenges provided.".into());
+        }
+
         // This generates a partial trie based on the proof and checks that the root hash matches the `expected_root`.
         let (memdb, root) = proof.to_memory_db(Some(root.into())).map_err(|_| {
             "Failed to convert proof to memory DB, root doesn't match with expected."
@@ -49,20 +54,7 @@ where
 
         // Check if the iterator has at least one leaf.
         if trie_de_iter.next().is_none() {
-            #[cfg(test)]
-            unreachable!(
-                "This should not happen. A trie with no leafs wouldn't be possible to create."
-            );
-
-            #[allow(unreachable_code)]
-            {
-                return Err("No leaves provided in proof.".into());
-            }
-        }
-
-        // Check that `challenges` is not empty.
-        if challenges.is_empty() {
-            return Err("No challenges provided.".into());
+            return Ok(BTreeSet::new());
         }
 
         // Initialise vector of proven keys. We use a `BTreeSet` to ensure that the keys are unique.
@@ -178,17 +170,9 @@ where
 
                     continue;
                 }
-                // Invalid
+                // Scenario 5: The trie is empty.
                 (None, None) => {
-                    #[cfg(test)]
-                    unreachable!(
-                        "This should not happen. We check if the iterator has at least one leaf."
-                    );
-
-                    #[allow(unreachable_code)]
-                    {
-                        return Err("No leaves provided in proof.".into());
-                    }
+                    continue;
                 }
                 _ => {
                     #[cfg(test)]

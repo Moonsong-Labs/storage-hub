@@ -26,7 +26,7 @@ describe("BSPNet: BSP Volunteer", () => {
   });
 
   after(async () => {
-    // await cleardownTest(api);
+    await cleardownTest(api);
   });
 
   it("Network launches and can be queried", async () => {
@@ -110,7 +110,7 @@ describe("BSPNet: BSP Volunteer", () => {
     strictEqual(dataBlob.peerIds[0].toHuman(), NODE_INFOS.user.expectedPeerId);
   });
 
-  it.only("bsp volunteers when issueStorageRequest sent", async () => {
+  it("bsp volunteers when issueStorageRequest sent", async () => {
     const source = "res/whatsup.jpg";
     const destination = "test/whatsup.jpg";
     const bucketName = "nothingmuch-2";
@@ -165,6 +165,14 @@ describe("BSPNet: BSP Volunteer", () => {
     strictEqual(confirm_pending.length, 1, "There should be one pending extrinsic from BSP (confirm store)");
 
     await api.sealBlock();
+    const [bspConfirmRes_bspId, bspConfirmRes_fileKey, bspConfirmRes_newRoot] = fetchEventData(
+      api.events.fileSystem.BspConfirmedStoring,
+      await api.query.system.events()
+    );
+
+    strictEqual(bspConfirmRes_bspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
+    // TODO: check the new root hash. We need and endpoint to get the root hash of the BSP node.
+    // TODO: check the file key. We need an RPC endpoint to compute the file key.
 
     await it("downloaded file passed integrity checks", async () => {
       await checkBspForFile("test/whatsup.jpg");
