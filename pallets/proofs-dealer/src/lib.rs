@@ -308,8 +308,9 @@ pub mod pallet {
 
         /// A Provider's challenge cycle was initialised.
         NewChallengeCycleInitialised {
-            provider: ProviderIdFor<T>,
             current_tick: BlockNumberFor<T>,
+            provider: ProviderIdFor<T>,
+            maybe_provider_account: Option<T::AccountId>,
         },
     }
 

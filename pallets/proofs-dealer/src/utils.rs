@@ -745,8 +745,9 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
         // Emit event.
         Self::deposit_event(Event::<T>::NewChallengeCycleInitialised {
-            provider: provider_id.clone(),
             current_tick,
+            provider: provider_id.clone(),
+            maybe_provider_account: ProvidersPalletFor::<T>::get_owner_account(provider_id.clone()),
         });
 
         Ok(())

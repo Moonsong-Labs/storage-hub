@@ -539,8 +539,9 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
         // Check that the last event emitted is the correct one.
         System::assert_last_event(
             Event::NewChallengeCycleInitialised {
-                provider: provider_id,
                 current_tick: 1,
+                provider: provider_id,
+                maybe_provider_account: Some(1u64),
             }
             .into(),
         );
