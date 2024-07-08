@@ -418,13 +418,6 @@ where
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
-        // TODO: make this a response to the blockchain event for confirm BSP file storage.
-        // Save [`FileMetadata`] of the newly stored file in the forest storage.
-        // let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
-        // let file_key = write_forest_storage
-        //     .insert_metadata(&metadata)
-        //     .expect("Failed to insert metadata.");
-
         // TODO: move this under an RPC call
         let file_path = Path::new("./storage/").join(
             String::from_utf8(metadata.location.clone())

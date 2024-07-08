@@ -42,7 +42,9 @@ pub struct NewStorageRequest {
 
 impl EventBusMessage for NewStorageRequest {}
 
-// TODO: use proper types
+/// Accepted BSP volunteer event.
+///
+/// This event is emitted when a BSP volunteer is accepted to store a file.
 #[derive(Debug, Clone)]
 pub struct AcceptedBspVolunteer {
     pub bsp_id: H256,
@@ -55,6 +57,19 @@ pub struct AcceptedBspVolunteer {
 }
 
 impl EventBusMessage for AcceptedBspVolunteer {}
+
+/// BSP confirmed storing event.
+///
+/// This event is emitted when a BSP confirms storing a file and the Runtime updates it's Forest
+/// trie root.
+#[derive(Debug, Clone)]
+pub struct BspConfirmedStoring {
+    pub bsp_id: H256,
+    pub file_key: FileKey,
+    pub new_root: H256,
+}
+
+impl EventBusMessage for BspConfirmedStoring {}
 
 // TODO: use proper types
 #[derive(Debug, Clone)]
@@ -69,6 +84,7 @@ pub struct BlockchainServiceEventBusProvider {
     new_challenge_seed_event_bus: EventBus<NewChallengeSeed>,
     new_storage_request_event_bus: EventBus<NewStorageRequest>,
     accepted_bsp_volunteer_event_bus: EventBus<AcceptedBspVolunteer>,
+    bsp_confirmed_storing_event_bus: EventBus<BspConfirmedStoring>,
     storage_request_revoked_event_bus: EventBus<StorageRequestRevoked>,
 }
 
@@ -78,6 +94,7 @@ impl BlockchainServiceEventBusProvider {
             new_challenge_seed_event_bus: EventBus::new(),
             new_storage_request_event_bus: EventBus::new(),
             accepted_bsp_volunteer_event_bus: EventBus::new(),
+            bsp_confirmed_storing_event_bus: EventBus::new(),
             storage_request_revoked_event_bus: EventBus::new(),
         }
     }
@@ -98,6 +115,12 @@ impl ProvidesEventBus<NewStorageRequest> for BlockchainServiceEventBusProvider {
 impl ProvidesEventBus<AcceptedBspVolunteer> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<AcceptedBspVolunteer> {
         &self.accepted_bsp_volunteer_event_bus
+    }
+}
+
+impl ProvidesEventBus<BspConfirmedStoring> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<BspConfirmedStoring> {
+        &self.bsp_confirmed_storing_event_bus
     }
 }
 

@@ -12,7 +12,10 @@ use shc_forest_manager::traits::ForestStorage;
 
 use crate::{
     services::{blockchain::events::NewStorageRequest, file_transfer::events::RemoteUploadRequest},
-    tasks::{bsp_upload_file::BspUploadFileTask, user_sends_file::UserSendsFileTask},
+    tasks::{
+        bsp_confirmed_storing::BspConfirmedStoringHandler, bsp_upload_file::BspUploadFileTask,
+        user_sends_file::UserSendsFileTask,
+    },
 };
 
 use super::{blockchain::handler::BlockchainService, file_transfer::FileTransferService};
@@ -105,5 +108,13 @@ where
         let fts_event_bus_listener: EventBusListener<RemoteUploadRequest, _> =
             bsp_upload_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
         fts_event_bus_listener.start();
+
+        // BspConfirmedStoringHandler is triggered by a BspConfirmedStoring event.
+        // It is triggered when a BSP has confirmed that it has stored a file and it will update
+        // the forest storage layer with the new file.
+        let bsp_confirmed_storing_handler = BspConfirmedStoringHandler::new(self.clone());
+        bsp_confirmed_storing_handler
+            .subscribe_to(&self.task_spawner, &self.blockchain)
+            .start();
     }
 }

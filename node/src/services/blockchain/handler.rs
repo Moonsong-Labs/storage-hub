@@ -49,21 +49,14 @@ use sp_runtime::{
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
 
-use crate::{
-    service::ParachainClient,
-    services::blockchain::{events::AcceptedBspVolunteer, transaction::SubmittedTransaction},
-};
+use crate::{service::ParachainClient, services::blockchain::transaction::SubmittedTransaction};
 use pallet_file_system_runtime_api::{
     FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
 };
 use shc_common::types::BlockNumber;
 
 use crate::services::blockchain::{
-    commands::BlockchainServiceCommand,
-    events::BlockchainServiceEventBusProvider,
-    types::Extrinsic,
-    KEY_TYPE,
-    {events::NewStorageRequest, types::EventsVec},
+    commands::BlockchainServiceCommand, events::*, types::EventsVec, types::Extrinsic, KEY_TYPE,
 };
 
 const LOG_TARGET: &str = "blockchain-service";
@@ -534,6 +527,20 @@ impl BlockchainService {
                                 multiaddresses: multiaddress_vec,
                                 owner,
                                 size,
+                            })
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::BspConfirmedStoring {
+                                bsp_id,
+                                file_key,
+                                new_root,
+                            },
+                            // Filter the events by the BSP id.
+                        ) if bsp_id == H256::from(Self::caller_pub_key(self.keystore.clone())) => {
+                            self.emit(BspConfirmedStoring {
+                                bsp_id,
+                                file_key: FileKey::from(file_key.as_ref()),
+                                new_root,
                             })
                         }
                         // Ignore all other events.
