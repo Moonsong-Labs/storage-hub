@@ -694,8 +694,8 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         // Get stake for submitter.
         // If a submitter is a registered Provider, it must have a stake, so this shouldn't happen.
         // However, since the implementation of that is not up to this pallet, we need to check.
-        let stake = ProvidersPalletFor::<T>::get_stake(*who)
-            .ok_or(Error::<T>::ProviderStakeNotFound)?;
+        let stake =
+            ProvidersPalletFor::<T>::get_stake(*who).ok_or(Error::<T>::ProviderStakeNotFound)?;
 
         // Check that the stake is non-zero.
         ensure!(stake > BalanceFor::<T>::zero(), Error::<T>::ZeroStake);
@@ -713,10 +713,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
                 .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
             // Remove the old deadline.
-            ChallengeTickToChallengedProviders::<T>::remove(
-                old_next_challenge_deadline,
-                *who,
-            );
+            ChallengeTickToChallengedProviders::<T>::remove(old_next_challenge_deadline, *who);
         }
 
         // Set `LastTickProviderSubmittedProofFor` to the current tick.
@@ -734,11 +731,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
         // Set the deadline for submitting a proof.
-        ChallengeTickToChallengedProviders::<T>::set(
-            next_challenge_deadline,
-            *who,
-            Some(()),
-        );
+        ChallengeTickToChallengedProviders::<T>::set(next_challenge_deadline, *who, Some(()));
 
         Ok(())
     }
