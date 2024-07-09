@@ -113,7 +113,7 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
         Ok(())
     }
 
-    fn delete(&mut self, _chunk_count: u64) -> Result<(), FileStorageWriteError> {
+    fn delete(&mut self) -> Result<(), FileStorageWriteError> {
         let (memdb, root) = MemoryDB::<HashT<T>>::default_with_root();
         self.root = root;
         self.memdb = memdb;
@@ -148,7 +148,7 @@ where
 {
     type FileDataTrie = InMemoryFileDataTrie<T>;
 
-    fn new_empty_file_data_trie(&self) -> Self::FileDataTrie {
+    fn new_file_data_trie(&self) -> Self::FileDataTrie {
         InMemoryFileDataTrie::new()
     }
 
@@ -214,7 +214,7 @@ where
         }
         self.metadata.insert(key, metadata);
 
-        let empty_file_trie = self.new_empty_file_data_trie();
+        let empty_file_trie = self.new_file_data_trie();
         let previous = self.file_data.insert(key, empty_file_trie);
         if previous.is_some() {
             panic!("Key already associated with File Data, but not with File Metadata. Possible inconsistency between them.");
@@ -413,7 +413,7 @@ mod tests {
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
-        file_trie.delete(chunks.len() as u64).unwrap();
+        file_trie.delete().unwrap();
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_err());
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_err());
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_err());

@@ -29,6 +29,8 @@ pub enum FileStorageWriteError {
     FailedToUpdatePartialRoot,
     /// Failed to convert raw bytes into partial root.
     FailedToParsePartialRoot,
+    /// Failed to get chunks count in storage.
+    FailedToGetStoredChunksCount,
 }
 
 #[derive(Debug)]
@@ -104,14 +106,16 @@ pub trait FileDataTrie<T: TrieLayout> {
 
     /// Removes all references to chunks in the trie data and removes
     /// chunks themselves from storage.
-    fn delete(&mut self, chunk_count: u64) -> Result<(), FileStorageWriteError>;
+    fn delete(&mut self) -> Result<(), FileStorageWriteError>;
 }
 
 /// Storage interface to be implemented by the storage providers.
 pub trait FileStorage<T: TrieLayout>: 'static {
     type FileDataTrie: FileDataTrie<T> + Send + Sync;
 
-    fn new_empty_file_data_trie(&self) -> Self::FileDataTrie;
+    /// Creates a new [`FileDataTrie`] with no data and empty default root.
+    /// Should be used as the default way of generating new tries.
+    fn new_file_data_trie(&self) -> Self::FileDataTrie;
 
     /// Generate proof for a chunk of a file. If the file does not exists or any chunk is missing,
     /// no proof will be returned.

@@ -185,7 +185,8 @@ where
                 | FileStorageWriteError::FailedToParseFingerprint
                 | FileStorageWriteError::FailedToReadStorage
                 | FileStorageWriteError::FailedToUpdatePartialRoot
-                | FileStorageWriteError::FailedToParsePartialRoot => {
+                | FileStorageWriteError::FailedToParsePartialRoot
+                | FileStorageWriteError::FailedToGetStoredChunksCount => {
                     // This internal error should not happen.
 
                     // Unvolunteer the file.

@@ -223,7 +223,9 @@ where
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
 
-        let mut iter = trie.iter().expect("Should be able to get iterator; qed.");
+        let mut iter = trie
+            .iter()
+            .map_err(|_| FileStorageError::FailedToConstructTrieIter)?;
         let mut count = 0u64;
         while let Some(_) = iter.next() {
             count += 1
@@ -325,13 +327,17 @@ where
     }
 
     // Deletes itself from the underlying db.
-    fn delete(&mut self, chunk_count: u64) -> Result<(), FileStorageWriteError> {
+    fn delete(&mut self) -> Result<(), FileStorageWriteError> {
         let mut root = self.root;
+        let stored_chunks_count = self.stored_chunks_count().map_err(|e| {
+            error!(target: LOG_TARGET, "{:?}", e);
+            FileStorageWriteError::FailedToGetStoredChunksCount
+        })?;
         let db = self.as_hash_db_mut();
         let trie_root_key = root;
         let mut trie = TrieDBMutBuilder::<T>::from_existing(db, &mut root).build();
 
-        for chunk_id in 0..chunk_count {
+        for chunk_id in 0..stored_chunks_count {
             trie.remove(&ChunkId::new(chunk_id as u64).as_trie_key())
                 .map_err(|e| {
                     error!(target: LOG_TARGET, "Failed to delete chunk from RocksDb: {}", e);
@@ -440,7 +446,7 @@ where
 {
     type FileDataTrie = RocksDbFileDataTrie<T>;
 
-    fn new_empty_file_data_trie(&self) -> Self::FileDataTrie {
+    fn new_file_data_trie(&self) -> Self::FileDataTrie {
         RocksDbFileDataTrie::new(self.storage.clone())
     }
 
@@ -681,9 +687,7 @@ where
         let mut file_trie =
             RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
 
-        let chunk_count = metadata.chunks_count();
-
-        file_trie.delete(chunk_count).map_err(|e| {
+        file_trie.delete().map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
             FileStorageError::FailedToDeleteFileChunk
         })?;
@@ -854,7 +858,7 @@ mod tests {
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
-        file_trie.delete(chunks.len() as u64).unwrap();
+        file_trie.delete().unwrap();
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_err());
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_err());
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_err());
