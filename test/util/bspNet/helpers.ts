@@ -27,6 +27,14 @@ import type { BspNetApi } from "./types";
 
 const exec = util.promisify(child_process.exec);
 
+export interface FileSendResponse {
+  owner: string;
+  bucket_id: string;
+  location: string;
+  size: bigint;
+  fingerprint: string;
+}
+
 export const sendLoadFileRpc = async (
   api: ApiPromise,
   filePath: string,
@@ -55,6 +63,24 @@ export const sendLoadFileRpc = async (
     throw new Error("filestorage_loadFileInStorage RPC call failed");
   }
 };
+
+export interface FileSaveResponse {
+  owner: string;
+}
+
+export const sendSaveFileRpc = async (api: ApiPromise, fileKey: H256, filePath: string): Promise<FileSaveResponse> => {
+  try {
+    // @ts-expect-error - rpc provider not officially exposed
+    const resp = await api._rpcCore.provider.send("filestorage_saveFileToDisk", [fileKey, filePath]);
+    console.log("resp = ", resp);
+    return {
+      owner: u8aToHex(resp.owner)
+    };
+  } catch (e) {
+    console.error("Error saving file to user node:", e);
+    throw new Error("filestorage_saveFileToDisk RPC call failed");
+  }
+}
 
 export const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {
   const maxRetries = 60;
@@ -89,14 +115,6 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
   showContainers();
   throw new Error("Error fetching container IP");
 };
-
-export interface FileSendResponse {
-  owner: string;
-  bucket_id: string;
-  location: string;
-  size: bigint;
-  fingerprint: string;
-}
 
 export const getContainerPeerId = async (url: string, verbose = false) => {
   const maxRetries = 60;

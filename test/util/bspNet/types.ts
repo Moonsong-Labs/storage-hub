@@ -2,7 +2,7 @@ import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
-import type { FileSendResponse, SealedBlock } from "./helpers";
+import type { FileSendResponse, FileSaveResponse, SealedBlock } from "./helpers";
 import type { EventRecord, Event, H256 } from "@polkadot/types/interfaces";
 
 /**
@@ -37,6 +37,15 @@ export type BspNetApi = ApiPromise & {
     addressId: string,
     bucketId: H256
   ) => Promise<FileSendResponse>;
+
+  /**
+   * @description Issues a saveFile RPC call to Node.
+   *
+   * @param fileKey - The file key to be saved.
+   * @param filePath - The path to save the file to.
+   * @returns A promise that resolves to a file save response.
+   */
+  saveFile: (fileKey: H256, filePath: string) => Promise<FileSaveResponse>;
 
   /** @description Creates a new bucket.
    *

@@ -161,6 +161,10 @@ describe("BSPNet: BSP Volunteer", () => {
     strictEqual(resSize.toBigInt(), size);
 
     await it("downloaded file passed integrity checks", async () => {
+      let result = await api.saveFile(resBspId, "/storage/test/whatsup.jpg");
+
+      console.log("result = ", result);
+
       await checkBspForFile("test/whatsup.jpg");
       const sha = await checkFileChecksum("test/whatsup.jpg");
       strictEqual(sha, TEST_ARTEFACTS["res/whatsup.jpg"].checksum);
