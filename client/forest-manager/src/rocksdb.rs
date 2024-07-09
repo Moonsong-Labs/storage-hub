@@ -258,10 +258,14 @@ impl<T: TrieLayout + Send + Sync> hash_db::HashDB<HashT<T>, DBValue> for RocksDB
     }
 }
 
-impl<T: TrieLayout + Send + Sync> ForestStorage<T> for RocksDBForestStorage<T>
+impl<T: TrieLayout + Send + Sync + 'static> ForestStorage<T> for RocksDBForestStorage<T>
 where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
+    fn root(&self) -> HasherOutT<T> {
+        self.root
+    }
+
     fn contains_file_key(&self, file_key: &HasherOutT<T>) -> Result<bool, ErrorT<T>> {
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();

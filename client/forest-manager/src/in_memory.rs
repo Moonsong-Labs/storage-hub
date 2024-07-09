@@ -29,6 +29,10 @@ impl<T: TrieLayout> ForestStorage<T> for InMemoryForestStorage<T>
 where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
+    fn root(&self) -> HasherOutT<T> {
+        self.root
+    }
+
     fn contains_file_key(&self, file_key: &HasherOutT<T>) -> Result<bool, ErrorT<T>> {
         let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
         Ok(trie.contains(file_key.as_ref())?)
