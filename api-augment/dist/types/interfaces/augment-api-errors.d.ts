@@ -227,6 +227,10 @@ declare module '@polkadot/api-base/types/errors' {
              **/
             FileKeyAlreadyPendingDeletion: AugmentedError<ApiType>;
             /**
+             * File key not found in pending deletion requests.
+             **/
+            FileKeyNotPendingDeletion: AugmentedError<ApiType>;
+            /**
              * Failed to get value when just checked it existed.
              **/
             ImpossibleFailedToGetValue: AugmentedError<ApiType>;

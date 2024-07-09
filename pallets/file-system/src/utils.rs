@@ -933,6 +933,14 @@ where
             Error::<T>::MspNotStoringBucket
         );
 
+        let pending_file_deletion_requests = <PendingFileDeletionRequests<T>>::get(&user);
+
+        // Check if the file key is in the pending deletion requests.
+        ensure!(
+            pending_file_deletion_requests.contains(&(file_key.clone(), bucket_id.clone())),
+            Error::<T>::FileKeyNotPendingDeletion
+        );
+
         // Verify the proof of inclusion.let proven_keys =
         let proven_keys =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(

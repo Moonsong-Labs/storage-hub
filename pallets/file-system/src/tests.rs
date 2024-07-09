@@ -2793,6 +2793,49 @@ mod delete_file_tests {
             );
         });
     }
+
+    #[test]
+    fn submit_proof_pending_file_deletion_not_found_fail() {
+        new_test_ext().execute_with(|| {
+            let owner_account_id = Keyring::Alice.to_account_id();
+
+            let msp = Keyring::Charlie.to_account_id();
+            let msp_origin = RuntimeOrigin::signed(msp.clone());
+
+            let size = 4;
+            let file_content = b"test".to_vec();
+            let fingerprint = BlakeTwo256::hash(&file_content);
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+            let file_key = FileSystem::compute_file_key(
+                owner_account_id.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            );
+
+            let forest_proof = CompactProof {
+                encoded_nodes: vec![vec![0]],
+            };
+
+            assert_noop!(
+                FileSystem::pending_file_deletion_request_submit_proof(
+                    msp_origin,
+                    owner_account_id.clone(),
+                    file_key,
+                    bucket_id,
+                    forest_proof
+                ),
+                Error::<Test>::FileKeyNotPendingDeletion
+            );
+        });
+    }
 }
 
 /// Helper function that registers an account as a Backup Storage Provider

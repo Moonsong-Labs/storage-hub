@@ -3870,7 +3870,8 @@ export default {
       "NotFileOwner",
       "FileKeyAlreadyPendingDeletion",
       "MaxUserPendingDeletionRequestsReached",
-      "MspNotStoringBucket"
+      "MspNotStoringBucket",
+      "FileKeyNotPendingDeletion"
     ]
   },
   /**
