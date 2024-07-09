@@ -36,7 +36,7 @@ export const sendLoadFileRpc = async (
 ): Promise<FileSendResponse> => {
   try {
     // @ts-expect-error - rpc provider not officially exposed
-    const resp = await api._rpcCore.provider.send("filestorage_loadFileInStorage", [
+    const resp = await api._rpcCore.provider.send("provider_loadFileInStorage", [
       filePath,
       remotePath,
       userNodeAccountId,
@@ -52,7 +52,18 @@ export const sendLoadFileRpc = async (
     };
   } catch (e) {
     console.error("Error sending file to user node:", e);
-    throw new Error("filestorage_loadFileInStorage RPC call failed");
+    throw new Error("provider_loadFileInStorage RPC call failed");
+  }
+};
+
+export const getForestRoot = async (api: ApiPromise): Promise<H256> => {
+  try {
+    // @ts-expect-error - rpc provider not officially exposed
+    const resp = await api._rpcCore.provider.send("provider_getForestRoot");
+    return resp;
+  } catch (e) {
+    console.error("Error getting the forest root from provider node:", e);
+    throw new Error("provider_getForestRoot RPC call failed");
   }
 };
 

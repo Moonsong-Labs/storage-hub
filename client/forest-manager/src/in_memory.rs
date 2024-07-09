@@ -4,6 +4,7 @@ use sp_trie::{recorder::Recorder, MemoryDB, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::{Trie, TrieDBMutBuilder};
 
 use shc_common::types::ForestProof;
+use shc_common::types::HashT;
 
 use crate::{
     error::{ErrorT, ForestStorageError},
@@ -18,10 +19,9 @@ pub struct InMemoryForestStorage<T: TrieLayout + 'static> {
 
 impl<T: TrieLayout> InMemoryForestStorage<T> {
     pub fn new() -> Self {
-        Self {
-            root: Default::default(),
-            memdb: MemoryDB::default(),
-        }
+        let (memdb, root) = MemoryDB::<HashT<T>>::default_with_root();
+
+        Self { root, memdb }
     }
 }
 
@@ -79,7 +79,8 @@ where
             return Err(ForestStorageError::FileKeyAlreadyExists(file_key).into());
         }
 
-        let mut trie = TrieDBMutBuilder::<T>::new(&mut self.memdb, &mut self.root).build();
+        let mut trie =
+            TrieDBMutBuilder::<T>::from_existing(&mut self.memdb, &mut self.root).build();
 
         // Insert the file key and metadata into the trie.
         trie.insert(file_key.as_ref(), b"")?;
@@ -88,7 +89,8 @@ where
     }
 
     fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>> {
-        let mut trie = TrieDBMutBuilder::<T>::new(&mut self.memdb, &mut self.root).build();
+        let mut trie =
+            TrieDBMutBuilder::<T>::from_existing(&mut self.memdb, &mut self.root).build();
 
         // Remove the file key from the trie.
         let _ = trie.remove(file_key.as_ref())?;
