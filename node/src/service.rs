@@ -25,6 +25,7 @@ use shc_blockchain_service::KEY_TYPE;
 use shc_common::types::HasherOutT;
 use shc_common::types::ParachainClient;
 use shc_common::types::ParachainExecutor;
+use shc_common::types::ParachainNetworkService;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
 use sp_trie::{LayoutV1, TrieLayout};
@@ -53,20 +54,19 @@ use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
 use sc_client_api::{Backend, HeaderBackend};
 use sc_consensus::{ImportQueue, LongestChain};
 use sc_executor::{HeapAllocStrategy, DEFAULT_HEAP_ALLOC_STRATEGY};
-use sc_network::{config::IncomingRequest, NetworkBlock, NetworkService, ProtocolName};
+use sc_network::{config::IncomingRequest, NetworkBlock, ProtocolName};
 use sc_network_sync::SyncingService;
 use sc_service::{Configuration, PartialComponents, RpcHandlers, TFullBackend, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
+use shc_file_transfer_service::configure_file_transfer_network;
 use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::traits::Block as BlockT;
 use substrate_prometheus_endpoint::Registry;
 
 use crate::{
     cli::StorageLayer,
     services::{
         builder::{StorageHubBuilder, StorageLayerBuilder},
-        file_transfer::configure_file_transfer_network,
         handler::StorageHubHandler,
     },
 };
@@ -79,8 +79,6 @@ pub(crate) type ParachainBackend = TFullBackend<Block>;
 
 pub(crate) type ParachainBlockImport =
     TParachainBlockImport<Block, Arc<ParachainClient>, ParachainBackend>;
-
-pub(crate) type ParachainNetworkService = NetworkService<Block, <Block as BlockT>::Hash>;
 
 type MaybeSelectChain = Option<sc_consensus::LongestChain<ParachainBackend, Block>>;
 

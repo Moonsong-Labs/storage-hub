@@ -3,12 +3,11 @@ use sc_network::ProtocolName;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::service::ParachainNetworkService;
 use sc_network::request_responses::IncomingRequest;
 use sc_network::{config::FullNetworkConfiguration, request_responses::ProtocolConfig};
 use sc_service::Configuration;
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
-use shc_common::types::ParachainClient;
+use shc_common::types::{ParachainClient, ParachainNetworkService};
 
 pub use self::handler::FileTransferService;
 
@@ -17,9 +16,9 @@ pub mod commands;
 /// For defining the events emitted by the file transfer service.
 pub mod events;
 /// For incoming provider requests.
-mod handler;
+pub mod handler;
 /// For defining the provider requests protocol schema.
-mod schema;
+pub mod schema;
 
 // TODO determine ideal max request/response sizes (we could technically specify here usize::MAX)
 /// Max size of request packet. (1GB)

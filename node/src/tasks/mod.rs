@@ -10,10 +10,10 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::{AcceptedBspVolunteer, NewStorageRequest};
 use shc_common::types::HasherOutT;
 use shc_file_manager::traits::FileStorage;
+use shc_file_transfer_service::events::RemoteUploadRequest;
 use shc_forest_manager::traits::ForestStorage;
 use sp_trie::TrieLayout;
 
-use crate::services::file_transfer::events::RemoteUploadRequest;
 use crate::services::handler::StorageHubHandler;
 
 // ! The following are examples of task definitions.

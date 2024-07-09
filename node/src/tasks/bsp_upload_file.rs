@@ -14,12 +14,12 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
 use shc_common::types::{FileKey, FileMetadata, HasherOutT};
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
+use shc_file_transfer_service::{
+    commands::FileTransferServiceInterface, events::RemoteUploadRequest,
+};
 use shc_forest_manager::traits::ForestStorage;
 
-use crate::services::{
-    file_transfer::{commands::FileTransferServiceInterface, events::RemoteUploadRequest},
-    handler::StorageHubHandler,
-};
+use crate::services::handler::StorageHubHandler;
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 

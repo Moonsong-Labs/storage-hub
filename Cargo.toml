@@ -170,6 +170,7 @@ pallet-payment-streams = { path = "pallets/payment-streams", default-features = 
 
 shc-actors-framework = { path = "client/actors-framework", default-features = false }
 shc-blockchain-service = { path = "client/blockchain-service", default-features = false }
+shc-file-transfer-service = { path = "client/file-transfer-service", default-features = false }
 shc-common = { path = "client/common", default-features = false }
 shc-file-manager = { path = "client/file-manager", default-features = false }
 shc-forest-manager = { path = "client/forest-manager", default-features = false }
