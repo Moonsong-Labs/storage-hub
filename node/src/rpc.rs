@@ -13,8 +13,9 @@ use sc_consensus_manual_seal::{
 };
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
-use shc_rpc::ProviderApiServer;
-use shc_rpc::ProviderRpc;
+use shc_rpc::StorageHubClientApiServer;
+use shc_rpc::StorageHubClientRpc;
+use shc_rpc::StorageHubClientRpcConfig;
 use sp_core::H256;
 use sp_trie::TrieLayout;
 use storage_hub_runtime::{opaque::Block, AccountId, Balance, Nonce};
@@ -24,8 +25,6 @@ use sc_transaction_pool_api::TransactionPool;
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
-
-use shc_rpc::ProviderRpcConfig;
 
 /// A type representing all RPC extensions.
 pub type RpcExtension = jsonrpsee::RpcModule<()>;
@@ -37,7 +36,7 @@ pub struct FullDeps<C, P, T, FL, FS> {
     /// Transaction pool instance.
     pub pool: Arc<P>,
     /// File Storage instance.
-    pub maybe_provider_config: Option<ProviderRpcConfig<T, FL, FS>>,
+    pub maybe_storage_hub_client_config: Option<StorageHubClientRpcConfig<T, FL, FS>>,
     /// Manual seal command sink
     pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<H256>>>,
     /// Whether to deny unsafe calls
@@ -70,7 +69,7 @@ where
     let FullDeps {
         client,
         pool,
-        maybe_provider_config,
+        maybe_storage_hub_client_config,
         command_sink,
         deny_unsafe,
     } = deps;
@@ -78,8 +77,8 @@ where
     io.merge(System::new(client.clone(), pool, deny_unsafe).into_rpc())?;
     io.merge(TransactionPayment::new(client).into_rpc())?;
 
-    if let Some(provider_config) = maybe_provider_config {
-        io.merge(ProviderRpc::new(provider_config).into_rpc())?;
+    if let Some(storage_hub_client_config) = maybe_storage_hub_client_config {
+        io.merge(StorageHubClientRpc::new(storage_hub_client_config).into_rpc())?;
     }
 
     if let Some(command_sink) = command_sink {

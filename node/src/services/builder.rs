@@ -14,7 +14,7 @@ use shc_file_manager::{
 use shc_forest_manager::{
     in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
 };
-use shc_rpc::ProviderRpcConfig;
+use shc_rpc::StorageHubClientRpcConfig;
 
 use crate::service::{ParachainClient, ParachainNetworkService};
 
@@ -132,8 +132,8 @@ where
     }
 
     /// Get the [`FileStorage`] from the builder.
-    pub fn provider_rpc_config(&self) -> ProviderRpcConfig<T, FL, FS> {
-        ProviderRpcConfig::new(
+    pub fn rpc_config(&self) -> StorageHubClientRpcConfig<T, FL, FS> {
+        StorageHubClientRpcConfig::new(
             self.file_storage
                 .clone()
                 .expect("File Storage not initialized"),
