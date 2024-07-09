@@ -179,7 +179,7 @@ declare module '@polkadot/api-base/types/storage' {
             /**
              * Pending file deletion requests.
              *
-             * A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key and
+             * A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key and bucket id.
              **/
             pendingFileDeletionRequests: AugmentedQuery<ApiType, (arg: AccountId32 | string | Uint8Array) => Observable<Vec<ITuple<[H256, H256]>>>, [AccountId32]> & QueryableStorageEntry<ApiType, [AccountId32]>;
             /**
