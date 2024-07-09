@@ -2,14 +2,13 @@ use std::{io, path::PathBuf, sync::Arc};
 
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
-use kvdb_rocksdb::{Database, DatabaseConfig};
 use log::{debug, error};
 use shc_common::types::{
     Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
 };
 use sp_state_machine::{warn, Storage};
 use sp_trie::{prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieLayout, TrieMut};
-use trie_db::{DBValue, Hasher, Trie, TrieDBBuilder, TrieDBMutBuilder};
+use trie_db::{DBValue, Trie, TrieDBBuilder, TrieDBMutBuilder};
 
 use crate::{
     error::{other_io_error, ErrorT},
@@ -24,31 +23,33 @@ const ROOTS_COLUMN: u32 = 1;
 const CHUNKS_COLUMN: u32 = 2;
 
 /// Open the database on disk, creating it if it doesn't exist.
-fn open_or_creating_rocksdb(db_path: String) -> io::Result<Database> {
+fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Database> {
     // TODO: add a configuration option for the base path
     let root = PathBuf::from("/tmp/");
     let path = root.join("storagehub/file_storage/").join(db_path);
 
-    let db_config = DatabaseConfig::with_columns(3);
+    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(3);
 
     let path_str = path
         .to_str()
         .ok_or_else(|| other_io_error(format!("Bad database path: {:?}", path)))?;
 
     std::fs::create_dir_all(&path_str)?;
-    let db = Database::open(&db_config, &path_str)?;
+    let db = kvdb_rocksdb::Database::open(&db_config, &path_str)?;
 
     Ok(db)
 }
 
 /// Storage backend for RocksDB.
-pub struct StorageDb<T> {
-    pub db: Arc<dyn KeyValueDB>,
+pub struct StorageDb<T, DB> {
+    pub db: Arc<DB>,
     pub _marker: std::marker::PhantomData<T>,
 }
 
-impl<T: TrieLayout> StorageDb<T>
+impl<T, DB> StorageDb<T, DB>
 where
+    T: TrieLayout,
+    DB: KeyValueDB,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>> {
@@ -70,7 +71,7 @@ where
     }
 }
 
-impl<T> Clone for StorageDb<T> {
+impl<T, DB> Clone for StorageDb<T, DB> {
     fn clone(&self) -> Self {
         Self {
             db: self.db.clone(),
@@ -79,7 +80,7 @@ impl<T> Clone for StorageDb<T> {
     }
 }
 
-impl<T: TrieLayout + Send + Sync> Storage<HashT<T>> for StorageDb<T> {
+impl<T: TrieLayout + Send + Sync, DB: KeyValueDB> Storage<HashT<T>> for StorageDb<T, DB> {
     fn get(&self, key: &HasherOutT<T>, prefix: Prefix) -> Result<Option<DBValue>, String> {
         let prefixed_key = prefixed_key::<HashT<T>>(key, prefix);
         self.db.get(CHUNKS_COLUMN, &prefixed_key).map_err(|e| {
@@ -89,9 +90,10 @@ impl<T: TrieLayout + Send + Sync> Storage<HashT<T>> for StorageDb<T> {
     }
 }
 
-fn convert_raw_bytes_to_hasher_out<T: TrieLayout>(key: Vec<u8>) -> Result<HasherOutT<T>, ErrorT<T>>
+fn convert_raw_bytes_to_hasher_out<T>(key: Vec<u8>) -> Result<HasherOutT<T>, ErrorT<T>>
 where
-    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
+    T: TrieLayout,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     let key: [u8; 32] = key.try_into().map_err(|e| {
         error!(target: LOG_TARGET, "{:?}", e);
@@ -106,22 +108,24 @@ where
     Ok(key)
 }
 
-pub struct RocksDbFileDataTrie<T: TrieLayout> {
+pub struct RocksDbFileDataTrie<T: TrieLayout, DB> {
     // Persistent storage.
-    storage: StorageDb<T>,
+    storage: StorageDb<T, DB>,
     // In memory overlay used for Trie operations.
     overlay: PrefixedMemoryDB<HashT<T>>,
     // Root of the file Trie, which is the file fingerprint.
     root: HasherOutT<T>,
 }
 
-impl<T: TrieLayout + Send + Sync + 'static> RocksDbFileDataTrie<T>
+impl<T, DB> RocksDbFileDataTrie<T, DB>
 where
+    T: TrieLayout + Send + Sync,
+    DB: KeyValueDB,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
-    fn new(storage: StorageDb<T>) -> Self {
+    fn new(storage: StorageDb<T, DB>) -> Self {
         let (overlay, mut root) = PrefixedMemoryDB::<HashT<T>>::default_with_root();
-        let mut rocksdb_file_data_trie = RocksDbFileDataTrie::<T> {
+        let mut rocksdb_file_data_trie = RocksDbFileDataTrie::<T, DB> {
             storage,
             root,
             overlay,
@@ -136,8 +140,8 @@ where
         rocksdb_file_data_trie
     }
 
-    fn from_existing(storage: StorageDb<T>, root: &mut HasherOutT<T>) -> Self {
-        let mut rocksdb_file_data_trie = RocksDbFileDataTrie::<T> {
+    fn from_existing(storage: StorageDb<T, DB>, root: &mut HasherOutT<T>) -> Self {
+        let mut rocksdb_file_data_trie = RocksDbFileDataTrie::<T, DB> {
             root: *root,
             storage,
             overlay: Default::default(),
@@ -194,7 +198,9 @@ where
     }
 
     /// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
-    pub fn rocksdb_storage(db_path: String) -> Result<StorageDb<T>, ErrorT<T>> {
+    pub fn rocksdb_storage(
+        db_path: String,
+    ) -> Result<StorageDb<T, kvdb_rocksdb::Database>, ErrorT<T>> {
         let db = open_or_creating_rocksdb(db_path).map_err(|e| {
             warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
             FileStorageError::FailedToReadStorage
@@ -209,8 +215,10 @@ where
 
 // As a reminder, dropping the trie (either by calling `drop()` or by the end of the scope)
 // automatically commits to the underlying db.
-impl<T: TrieLayout + Send + Sync + 'static> FileDataTrie<T> for RocksDbFileDataTrie<T>
+impl<T, DB> FileDataTrie<T> for RocksDbFileDataTrie<T, DB>
 where
+    T: TrieLayout + Send + Sync,
+    DB: KeyValueDB,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     // Returns internal root representation kept for immediate access.
@@ -369,8 +377,10 @@ where
     }
 }
 
-impl<T: TrieLayout + Send + Sync> AsHashDB<HashT<T>, DBValue> for RocksDbFileDataTrie<T>
+impl<T, DB> AsHashDB<HashT<T>, DBValue> for RocksDbFileDataTrie<T, DB>
 where
+    T: TrieLayout + Send + Sync,
+    DB: KeyValueDB,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn as_hash_db<'b>(&'b self) -> &'b (dyn HashDB<HashT<T>, DBValue> + 'b) {
@@ -381,8 +391,10 @@ where
     }
 }
 
-impl<T: TrieLayout + Send + Sync> hash_db::HashDB<HashT<T>, DBValue> for RocksDbFileDataTrie<T>
+impl<T, DB> hash_db::HashDB<HashT<T>, DBValue> for RocksDbFileDataTrie<T, DB>
 where
+    T: TrieLayout + Send + Sync,
+    DB: KeyValueDB,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn get(&self, key: &HasherOutT<T>, prefix: Prefix) -> Option<DBValue> {
@@ -411,23 +423,29 @@ where
     }
 }
 
-pub struct RocksDbFileStorage<T: TrieLayout + 'static>
+pub struct RocksDbFileStorage<T, DB>
 where
+    T: TrieLayout + 'static,
+    DB: KeyValueDB,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
-    storage: StorageDb<T>,
+    storage: StorageDb<T, DB>,
 }
 
-impl<T: TrieLayout + Send + Sync + 'static> RocksDbFileStorage<T>
+impl<T: TrieLayout, DB> RocksDbFileStorage<T, DB>
 where
+    T: TrieLayout,
+    DB: KeyValueDB,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
-    pub fn new(storage: StorageDb<T>) -> Self {
+    pub fn new(storage: StorageDb<T, DB>) -> Self {
         Self { storage }
     }
 
     /// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
-    pub fn rocksdb_storage(db_path: String) -> Result<StorageDb<T>, ErrorT<T>> {
+    pub fn rocksdb_storage(
+        db_path: String,
+    ) -> Result<StorageDb<T, kvdb_rocksdb::Database>, ErrorT<T>> {
         let db = open_or_creating_rocksdb(db_path).map_err(|e| {
             warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
             FileStorageError::FailedToReadStorage
@@ -440,11 +458,13 @@ where
     }
 }
 
-impl<T: TrieLayout + 'static + Send + Sync> FileStorage<T> for RocksDbFileStorage<T>
+impl<T, DB> FileStorage<T> for RocksDbFileStorage<T, DB>
 where
+    T: TrieLayout + Send + Sync + 'static,
+    DB: KeyValueDB + 'static,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
-    type FileDataTrie = RocksDbFileDataTrie<T>;
+    type FileDataTrie = RocksDbFileDataTrie<T, DB>;
 
     fn new_file_data_trie(&self) -> Self::FileDataTrie {
         RocksDbFileDataTrie::new(self.storage.clone())
@@ -480,7 +500,7 @@ where
             })?;
 
         let file_trie =
-            RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut partial_root);
+            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut partial_root);
 
         file_trie.get_chunk(chunk_id)
     }
@@ -517,7 +537,7 @@ where
             })?;
 
         let mut file_trie =
-            RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut partial_root);
+            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut partial_root);
         file_trie.write_chunk(chunk_id, data).map_err(|e| {
             error!(target: LOG_TARGET, "{:?}", e);
             FileStorageWriteError::FailedToInsertFileChunk
@@ -653,7 +673,7 @@ where
             })?;
 
         let file_trie =
-            RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut partial_root);
+            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut partial_root);
 
         let stored_chunks = file_trie.stored_chunks_count()?;
         if metadata.chunks_count() != stored_chunks {
@@ -685,7 +705,7 @@ where
         })?;
 
         let mut file_trie =
-            RocksDbFileDataTrie::<T>::from_existing(self.storage.clone(), &mut root);
+            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut root);
 
         file_trie.delete().map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -708,6 +728,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kvdb_memorydb::InMemory;
     use shc_common::types::Fingerprint;
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
@@ -721,7 +742,7 @@ mod tests {
             _marker: Default::default(),
         };
 
-        let file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+        let file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
 
         // expected hash is the root hash of an empty tree.
         let expected_hash = HasherOutT::<LayoutV1<BlakeTwo256>>::try_from([
@@ -744,7 +765,7 @@ mod tests {
             _marker: Default::default(),
         };
 
-        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
         let old_root = *file_trie.get_root();
         file_trie
             .write_chunk(&ChunkId::new(0u64), &Chunk::from([1u8; 1024]))
@@ -763,7 +784,7 @@ mod tests {
             _marker: Default::default(),
         };
 
-        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
 
         let chunk = Chunk::from([3u8; 32]);
         let chunk_id = ChunkId::new(3);
@@ -781,7 +802,7 @@ mod tests {
 
         let chunk_ids = vec![ChunkId::new(0u64), ChunkId::new(1u64)];
         let chunks = vec![Chunk::from([0u8; 1024]), Chunk::from([1u8; 1024])];
-        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
@@ -807,7 +828,7 @@ mod tests {
             Chunk::from([2u8; 1024]),
         ];
 
-        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
@@ -844,7 +865,7 @@ mod tests {
             Chunk::from([2u8; 1024]),
         ];
 
-        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage);
+        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
@@ -899,7 +920,7 @@ mod tests {
         };
         let key = file_metadata.file_key::<BlakeTwo256>();
 
-        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new(storage);
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
         file_storage.insert_file(key, file_metadata).unwrap();
 
         file_storage
@@ -941,7 +962,8 @@ mod tests {
             .map(|(id, _)| ChunkId::new(id as u64))
             .collect();
 
-        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage.clone());
+        let mut file_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
@@ -964,7 +986,7 @@ mod tests {
         };
 
         let key = file_metadata.file_key::<BlakeTwo256>();
-        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new(storage);
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
         file_storage
             .insert_file_with_data(key, file_metadata, file_trie)
             .unwrap();
@@ -994,7 +1016,8 @@ mod tests {
             .map(|(id, _)| ChunkId::new(id as u64))
             .collect();
 
-        let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>>::new(storage.clone());
+        let mut file_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
@@ -1016,7 +1039,7 @@ mod tests {
         };
 
         let key = file_metadata.file_key::<BlakeTwo256>();
-        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new(storage);
+        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
         file_storage
             .insert_file_with_data(key, file_metadata, file_trie)
             .unwrap();
@@ -1064,7 +1087,8 @@ mod tests {
         };
         let key = file_metadata.file_key::<BlakeTwo256>();
 
-        let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>>::new(storage.clone());
+        let mut file_storage =
+            RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
         file_storage.insert_file(key, file_metadata).unwrap();
         assert!(file_storage.get_metadata(&key).is_ok());
 

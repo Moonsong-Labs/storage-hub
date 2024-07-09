@@ -14607,6 +14607,8 @@ dependencies = [
  "futures-timer",
  "hex",
  "jsonrpsee",
+ "kvdb",
+ "kvdb-rocksdb",
  "lazy_static",
  "libp2p-identity",
  "log",

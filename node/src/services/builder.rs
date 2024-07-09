@@ -173,7 +173,8 @@ where
     }
 }
 
-impl<T> StorageLayerBuilder for StorageHubBuilder<T, RocksDbFileStorage<T>, RocksDBForestStorage<T>>
+impl<T> StorageLayerBuilder
+    for StorageHubBuilder<T, RocksDbFileStorage<T, kvdb_rocksdb::Database>, RocksDBForestStorage<T>>
 where
     T: TrieLayout + Send + Sync,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
@@ -185,14 +186,16 @@ where
         let storage_path = hex::encode(provider_pub_key);
         let forest_storage = RocksDBForestStorage::<T>::rocksdb_storage(storage_path.clone())
             .expect("Failed to create RocksDB");
-        let file_storage = RocksDbFileStorage::<T>::rocksdb_storage(storage_path)
-            .expect("Failed to create RocksDB");
+        let file_storage =
+            RocksDbFileStorage::<T, kvdb_rocksdb::Database>::rocksdb_storage(storage_path)
+                .expect("Failed to create RocksDB");
 
-        self.with_file_storage(Arc::new(RwLock::new(RocksDbFileStorage::<T>::new(
-            file_storage,
-        ))))
-        .with_forest_storage(Arc::new(RwLock::new(
-            RocksDBForestStorage::<T>::new(forest_storage).expect("Failed to create RocksDB"),
-        )))
+        self.with_file_storage(Arc::new(RwLock::new(RocksDbFileStorage::<
+            T,
+            kvdb_rocksdb::Database,
+        >::new(file_storage))))
+            .with_forest_storage(Arc::new(RwLock::new(
+                RocksDBForestStorage::<T>::new(forest_storage).expect("Failed to create RocksDB"),
+            )))
     }
 }

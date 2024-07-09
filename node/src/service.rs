@@ -1020,7 +1020,7 @@ pub async fn start_dev_node(
             StorageLayer::RocksDB => {
                 start_dev_impl::<
                     LayoutV1<BlakeTwo256>,
-                    RocksDbFileStorage<_>,
+                    RocksDbFileStorage<_, kvdb_rocksdb::Database>,
                     RocksDBForestStorage<_>,
                 >(config, Some(provider_options), hwbench, para_id, sealing)
                 .await
@@ -1066,7 +1066,7 @@ pub async fn start_parachain_node(
             StorageLayer::RocksDB => {
                 start_node_impl::<
                     LayoutV1<BlakeTwo256>,
-                    RocksDbFileStorage<_>,
+                    RocksDbFileStorage<_, kvdb_rocksdb::Database>,
                     RocksDBForestStorage<_>,
                 >(
                     parachain_config,
