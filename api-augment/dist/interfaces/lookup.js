@@ -1472,8 +1472,9 @@ export default {
                 provider: 'H256',
             },
             NewChallengeCycleInitialised: {
+                currentTick: 'u32',
                 provider: 'H256',
-                currentTick: 'u32'
+                maybeProviderAccount: 'Option<AccountId32>'
             }
         }
     },
@@ -3600,6 +3601,7 @@ export default {
         multiaddresses: 'Vec<Bytes>',
         root: 'H256',
         lastCapacityChange: 'u32',
+        ownerAccount: 'AccountId32',
         paymentAccount: 'AccountId32'
     },
     /**
@@ -3612,6 +3614,7 @@ export default {
         multiaddresses: 'Vec<Bytes>',
         valueProp: 'PalletStorageProvidersValueProposition',
         lastCapacityChange: 'u32',
+        ownerAccount: 'AccountId32',
         paymentAccount: 'AccountId32'
     },
     /**

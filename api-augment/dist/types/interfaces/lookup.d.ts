@@ -1469,8 +1469,9 @@ declare const _default: {
                 provider: string;
             };
             NewChallengeCycleInitialised: {
-                provider: string;
                 currentTick: string;
+                provider: string;
+                maybeProviderAccount: string;
             };
         };
     };
@@ -3597,6 +3598,7 @@ declare const _default: {
         multiaddresses: string;
         root: string;
         lastCapacityChange: string;
+        ownerAccount: string;
         paymentAccount: string;
     };
     /**
@@ -3609,6 +3611,7 @@ declare const _default: {
         multiaddresses: string;
         valueProp: string;
         lastCapacityChange: string;
+        ownerAccount: string;
         paymentAccount: string;
     };
     /**

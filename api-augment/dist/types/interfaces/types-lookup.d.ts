@@ -1540,8 +1540,9 @@ declare module '@polkadot/types/lookup' {
         } & Struct;
         readonly isNewChallengeCycleInitialised: boolean;
         readonly asNewChallengeCycleInitialised: {
-            readonly provider: H256;
             readonly currentTick: u32;
+            readonly provider: H256;
+            readonly maybeProviderAccount: Option<AccountId32>;
         } & Struct;
         readonly type: 'NewChallenge' | 'ProofAccepted' | 'NewChallengeSeed' | 'NewCheckpointChallenge' | 'SlashableProvider' | 'NewChallengeCycleInitialised';
     }
@@ -3686,6 +3687,7 @@ declare module '@polkadot/types/lookup' {
         readonly multiaddresses: Vec<Bytes>;
         readonly root: H256;
         readonly lastCapacityChange: u32;
+        readonly ownerAccount: AccountId32;
         readonly paymentAccount: AccountId32;
     }
     /** @name PalletStorageProvidersMainStorageProvider (385) */
@@ -3696,6 +3698,7 @@ declare module '@polkadot/types/lookup' {
         readonly multiaddresses: Vec<Bytes>;
         readonly valueProp: PalletStorageProvidersValueProposition;
         readonly lastCapacityChange: u32;
+        readonly ownerAccount: AccountId32;
         readonly paymentAccount: AccountId32;
     }
     /** @name PalletStorageProvidersBucket (387) */
