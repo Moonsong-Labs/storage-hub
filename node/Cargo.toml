@@ -36,6 +36,7 @@ pallet-proofs-dealer = { workspace = true }
 pallet-storage-providers = { workspace = true }
 storage-hub-runtime = { workspace = true }
 shc-actors-framework = { workspace = true }
+shc-blockchain-service = { workspace = true }
 shc-common = { workspace = true }
 shc-file-manager = { workspace = true }
 shc-forest-manager = { workspace = true }

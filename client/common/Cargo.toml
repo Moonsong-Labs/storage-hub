@@ -21,18 +21,28 @@ reference-trie = { workspace = true }
 serde = { workspace = true, default-features = true }
 trie-db = { workspace = true }
 
+# Substrate
 frame-system = { workspace = true }
 sp-core = { workspace = true }
 sp-trie = { workspace = true, default-features = true }
+sp-io = { workspace = true, default-features = true }
+sc-executor = { workspace = true }
+sc-service = { workspace = true }
 
+# Polkadot
 polkadot-primitives = { workspace = true }
 
-pallet-file-system = { workspace = true }
-pallet-proofs-dealer = { workspace = true }
-pallet-storage-providers = { workspace = true }
+# Cumulus
+cumulus-client-service = { workspace = true }
 
+# Local
 storage-hub-runtime = { workspace = true }
 shp-file-key-verifier = { workspace = true, default-features = false }
 shp-forest-verifier = { workspace = true, default-features = false }
 shp-traits = { workspace = true }
 shc-actors-framework = { workspace = true }
+
+# Local pallets
+pallet-file-system = { workspace = true }
+pallet-proofs-dealer = { workspace = true }
+pallet-storage-providers = { workspace = true }

@@ -11,12 +11,12 @@ use sp_trie::TrieLayout;
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use shc_actors_framework::event_bus::EventHandler;
+use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
 use shc_common::types::{FileKey, FileMetadata, HasherOutT};
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_forest_manager::traits::ForestStorage;
 
 use crate::services::{
-    blockchain::{commands::BlockchainServiceInterface, events::NewStorageRequest},
     file_transfer::{commands::FileTransferServiceInterface, events::RemoteUploadRequest},
     handler::StorageHubHandler,
 };

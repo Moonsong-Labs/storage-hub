@@ -1,12 +1,14 @@
 use std::fmt::Debug;
 
 use codec::{Decode, Encode};
+use sc_executor::WasmExecutor;
+use sc_service::TFullClient;
 pub use shp_file_key_verifier::consts::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
 pub use shp_file_key_verifier::types::{Chunk, ChunkId, Leaf};
 use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
 use sp_trie::CompactProof;
-use storage_hub_runtime::Runtime;
+use storage_hub_runtime::{opaque::Block, Runtime, RuntimeApi};
 use trie_db::TrieLayout;
 
 /// The hash type of trie node keys
@@ -29,6 +31,25 @@ pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
 pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
 pub type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<Runtime>;
 pub type RandomSeed = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
+
+#[cfg(not(feature = "runtime-benchmarks"))]
+type HostFunctions = (
+    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
+    sp_io::SubstrateHostFunctions,
+    cumulus_client_service::storage_proof_size::HostFunctions,
+);
+
+#[cfg(feature = "runtime-benchmarks")]
+type HostFunctions = (
+    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
+    sp_io::SubstrateHostFunctions,
+    cumulus_client_service::storage_proof_size::HostFunctions,
+    frame_benchmarking::benchmarking::HostFunctions,
+);
+
+pub type ParachainExecutor = WasmExecutor<HostFunctions>;
+
+pub type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
 
 /// Proving either the exact key or the neighbour keys of the challenged key.
 pub enum Proven<K, D: Debug> {

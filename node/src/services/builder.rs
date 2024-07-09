@@ -8,6 +8,8 @@ use std::{marker::PhantomData, sync::Arc};
 use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
+use shc_blockchain_service::{spawn_blockchain_service, BlockchainService};
+use shc_common::types::ParachainClient;
 use shc_file_manager::{
     in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage, traits::FileStorage,
 };
@@ -16,10 +18,9 @@ use shc_forest_manager::{
 };
 use shc_rpc::StorageHubClientRpcConfig;
 
-use crate::service::{ParachainClient, ParachainNetworkService};
+use crate::service::ParachainNetworkService;
 
 use super::{
-    blockchain::{spawn_blockchain_service, BlockchainService},
     file_transfer::{spawn_file_transfer_service, FileTransferService},
     handler::StorageHubHandler,
 };

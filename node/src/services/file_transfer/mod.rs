@@ -3,11 +3,12 @@ use sc_network::ProtocolName;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::service::{ParachainClient, ParachainNetworkService};
+use crate::service::ParachainNetworkService;
 use sc_network::request_responses::IncomingRequest;
 use sc_network::{config::FullNetworkConfiguration, request_responses::ProtocolConfig};
 use sc_service::Configuration;
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
+use shc_common::types::ParachainClient;
 
 pub use self::handler::FileTransferService;
 
