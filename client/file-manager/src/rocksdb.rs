@@ -259,7 +259,7 @@ where
         let mut chunks = Vec::new();
         for chunk_id in chunk_ids {
             let chunk: Option<Vec<u8>> = trie.get(&chunk_id.as_trie_key()).map_err(|e| {
-                error!("{}", e);
+                error!(target: LOG_TARGET, "Failed to find file chunk in File Trie {}", e);
                 FileStorageError::FailedToGetFileChunk
             })?;
 
