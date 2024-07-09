@@ -1509,7 +1509,23 @@ declare module '@polkadot/types/lookup' {
             readonly user: AccountId32;
             readonly fileKey: H256;
         } & Struct;
-        readonly type: 'NewBucket' | 'BucketPrivacyUpdated' | 'NewCollectionAndAssociation' | 'NewStorageRequest' | 'AcceptedBspVolunteer' | 'BspConfirmedStoring' | 'StorageRequestExpired' | 'StorageRequestRevoked' | 'BspStoppedStoring' | 'FailedToQueuePriorityChallenge';
+        readonly isFileDeletionRequest: boolean;
+        readonly asFileDeletionRequest: {
+            readonly user: AccountId32;
+            readonly fileKey: H256;
+            readonly bucketId: H256;
+            readonly mspId: H256;
+            readonly proofOfInclusion: bool;
+        } & Struct;
+        readonly isProofSubmittedForPendingFileDeletionRequest: boolean;
+        readonly asProofSubmittedForPendingFileDeletionRequest: {
+            readonly mspId: H256;
+            readonly user: AccountId32;
+            readonly fileKey: H256;
+            readonly bucketId: H256;
+            readonly proofOfInclusion: bool;
+        } & Struct;
+        readonly type: 'NewBucket' | 'BucketPrivacyUpdated' | 'NewCollectionAndAssociation' | 'NewStorageRequest' | 'AcceptedBspVolunteer' | 'BspConfirmedStoring' | 'StorageRequestExpired' | 'StorageRequestRevoked' | 'BspStoppedStoring' | 'FailedToQueuePriorityChallenge' | 'FileDeletionRequest' | 'ProofSubmittedForPendingFileDeletionRequest';
     }
     /** @name PalletProofsDealerEvent (133) */
     interface PalletProofsDealerEvent extends Enum {

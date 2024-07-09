@@ -1441,6 +1441,20 @@ declare const _default: {
                 user: string;
                 fileKey: string;
             };
+            FileDeletionRequest: {
+                user: string;
+                fileKey: string;
+                bucketId: string;
+                mspId: string;
+                proofOfInclusion: string;
+            };
+            ProofSubmittedForPendingFileDeletionRequest: {
+                mspId: string;
+                user: string;
+                fileKey: string;
+                bucketId: string;
+                proofOfInclusion: string;
+            };
         };
     };
     /**

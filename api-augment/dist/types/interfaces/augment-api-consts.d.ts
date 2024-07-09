@@ -2,7 +2,7 @@ import '@polkadot/api-base/types/consts';
 import type { ApiTypes, AugmentedConst } from '@polkadot/api-base/types';
 import type { Option, u128, u16, u32, u64, u8 } from '@polkadot/types-codec';
 import type { Codec } from '@polkadot/types-codec/types';
-import type { AccountId32 } from '@polkadot/types/interfaces/runtime';
+import type { AccountId32, H256 } from '@polkadot/types/interfaces/runtime';
 import type { FrameSystemLimitsBlockLength, FrameSystemLimitsBlockWeights, SpVersionRuntimeVersion, SpWeightsRuntimeDbWeight, SpWeightsWeightV2Weight } from '@polkadot/types/lookup';
 export type __AugmentedConst<ApiType extends ApiTypes> = AugmentedConst<ApiType>;
 declare module '@polkadot/api-base/types/consts' {
@@ -289,6 +289,10 @@ declare module '@polkadot/api-base/types/consts' {
              * Type that represents the byte limit of a bucket name.
              **/
             bucketNameLimit: u32 & AugmentedConst<ApiType>;
+            /**
+             * The default value of the root of the Merkle Patricia Trie of the runtime
+             **/
+            defaultMerkleRoot: H256 & AugmentedConst<ApiType>;
             /**
              * The slope of the collateral vs storage capacity curve. In other terms, how many tokens a Storage Provider should add as collateral to increase its storage capacity in one unit of StorageData.
              **/

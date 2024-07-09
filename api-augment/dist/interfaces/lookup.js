@@ -1442,7 +1442,21 @@ export default {
             },
             FailedToQueuePriorityChallenge: {
                 user: 'AccountId32',
-                fileKey: 'H256'
+                fileKey: 'H256',
+            },
+            FileDeletionRequest: {
+                user: 'AccountId32',
+                fileKey: 'H256',
+                bucketId: 'H256',
+                mspId: 'H256',
+                proofOfInclusion: 'bool',
+            },
+            ProofSubmittedForPendingFileDeletionRequest: {
+                mspId: 'H256',
+                user: 'AccountId32',
+                fileKey: 'H256',
+                bucketId: 'H256',
+                proofOfInclusion: 'bool'
             }
         }
     },

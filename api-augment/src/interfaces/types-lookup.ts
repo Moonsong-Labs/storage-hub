@@ -1924,6 +1924,22 @@ declare module "@polkadot/types/lookup" {
       readonly user: AccountId32;
       readonly fileKey: H256;
     } & Struct;
+    readonly isFileDeletionRequest: boolean;
+    readonly asFileDeletionRequest: {
+      readonly user: AccountId32;
+      readonly fileKey: H256;
+      readonly bucketId: H256;
+      readonly mspId: H256;
+      readonly proofOfInclusion: bool;
+    } & Struct;
+    readonly isProofSubmittedForPendingFileDeletionRequest: boolean;
+    readonly asProofSubmittedForPendingFileDeletionRequest: {
+      readonly mspId: H256;
+      readonly user: AccountId32;
+      readonly fileKey: H256;
+      readonly bucketId: H256;
+      readonly proofOfInclusion: bool;
+    } & Struct;
     readonly type:
       | "NewBucket"
       | "BucketPrivacyUpdated"
@@ -1934,7 +1950,9 @@ declare module "@polkadot/types/lookup" {
       | "StorageRequestExpired"
       | "StorageRequestRevoked"
       | "BspStoppedStoring"
-      | "FailedToQueuePriorityChallenge";
+      | "FailedToQueuePriorityChallenge"
+      | "FileDeletionRequest"
+      | "ProofSubmittedForPendingFileDeletionRequest";
   }
 
   /** @name PalletProofsDealerEvent (133) */

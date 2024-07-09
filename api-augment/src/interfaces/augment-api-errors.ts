@@ -211,10 +211,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ExpectedNonInclusionProof: AugmentedError<ApiType>;
       /**
-       * Failed to add file key to pending deletion requests.
-       **/
-      MaxUserPendingDeletionRequestsReached: AugmentedError<ApiType>;
-      /**
        * Failed to convert block number to threshold.
        **/
       FailedToConvertBlockNumber: AugmentedError<ApiType>;
@@ -251,6 +247,10 @@ declare module "@polkadot/api-base/types/errors" {
        * probably stop using this pallet.
        **/
       MaxBlockNumberReached: AugmentedError<ApiType>;
+      /**
+       * Max number of user pending deletion requests reached.
+       **/
+      MaxUserPendingDeletionRequestsReached: AugmentedError<ApiType>;
       /**
        * Unauthorized operation, signer is not an MSP of the bucket id.
        **/
