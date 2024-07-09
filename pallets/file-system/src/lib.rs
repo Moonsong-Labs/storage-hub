@@ -198,8 +198,7 @@ pub mod pallet {
         #[pallet::constant]
         type StorageRequestTtl: Get<u32>;
 
-        /// Time-to-live for a pending file deletion request.
-        #[pallet::constant]
+        /// Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.        #[pallet::constant]
         type PendingFileDeletionRequestTtl: Get<u32>;
 
         /// Maximum number of file deletion requests a user can have pending.

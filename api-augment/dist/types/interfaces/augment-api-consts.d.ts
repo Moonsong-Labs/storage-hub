@@ -83,10 +83,6 @@ declare module '@polkadot/api-base/types/consts' {
              **/
             maxUserPendingDeletionRequests: u32 & AugmentedConst<ApiType>;
             /**
-             * Time-to-live for a pending file deletion request.
-             **/
-            pendingFileDeletionRequestTtl: u32 & AugmentedConst<ApiType>;
-            /**
              * Time-to-live for a storage request.
              **/
             storageRequestTtl: u32 & AugmentedConst<ApiType>;
