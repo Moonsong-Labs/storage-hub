@@ -20,12 +20,8 @@ use shc_forest_manager::{
 use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
-use shc_blockchain_service::BlockchainService;
-use shc_blockchain_service::KEY_TYPE;
+use shc_blockchain_service::{BlockchainService, KEY_TYPE};
 use shc_common::types::HasherOutT;
-use shc_common::types::ParachainClient;
-use shc_common::types::ParachainExecutor;
-use shc_common::types::ParachainNetworkService;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
 use sp_trie::{LayoutV1, TrieLayout};
@@ -74,6 +70,12 @@ use crate::{
     cli::{self, ProviderType},
     command::ProviderOptions,
 };
+
+//* These type definitions were moved from this file to the common crate to be used by'
+//* the StorageHub services crates
+type ParachainExecutor = shc_common::types::ParachainExecutor;
+type ParachainClient = shc_common::types::ParachainClient;
+type ParachainNetworkService = shc_common::types::ParachainNetworkService;
 
 pub(crate) type ParachainBackend = TFullBackend<Block>;
 
