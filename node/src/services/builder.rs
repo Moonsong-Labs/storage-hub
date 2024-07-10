@@ -128,7 +128,7 @@ where
         self
     }
 
-    /// Get the [`FileStorage`] from the builder.
+    /// Creates a new [`StorageHubClientRpcConfig`] to be used when setting up the RPCs.
     pub fn rpc_config(&self) -> StorageHubClientRpcConfig<T, FL, FS> {
         StorageHubClientRpcConfig::new(
             self.file_storage
