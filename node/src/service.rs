@@ -20,6 +20,7 @@ use shc_forest_manager::{
 use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
+use shc_blockchain_service::{BlockchainService, KEY_TYPE};
 use shc_common::types::HasherOutT;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
@@ -48,58 +49,38 @@ use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
 use sc_client_api::{Backend, HeaderBackend};
 use sc_consensus::{ImportQueue, LongestChain};
-use sc_executor::{HeapAllocStrategy, WasmExecutor, DEFAULT_HEAP_ALLOC_STRATEGY};
-use sc_network::{config::IncomingRequest, NetworkBlock, NetworkService, ProtocolName};
+use sc_executor::{HeapAllocStrategy, DEFAULT_HEAP_ALLOC_STRATEGY};
+use sc_network::{config::IncomingRequest, NetworkBlock, ProtocolName};
 use sc_network_sync::SyncingService;
-use sc_service::{
-    Configuration, PartialComponents, RpcHandlers, TFullBackend, TFullClient, TaskManager,
-};
+use sc_service::{Configuration, PartialComponents, RpcHandlers, TFullBackend, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
+use shc_file_transfer_service::configure_file_transfer_network;
 use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::traits::Block as BlockT;
 use substrate_prometheus_endpoint::Registry;
 
 use crate::{
     cli::StorageLayer,
     services::{
-        blockchain::BlockchainService,
         builder::{StorageHubBuilder, StorageLayerBuilder},
-        file_transfer::configure_file_transfer_network,
         handler::StorageHubHandler,
     },
 };
 use crate::{
     cli::{self, ProviderType},
     command::ProviderOptions,
-    services::blockchain::KEY_TYPE,
 };
 
-#[cfg(not(feature = "runtime-benchmarks"))]
-type HostFunctions = (
-    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
-    sp_io::SubstrateHostFunctions,
-    cumulus_client_service::storage_proof_size::HostFunctions,
-);
-
-#[cfg(feature = "runtime-benchmarks")]
-type HostFunctions = (
-    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
-    sp_io::SubstrateHostFunctions,
-    cumulus_client_service::storage_proof_size::HostFunctions,
-    frame_benchmarking::benchmarking::HostFunctions,
-);
-
-pub(crate) type ParachainExecutor = WasmExecutor<HostFunctions>;
-
-pub(crate) type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
+//* These type definitions were moved from this file to the common crate to be used by'
+//* the StorageHub services crates
+type ParachainExecutor = shc_common::types::ParachainExecutor;
+type ParachainClient = shc_common::types::ParachainClient;
+type ParachainNetworkService = shc_common::types::ParachainNetworkService;
 
 pub(crate) type ParachainBackend = TFullBackend<Block>;
 
 pub(crate) type ParachainBlockImport =
     TParachainBlockImport<Block, Arc<ParachainClient>, ParachainBackend>;
-
-pub(crate) type ParachainNetworkService = NetworkService<Block, <Block as BlockT>::Hash>;
 
 type MaybeSelectChain = Option<sc_consensus::LongestChain<ParachainBackend, Block>>;
 

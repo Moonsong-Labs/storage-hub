@@ -8,21 +8,18 @@ use std::{marker::PhantomData, sync::Arc};
 use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
+use shc_blockchain_service::{spawn_blockchain_service, BlockchainService};
+use shc_common::types::{ParachainClient, ParachainNetworkService};
 use shc_file_manager::{
     in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage, traits::FileStorage,
 };
+use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_forest_manager::{
     in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
 };
 use shc_rpc::StorageHubClientRpcConfig;
 
-use crate::service::{ParachainClient, ParachainNetworkService};
-
-use super::{
-    blockchain::{spawn_blockchain_service, BlockchainService},
-    file_transfer::{spawn_file_transfer_service, FileTransferService},
-    handler::StorageHubHandler,
-};
+use super::handler::StorageHubHandler;
 
 /// Builds the [`StorageHubHandler`] by adding each component separately.
 /// Provides setters and getters for each component.

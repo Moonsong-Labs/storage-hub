@@ -1,11 +1,11 @@
-use crate::services::file_transfer::commands::FileTransferServiceInterface;
-use crate::tasks::AcceptedBspVolunteer;
 use crate::tasks::StorageHubHandler;
 use log::{debug, error, info};
 use sc_network::PeerId;
 use shc_actors_framework::event_bus::EventHandler;
+use shc_blockchain_service::events::AcceptedBspVolunteer;
 use shc_common::types::FileMetadata;
 use shc_file_manager::traits::FileStorage;
+use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::ForestStorage;
 use shp_file_key_verifier::types::ChunkId;
 use sp_runtime::AccountId32;
