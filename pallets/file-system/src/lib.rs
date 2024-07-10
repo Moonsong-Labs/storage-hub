@@ -48,7 +48,7 @@ pub mod pallet {
     use frame_support::{
         dispatch::DispatchResult,
         pallet_prelude::{ValueQuery, *},
-        sp_runtime::traits::{AtLeast32Bit, CheckEqual, MaybeDisplay, SimpleBitOps},
+        sp_runtime::traits::{CheckEqual, Convert, MaybeDisplay, SimpleBitOps},
         traits::{
             nonfungibles_v2::{Create, Inspect as NonFungiblesInspect},
             Currency,
@@ -56,7 +56,6 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use sp_runtime::traits::Convert;
     use sp_runtime::BoundedVec;
     use sp_runtime::{
         traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
@@ -99,7 +98,7 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + Default
             + MaybeDisplay
-            + AtLeast32Bit
+            + Into<u32>
             + Copy
             + MaxEncodedLen
             + HasCompact
@@ -109,8 +108,8 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + CheckedAdd
             + One
-            + Zero
-            + Into<u32>;
+            + Saturating
+            + Zero;
 
         /// Type representing the threshold a BSP must meet to be eligible to volunteer to store a file.
         type ThresholdType: Parameter

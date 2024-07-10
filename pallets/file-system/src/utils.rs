@@ -274,7 +274,7 @@ where
             return Err(Error::<T>::BspsRequiredCannotBeZero)?;
         }
 
-        if bsps_required > MaxBspsPerStorageRequest::<T>::get().into() {
+        if bsps_required.into() > MaxBspsPerStorageRequest::<T>::get().into() {
             return Err(Error::<T>::BspsRequiredExceedsMax)?;
         }
 
@@ -356,7 +356,7 @@ where
             <StorageRequests<T>>::get(&file_key).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         expect_or_err!(
-            storage_request_metadata.bsps_confirmed < storage_request_metadata.bsps_required,
+            storage_request_metadata.bsps_confirmed.into() < storage_request_metadata.bsps_required.into(),
             "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
             Error::<T>::StorageRequestBspsRequiredFulfilled,
             bool
@@ -464,7 +464,7 @@ where
             <StorageRequests<T>>::get(&file_key).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         expect_or_err!(
-            file_metadata.bsps_confirmed < file_metadata.bsps_required,
+            file_metadata.bsps_confirmed.into() < file_metadata.bsps_required.into(),
             "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
             Error::<T>::StorageRequestBspsRequiredFulfilled,
             bool
@@ -487,7 +487,7 @@ where
 
         // Check that the number of confirmed bsps is less than the required bsps and increment it.
         expect_or_err!(
-            file_metadata.bsps_confirmed < file_metadata.bsps_required,
+            file_metadata.bsps_confirmed.into() < file_metadata.bsps_required.into(),
             "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
             Error::<T>::StorageRequestBspsRequiredFulfilled,
             bool
@@ -630,7 +630,9 @@ where
         );
 
         // Check if there are already BSPs who have confirmed to store the file.
-        if storage_request_metadata.bsps_confirmed >= T::StorageRequestBspsRequiredType::zero() {
+        if storage_request_metadata.bsps_confirmed.into()
+            >= T::StorageRequestBspsRequiredType::zero().into()
+        {
             // Apply Remove mutation of the file key to the BSPs that have confirmed storing the file (proofs of inclusion).
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &file_key,
@@ -744,11 +746,11 @@ where
 
                         storage_request_metadata.bsps_confirmed = storage_request_metadata
                             .bsps_confirmed
-                            .saturating_sub(1u32.into());
+                            .saturating_sub(T::StorageRequestBspsRequiredType::one());
 
                         storage_request_metadata.bsps_volunteered = storage_request_metadata
                             .bsps_volunteered
-                            .saturating_sub(1u32.into());
+                            .saturating_sub(T::StorageRequestBspsRequiredType::one());
 
                         <StorageRequestBsps<T>>::remove(&file_key, &bsp_id);
                     }
@@ -757,7 +759,7 @@ where
                     None => {
                         storage_request_metadata.bsps_required = storage_request_metadata
                             .bsps_required
-                            .saturating_add(1u32.into())
+                            .saturating_sub(T::StorageRequestBspsRequiredType::one());
                     }
                 }
 
@@ -774,7 +776,7 @@ where
                     fingerprint,
                     size,
                     None,
-                    Some(1u32.into()),
+                    Some(T::StorageRequestBspsRequiredType::one()),
                     None,
                     if can_serve {
                         BoundedVec::try_from(vec![bsp_id]).unwrap()
