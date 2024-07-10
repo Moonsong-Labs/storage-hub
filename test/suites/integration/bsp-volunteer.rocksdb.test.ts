@@ -12,25 +12,29 @@ import {
   checkBspForFile,
   checkFileChecksum,
   type BspNetApi,
-  cleardownTest,
+  closeBspNet,
   sleep
 } from "../../util";
 import { hexToString } from "@polkadot/util";
 
 describe("BSPNet: BSP Volunteer", () => {
-  let api: BspNetApi;
+  let user_api: BspNetApi;
+  let bsp_api: BspNetApi;
 
   before(async () => {
     await runBspNet(false, true);
-    api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+    user_api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+    bsp_api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
   });
 
   after(async () => {
-    await cleardownTest(api);
+    await user_api.disconnect();
+    await bsp_api.disconnect();
+    await closeBspNet();
   });
 
   it("Network launches and can be queried", async () => {
-    const userNodePeerId = await api.rpc.system.localPeerId();
+    const userNodePeerId = await user_api.rpc.system.localPeerId();
     strictEqual(userNodePeerId.toString(), NODE_INFOS.user.expectedPeerId);
 
     const bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
@@ -44,15 +48,15 @@ describe("BSPNet: BSP Volunteer", () => {
     const destination = "test/adolphus.jpg";
     const bucketName = "nothingmuch-0";
 
-    const newBucketEventEvent = await api.createBucket(bucketName);
+    const newBucketEventEvent = await user_api.createBucket(bucketName);
     const newBucketEventDataBlob =
-      api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+      user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
     if (!newBucketEventDataBlob) {
       throw new Error("Event doesn't match Type");
     }
 
-    const { fingerprint, size, location } = await api.loadFile(
+    const { fingerprint, size, location } = await user_api.loadFile(
       source,
       destination,
       NODE_INFOS.user.AddressId,
@@ -69,16 +73,16 @@ describe("BSPNet: BSP Volunteer", () => {
     const destination = "test/smile.jpg";
     const bucketName = "nothingmuch-1";
 
-    const newBucketEventEvent = await api.createBucket(bucketName);
+    const newBucketEventEvent = await user_api.createBucket(bucketName);
     const newBucketEventDataBlob =
-      api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+      user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
     if (!newBucketEventDataBlob) {
       throw new Error("Event doesn't match Type");
     }
 
-    const issueStorageRequestResult = await api.sealBlock(
-      api.tx.fileSystem.issueStorageRequest(
+    const issueStorageRequestResult = await user_api.sealBlock(
+      user_api.tx.fileSystem.issueStorageRequest(
         newBucketEventDataBlob.bucketId,
         destination,
         TEST_ARTEFACTS["res/smile.jpg"].fingerprint,
@@ -90,13 +94,13 @@ describe("BSPNet: BSP Volunteer", () => {
     );
     await sleep(500); // wait for the bsp to volunteer
 
-    const { event } = api.assertEvent(
+    const { event } = user_api.assertEvent(
       "fileSystem",
       "NewStorageRequest",
       issueStorageRequestResult.events
     );
 
-    const dataBlob = api.events.fileSystem.NewStorageRequest.is(event) && event.data;
+    const dataBlob = user_api.events.fileSystem.NewStorageRequest.is(event) && event.data;
 
     if (!dataBlob) {
       throw new Error("Event doesn't match Type");
@@ -115,23 +119,29 @@ describe("BSPNet: BSP Volunteer", () => {
     const destination = "test/whatsup.jpg";
     const bucketName = "nothingmuch-2";
 
-    const newBucketEventEvent = await api.createBucket(bucketName);
+    const initial_bsp_forest_root = await bsp_api.getForestRoot();
+    strictEqual(
+      initial_bsp_forest_root.toString(),
+      "0x03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314"
+    );
+
+    const newBucketEventEvent = await user_api.createBucket(bucketName);
     const newBucketEventDataBlob =
-      api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+      user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
     if (!newBucketEventDataBlob) {
       throw new Error("Event doesn't match Type");
     }
 
-    const { fingerprint, size, location } = await api.loadFile(
+    const { fingerprint, size, location } = await user_api.loadFile(
       source,
       destination,
       NODE_INFOS.user.AddressId,
       newBucketEventDataBlob.bucketId
     );
 
-    await api.sealBlock(
-      api.tx.fileSystem.issueStorageRequest(
+    await user_api.sealBlock(
+      user_api.tx.fileSystem.issueStorageRequest(
         newBucketEventDataBlob.bucketId,
         location,
         fingerprint,
@@ -143,13 +153,13 @@ describe("BSPNet: BSP Volunteer", () => {
     );
 
     await sleep(500); // wait for the bsp to volunteer
-    const pending = await api.rpc.author.pendingExtrinsics();
+    const pending = await user_api.rpc.author.pendingExtrinsics();
     strictEqual(pending.length, 1, "There should be one pending extrinsic from BSP");
 
-    await api.sealBlock();
+    await user_api.sealBlock();
     const [resBspId, resBucketId, resLoc, resFinger, resMulti, _, resSize] = fetchEventData(
-      api.events.fileSystem.AcceptedBspVolunteer,
-      await api.query.system.events()
+      user_api.events.fileSystem.AcceptedBspVolunteer,
+      await user_api.query.system.events()
     );
 
     strictEqual(resBspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
@@ -164,6 +174,12 @@ describe("BSPNet: BSP Volunteer", () => {
       await checkBspForFile("test/whatsup.jpg");
       const sha = await checkFileChecksum("test/whatsup.jpg");
       strictEqual(sha, TEST_ARTEFACTS["res/whatsup.jpg"].checksum);
+
+      const bsp_forest_root_after_confirm = await bsp_api.getForestRoot();
+      strictEqual(
+        bsp_forest_root_after_confirm.toString(),
+        "0x13523a10e123eb456ac5b9be431bec7eca4f7d218e3336aea175771a747978a8"
+      );
     });
   });
 });
