@@ -55,6 +55,25 @@ pub type ParachainExecutor = WasmExecutor<HostFunctions>;
 pub type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
 pub type ParachainNetworkService = NetworkService<Block, <Block as BlockT>::Hash>;
 
+#[cfg(not(feature = "runtime-benchmarks"))]
+type HostFunctions = (
+    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
+    sp_io::SubstrateHostFunctions,
+    cumulus_client_service::storage_proof_size::HostFunctions,
+);
+
+#[cfg(feature = "runtime-benchmarks")]
+type HostFunctions = (
+    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
+    sp_io::SubstrateHostFunctions,
+    cumulus_client_service::storage_proof_size::HostFunctions,
+    frame_benchmarking::benchmarking::HostFunctions,
+);
+
+pub type ParachainExecutor = WasmExecutor<HostFunctions>;
+pub type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
+pub type ParachainNetworkService = NetworkService<Block, <Block as BlockT>::Hash>;
+
 /// Proving either the exact key or the neighbour keys of the challenged key.
 pub enum Proven<K, D: Debug> {
     ExactKey(Leaf<K, D>),
