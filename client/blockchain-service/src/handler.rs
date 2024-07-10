@@ -37,7 +37,6 @@ use serde_json::Number;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::Fingerprint;
 use shp_file_key_verifier::types::FileKey;
-use sp_api::Metadata;
 use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::{Keystore, KeystorePtr};
@@ -55,7 +54,8 @@ use pallet_file_system_runtime_api::{
 use shc_common::types::{BlockNumber, ParachainClient};
 
 use crate::{
-    commands::BlockchainServiceCommand, events::*, types::EventsVec, types::Extrinsic, KEY_TYPE, transaction::SubmittedTransaction
+    commands::BlockchainServiceCommand, events::*, transaction::SubmittedTransaction,
+    types::EventsVec, types::Extrinsic, KEY_TYPE,
 };
 
 const LOG_TARGET: &str = "blockchain-service";
@@ -291,25 +291,6 @@ impl Actor for BlockchainService {
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
-                        }
-                    }
-                }
-                BlockchainServiceCommand::GetApiMetadata {
-                    block_hash,
-                    callback,
-                } => {
-                    let metadata = self
-                        .client
-                        .runtime_api()
-                        .metadata(block_hash)
-                        .map_err(|_| anyhow::anyhow!("Failed to get metadata"));
-
-                    match callback.send(metadata) {
-                        Ok(_) => {
-                            trace!(target: LOG_TARGET, "Metadata sent successfully");
-                        }
-                        Err(_) => {
-                            error!(target: LOG_TARGET, "Failed to send to receiver");
                         }
                     }
                 }

@@ -1,7 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::Number;
-use sp_core::OpaqueMetadata;
 use sp_core::H256;
 
 use pallet_file_system_runtime_api::{
@@ -51,10 +50,6 @@ pub enum BlockchainServiceCommand {
             Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>,
         >,
     },
-    GetApiMetadata {
-        block_hash: H256,
-        callback: tokio::sync::oneshot::Sender<Result<OpaqueMetadata>>,
-    },
 }
 
 /// Interface for interacting with the BlockchainService actor.
@@ -98,9 +93,6 @@ pub trait BlockchainServiceInterface {
         bsp_id: sp_core::sr25519::Public,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
-
-    /// Get the runtime API metadata for a given block.
-    async fn get_api_metadata(&self, block_hash: H256) -> Result<OpaqueMetadata>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -223,17 +215,6 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         let message = BlockchainServiceCommand::QueryBspConfirmChunksToProveForFile {
             bsp_id,
             file_key,
-            callback,
-        };
-        self.send(message).await;
-        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
-    }
-
-    async fn get_api_metadata(&self, block_hash: H256) -> Result<OpaqueMetadata> {
-        let (callback, rx) = tokio::sync::oneshot::channel();
-        // Build command to send to blockchain service.
-        let message = BlockchainServiceCommand::GetApiMetadata {
-            block_hash,
             callback,
         };
         self.send(message).await;
