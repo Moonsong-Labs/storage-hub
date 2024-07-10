@@ -15,12 +15,6 @@ pub struct InMemoryFileDataTrie<T: TrieLayout + 'static> {
     memdb: MemoryDB<T::Hash>,
 }
 
-impl<T: TrieLayout> Default for InMemoryFileDataTrie<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl<T: TrieLayout + 'static> InMemoryFileDataTrie<T> {
     fn new() -> Self {
         let (memdb, root) = MemoryDB::<HashT<T>>::default_with_root();
@@ -119,7 +113,7 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
         Ok(())
     }
 
-    fn delete(&mut self, _chunk_count: u64) -> Result<(), FileStorageWriteError> {
+    fn delete(&mut self) -> Result<(), FileStorageWriteError> {
         let (memdb, root) = MemoryDB::<HashT<T>>::default_with_root();
         self.root = root;
         self.memdb = memdb;
@@ -153,6 +147,10 @@ where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     type FileDataTrie = InMemoryFileDataTrie<T>;
+
+    fn new_file_data_trie(&self) -> Self::FileDataTrie {
+        InMemoryFileDataTrie::new()
+    }
 
     fn generate_proof(
         &self,
@@ -216,7 +214,8 @@ where
         }
         self.metadata.insert(key, metadata);
 
-        let previous = self.file_data.insert(key, InMemoryFileDataTrie::default());
+        let empty_file_trie = self.new_file_data_trie();
+        let previous = self.file_data.insert(key, empty_file_trie);
         if previous.is_some() {
             panic!("Key already associated with File Data, but not with File Metadata. Possible inconsistency between them.");
         }
@@ -302,7 +301,7 @@ mod tests {
 
     #[test]
     fn file_trie_create_empty_works() {
-        let file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+        let file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
 
         // expected hash is the root hash of an empty tree.
         let expected_hash = HasherOutT::<LayoutV1<BlakeTwo256>>::try_from([
@@ -320,7 +319,7 @@ mod tests {
 
     #[test]
     fn file_trie_write_chunk_works() {
-        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
         let old_root = *file_trie.get_root();
         file_trie
             .write_chunk(&ChunkId::new(0u64), &Chunk::from([1u8; 1024]))
@@ -334,7 +333,7 @@ mod tests {
 
     #[test]
     fn file_trie_get_chunk_works() {
-        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
 
         let chunk = Chunk::from([3u8; 32]);
         let chunk_id = ChunkId::new(3);
@@ -347,7 +346,7 @@ mod tests {
     fn file_trie_stored_chunks_count_works() {
         let chunk_ids = vec![ChunkId::new(0u64), ChunkId::new(1u64)];
         let chunks = vec![Chunk::from([0u8; 1024]), Chunk::from([1u8; 1024])];
-        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
@@ -368,7 +367,7 @@ mod tests {
             Chunk::from([2u8; 1024]),
         ];
 
-        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
@@ -400,7 +399,7 @@ mod tests {
             Chunk::from([2u8; 1024]),
         ];
 
-        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
@@ -414,7 +413,7 @@ mod tests {
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
-        file_trie.delete(chunks.len() as u64).unwrap();
+        file_trie.delete().unwrap();
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_err());
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_err());
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_err());
@@ -436,7 +435,7 @@ mod tests {
             .map(|(id, _)| ChunkId::new(id as u64))
             .collect();
 
-        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
@@ -484,7 +483,7 @@ mod tests {
             .map(|(id, _)| ChunkId::new(id as u64))
             .collect();
 
-        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
@@ -535,7 +534,7 @@ mod tests {
             .map(|(id, _)| ChunkId::new(id as u64))
             .collect();
 
-        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::default();
+        let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
         assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());

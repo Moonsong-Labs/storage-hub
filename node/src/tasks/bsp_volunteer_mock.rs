@@ -2,15 +2,13 @@ use std::time::Duration;
 
 use log::*;
 use shc_actors_framework::event_bus::EventHandler;
+use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
 use sp_core::H256;
 use sp_trie::TrieLayout;
 
-use crate::services::{
-    blockchain::{commands::BlockchainServiceInterface, events::NewStorageRequest},
-    handler::StorageHubHandler,
-};
+use crate::services::handler::StorageHubHandler;
 
 const LOG_TARGET: &str = "bsp-volunteer-mock-task";
 

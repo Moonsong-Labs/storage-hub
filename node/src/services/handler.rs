@@ -7,7 +7,9 @@ use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::{EventBusListener, EventHandler},
 };
+use shc_blockchain_service::{events::NewStorageRequest, BlockchainService};
 use shc_file_manager::traits::FileStorage;
+use shc_file_transfer_service::{events::RemoteUploadRequest, FileTransferService};
 use shc_forest_manager::traits::ForestStorage;
 
 use crate::{

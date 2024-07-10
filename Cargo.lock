@@ -12075,15 +12075,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scc"
-version = "2.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76ad2bbb0ae5100a07b7a6f2ed7ab5fd0045551a4c507989b7a620046ea3efdc"
-dependencies = [
- "sdd",
-]
-
-[[package]]
 name = "schannel"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12159,12 +12150,6 @@ dependencies = [
  "ring 0.17.8",
  "untrusted 0.9.0",
 ]
-
-[[package]]
-name = "sdd"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b84345e4c9bd703274a082fb80caaa99b7612be48dfaa1dd9266577ec412309d"
 
 [[package]]
 name = "sec1"
@@ -12324,31 +12309,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serial_test"
-version = "3.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b4b487fe2acf240a021cf57c6b2b4903b1e78ca0ecd862a71b71d2a51fed77d"
-dependencies = [
- "futures",
- "log",
- "once_cell",
- "parking_lot 0.12.3",
- "scc",
- "serial_test_derive",
-]
-
-[[package]]
-name = "serial_test_derive"
-version = "3.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82fe9db325bcef1fbcde82e078a5cc4efdf787e96b3b9cf45b50b529f2083d67"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.67",
-]
-
-[[package]]
 name = "sha-1"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12434,10 +12394,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "shc-blockchain-service"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "array-bytes 6.2.3",
+ "async-trait",
+ "cumulus-primitives-core",
+ "cumulus-primitives-storage-weight-reclaim",
+ "frame-support 28.0.0",
+ "frame-system 28.0.0",
+ "futures",
+ "lazy_static",
+ "log",
+ "pallet-file-system",
+ "pallet-file-system-runtime-api",
+ "pallet-transaction-payment 28.0.0",
+ "parity-scale-codec",
+ "polkadot-primitives 7.0.0",
+ "polkadot-runtime-common 7.0.0",
+ "sc-client-api",
+ "sc-network",
+ "sc-service",
+ "sc-tracing",
+ "sc-utils",
+ "serde",
+ "serde_json",
+ "shc-actors-framework",
+ "shc-common",
+ "shp-file-key-verifier",
+ "sp-api 26.0.0",
+ "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-keystore 0.34.0",
+ "sp-runtime 31.0.1",
+ "storage-hub-runtime",
+ "substrate-frame-rpc-system",
+ "tokio",
+]
+
+[[package]]
 name = "shc-common"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "cumulus-client-service",
  "frame-system 28.0.0",
  "pallet-file-system",
  "pallet-proofs-dealer",
@@ -12445,12 +12445,17 @@ dependencies = [
  "parity-scale-codec",
  "polkadot-primitives 7.0.0",
  "reference-trie",
+ "sc-executor",
+ "sc-network",
+ "sc-service",
  "serde",
  "shc-actors-framework",
  "shp-file-key-verifier",
  "shp-forest-verifier",
  "shp-traits",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
+ "sp-io 30.0.0",
+ "sp-runtime 31.0.1",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "storage-hub-runtime",
  "trie-db 0.29.1",
@@ -12463,12 +12468,12 @@ dependencies = [
  "bincode",
  "hash-db",
  "kvdb",
+ "kvdb-memorydb",
  "kvdb-rocksdb",
  "log",
  "parity-scale-codec",
  "reference-trie",
  "serde_json",
- "serial_test",
  "shc-actors-framework",
  "shc-common",
  "shp-traits",
@@ -12481,12 +12486,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "shc-file-transfer-service"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "array-bytes 6.2.3",
+ "async-channel 1.9.0",
+ "async-trait",
+ "futures",
+ "libp2p-identity",
+ "parity-scale-codec",
+ "prost 0.12.6",
+ "prost-build 0.12.6",
+ "sc-client-api",
+ "sc-network",
+ "sc-service",
+ "sc-tracing",
+ "sc-utils",
+ "shc-actors-framework",
+ "shc-common",
+ "shp-file-key-verifier",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "shc-forest-manager"
 version = "0.1.0"
 dependencies = [
  "bincode",
  "hash-db",
  "kvdb",
+ "kvdb-memorydb",
  "kvdb-rocksdb",
  "log",
  "parity-scale-codec",
@@ -12509,6 +12540,7 @@ dependencies = [
  "log",
  "shc-common",
  "shc-file-manager",
+ "shc-forest-manager",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-runtime 31.0.1",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
@@ -14645,8 +14677,9 @@ dependencies = [
  "futures-timer",
  "hex",
  "jsonrpsee",
+ "kvdb",
+ "kvdb-rocksdb",
  "lazy_static",
- "libp2p-identity",
  "log",
  "pallet-file-system",
  "pallet-file-system-runtime-api",
@@ -14659,8 +14692,6 @@ dependencies = [
  "polkadot-cli",
  "polkadot-primitives 7.0.0",
  "polkadot-runtime-common 7.0.0",
- "prost 0.12.6",
- "prost-build 0.12.6",
  "reference-trie",
  "sc-basic-authorship",
  "sc-chain-spec",
@@ -14684,8 +14715,10 @@ dependencies = [
  "serde",
  "serde_json",
  "shc-actors-framework",
+ "shc-blockchain-service",
  "shc-common",
  "shc-file-manager",
+ "shc-file-transfer-service",
  "shc-forest-manager",
  "shc-rpc",
  "shp-file-key-verifier",

@@ -61,12 +61,12 @@ use pallet_proofs_dealer_runtime_api::{
 };
 use shc_common::types::{BlockNumber, ProviderId};
 
-use crate::services::blockchain::{
+use crate::{
     commands::BlockchainServiceCommand,
-    events::BlockchainServiceEventBusProvider,
-    types::Extrinsic,
+    events::{AcceptedBspVolunteer, BlockchainServiceEventBusProvider, NewStorageRequest},
+    transaction::SubmittedTransaction,
+    types::{EventsVec, Extrinsic},
     KEY_TYPE,
-    {events::NewStorageRequest, types::EventsVec},
 };
 
 const LOG_TARGET: &str = "blockchain-service";

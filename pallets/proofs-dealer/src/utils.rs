@@ -140,8 +140,7 @@ where
         );
 
         // Get last tick for which the submitter submitted a proof.
-        let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(submitter.clone())
-        {
+        let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(*submitter) {
             Some(tick) => tick,
             None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
         };
@@ -282,7 +281,7 @@ where
 
         // Update `LastTickProviderSubmittedProofFor` to the challenge tick the provider has just
         // submitted a proof for.
-        LastTickProviderSubmittedProofFor::<T>::set(submitter.clone(), Some(challenges_tick));
+        LastTickProviderSubmittedProofFor::<T>::set(*submitter, Some(challenges_tick));
 
         // Remove the submitter from its current deadline registered in `ChallengeTickToChallengedProviders`.
         ChallengeTickToChallengedProviders::<T>::remove(challenges_tick_deadline, submitter);
@@ -688,23 +687,21 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
     fn initialise_challenge_cycle(provider_id: &Self::ProviderId) -> DispatchResult {
         // Check that `who` is a registered Provider.
-        if !ProvidersPalletFor::<T>::is_provider(provider_id.clone()) {
+        if !ProvidersPalletFor::<T>::is_provider(*provider_id) {
             return Err(Error::<T>::NotProvider.into());
         }
 
         // Get stake for submitter.
         // If a submitter is a registered Provider, it must have a stake, so this shouldn't happen.
         // However, since the implementation of that is not up to this pallet, we need to check.
-        let stake = ProvidersPalletFor::<T>::get_stake(provider_id.clone())
+        let stake = ProvidersPalletFor::<T>::get_stake(*provider_id)
             .ok_or(Error::<T>::ProviderStakeNotFound)?;
 
         // Check that the stake is non-zero.
         ensure!(stake > BalanceFor::<T>::zero(), Error::<T>::ZeroStake);
 
         // Check if this Provider previously had a challenge cycle initialised.
-        if let Some(last_tick_proven) =
-            LastTickProviderSubmittedProofFor::<T>::get(provider_id.clone())
-        {
+        if let Some(last_tick_proven) = LastTickProviderSubmittedProofFor::<T>::get(*provider_id) {
             // Compute the next tick for which the Provider should have been submitting a proof.
             let old_next_challenge_tick = last_tick_proven
                 .checked_add(&Self::stake_to_challenge_period(stake))
@@ -718,13 +715,13 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             // Remove the old deadline.
             ChallengeTickToChallengedProviders::<T>::remove(
                 old_next_challenge_deadline,
-                provider_id.clone(),
+                *provider_id,
             );
         }
 
         // Set `LastTickProviderSubmittedProofFor` to the current tick.
         let current_tick = ChallengesTicker::<T>::get();
-        LastTickProviderSubmittedProofFor::<T>::set(provider_id.clone(), Some(current_tick));
+        LastTickProviderSubmittedProofFor::<T>::set(*provider_id, Some(current_tick));
 
         // Compute the next tick for which the Provider should be submitting a proof.
         let next_challenge_tick = current_tick
@@ -739,15 +736,15 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         // Set the deadline for submitting a proof.
         ChallengeTickToChallengedProviders::<T>::set(
             next_challenge_deadline,
-            provider_id.clone(),
+            *provider_id,
             Some(()),
         );
 
         // Emit event.
         Self::deposit_event(Event::<T>::NewChallengeCycleInitialised {
             current_tick,
-            provider: provider_id.clone(),
-            maybe_provider_account: ProvidersPalletFor::<T>::get_owner_account(provider_id.clone()),
+            provider: *provider_id,
+            maybe_provider_account: ProvidersPalletFor::<T>::get_owner_account(*provider_id),
         });
 
         Ok(())
@@ -792,7 +789,7 @@ where
     pub fn get_challenge_period(
         provider_id: &ProviderIdFor<T>,
     ) -> Result<BlockNumberFor<T>, GetChallengePeriodError> {
-        let stake = ProvidersPalletFor::<T>::get_stake(provider_id.clone())
+        let stake = ProvidersPalletFor::<T>::get_stake(*provider_id)
             .ok_or(GetChallengePeriodError::ProviderNotRegistered)?;
 
         Ok(Self::stake_to_challenge_period(stake))
