@@ -11,15 +11,15 @@ use sp_trie::TrieLayout;
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use shc_actors_framework::event_bus::EventHandler;
+use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
 use shc_common::types::{FileKey, FileMetadata, HasherOutT};
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
+use shc_file_transfer_service::{
+    commands::FileTransferServiceInterface, events::RemoteUploadRequest,
+};
 use shc_forest_manager::traits::ForestStorage;
 
-use crate::services::{
-    blockchain::{commands::BlockchainServiceInterface, events::NewStorageRequest},
-    file_transfer::{commands::FileTransferServiceInterface, events::RemoteUploadRequest},
-    handler::StorageHubHandler,
-};
+use crate::services::handler::StorageHubHandler;
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
@@ -183,7 +183,10 @@ where
                 | FileStorageWriteError::FailedToPersistChanges
                 | FileStorageWriteError::FailedToParseFileMetadata
                 | FileStorageWriteError::FailedToParseFingerprint
-                | FileStorageWriteError::FailedToReadStorage => {
+                | FileStorageWriteError::FailedToReadStorage
+                | FileStorageWriteError::FailedToUpdatePartialRoot
+                | FileStorageWriteError::FailedToParsePartialRoot
+                | FileStorageWriteError::FailedToGetStoredChunksCount => {
                     // This internal error should not happen.
 
                     // Unvolunteer the file.
@@ -382,10 +385,11 @@ where
 
         // TODO: make this a response to the blockchain event for confirm BSP file storage.
         // Save [`FileMetadata`] of the newly stored file in the forest storage.
-        // let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
-        // let file_key = write_forest_storage
-        //     .insert_metadata(&metadata)
-        //     .expect("Failed to insert metadata.");
+        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
+        let file_key = write_forest_storage
+            .insert_metadata(&metadata)
+            .expect("Failed to insert metadata.");
+        drop(write_forest_storage);
 
         // TODO: move this under an RPC call
         let file_path = Path::new("./storage/").join(
