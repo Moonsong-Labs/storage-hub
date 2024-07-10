@@ -1259,7 +1259,6 @@ import type {
   XcmpMessageFormat
 } from "@polkadot/types/interfaces/xcm";
 import type { XcmPaymentApiError } from "@polkadot/types/interfaces/xcmPaymentApi";
-// biome-ignore lint/suspicious/noShadowRestrictedNames: <explanation>
 import type { Error } from "@polkadot/types/interfaces/xcmRuntimeApi";
 
 declare module "@polkadot/types/types/registry" {
