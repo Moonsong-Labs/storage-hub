@@ -38,6 +38,13 @@ export type BspNetApi = ApiPromise & {
     bucketId: H256
   ) => Promise<FileSendResponse>;
 
+  /**
+   * @description Requests the local forest root from a provider node.
+   *
+   * @returns A promise that resolves to a H256 representing the forest root.
+   */
+  getForestRoot: () => Promise<H256>;
+
   /** @description Creates a new bucket.
    *
    * @param bucketName - The name of the bucket to be created.

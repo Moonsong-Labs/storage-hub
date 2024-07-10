@@ -445,8 +445,8 @@ where
     )
     .await;
 
-    let maybe_file_storage = if let Some(ref sh_builder) = sh_builder {
-        sh_builder.file_storage().clone()
+    let maybe_storage_hub_client_rpc_config = if let Some(ref sh_builder) = sh_builder {
+        Some(sh_builder.rpc_config())
     } else {
         None
     };
@@ -459,7 +459,7 @@ where
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
-                maybe_file_storage: maybe_file_storage.clone(),
+                maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: command_sink.clone(),
                 deny_unsafe,
             };
@@ -759,8 +759,8 @@ where
     )
     .await;
 
-    let maybe_file_storage = if let Some(ref sh_builder) = sh_builder {
-        sh_builder.file_storage().clone()
+    let maybe_storage_hub_client_rpc_config = if let Some(ref sh_builder) = sh_builder {
+        Some(sh_builder.rpc_config())
     } else {
         None
     };
@@ -773,7 +773,7 @@ where
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
-                maybe_file_storage: maybe_file_storage.clone(),
+                maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: None,
                 deny_unsafe,
             };
