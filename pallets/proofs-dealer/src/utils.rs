@@ -140,8 +140,7 @@ where
         );
 
         // Get last tick for which the submitter submitted a proof.
-        let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(submitter.clone())
-        {
+        let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(*submitter) {
             Some(tick) => tick,
             None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
         };
@@ -282,7 +281,7 @@ where
 
         // Update `LastTickProviderSubmittedProofFor` to the challenge tick the provider has just
         // submitted a proof for.
-        LastTickProviderSubmittedProofFor::<T>::set(submitter.clone(), Some(challenges_tick));
+        LastTickProviderSubmittedProofFor::<T>::set(*submitter, Some(challenges_tick));
 
         // Remove the submitter from its current deadline registered in `ChallengeTickToChallengedProviders`.
         ChallengeTickToChallengedProviders::<T>::remove(challenges_tick_deadline, submitter);
@@ -697,21 +696,21 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
     fn initialise_challenge_cycle(who: &Self::ProviderId) -> DispatchResult {
         // Check that `who` is a registered Provider.
-        if !ProvidersPalletFor::<T>::is_provider(who.clone()) {
+        if !ProvidersPalletFor::<T>::is_provider(*who) {
             return Err(Error::<T>::NotProvider.into());
         }
 
         // Get stake for submitter.
         // If a submitter is a registered Provider, it must have a stake, so this shouldn't happen.
         // However, since the implementation of that is not up to this pallet, we need to check.
-        let stake = ProvidersPalletFor::<T>::get_stake(who.clone())
-            .ok_or(Error::<T>::ProviderStakeNotFound)?;
+        let stake =
+            ProvidersPalletFor::<T>::get_stake(*who).ok_or(Error::<T>::ProviderStakeNotFound)?;
 
         // Check that the stake is non-zero.
         ensure!(stake > BalanceFor::<T>::zero(), Error::<T>::ZeroStake);
 
         // Check if this Provider previously had a challenge cycle initialised.
-        if let Some(last_tick_proven) = LastTickProviderSubmittedProofFor::<T>::get(who.clone()) {
+        if let Some(last_tick_proven) = LastTickProviderSubmittedProofFor::<T>::get(*who) {
             // Compute the next tick for which the Provider should have been submitting a proof.
             let old_next_challenge_tick = last_tick_proven
                 .checked_add(&Self::stake_to_challenge_period(stake))
@@ -723,15 +722,12 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
                 .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
             // Remove the old deadline.
-            ChallengeTickToChallengedProviders::<T>::remove(
-                old_next_challenge_deadline,
-                who.clone(),
-            );
+            ChallengeTickToChallengedProviders::<T>::remove(old_next_challenge_deadline, *who);
         }
 
         // Set `LastTickProviderSubmittedProofFor` to the current tick.
         let current_tick = ChallengesTicker::<T>::get();
-        LastTickProviderSubmittedProofFor::<T>::set(who.clone(), Some(current_tick));
+        LastTickProviderSubmittedProofFor::<T>::set(*who, Some(current_tick));
 
         // Compute the next tick for which the Provider should be submitting a proof.
         let next_challenge_tick = current_tick
@@ -744,11 +740,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
         // Set the deadline for submitting a proof.
-        ChallengeTickToChallengedProviders::<T>::set(
-            next_challenge_deadline,
-            who.clone(),
-            Some(()),
-        );
+        ChallengeTickToChallengedProviders::<T>::set(next_challenge_deadline, *who, Some(()));
 
         Ok(())
     }

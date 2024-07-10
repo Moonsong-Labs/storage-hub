@@ -2,11 +2,12 @@ use sc_tracing::tracing::*;
 use sp_trie::TrieLayout;
 
 use shc_actors_framework::event_bus::EventHandler;
+use shc_blockchain_service::events::BspConfirmedStoring;
 use shc_common::types::HasherOutT;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
 
-use crate::services::{blockchain::events::BspConfirmedStoring, handler::StorageHubHandler};
+use crate::services::handler::StorageHubHandler;
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 

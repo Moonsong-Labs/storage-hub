@@ -12,7 +12,7 @@ ENV RUST_BACKTRACE=1
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    ca-certificates curl sudo && \
+    ca-certificates curl sudo librocksdb-dev && \
     apt-get autoremove -y && \
     apt-get clean && \
     find /var/lib/apt/lists/ -type f -not -name lock -delete && \

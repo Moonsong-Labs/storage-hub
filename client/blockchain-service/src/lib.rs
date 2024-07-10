@@ -7,11 +7,11 @@ pub mod types;
 use std::sync::Arc;
 
 use sc_service::RpcHandlers;
-use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use sp_keystore::KeystorePtr;
 use sp_runtime::KeyTypeId;
 
-use crate::service::ParachainClient;
+use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
+use shc_common::types::ParachainClient;
 
 pub use self::handler::BlockchainService;
 
