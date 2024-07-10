@@ -124,7 +124,7 @@ where
         let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
 
         // Instantiate an "empty" [`FileDataTrie`] so we can write the file chunks into it.
-        let mut file_data_trie = <FL as FileStorage<T>>::FileDataTrie::default();
+        let mut file_data_trie = self.file_storage.write().await.new_file_data_trie();
         // A chunk id is simply an integer index.
         let mut chunk_id: u64 = 0;
 

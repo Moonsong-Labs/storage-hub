@@ -148,17 +148,19 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
   throw new Error(`Error fetching peerId from ${url}`);
 };
 
-export const runBspNet = async (noisy = false) => {
+export const runBspNet = async (noisy = false, rocksdb = false) => {
   let api: BspNetApi | undefined;
   try {
     console.log(`sh user id: ${shUser.address}`);
     console.log(`sh bsp id: ${bsp.address}`);
-    const composeFilePath = path.resolve(
-      process.cwd(),
-      "..",
-      "docker",
-      noisy ? "noisy-bsp-compose.yml" : "local-dev-bsp-compose.yml"
-    );
+    let file = "local-dev-bsp-compose.yml";
+    if (rocksdb) {
+      file = "local-dev-bsp-rocksdb-compose.yml";
+    }
+    if (noisy) {
+      file = "noisy-bsp-compose.yml";
+    }
+    const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
 
     if (noisy) {
       await compose.upOne("toxiproxy", { config: composeFilePath, log: true });

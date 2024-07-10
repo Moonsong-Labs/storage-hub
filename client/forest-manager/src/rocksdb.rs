@@ -31,7 +31,7 @@ pub(crate) fn other_io_error(err: String) -> io::Error {
 fn open_or_creating_rocksdb(db_path: String) -> io::Result<Database> {
     // TODO: add a configuration option for the base path
     let root = PathBuf::from("/tmp/");
-    let path = root.join("storagehub").join(db_path);
+    let path = root.join("storagehub/forest_storage/").join(db_path);
 
     let db_config = DatabaseConfig::with_columns(1);
 
@@ -46,33 +46,12 @@ fn open_or_creating_rocksdb(db_path: String) -> io::Result<Database> {
 }
 
 /// Storage backend for RocksDB.
-pub struct StorageDb<Hasher> {
+pub struct StorageDb<T> {
     pub db: Arc<dyn KeyValueDB>,
-    pub _phantom: std::marker::PhantomData<Hasher>,
+    pub _phantom: std::marker::PhantomData<T>,
 }
 
-impl<H: Hasher> Storage<H> for StorageDb<H> {
-    fn get(&self, key: &H::Out, prefix: Prefix) -> Result<Option<DBValue>, String> {
-        let prefixed_key = prefixed_key::<H>(key, prefix);
-        self.db.get(0, &prefixed_key).map_err(|e| {
-            warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
-            format!("Failed to read from DB: {}", e)
-        })
-    }
-}
-
-/// Trait that [`RocksDBForestStorage`] requires to interact with the storage backend.
-pub trait Backend<T: TrieLayout>: Storage<HashT<T>>
-where
-    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
-{
-    /// Write the transaction to the storage.
-    fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>>;
-    /// Get the [`ROOT`](`well_known_keys::ROOT`) from storage.
-    fn storage_root(&self) -> Result<Option<HasherOutT<T>>, ErrorT<T>>;
-}
-
-impl<T: TrieLayout> Backend<T> for StorageDb<HashT<T>>
+impl<T: TrieLayout> StorageDb<T>
 where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
@@ -97,10 +76,20 @@ where
     }
 }
 
+impl<T: TrieLayout + Send + Sync> Storage<HashT<T>> for StorageDb<T> {
+    fn get(&self, key: &HasherOutT<T>, prefix: Prefix) -> Result<Option<DBValue>, String> {
+        let prefixed_key = prefixed_key::<HashT<T>>(key, prefix);
+        self.db.get(0, &prefixed_key).map_err(|e| {
+            warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
+            format!("Failed to read from DB: {}", e)
+        })
+    }
+}
+
 /// RocksDB based [`ForestStorage`] implementation.
 pub struct RocksDBForestStorage<T: TrieLayout> {
     /// RocksDB storage backend.
-    storage: Box<dyn Backend<T>>,
+    storage: StorageDb<T>,
     /// In-memory overlay of the trie with changes not yet committed to the backend.
     ///
     /// Once all operations are done, the overlay will be committed to the storage by executing [`RocksDBForestStorage::commit`].
@@ -114,7 +103,7 @@ where
 {
     /// This will open the RocksDB database and read the storage [`ROOT`](`well_known_keys::ROOT`) from it.
     /// If the root hash is not found in storage, a new trie will be created and the root hash will be stored in storage.
-    pub fn new(storage: Box<dyn Backend<T>>) -> Result<Self, ErrorT<T>> {
+    pub fn new(storage: StorageDb<T>) -> Result<Self, ErrorT<T>> {
         let maybe_root = storage.storage_root()?;
 
         let rocksdb_forest_storage = match maybe_root {
@@ -163,9 +152,9 @@ where
         Ok(rocksdb_forest_storage)
     }
 
-    /// Open the RocksDB database at `dp_path` and return a new instance of [`StorageDb`].
-    pub fn rocksdb_storage(dp_path: String) -> Result<StorageDb<HashT<T>>, ErrorT<T>> {
-        let db = open_or_creating_rocksdb(dp_path).map_err(|e| {
+    /// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
+    pub fn rocksdb_storage(db_path: String) -> Result<StorageDb<T>, ErrorT<T>> {
+        let db = open_or_creating_rocksdb(db_path).map_err(|e| {
             warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
             ForestStorageError::FailedToReadStorage
         })?;
@@ -370,61 +359,16 @@ mod tests {
     use sp_trie::LayoutV1;
     use trie_db::Trie;
 
-    /// Mock that simulates the backend for testing purposes.
-    struct MockStorageDb {
-        pub data: std::collections::HashMap<Vec<u8>, Vec<u8>>,
-    }
-
-    impl<H: Hasher> Storage<H> for MockStorageDb {
-        fn get(&self, key: &H::Out, prefix: Prefix) -> Result<Option<DBValue>, String> {
-            let prefixed_key = prefixed_key::<H>(key, prefix);
-            Ok(self.data.get(&prefixed_key).cloned())
-        }
-    }
-
-    impl<T: TrieLayout> Backend<T> for MockStorageDb
-    where
-        <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
-    {
-        fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>> {
-            for op in transaction.ops {
-                match op {
-                    kvdb::DBOp::Insert {
-                        col: _col,
-                        key,
-                        value,
-                    } => {
-                        self.data.insert(key.to_vec(), value);
-                    }
-                    kvdb::DBOp::Delete { col: _col, key } => {
-                        self.data.remove(&key.to_vec());
-                    }
-                    kvdb::DBOp::DeletePrefix { col: _col, prefix } => {
-                        self.data.retain(|k, _| !k.starts_with(&prefix));
-                    }
-                };
-            }
-
-            Ok(())
-        }
-
-        fn storage_root(&self) -> Result<Option<HasherOutT<T>>, ErrorT<T>> {
-            self.data
-                .get(well_known_keys::ROOT)
-                .map(|root| convert_raw_bytes_to_hasher_out::<T>(root.to_owned()))
-                .transpose()
-        }
-    }
-
-    // Reusable function to setup a new `MockStorageDb` and `RocksDBForestStorage`.
+    // Reusable function to setup a new `StorageDb` and `RocksDBForestStorage`.
     fn setup_storage<T>() -> Result<RocksDBForestStorage<T>, ErrorT<T>>
     where
         T: TrieLayout + Send + Sync + 'static,
         <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
     {
-        let storage = Box::new(MockStorageDb {
-            data: Default::default(),
-        });
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(1)),
+            _phantom: Default::default(),
+        };
         RocksDBForestStorage::<T>::new(storage)
     }
 
