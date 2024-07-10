@@ -14,6 +14,7 @@ use shc_file_manager::{
 use shc_forest_manager::{
     in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
 };
+use shc_rpc::StorageHubClientRpcConfig;
 
 use crate::service::{ParachainClient, ParachainNetworkService};
 
@@ -130,9 +131,16 @@ where
         self
     }
 
-    /// Get the [`FileStorage`] from the builder.
-    pub fn file_storage(&self) -> &Option<Arc<RwLock<FL>>> {
-        &self.file_storage
+    /// Creates a new [`StorageHubClientRpcConfig`] to be used when setting up the RPCs.
+    pub fn rpc_config(&self) -> StorageHubClientRpcConfig<T, FL, FS> {
+        StorageHubClientRpcConfig::new(
+            self.file_storage
+                .clone()
+                .expect("File Storage not initialized"),
+            self.forest_storage
+                .clone()
+                .expect("Forest Storage not initialized"),
+        )
     }
 
     /// Build the [`StorageHubHandler`] with the configuration set in the builder.

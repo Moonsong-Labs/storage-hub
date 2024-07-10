@@ -108,7 +108,7 @@ pub struct RocksDBForestStorage<T: TrieLayout> {
     root: HasherOutT<T>,
 }
 
-impl<T: TrieLayout + Send + Sync> RocksDBForestStorage<T>
+impl<T: TrieLayout + Send + Sync + 'static> RocksDBForestStorage<T>
 where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
@@ -258,10 +258,14 @@ impl<T: TrieLayout + Send + Sync> hash_db::HashDB<HashT<T>, DBValue> for RocksDB
     }
 }
 
-impl<T: TrieLayout + Send + Sync> ForestStorage<T> for RocksDBForestStorage<T>
+impl<T: TrieLayout + Send + Sync + 'static> ForestStorage<T> for RocksDBForestStorage<T>
 where
     <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
 {
+    fn root(&self) -> HasherOutT<T> {
+        self.root
+    }
+
     fn contains_file_key(&self, file_key: &HasherOutT<T>) -> Result<bool, ErrorT<T>> {
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
@@ -415,7 +419,7 @@ mod tests {
     // Reusable function to setup a new `MockStorageDb` and `RocksDBForestStorage`.
     fn setup_storage<T>() -> Result<RocksDBForestStorage<T>, ErrorT<T>>
     where
-        T: TrieLayout + Send + Sync,
+        T: TrieLayout + Send + Sync + 'static,
         <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
     {
         let storage = Box::new(MockStorageDb {
@@ -449,7 +453,7 @@ mod tests {
         size: u64,
     ) -> HasherOutT<T>
     where
-        T: TrieLayout + Send + Sync,
+        T: TrieLayout + Send + Sync + 'static,
         HasherOutT<T>: TryFrom<[u8; 32]>,
     {
         let metadata = create_metadata(owner, bucket_id, location.clone(), size);
