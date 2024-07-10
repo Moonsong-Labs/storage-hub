@@ -759,7 +759,7 @@ where
                     None => {
                         storage_request_metadata.bsps_required = storage_request_metadata
                             .bsps_required
-                            .saturating_sub(T::StorageRequestBspsRequiredType::one());
+                            .saturating_add(T::StorageRequestBspsRequiredType::one());
                     }
                 }
 
