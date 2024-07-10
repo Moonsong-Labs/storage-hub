@@ -58,6 +58,7 @@ export const sendLoadFileRpc = async (
 
 export const getForestRoot = async (api: ApiPromise): Promise<H256> => {
   try {
+    // TODO: Replace with api.rpc.storagehubclient.getForestRoot() when we autogenerate the types for StorageHub.
     // @ts-expect-error - rpc provider not officially exposed
     const resp = await api._rpcCore.provider.send("storagehubclient_getForestRoot");
     return resp;
