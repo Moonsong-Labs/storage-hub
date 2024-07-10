@@ -20,6 +20,7 @@ codec = { workspace = true }
 hash-db = { workspace = true }
 kvdb = { workspace = true }
 kvdb-rocksdb = { workspace = true }
+kvdb-memorydb = { workspace =  true }
 log = { workspace = true }
 reference-trie = { workspace = true }
 thiserror = { workspace = true }

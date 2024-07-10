@@ -183,7 +183,10 @@ where
                 | FileStorageWriteError::FailedToPersistChanges
                 | FileStorageWriteError::FailedToParseFileMetadata
                 | FileStorageWriteError::FailedToParseFingerprint
-                | FileStorageWriteError::FailedToReadStorage => {
+                | FileStorageWriteError::FailedToReadStorage
+                | FileStorageWriteError::FailedToUpdatePartialRoot
+                | FileStorageWriteError::FailedToParsePartialRoot
+                | FileStorageWriteError::FailedToGetStoredChunksCount => {
                     // This internal error should not happen.
 
                     // Unvolunteer the file.

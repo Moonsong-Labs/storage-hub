@@ -1,15 +1,13 @@
 import { setTimeout } from "node:timers/promises";
 import {
+  DUMMY_MSP_ID,
+  NODE_INFOS,
   createApiObject,
   createCheckBucket,
-  DUMMY_MSP_ID,
   getContainerPeerId,
-  NODE_INFOS,
-  registerToxics,
   runBspNet,
   shUser,
-  type BspNetApi,
-  type ToxicInfo
+  type BspNetApi
 } from "../util";
 
 let api: BspNetApi | undefined;
@@ -21,37 +19,7 @@ const CONFIG = {
 };
 
 async function bootStrapNetwork() {
-  await runBspNet(true, false);
-
-  // For more info on the kind of toxics you can register,
-  // see: https://github.com/Shopify/toxiproxy?tab=readme-ov-file#toxics
-  const reqToxics = [
-    {
-      type: "latency",
-      name: "lag-down",
-      stream: "upstream",
-      toxicity: 0.8,
-      attributes: {
-        latency: 25,
-        jitter: 7
-      }
-    },
-    {
-      type: "bandwidth",
-      name: "low-band",
-      // Setting as upstream simulates slow user connection
-      stream: "upstream",
-      // 50% of the time, the toxic will be applied
-      toxicity: 0.5,
-      attributes: {
-        // 10kbps
-        rate: 10
-      }
-    }
-  ] satisfies ToxicInfo[];
-
-  await registerToxics(reqToxics);
-
+  await runBspNet(false, true);
   api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
   const newBucketEventDataBlob = await createCheckBucket(api, CONFIG.bucketName);
@@ -86,8 +54,7 @@ async function bootStrapNetwork() {
   // Seal the block from BSP volunteer
   await setTimeout(1000);
   await api.sealBlock();
-
-  console.log("✅ NoisyNet Bootstrap success");
+  console.log("✅ BSPNet Bootstrap success");
 }
 
 bootStrapNetwork()
