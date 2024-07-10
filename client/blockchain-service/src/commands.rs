@@ -1,4 +1,5 @@
 use anyhow::Result;
+use async_trait::async_trait;
 use serde_json::Number;
 use sp_core::H256;
 
@@ -44,11 +45,12 @@ pub enum BlockchainServiceCommand {
 }
 
 /// Interface for interacting with the BlockchainService actor.
+#[async_trait]
 pub trait BlockchainServiceInterface {
     /// Send an extrinsic to the runtime.
     async fn send_extrinsic(
         &self,
-        call: impl Into<storage_hub_runtime::RuntimeCall>,
+        call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
     ) -> Result<SubmittedTransaction>;
 
     /// Get an extrinsic from a block.
@@ -79,10 +81,11 @@ pub trait BlockchainServiceInterface {
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
+#[async_trait]
 impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn send_extrinsic(
         &self,
-        call: impl Into<storage_hub_runtime::RuntimeCall>,
+        call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
     ) -> Result<SubmittedTransaction> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         // Build command to send to blockchain service.

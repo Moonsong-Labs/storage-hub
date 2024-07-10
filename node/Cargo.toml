@@ -26,8 +26,6 @@ hex = { workspace = true }
 kvdb = { workspace = true }
 kvdb-rocksdb = { workspace = true }
 lazy-static = { workspace = true }
-libp2p-identity = { workspace = true, features = ["peerid"] }
-prost = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 
@@ -38,6 +36,8 @@ pallet-proofs-dealer = { workspace = true }
 pallet-storage-providers = { workspace = true }
 storage-hub-runtime = { workspace = true }
 shc-actors-framework = { workspace = true }
+shc-blockchain-service = { workspace = true }
+shc-file-transfer-service = { workspace = true }
 shc-common = { workspace = true }
 shc-file-manager = { workspace = true }
 shc-forest-manager = { workspace = true }
@@ -115,7 +115,6 @@ cumulus-primitives-storage-weight-reclaim = { workspace = true }
 cumulus-relay-chain-interface = { workspace = true }
 
 [build-dependencies]
-prost-build = { workspace = true }
 substrate-build-script-utils = { workspace = true }
 
 [features]
