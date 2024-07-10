@@ -14677,6 +14677,8 @@ dependencies = [
  "futures-timer",
  "hex",
  "jsonrpsee",
+ "kvdb",
+ "kvdb-rocksdb",
  "lazy_static",
  "log",
  "pallet-file-system",

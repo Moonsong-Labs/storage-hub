@@ -23,6 +23,8 @@ chrono = { workspace = true }
 color-print = { workspace = true }
 futures-timer = { workspace = true }
 hex = { workspace = true }
+kvdb = { workspace = true }
+kvdb-rocksdb = { workspace = true }
 lazy-static = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
