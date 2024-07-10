@@ -2,14 +2,12 @@ use std::time::Duration;
 
 use log::*;
 use shc_actors_framework::event_bus::EventHandler;
+use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewChallengeSeed};
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
 use sp_trie::TrieLayout;
 
-use crate::services::{
-    blockchain::{commands::BlockchainServiceInterface, events::NewChallengeSeed},
-    handler::StorageHubHandler,
-};
+use crate::services::handler::StorageHubHandler;
 
 const LOG_TARGET: &str = "sp-react-to-event-mock-task";
 

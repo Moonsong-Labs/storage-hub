@@ -48,22 +48,18 @@ use sp_runtime::{
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
 
-use crate::{
-    service::ParachainClient,
-    services::blockchain::{
-        events::{AcceptedBspVolunteer, NewChallengeSeed},
-        transaction::SubmittedTransaction,
-    },
-};
 use pallet_file_system_runtime_api::{FileSystemApi, QueryFileEarliestVolunteerBlockError};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetLastTickProviderSubmittedProofError, ProofsDealerApi,
 };
-use shc_common::types::{BlockNumber, ProviderId};
+use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
 
 use crate::{
     commands::BlockchainServiceCommand,
-    events::{AcceptedBspVolunteer, BlockchainServiceEventBusProvider, NewStorageRequest},
+    events::{
+        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, NewChallengeSeed,
+        NewStorageRequest,
+    },
     transaction::SubmittedTransaction,
     types::{EventsVec, Extrinsic},
     KEY_TYPE,

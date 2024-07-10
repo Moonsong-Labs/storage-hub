@@ -12,16 +12,11 @@ use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{events::RemoteUploadRequest, FileTransferService};
 use shc_forest_manager::traits::ForestStorage;
 
-use crate::{
-    services::{blockchain::events::NewStorageRequest, file_transfer::events::RemoteUploadRequest},
-    tasks::{
-        bsp_upload_file::BspUploadFileTask,
-        sp_react_to_event_mock::{EventToReactTo, SpReactToEventMockTask},
-        user_sends_file::UserSendsFileTask,
-    },
+use crate::tasks::{
+    bsp_upload_file::BspUploadFileTask,
+    sp_react_to_event_mock::{EventToReactTo, SpReactToEventMockTask},
+    user_sends_file::UserSendsFileTask,
 };
-
-use super::{blockchain::handler::BlockchainService, file_transfer::FileTransferService};
 
 /// Represents the handler for the Storage Hub service.
 pub struct StorageHubHandler<T, FL, FS>
