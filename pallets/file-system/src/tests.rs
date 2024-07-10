@@ -1,11 +1,11 @@
-use crate::types::{BucketIdFor, BucketNameFor};
+use crate::types::{BucketIdFor, BucketNameFor, ExpiredItems};
 use crate::{
     mock::*,
     types::{
-        FileLocation, PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, TargetBspsRequired,
+        FileLocation, PeerIds, PendingFileDeletionRequestTtl, ProviderIdFor, StorageData,
+        StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestTtl, TargetBspsRequired,
     },
-    Config, Error, Event, StorageRequestExpirations,
+    Config, Error, Event, ItemExpirations,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -13,7 +13,9 @@ use frame_support::{
     traits::{nonfungibles_v2::Destroy, Hooks, OriginTrait},
     weights::Weight,
 };
+use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::{LastTickProviderSubmittedProofFor, PriorityChallengesQueue};
+use pallet_storage_providers::types::Bucket;
 use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface, TrieRemoveMutation};
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
@@ -616,22 +618,28 @@ fn request_storage_expiration_clear_success() {
             fingerprint,
         );
 
-        let expected_expiration_inserted_at_block_number: BlockNumber =
-            FileSystem::next_expiration_insertion_block_number().into();
+        let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
+        let storage_request_ttl: BlockNumberFor<Test> = storage_request_ttl.into();
+
+        // Assert that the next starting block to clean up is set to 0 initially
+        assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
+
+        // Assert that the next expiration block number is the storage request ttl since a single storage request was made
+        assert_eq!(
+            FileSystem::next_available_expiration_insertion_block(),
+            storage_request_ttl
+        );
 
         // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_inserted_at_block_number),
-            vec![file_key]
+            FileSystem::item_expirations(storage_request_ttl),
+            vec![ExpiredItems::StorageRequest(file_key)]
         );
 
-        roll_to(expected_expiration_inserted_at_block_number + 1);
+        roll_to(storage_request_ttl + 1);
 
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
-        assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_inserted_at_block_number),
-            vec![]
-        );
+        assert_eq!(FileSystem::item_expirations(storage_request_ttl), vec![]);
     });
 }
 
@@ -652,9 +660,6 @@ fn request_storage_expiration_current_block_increment_success() {
         let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
         let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
 
-        let mut expected_expiration_block_number: BlockNumber =
-            FileSystem::next_expiration_insertion_block_number().into();
-
         let file_key = FileSystem::compute_file_key(
             owner_account_id.clone(),
             bucket_id,
@@ -663,12 +668,16 @@ fn request_storage_expiration_current_block_increment_success() {
             fingerprint,
         );
 
+        let expected_expiration_block_number: u32 = StorageRequestTtl::<Test>::get();
+        let expected_expiration_block_number: BlockNumberFor<Test> =
+            expected_expiration_block_number.into();
+
         // Append storage request expiration to the list at `StorageRequestTtl`
-        let max_storage_request_expiry: u32 = <Test as Config>::MaxExpiredStorageRequests::get();
-        for _ in 0..(max_storage_request_expiry - 1) {
-            assert_ok!(StorageRequestExpirations::<Test>::try_append(
+        let max_expired_items_in_block: u32 = <Test as Config>::MaxExpiredItemsInBlock::get();
+        for _ in 0..max_expired_items_in_block {
+            assert_ok!(ItemExpirations::<Test>::try_append(
                 expected_expiration_block_number,
-                file_key
+                ExpiredItems::StorageRequest(file_key)
             ));
         }
 
@@ -685,17 +694,8 @@ fn request_storage_expiration_current_block_increment_success() {
 
         // Assert that the storage request expirations storage is at max capacity
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
-            max_storage_request_expiry as usize
-        );
-
-        expected_expiration_block_number =
-            FileSystem::next_expiration_insertion_block_number().into();
-
-        // Assert that the `CurrentExpirationBlock` storage is incremented by 1
-        assert_eq!(
-            FileSystem::next_available_expiration_insertion_block(),
-            expected_expiration_block_number
+            FileSystem::item_expirations(expected_expiration_block_number).len(),
+            max_expired_items_in_block as usize
         );
 
         // Go to block number after which the storage request expirations should be removed
@@ -703,7 +703,7 @@ fn request_storage_expiration_current_block_increment_success() {
 
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number),
+            FileSystem::item_expirations(expected_expiration_block_number),
             vec![]
         );
     });
@@ -726,11 +726,8 @@ fn request_storage_clear_old_expirations_success() {
         let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
         let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
 
-        let expected_expiration_block_number: BlockNumber =
-            FileSystem::next_expiration_insertion_block_number().into();
-
         // Append storage request expiration to the list at `StorageRequestTtl`
-        let max_storage_request_expiry: u32 = <Test as Config>::MaxExpiredStorageRequests::get();
+        let max_storage_request_expiry: u32 = <Test as Config>::MaxExpiredItemsInBlock::get();
 
         let file_key = FileSystem::compute_file_key(
             owner_account_id.clone(),
@@ -740,10 +737,14 @@ fn request_storage_clear_old_expirations_success() {
             fingerprint,
         );
 
-        for _ in 0..(max_storage_request_expiry - 1) {
-            assert_ok!(StorageRequestExpirations::<Test>::try_append(
+        let expected_expiration_block_number: u32 = StorageRequestTtl::<Test>::get();
+        let expected_expiration_block_number: BlockNumberFor<Test> =
+            expected_expiration_block_number.into();
+
+        for _ in 0..max_storage_request_expiry {
+            assert_ok!(ItemExpirations::<Test>::try_append(
                 expected_expiration_block_number,
-                file_key
+                ExpiredItems::StorageRequest(file_key)
             ));
         }
 
@@ -758,14 +759,16 @@ fn request_storage_clear_old_expirations_success() {
             peer_ids,
         ));
 
-        System::set_block_number(expected_expiration_block_number);
+        let expected_expiration_block_number: u32 = StorageRequestTtl::<Test>::get();
+        let expected_expiration_block_number: BlockNumberFor<Test> =
+            expected_expiration_block_number.into();
 
         // Assert that the `NextExpirationInsertionBlockNumber` storage is set to 0 initially
         assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
 
         // Assert that the storage request expirations storage is at max capacity
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
+            FileSystem::item_expirations(expected_expiration_block_number).len(),
             max_storage_request_expiry as usize
         );
 
@@ -777,7 +780,7 @@ fn request_storage_clear_old_expirations_success() {
         // Assert that the storage request expirations storage is at max capacity
         // TODO: Fix this test...
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
+            FileSystem::item_expirations(expected_expiration_block_number).len(),
             max_storage_request_expiry as usize
         );
 
@@ -789,7 +792,7 @@ fn request_storage_clear_old_expirations_success() {
 
         // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
         assert_eq!(
-            FileSystem::storage_request_expirations(expected_expiration_block_number),
+            FileSystem::item_expirations(expected_expiration_block_number),
             vec![]
         );
 
@@ -900,12 +903,16 @@ fn revoke_request_storage_success() {
             fingerprint,
         );
 
+        let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
+        let storage_request_ttl: BlockNumberFor<Test> = storage_request_ttl.into();
+
+        // Assert that the NextExpirationInsertionBlockNumber storage is set to 0 initially
+        assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
+
         // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
         assert_eq!(
-            FileSystem::storage_request_expirations(
-                FileSystem::next_expiration_insertion_block_number()
-            ),
-            vec![file_key]
+            FileSystem::item_expirations(storage_request_ttl),
+            vec![ExpiredItems::StorageRequest(file_key)]
         );
 
         assert_ok!(FileSystem::revoke_storage_request(owner.clone(), file_key));
@@ -2290,6 +2297,557 @@ fn threshold_does_not_exceed_asymptote_success() {
     });
 }
 
+mod delete_file_tests {
+    use super::*;
+
+    #[test]
+    fn delete_file_with_proof_of_inclusion_success() {
+        new_test_ext().execute_with(|| {
+            let owner_account_id = Keyring::Alice.to_account_id();
+            let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let size = 4;
+            let file_content = b"test".to_vec();
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+            let file_key = FileSystem::compute_file_key(
+                owner_account_id.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            );
+
+            let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
+
+            // Delete file
+            assert_ok!(FileSystem::delete_file(
+                owner_signed.clone(),
+                bucket_id,
+                file_key,
+                location,
+                size,
+                fingerprint,
+                Some(forest_proof),
+            ));
+
+            // Assert that there is a queued priority challenge for file key in proofs dealer pallet
+            assert!(
+                // Find file key in vec of queued priority challenges
+                pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
+                    .iter()
+                    .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
+                    .is_some(),
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::FileDeletionRequest {
+                    user: owner_account_id.clone(),
+                    file_key,
+                    bucket_id,
+                    msp_id,
+                    proof_of_inclusion: true,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn delete_file_bucket_not_owned_by_user_fail() {
+        new_test_ext().execute_with(|| {
+            let owner_account_id = Keyring::Alice.to_account_id();
+            let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let size = 4;
+            let file_content = b"test".to_vec();
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let _ = create_bucket(&owner_account_id.clone(), name.clone(), msp_id.clone());
+
+            let other_user = Keyring::Bob.to_account_id();
+            let bucket_id = create_bucket(&other_user.clone(), name, msp_id);
+
+            let file_key = FileSystem::compute_file_key(
+                owner_account_id.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            );
+
+            let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
+
+            // Assert that the user does not own the bucket
+            assert_noop!(
+                FileSystem::delete_file(
+                    owner_signed,
+                    bucket_id,
+                    file_key,
+                    location,
+                    size,
+                    fingerprint,
+                    Some(forest_proof),
+                ),
+                Error::<Test>::NotBucketOwner
+            );
+        });
+    }
+
+    #[test]
+    fn delete_file_beyond_maximum_limit_allowed_fail() {
+        new_test_ext().execute_with(|| {
+            let owner_account_id = Keyring::Alice.to_account_id();
+            let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let size = u32::MAX;
+            let file_content = b"test".to_vec();
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id.clone());
+
+            // For loop to create 1 over maximum of MaxUserPendingDeletionRequests
+            for i in 0..<Test as crate::Config>::MaxUserPendingDeletionRequests::get() {
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    i,
+                    fingerprint,
+                );
+
+                assert_ok!(FileSystem::delete_file(
+                    owner_signed.clone(),
+                    bucket_id,
+                    file_key.clone(),
+                    location.clone(),
+                    i,
+                    fingerprint,
+                    None,
+                ));
+            }
+
+            let file_key = FileSystem::compute_file_key(
+                owner_account_id.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            );
+
+            assert_noop!(
+                FileSystem::delete_file(
+                    owner_signed,
+                    bucket_id,
+                    file_key,
+                    location,
+                    size,
+                    fingerprint,
+                    None
+                ),
+                Error::<Test>::MaxUserPendingDeletionRequestsReached
+            );
+        });
+    }
+
+    #[test]
+    fn delete_file_expired_pending_file_deletion_request_success() {
+        new_test_ext().execute_with(|| {
+            let owner_account_id = Keyring::Alice.to_account_id();
+            let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let size = 4;
+            let file_content = b"test".to_vec();
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+            let file_key = FileSystem::compute_file_key(
+                owner_account_id.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            );
+
+            // Delete file
+            assert_ok!(FileSystem::delete_file(
+                owner_signed.clone(),
+                bucket_id,
+                file_key,
+                location,
+                size,
+                fingerprint,
+                None,
+            ));
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::FileDeletionRequest {
+                    user: owner_account_id.clone(),
+                    file_key,
+                    bucket_id,
+                    msp_id,
+                    proof_of_inclusion: false,
+                }
+                .into(),
+            );
+
+            // Assert that the pending file deletion request was added to storage
+            assert_eq!(
+                FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    vec![(file_key, bucket_id)]
+                )
+                .unwrap()
+            );
+
+            let pending_file_deletion_request_ttl: u32 =
+                PendingFileDeletionRequestTtl::<Test>::get();
+            let pending_file_deletion_request_ttl: BlockNumberFor<Test> =
+                pending_file_deletion_request_ttl.into();
+
+            // Assert that the pending file deletion request was added to storage
+            assert_eq!(
+                FileSystem::item_expirations(pending_file_deletion_request_ttl),
+                vec![ExpiredItems::PendingFileDeletionRequests((
+                    owner_account_id.clone(),
+                    file_key
+                ))]
+            );
+
+            // Roll past the expiration block
+            roll_to(pending_file_deletion_request_ttl);
+
+            // Item expiration should be removed
+            assert_eq!(
+                FileSystem::item_expirations(pending_file_deletion_request_ttl),
+                vec![]
+            );
+
+            // Asser that the pending file deletion request was removed from storage
+            assert_eq!(
+                FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::default()
+            );
+
+            // Assert that there is a queued priority challenge for file key in proofs dealer pallet
+            assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
+                .iter()
+                .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
+                .is_some(),);
+        });
+    }
+
+    #[test]
+    fn delete_file_pending_file_deletion_request_submit_proof_of_inclusion_success() {
+        new_test_ext().execute_with(|| {
+            let owner_account_id = Keyring::Alice.to_account_id();
+            let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let size = 4;
+            let file_content = b"test".to_vec();
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+            let file_key = FileSystem::compute_file_key(
+                owner_account_id.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            );
+
+            // Delete file
+            assert_ok!(FileSystem::delete_file(
+                owner_signed.clone(),
+                bucket_id,
+                file_key,
+                location,
+                size,
+                fingerprint,
+                None,
+            ));
+
+            // Assert that the pending file deletion request was added to storage
+            assert_eq!(
+                FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    vec![(file_key, bucket_id)]
+                )
+                .unwrap()
+            );
+
+            let forest_proof = CompactProof {
+                encoded_nodes: vec![file_key.as_ref().to_vec()],
+            };
+
+            let msp_origin = RuntimeOrigin::signed(msp.clone());
+
+            assert_ok!(FileSystem::pending_file_deletion_request_submit_proof(
+                msp_origin,
+                owner_account_id.clone(),
+                file_key,
+                bucket_id,
+                forest_proof
+            ));
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::ProofSubmittedForPendingFileDeletionRequest {
+                    msp_id,
+                    user: owner_account_id.clone(),
+                    file_key,
+                    bucket_id,
+                    proof_of_inclusion: true,
+                }
+                .into(),
+            );
+
+            // Assert that there is a queued priority challenge for file key in proofs dealer pallet
+            assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
+                .iter()
+                .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
+                .is_some(),);
+
+            // Assert that the pending file deletion request was removed from storage
+            assert_eq!(
+                FileSystem::pending_file_deletion_requests(owner_account_id),
+                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::default()
+            );
+        });
+    }
+
+    #[test]
+    fn delete_file_pending_file_deletion_request_submit_proof_of_non_inclusion_success() {
+        new_test_ext().execute_with(|| {
+            let owner_account_id = Keyring::Alice.to_account_id();
+            let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let size = 4;
+            let file_content = b"test".to_vec();
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+            let file_key = FileSystem::compute_file_key(
+                owner_account_id.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            );
+
+            // Delete file
+            assert_ok!(FileSystem::delete_file(
+                owner_signed.clone(),
+                bucket_id,
+                file_key,
+                location,
+                size,
+                fingerprint,
+                None,
+            ));
+
+            // Assert that the pending file deletion request was added to storage
+            assert_eq!(
+                FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    vec![(file_key, bucket_id)]
+                )
+                .unwrap()
+            );
+
+            let forest_proof = CompactProof {
+                encoded_nodes: vec![H256::zero().as_bytes().to_vec()],
+            };
+
+            let msp_origin = RuntimeOrigin::signed(msp.clone());
+
+            assert_ok!(FileSystem::pending_file_deletion_request_submit_proof(
+                msp_origin,
+                owner_account_id.clone(),
+                file_key,
+                bucket_id,
+                forest_proof
+            ));
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::ProofSubmittedForPendingFileDeletionRequest {
+                    msp_id,
+                    user: owner_account_id.clone(),
+                    file_key,
+                    bucket_id,
+                    proof_of_inclusion: false,
+                }
+                .into(),
+            );
+
+            // Assert that there is a queued priority challenge for file key in proofs dealer pallet
+            assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
+                .iter()
+                .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
+                .is_none(),);
+
+            // Assert that the pending file deletion request was removed from storage
+            assert_eq!(
+                FileSystem::pending_file_deletion_requests(owner_account_id),
+                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::default()
+            );
+        });
+    }
+
+    #[test]
+    fn delete_file_pending_file_deletion_request_submit_proof_not_msp_of_bucket_fail() {
+        new_test_ext().execute_with(|| {
+            let owner_account_id = Keyring::Alice.to_account_id();
+            let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let size = 4;
+            let file_content = b"test".to_vec();
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+            let file_key = FileSystem::compute_file_key(
+                owner_account_id.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            );
+
+            // Delete file
+            assert_ok!(FileSystem::delete_file(
+                owner_signed.clone(),
+                bucket_id,
+                file_key,
+                location,
+                size,
+                fingerprint,
+                None,
+            ));
+
+            // Assert that the pending file deletion request was added to storage
+            assert_eq!(
+                FileSystem::pending_file_deletion_requests(owner_account_id.clone()),
+                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    vec![(file_key, bucket_id)]
+                )
+                .unwrap()
+            );
+
+            let forest_proof = CompactProof {
+                encoded_nodes: vec![vec![0]],
+            };
+
+            let msp_dave = Keyring::Dave.to_account_id();
+            add_msp_to_provider_storage(&msp_dave);
+            let msp_origin = RuntimeOrigin::signed(msp_dave.clone());
+
+            assert_noop!(
+                FileSystem::pending_file_deletion_request_submit_proof(
+                    msp_origin,
+                    owner_account_id.clone(),
+                    file_key,
+                    bucket_id,
+                    forest_proof
+                ),
+                Error::<Test>::MspNotStoringBucket
+            );
+
+            // Assert that the pending file deletion request was not removed from storage
+            assert_eq!(
+                FileSystem::pending_file_deletion_requests(owner_account_id),
+                BoundedVec::<_, <Test as crate::Config>::MaxUserPendingDeletionRequests>::try_from(
+                    vec![(file_key, bucket_id)]
+                )
+                .unwrap()
+            );
+        });
+    }
+
+    #[test]
+    fn submit_proof_pending_file_deletion_not_found_fail() {
+        new_test_ext().execute_with(|| {
+            let owner_account_id = Keyring::Alice.to_account_id();
+
+            let msp = Keyring::Charlie.to_account_id();
+            let msp_origin = RuntimeOrigin::signed(msp.clone());
+
+            let size = 4;
+            let file_content = b"test".to_vec();
+            let fingerprint = BlakeTwo256::hash(&file_content);
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+            let file_key = FileSystem::compute_file_key(
+                owner_account_id.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            );
+
+            let forest_proof = CompactProof {
+                encoded_nodes: vec![vec![0]],
+            };
+
+            assert_noop!(
+                FileSystem::pending_file_deletion_request_submit_proof(
+                    msp_origin,
+                    owner_account_id.clone(),
+                    file_key,
+                    bucket_id,
+                    forest_proof
+                ),
+                Error::<Test>::FileKeyNotPendingDeletion
+            );
+        });
+    }
+}
+
 /// Helper function that registers an account as a Backup Storage Provider
 fn bsp_sign_up(
     bsp_signed: RuntimeOrigin,
@@ -2369,8 +2927,20 @@ fn create_bucket(
         origin,
         msp_id,
         name.clone(),
-        true
+        false
     ));
+
+    // Assert bucket was created
+    assert_eq!(
+        pallet_storage_providers::Buckets::<Test>::get(bucket_id),
+        Some(Bucket {
+            root: <Test as pallet_storage_providers::pallet::Config>::DefaultMerkleRoot::get(),
+            user_id: owner.clone(),
+            msp_id,
+            private: false,
+            read_access_group_id: None,
+        })
+    );
 
     bucket_id
 }

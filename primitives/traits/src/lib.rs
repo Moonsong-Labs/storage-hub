@@ -38,9 +38,16 @@ pub trait ProvidersInterface {
         + Member
         + MaybeSerializeDeserialize
         + Debug
+        + MaybeDisplay
+        + SimpleBitOps
         + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
         + MaxEncodedLen
-        + Copy;
+        + FullCodec;
     /// The type corresponding to the root of a registered Provider.
     type MerkleHash: Parameter
         + Member
@@ -153,10 +160,16 @@ pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
         bucket_id: &Self::BucketId,
     ) -> Result<bool, DispatchError>;
 
+    /// Is bucket stored by MSP.
+    fn is_bucket_stored_by_msp(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId) -> bool;
+
     /// Get `collection_id` of a bucket if there is one.
     fn get_read_access_group_id_of_bucket(
         bucket_id: &Self::BucketId,
     ) -> Result<Option<Self::ReadAccessGroupId>, DispatchError>;
+
+    /// Get MSP storing a bucket.
+    fn get_msp_of_bucket(bucket_id: &Self::BucketId) -> Option<Self::ProviderId>;
 
     /// Check if a bucket is private.
     fn is_bucket_private(bucket_id: &Self::BucketId) -> Result<bool, DispatchError>;

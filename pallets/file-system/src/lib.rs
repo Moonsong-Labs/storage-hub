@@ -48,7 +48,7 @@ pub mod pallet {
     use frame_support::{
         dispatch::DispatchResult,
         pallet_prelude::{ValueQuery, *},
-        sp_runtime::traits::{AtLeast32Bit, CheckEqual, MaybeDisplay, SimpleBitOps},
+        sp_runtime::traits::{CheckEqual, Convert, MaybeDisplay, SimpleBitOps},
         traits::{
             nonfungibles_v2::{Create, Inspect as NonFungiblesInspect},
             Currency,
@@ -56,7 +56,6 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use sp_runtime::traits::Convert;
     use sp_runtime::BoundedVec;
     use sp_runtime::{
         traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
@@ -69,8 +68,9 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         /// The trait for reading and mutating storage provider data.
-        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId>
-            + shp_traits::MutateProvidersInterface<AccountId = Self::AccountId, ReadAccessGroupId = CollectionIdFor<Self>, MerklePatriciaRoot = <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash>;
+        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId, BucketId = <Self::Providers as shp_traits::ProvidersInterface>::ProviderId>
+            + shp_traits::MutateProvidersInterface<AccountId = Self::AccountId, ReadAccessGroupId = CollectionIdFor<Self>,
+            MerklePatriciaRoot = <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash>;
 
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: shp_traits::ProofsDealerInterface<
@@ -98,7 +98,7 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + Default
             + MaybeDisplay
-            + AtLeast32Bit
+            + Into<u32>
             + Copy
             + MaxEncodedLen
             + HasCompact
@@ -108,6 +108,7 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + CheckedAdd
             + One
+            + Saturating
             + Zero;
 
         /// Type representing the threshold a BSP must meet to be eligible to volunteer to store a file.
@@ -168,7 +169,7 @@ pub mod pallet {
         /// Maximum number of BSPs that can store a file.
         ///
         /// This is used to limit the number of BSPs storing a file and claiming rewards for it.
-        /// If this number is to high, then the reward for storing a file might be to diluted and pointless to store.
+        /// If this number is too high, then the reward for storing a file might be to diluted and pointless to store.
         #[pallet::constant]
         type MaxBspsPerStorageRequest: Get<u32>;
 
@@ -188,13 +189,20 @@ pub mod pallet {
         #[pallet::constant]
         type MaxDataServerMultiAddresses: Get<u32>;
 
+        /// Maximum number of expired storage requests to clean up in a single block.
+        #[pallet::constant]
+        type MaxExpiredItemsInBlock: Get<u32>;
+
         /// Time-to-live for a storage request.
         #[pallet::constant]
         type StorageRequestTtl: Get<u32>;
 
-        /// Maximum number of expired storage requests to clean up in a single block.
+        /// Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.        #[pallet::constant]
+        type PendingFileDeletionRequestTtl: Get<u32>;
+
+        /// Maximum number of file deletion requests a user can have pending.
         #[pallet::constant]
-        type MaxExpiredStorageRequests: Get<u32>;
+        type MaxUserPendingDeletionRequests: Get<u32>;
     }
 
     #[pallet::pallet]
@@ -225,12 +233,12 @@ pub mod pallet {
 
     /// A map of blocks to expired storage requests.
     #[pallet::storage]
-    #[pallet::getter(fn storage_request_expirations)]
-    pub type StorageRequestExpirations<T: Config> = StorageMap<
+    #[pallet::getter(fn item_expirations)]
+    pub type ItemExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
-        BoundedVec<MerkleHash<T>, T::MaxExpiredStorageRequests>,
+        BoundedVec<ExpiredItems<T>, T::MaxExpiredItemsInBlock>,
         ValueQuery,
     >;
 
@@ -250,6 +258,19 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn next_starting_block_to_clean_up)]
     pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
+    /// Pending file deletion requests.
+    ///
+    /// A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key and bucket id.
+    #[pallet::storage]
+    #[pallet::getter(fn pending_file_deletion_requests)]
+    pub type PendingFileDeletionRequests<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        T::AccountId,
+        BoundedVec<(MerkleHash<T>, BucketIdFor<T>), T::MaxUserPendingDeletionRequests>,
+        ValueQuery,
+    >;
 
     /// Minimum BSP assignment threshold.
     ///
@@ -353,6 +374,27 @@ pub mod pallet {
             owner: T::AccountId,
             location: FileLocation<T>,
         },
+        /// Notifies that a priority challenge failed to be queued for pending file deletion.
+        FailedToQueuePriorityChallenge {
+            user: T::AccountId,
+            file_key: MerkleHash<T>,
+        },
+        /// Notifies that a file will be deleted.
+        FileDeletionRequest {
+            user: T::AccountId,
+            file_key: MerkleHash<T>,
+            bucket_id: ProviderIdFor<T>,
+            msp_id: ProviderIdFor<T>,
+            proof_of_inclusion: bool,
+        },
+        /// Notifies that a proof has been submitted for a pending file deletion request.
+        ProofSubmittedForPendingFileDeletionRequest {
+            msp_id: ProviderIdFor<T>,
+            user: T::AccountId,
+            file_key: MerkleHash<T>,
+            bucket_id: ProviderIdFor<T>,
+            proof_of_inclusion: bool,
+        },
         /// Notifies that a BSP's challenge cycle has been initialised, adding the first file
         /// key to the BSP's Merkle Patricia Forest.
         BspChallengeCycleInitialised {
@@ -430,6 +472,16 @@ pub mod pallet {
         InvalidFileKeyMetadata,
         /// BSPs assignment threshold cannot be below asymptote.
         ThresholdBelowAsymptote,
+        /// Unauthorized operation, signer does not own the file.
+        NotFileOwner,
+        /// File key already pending deletion.
+        FileKeyAlreadyPendingDeletion,
+        /// Max number of user pending deletion requests reached.
+        MaxUserPendingDeletionRequestsReached,
+        /// Unauthorized operation, signer is not an MSP of the bucket id.
+        MspNotStoringBucket,
+        /// File key not found in pending deletion requests.
+        FileKeyNotPendingDeletion,
     }
 
     #[pallet::call]
@@ -675,6 +727,70 @@ pub mod pallet {
 
         #[pallet::call_index(8)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn delete_file(
+            origin: OriginFor<T>,
+            bucket_id: ProviderIdFor<T>,
+            file_key: MerkleHash<T>,
+            location: FileLocation<T>,
+            size: StorageData<T>,
+            fingerprint: Fingerprint<T>,
+            maybe_inclusion_forest_proof: Option<ForestProof<T>>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let (proof_of_inclusion, msp_id) = Self::do_delete_file(
+                who.clone(),
+                bucket_id,
+                file_key,
+                location,
+                fingerprint,
+                size,
+                maybe_inclusion_forest_proof,
+            )?;
+
+            Self::deposit_event(Event::FileDeletionRequest {
+                user: who,
+                file_key,
+                bucket_id,
+                msp_id,
+                proof_of_inclusion,
+            });
+
+            Ok(())
+        }
+
+        #[pallet::call_index(9)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn pending_file_deletion_request_submit_proof(
+            origin: OriginFor<T>,
+            user: T::AccountId,
+            file_key: MerkleHash<T>,
+            bucket_id: ProviderIdFor<T>,
+            forest_proof: ForestProof<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            let (proof_of_inclusion, msp_id) = Self::do_pending_file_deletion_request_submit_proof(
+                who.clone(),
+                user.clone(),
+                file_key,
+                bucket_id,
+                forest_proof,
+            )?;
+
+            Self::deposit_event(Event::ProofSubmittedForPendingFileDeletionRequest {
+                msp_id,
+                user,
+                file_key,
+                bucket_id,
+                proof_of_inclusion,
+            });
+
+            Ok(())
+        }
+
+        #[pallet::call_index(10)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn force_update_bsps_assignment_threshold(
             origin: OriginFor<T>,
             bsp_assignment_threshold: T::ThresholdType,
@@ -699,66 +815,11 @@ pub mod pallet {
         u32: TryFrom<BlockNumberFor<T>>,
     {
         fn on_idle(current_block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
-            let db_weight = T::DbWeight::get();
+            let mut remaining_weight = remaining_weight;
 
-            // Determine the starting block for cleanup, using `NextBlockToCleanup` if available,
-            // or defaulting to the current block
-            let start_block = NextStartingBlockToCleanUp::<T>::get();
-            let mut block_to_clean = start_block;
+            Self::do_on_idle(current_block, &mut remaining_weight);
 
-            let writes = match T::MaxExpiredStorageRequests::get().checked_add(1) {
-                Some(writes) => writes,
-                // This should never happen. It would mean that MaxExpiredStorageRequests is u32::MAX,
-                // which is an irrational number to set as a limit.
-                None => return Weight::zero(),
-            };
-
-            // Total weight used to avoid exceeding the remaining weight.
-            // We count one write for the `NextBlockToCleanup` storage item updated at the end.
-            let mut total_used_weight = Weight::zero();
-
-            let required_weight_for_iteration = db_weight.reads_writes(1, writes.into());
-
-            // Iterate over blocks from the start block to the current block,
-            // cleaning up storage requests until the remaining weight is insufficient
-            while block_to_clean <= current_block
-                && remaining_weight
-                    .all_gte(total_used_weight.saturating_add(required_weight_for_iteration))
-            {
-                let mut used_weight = db_weight.reads(1);
-                let expired_requests = StorageRequestExpirations::<T>::take(&block_to_clean);
-
-                // Remove expired storage requests for the block
-                for file_key in expired_requests {
-                    // Remove storage request
-                    StorageRequests::<T>::remove(&file_key);
-
-                    // Remove storage request bsps
-                    let _ =
-                        <StorageRequestBsps<T>>::drain_prefix(&file_key).fold(0, |acc, _| acc + 1);
-
-                    used_weight += db_weight.writes(1);
-                    Self::deposit_event(Event::StorageRequestExpired { file_key });
-                }
-
-                // Accumulate the weight used for cleanup operations
-                total_used_weight += used_weight;
-                // Increment the block to clean up for the next iteration
-                block_to_clean = match block_to_clean.checked_add(&1u8.into()) {
-                    Some(block) => block,
-                    None => {
-                        return total_used_weight;
-                    }
-                };
-            }
-
-            // `NextStartingBlockToCleanUp` is always updated to start from the block we reached in the current `on_idle` call.
-            if block_to_clean > start_block {
-                NextStartingBlockToCleanUp::<T>::put(block_to_clean);
-                total_used_weight += db_weight.writes(1);
-            }
-
-            total_used_weight
+            remaining_weight
         }
     }
 }
