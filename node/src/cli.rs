@@ -83,6 +83,7 @@ pub struct ProviderConfigurations {
     pub provider_type: Option<ProviderType>,
 
     /// Type of StorageHub provider.
+    /// Currently: `memory` and `rocks-db`.
     #[clap(
         long,
         value_enum,
@@ -91,6 +92,8 @@ pub struct ProviderConfigurations {
     )]
     pub storage_layer: Option<StorageLayer>,
 
+    /// Storage location in the file system
+    /// Currently for `rocks-db`.
     #[clap(long, required_if_eq("storage-layer", "rocks-db"))]
     pub storage_path: Option<String>,
 }

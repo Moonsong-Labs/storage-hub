@@ -14,7 +14,7 @@ services:
         "--provider",
         "--provider-type=bsp",
         "--storage-layer=rocks-db",
-        "--storage-path=${BSP_IP:-default_bsp_ip}"
+        "--storage-path=/tmp/bsp/${BSP_IP:-default_bsp_ip}"
         "--name=sh-bsp",
         "--no-hardware-benchmarks",
         "--unsafe-rpc-external",
@@ -43,7 +43,7 @@ services:
         "--provider",
         "--provider-type=user",
         "--storage-layer=rocks-db",
-        "--storage-path=sh-user-${BSP_IP:-default_bsp_ip}"
+        "--storage-path=/tmp/user/${BSP_IP:-default_bsp_ip}"
         "--no-hardware-benchmarks",
         "--unsafe-rpc-external",
         "--rpc-methods=unsafe",
