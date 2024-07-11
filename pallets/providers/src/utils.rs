@@ -55,11 +55,10 @@ where
 {
     /// This function holds the logic that checks if a user can request to sign up as a Main Storage Provider
     /// and, if so, stores the request in the SignUpRequests mapping
-    pub fn do_request_msp_sign_up(
-        who: &T::AccountId,
-        msp_info: &MainStorageProvider<T>,
-    ) -> DispatchResult {
+    pub fn do_request_msp_sign_up(msp_info: &MainStorageProvider<T>) -> DispatchResult {
         // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
+
+        let who = &msp_info.owner_account;
 
         // Check that the user does not have a pending sign up request
         ensure!(
@@ -147,11 +146,10 @@ where
 
     /// This function holds the logic that checks if a user can request to sign up as a Backup Storage Provider
     /// and, if so, stores the request in the SignUpRequests mapping
-    pub fn do_request_bsp_sign_up(
-        who: &T::AccountId,
-        bsp_info: &BackupStorageProvider<T>,
-    ) -> DispatchResult {
+    pub fn do_request_bsp_sign_up(bsp_info: &BackupStorageProvider<T>) -> DispatchResult {
         // todo!("If this comment is present, it means this function is still incomplete even though it compiles.")
+
+        let who = &bsp_info.owner_account;
 
         // Check that the user does not have a pending sign up request
         ensure!(
@@ -775,6 +773,7 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
             multiaddresses: msp.multiaddresses,
             root: T::DefaultMerkleRoot::get(),
             last_capacity_change: msp.last_capacity_change,
+            owner_account: msp.owner_account,
             payment_account: msp.payment_account,
         }
     }
@@ -1010,6 +1009,23 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
             Some(bsp_id)
         } else if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             Some(msp_id)
+        } else {
+            None
+        }
+    }
+
+    fn get_owner_account(provider_id: Self::ProviderId) -> Option<Self::AccountId> {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(&provider_id) {
+            Some(bsp.owner_account)
+        } else if let Some(msp) = MainStorageProviders::<T>::get(&provider_id) {
+            Some(msp.owner_account)
+        } else if let Some(bucket) = Buckets::<T>::get(&provider_id) {
+            let msp_for_bucket = bucket.msp_id;
+            if let Some(msp) = MainStorageProviders::<T>::get(&msp_for_bucket) {
+                Some(msp.owner_account)
+            } else {
+                None
+            }
         } else {
             None
         }

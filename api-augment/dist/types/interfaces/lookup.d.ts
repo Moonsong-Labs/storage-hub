@@ -1455,6 +1455,11 @@ declare const _default: {
                 bucketId: string;
                 proofOfInclusion: string;
             };
+            BspChallengeCycleInitialised: {
+                who: string;
+                bspId: string;
+                fileKey: string;
+            };
         };
     };
     /**
@@ -1480,6 +1485,11 @@ declare const _default: {
             };
             SlashableProvider: {
                 provider: string;
+            };
+            NewChallengeCycleInitialised: {
+                currentTick: string;
+                provider: string;
+                maybeProviderAccount: string;
             };
         };
     };
@@ -3050,6 +3060,9 @@ declare const _default: {
                 proof: string;
                 provider: string;
             };
+            force_initialise_challenge_cycle: {
+                provider: string;
+            };
         };
     };
     /**
@@ -3620,6 +3633,7 @@ declare const _default: {
         multiaddresses: string;
         root: string;
         lastCapacityChange: string;
+        ownerAccount: string;
         paymentAccount: string;
     };
     /**
@@ -3632,6 +3646,7 @@ declare const _default: {
         multiaddresses: string;
         valueProp: string;
         lastCapacityChange: string;
+        ownerAccount: string;
         paymentAccount: string;
     };
     /**
