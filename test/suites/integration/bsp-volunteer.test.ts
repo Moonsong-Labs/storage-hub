@@ -23,7 +23,7 @@ const bspNetConfigCases = [
   { noisy: true, rocksdb: false }
 ];
 
-bspNetConfigCases.forEach(({ noisy, rocksdb }) => {
+for (const { noisy, rocksdb } of bspNetConfigCases) {
   describe("BSPNet: BSP Volunteer", () => {
     let user_api: BspNetApi;
     let bsp_api: BspNetApi;
@@ -190,4 +190,4 @@ bspNetConfigCases.forEach(({ noisy, rocksdb }) => {
       });
     });
   });
-});
+}

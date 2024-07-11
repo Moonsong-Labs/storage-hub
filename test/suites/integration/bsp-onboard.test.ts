@@ -18,7 +18,7 @@ const bspNetConfigCases = [
   { noisy: true, rocksdb: false }
 ];
 
-bspNetConfigCases.forEach(({ noisy, rocksdb }) => {
+for (const { noisy, rocksdb } of bspNetConfigCases) {
   describe("BSPNet: Adding new BSPs", () => {
     let api: BspNetApi;
 
@@ -90,4 +90,4 @@ bspNetConfigCases.forEach(({ noisy, rocksdb }) => {
       strictEqual(sh_nodes.length > 3, true);
     });
   });
-});
+}
