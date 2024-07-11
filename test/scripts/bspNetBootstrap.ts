@@ -101,7 +101,11 @@ async function bootStrapNetwork() {
 bootStrapNetwork()
   .catch((e) => {
     console.error("Error running bootstrap script:", e);
-    console.log("❌ BSPNet Bootstrap failure");
+    if (NOISY) {
+      console.log("❌ NoisyNet Bootstrap failure");
+    } else {
+      console.log("❌ BSPNet Bootstrap failure");
+    }
     process.exitCode = 1;
   })
   .finally(async () => await api?.disconnect());
