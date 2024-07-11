@@ -28,9 +28,8 @@ pub(crate) fn other_io_error(err: String) -> io::Error {
 
 /// Open the database on disk, creating it if it doesn't exist.
 fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Database> {
-    // TODO: add a configuration option for the base path
-    let root = PathBuf::from("/tmp/");
-    let path = root.join("storagehub/forest_storage/").join(db_path);
+    let root = PathBuf::new();
+    let path = root.join(db_path).join("/storagehub/forest_storage/");
 
     let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(1);
 
