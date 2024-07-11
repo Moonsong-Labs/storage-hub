@@ -104,7 +104,7 @@ async function bootStrapNetwork() {
 bootStrapNetwork()
   .catch((e) => {
     console.error("Error running bootstrap script:", e);
-    if (bspNetconfig.noisy) {
+    if (bspNetConfig.noisy) {
       console.log("❌ NoisyNet Bootstrap failure");
     } else {
       console.log("❌ BSPNet Bootstrap failure");

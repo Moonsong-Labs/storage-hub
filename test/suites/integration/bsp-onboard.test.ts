@@ -12,7 +12,6 @@ import {
 } from "../../util";
 import Docker from "dockerode";
 import { strictEqual } from "node:assert";
-import { sleep } from "@zombienet/utils";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
