@@ -24,8 +24,9 @@ const CHUNKS_COLUMN: u32 = 2;
 
 /// Open the database on disk, creating it if it doesn't exist.
 fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Database> {
-    let root = PathBuf::new();
-    let path = root.join(db_path).join("/storagehub/file_storage/");
+    let mut path = PathBuf::new();
+    path.push(db_path.as_str());
+    path.push("storagehub/file_storage/");
 
     let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(3);
 
