@@ -98,6 +98,13 @@ pub enum BucketPrivacy {
     Private,
 }
 
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub enum ExpiredItems<T: Config> {
+    StorageRequest(MerkleHash<T>),
+    PendingFileDeletionRequests((T::AccountId, MerkleHash<T>)),
+}
+
 /// Alias for the `MerkleHash` type used in the ProofsDealerInterface representing file keys.
 pub type MerkleHash<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash;
@@ -129,6 +136,12 @@ pub type StorageData<T> =
 
 /// Alias for the `TargetBspsRequired` type used in the FileSystem pallet.
 pub type TargetBspsRequired<T> = <T as crate::Config>::TargetBspsRequired;
+
+/// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
+pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;
+
+/// Alias for the `PendingFileDeletionRequestTtl` type used in the FileSystem pallet.
+pub type PendingFileDeletionRequestTtl<T> = <T as crate::Config>::PendingFileDeletionRequestTtl;
 
 /// Byte array representing the file path.
 pub type FileLocation<T> = BoundedVec<u8, MaxFilePathSize<T>>;

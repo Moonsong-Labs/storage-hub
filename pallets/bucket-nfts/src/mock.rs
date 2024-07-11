@@ -208,7 +208,9 @@ impl pallet_file_system::Config for Test {
     type MaxDataServerMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
     type MaxFilePathSize = ConstU32<512u32>;
     type StorageRequestTtl = ConstU32<40u32>;
-    type MaxExpiredStorageRequests = ConstU32<100u32>;
+    type PendingFileDeletionRequestTtl = ConstU32<40u32>;
+    type MaxExpiredItemsInBlock = ConstU32<100u32>;
+    type MaxUserPendingDeletionRequests = ConstU32<5u32>;
 }
 
 parameter_types! {

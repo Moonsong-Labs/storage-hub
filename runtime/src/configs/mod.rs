@@ -604,7 +604,9 @@ impl pallet_file_system::Config for Runtime {
     type MaxNumberOfPeerIds = ConstU32<5>;
     type MaxDataServerMultiAddresses = ConstU32<10>;
     type StorageRequestTtl = ConstU32<40>;
-    type MaxExpiredStorageRequests = ConstU32<100>;
+    type PendingFileDeletionRequestTtl = ConstU32<40u32>;
+    type MaxExpiredItemsInBlock = ConstU32<100>;
+    type MaxUserPendingDeletionRequests = ConstU32<10u32>;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.
