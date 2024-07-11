@@ -481,7 +481,7 @@ impl BlockchainService {
                                     &challenges_ticker,
                                 ) {
                                     self.emit(NewChallengeSeed {
-                                        provider_id: provider_id.clone(),
+                                        provider_id: *provider_id,
                                         tick: challenges_ticker,
                                         seed,
                                     })
@@ -808,7 +808,7 @@ impl BlockchainService {
         let last_tick_provided = match self
             .client
             .runtime_api()
-            .get_last_tick_provider_submitted_proof(block_hash.clone(), provider_id)
+            .get_last_tick_provider_submitted_proof(*block_hash, provider_id)
         {
             Ok(last_tick_provided_result) => match last_tick_provided_result {
                 Ok(last_tick_provided) => last_tick_provided,
@@ -847,10 +847,6 @@ impl BlockchainService {
                 return false;
             }
         };
-
-        trace!(target: LOG_TARGET, "CURRENT TICK: {:?}", current_tick);
-        trace!(target: LOG_TARGET, "LAST TICK PROVED: {:?}", last_tick_provided);
-        trace!(target: LOG_TARGET, "PROVIDER CHALLENGE PERIOD: {:?}", provider_challenge_period);
         current_tick == &last_tick_provided.saturating_add(provider_challenge_period)
     }
 }
