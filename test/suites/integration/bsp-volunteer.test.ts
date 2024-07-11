@@ -12,24 +12,25 @@ import {
   checkBspForFile,
   checkFileChecksum,
   type BspNetApi,
+  type BspNetConfig,
   closeBspNet,
   sleep
 } from "../../util";
 import { hexToString } from "@polkadot/util";
 
-const bspNetConfigCases = [
+const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
   { noisy: false, rocksdb: true },
   { noisy: true, rocksdb: false }
 ];
 
-for (const { noisy, rocksdb } of bspNetConfigCases) {
+for (const bspNetConfig of bspNetConfigCases) {
   describe("BSPNet: BSP Volunteer", () => {
     let user_api: BspNetApi;
     let bsp_api: BspNetApi;
 
     before(async () => {
-      await runBspNet(noisy, rocksdb);
+      await runBspNet(bspNetConfig);
       user_api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
       bsp_api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
     });
@@ -38,6 +39,7 @@ for (const { noisy, rocksdb } of bspNetConfigCases) {
       await user_api.disconnect();
       await bsp_api.disconnect();
       await closeBspNet();
+      await sleep(1000);
     });
 
     it("Network launches and can be queried", async () => {

@@ -9,12 +9,15 @@ import {
   runBspNet,
   shUser,
   type BspNetApi,
+  type BspNetConfig,
   type ToxicInfo
 } from "../util";
 
 let api: BspNetApi | undefined;
-const NOISY = process.env.NOISY === "1" ?? false;
-const ROCKSDB = process.env.ROCKSDB === "1" ?? false;
+const bspNetConfig: BspNetConfig = {
+  noisy: process.env.NOISY === "1" ?? false,
+  rocksdb: process.env.ROCKSDB === "1" ?? false
+};
 
 const CONFIG = {
   bucketName: "nothingmuch-0",
@@ -23,9 +26,9 @@ const CONFIG = {
 };
 
 async function bootStrapNetwork() {
-  await runBspNet(NOISY, ROCKSDB);
+  await runBspNet(bspNetConfig);
 
-  if (NOISY) {
+  if (bspNetConfig.noisy) {
     // For more info on the kind of toxics you can register,
     // see: https://github.com/Shopify/toxiproxy?tab=readme-ov-file#toxics
     const reqToxics = [
@@ -91,7 +94,7 @@ async function bootStrapNetwork() {
   await setTimeout(1000);
   await api.sealBlock();
 
-  if (NOISY) {
+  if (bspNetConfig.noisy) {
     console.log("✅ NoisyNet Bootstrap success");
   } else {
     console.log("✅ BSPNet Bootstrap success");
@@ -101,7 +104,7 @@ async function bootStrapNetwork() {
 bootStrapNetwork()
   .catch((e) => {
     console.error("Error running bootstrap script:", e);
-    if (NOISY) {
+    if (bspNetconfig.noisy) {
       console.log("❌ NoisyNet Bootstrap failure");
     } else {
       console.log("❌ BSPNet Bootstrap failure");

@@ -3,6 +3,7 @@ import { after, before, describe, it } from "node:test";
 import {
   addBspContainer,
   type BspNetApi,
+  type BspNetConfig,
   cleardownTest,
   createApiObject,
   DOCKER_IMAGE,
@@ -11,24 +12,26 @@ import {
 } from "../../util";
 import Docker from "dockerode";
 import { strictEqual } from "node:assert";
+import { sleep } from "@zombienet/utils";
 
-const bspNetConfigCases = [
+const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
   { noisy: false, rocksdb: true },
   { noisy: true, rocksdb: false }
 ];
 
-for (const { noisy, rocksdb } of bspNetConfigCases) {
+for (const bspNetConfig of bspNetConfigCases) {
   describe("BSPNet: Adding new BSPs", () => {
     let api: BspNetApi;
 
     before(async () => {
-      await runBspNet(noisy, rocksdb);
+      await runBspNet(bspNetConfig);
       api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
     });
 
     after(async () => {
       await cleardownTest(api);
+      await sleep(1000);
     });
 
     it("New BSP can be created", async () => {
