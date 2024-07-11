@@ -48,7 +48,7 @@ use pallet_file_system_runtime_api::{
 };
 use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor};
 use pallet_proofs_dealer_runtime_api::{
-    GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+    GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
 };
 use shp_traits::TrieRemoveMutation;
 
@@ -548,6 +548,14 @@ impl_runtime_apis! {
             tick: BlockNumber
         ) -> Result<Vec<(KeyFor<Runtime>, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError> {
             ProofsDealer::get_checkpoint_challenges(tick)
+        }
+
+        fn get_challenge_period(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetChallengePeriodError> {
+            ProofsDealer::get_challenge_period(provider_id)
+        }
+
+        fn get_checkpoint_challenge_period() -> BlockNumber {
+            ProofsDealer::get_checkpoint_challenge_period()
         }
     }
 }

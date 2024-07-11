@@ -1823,6 +1823,15 @@ declare module '@polkadot/api-base/types/submittable' {
              **/
             challenge: AugmentedSubmittable<(key: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
+             * Initialise a Provider's challenge cycle.
+             *
+             * Only callable by sudo.
+             *
+             * Sets the last tick the Provider submitted a proof for to the current tick, and sets the
+             * deadline for submitting a proof to the current tick + the Provider's period + the tolerance.
+             **/
+            forceInitialiseChallengeCycle: AugmentedSubmittable<(provider: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
+            /**
              * For a Provider to submit a proof.
              *
              * Checks that `provider` is a registered Provider. If none

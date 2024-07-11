@@ -140,6 +140,7 @@ mod sign_up {
                                 multiaddresses,
                                 value_prop,
                                 last_capacity_change: current_block,
+                                owner_account: alice,
                                 payment_account: alice
                             }),
                             current_block
@@ -508,6 +509,7 @@ mod sign_up {
                             multiaddresses: multiaddresses.clone(),
                             value_prop: value_prop.clone(),
                             last_capacity_change: current_block,
+                            owner_account: alice,
                             payment_account: alice
                         })));
                     assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
@@ -621,6 +623,7 @@ mod sign_up {
                                 data_used: 0,
                                 multiaddresses,
                                 last_capacity_change: current_block,
+                                owner_account: alice,
                                 payment_account: alice
                             }),
                             current_block
@@ -987,6 +990,7 @@ mod sign_up {
                             multiaddresses: multiaddresses.clone(),
                             root: DefaultMerkleRoot::get(),
                             last_capacity_change: current_block,
+                            owner_account: alice,
                             payment_account: alice
                         })));
                     assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
@@ -4048,6 +4052,7 @@ fn register_account_as_msp(
             multiaddresses,
             value_prop,
             last_capacity_change: frame_system::Pallet::<Test>::block_number(),
+            owner_account: account,
             payment_account: account,
         },
     )
@@ -4128,6 +4133,7 @@ fn register_account_as_bsp(
             multiaddresses,
             root: DefaultMerkleRoot::get(),
             last_capacity_change: frame_system::Pallet::<Test>::block_number(),
+            owner_account: account,
             payment_account: account,
         },
     )
