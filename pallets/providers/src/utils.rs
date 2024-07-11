@@ -1014,12 +1014,12 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
         }
     }
 
-    fn get_owner_account(who: Self::ProviderId) -> Option<Self::AccountId> {
-        if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
+    fn get_owner_account(provider_id: Self::ProviderId) -> Option<Self::AccountId> {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(&provider_id) {
             Some(bsp.owner_account)
-        } else if let Some(msp) = MainStorageProviders::<T>::get(&who) {
+        } else if let Some(msp) = MainStorageProviders::<T>::get(&provider_id) {
             Some(msp.owner_account)
-        } else if let Some(bucket) = Buckets::<T>::get(&who) {
+        } else if let Some(bucket) = Buckets::<T>::get(&provider_id) {
             let msp_for_bucket = bucket.msp_id;
             if let Some(msp) = MainStorageProviders::<T>::get(&msp_for_bucket) {
                 Some(msp.owner_account)
