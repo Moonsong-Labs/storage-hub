@@ -518,6 +518,9 @@ impl BlockchainService {
                             },
                             // Filter the events by the BSP id.
                         ) => {
+                            // TODO: Ideally we would be filtering by BSP ID here, but since we don't have a
+                            // TODO: way to properly initialise the BSP ID yet, we are just going to filter by the
+                            // TODO: caller's public key.
                             if who == AccountId32::from(Self::caller_pub_key(self.keystore.clone()))
                             {
                                 self.emit(BspConfirmedStoring {
