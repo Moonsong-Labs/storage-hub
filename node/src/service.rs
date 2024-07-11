@@ -208,7 +208,7 @@ where
     HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     match provider_options {
-        Some(_) => {
+        Some(ProviderOptions { storage_path, .. }) => {
             // Start building the StorageHubHandler, if running as a provider.
             let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
@@ -232,7 +232,7 @@ where
             let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
             storage_hub_builder.with_provider_pub_key(caller_pub_key);
 
-            storage_hub_builder.setup_storage_layer();
+            storage_hub_builder.setup_storage_layer(storage_path.clone());
             Some(storage_hub_builder)
         }
         None => None,
