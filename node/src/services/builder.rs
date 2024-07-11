@@ -155,7 +155,7 @@ where
 /// Provides an interface for defining the concrete types of
 /// each `StorageLayer` kind, so that their specific requirements can be fulfilled.
 pub trait StorageLayerBuilder {
-    fn setup_storage_layer(&mut self) -> &mut Self;
+    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self;
 }
 
 impl<T> StorageLayerBuilder
@@ -164,7 +164,7 @@ where
     T: TrieLayout + Send + Sync,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
-    fn setup_storage_layer(&mut self) -> &mut Self {
+    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.with_file_storage(Arc::new(RwLock::new(InMemoryFileStorage::<T>::new())))
             .with_forest_storage(Arc::new(RwLock::new(InMemoryForestStorage::<T>::new())))
     }
@@ -180,17 +180,22 @@ where
     T: TrieLayout + Send + Sync,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
-    fn setup_storage_layer(&mut self) -> &mut Self {
-        let provider_pub_key = self
-            .provider_pub_key
-            .expect("Provider public key not set before building the storage layer.");
-        let storage_path = hex::encode(provider_pub_key);
+    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
+        let rocksdb_path = if let Some(path) = storage_path {
+            path
+        } else {
+            let provider_pub_key = self
+                .provider_pub_key
+                .expect("Provider public key not set before building the storage layer.");
+            hex::encode(provider_pub_key)
+        };
+
         let forest_storage = RocksDBForestStorage::<T, kvdb_rocksdb::Database>::rocksdb_storage(
-            storage_path.clone(),
+            rocksdb_path.clone(),
         )
         .expect("Failed to create RocksDB");
         let file_storage =
-            RocksDbFileStorage::<T, kvdb_rocksdb::Database>::rocksdb_storage(storage_path)
+            RocksDbFileStorage::<T, kvdb_rocksdb::Database>::rocksdb_storage(rocksdb_path)
                 .expect("Failed to create RocksDB");
 
         self.with_file_storage(Arc::new(RwLock::new(RocksDbFileStorage::<

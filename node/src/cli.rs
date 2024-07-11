@@ -60,7 +60,7 @@ pub enum ProviderType {
 
 #[derive(ValueEnum, Clone, Debug)]
 pub enum StorageLayer {
-    /// RocksDB
+    /// RocksDB with path.
     RocksDB,
     /// In Memory
     Memory,
@@ -90,6 +90,9 @@ pub struct ProviderConfigurations {
         default_value = "memory"
     )]
     pub storage_layer: Option<StorageLayer>,
+
+    #[clap(long, required_if_eq("storage-layer", "rocks-db"))]
+    pub storage_path: Option<String>,
 }
 
 impl ProviderConfigurations {
@@ -103,6 +106,7 @@ impl ProviderConfigurations {
                 .storage_layer
                 .clone()
                 .expect("Storage layer is required"),
+            storage_path: self.storage_path.clone(),
         }
     }
 }
