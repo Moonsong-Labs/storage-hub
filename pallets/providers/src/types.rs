@@ -29,6 +29,7 @@ pub struct MainStorageProvider<T: Config> {
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub value_prop: ValueProposition<T>,
     pub last_capacity_change: BlockNumberFor<T>,
+    pub owner_account: T::AccountId,
     pub payment_account: T::AccountId,
 }
 
@@ -42,6 +43,7 @@ pub struct BackupStorageProvider<T: Config> {
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub root: MerklePatriciaRoot<T>,
     pub last_capacity_change: BlockNumberFor<T>,
+    pub owner_account: T::AccountId,
     pub payment_account: T::AccountId,
 }
 

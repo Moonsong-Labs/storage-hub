@@ -12,7 +12,11 @@ use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{events::RemoteUploadRequest, FileTransferService};
 use shc_forest_manager::traits::ForestStorage;
 
-use crate::tasks::{bsp_upload_file::BspUploadFileTask, user_sends_file::UserSendsFileTask};
+use crate::tasks::{
+    bsp_upload_file::BspUploadFileTask,
+    sp_react_to_event_mock::{EventToReactTo, SpReactToEventMockTask},
+    user_sends_file::UserSendsFileTask,
+};
 
 /// Represents the handler for the Storage Hub service.
 pub struct StorageHubHandler<T, FL, FS>
@@ -102,5 +106,14 @@ where
         let fts_event_bus_listener: EventBusListener<RemoteUploadRequest, _> =
             bsp_upload_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
         fts_event_bus_listener.start();
+
+        // TODO: Remove this, this is just a mocked task for testing purposes.
+        let sp_react_to_event_mock_task = SpReactToEventMockTask::new(self.clone());
+        // Subscribing to events from the BlockchainService.
+        let bs_event_bus_listener: EventBusListener<EventToReactTo, _> =
+            sp_react_to_event_mock_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        bs_event_bus_listener.start();
     }
 }
