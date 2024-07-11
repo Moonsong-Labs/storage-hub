@@ -511,17 +511,21 @@ impl BlockchainService {
                         }
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::BspConfirmedStoring {
+                                who,
                                 bsp_id,
                                 file_key,
                                 new_root,
                             },
                             // Filter the events by the BSP id.
-                        ) if bsp_id == H256::from(Self::caller_pub_key(self.keystore.clone())) => {
-                            self.emit(BspConfirmedStoring {
-                                bsp_id,
-                                file_key: FileKey::from(file_key.as_ref()),
-                                new_root,
-                            })
+                        ) => {
+                            if who == AccountId32::from(Self::caller_pub_key(self.keystore.clone()))
+                            {
+                                self.emit(BspConfirmedStoring {
+                                    bsp_id,
+                                    file_key: FileKey::from(file_key.as_ref()),
+                                    new_root,
+                                })
+                            }
                         }
                         // Ignore all other events.
                         _ => {}

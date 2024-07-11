@@ -351,6 +351,7 @@ pub mod pallet {
         },
         /// Notifies that a BSP confirmed storing a file.
         BspConfirmedStoring {
+            who: T::AccountId,
             bsp_id: ProviderIdFor<T>,
             file_key: MerkleHash<T>,
             new_root: MerkleHash<T>,
@@ -624,6 +625,7 @@ pub mod pallet {
 
             // Emit event.
             Self::deposit_event(Event::BspConfirmedStoring {
+                who,
                 bsp_id,
                 file_key,
                 new_root,

@@ -1436,6 +1436,7 @@ export default {
         size_: "u32"
       },
       BspConfirmedStoring: {
+        who: "AccountId32",
         bspId: "H256",
         fileKey: "H256",
         newRoot: "H256"

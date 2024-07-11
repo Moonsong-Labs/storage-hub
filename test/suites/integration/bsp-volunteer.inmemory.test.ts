@@ -1,5 +1,5 @@
 import "@storagehub/api-augment";
-import { strictEqual } from "node:assert";
+import { notEqual, strictEqual } from "node:assert";
 import { after, before, describe, it } from "node:test";
 import {
   DUMMY_MSP_ID,
@@ -154,7 +154,11 @@ describe("BSPNet: BSP Volunteer", () => {
 
     await sleep(500); // wait for the bsp to volunteer
     const volunteer_pending = await user_api.rpc.author.pendingExtrinsics();
-    strictEqual(volunteer_pending.length, 1, "There should be one pending extrinsic from BSP (volunteer)");
+    strictEqual(
+      volunteer_pending.length,
+      1,
+      "There should be one pending extrinsic from BSP (volunteer)"
+    );
 
     await user_api.sealBlock();
     const [resBspId, resBucketId, resLoc, resFinger, resMulti, _, resSize] = fetchEventData(
@@ -179,25 +183,24 @@ describe("BSPNet: BSP Volunteer", () => {
     );
 
     await user_api.sealBlock();
-    const [bspConfirmRes_bspId, bspConfirmRes_fileKey, bspConfirmRes_newRoot] = fetchEventData(
-      user_api.events.fileSystem.BspConfirmedStoring,
-      await user_api.query.system.events()
-    );
+    const [_bspConfirmRes_who, bspConfirmRes_bspId, bspConfirmRes_fileKey, bspConfirmRes_newRoot] =
+      fetchEventData(
+        user_api.events.fileSystem.BspConfirmedStoring,
+        await user_api.query.system.events()
+      );
 
     strictEqual(bspConfirmRes_bspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
-    // TODO: check the new root hash. We need and endpoint to get the root hash of the BSP node.
+
+    await sleep(1000); // wait for the bsp to process the BspConfirmedStoring event
+    const bsp_forest_root_after_confirm = await bsp_api.getForestRoot();
+    strictEqual(bsp_forest_root_after_confirm.toString(), bspConfirmRes_newRoot.toString());
+    notEqual(bsp_forest_root_after_confirm.toString(), initial_bsp_forest_root.toString());
     // TODO: check the file key. We need an RPC endpoint to compute the file key.
 
     await it("downloaded file passed integrity checks", async () => {
       await checkBspForFile("test/whatsup.jpg");
       const sha = await checkFileChecksum("test/whatsup.jpg");
       strictEqual(sha, TEST_ARTEFACTS["res/whatsup.jpg"].checksum);
-
-      const bsp_forest_root_after_confirm = await bsp_api.getForestRoot();
-      strictEqual(
-        bsp_forest_root_after_confirm.toString(),
-        "0x13523a10e123eb456ac5b9be431bec7eca4f7d218e3336aea175771a747978a8"
-      );
     });
   });
 });

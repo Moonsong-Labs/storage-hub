@@ -745,67 +745,56 @@ declare module "@polkadot/api-base/types/errors" {
        * `challenge` extrinsic errors
        * The ChallengesQueue is full. No more manual challenges can be made
        * until some of the challenges in the queue are dispatched.
-       * Index 1
        **/
       ChallengesQueueOverflow: AugmentedError<ApiType>;
       /**
        * Provider is submitting a proof for a tick in the future.
-       * Index 11
        **/
       ChallengesTickNotReached: AugmentedError<ApiType>;
       /**
        * Provider is submitting a proof for a tick too late, i.e. that the challenges tick
        * is greater or equal than `challenges_tick` + `T::ChallengeTicksTolerance::get()`.
-       * Index 13
        **/
       ChallengesTickTooLate: AugmentedError<ApiType>;
       /**
        * Provider is submitting a proof for a tick before the last tick this pallet registers
        * challenges for.
-       * Index 12
        **/
       ChallengesTickTooOld: AugmentedError<ApiType>;
       /**
        * Checkpoint challenges not found in block.
        * This should only be possible if `TickToCheckpointChallenges` is dereferenced for a tick
        * that is not a checkpoint tick.
-       * Index 15
        **/
       CheckpointChallengesNotFound: AugmentedError<ApiType>;
       /**
        * `submit_proof` extrinsic errors
        * There are no key proofs submitted.
-       * Index 4
        **/
       EmptyKeyProofs: AugmentedError<ApiType>;
       /**
        * Failed to apply delta to the forest proof partial trie.
-       * Index 19
        **/
       FailedToApplyDelta: AugmentedError<ApiType>;
       /**
        * The fee for submitting a challenge could not be charged.
-       * Index 3
        **/
       FeeChargeFailed: AugmentedError<ApiType>;
       /**
        * The forest proof submitted by the Provider is invalid.
        * This could be because the proof is not valid for the root, or because the proof is
        * not sufficient for the challenges made.
-       * Index 16W
        **/
       ForestProofVerificationFailed: AugmentedError<ApiType>;
       /**
        * There is at least one key proven in the forest proof, that does not have a corresponding
        * key proof.
-       * Index 17
        **/
       KeyProofNotFound: AugmentedError<ApiType>;
       /**
        * A key proof submitted by the Provider is invalid.
        * This could be because the proof is not valid for the root of that key, or because the proof
        * is not sufficient for the challenges made.
-       * Index 18
        **/
       KeyProofVerificationFailed: AugmentedError<ApiType>;
       /**
@@ -814,54 +803,45 @@ declare module "@polkadot/api-base/types/errors" {
        * Providers who are required to submit proofs should always have a record of the
        * last tick they submitted a proof for, otherwise it means they haven't started
        * providing service for any user yet.
-       * Index 7
        **/
       NoRecordOfLastSubmittedProof: AugmentedError<ApiType>;
       /**
        * General errors
        * The proof submitter is not a registered Provider.
-       * Index 0
        **/
       NotProvider: AugmentedError<ApiType>;
       /**
        * The PriorityChallengesQueue is full. No more priority challenges can be made
        * until some of the challenges in the queue are dispatched.
-       * Index 2
        **/
       PriorityChallengesQueueOverflow: AugmentedError<ApiType>;
       /**
        * The root for the Provider could not be found.
-       * Index 5
        **/
       ProviderRootNotFound: AugmentedError<ApiType>;
       /**
        * The provider stake could not be found.
-       * Index 8
        **/
       ProviderStakeNotFound: AugmentedError<ApiType>;
       /**
        * The seed for the tick could not be found.
        * This should not be possible for a tick within the `ChallengeHistoryLength` range, as
        * seeds are generated for all ticks, and stored within this range.
-       * Index 14
        **/
       SeedNotFound: AugmentedError<ApiType>;
       /**
        * The staked balance of the Provider could not be converted to `u128`.
        * This should not be possible, as the `Balance` type should be an unsigned integer type.
-       * Index 10
        **/
       StakeCouldNotBeConverted: AugmentedError<ApiType>;
       /**
        * Provider is submitting a proof when they have a zero root.
        * Providers with zero roots are not providing any service, so they should not be
        * submitting proofs.
-       * Index 6
        **/
       ZeroRoot: AugmentedError<ApiType>;
       /**
        * Provider is submitting a proof but their stake is zero.
-       * Index 9
        **/
       ZeroStake: AugmentedError<ApiType>;
       /**

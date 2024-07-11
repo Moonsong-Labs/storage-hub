@@ -306,7 +306,8 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a BSP confirmed storing a file.
              **/
-            BspConfirmedStoring: AugmentedEvent<ApiType, [bspId: H256, fileKey: H256, newRoot: H256], {
+            BspConfirmedStoring: AugmentedEvent<ApiType, [who: AccountId32, bspId: H256, fileKey: H256, newRoot: H256], {
+                who: AccountId32;
                 bspId: H256;
                 fileKey: H256;
                 newRoot: H256;
