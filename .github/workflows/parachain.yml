@@ -285,7 +285,6 @@ jobs:
                --test-reporter-destination=stdout   \
                --test-concurrency=1                 \
                --test-shard=${{ matrix.shard }}/4   \
-               --test-timeout=60000                 \
                ./suites/solo-node/**/**.test.ts
 
   bsp_net:
@@ -338,7 +337,6 @@ jobs:
               --test-reporter-destination=stdout   \
               --test-concurrency=1                 \
               --test-shard=${{ matrix.shard }}/4   \
-              --test-timeout=60000                 \
               --test-force-exit                    \
               ./suites/integration/**/**.test.ts
 
