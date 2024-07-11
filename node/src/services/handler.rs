@@ -15,7 +15,6 @@ use shc_forest_manager::traits::ForestStorage;
 use crate::tasks::{
     bsp_confirmed_storing::BspConfirmedStoringHandler,
     bsp_upload_file::BspUploadFileTask,
-    bsp_upload_file::BspUploadFileTask,
     sp_react_to_event_mock::{EventToReactTo, SpReactToEventMockTask},
     user_sends_file::UserSendsFileTask,
 };
