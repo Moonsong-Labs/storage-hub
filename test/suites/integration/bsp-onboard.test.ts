@@ -31,7 +31,6 @@ for (const bspNetConfig of bspNetConfigCases) {
 
     after(async () => {
       await cleardownTest(api);
-      await sleep(1000);
     });
 
     it("New BSP can be created", async () => {

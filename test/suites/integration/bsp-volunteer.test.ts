@@ -39,7 +39,6 @@ for (const bspNetConfig of bspNetConfigCases) {
       await user_api.disconnect();
       await bsp_api.disconnect();
       await closeBspNet();
-      await sleep(1000);
     });
 
     it("Network launches and can be queried", async () => {
