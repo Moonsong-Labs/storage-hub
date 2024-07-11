@@ -283,6 +283,7 @@ jobs:
                --test-reporter-destination=stdout   \
                --test-reporter=spec                 \
                --test-reporter-destination=stdout   \
+               --test-concurrency=1                 \
                --test-shard=${{ matrix.shard }}/4   \
                --test-timeout=60000                 \
                ./suites/solo-node/**/**.test.ts
@@ -335,6 +336,7 @@ jobs:
               --test-reporter-destination=stdout   \
               --test-reporter=spec                 \
               --test-reporter-destination=stdout   \
+              --test-concurrency=1                 \
               --test-shard=${{ matrix.shard }}/4   \
               --test-timeout=60000                 \
               --test-force-exit                    \
