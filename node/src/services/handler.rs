@@ -107,7 +107,7 @@ where
             bsp_upload_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
         fts_event_bus_listener.start();
 
-        // TODO: Remove this, this is juts a mocked task for testing purposes.
+        // TODO: Remove this, this is just a mocked task for testing purposes.
         let sp_react_to_event_mock_task = SpReactToEventMockTask::new(self.clone());
         // Subscribing to events from the BlockchainService.
         let bs_event_bus_listener: EventBusListener<EventToReactTo, _> =
