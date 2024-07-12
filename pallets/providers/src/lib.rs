@@ -490,11 +490,12 @@ pub mod pallet {
                 multiaddresses: multiaddresses.clone(),
                 value_prop: value_prop.clone(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
+                owner_account: who.clone(),
                 payment_account,
             };
 
             // Sign up the new MSP (if possible), updating storage
-            Self::do_request_msp_sign_up(&who, &msp_info)?;
+            Self::do_request_msp_sign_up(&msp_info)?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::MspRequestSignUpSuccess {
@@ -550,11 +551,12 @@ pub mod pallet {
                 multiaddresses: multiaddresses.clone(),
                 root: T::DefaultMerkleRoot::get(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
+                owner_account: who.clone(),
                 payment_account,
             };
 
             // Sign up the new BSP (if possible), updating storage
-            Self::do_request_bsp_sign_up(&who, &bsp_info)?;
+            Self::do_request_bsp_sign_up(&bsp_info)?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::BspRequestSignUpSuccess {
@@ -819,11 +821,12 @@ pub mod pallet {
                 multiaddresses: multiaddresses.clone(),
                 value_prop: value_prop.clone(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
+                owner_account: who.clone(),
                 payment_account,
             };
 
             // Sign up the new MSP (if possible), updating storage
-            Self::do_request_msp_sign_up(&who, &msp_info)?;
+            Self::do_request_msp_sign_up(&msp_info)?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::MspRequestSignUpSuccess {
@@ -884,11 +887,12 @@ pub mod pallet {
                 multiaddresses: multiaddresses.clone(),
                 root: T::DefaultMerkleRoot::get(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
+                owner_account: who.clone(),
                 payment_account,
             };
 
             // Sign up the new BSP (if possible), updating storage
-            Self::do_request_bsp_sign_up(&who, &bsp_info)?;
+            Self::do_request_bsp_sign_up(&bsp_info)?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::<T>::BspRequestSignUpSuccess {

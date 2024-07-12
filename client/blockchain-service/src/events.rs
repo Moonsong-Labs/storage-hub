@@ -1,7 +1,8 @@
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
-    BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, PeerIds, RandomSeed, StorageData,
+    BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, PeerIds, ProviderId, RandomSeed,
+    StorageData,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -11,8 +12,9 @@ use sp_runtime::AccountId32;
 /// This event is emitted when there's a new random challenge seed that affects this
 /// BSP. In other words, it only pays attention to the random seeds in the challenge
 /// period of this BSP.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct NewChallengeSeed {
+    pub provider_id: ProviderId,
     pub tick: BlockNumber,
     pub seed: RandomSeed,
 }
