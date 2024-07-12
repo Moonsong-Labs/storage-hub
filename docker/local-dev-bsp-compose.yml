@@ -23,7 +23,6 @@ services:
         "--keystore-path=/keystore",
         "--sealing=manual",
         "--base-path=/data",
-        "--log=runtime=debug",
       ]
   sh-user:
     image: storage-hub:local
@@ -51,5 +50,4 @@ services:
         "--keystore-path=/keystore",
         "--sealing=manual",
         "--base-path=/data",
-        "--log=runtime=debug",
       ]
