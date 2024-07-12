@@ -234,6 +234,46 @@ where
     }
 }
 
+/// Handles the `BspConfirmedStoring` event.
+///
+/// This event is triggered by the runtime confirming that the BSP is now storing the file.
+impl<T, FL, FS> EventHandler<BspConfirmedStoring> for BspUploadFileTask<T, FL, FS>
+where
+    T: TrieLayout + Send + Sync + 'static,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    async fn handle_event(&mut self, event: BspConfirmedStoring) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET,
+            "Runtime confirmed BSP storing file: {:?}",
+            event.file_key,
+        );
+
+        let file_key: HasherOutT<T> = TryFrom::<[u8; 32]>::try_from(*event.file_key.as_ref())
+            .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
+
+        // Get the metadata of the stored file.
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let file_metadata = read_file_storage
+            .get_metadata(&file_key)
+            .expect("Failed to get metadata.");
+        // Release the file storage lock.
+        drop(read_file_storage);
+
+        // Save [`FileMetadata`] of the newly confirmed stored file in the forest storage.
+        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
+        write_forest_storage
+            .insert_metadata(&file_metadata)
+            .expect("Failed to insert metadata.");
+        // Release the forest storage lock.
+        drop(write_forest_storage);
+
+        Ok(())
+    }
+}
+
 impl<T, FL, FS> BspUploadFileTask<T, FL, FS>
 where
     T: TrieLayout,
@@ -453,46 +493,6 @@ where
                 .expect("Failed to write file chunk.");
         }
         drop(read_file_storage);
-
-        Ok(())
-    }
-}
-
-/// Handles the `BspConfirmedStoring` event.
-///
-/// This event is triggered by the runtime confirming that the BSP is now storing the file.
-impl<T, FL, FS> EventHandler<BspConfirmedStoring> for BspUploadFileTask<T, FL, FS>
-where
-    T: TrieLayout + Send + Sync + 'static,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
-{
-    async fn handle_event(&mut self, event: BspConfirmedStoring) -> anyhow::Result<()> {
-        info!(
-            target: LOG_TARGET,
-            "Runtime confirmed BSP storing file: {:?}",
-            event.file_key,
-        );
-
-        let file_key: HasherOutT<T> = TryFrom::<[u8; 32]>::try_from(*event.file_key.as_ref())
-            .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
-
-        // Get the metadata of the stored file.
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let file_metadata = read_file_storage
-            .get_metadata(&file_key)
-            .expect("Failed to get metadata.");
-        // Release the file storage lock.
-        drop(read_file_storage);
-
-        // Save [`FileMetadata`] of the newly confirmed stored file in the forest storage.
-        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
-        write_forest_storage
-            .insert_metadata(&file_metadata)
-            .expect("Failed to insert metadata.");
-        // Release the forest storage lock.
-        drop(write_forest_storage);
 
         Ok(())
     }
