@@ -48,19 +48,15 @@ use sp_runtime::{
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
 
-use crate::{
-    service::ParachainClient,
-    services::blockchain::{events::AcceptedBspVolunteer, transaction::SubmittedTransaction},
-};
 use pallet_file_system_runtime_api::{FileSystemApi, QueryFileEarliestVolunteerBlockError};
-use shc_common::types::BlockNumber;
+use shc_common::types::{BlockNumber, ParachainClient};
 
-use crate::services::blockchain::{
+use crate::{
     commands::BlockchainServiceCommand,
-    events::BlockchainServiceEventBusProvider,
-    types::Extrinsic,
+    events::{AcceptedBspVolunteer, BlockchainServiceEventBusProvider, NewStorageRequest},
+    transaction::SubmittedTransaction,
+    types::{EventsVec, Extrinsic},
     KEY_TYPE,
-    {events::NewStorageRequest, types::EventsVec},
 };
 
 const LOG_TARGET: &str = "blockchain-service";

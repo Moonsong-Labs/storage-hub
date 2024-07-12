@@ -22,6 +22,7 @@ sp-trie = { workspace = true }
 # Local
 shc-common = { workspace = true }
 shc-file-manager = { workspace = true }
+shc-forest-manager = { workspace = true }
 
 [features]
 default = ["std"]

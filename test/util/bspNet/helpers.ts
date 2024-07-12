@@ -44,7 +44,7 @@ export const sendLoadFileRpc = async (
 ): Promise<FileSendResponse> => {
   try {
     // @ts-expect-error - rpc provider not officially exposed
-    const resp = await api._rpcCore.provider.send("filestorage_loadFileInStorage", [
+    const resp = await api._rpcCore.provider.send("storagehubclient_loadFileInStorage", [
       filePath,
       remotePath,
       userNodeAccountId,
@@ -60,7 +60,19 @@ export const sendLoadFileRpc = async (
     };
   } catch (e) {
     console.error("Error sending file to user node:", e);
-    throw new Error("filestorage_loadFileInStorage RPC call failed");
+    throw new Error("storagehubclient_loadFileInStorage RPC call failed");
+  }
+};
+
+export const getForestRoot = async (api: ApiPromise): Promise<H256> => {
+  try {
+    // TODO: Replace with api.rpc.storagehubclient.getForestRoot() when we autogenerate the types for StorageHub.
+    // @ts-expect-error - rpc provider not officially exposed
+    const resp = await api._rpcCore.provider.send("storagehubclient_getForestRoot");
+    return resp;
+  } catch (e) {
+    console.error("Error getting the forest root from provider node:", e);
+    throw new Error("storagehubclient_getForestRoot RPC call failed");
   }
 };
 
@@ -71,14 +83,14 @@ export interface FileSaveResponse {
 export const sendSaveFileRpc = async (api: ApiPromise, fileKey: H256, filePath: string): Promise<FileSaveResponse> => {
   try {
     // @ts-expect-error - rpc provider not officially exposed
-    const resp = await api._rpcCore.provider.send("filestorage_saveFileToDisk", [fileKey, filePath]);
+    const resp = await api._rpcCore.provider.send("storagehubclient_saveFileToDisk", [fileKey, filePath]);
     console.log("resp = ", resp);
     return {
       owner: u8aToHex(resp.owner)
     };
   } catch (e) {
     console.error("Error saving file to user node:", e);
-    throw new Error("filestorage_saveFileToDisk RPC call failed");
+    throw new Error("storagehubclient_saveFileToDisk RPC call failed");
   }
 }
 
@@ -154,17 +166,19 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
   throw new Error(`Error fetching peerId from ${url}`);
 };
 
-export const runBspNet = async (noisy = false) => {
+export const runBspNet = async (noisy = false, rocksdb = false) => {
   let api: BspNetApi | undefined;
   try {
     console.log(`sh user id: ${shUser.address}`);
     console.log(`sh bsp id: ${bsp.address}`);
-    const composeFilePath = path.resolve(
-      process.cwd(),
-      "..",
-      "docker",
-      noisy ? "noisy-bsp-compose.yml" : "local-dev-bsp-compose.yml"
-    );
+    let file = "local-dev-bsp-compose.yml";
+    if (rocksdb) {
+      file = "local-dev-bsp-rocksdb-compose.yml";
+    }
+    if (noisy) {
+      file = "noisy-bsp-compose.yml";
+    }
+    const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
 
     if (noisy) {
       await compose.upOne("toxiproxy", { config: composeFilePath, log: true });
