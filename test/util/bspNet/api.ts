@@ -3,7 +3,13 @@ import type { BspNetApi } from "./types";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import { createBucket, getForestRoot, sealBlock, sendLoadFileRpc, sendSaveFileRpc } from "./helpers";
+import {
+  createBucket,
+  getForestRoot,
+  sealBlock,
+  sendLoadFileRpc,
+  sendSaveFileRpc
+} from "./helpers";
 import { assertEventPresent } from "../asserts";
 import type { EventRecord, H256 } from "@polkadot/types/interfaces";
 
@@ -22,7 +28,7 @@ export const createApiObject = async (uri: string): Promise<BspNetApi> => {
 
     loadFile: async (localPath: string, remotePath: string, addressId: string, bucket: H256) =>
       sendLoadFileRpc(baseApi, localPath, remotePath, addressId, bucket),
-    
+
     saveFile: async (fileKey: H256, filePath: string) =>
       sendSaveFileRpc(baseApi, fileKey, filePath),
 

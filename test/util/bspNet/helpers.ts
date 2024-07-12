@@ -80,10 +80,17 @@ export interface FileSaveResponse {
   owner: string;
 }
 
-export const sendSaveFileRpc = async (api: ApiPromise, fileKey: H256, filePath: string): Promise<FileSaveResponse> => {
+export const sendSaveFileRpc = async (
+  api: ApiPromise,
+  fileKey: H256,
+  filePath: string
+): Promise<FileSaveResponse> => {
   try {
     // @ts-expect-error - rpc provider not officially exposed
-    const resp = await api._rpcCore.provider.send("storagehubclient_saveFileToDisk", [fileKey, filePath]);
+    const resp = await api._rpcCore.provider.send("storagehubclient_saveFileToDisk", [
+      fileKey,
+      filePath
+    ]);
     console.log("resp = ", resp);
     return {
       owner: u8aToHex(resp.owner)
@@ -92,7 +99,7 @@ export const sendSaveFileRpc = async (api: ApiPromise, fileKey: H256, filePath: 
     console.error("Error saving file to user node:", e);
     throw new Error("storagehubclient_saveFileToDisk RPC call failed");
   }
-}
+};
 
 export const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {
   const maxRetries = 60;
