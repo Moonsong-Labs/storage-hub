@@ -1940,6 +1940,12 @@ declare module "@polkadot/types/lookup" {
       readonly bucketId: H256;
       readonly proofOfInclusion: bool;
     } & Struct;
+    readonly isBspChallengeCycleInitialised: boolean;
+    readonly asBspChallengeCycleInitialised: {
+      readonly who: AccountId32;
+      readonly bspId: H256;
+      readonly fileKey: H256;
+    } & Struct;
     readonly type:
       | "NewBucket"
       | "BucketPrivacyUpdated"
@@ -1952,7 +1958,8 @@ declare module "@polkadot/types/lookup" {
       | "BspStoppedStoring"
       | "FailedToQueuePriorityChallenge"
       | "FileDeletionRequest"
-      | "ProofSubmittedForPendingFileDeletionRequest";
+      | "ProofSubmittedForPendingFileDeletionRequest"
+      | "BspChallengeCycleInitialised";
   }
 
   /** @name PalletProofsDealerEvent (133) */
@@ -1981,12 +1988,19 @@ declare module "@polkadot/types/lookup" {
     readonly asSlashableProvider: {
       readonly provider: H256;
     } & Struct;
+    readonly isNewChallengeCycleInitialised: boolean;
+    readonly asNewChallengeCycleInitialised: {
+      readonly currentTick: u32;
+      readonly provider: H256;
+      readonly maybeProviderAccount: Option<AccountId32>;
+    } & Struct;
     readonly type:
       | "NewChallenge"
       | "ProofAccepted"
       | "NewChallengeSeed"
       | "NewCheckpointChallenge"
-      | "SlashableProvider";
+      | "SlashableProvider"
+      | "NewChallengeCycleInitialised";
   }
 
   /** @name PalletProofsDealerProof (134) */
@@ -3876,7 +3890,11 @@ declare module "@polkadot/types/lookup" {
       readonly proof: PalletProofsDealerProof;
       readonly provider: Option<H256>;
     } & Struct;
-    readonly type: "Challenge" | "SubmitProof";
+    readonly isForceInitialiseChallengeCycle: boolean;
+    readonly asForceInitialiseChallengeCycle: {
+      readonly provider: H256;
+    } & Struct;
+    readonly type: "Challenge" | "SubmitProof" | "ForceInitialiseChallengeCycle";
   }
 
   /** @name PalletRandomnessCall (300) */
@@ -4632,6 +4650,7 @@ declare module "@polkadot/types/lookup" {
     readonly multiaddresses: Vec<Bytes>;
     readonly root: H256;
     readonly lastCapacityChange: u32;
+    readonly ownerAccount: AccountId32;
     readonly paymentAccount: AccountId32;
   }
 
@@ -4643,6 +4662,7 @@ declare module "@polkadot/types/lookup" {
     readonly multiaddresses: Vec<Bytes>;
     readonly valueProp: PalletStorageProvidersValueProposition;
     readonly lastCapacityChange: u32;
+    readonly ownerAccount: AccountId32;
     readonly paymentAccount: AccountId32;
   }
 

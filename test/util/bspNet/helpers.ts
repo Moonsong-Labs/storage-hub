@@ -319,9 +319,10 @@ export const sealBlock = async (
     txHash: results.hash?.toString()
   };
 
+  const blockHash = sealedResults.blockReceipt.blockHash;
+  const allEvents = await (await api.at(blockHash)).query.system.events();
+
   if (results.hash) {
-    const blockHash = sealedResults.blockReceipt.blockHash;
-    const allEvents = await (await api.at(blockHash)).query.system.events();
     const blockData = await api.rpc.chain.getBlock(blockHash);
     const getExtIndex = (txHash: Hash) => {
       return blockData.block.extrinsics.findIndex((ext) => ext.hash.toHex() === txHash.toString());
@@ -334,6 +335,8 @@ export const sealBlock = async (
     results.blockData = blockData;
     results.events = extEvents;
     results.success = isExtSuccess(extEvents);
+  } else {
+    results.events = allEvents;
   }
 
   // Allow time for chain to settle

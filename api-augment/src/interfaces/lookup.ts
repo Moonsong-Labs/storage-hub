@@ -1470,6 +1470,11 @@ export default {
         fileKey: "H256",
         bucketId: "H256",
         proofOfInclusion: "bool"
+      },
+      BspChallengeCycleInitialised: {
+        who: "AccountId32",
+        bspId: "H256",
+        fileKey: "H256"
       }
     }
   },
@@ -1496,6 +1501,11 @@ export default {
       },
       SlashableProvider: {
         provider: "H256"
+      },
+      NewChallengeCycleInitialised: {
+        currentTick: "u32",
+        provider: "H256",
+        maybeProviderAccount: "Option<AccountId32>"
       }
     }
   },
@@ -3098,6 +3108,9 @@ export default {
       submit_proof: {
         proof: "PalletProofsDealerProof",
         provider: "Option<H256>"
+      },
+      force_initialise_challenge_cycle: {
+        provider: "H256"
       }
     }
   },
@@ -3741,6 +3754,7 @@ export default {
     multiaddresses: "Vec<Bytes>",
     root: "H256",
     lastCapacityChange: "u32",
+    ownerAccount: "AccountId32",
     paymentAccount: "AccountId32"
   },
   /**
@@ -3753,6 +3767,7 @@ export default {
     multiaddresses: "Vec<Bytes>",
     valueProp: "PalletStorageProvidersValueProposition",
     lastCapacityChange: "u32",
+    ownerAccount: "AccountId32",
     paymentAccount: "AccountId32"
   },
   /**
