@@ -11,7 +11,10 @@ use sp_trie::TrieLayout;
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
+use shc_blockchain_service::{
+    commands::BlockchainServiceInterface,
+    events::{BspConfirmedStoring, NewStorageRequest},
+};
 use shc_common::types::{FileKey, FileMetadata, HasherOutT};
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
@@ -26,7 +29,7 @@ const LOG_TARGET: &str = "bsp-upload-file-task";
 /// BSP Upload File Task: Handles the whole flow of a file being uploaded to a BSP, from
 /// the BSP's perspective.
 ///
-/// The flow is split into two parts, which are represented here as two handlers for two
+/// The flow is split into two parts, which are represented here as 3 handlers for 3
 /// different events:
 /// - `NewStorageRequest` event: The first part of the flow. It is triggered by an
 ///   on-chain event of a user submitting a storage request to StorageHub. It responds
@@ -35,6 +38,9 @@ const LOG_TARGET: &str = "bsp-upload-file-task";
 /// - `RemoteUploadRequest` event: The second part of the flow. It is triggered by a
 ///   user sending a chunk of the file to the BSP. It checks the proof for the chunk
 ///   and if it is valid, stores it, until the whole file is stored.
+/// - `BspConfirmedStoring` event: The third part of the flow. It is triggered by the
+///   runtime confirming that the BSP is now storing the file so that the BSP can update
+///   it's Forest storage.
 pub struct BspUploadFileTask<T, FL, FS>
 where
     T: TrieLayout,
@@ -447,6 +453,46 @@ where
                 .expect("Failed to write file chunk.");
         }
         drop(read_file_storage);
+
+        Ok(())
+    }
+}
+
+/// Handles the `BspConfirmedStoring` event.
+///
+/// This event is triggered by the runtime confirming that the BSP is now storing the file.
+impl<T, FL, FS> EventHandler<BspConfirmedStoring> for BspUploadFileTask<T, FL, FS>
+where
+    T: TrieLayout + Send + Sync + 'static,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    async fn handle_event(&mut self, event: BspConfirmedStoring) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET,
+            "Runtime confirmed BSP storing file: {:?}",
+            event.file_key,
+        );
+
+        let file_key: HasherOutT<T> = TryFrom::<[u8; 32]>::try_from(*event.file_key.as_ref())
+            .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
+
+        // Get the metadata of the stored file.
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let file_metadata = read_file_storage
+            .get_metadata(&file_key)
+            .expect("Failed to get metadata.");
+        // Release the file storage lock.
+        drop(read_file_storage);
+
+        // Save [`FileMetadata`] of the newly confirmed stored file in the forest storage.
+        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
+        write_forest_storage
+            .insert_metadata(&file_metadata)
+            .expect("Failed to insert metadata.");
+        // Release the forest storage lock.
+        drop(write_forest_storage);
 
         Ok(())
     }
