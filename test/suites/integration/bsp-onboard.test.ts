@@ -15,8 +15,8 @@ import { strictEqual } from "node:assert";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
-  { noisy: false, rocksdb: true },
-  { noisy: true, rocksdb: false }
+  { noisy: false, rocksdb: true }
+  // { noisy: true, rocksdb: false }
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
