@@ -176,7 +176,7 @@ where
                 (None, None) => {
                     #[cfg(test)]
                     unreachable!(
-                        "This should not happen. Unexpected scenario when iterating through proofs."
+                        "This should not happen. Empty trie scenario should be handled before reaching this point."
                     );
 
                     #[allow(unreachable_code)]
