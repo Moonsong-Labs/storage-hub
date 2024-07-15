@@ -170,9 +170,19 @@ where
 
                     continue;
                 }
-                // Scenario 5: The trie is empty.
+                // Scenario 5 (unreachable): The trie is empty. While it is possible to have an empty
+                // trie, this case should not be reached as the check for an empty trie is done before
+                // iterating through the challenges.
                 (None, None) => {
-                    continue;
+                    #[cfg(test)]
+                    unreachable!(
+                        "This should not happen. Unexpected scenario when iterating through proofs."
+                    );
+
+                    #[allow(unreachable_code)]
+                    {
+                        return Err("Proof is invalid.".into());
+                    }
                 }
                 _ => {
                     #[cfg(test)]
