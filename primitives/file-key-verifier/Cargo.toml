@@ -37,7 +37,6 @@ frame-support = { workspace = true }
 bincode = { workspace = true }
 rand = { workspace = true }
 reference-trie = { workspace = true }
-serde = { workspace = true }
 
 # Substrate
 sp-io = { workspace = true }
