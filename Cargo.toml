@@ -168,6 +168,7 @@ pallet-randomness = { path = "pallets/randomness", default-features = false }
 pallet-bucket-nfts = { path = "pallets/bucket-nfts", default-features = false }
 pallet-payment-streams = { path = "pallets/payment-streams", default-features = false }
 
+# Local - StorageHub Client (used by the node, can be std or no_std)
 shc-actors-framework = { path = "client/actors-framework", default-features = false }
 shc-blockchain-service = { path = "client/blockchain-service", default-features = false }
 shc-file-transfer-service = { path = "client/file-transfer-service", default-features = false }
@@ -176,12 +177,15 @@ shc-file-manager = { path = "client/file-manager", default-features = false }
 shc-forest-manager = { path = "client/forest-manager", default-features = false }
 shc-rpc = { path = "client/rpc", default-features = false }
 
-storage-hub-runtime = { path = "runtime", default-features = false }
-
-shp-session-keys = { path = "primitives/session-keys", default-features = false }
+# Local - StorageHub Primitives (used by the runtime and the node, must be no_std compatible)
+shp-constants = { path = "primitives/constants", default-features = false }
 shp-file-key-verifier = { path = "primitives/file-key-verifier", default-features = false }
 shp-forest-verifier = { path = "primitives/forest-verifier", default-features = false }
+shp-session-keys = { path = "primitives/session-keys", default-features = false }
 shp-traits = { path = "primitives/traits", default-features = false }
+
+# Lcoal - StorageHub Runtime
+storage-hub-runtime = { path = "runtime", default-features = false }
 
 [workspace.lints.rust]
 suspicious_double_ref_op = { level = "allow", priority = 2 }

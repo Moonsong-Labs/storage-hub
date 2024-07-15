@@ -35,6 +35,7 @@ pallet-randomness = { workspace = true }
 pallet-bucket-nfts = { workspace = true }
 pallet-payment-streams = { workspace = true }
 
+shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-forest-verifier = { workspace = true }
 shp-traits = { workspace = true }
