@@ -160,7 +160,7 @@ impl<const H_LENGTH: usize> AsRef<[u8]> for Fingerprint<H_LENGTH> {
 }
 
 /// Typed u64 representing the index of a file [`Chunk`]. Indexed from 0.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TypeInfo, Encode, Decode, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TypeInfo, Encode, Decode, Ord, PartialOrd, Hash)]
 pub struct ChunkId(u64);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -289,5 +289,9 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
 
     pub fn chunks_count(&self) -> u64 {
         self.size / CHUNK_SIZE + (self.size % CHUNK_SIZE != 0) as u64
+    }
+
+    pub fn last_chunk_id(&self) -> ChunkId {
+        ChunkId::new(self.chunks_count() - 1)
     }
 }

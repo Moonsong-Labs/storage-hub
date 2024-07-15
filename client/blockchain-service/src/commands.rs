@@ -3,9 +3,11 @@ use async_trait::async_trait;
 use serde_json::Number;
 use sp_core::H256;
 
-use pallet_file_system_runtime_api::QueryFileEarliestVolunteerBlockError;
+use pallet_file_system_runtime_api::{
+    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
+};
 use shc_actors_framework::actor::ActorHandle;
-use shc_common::types::BlockNumber;
+use shc_common::types::{BlockNumber, ChunkId};
 
 use super::{
     handler::BlockchainService,
@@ -14,7 +16,6 @@ use super::{
 };
 
 /// Commands that can be sent to the BlockchainService actor.
-#[derive(Debug)]
 pub enum BlockchainServiceCommand {
     SendExtrinsic {
         call: storage_hub_runtime::RuntimeCall,
@@ -41,6 +42,13 @@ pub enum BlockchainServiceCommand {
     },
     GetNodePublicKey {
         callback: tokio::sync::oneshot::Sender<sp_core::sr25519::Public>,
+    },
+    QueryBspConfirmChunksToProveForFile {
+        bsp_id: sp_core::sr25519::Public,
+        file_key: H256,
+        callback: tokio::sync::oneshot::Sender<
+            Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>,
+        >,
     },
 }
 
@@ -78,6 +86,13 @@ pub trait BlockchainServiceInterface {
 
     /// Get the node's public key.
     async fn get_node_public_key(&self) -> sp_core::sr25519::Public;
+
+    /// Query the chunks that a BSP needs to confirm for a file.
+    async fn query_bsp_confirm_chunks_to_prove_for_file(
+        &self,
+        bsp_id: sp_core::sr25519::Public,
+        file_key: H256,
+    ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -186,6 +201,22 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         // Build command to send to blockchain service.
         let message = BlockchainServiceCommand::GetNodePublicKey { callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_bsp_confirm_chunks_to_prove_for_file(
+        &self,
+        bsp_id: sp_core::sr25519::Public,
+        file_key: H256,
+    ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::QueryBspConfirmChunksToProveForFile {
+            bsp_id,
+            file_key,
+            callback,
+        };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
