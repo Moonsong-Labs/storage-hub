@@ -30,7 +30,7 @@ pub fn build_merkle_patricia_forest<T: TrieLayout>(
             owner: "owner".as_bytes().to_vec(),
             bucket_id: bucket.to_vec(),
             location: file_path,
-            size: 0,
+            file_size: 0,
             fingerprint: Fingerprint::default(),
         };
 

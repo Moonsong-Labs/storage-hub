@@ -102,7 +102,7 @@ impl FileProof {
             file_metadata.owner.clone(),
             file_metadata.bucket_id.clone(),
             file_metadata.location.clone(),
-            file_metadata.size,
+            file_metadata.file_size,
             file_metadata.fingerprint,
             self.proof.clone(),
         )
