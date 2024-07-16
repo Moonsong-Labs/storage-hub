@@ -25,12 +25,12 @@
   },
   "license": "ISC",
   "dependencies": {
-    "@polkadot/api": "12.1.1",
-    "@polkadot/api-base": "12.1.1",
-    "@polkadot/rpc-core": "12.1.1",
-    "@polkadot/typegen": "12.1.1",
-    "@polkadot/types": "^12.1.1",
-    "@polkadot/types-codec": "12.1.1",
+    "@polkadot/api": "12.2.1",
+    "@polkadot/api-base": "12.2.1",
+    "@polkadot/rpc-core": "12.2.1",
+    "@polkadot/typegen": "12.2.1",
+    "@polkadot/types": "^12.2.1",
+    "@polkadot/types-codec": "12.2.1",
     "tsx": "4.16.2",
     "typescript": "5.5.3"
   }

@@ -23,7 +23,7 @@ import type { AccountId, AccountId32, BlockNumber, H160, H256, H64, Hash, Header
 import type { MigrationStatusResult, ReadProof, RuntimeVersion, TraceBlockResponse } from '@polkadot/types/interfaces/state';
 import type { ApplyExtrinsicResult, ChainProperties, ChainType, Health, NetworkState, NodeRole, PeerInfo, SyncState } from '@polkadot/types/interfaces/system';
 import type { IExtrinsic, Observable } from '@polkadot/types/types';
-import type { FileMetadata } from '@storagehub/api-augment/interfaces/storagehubclient';
+import type {  FileMetadata } from '@storagehub/api-augment/interfaces/storagehubclient';
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
 declare module '@polkadot/rpc-core/types/jsonrpc' {
     interface RpcInterface {

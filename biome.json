@@ -39,6 +39,9 @@
       "suspicious": {
         "noExplicitAny": "off",
         "noAsyncPromiseExecutor": "off"
+      },
+      "performance":{
+        "noAccumulatingSpread": "off"
       }
     }
   }

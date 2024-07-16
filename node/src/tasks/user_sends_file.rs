@@ -76,7 +76,7 @@ where
         let file_metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),
             bucket_id: event.bucket_id.as_ref().to_vec(),
-            size: event.size.into(),
+            file_size: event.size.into(),
             fingerprint: event.fingerprint,
             location: event.location.into_inner(),
         };

@@ -16,7 +16,6 @@ import {
   closeBspNet,
   sleep
 } from "../../util";
-import { hexToString } from "@polkadot/util";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
@@ -51,7 +50,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(bspNodePeerId.toString(), NODE_INFOS.bsp.expectedPeerId);
     });
 
-    it.only("file is finger printed correctly", async () => {
+    it("file is finger printed correctly", async () => {
       const source = "res/adolphus.jpg";
       const destination = "test/adolphus.jpg";
       const bucketName = "nothingmuch-0";
@@ -64,16 +63,17 @@ for (const bspNetConfig of bspNetConfigCases) {
         throw new Error("Event doesn't match Type");
       }
 
-      const { fingerprint, size, location } = await user_api.rpc.storagehubclient.loadFileInStorage(
-        source,
-        destination,
-        NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
+      const { location, fingerprint, file_size } =
+        await user_api.rpc.storagehubclient.loadFileInStorage(
+          source,
+          destination,
+          NODE_INFOS.user.AddressId,
+          newBucketEventDataBlob.bucketId
+        );
 
-      strictEqual(hexToString(location), destination);
-      strictEqual(fingerprint, TEST_ARTEFACTS[source].fingerprint);
-      strictEqual(size, TEST_ARTEFACTS[source].size);
+      strictEqual(location.toHuman(), destination);
+      strictEqual(fingerprint.toString(), TEST_ARTEFACTS[source].fingerprint);
+      strictEqual(file_size.toBigInt(), TEST_ARTEFACTS[source].size);
     });
 
     it("issueStorageRequest sent correctly", async () => {

@@ -256,7 +256,7 @@ pub struct FileMetadata<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE
     pub bucket_id: Vec<u8>,
     pub location: Vec<u8>,
     #[codec(compact)]
-    pub size: u64,
+    pub file_size: u64,
     pub fingerprint: Fingerprint<H_LENGTH>,
 }
 
@@ -267,14 +267,14 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         owner: Vec<u8>,
         bucket_id: Vec<u8>,
         location: Vec<u8>,
-        size: u64,
+        file_size: u64,
         fingerprint: Fingerprint<H_LENGTH>,
     ) -> Self {
         Self {
             owner,
             bucket_id,
             location,
-            size,
+            file_size,
             fingerprint,
         }
     }
@@ -284,11 +284,11 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     }
 
     pub fn chunks_to_check(&self) -> u64 {
-        self.size / SIZE_TO_CHALLENGES + (self.size % SIZE_TO_CHALLENGES != 0) as u64
+        self.file_size / SIZE_TO_CHALLENGES + (self.file_size % SIZE_TO_CHALLENGES != 0) as u64
     }
 
     pub fn chunks_count(&self) -> u64 {
-        self.size / CHUNK_SIZE + (self.size % CHUNK_SIZE != 0) as u64
+        self.file_size / CHUNK_SIZE + (self.file_size % CHUNK_SIZE != 0) as u64
     }
 
     pub fn last_chunk_id(&self) -> ChunkId {

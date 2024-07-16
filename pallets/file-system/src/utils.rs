@@ -1129,7 +1129,7 @@ where
             owner: owner.encode(),
             bucket_id: bucket_id.as_ref().to_vec(),
             location: location.clone().to_vec(),
-            size: size.into(),
+            file_size: size.into(),
             fingerprint: fingerprint.as_ref().into(),
         }
         .file_key::<FileKeyHasher<T>>()
