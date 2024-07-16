@@ -51,7 +51,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(bspNodePeerId.toString(), NODE_INFOS.bsp.expectedPeerId);
     });
 
-    it("file is finger printed correctly", async () => {
+    it.only("file is finger printed correctly", async () => {
       const source = "res/adolphus.jpg";
       const destination = "test/adolphus.jpg";
       const bucketName = "nothingmuch-0";
@@ -64,7 +64,7 @@ for (const bspNetConfig of bspNetConfigCases) {
         throw new Error("Event doesn't match Type");
       }
 
-      const { fingerprint, size, location } = await user_api.loadFile(
+      const { fingerprint, size, location } = await user_api.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
         NODE_INFOS.user.AddressId,
@@ -127,7 +127,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       const destination = "test/whatsup.jpg";
       const bucketName = "nothingmuch-2";
 
-      const initial_bsp_forest_root = await bsp_api.getForestRoot();
+      const initial_bsp_forest_root = await bsp_api.rpc.storagehubclient.getForestRoot();
       strictEqual(
         initial_bsp_forest_root.toString(),
         "0x03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314"
@@ -141,7 +141,7 @@ for (const bspNetConfig of bspNetConfigCases) {
         throw new Error("Event doesn't match Type");
       }
 
-      const { fingerprint, size, location } = await user_api.loadFile(
+      const { fingerprint, size, location } = await user_api.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
         NODE_INFOS.user.AddressId,
@@ -204,7 +204,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(bspConfirmRes_bspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
 
       await sleep(1000); // wait for the bsp to process the BspConfirmedStoring event
-      const bsp_forest_root_after_confirm = await bsp_api.getForestRoot();
+      const bsp_forest_root_after_confirm = await bsp_api.rpc.storagehubclient.getForestRoot();
       strictEqual(bsp_forest_root_after_confirm.toString(), bspConfirmRes_newRoot.toString());
       notEqual(bsp_forest_root_after_confirm.toString(), initial_bsp_forest_root.toString());
       // TODO: check the file key. We need an RPC endpoint to compute the file key.
