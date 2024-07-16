@@ -17,7 +17,7 @@ use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
 use system::pallet_prelude::BlockNumberFor;
 
-use shp_file_key_verifier::types::ChunkId;
+use shp_file_metadata::ChunkId;
 use shp_traits::{
     ProofsDealerInterface, SubscribeProvidersInterface, TrieMutation, TrieRemoveMutation,
 };

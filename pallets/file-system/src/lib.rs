@@ -62,7 +62,7 @@ pub mod pallet {
         FixedPointNumber,
     };
 
-    use shp_file_key_verifier::types::ChunkId;
+    use shp_file_metadata::ChunkId;
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
