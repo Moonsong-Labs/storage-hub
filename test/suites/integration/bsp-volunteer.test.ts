@@ -121,7 +121,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(dataBlob.peerIds[0].toHuman(), NODE_INFOS.user.expectedPeerId);
     });
 
-    it.only("bsp volunteers when issueStorageRequest sent", async () => {
+    it("bsp volunteers when issueStorageRequest sent", async () => {
       const source = "res/whatsup.jpg";
       const destination = "test/whatsup.jpg";
       const bucketName = "nothingmuch-2";
