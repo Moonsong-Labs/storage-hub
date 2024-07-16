@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use codec::{Compact, Decode, Encode};
 use core::fmt::Debug;
 use scale_info::TypeInfo;
