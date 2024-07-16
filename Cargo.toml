@@ -180,6 +180,7 @@ shc-rpc = { path = "client/rpc", default-features = false }
 # Local - StorageHub Primitives (used by the runtime and the node, must be no_std compatible)
 shp-constants = { path = "primitives/constants", default-features = false }
 shp-file-key-verifier = { path = "primitives/file-key-verifier", default-features = false }
+shp-file-metadata = { path = "primitives/file-metadata", default-features = false }
 shp-forest-verifier = { path = "primitives/forest-verifier", default-features = false }
 shp-session-keys = { path = "primitives/session-keys", default-features = false }
 shp-traits = { path = "primitives/traits", default-features = false }

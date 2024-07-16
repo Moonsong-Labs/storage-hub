@@ -12582,6 +12582,7 @@ dependencies = [
  "reference-trie",
  "scale-info",
  "serde",
+ "shp-file-metadata",
  "shp-traits",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io 30.0.0",
