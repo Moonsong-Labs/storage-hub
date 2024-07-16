@@ -1437,6 +1437,7 @@ fn bsp_confirm_storing_success() {
         // Assert that the correct event was deposited
         System::assert_last_event(
             Event::BspConfirmedStoring {
+                who: bsp_account_id.clone(),
                 bsp_id,
                 file_key,
                 new_root,

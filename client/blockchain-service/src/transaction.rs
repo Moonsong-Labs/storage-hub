@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::anyhow;
-use log::*;
+use log::{debug, error, info, warn};
 use shc_actors_framework::actor::ActorHandle;
 use sp_core::H256;
 use tokio::sync::mpsc::Receiver;

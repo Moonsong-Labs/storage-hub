@@ -91,7 +91,6 @@ export const sendSaveFileRpc = async (
       fileKey,
       filePath
     ]);
-    console.log("resp = ", resp);
     return {
       owner: u8aToHex(resp.owner)
     };
@@ -173,29 +172,36 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
   throw new Error(`Error fetching peerId from ${url}`);
 };
 
-export const runBspNet = async (noisy = false, rocksdb = false) => {
+export type BspNetConfig = {
+  noisy: boolean;
+  rocksdb: boolean;
+};
+
+export const runBspNet = async (bspNetConfig: BspNetConfig) => {
   let api: BspNetApi | undefined;
   try {
     console.log(`sh user id: ${shUser.address}`);
     console.log(`sh bsp id: ${bsp.address}`);
     let file = "local-dev-bsp-compose.yml";
-    if (rocksdb) {
+    if (bspNetConfig.rocksdb) {
       file = "local-dev-bsp-rocksdb-compose.yml";
     }
-    if (noisy) {
+    if (bspNetConfig.noisy) {
       file = "noisy-bsp-compose.yml";
     }
     const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
 
-    if (noisy) {
+    if (bspNetConfig.noisy) {
       await compose.upOne("toxiproxy", { config: composeFilePath, log: true });
     }
 
     await compose.upOne("sh-bsp", { config: composeFilePath, log: true });
 
-    const bspIp = await getContainerIp(noisy ? "toxiproxy" : NODE_INFOS.bsp.containerName);
+    const bspIp = await getContainerIp(
+      bspNetConfig.noisy ? "toxiproxy" : NODE_INFOS.bsp.containerName
+    );
 
-    if (noisy) {
+    if (bspNetConfig.noisy) {
       console.log(`toxiproxy IP: ${bspIp}`);
     } else {
       console.log(`sh-bsp IP: ${bspIp}`);

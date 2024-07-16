@@ -1420,6 +1420,7 @@ declare const _default: {
                 size_: string;
             };
             BspConfirmedStoring: {
+                who: string;
                 bspId: string;
                 fileKey: string;
                 newRoot: string;

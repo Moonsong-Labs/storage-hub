@@ -31,6 +31,7 @@ use std::io::Write;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::fs::create_dir_all;
 use tokio::sync::RwLock;
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
@@ -243,6 +244,13 @@ where
                 total_chunks,
             }));
         }
+
+        let file_path = PathBuf::from(file_path.clone());
+
+        // Create parent directories if they don't exist.
+        create_dir_all(&file_path.parent().unwrap())
+            .await
+            .map_err(into_rpc_error)?;
 
         // Open file in the local file system.
         let mut file = File::create(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;

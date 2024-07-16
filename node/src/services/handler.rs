@@ -7,7 +7,10 @@ use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::{EventBusListener, EventHandler},
 };
-use shc_blockchain_service::{events::NewStorageRequest, BlockchainService};
+use shc_blockchain_service::{
+    events::{BspConfirmedStoring, NewStorageRequest},
+    BlockchainService,
+};
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{events::RemoteUploadRequest, FileTransferService};
 use shc_forest_manager::traits::ForestStorage;
@@ -97,12 +100,19 @@ where
         // happens when the user, now aware of the BSP volunteering, submits chunks of the file,
         // along with a proof of storage.
         let bsp_upload_file_task = BspUploadFileTask::new(self.clone());
-        // Subscribing to events from the BlockchainService.
-        let bs_event_bus_listener: EventBusListener<NewStorageRequest, _> = bsp_upload_file_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain);
-        bs_event_bus_listener.start();
-        // Subscribing to events from the FileTransferService.
+        // Subscribing to NewStorageRequest event from the BlockchainService.
+        let new_storage_request_event_bus_listener: EventBusListener<NewStorageRequest, _> =
+            bsp_upload_file_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        new_storage_request_event_bus_listener.start();
+        // Subscribing to BspConfirmedStoring event from the BlockchainService.
+        let bsp_confirmed_storing_event_bus_listener: EventBusListener<BspConfirmedStoring, _> =
+            bsp_upload_file_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        bsp_confirmed_storing_event_bus_listener.start();
+        // Subscribing to RemoteUploadRequest event from the FileTransferService.
         let fts_event_bus_listener: EventBusListener<RemoteUploadRequest, _> =
             bsp_upload_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
         fts_event_bus_listener.start();
