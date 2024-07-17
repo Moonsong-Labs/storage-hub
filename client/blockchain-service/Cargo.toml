@@ -56,6 +56,7 @@ storage-hub-runtime = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }
 shp-file-key-verifier = { workspace = true }
+shp-file-metadata = { workspace = true }
 
 # Local pallets
 pallet-file-system = { workspace = true }

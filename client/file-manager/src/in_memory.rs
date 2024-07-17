@@ -457,7 +457,7 @@ mod tests {
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         let file_metadata = FileMetadata {
-            size: 32u64 * chunks.len() as u64,
+            file_size: 32u64 * chunks.len() as u64,
             fingerprint: file_trie.get_root().as_ref().into(),
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
             location: "location".to_string().into_bytes(),
@@ -504,7 +504,7 @@ mod tests {
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         let file_metadata = FileMetadata {
-            size: 32u64 * chunks.len() as u64,
+            file_size: 32u64 * chunks.len() as u64,
             fingerprint: file_trie.get_root().as_ref().into(),
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
             location: "location".to_string().into_bytes(),
@@ -555,7 +555,7 @@ mod tests {
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         let file_metadata = FileMetadata {
-            size: 1024u64 * chunks.len() as u64,
+            file_size: 1024u64 * chunks.len() as u64,
             fingerprint: file_trie.get_root().as_ref().into(),
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
             location: "location".to_string().into_bytes(),

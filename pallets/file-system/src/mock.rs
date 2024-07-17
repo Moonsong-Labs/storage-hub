@@ -7,7 +7,7 @@ use frame_support::{
 use frame_system as system;
 use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
-use shp_file_key_verifier::types::ChunkId;
+use shp_file_metadata::ChunkId;
 use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;

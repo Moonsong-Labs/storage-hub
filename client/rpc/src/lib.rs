@@ -196,7 +196,7 @@ where
         let file_metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&owner).to_vec(),
             bucket_id: bucket_id.as_ref().to_vec(),
-            size: fs_metadata.len(),
+            file_size: fs_metadata.len(),
             fingerprint: root.as_ref().into(),
             location: location.clone().into(),
         };

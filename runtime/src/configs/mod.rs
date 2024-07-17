@@ -52,8 +52,8 @@ use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
-use shp_file_key_verifier::types::ChunkId;
 use shp_file_key_verifier::FileKeyVerifier;
+use shp_file_metadata::ChunkId;
 use shp_forest_verifier::ForestVerifier;
 use shp_traits::{CommitmentVerifier, MaybeDebug};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -527,9 +527,9 @@ impl pallet_proofs_dealer::Config for Runtime {
     type ForestVerifier = ForestVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type KeyVerifier = FileKeyVerifier<
         LayoutV1<BlakeTwo256>,
-        { shp_file_key_verifier::consts::H_LENGTH },
-        { shp_file_key_verifier::consts::FILE_CHUNK_SIZE },
-        { shp_file_key_verifier::consts::FILE_SIZE_TO_CHALLENGES },
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
     >;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = RandomChallengesPerBlock;

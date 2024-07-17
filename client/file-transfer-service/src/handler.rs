@@ -39,7 +39,7 @@ use sc_network::{
 use sc_tracing::tracing::{debug, error, info, warn};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::{FileKey, FileKeyProof, ParachainNetworkService};
-use shp_file_key_verifier::types::ChunkId;
+use shp_file_metadata::ChunkId;
 
 use crate::events::RemoteUploadRequest;
 

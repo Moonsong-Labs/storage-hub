@@ -50,12 +50,12 @@ export const sendLoadFileRpc = async (
       userNodeAccountId,
       bucket
     ]);
-    const { owner, bucket_id, location, size, fingerprint } = resp;
+    const { owner, bucket_id, location, file_size, fingerprint } = resp;
     return {
       owner: u8aToHex(owner),
       bucket_id,
       location: u8aToHex(location),
-      size: BigInt(size),
+      size: BigInt(file_size),
       fingerprint: u8aToHex(fingerprint)
     };
   } catch (e) {

@@ -21,6 +21,7 @@ scale-info = { workspace = true }
 serde = { workspace = true }
 
 # Local
+shp-file-metadata = { workspace = true }
 shp-traits = { workspace = true }
 
 # Substrate
@@ -37,7 +38,6 @@ frame-support = { workspace = true }
 bincode = { workspace = true }
 rand = { workspace = true }
 reference-trie = { workspace = true }
-serde = { workspace = true }
 
 # Substrate
 sp-io = { workspace = true }
@@ -49,6 +49,7 @@ default = ["std"]
 runtime-benchmarks = [
     "frame-support/runtime-benchmarks",
     "frame-system/runtime-benchmarks",
+    "shp-file-metadata/runtime-benchmarks",
     "shp-traits/runtime-benchmarks",
     "sp-runtime/runtime-benchmarks",
 ]
@@ -57,6 +58,7 @@ std = [
     "frame-support/std",
     "frame-system/std",
     "scale-info/std",
+    "shp-file-metadata/std",
     "shp-traits/std",
     "sp-core/std",
     "sp-io/std",
@@ -68,6 +70,7 @@ std = [
 try-runtime = [
     "frame-support/try-runtime",
     "frame-system/try-runtime",
+    "shp-file-metadata/try-runtime",
     "shp-traits/try-runtime",
     "sp-runtime/try-runtime",
 ]
