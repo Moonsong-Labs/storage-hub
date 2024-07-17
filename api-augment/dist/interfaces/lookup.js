@@ -1528,13 +1528,10 @@ export default {
      * Lookup140: shp_file_key_verifier::types::FileMetadata
      **/
     ShpFileKeyVerifierFileMetadata: {
-        _alias: {
-            size_: 'size'
-        },
         owner: 'Bytes',
         bucketId: 'Bytes',
         location: 'Bytes',
-        size_: 'Compact<u64>',
+        fileSize: 'Compact<u64>',
         fingerprint: 'ShpFileKeyVerifierFingerprint'
     },
     /**

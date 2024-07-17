@@ -4,7 +4,7 @@ declare const _default: {
             owner: string;
             bucket_id: string;
             location: string;
-            size: string;
+            file_size: string;
             fingerprint: string;
         };
     };

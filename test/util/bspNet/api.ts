@@ -1,3 +1,4 @@
+import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { BspNetApi } from "./types";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
@@ -6,12 +7,26 @@ import type { KeyringPair } from "@polkadot/keyring/types";
 import { createBucket, sealBlock } from "./helpers";
 import { assertEventPresent } from "../asserts";
 import type { EventRecord } from "@polkadot/types/interfaces";
+import * as definitions from "../../node_modules/@storagehub/api-augment/src/interfaces/definitions";
 
 //TODO: Maybe make this a resource?
 export const createApiObject = async (uri: string): Promise<BspNetApi> => {
+  const types = Object.values(definitions).reduce((res, { types }) => ({ ...res, ...types }), {});
+  const rpcMethods = Object.entries(definitions).reduce(
+    (res: Record<string, any>, [key, { rpc }]) => {
+      if (rpc) {
+        res[key] = rpc;
+      }
+      return res;
+    },
+    {}
+  );
+
   const baseApi = await ApiPromise.create({
     provider: new WsProvider(uri),
-    noInitWarn: true
+    noInitWarn: true,
+    types,
+    rpc: rpcMethods
   });
 
   return Object.assign(baseApi, {

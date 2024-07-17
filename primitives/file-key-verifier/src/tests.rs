@@ -65,7 +65,7 @@ where
         owner: user_id.to_vec(),
         bucket_id: bucket.to_vec(),
         location: file_path.as_bytes().to_vec(),
-        size: file_size,
+        file_size: file_size,
         fingerprint: fingerprint
             .as_ref()
             .try_into()
@@ -664,7 +664,7 @@ fn commitment_verifier_wrong_file_key_no_compact_encoding_failure() {
         &[
             &file_metadata.owner.encode(),
             &file_metadata.location.encode(),
-            &file_metadata.size.encode(),
+            &file_metadata.file_size.encode(),
             &file_metadata.fingerprint.encode(),
         ]
         .into_iter()
@@ -733,7 +733,7 @@ fn commitment_verifier_wrong_file_key_vec_fingerprint_failure() {
         &[
             &file_metadata.owner.encode(),
             &file_metadata.location.encode(),
-            &AsCompact(file_metadata.size).encode(),
+            &AsCompact(file_metadata.file_size).encode(),
             &file_metadata.fingerprint.as_hash().to_vec().encode(),
         ]
         .into_iter()
@@ -807,7 +807,7 @@ fn commitment_verifier_wrong_file_key_encoding_as_bytes_failure() {
         &[
             &file_metadata.owner,
             &file_metadata.location,
-            &file_metadata.size.to_be_bytes().to_vec(),
+            &file_metadata.file_size.to_be_bytes().to_vec(),
             &file_metadata.fingerprint.as_hash().to_vec(),
         ]
         .into_iter()
@@ -1004,7 +1004,7 @@ fn commitment_verifier_challenge_with_none_value_failure() {
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, 2 * CHUNK_SIZE);
     let root = file_metadata.fingerprint.as_hash().into();
 
-    file_metadata.size = FILE_SIZE;
+    file_metadata.file_size = FILE_SIZE;
 
     let file_key = file_metadata.file_key::<BlakeTwo256>();
 

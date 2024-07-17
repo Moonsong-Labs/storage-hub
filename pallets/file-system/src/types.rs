@@ -74,7 +74,7 @@ impl<T: Config> StorageRequestMetadata<T> {
             owner: self.owner.encode(),
             bucket_id: self.bucket_id.as_ref().to_vec(),
             location: self.location.to_vec(),
-            size: self.size.into() as u64,
+            file_size: self.size.into() as u64,
             fingerprint: self.fingerprint.as_ref().into(),
         }
     }

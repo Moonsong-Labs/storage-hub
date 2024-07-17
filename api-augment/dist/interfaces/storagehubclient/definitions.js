@@ -4,7 +4,7 @@ export default {
             owner: "Vec<u8>",
             bucket_id: "Vec<u8>",
             location: "Vec<u8>",
-            size: "number",
+            file_size: "u64",
             fingerprint: "[u8; 32]"
         }
     },

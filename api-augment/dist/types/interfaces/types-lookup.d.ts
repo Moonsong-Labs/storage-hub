@@ -1592,7 +1592,7 @@ declare module '@polkadot/types/lookup' {
         readonly owner: Bytes;
         readonly bucketId: Bytes;
         readonly location: Bytes;
-        readonly size_: Compact<u64>;
+        readonly fileSize: Compact<u64>;
         readonly fingerprint: ShpFileKeyVerifierFingerprint;
     }
     /** @name ShpFileKeyVerifierFingerprint (141) */
