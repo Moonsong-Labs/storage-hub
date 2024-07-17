@@ -1,6 +1,7 @@
 // TODO: Remove this once we don't need the examples in this file
 #![allow(dead_code)]
 
+pub mod bsp_submit_proof;
 pub mod bsp_upload_file;
 pub mod bsp_volunteer_mock;
 pub mod sp_react_to_event_mock;
