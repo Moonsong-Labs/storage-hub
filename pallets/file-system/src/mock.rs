@@ -5,7 +5,9 @@ use frame_support::{
     weights::{constants::RocksDbWeight, Weight, WeightMeter},
 };
 use frame_system as system;
+use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
+use shp_file_key_verifier::types::ChunkId;
 use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
@@ -28,11 +30,6 @@ type AccountId = <AccountPublic as IdentifyAccount>::AccountId;
 const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10;
 const UNITS: Balance = 1_000_000_000_000;
 const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
-
-pub type ForestProof =
-    <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::ForestProof;
-pub type KeyProof =
-    <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::KeyProof;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;
@@ -316,6 +313,8 @@ impl crate::Config for Test {
     type ThresholdType = ThresholdType;
     type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
     type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
+    type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
+    type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
@@ -329,7 +328,9 @@ impl crate::Config for Test {
     type MaxDataServerMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
     type MaxFilePathSize = ConstU32<512u32>;
     type StorageRequestTtl = ConstU32<40u32>;
-    type MaxExpiredStorageRequests = ConstU32<100u32>;
+    type PendingFileDeletionRequestTtl = ConstU32<40u32>;
+    type MaxExpiredItemsInBlock = ConstU32<100u32>;
+    type MaxUserPendingDeletionRequests = ConstU32<10u32>;
 }
 
 // Build genesis storage according to the mock runtime.
@@ -394,5 +395,33 @@ pub struct BlockNumberToThresholdTypeConverter;
 impl Convert<BlockNumberFor<Test>, ThresholdType> for BlockNumberToThresholdTypeConverter {
     fn convert(block_number: BlockNumberFor<Test>) -> ThresholdType {
         FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
+    }
+}
+
+// Converter from the MerkleHash (H256) type to the RandomnessOutput type.
+pub struct MerkleHashToRandomnessOutputConverter;
+
+impl Convert<H256, H256> for MerkleHashToRandomnessOutputConverter {
+    fn convert(hash: H256) -> H256 {
+        hash
+    }
+}
+
+// Converter from the ChunkId type to the MerkleHash (H256) type.
+pub struct ChunkIdToMerkleHashConverter;
+
+impl Convert<ChunkId, H256> for ChunkIdToMerkleHashConverter {
+    fn convert(chunk_id: ChunkId) -> H256 {
+        let chunk_id_biguint = BigUint::from(chunk_id.as_u64());
+        let mut bytes = chunk_id_biguint.to_bytes_be();
+
+        // Ensure the byte slice is exactly 32 bytes long by padding with leading zeros
+        if bytes.len() < 32 {
+            let mut padded_bytes = vec![0u8; 32 - bytes.len()];
+            padded_bytes.extend(bytes);
+            bytes = padded_bytes;
+        }
+
+        H256::from_slice(&bytes)
     }
 }

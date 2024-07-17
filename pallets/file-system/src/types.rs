@@ -6,6 +6,7 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::CollectionConfig;
 use scale_info::TypeInfo;
+use shp_file_key_verifier::types::FileMetadata;
 use shp_traits::ProvidersInterface;
 
 use crate::Config;
@@ -61,6 +62,24 @@ pub struct StorageRequestMetadata<T: Config> {
     pub bsps_volunteered: T::StorageRequestBspsRequiredType,
 }
 
+impl<T: Config> StorageRequestMetadata<T> {
+    pub fn to_file_metadata(
+        self,
+    ) -> FileMetadata<
+        { shp_file_key_verifier::consts::H_LENGTH },
+        { shp_file_key_verifier::consts::FILE_CHUNK_SIZE },
+        { shp_file_key_verifier::consts::FILE_SIZE_TO_CHALLENGES },
+    > {
+        FileMetadata {
+            owner: self.owner.encode(),
+            bucket_id: self.bucket_id.as_ref().to_vec(),
+            location: self.location.to_vec(),
+            size: self.size.into() as u64,
+            fingerprint: self.fingerprint.as_ref().into(),
+        }
+    }
+}
+
 /// Ephemeral BSP storage request tracking metadata.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
@@ -77,6 +96,13 @@ pub struct StorageRequestBspsMetadata<T: Config> {
 pub enum BucketPrivacy {
     Public,
     Private,
+}
+
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub enum ExpiredItems<T: Config> {
+    StorageRequest(MerkleHash<T>),
+    PendingFileDeletionRequests((T::AccountId, MerkleHash<T>)),
 }
 
 /// Alias for the `MerkleHash` type used in the ProofsDealerInterface representing file keys.
@@ -110,6 +136,12 @@ pub type StorageData<T> =
 
 /// Alias for the `TargetBspsRequired` type used in the FileSystem pallet.
 pub type TargetBspsRequired<T> = <T as crate::Config>::TargetBspsRequired;
+
+/// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
+pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;
+
+/// Alias for the `PendingFileDeletionRequestTtl` type used in the FileSystem pallet.
+pub type PendingFileDeletionRequestTtl<T> = <T as crate::Config>::PendingFileDeletionRequestTtl;
 
 /// Byte array representing the file path.
 pub type FileLocation<T> = BoundedVec<u8, MaxFilePathSize<T>>;

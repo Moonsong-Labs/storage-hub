@@ -25,6 +25,8 @@ pub struct ProviderOptions {
     pub provider_type: ProviderType,
     /// Storage layer.
     pub storage_layer: StorageLayer,
+    /// RocksDB Path.
+    pub storage_path: Option<String>,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {

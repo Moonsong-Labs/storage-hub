@@ -1,11 +1,11 @@
-use crate::services::file_transfer::commands::FileTransferServiceInterface;
-use crate::tasks::AcceptedBspVolunteer;
 use crate::tasks::StorageHubHandler;
 use log::{debug, error, info};
 use sc_network::PeerId;
 use shc_actors_framework::event_bus::EventHandler;
+use shc_blockchain_service::events::AcceptedBspVolunteer;
 use shc_common::types::FileMetadata;
 use shc_file_manager::traits::FileStorage;
+use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::ForestStorage;
 use shp_file_key_verifier::types::ChunkId;
 use sp_runtime::AccountId32;
@@ -69,9 +69,6 @@ where
             event.owner,
             event.location,
         );
-
-        // TODO: FIND A BETTER WORKAROUND FOR THIS
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
         let file_metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),

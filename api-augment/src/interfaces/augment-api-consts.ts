@@ -8,7 +8,7 @@ import "@polkadot/api-base/types/consts";
 import type { ApiTypes, AugmentedConst } from "@polkadot/api-base/types";
 import type { Option, u128, u16, u32, u64, u8 } from "@polkadot/types-codec";
 import type { Codec } from "@polkadot/types-codec/types";
-import type { AccountId32 } from "@polkadot/types/interfaces/runtime";
+import type { AccountId32, H256 } from "@polkadot/types/interfaces/runtime";
 import type {
   FrameSystemLimitsBlockLength,
   FrameSystemLimitsBlockWeights,
@@ -69,7 +69,7 @@ declare module "@polkadot/api-base/types/consts" {
        * Maximum number of BSPs that can store a file.
        *
        * This is used to limit the number of BSPs storing a file and claiming rewards for it.
-       * If this number is to high, then the reward for storing a file might be to diluted and pointless to store.
+       * If this number is too high, then the reward for storing a file might be to diluted and pointless to store.
        **/
       maxBspsPerStorageRequest: u32 & AugmentedConst<ApiType>;
       /**
@@ -79,7 +79,7 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * Maximum number of expired storage requests to clean up in a single block.
        **/
-      maxExpiredStorageRequests: u32 & AugmentedConst<ApiType>;
+      maxExpiredItemsInBlock: u32 & AugmentedConst<ApiType>;
       /**
        * Maximum byte size of a file path.
        **/
@@ -92,6 +92,10 @@ declare module "@polkadot/api-base/types/consts" {
        * Maximum byte size of a peer id.
        **/
       maxPeerIdSize: u32 & AugmentedConst<ApiType>;
+      /**
+       * Maximum number of file deletion requests a user can have pending.
+       **/
+      maxUserPendingDeletionRequests: u32 & AugmentedConst<ApiType>;
       /**
        * Time-to-live for a storage request.
        **/
@@ -295,6 +299,10 @@ declare module "@polkadot/api-base/types/consts" {
        * Type that represents the byte limit of a bucket name.
        **/
       bucketNameLimit: u32 & AugmentedConst<ApiType>;
+      /**
+       * The default value of the root of the Merkle Patricia Trie of the runtime
+       **/
+      defaultMerkleRoot: H256 & AugmentedConst<ApiType>;
       /**
        * The slope of the collateral vs storage capacity curve. In other terms, how many tokens a Storage Provider should add as collateral to increase its storage capacity in one unit of StorageData.
        **/

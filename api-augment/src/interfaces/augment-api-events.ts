@@ -390,12 +390,21 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Notifies that a BSP's challenge cycle has been initialised, adding the first file
+       * key to the BSP's Merkle Patricia Forest.
+       **/
+      BspChallengeCycleInitialised: AugmentedEvent<
+        ApiType,
+        [who: AccountId32, bspId: H256, fileKey: H256],
+        { who: AccountId32; bspId: H256; fileKey: H256 }
+      >;
+      /**
        * Notifies that a BSP confirmed storing a file.
        **/
       BspConfirmedStoring: AugmentedEvent<
         ApiType,
-        [bspId: H256, fileKey: H256, newRoot: H256],
-        { bspId: H256; fileKey: H256; newRoot: H256 }
+        [who: AccountId32, bspId: H256, fileKey: H256, newRoot: H256],
+        { who: AccountId32; bspId: H256; fileKey: H256; newRoot: H256 }
       >;
       /**
        * Notifies that a BSP has stopped storing a file.
@@ -412,6 +421,22 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [who: AccountId32, bucketId: H256, collectionId: Option<u32>, private: bool],
         { who: AccountId32; bucketId: H256; collectionId: Option<u32>; private: bool }
+      >;
+      /**
+       * Notifies that a priority challenge failed to be queued for pending file deletion.
+       **/
+      FailedToQueuePriorityChallenge: AugmentedEvent<
+        ApiType,
+        [user: AccountId32, fileKey: H256],
+        { user: AccountId32; fileKey: H256 }
+      >;
+      /**
+       * Notifies that a file will be deleted.
+       **/
+      FileDeletionRequest: AugmentedEvent<
+        ApiType,
+        [user: AccountId32, fileKey: H256, bucketId: H256, mspId: H256, proofOfInclusion: bool],
+        { user: AccountId32; fileKey: H256; bucketId: H256; mspId: H256; proofOfInclusion: bool }
       >;
       /**
        * Notifies that a new bucket has been created.
@@ -466,6 +491,14 @@ declare module "@polkadot/api-base/types/events" {
           size_: u32;
           peerIds: Vec<Bytes>;
         }
+      >;
+      /**
+       * Notifies that a proof has been submitted for a pending file deletion request.
+       **/
+      ProofSubmittedForPendingFileDeletionRequest: AugmentedEvent<
+        ApiType,
+        [mspId: H256, user: AccountId32, fileKey: H256, bucketId: H256, proofOfInclusion: bool],
+        { mspId: H256; user: AccountId32; fileKey: H256; bucketId: H256; proofOfInclusion: bool }
       >;
       /**
        * Notifies the expiration of a storage request.
@@ -1337,6 +1370,14 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [who: AccountId32, keyChallenged: H256],
         { who: AccountId32; keyChallenged: H256 }
+      >;
+      /**
+       * A Provider's challenge cycle was initialised.
+       **/
+      NewChallengeCycleInitialised: AugmentedEvent<
+        ApiType,
+        [currentTick: u32, provider: H256, maybeProviderAccount: Option<AccountId32>],
+        { currentTick: u32; provider: H256; maybeProviderAccount: Option<AccountId32> }
       >;
       /**
        * A new challenge seed was generated.

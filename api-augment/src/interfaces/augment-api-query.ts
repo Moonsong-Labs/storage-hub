@@ -41,6 +41,7 @@ import type {
   PalletBalancesIdAmount,
   PalletBalancesReserveData,
   PalletCollatorSelectionCandidateInfo,
+  PalletFileSystemExpiredItems,
   PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletMessageQueueBookState,
@@ -295,6 +296,15 @@ declare module "@polkadot/api-base/types/storage" {
       bspsAssignmentThreshold: AugmentedQuery<ApiType, () => Observable<u128>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
+       * A map of blocks to expired storage requests.
+       **/
+      itemExpirations: AugmentedQuery<
+        ApiType,
+        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<PalletFileSystemExpiredItems>>,
+        [u32]
+      > &
+        QueryableStorageEntry<ApiType, [u32]>;
+      /**
        * A pointer to the earliest available block to insert a new storage request expiration.
        *
        * This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
@@ -310,6 +320,17 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       nextStartingBlockToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
+      /**
+       * Pending file deletion requests.
+       *
+       * A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key and bucket id.
+       **/
+      pendingFileDeletionRequests: AugmentedQuery<
+        ApiType,
+        (arg: AccountId32 | string | Uint8Array) => Observable<Vec<ITuple<[H256, H256]>>>,
+        [AccountId32]
+      > &
+        QueryableStorageEntry<ApiType, [AccountId32]>;
       /**
        * A double map from storage request to BSP `AccountId`s that volunteered to store the file.
        *
@@ -327,15 +348,6 @@ declare module "@polkadot/api-base/types/storage" {
         [H256, H256]
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
-      /**
-       * A map of blocks to expired storage requests.
-       **/
-      storageRequestExpirations: AugmentedQuery<
-        ApiType,
-        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<H256>>,
-        [u32]
-      > &
-        QueryableStorageEntry<ApiType, [u32]>;
       storageRequests: AugmentedQuery<
         ApiType,
         (

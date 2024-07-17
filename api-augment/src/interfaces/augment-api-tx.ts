@@ -473,6 +473,23 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [H256, Bytes, bool]
       >;
+      deleteFile: AugmentedSubmittable<
+        (
+          bucketId: H256 | string | Uint8Array,
+          fileKey: H256 | string | Uint8Array,
+          location: Bytes | string | Uint8Array,
+          size: u32 | AnyNumber | Uint8Array,
+          fingerprint: H256 | string | Uint8Array,
+          maybeInclusionForestProof:
+            | Option<SpTrieStorageProofCompactProof>
+            | null
+            | Uint8Array
+            | SpTrieStorageProofCompactProof
+            | { encodedNodes?: any }
+            | string
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, H256, Bytes, u32, H256, Option<SpTrieStorageProofCompactProof>]
+      >;
       forceUpdateBspsAssignmentThreshold: AugmentedSubmittable<
         (bspAssignmentThreshold: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [u128]
@@ -490,6 +507,15 @@ declare module "@polkadot/api-base/types/submittable" {
           peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[]
         ) => SubmittableExtrinsic<ApiType>,
         [H256, Bytes, H256, u32, H256, Vec<Bytes>]
+      >;
+      pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
+        (
+          user: AccountId32 | string | Uint8Array,
+          fileKey: H256 | string | Uint8Array,
+          bucketId: H256 | string | Uint8Array,
+          forestProof: SpTrieStorageProofCompactProof | { encodedNodes?: any } | string | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [AccountId32, H256, H256, SpTrieStorageProofCompactProof]
       >;
       /**
        * Revoke storage request
@@ -2410,6 +2436,18 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       challenge: AugmentedSubmittable<
         (key: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
+      >;
+      /**
+       * Initialise a Provider's challenge cycle.
+       *
+       * Only callable by sudo.
+       *
+       * Sets the last tick the Provider submitted a proof for to the current tick, and sets the
+       * deadline for submitting a proof to the current tick + the Provider's period + the tolerance.
+       **/
+      forceInitialiseChallengeCycle: AugmentedSubmittable<
+        (provider: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
       >;
       /**

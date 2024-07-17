@@ -12,6 +12,7 @@ use sp_core::Get;
 use sp_runtime::traits::{AtLeast32BitUnsigned, Hash, Saturating};
 use sp_runtime::{BoundedVec, DispatchError};
 use sp_std::collections::btree_set::BTreeSet;
+use sp_std::vec::Vec;
 
 #[cfg(feature = "std")]
 pub trait MaybeDebug: Debug {}
@@ -38,9 +39,16 @@ pub trait ProvidersInterface {
         + Member
         + MaybeSerializeDeserialize
         + Debug
+        + MaybeDisplay
+        + SimpleBitOps
         + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
         + MaxEncodedLen
-        + Copy;
+        + FullCodec;
     /// The type corresponding to the root of a registered Provider.
     type MerkleHash: Parameter
         + Member
@@ -62,6 +70,9 @@ pub trait ProvidersInterface {
 
     /// Get the ProviderId from AccountId, if it is a registered Provider.
     fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId>;
+
+    /// Get the AccountId of the owner of a registered Provider.
+    fn get_owner_account(who: Self::ProviderId) -> Option<Self::AccountId>;
 
     /// Get the root for a registered Provider.
     fn get_root(who: Self::ProviderId) -> Option<Self::MerkleHash>;
@@ -150,10 +161,16 @@ pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
         bucket_id: &Self::BucketId,
     ) -> Result<bool, DispatchError>;
 
+    /// Is bucket stored by MSP.
+    fn is_bucket_stored_by_msp(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId) -> bool;
+
     /// Get `collection_id` of a bucket if there is one.
     fn get_read_access_group_id_of_bucket(
         bucket_id: &Self::BucketId,
     ) -> Result<Option<Self::ReadAccessGroupId>, DispatchError>;
+
+    /// Get MSP storing a bucket.
+    fn get_msp_of_bucket(bucket_id: &Self::BucketId) -> Option<Self::ProviderId>;
 
     /// Check if a bucket is private.
     fn is_bucket_private(bucket_id: &Self::BucketId) -> Result<bool, DispatchError>;
@@ -270,6 +287,8 @@ pub trait ProofsDealerInterface {
         + FullCodec;
     /// The hashing system (algorithm) being used for the Merkle Patricia Forests (e.g. Blake2).
     type MerkleHashing: Hash<Output = Self::MerkleHash>;
+    /// The type that represents the randomness output.
+    type RandomnessOutput: Parameter + Member + Debug;
 
     /// Verify a proof just for the Merkle Patricia Forest, for a given Provider.
     ///
@@ -299,6 +318,13 @@ pub trait ProofsDealerInterface {
         key_challenged: &Self::MerkleHash,
         mutation: Option<TrieRemoveMutation>,
     ) -> DispatchResult;
+
+    /// Given a randomness seed, a provider id and a count, generate a list of challenges.
+    fn generate_challenges_from_seed(
+        seed: Self::RandomnessOutput,
+        provider_id: &Self::ProviderId,
+        count: u32,
+    ) -> Vec<Self::MerkleHash>;
 
     /// Apply delta (mutations) to the partial trie based on the proof and the commitment.
     ///

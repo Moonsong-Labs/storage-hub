@@ -1,4 +1,5 @@
 use anyhow::Result;
+use async_trait::async_trait;
 use prost::Message;
 use thiserror::Error;
 
@@ -64,6 +65,7 @@ pub enum RequestError {
 
 /// Allows our ActorHandle to implement
 /// the specific methods for each kind of message.
+#[async_trait]
 pub trait FileTransferServiceInterface {
     async fn upload_request(
         &self,
@@ -94,6 +96,7 @@ pub trait FileTransferServiceInterface {
     async fn unregister_file(&self, file_key: FileKey) -> Result<(), RequestError>;
 }
 
+#[async_trait]
 impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
     /// Request an upload of a file chunk to a peer.
     /// This returns after receiving a response from the network.

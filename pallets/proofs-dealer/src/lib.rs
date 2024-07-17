@@ -1,5 +1,3 @@
-// TODO: Remove this attribute.
-#![allow(unused_variables)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
@@ -27,7 +25,8 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{
-        CommitmentVerifier, ProvidersInterface, TrieProofDeltaApplier, TrieRemoveMutation,
+        CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, TrieProofDeltaApplier,
+        TrieRemoveMutation,
     };
     use sp_runtime::traits::Convert;
     use types::{KeyFor, ProviderIdFor};
@@ -306,6 +305,13 @@ pub mod pallet {
 
         /// A slashable provider was found.
         SlashableProvider { provider: ProviderIdFor<T> },
+
+        /// A Provider's challenge cycle was initialised.
+        NewChallengeCycleInitialised {
+            current_tick: BlockNumberFor<T>,
+            provider: ProviderIdFor<T>,
+            maybe_provider_account: Option<T::AccountId>,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -476,6 +482,28 @@ pub mod pallet {
             // If the proof is valid, the execution of this extrinsic should be refunded.
             Ok(Pays::No.into())
         }
+
+        /// Initialise a Provider's challenge cycle.
+        ///
+        /// Only callable by sudo.
+        ///
+        /// Sets the last tick the Provider submitted a proof for to the current tick, and sets the
+        /// deadline for submitting a proof to the current tick + the Provider's period + the tolerance.
+        #[pallet::call_index(2)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn force_initialise_challenge_cycle(
+            origin: OriginFor<T>,
+            provider: ProviderIdFor<T>,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was executed by the root origin
+            ensure_root(origin)?;
+
+            // Execute checks and logic, update storage.
+            <Self as ProofsDealerInterface>::initialise_challenge_cycle(&provider)?;
+
+            // Return a successful DispatchResultWithPostInfo.
+            Ok(Pays::No.into())
+        }
     }
 
     #[pallet::hooks]
@@ -486,10 +514,10 @@ pub mod pallet {
         /// [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
         /// For more information on the lifecycle of the block and its hooks, see the [Substrate
         /// documentation](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#method.on_poll).
-        fn on_poll(n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
+        fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
             // TODO: Benchmark computational weight cost of this hook.
 
-            Self::do_new_challenges_round(n, weight);
+            Self::do_new_challenges_round(weight);
         }
 
         // TODO: Document why we need to do this.

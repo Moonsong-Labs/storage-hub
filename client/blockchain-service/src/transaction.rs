@@ -4,14 +4,16 @@ use std::{
 };
 
 use anyhow::anyhow;
-use log::*;
+use log::{debug, error, info, warn};
 use shc_actors_framework::actor::ActorHandle;
 use sp_core::H256;
 use tokio::sync::mpsc::Receiver;
 
-use crate::services::blockchain::{commands::BlockchainServiceInterface, types::ExtrinsicResult};
-
-use super::{types::ExtrinsicHash, BlockchainService};
+use crate::{
+    commands::BlockchainServiceInterface,
+    types::{ExtrinsicHash, ExtrinsicResult},
+    BlockchainService,
+};
 
 const LOG_TARGET: &str = "blockchain-transaction";
 

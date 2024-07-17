@@ -216,9 +216,9 @@ where
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(
-        root: &Self::Key,
+        _root: &Self::Key,
         mutations: &[(Self::Key, TrieMutation)],
-        proof: &Self::Proof,
+        _proof: &Self::Proof,
     ) -> Result<(MemoryDB<T::Hash>, Self::Key), DispatchError> {
         let last_key = mutations.last().unwrap().0;
 

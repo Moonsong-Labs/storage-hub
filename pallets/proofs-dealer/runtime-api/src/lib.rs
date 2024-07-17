@@ -19,6 +19,8 @@ sp_api::decl_runtime_apis! {
         fn get_checkpoint_challenges(
             tick: BlockNumber
         ) -> Result<Vec<(Key, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError>;
+        fn get_challenge_period(provider_id: &ProviderId) -> Result<BlockNumber, GetChallengePeriodError>;
+        fn get_checkpoint_challenge_period() -> BlockNumber;
     }
 }
 
@@ -34,4 +36,10 @@ pub enum GetLastTickProviderSubmittedProofError {
 pub enum GetCheckpointChallengesError {
     TickGreaterThanLastCheckpointTick,
     NoCheckpointChallengesInTick,
+}
+
+/// Error type for the `get_challenge_period` runtime API call.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum GetChallengePeriodError {
+    ProviderNotRegistered,
 }

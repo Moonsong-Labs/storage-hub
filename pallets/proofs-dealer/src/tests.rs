@@ -51,7 +51,7 @@ fn challenge_submit_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(user, file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -100,10 +100,7 @@ fn challenge_submit_twice_succeed() {
         let file_key_2 = BlakeTwo256::hash(b"file_key_2");
 
         // Dispatch challenge extrinsic twice.
-        assert_ok!(ProofsDealer::challenge(
-            RuntimeOrigin::signed(1),
-            file_key_1
-        ));
+        assert_ok!(ProofsDealer::challenge(user_1, file_key_1));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -114,10 +111,7 @@ fn challenge_submit_twice_succeed() {
             .into(),
         );
 
-        assert_ok!(ProofsDealer::challenge(
-            RuntimeOrigin::signed(2),
-            file_key_2
-        ));
+        assert_ok!(ProofsDealer::challenge(user_2, file_key_2));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -165,8 +159,8 @@ fn challenge_submit_existing_challenge_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic twice.
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(user.clone(), file_key));
+        assert_ok!(ProofsDealer::challenge(user, file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -209,7 +203,7 @@ fn challenge_submit_in_two_rounds_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic twice.
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(user.clone(), file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -238,7 +232,7 @@ fn challenge_submit_in_two_rounds_succeed() {
 
         // Dispatch challenge extrinsic twice.
         let file_key = BlakeTwo256::hash(b"file_key_2");
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(user, file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -286,6 +280,7 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -304,7 +299,7 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(user, file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -353,7 +348,7 @@ fn challenge_submit_by_regular_user_with_no_funds_fail() {
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key),
+            ProofsDealer::challenge(user, file_key),
             crate::Error::<Test>::FeeChargeFailed
         );
     });
@@ -380,12 +375,12 @@ fn challenge_overflow_challenges_queue_fail() {
         let queue_size: u32 = <Test as crate::Config>::ChallengesQueueLength::get();
         for i in 0..queue_size {
             let file_key = BlakeTwo256::hash(&i.to_le_bytes());
-            assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+            assert_ok!(ProofsDealer::challenge(user.clone(), file_key));
         }
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key),
+            ProofsDealer::challenge(user, file_key),
             crate::Error::<Test>::ChallengesQueueOverflow
         );
     });
@@ -496,14 +491,6 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
         // Go past genesis block so events get deposited.
         run_to_block(1);
 
-        // Create user and add funds to the account.
-        let user = RuntimeOrigin::signed(1);
-        let user_balance = 1_000_000_000_000_000;
-        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-            &1,
-            user_balance
-        ));
-
         // Mock a Provider ID.
         let provider_id = BlakeTwo256::hash(b"provider_id");
 
@@ -520,12 +507,16 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
 
         // Dispatch initialise provider extrinsic.
-        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id));
+        assert_ok!(ProofsDealer::force_initialise_challenge_cycle(
+            RuntimeOrigin::root(),
+            provider_id
+        ));
 
         // Check that the Provider's last tick was set to 1.
         let last_tick_provider_submitted_proof =
@@ -544,6 +535,16 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
         let deadline =
             ChallengeTickToChallengedProviders::<Test>::get(expected_deadline, provider_id);
         assert_eq!(deadline, Some(()));
+
+        // Check that the last event emitted is the correct one.
+        System::assert_last_event(
+            Event::NewChallengeCycleInitialised {
+                current_tick: 1,
+                provider: provider_id,
+                maybe_provider_account: Some(1u64),
+            }
+            .into(),
+        );
     });
 }
 
@@ -552,14 +553,6 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
         run_to_block(1);
-
-        // Create user and add funds to the account.
-        let user = RuntimeOrigin::signed(1);
-        let user_balance = 1_000_000_000_000_000;
-        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-            &1,
-            user_balance
-        ));
 
         // Mock a Provider ID.
         let provider_id = BlakeTwo256::hash(b"provider_id");
@@ -577,12 +570,16 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
 
         // Dispatch initialise provider extrinsic.
-        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id));
+        assert_ok!(ProofsDealer::force_initialise_challenge_cycle(
+            RuntimeOrigin::root(),
+            provider_id
+        ));
 
         // Check that the Provider's last tick was set to 1.
         let last_tick_provider_submitted_proof =
@@ -605,7 +602,10 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
         run_to_block(current_block + challenge_ticks_tolerance - 1);
 
         // Re-initialise the provider.
-        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id));
+        assert_ok!(ProofsDealer::force_initialise_challenge_cycle(
+            RuntimeOrigin::root(),
+            provider_id
+        ));
 
         // Check that the Provider's last tick is the current now.
         let last_tick_provider_submitted_proof =
@@ -642,20 +642,6 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
         // Go past genesis block so events get deposited.
         run_to_block(1);
 
-        // Create users and add funds to the accounts.
-        let user = RuntimeOrigin::signed(1);
-        let user_balance = 1_000_000_000_000_000;
-        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-            &1,
-            user_balance
-        ));
-        let user_2 = RuntimeOrigin::signed(2);
-        let user_balance_2 = 1_000_000_000_000_000;
-        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-            &2,
-            user_balance_2
-        ));
-
         // Mock two Provider IDs.
         let provider_id_1 = BlakeTwo256::hash(b"provider_id_1");
         let provider_id_2 = BlakeTwo256::hash(b"provider_id_2");
@@ -673,6 +659,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -688,6 +675,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 2u64,
                 payment_account: Default::default(),
             },
         );
@@ -759,14 +747,6 @@ fn proofs_dealer_trait_initialise_challenge_cycle_not_provider_fail() {
         // Go past genesis block so events get deposited.
         run_to_block(1);
 
-        // Create user and add funds to the account.
-        let user = RuntimeOrigin::signed(1);
-        let user_balance = 1_000_000_000_000_000;
-        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-            &1,
-            user_balance
-        ));
-
         // Mock a Provider ID.
         let provider_id = BlakeTwo256::hash(b"provider_id");
 
@@ -806,6 +786,7 @@ fn submit_proof_success() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -875,11 +856,7 @@ fn submit_proof_success() {
         };
 
         // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::submit_proof(
-            RuntimeOrigin::signed(1),
-            proof.clone(),
-            None
-        ));
+        assert_ok!(ProofsDealer::submit_proof(user, proof.clone(), None));
 
         // Check for event submitted.
         System::assert_last_event(
@@ -915,14 +892,6 @@ fn submit_proof_submitted_by_not_a_provider_success() {
         // Go past genesis block so events get deposited.
         run_to_block(1);
 
-        // Create user and add funds to the account.
-        let user = RuntimeOrigin::signed(2);
-        let user_balance = 1_000_000_000_000_000;
-        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-            &2,
-            user_balance
-        ));
-
         // Register user as a Provider in Providers pallet.
         // The registered Provider ID will be different from the one that will be used in the proof.
         let provider_id = BlakeTwo256::hash(b"provider_id");
@@ -938,6 +907,7 @@ fn submit_proof_submitted_by_not_a_provider_success() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1028,6 +998,7 @@ fn submit_proof_with_checkpoint_challenges_success() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1085,7 +1056,7 @@ fn submit_proof_with_checkpoint_challenges_success() {
         let mut key_proofs = BTreeMap::new();
         for challenge in &challenges {
             key_proofs.insert(
-                challenge.clone(),
+                *challenge,
                 KeyProof::<Test> {
                     proof: CompactProof {
                         encoded_nodes: vec![vec![0]],
@@ -1104,11 +1075,7 @@ fn submit_proof_with_checkpoint_challenges_success() {
         };
 
         // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::submit_proof(
-            RuntimeOrigin::signed(1),
-            proof,
-            None
-        ));
+        assert_ok!(ProofsDealer::submit_proof(user, proof, None));
     });
 }
 
@@ -1140,6 +1107,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1203,7 +1171,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         let mut key_proofs = BTreeMap::new();
         for challenge in &challenges {
             key_proofs.insert(
-                challenge.clone(),
+                *challenge,
                 KeyProof::<Test> {
                     proof: CompactProof {
                         encoded_nodes: vec![vec![0]],
@@ -1222,11 +1190,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         };
 
         // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::submit_proof(
-            RuntimeOrigin::signed(1),
-            proof,
-            None
-        ));
+        assert_ok!(ProofsDealer::submit_proof(user, proof, None));
 
         // Check if root of the provider was updated the last challenge key
         // Note: The apply_delta method is applying the mutation the root of the provider for every challenge key.
@@ -1262,7 +1226,7 @@ fn submit_proof_caller_not_a_provider_fail() {
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::NotProvider
         );
     });
@@ -1295,7 +1259,7 @@ fn submit_proof_provider_passed_not_registered_fail() {
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, Some(provider_id)),
+            ProofsDealer::submit_proof(user, proof, Some(provider_id)),
             crate::Error::<Test>::NotProvider
         );
     });
@@ -1337,6 +1301,7 @@ fn submit_proof_empty_key_proofs_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1353,7 +1318,7 @@ fn submit_proof_empty_key_proofs_fail() {
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::EmptyKeyProofs
         );
     });
@@ -1406,6 +1371,7 @@ fn submit_proof_no_record_of_last_proof_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1422,7 +1388,7 @@ fn submit_proof_no_record_of_last_proof_fail() {
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::NoRecordOfLastSubmittedProof
         );
     });
@@ -1475,6 +1441,7 @@ fn submit_proof_challenges_block_not_reached_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1494,7 +1461,7 @@ fn submit_proof_challenges_block_not_reached_fail() {
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::ChallengesTickNotReached
         );
     });
@@ -1551,6 +1518,7 @@ fn submit_proof_challenges_block_too_old_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1573,7 +1541,7 @@ fn submit_proof_challenges_block_too_old_fail() {
         run_to_block(challenge_history_length * 2);
 
         // Dispatch challenge extrinsic.
-        let _ = ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None);
+        let _ = ProofsDealer::submit_proof(user, proof, None);
     });
 }
 
@@ -1627,6 +1595,7 @@ fn submit_proof_seed_not_found_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1652,7 +1621,7 @@ fn submit_proof_seed_not_found_fail() {
         TickToChallengesSeed::<Test>::remove(2);
 
         // Dispatch challenge extrinsic.
-        let _ = ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None);
+        let _ = ProofsDealer::submit_proof(user, proof, None);
     });
 }
 
@@ -1706,6 +1675,7 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1738,7 +1708,7 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
         LastCheckpointTick::<Test>::set(checkpoint_challenge_block);
 
         // Dispatch challenge extrinsic.
-        let _ = ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None);
+        let _ = ProofsDealer::submit_proof(user, proof, None);
     });
 }
 
@@ -1790,6 +1760,7 @@ fn submit_proof_forest_proof_verification_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1818,7 +1789,7 @@ fn submit_proof_forest_proof_verification_fail() {
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::ForestProofVerificationFailed
         );
     });
@@ -1872,6 +1843,7 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -1903,7 +1875,7 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
         // and it will return the generated challenges as keys proven. The key proofs are an empty
         // vector, so it will fail saying that there are no key proofs for the keys proven.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::KeyProofNotFound
         );
     });
@@ -1937,6 +1909,7 @@ fn submit_proof_out_checkpoint_challenges_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -2015,7 +1988,7 @@ fn submit_proof_out_checkpoint_challenges_fail() {
         // proofs for the regular challenges, not the checkpoint challenges, so it will fail saying
         // that there are no key proofs for the keys proven.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::KeyProofNotFound
         );
     });
@@ -2049,6 +2022,7 @@ fn submit_proof_key_proof_verification_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -2108,7 +2082,7 @@ fn submit_proof_key_proof_verification_fail() {
         // for each key proven, but they are empty, so it will fail saying that the verification
         // failed.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::KeyProofVerificationFailed
         );
     });
@@ -2429,14 +2403,6 @@ fn new_challenges_round_provider_marked_as_slashable() {
         // Go past genesis block so events get deposited.
         run_to_block(1);
 
-        // Create user and add funds to the account.
-        let user = RuntimeOrigin::signed(1);
-        let user_balance = 1_000_000_000_000_000;
-        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-            &1,
-            user_balance
-        ));
-
         // Register user as a Provider in Providers pallet.
         let provider_id = BlakeTwo256::hash(b"provider_id");
         pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
@@ -2451,6 +2417,7 @@ fn new_challenges_round_provider_marked_as_slashable() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -2530,22 +2497,6 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
         // Go past genesis block so events get deposited.
         run_to_block(1);
 
-        // Create an Alice user and add funds to the account.
-        let alice = RuntimeOrigin::signed(1);
-        let alice_balance = 1_000_000_000_000_000;
-        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-            &1,
-            alice_balance
-        ));
-
-        // Create a Bob user and add funds to the account.
-        let bob = RuntimeOrigin::signed(2);
-        let bob_balance = 1_000_000_000_000_000;
-        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-            &2,
-            bob_balance
-        ));
-
         // Register Alice as a Provider in Providers pallet.
         let alice_provider_id = BlakeTwo256::hash(b"alice_id");
         pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
@@ -2560,6 +2511,7 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -2578,6 +2530,7 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 2u64,
                 payment_account: Default::default(),
             },
         );

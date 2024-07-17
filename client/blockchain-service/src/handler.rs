@@ -48,19 +48,23 @@ use sp_runtime::{
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
 
-use crate::{
-    service::ParachainClient,
-    services::blockchain::{events::AcceptedBspVolunteer, transaction::SubmittedTransaction},
+use pallet_file_system_runtime_api::{
+    FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
 };
-use pallet_file_system_runtime_api::{FileSystemApi, QueryFileEarliestVolunteerBlockError};
-use shc_common::types::BlockNumber;
+use pallet_proofs_dealer_runtime_api::{
+    GetChallengePeriodError, GetLastTickProviderSubmittedProofError, ProofsDealerApi,
+};
+use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
 
-use crate::services::blockchain::{
+use crate::{
     commands::BlockchainServiceCommand,
-    events::BlockchainServiceEventBusProvider,
-    types::Extrinsic,
+    events::{
+        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmedStoring,
+        NewChallengeSeed, NewStorageRequest,
+    },
+    transaction::SubmittedTransaction,
+    types::{EventsVec, Extrinsic},
     KEY_TYPE,
-    {events::NewStorageRequest, types::EventsVec},
 };
 
 const LOG_TARGET: &str = "blockchain-service";
@@ -98,6 +102,9 @@ pub struct BlockchainService {
     nonce_counter: u32,
     /// A registry of waiters for a block number.
     wait_for_block_request_by_number: BTreeMap<BlockNumber, Vec<tokio::sync::oneshot::Sender<()>>>,
+    /// A list of Provider IDs that this node has to pay attention to submit proofs for.
+    /// This could be a BSP or a list of buckets that an MSP has.
+    provider_ids: Vec<ProviderId>,
 }
 
 /// Implement the Actor trait for the BlockchainService actor.
@@ -271,6 +278,34 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryBspConfirmChunksToProveForFile {
+                    bsp_id,
+                    file_key,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let chunks_to_prove = self
+                        .client
+                        .runtime_api()
+                        .query_bsp_confirm_chunks_to_prove_for_file(
+                            current_block_hash,
+                            bsp_id.into(),
+                            file_key,
+                        )
+                        .unwrap_or_else(|_| {
+                            Err(QueryBspConfirmChunksToProveForFileError::InternalError)
+                        });
+
+                    match callback.send(chunks_to_prove) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Chunks to prove file sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }
@@ -364,6 +399,7 @@ impl BlockchainService {
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
+            provider_ids: Vec::new(),
         }
     }
 
@@ -439,6 +475,51 @@ impl BlockchainService {
                             size,
                             user_peer_ids: peer_ids,
                         }),
+                        // A Provider's challenge cycle has been initialised.
+                        RuntimeEvent::ProofsDealer(
+                            pallet_proofs_dealer::Event::NewChallengeCycleInitialised {
+                                current_tick: _,
+                                provider: provider_id,
+                                maybe_provider_account,
+                            },
+                        ) => {
+                            // This node only cares if the Provider account matches one of the accounts in the keystore.
+                            if let Some(account) = maybe_provider_account {
+                                let account: Vec<u8> =
+                                    <sp_runtime::AccountId32 as AsRef<[u8; 32]>>::as_ref(&account)
+                                        .to_vec();
+                                if self.keystore.has_keys(&[(account.clone(), KEY_TYPE)]) {
+                                    // If so, add the Provider ID to the list of Providers that this node is monitoring.
+                                    info!(target: LOG_TARGET, "New Provider ID to monitor [{:?}] for account [{:?}]", provider_id, account);
+                                    self.provider_ids.push(provider_id);
+                                }
+                            }
+                        }
+                        // New challenge seed event coming from pallet-proofs-dealer.
+                        RuntimeEvent::ProofsDealer(
+                            pallet_proofs_dealer::Event::NewChallengeSeed {
+                                challenges_ticker,
+                                seed,
+                            },
+                        ) => {
+                            // For each Provider ID this node monitors...
+                            for provider_id in &self.provider_ids {
+                                // ...check if the challenges tick is one that this provider has to submit a proof for.
+                                if self.should_provider_submit_proof(
+                                    &block_hash,
+                                    provider_id,
+                                    &challenges_ticker,
+                                ) {
+                                    self.emit(NewChallengeSeed {
+                                        provider_id: *provider_id,
+                                        tick: challenges_ticker,
+                                        seed,
+                                    })
+                                } else {
+                                    trace!(target: LOG_TARGET, "Challenges tick is not the next one to be submitted for Provider [{:?}]", provider_id);
+                                }
+                            }
+                        }
                         // This event should only be of any use if a node is run by as a user.
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::AcceptedBspVolunteer {
@@ -485,6 +566,27 @@ impl BlockchainService {
                                 owner,
                                 size,
                             })
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::BspConfirmedStoring {
+                                who,
+                                bsp_id,
+                                file_key,
+                                new_root,
+                            },
+                            // Filter the events by the BSP id.
+                        ) => {
+                            // TODO: Ideally we would be filtering by BSP ID here, but since we don't have a
+                            // TODO: way to properly initialise the BSP ID yet, we are just going to filter by the
+                            // TODO: caller's public key.
+                            if who == AccountId32::from(Self::caller_pub_key(self.keystore.clone()))
+                            {
+                                self.emit(BspConfirmedStoring {
+                                    bsp_id,
+                                    file_key: FileKey::from(file_key.as_ref()),
+                                    new_root,
+                                })
+                            }
                         }
                         // Ignore all other events.
                         _ => {}
@@ -744,5 +846,58 @@ impl BlockchainService {
         } else {
             return Err(anyhow::anyhow!("Failed to get Events storage element"));
         }
+    }
+
+    /// Check if the challenges tick is one that this provider has to submit a proof for,
+    /// and if so, emit a `NewChallengeSeed` event.
+    fn should_provider_submit_proof(
+        &self,
+        block_hash: &H256,
+        provider_id: &ProviderId,
+        current_tick: &BlockNumber,
+    ) -> bool {
+        let last_tick_provided = match self
+            .client
+            .runtime_api()
+            .get_last_tick_provider_submitted_proof(*block_hash, provider_id)
+        {
+            Ok(last_tick_provided_result) => match last_tick_provided_result {
+                Ok(last_tick_provided) => last_tick_provided,
+                Err(e) => match e {
+                    GetLastTickProviderSubmittedProofError::ProviderNotRegistered => {
+                        debug!(target: LOG_TARGET, "Provider [{:?}] is not registered", provider_id);
+                        return false;
+                    }
+                    GetLastTickProviderSubmittedProofError::ProviderNeverSubmittedProof => {
+                        debug!(target: LOG_TARGET, "Provider [{:?}] does not have an initialised challenge cycle", provider_id);
+                        return false;
+                    }
+                },
+            },
+            Err(e) => {
+                error!(target: LOG_TARGET, "Runtime API error while getting last tick Provider [{:?}] submitted a proof for: {:?}", provider_id, e);
+                return false;
+            }
+        };
+        let provider_challenge_period = match self
+            .client
+            .runtime_api()
+            .get_challenge_period(block_hash.clone(), provider_id)
+        {
+            Ok(provider_challenge_period_result) => match provider_challenge_period_result {
+                Ok(provider_challenge_period) => provider_challenge_period,
+                Err(e) => match e {
+                    GetChallengePeriodError::ProviderNotRegistered => {
+                        debug!(target: LOG_TARGET, "Provider [{:?}] is not registered", provider_id);
+                        return false;
+                    }
+                },
+            },
+            Err(e) => {
+                debug!(target: LOG_TARGET, "Runtime API error while getting challenge period for Provider [{:?}]: {:?}", provider_id, e);
+                return false;
+            }
+        };
+        current_tick == &last_tick_provided.saturating_add(provider_challenge_period)
     }
 }
