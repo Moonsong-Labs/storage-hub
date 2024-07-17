@@ -36,6 +36,7 @@ pub type ProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
 pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
 pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;
 pub type TrieRemoveMutation = shp_traits::TrieRemoveMutation;
+pub type StorageProofsMerkleTrieLayout = storage_hub_runtime::StorageProofsMerkleTrieLayout;
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = (

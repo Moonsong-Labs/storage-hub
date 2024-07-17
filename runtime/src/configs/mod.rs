@@ -81,6 +81,8 @@ use super::{
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
+pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
+
 parameter_types! {
     pub const Version: RuntimeVersion = VERSION;
 
@@ -456,7 +458,7 @@ impl pallet_storage_providers::Config for Runtime {
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
-    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
+    type DefaultMerkleRoot = DefaultMerkleRoot<StorageProofsMerkleTrieLayout>;
     type ValuePropId = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = ConstU32<100>;
@@ -524,9 +526,9 @@ impl pallet_proofs_dealer::Config for Runtime {
     type NativeBalance = Balances;
     type MerkleTrieHash = Hash;
     type MerkleTrieHashing = BlakeTwo256;
-    type ForestVerifier = ForestVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
+    type ForestVerifier = ForestVerifier<StorageProofsMerkleTrieLayout, { BlakeTwo256::LENGTH }>;
     type KeyVerifier = FileKeyVerifier<
-        LayoutV1<BlakeTwo256>,
+        StorageProofsMerkleTrieLayout,
         { shp_constants::H_LENGTH },
         { shp_constants::FILE_CHUNK_SIZE },
         { shp_constants::FILE_SIZE_TO_CHALLENGES },

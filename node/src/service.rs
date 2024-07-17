@@ -21,10 +21,10 @@ use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
 use shc_blockchain_service::{BlockchainService, KEY_TYPE};
-use shc_common::types::HasherOutT;
+use shc_common::types::{HasherOutT, StorageProofsMerkleTrieLayout};
 use sp_consensus_aura::Slot;
 use sp_core::H256;
-use sp_trie::{LayoutV1, TrieLayout};
+use sp_trie::TrieLayout;
 // Local Runtime Types
 use storage_hub_runtime::{
     opaque::{Block, Hash},
@@ -992,7 +992,7 @@ pub async fn start_dev_node(
         Some(provider_options) => match provider_options.storage_layer {
             StorageLayer::Memory => {
                 start_dev_impl::<
-                    LayoutV1<BlakeTwo256>,
+                    StorageProofsMerkleTrieLayout,
                     InMemoryFileStorage<_>,
                     InMemoryForestStorage<_>,
                 >(config, Some(provider_options), hwbench, para_id, sealing)
@@ -1000,7 +1000,7 @@ pub async fn start_dev_node(
             }
             StorageLayer::RocksDB => {
                 start_dev_impl::<
-                    LayoutV1<BlakeTwo256>,
+                    StorageProofsMerkleTrieLayout,
                     RocksDbFileStorage<_, kvdb_rocksdb::Database>,
                     RocksDBForestStorage<_, kvdb_rocksdb::Database>,
                 >(config, Some(provider_options), hwbench, para_id, sealing)
@@ -1009,12 +1009,14 @@ pub async fn start_dev_node(
         },
         // In this case, it is not really important the types used for the storage layer, as
         // the node will not run as a provider.
-        None => start_dev_impl::<
-            LayoutV1<BlakeTwo256>,
-            InMemoryFileStorage<_>,
-            InMemoryForestStorage<_>,
-        >(config, None, hwbench, para_id, sealing)
-        .await,
+        None => {
+            start_dev_impl::<
+                StorageProofsMerkleTrieLayout,
+                InMemoryFileStorage<_>,
+                InMemoryForestStorage<_>,
+            >(config, None, hwbench, para_id, sealing)
+            .await
+        }
     }
 }
 
@@ -1031,7 +1033,7 @@ pub async fn start_parachain_node(
         Some(provider_options) => match provider_options.storage_layer {
             StorageLayer::Memory => {
                 start_node_impl::<
-                    LayoutV1<BlakeTwo256>,
+                    StorageProofsMerkleTrieLayout,
                     InMemoryFileStorage<_>,
                     InMemoryForestStorage<_>,
                 >(
@@ -1046,7 +1048,7 @@ pub async fn start_parachain_node(
             }
             StorageLayer::RocksDB => {
                 start_node_impl::<
-                    LayoutV1<BlakeTwo256>,
+                    StorageProofsMerkleTrieLayout,
                     RocksDbFileStorage<_, kvdb_rocksdb::Database>,
                     RocksDBForestStorage<_, kvdb_rocksdb::Database>,
                 >(
@@ -1064,7 +1066,7 @@ pub async fn start_parachain_node(
             // In this case, it is not really important the types used for the storage layer, as
             // the node will not run as a provider.
             start_node_impl::<
-                LayoutV1<BlakeTwo256>,
+                StorageProofsMerkleTrieLayout,
                 InMemoryFileStorage<_>,
                 InMemoryForestStorage<_>,
             >(
