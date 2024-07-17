@@ -46,7 +46,7 @@ use sp_std::prelude::Vec;
 use pallet_file_system_runtime_api::{
     QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
 };
-use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor};
+use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor, RandomnessOutputFor};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
 };
@@ -535,7 +535,7 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, TrieRemoveMutation> for Runtime {
+    impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, RandomnessOutputFor<Runtime>, TrieRemoveMutation> for Runtime {
         fn get_last_tick_provider_submitted_proof(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
             ProofsDealer::get_last_tick_provider_submitted_proof(provider_id)
         }
@@ -556,6 +556,10 @@ impl_runtime_apis! {
 
         fn get_checkpoint_challenge_period() -> BlockNumber {
             ProofsDealer::get_checkpoint_challenge_period()
+        }
+
+        fn get_challenges_from_seed(seed: &RandomnessOutputFor<Runtime>, provider_id: &ProviderIdFor<Runtime>, count: u32) -> Vec<KeyFor<Runtime>> {
+            ProofsDealer::get_challenges_from_seed(seed, provider_id, count)
         }
     }
 }
