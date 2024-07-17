@@ -32,9 +32,9 @@ pub type StorageData = pallet_file_system::types::StorageData<Runtime>;
 pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
 pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
 pub type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<Runtime>;
-pub type RandomSeed = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
 pub type ProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
 pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
+pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = (

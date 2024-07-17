@@ -263,7 +263,7 @@ impl Actor for BlockchainService {
                             trace!(target: LOG_TARGET, "Earliest block to volunteer result sent successfully");
                         }
                         Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            error!(target: LOG_TARGET, "Failed to send earliest block to volunteer: {:?}", e);
                         }
                     }
                 }
@@ -274,7 +274,7 @@ impl Actor for BlockchainService {
                             trace!(target: LOG_TARGET, "Node's public key sent successfully");
                         }
                         Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            error!(target: LOG_TARGET, "Failed to send node's public key: {:?}", e);
                         }
                     }
                 }
@@ -302,7 +302,31 @@ impl Actor for BlockchainService {
                             trace!(target: LOG_TARGET, "Chunks to prove file sent successfully");
                         }
                         Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            error!(target: LOG_TARGET, "Failed to send chunks to prove file: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryChallengesFromSeed {
+                    seed,
+                    provider_id,
+                    count,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let challenges = self.client.runtime_api().get_challenges_from_seed(
+                        current_block_hash,
+                        &seed,
+                        &provider_id,
+                        count,
+                    );
+
+                    match callback.send(challenges) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Challenges sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send challenges: {:?}", e);
                         }
                     }
                 }

@@ -1,13 +1,14 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::Number;
+use sp_api::ApiError;
 use sp_core::H256;
 
 use pallet_file_system_runtime_api::{
     QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
 };
 use shc_actors_framework::actor::ActorHandle;
-use shc_common::types::{BlockNumber, ChunkId};
+use shc_common::types::{BlockNumber, ChunkId, ForestLeaf, ProviderId, RandomnessOutput};
 
 use super::{
     handler::BlockchainService,
@@ -49,6 +50,12 @@ pub enum BlockchainServiceCommand {
         callback: tokio::sync::oneshot::Sender<
             Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>,
         >,
+    },
+    QueryChallengesFromSeed {
+        seed: RandomnessOutput,
+        provider_id: ProviderId,
+        count: u32,
+        callback: tokio::sync::oneshot::Sender<Result<Vec<ForestLeaf>, ApiError>>,
     },
 }
 
@@ -93,6 +100,14 @@ pub trait BlockchainServiceInterface {
         bsp_id: sp_core::sr25519::Public,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
+
+    /// Query the challenges that a Provider needs to submit for a given seed.
+    async fn query_challenges_from_seed(
+        &self,
+        seed: RandomnessOutput,
+        provider_id: ProviderId,
+        count: u32,
+    ) -> Result<Vec<ForestLeaf>, ApiError>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -215,6 +230,24 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         let message = BlockchainServiceCommand::QueryBspConfirmChunksToProveForFile {
             bsp_id,
             file_key,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_challenges_from_seed(
+        &self,
+        seed: RandomnessOutput,
+        provider_id: ProviderId,
+        count: u32,
+    ) -> Result<Vec<ForestLeaf>, ApiError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::QueryChallengesFromSeed {
+            seed,
+            provider_id,
+            count,
             callback,
         };
         self.send(message).await;
