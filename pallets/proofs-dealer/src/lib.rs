@@ -156,6 +156,18 @@ pub mod pallet {
         #[pallet::constant]
         type ChallengesFee: Get<BalanceFor<Self>>;
 
+        /// The target number of ticks for which to store the submitters that submitted valid proofs in them,
+        /// stored in the `ValidProofSubmittersLastTicks` StorageMap. That storage will be trimmed down to this number
+        /// of ticks in the `on_idle` hook of this pallet, to avoid bloating the state.
+        #[pallet::constant]
+        type TargetTicksStorageOfSubmitters: Get<u32>;
+
+        /// The maximum amount of Providers that can submit a proof in a single block.
+        /// This is not an arbitrary limit but making the limit based on the block weight explicit,
+        /// to be able to bound the storage that holds the submitters.
+        #[pallet::constant]
+        type MaxSubmittersPerTick: Get<u32>;
+
         /// The Treasury AccountId.
         /// The account to which:
         /// - The fees for submitting a challenge are transferred.
@@ -270,6 +282,19 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn slashable_providers)]
     pub type SlashableProviders<T: Config> = StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, ()>;
+
+    /// A mapping from block number (tick) to Providers, which is set if the Provider submitted a valid proof in that tick.
+    ///
+    /// This is used to keep track of the Providers that have submitted proofs in the last few
+    /// ticks, where availability only up to the last `TargetTicksStorageOfSubmitters` ticks is guaranteed.
+    /// This storage is then made available for other pallets to use through the `ReadProofSubmittersInterface`.
+    #[pallet::storage]
+    pub type ValidProofSubmittersLastTicks<T: Config> = CountedStorageMap<
+        _,
+        Blake2_128Concat,
+        BlockNumberFor<T>,
+        BoundedBTreeSet<ProviderIdFor<T>, T::MaxSubmittersPerTick>,
+    >;
 
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
@@ -526,6 +551,16 @@ pub mod pallet {
         // TODO: smallest stake.
         fn integrity_test() {
             // TODO: Check that the `CheckpointChallengePeriod` is greater or equal to the largest period of a Provider.
+        }
+
+        /// This hook is used to trim down the `ValidProofSubmittersLastBlocks` StorageMap up to the `TargetBlocksOfProofsStorage`.
+        ///
+        /// It runs when the block is being finalized (but before the `on_finalize` hook) and can consume all remaining weight.
+        /// It returns the used weight, so it can be used to calculate the remaining weight for the block for any other
+        /// pallets that have `on_idle` hooks.
+        fn on_idle(n: BlockNumberFor<T>, weight: Weight) -> Weight {
+            // TODO: Benchmark computational and proof size weight cost of this hook.
+            Self::do_trim_valid_proof_submitters_last_blocks(n, weight)
         }
     }
 }

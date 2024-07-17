@@ -3,15 +3,16 @@ use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
     traits::{fungible::Mutate, tokens::Preservation, Get, Randomness},
-    weights::WeightMeter,
+    weights::{Weight, WeightMeter},
+    BoundedBTreeSet,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
 };
 use shp_traits::{
-    CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, TrieMutation,
-    TrieProofDeltaApplier, TrieRemoveMutation,
+    CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, ReadProofSubmittersInterface,
+    TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedSub, Convert, Hash, Zero},
@@ -28,13 +29,15 @@ use crate::{
         AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor,
         ChallengeTicksToleranceFor, ChallengesFeeFor, ChallengesQueueLengthFor,
         CheckpointChallengePeriodFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor,
-        KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor, Proof, ProviderIdFor,
-        ProvidersPalletFor, RandomChallengesPerBlockFor, RandomnessOutputFor,
-        RandomnessProviderFor, StakeToChallengePeriodFor, TreasuryAccountFor,
+        KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor,
+        MaxSubmittersPerTickFor, Proof, ProviderIdFor, ProvidersPalletFor,
+        RandomChallengesPerBlockFor, RandomnessOutputFor, RandomnessProviderFor,
+        StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
     },
     ChallengeTickToChallengedProviders, ChallengesQueue, ChallengesTicker, Error, Event,
     LastCheckpointTick, LastTickProviderSubmittedProofFor, Pallet, PriorityChallengesQueue,
     SlashableProviders, TickToChallengesSeed, TickToCheckpointChallenges,
+    ValidProofSubmittersLastTicks,
 };
 
 macro_rules! expect_or_err {
@@ -620,6 +623,59 @@ where
 
         challenges
     }
+
+    /// Trim the storage that holds the Providers that submitted valid proofs in the last blocks until there's
+    /// `TargetBlocksOfProofsStorage` blocks left (or until the remaining weight allows it).
+    ///
+    /// This function is called in the `on_idle` hook, which means it's only called when the block has
+    /// unused weight.
+    ///
+    /// It removes the oldest block from the storage that holds the providers that submitted valid proofs
+    /// in the last blocks as many times as the remaining weight allows it, but at most until the storage
+    /// has `TargetBlocksOfProofsStorage` blocks left.
+    pub fn do_trim_valid_proof_submitters_last_blocks(
+        _n: BlockNumberFor<T>,
+        usable_weight: Weight,
+    ) -> Weight {
+        // Initialize the weight used by this function.
+        let mut used_weight = Weight::zero();
+
+        // Since we are using a double map and we don't know how many Providers are going to exist in each block, we delete
+        // not blocks but chunks of Providers. This means blocks older than "TargetBlocksOfProofsStorage" ago are in an undefined
+        // state and should not be used. This is a trade-off to avoid iterating over all Providers in each block, which could be
+        // computationally expensive.
+        let weight_to_remove_block = T::DbWeight::get().reads_writes(1, 1); // TODO: Benchmark this logic to get the actual weight.
+        let removable_blocks = usable_weight.checked_div_per_component(&weight_to_remove_block);
+
+        // If there is enough weight to remove blocks, try to remove them.
+        if let Some(removable_blocks) = removable_blocks {
+            // Check to see if our limiting factor for removing old blocks is weight remaining or the target amount of blocks to keep in storage.
+            let blocks_in_storage = ValidProofSubmittersLastTicks::<T>::count();
+            let target_blocks = TargetTicksStorageOfSubmittersFor::<T>::get();
+            let removable_blocks: u32 = removable_blocks
+                .try_into()
+                .unwrap_or(u32::MAX)
+                .min(blocks_in_storage.saturating_sub(target_blocks));
+
+            // Remove all the blocks that we can.
+            for _ in 0..removable_blocks {
+                // Get the oldest block.
+                let mut available_blocks = ValidProofSubmittersLastTicks::<T>::iter_keys()
+                    .collect::<Vec<BlockNumberFor<T>>>();
+                available_blocks.sort();
+                let oldest_block = available_blocks.first().expect("We checked before how many blocks are available and at least one should be there.");
+
+                // Remove the oldest block from storage.
+                ValidProofSubmittersLastTicks::<T>::remove(oldest_block);
+
+                // Increment the used weight.
+                used_weight += weight_to_remove_block;
+            }
+        }
+
+        // Return the weight used by this function.
+        used_weight
+    }
 }
 
 impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
@@ -757,6 +813,18 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         });
 
         Ok(())
+    }
+}
+
+impl<T: pallet::Config> ReadProofSubmittersInterface for Pallet<T> {
+    type ProviderId = ProviderIdFor<T>;
+    type BlockNumber = BlockNumberFor<T>;
+    type MaxProofSubmitters = MaxSubmittersPerTickFor<T>;
+
+    fn get_proof_submitters_for_block(
+        block_number: &Self::BlockNumber,
+    ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
+        ValidProofSubmittersLastTicks::<T>::get(block_number)
     }
 }
 
