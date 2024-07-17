@@ -1,16 +1,19 @@
-use crate::{mock::*, types::BalanceOf, Error, Event, RegisteredUsers};
+use crate::{
+    mock::*,
+    types::{BalanceOf, ProviderLastChargeable},
+    Error, Event, LastChargeableInfo, RegisteredUsers,
+};
 
-use frame_support::assert_noop;
-use frame_support::pallet_prelude::Weight;
-use frame_support::traits::fungible::Mutate;
-use frame_support::traits::{Get, OnFinalize, OnIdle, OnInitialize};
-use frame_support::{assert_ok, BoundedVec};
-use shp_traits::PaymentManager;
-use shp_traits::PaymentStreamsInterface;
-use shp_traits::ProvidersInterface;
+use frame_support::{
+    assert_noop, assert_ok,
+    pallet_prelude::Weight,
+    traits::{fungible::Mutate, Get, Hooks, OnFinalize, OnIdle, OnInitialize},
+    weights::WeightMeter,
+    BoundedVec,
+};
+use shp_traits::{PaymentStreamsInterface, ProvidersInterface};
 use sp_core::H256;
-use sp_runtime::traits::Convert;
-use sp_runtime::DispatchError;
+use sp_runtime::{traits::Convert, DispatchError};
 
 // `payment-streams` types:
 type NativeBalance = <Test as crate::Config>::NativeBalance;
@@ -183,12 +186,12 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_msp_id,
-                        System::block_number(),
-						100
-                    )
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: 100,
+                    },
                 );
 
                 // Try to charge the payment stream (Bob will not have enough balance to pay for the 10th block and will get flagged as without funds)
@@ -519,8 +522,12 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(&alice_msp_id, System::block_number(), 100)
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: 100,
+                    },
                 );
 
                 // Try to charge the payment stream (Bob will not have enough balance to pay for the 10th block and will get flagged as without funds)
@@ -576,8 +583,12 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(&alice_msp_id, System::block_number(), 100)
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: 100,
+                    },
                 );
 
                 // Update the rate of the payment stream from Bob to Alice to 20 units per block
@@ -755,8 +766,12 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(&alice_msp_id, System::block_number(), 100)
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: 100,
+                    },
                 );
 
                 // Try to charge the payment stream (Bob will not have enough balance to pay for the 10th block and will get flagged as without funds)
@@ -810,8 +825,12 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(&alice_msp_id, System::block_number(), 100)
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: 100,
+                    },
                 );
 
                 // Delete the payment stream from Bob to Alice
@@ -891,8 +910,12 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(&alice_msp_id, System::block_number(), 100)
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: 100,
+                    },
                 );
 
                 // Charge the payment stream from Bob to Alice
@@ -959,8 +982,12 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead, with a 10 units/block price index rate
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(&alice_msp_id, System::block_number(), 100)
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: 100,
+                    },
                 );
 
                 // Advance some blocks so the last valid proof is not the same as the current block
@@ -991,8 +1018,9 @@ mod fixed_rate_streams {
                     PaymentStreams::get_fixed_rate_payment_stream_info(&alice_msp_id, &bob)
                         .unwrap();
 
-				// Get Alice's last chargeable information
-				let alice_last_chargeable_info = PaymentStreams::get_last_chargeable_info(&alice_msp_id);
+                // Get Alice's last chargeable information
+                let alice_last_chargeable_info =
+                    PaymentStreams::get_last_chargeable_info(&alice_msp_id);
 
                 // The payment stream should be updated with the correct last charged proof
                 assert_eq!(
@@ -1054,8 +1082,12 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(&alice_msp_id, System::block_number(), 100)
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: 100,
+                    },
                 );
 
                 // Charge the payment stream from Bob to Alice
@@ -1083,8 +1115,9 @@ mod fixed_rate_streams {
                     PaymentStreams::get_fixed_rate_payment_stream_info(&alice_msp_id, &bob)
                         .unwrap();
 
-				// Get Alice's last chargeable information
-				let alice_last_chargeable_info = PaymentStreams::get_last_chargeable_info(&alice_msp_id);
+                // Get Alice's last chargeable information
+                let alice_last_chargeable_info =
+                    PaymentStreams::get_last_chargeable_info(&alice_msp_id);
 
                 // The payment stream should be updated with the correct last charged proof
                 assert_eq!(
@@ -1134,8 +1167,12 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(&alice_msp_id, System::block_number(), 100)
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: 100,
+                    },
                 );
 
                 // Charge the payment stream from Bob to Alice
@@ -1171,8 +1208,12 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 20 blocks ahead
                 run_to_block(System::block_number() + 20);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(&alice_msp_id, System::block_number(), 300)
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: 300,
+                    },
                 );
 
                 // Charge the payment stream from Bob to Alice
@@ -1279,8 +1320,12 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 1000 blocks ahead
                 run_to_block(System::block_number() + 1000);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(&alice_msp_id, System::block_number(), 100)
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: 100,
+                    },
                 );
 
                 // Try to charge the payment stream from Bob to Alice
@@ -1331,8 +1376,12 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(&alice_msp_id, System::block_number(), 100)
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: 100,
+                    },
                 );
 
                 // Try to charge the payment stream (Bob will not have enough balance to pay for it and will get flagged as without funds)
@@ -1402,8 +1451,12 @@ mod fixed_rate_streams {
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(&alice_msp_id, System::block_number(), 100)
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: 100,
+                    },
                 );
 
                 // Try to charge the payment stream (Bob will not have enough balance to pay for it and will get flagged as without funds)
@@ -1462,13 +1515,14 @@ mod fixed_rate_streams {
         #[test]
         fn update_last_chargeable_block_works() {
             ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = 0;
+                let alice_on_poll: AccountId = 123;
                 let bob: AccountId = 1;
 
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
-                register_account_as_msp(alice, 100);
+                register_account_as_msp(alice_on_poll, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ProvidersInterface>::get_provider_id(alice_on_poll)
+                        .unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
@@ -1480,106 +1534,21 @@ mod fixed_rate_streams {
                     )
                 );
 
-                // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
-                run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(&alice_msp_id, System::block_number(), 100)
-                );
+                // Set the last valid proof of the payment stream from Bob to Alice to block 123 (represented by Alice's account ID)
+                run_to_block(alice_on_poll);
+                let mut max_weight_meter = WeightMeter::new();
+                // Since we are using the mocked ReadProofSubmittersInterface, we can pass the account ID as the
+                // block number to the `on_poll` hook and it will consider that Provider as one that submitted a proof
+                PaymentStreams::on_poll(alice_on_poll, &mut max_weight_meter);
 
-				// Get Alice's last chargeable information
-				let alice_last_chargeable_info = PaymentStreams::get_last_chargeable_info(&alice_msp_id);
+                // Get Alice's last chargeable information
+                let alice_last_chargeable_info =
+                    PaymentStreams::get_last_chargeable_info(&alice_msp_id);
 
                 // The payment stream should be updated with the correct last valid proof
                 assert_eq!(
                     alice_last_chargeable_info.last_chargeable_block,
                     System::block_number()
-                );
-            });
-        }
-
-        #[test]
-        fn update_last_chargeable_block_fails_if_msp_account_has_not_registered_as_msp() {
-            ExtBuilder::build().execute_with(|| {
-                // Try to update the last valid proof of a payment stream from Bob to a random not registered MSP
-                assert_noop!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &H256::random(),
-                        System::block_number(),
-                        100
-                    ),
-                    Error::<Test>::NotAProvider
-                );
-            });
-        }
-
-        #[test]
-        fn update_last_chargeable_block_fails_if_trying_to_set_greater_than_current_block_number() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = 0;
-                let bob: AccountId = 1;
-
-                // Register Alice as a MSP with 100 units of data and get her MSP ID
-                register_account_as_msp(alice, 100);
-                let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Create a payment stream from Bob to Alice of 10 units per block
-                let rate: BalanceOf<Test> = 10;
-                assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
-                        &alice_msp_id,
-                        &bob,
-                        rate
-                    )
-                );
-
-                // Try to set the last valid proof of the payment stream from Bob to Alice to a block number greater than the current block number
-                assert_noop!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_msp_id,
-                        System::block_number() + 1,
-						100
-                    ),
-                    Error::<Test>::InvalidLastChargeableBlockNumber
-                );
-            });
-        }
-
-        #[test]
-        fn update_last_chargeable_block_fails_if_trying_to_set_less_than_previous_value() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = 0;
-                let bob: AccountId = 1;
-
-                // Register Alice as a MSP with 100 units of data and get her MSP ID
-                register_account_as_msp(alice, 100);
-                let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Create a payment stream from Bob to Alice of 10 units per block
-                let rate: BalanceOf<Test> = 10;
-                assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
-                        &alice_msp_id,
-                        &bob,
-                        rate
-                    )
-                );
-
-                // Set the last valid proof of the payment stream from Bob to Alice to 10 blocks ahead
-                run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(&alice_msp_id, System::block_number(), 100)
-                );
-
-                // Try to set the last valid proof of the payment stream from Bob to Alice to a block number less than the last valid proof block number already set
-                assert_noop!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_msp_id,
-                        System::block_number() - 1,
-						100
-                    ),
-                    Error::<Test>::InvalidLastChargeableBlockNumber
                 );
             });
         }
@@ -1782,12 +1751,12 @@ mod dynamic_rate_streams {
                 let current_price_index =
                     current_price_index + bob_new_balance / (amount_provided as u128) + 1;
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: current_price_index,
+                    },
                 );
 
                 // Try to charge the payment stream (Bob will not have enough balance to pay for storage and will get flagged as without funds)
@@ -2168,12 +2137,12 @@ mod dynamic_rate_streams {
                 let current_price_index =
                     current_price_index + bob_new_balance / (amount_provided as u128) + 1;
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: current_price_index,
+                    },
                 );
 
                 // Try to charge the payment stream (Bob will not have enough balance to pay for his storage and will get flagged as without funds)
@@ -2237,12 +2206,12 @@ mod dynamic_rate_streams {
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
                 let current_price_index = current_price_index + 10 * current_price;
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: current_price_index,
+                    },
                 );
 
                 // Update the amount provided of the payment stream from Bob to Alice to 200 units
@@ -2445,12 +2414,12 @@ mod dynamic_rate_streams {
                 let current_price_index =
                     current_price_index + bob_new_balance / (amount_provided as u128) + 1;
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: current_price_index,
+                    },
                 );
 
                 // Try to charge the payment stream (Bob will not have enough balance to pay for his storage and will get flagged as without funds)
@@ -2512,12 +2481,12 @@ mod dynamic_rate_streams {
                 let current_price_index = current_price_index + 10 * current_price;
                 let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: current_price_index,
+                    },
                 );
 
                 // Delete the payment stream from Bob to Alice
@@ -2605,12 +2574,12 @@ mod dynamic_rate_streams {
                 let current_price_index = current_price_index + 10 * current_price;
                 let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: current_price_index,
+                    },
                 );
 
                 // Charge the payment stream from Bob to Alice
@@ -2686,12 +2655,12 @@ mod dynamic_rate_streams {
                 let current_price_index = current_price_index + 10 * current_price;
                 let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: current_price_index,
+                    },
                 );
 
                 // Charge the payment stream from Bob to Alice
@@ -2719,8 +2688,9 @@ mod dynamic_rate_streams {
                     PaymentStreams::get_dynamic_rate_payment_stream_info(&alice_bsp_id, &bob)
                         .unwrap();
 
-				// Get Alice's last chargeable info
-				let alice_last_chargeable_info = PaymentStreams::get_last_chargeable_info(&alice_bsp_id);
+                // Get Alice's last chargeable info
+                let alice_last_chargeable_info =
+                    PaymentStreams::get_last_chargeable_info(&alice_bsp_id);
 
                 // The payment stream should be updated with the correct last charged price index
                 assert_eq!(
@@ -2787,12 +2757,12 @@ mod dynamic_rate_streams {
                 let current_price_index = current_price_index + 10 * current_price;
                 let amount_to_pay_for_storage = 10 * current_price * (new_amount_provided as u128);
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: current_price_index,
+                    },
                 );
 
                 // Charge the payment stream from Bob to Alice
@@ -2820,8 +2790,9 @@ mod dynamic_rate_streams {
                     PaymentStreams::get_dynamic_rate_payment_stream_info(&alice_bsp_id, &bob)
                         .unwrap();
 
-				// Get Alice's last chargeable info
-				let alice_last_chargeable_info = PaymentStreams::get_last_chargeable_info(&alice_bsp_id);
+                // Get Alice's last chargeable info
+                let alice_last_chargeable_info =
+                    PaymentStreams::get_last_chargeable_info(&alice_bsp_id);
 
                 // The payment stream should be updated with the correct last charged price index
                 assert_eq!(
@@ -2833,10 +2804,7 @@ mod dynamic_rate_streams {
                 assert_eq!(payment_stream_info.amount_provided, new_amount_provided);
 
                 // The payment stream should be updated with the correct last chargeable price index
-                assert_eq!(
-                    alice_last_chargeable_info.price_index,
-                    current_price_index
-                );
+                assert_eq!(alice_last_chargeable_info.price_index, current_price_index);
             });
         }
 
@@ -2879,12 +2847,12 @@ mod dynamic_rate_streams {
                 let current_price_index = current_price_index + 10 * current_price;
                 let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: current_price_index,
+                    },
                 );
 
                 // Charge the payment stream from Bob to Alice
@@ -2920,12 +2888,12 @@ mod dynamic_rate_streams {
                 let current_price_index = current_price_index + 20 * current_price;
                 let amount_to_pay_for_storage = 20 * current_price * (amount_provided as u128);
                 run_to_block(System::block_number() + 20);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: current_price_index,
+                    },
                 );
 
                 // Charge the payment stream from Bob to Alice
@@ -3031,12 +2999,12 @@ mod dynamic_rate_streams {
                 let current_price_index =
                     current_price_index + u128::MAX / (amount_provided as u128) + 1;
                 run_to_block(System::block_number() + 1000);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: current_price_index,
+                    },
                 );
 
                 // Try to charge the payment stream from Bob to Alice
@@ -3095,12 +3063,12 @@ mod dynamic_rate_streams {
                 let current_price_index =
                     current_price_index + bob_new_balance / (amount_provided as u128) + 1;
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: current_price_index,
+                    },
                 );
 
                 // Try to charge the payment stream (Bob will not have enough balance to pay for it and will get flagged as without funds)
@@ -3182,12 +3150,12 @@ mod dynamic_rate_streams {
                 let amount_to_pay_for_storage =
                     (amount_provided as u128) * (bob_new_balance / (amount_provided as u128) + 1);
                 run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeable {
+                        last_chargeable_block: System::block_number(),
+                        price_index: current_price_index,
+                    },
                 );
 
                 // Try to charge the payment stream (Bob will not have enough balance to pay for it and will get flagged as without funds)
@@ -3239,23 +3207,25 @@ mod dynamic_rate_streams {
             });
         }
     }
-    mod update_chargeable_price_index {
+    mod update_last_chargeable_price_index {
 
+        // TODO: Update this once we have the price index tracking
         use super::*;
 
         #[test]
-        fn update_chargeable_price_index_works() {
+        fn update_last_chargeable_price_index_works() {
             ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = 0;
+                let alice_on_poll: AccountId = 123;
                 let bob: AccountId = 1;
                 let amount_provided = 100;
                 let current_price = 10;
                 let current_price_index = 10000;
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
-                register_account_as_bsp(alice, 100);
+                register_account_as_bsp(alice_on_poll, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ProvidersInterface>::get_provider_id(alice_on_poll)
+                        .unwrap();
 
                 // Create a payment stream from Bob to Alice of 100 units per block
                 assert_ok!(
@@ -3269,87 +3239,18 @@ mod dynamic_rate_streams {
                 );
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
-                let current_price_index = current_price_index + 10 * current_price;
-                run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
-                );
-				// Get Alice's last chargeable info
-				let alice_last_chargeable_info = PaymentStreams::get_last_chargeable_info(&alice_bsp_id);
+                // TODO: Price index is currently hardcoded, update this test once we have the price index tracking
+                let current_price_index = 1;
+                run_to_block(alice_on_poll);
+                let mut max_weight_meter = WeightMeter::new();
+                PaymentStreams::on_poll(alice_on_poll, &mut max_weight_meter);
+
+                // Get Alice's last chargeable info
+                let alice_last_chargeable_info =
+                    PaymentStreams::get_last_chargeable_info(&alice_bsp_id);
 
                 // The payment stream should be updated with the correct last chargeable price index
-                assert_eq!(
-                    alice_last_chargeable_info.price_index,
-                    current_price_index
-                );
-            });
-        }
-
-        #[test]
-        fn update_chargeable_price_index_fails_if_bsp_account_has_not_registered_as_bsp() {
-            ExtBuilder::build().execute_with(|| {
-                // Try to update the last valid proof of a payment stream from Bob to a random not registered BSP
-                assert_noop!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &H256::random(),
-						System::block_number(),
-                        10000
-                    ),
-                    Error::<Test>::NotAProvider
-                );
-            });
-        }
-
-        #[test]
-        fn update_chargeable_price_index_fails_if_trying_to_set_less_than_previous_value() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = 0;
-                let bob: AccountId = 1;
-                let amount_provided = 100;
-                let current_price = 10;
-                let current_price_index = 10000;
-
-                // Register Alice as a BSP with 100 units of data and get her BSP ID
-                register_account_as_bsp(alice, 100);
-                let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Create a payment stream from Bob to Alice of 100 units per block
-                assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
-                        &alice_bsp_id,
-                        &bob,
-                        &amount_provided,
-                        current_price,
-                        current_price_index
-                    )
-                );
-
-                // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
-                let current_price_index = current_price_index + 10 * current_price;
-                run_to_block(System::block_number() + 10);
-                assert_ok!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index
-                    )
-                );
-
-                // Try to set the last chargeable price index of the payment stream from Bob to Alice to a price index smaller than the one just set
-				run_to_block(System::block_number() + 1);
-                assert_noop!(
-                    <PaymentStreams as PaymentManager>::update_last_chargeable_block_and_price_index(
-                        &alice_bsp_id,
-						System::block_number(),
-                        current_price_index - 1
-                    ),
-                    Error::<Test>::InvalidLastChargeablePriceIndex
-                );
+                assert_eq!(alice_last_chargeable_info.price_index, current_price_index);
             });
         }
     }

@@ -11,9 +11,10 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
-    PaymentManager, PaymentStreamsInterface, ProvidersInterface, ReadProvidersInterface,
+    PaymentStreamsInterface, ProvidersInterface, ReadProofSubmittersInterface,
+    ReadProvidersInterface,
 };
-use sp_runtime::traits::Convert;
+use sp_runtime::traits::{Convert, One};
 
 use crate::*;
 
@@ -720,6 +721,42 @@ where
         Ok(total_amount_charged)
     }
 
+    /// This function gets the Providers that submitted a valid proof in the last tick using the `ReadProofSubmittersInterface`,
+    /// and updates the last chargeable block and last chargeable price index of those Providers.
+    pub fn do_update_last_chargeable_info(
+        n: BlockNumberFor<T>,
+        weight: &mut frame_support::weights::WeightMeter,
+    ) {
+        // Get the Providers that submitted a valid proof in the last tick, if there are any
+        let proof_submitters =
+            <T::ProvidersProofSubmitters as ReadProofSubmittersInterface>::get_proof_submitters_for_block(&n);
+        weight.consume(T::DbWeight::get().reads(1));
+
+        // If there are any proof submitters in the last tick
+        if let Some(proof_submitters) = proof_submitters {
+            // See if we have enough weight limit to process all Providers
+            let weight_per_provider = T::DbWeight::get().reads_writes(1, 1);
+            let weight_limit = weight.remaining();
+            let max_providers = weight_limit
+                .checked_div_per_component(&weight_per_provider)
+                .unwrap_or(0);
+            // If we do have enough weight, update all Providers
+            if proof_submitters.len().try_into().unwrap_or(u64::MAX) <= max_providers {
+                // Iterate through the proof submitters and update their last chargeable block and last chargeable price index
+                for provider_id in proof_submitters {
+                    // Update the last chargeable block and last chargeable price index of the Provider
+                    LastChargeableInfo::<T>::mutate(provider_id, |provider_info| {
+                        provider_info.last_chargeable_block = n;
+                        provider_info.price_index = One::one(); // TODO: Have an actual price index
+                    });
+                    weight.consume(T::DbWeight::get().reads_writes(1, 1));
+                }
+            }
+            // TODO: What happens if we do not have enough weight? It should never happen so we should have a way to just reserve the
+            // needed weight in the block for this, such as what `on_initialize` does.
+        }
+    }
+
     /// This function holds the logic that updates the deposit of a User based on the new deposit that should be held from them.
     ///
     /// It checks if the new deposit is greater or smaller than the old deposit and holds/releases the difference in deposit from the User accordingly.
@@ -916,59 +953,5 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     ) -> Option<Self::DynamicRatePaymentStream> {
         // Return the payment stream information
         DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
-    }
-}
-
-impl<T: pallet::Config> PaymentManager for pallet::Pallet<T> {
-    type Balance = T::NativeBalance;
-    type AccountId = T::AccountId;
-    type ProviderId = ProviderIdFor<T>;
-    type BlockNumber = BlockNumberFor<T>;
-
-    fn update_last_chargeable_block_and_price_index(
-        provider_id: &Self::ProviderId,
-        new_last_chargeable_block: Self::BlockNumber,
-        price_index_at_that_block: <Self::Balance as frame_support::traits::fungible::Inspect<
-            Self::AccountId,
-        >>::Balance,
-    ) -> DispatchResult {
-        // Check that the given ID belongs to an actual Provider
-        ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
-            Error::<T>::NotAProvider
-        );
-
-        // Get the information of the Provider to update
-        let provider_info = LastChargeableInfo::<T>::get(provider_id);
-
-        // Ensure that the new last chargeable block number that is being set is not greater than the current block number
-        ensure!(
-            new_last_chargeable_block <= frame_system::Pallet::<T>::block_number(),
-            Error::<T>::InvalidLastChargeableBlockNumber
-        );
-
-        // Ensure that the new last chargeable block number that is being set is greater than the previous last chargeable block number of the payment stream
-        // (it does not make sense to update it to the same or a lower value)
-        ensure!(
-            new_last_chargeable_block > provider_info.last_chargeable_block,
-            Error::<T>::InvalidLastChargeableBlockNumber
-        );
-
-        // Ensure that the new last chargeable price index that is being set is greater than the previous last chargeable price index of the payment stream
-        // (it does not make sense to update it to the same or a lower value)
-        ensure!(
-            price_index_at_that_block > provider_info.price_index,
-            Error::<T>::InvalidLastChargeablePriceIndex
-        );
-
-        // Update the last chargeable block number and price index of the payment stream
-        LastChargeableInfo::<T>::mutate(provider_id, |provider_info| {
-            provider_info.last_chargeable_block = new_last_chargeable_block;
-            provider_info.price_index = price_index_at_that_block;
-            Ok::<(), DispatchError>(())
-        })?;
-
-        // Return a successful DispatchResult
-        Ok(())
     }
 }

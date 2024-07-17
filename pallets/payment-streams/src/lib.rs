@@ -34,7 +34,7 @@ pub mod pallet {
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
-    use shp_traits::{ProvidersInterface, ReadProvidersInterface};
+    use shp_traits::{ProvidersInterface, ReadProofSubmittersInterface, ReadProvidersInterface};
     use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, Saturating};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -52,6 +52,12 @@ pub mod pallet {
         /// The trait for reading provider data.
         type ProvidersPallet: ProvidersInterface<AccountId = Self::AccountId>
             + ReadProvidersInterface<AccountId = Self::AccountId>;
+
+        /// The trait for reading the data of which providers submitted valid proofs in which blocks
+        type ProvidersProofSubmitters: ReadProofSubmittersInterface<
+            ProviderId = <Self::ProvidersPallet as ProvidersInterface>::ProviderId,
+            BlockNumber = BlockNumberFor<Self>,
+        >;
 
         /// The overarching hold reason
         type RuntimeHoldReason: From<HoldReason>;
@@ -270,6 +276,20 @@ pub mod pallet {
         // Only for testing, another unrelated hold reason
         #[cfg(test)]
         AnotherUnrelatedHold,
+    }
+
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        /// This hook is used to update the last chargeable info of the Providers that submitted a valid proof.
+        ///
+        /// It will be called at the beginning of every block, if the block is not being part of a
+        /// [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
+        /// For more information on the lifecycle of the block and its hooks, see the [Substrate
+        /// documentation](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#method.on_poll).
+        fn on_poll(n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
+            // TODO: Benchmark computational weight cost of this hook.
+            Self::do_update_last_chargeable_info(n, weight);
+        }
     }
 
     /// Dispatchables (extrinsics) exposed by this pallet

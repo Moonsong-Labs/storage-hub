@@ -5,7 +5,7 @@ use frame_support::dispatch::DispatchResult;
 use frame_support::pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member};
 use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
 use frame_support::traits::{fungible, Incrementable};
-use frame_support::Parameter;
+use frame_support::{BoundedBTreeSet, Parameter};
 use scale_info::prelude::fmt::Debug;
 use scale_info::TypeInfo;
 use sp_core::Get;
@@ -523,13 +523,7 @@ pub trait PaymentStreamsInterface {
     ) -> Option<Self::DynamicRatePaymentStream>;
 }
 
-/// The interface of a Payment Manager, which has to be made aware of the last block for which a charge of a payment can be made by a provider.
-/// Example: the Proofs Dealer pallet uses this interface to update the block when a Storage Provider last submitted a valid proof for the Payment Streams pallet.
-pub trait PaymentManager {
-    /// The type which represents the balance of the runtime.
-    type Balance: fungible::Inspect<Self::AccountId>;
-    /// The type which represents an account identifier.
-    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+pub trait ReadProofSubmittersInterface {
     /// The type which represents a provider identifier.
     type ProviderId: Parameter
         + Member
@@ -540,12 +534,10 @@ pub trait PaymentManager {
         + Copy;
     /// The type which represents a block number.
     type BlockNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents the maximum limit of the number of proof submitters for a block.
+    type MaxProofSubmitters: Get<u32>;
 
-    /// Update the last valid block for which a charge of a payment stream can be made and the last accumulated price index
-    /// that corresponds to that block.
-    fn update_last_chargeable_block_and_price_index(
-        provider_id: &Self::ProviderId,
-        new_last_chargeable_block: Self::BlockNumber,
-        new_last_chargeable_price_index: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
-    ) -> DispatchResult;
+    fn get_proof_submitters_for_block(
+        block_number: &Self::BlockNumber,
+    ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>>;
 }
