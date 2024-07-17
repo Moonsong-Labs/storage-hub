@@ -405,13 +405,13 @@ mod tests {
         owner: Vec<u8>,
         bucket_id: Vec<u8>,
         location: Vec<u8>,
-        size: u64,
+        file_size: u64,
     ) -> FileMetadata {
         FileMetadata {
             owner,
             bucket_id,
             location,
-            file_size: size,
+            file_size,
             fingerprint: Fingerprint::default(),
         }
     }

@@ -6,16 +6,27 @@
 		"outDir": "dist",
 		"baseUrl": "./",
 		"paths": {
-		  "@storagehub/api-augment/*": ["src/*"],
-		  "@polkadot/api/augment": ["src/interfaces/augment-api.ts"],
-		  "@polkadot/types/augment": ["src/interfaces/augment-types.ts"],
-		  "@polkadot/types/lookup": ["src/interfaces/types-lookup.ts"]
+			"@storagehub/api-augment/*": [
+				"src/*"
+			],
+			"@polkadot/api/augment": [
+				"src/interfaces/augment-api.ts"
+			],
+			"@polkadot/types/augment": [
+				"src/interfaces/augment-types.ts"
+			],
+			"@polkadot/types/lookup": [
+				"src/interfaces/types-lookup.ts"
+			]
 		},
 		"noEmit": false,
 		"declaration": true,
 		"declarationDir": "dist/types",
 		"allowImportingTsExtensions": false,
-		
-	  },
-	  "exclude": ["node_modules", "dist", "scripts"]
+	},
+	"exclude": [
+		"node_modules",
+		"dist",
+		"scripts"
+	]
 }

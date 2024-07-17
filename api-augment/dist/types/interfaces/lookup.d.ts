@@ -1522,9 +1522,9 @@ declare const _default: {
         proof: string;
     };
     /**
-     * Lookup140: shp_file_metadata::FileMetadata
+     * Lookup140: shp_file_key_verifier::types::FileMetadata
      **/
-    ShpFileMetadataFileMetadata: {
+    ShpFileKeyVerifierFileMetadata: {
         _alias: {
             size_: string;
         };
@@ -1535,9 +1535,9 @@ declare const _default: {
         fingerprint: string;
     };
     /**
-     * Lookup141: shp_file_metadata::Fingerprint
+     * Lookup141: shp_file_key_verifier::types::Fingerprint
      **/
-    ShpFileMetadataFingerprint: string;
+    ShpFileKeyVerifierFingerprint: string;
     /**
      * Lookup147: shp_traits::TrieRemoveMutation
      **/

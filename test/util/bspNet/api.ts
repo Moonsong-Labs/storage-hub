@@ -1,23 +1,32 @@
+import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { BspNetApi } from "./types";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import {
-  createBucket,
-  getForestRoot,
-  sealBlock,
-  sendLoadFileRpc,
-  sendSaveFileRpc
-} from "./helpers";
+import { createBucket, sealBlock } from "./helpers";
 import { assertEventPresent } from "../asserts";
-import type { EventRecord, H256 } from "@polkadot/types/interfaces";
+import type { EventRecord } from "@polkadot/types/interfaces";
+import * as definitions from "../../node_modules/@storagehub/api-augment/src/interfaces/definitions";
 
 //TODO: Maybe make this a resource?
 export const createApiObject = async (uri: string): Promise<BspNetApi> => {
+  const types = Object.values(definitions).reduce((res, { types }) => ({ ...res, ...types }), {});
+  const rpcMethods = Object.entries(definitions).reduce(
+    (res: Record<string, any>, [key, { rpc }]) => {
+      if (rpc) {
+        res[key] = rpc;
+      }
+      return res;
+    },
+    {}
+  );
+
   const baseApi = await ApiPromise.create({
     provider: new WsProvider(uri),
-    noInitWarn: true
+    noInitWarn: true,
+    types,
+    rpc: rpcMethods
   });
 
   return Object.assign(baseApi, {
@@ -25,14 +34,6 @@ export const createApiObject = async (uri: string): Promise<BspNetApi> => {
       call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
       signer?: KeyringPair
     ) => sealBlock(baseApi, call, signer),
-
-    loadFile: async (localPath: string, remotePath: string, addressId: string, bucket: H256) =>
-      sendLoadFileRpc(baseApi, localPath, remotePath, addressId, bucket),
-
-    saveFile: async (fileKey: H256, filePath: string) =>
-      sendSaveFileRpc(baseApi, fileKey, filePath),
-
-    getForestRoot: async () => getForestRoot(baseApi),
 
     createBucket: async (bucketName: string) => createBucket(baseApi, bucketName),
 

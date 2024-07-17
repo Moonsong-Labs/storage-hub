@@ -1,15 +1,8 @@
 import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type {
-  CreatedBlock,
-  EventRecord,
-  H256,
-  Hash,
-  SignedBlock
-} from "@polkadot/types/interfaces";
+import type { CreatedBlock, EventRecord, Hash, SignedBlock } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
-import { u8aToHex } from "@polkadot/util";
 import { v2 as compose } from "docker-compose";
 import Docker from "dockerode";
 import * as child_process from "node:child_process";
@@ -26,79 +19,6 @@ import { showContainers } from "./docker";
 import type { BspNetApi } from "./types";
 
 const exec = util.promisify(child_process.exec);
-
-export interface FileSendResponse {
-  owner: string;
-  bucket_id: string;
-  location: string;
-  size: bigint;
-  fingerprint: string;
-}
-
-export const sendLoadFileRpc = async (
-  api: ApiPromise,
-  filePath: string,
-  remotePath: string,
-  userNodeAccountId: string,
-  bucket: H256
-): Promise<FileSendResponse> => {
-  try {
-    // @ts-expect-error - rpc provider not officially exposed
-    const resp = await api._rpcCore.provider.send("storagehubclient_loadFileInStorage", [
-      filePath,
-      remotePath,
-      userNodeAccountId,
-      bucket
-    ]);
-    const { owner, bucket_id, location, file_size, fingerprint } = resp;
-    return {
-      owner: u8aToHex(owner),
-      bucket_id,
-      location: u8aToHex(location),
-      size: BigInt(file_size),
-      fingerprint: u8aToHex(fingerprint)
-    };
-  } catch (e) {
-    console.error("Error sending file to user node:", e);
-    throw new Error("storagehubclient_loadFileInStorage RPC call failed");
-  }
-};
-
-export const getForestRoot = async (api: ApiPromise): Promise<H256> => {
-  try {
-    // TODO: Replace with api.rpc.storagehubclient.getForestRoot() when we autogenerate the types for StorageHub.
-    // @ts-expect-error - rpc provider not officially exposed
-    const resp = await api._rpcCore.provider.send("storagehubclient_getForestRoot");
-    return resp;
-  } catch (e) {
-    console.error("Error getting the forest root from provider node:", e);
-    throw new Error("storagehubclient_getForestRoot RPC call failed");
-  }
-};
-
-export interface FileSaveResponse {
-  owner: string;
-}
-
-export const sendSaveFileRpc = async (
-  api: ApiPromise,
-  fileKey: H256,
-  filePath: string
-): Promise<FileSaveResponse> => {
-  try {
-    // @ts-expect-error - rpc provider not officially exposed
-    const resp = await api._rpcCore.provider.send("storagehubclient_saveFileToDisk", [
-      fileKey,
-      filePath
-    ]);
-    return {
-      owner: u8aToHex(resp.owner)
-    };
-  } catch (e) {
-    console.error("Error saving file to user node:", e);
-    throw new Error("storagehubclient_saveFileToDisk RPC call failed");
-  }
-};
 
 export const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {
   const maxRetries = 60;
