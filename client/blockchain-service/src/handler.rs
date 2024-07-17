@@ -52,7 +52,8 @@ use pallet_file_system_runtime_api::{
     FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
 };
 use pallet_proofs_dealer_runtime_api::{
-    GetChallengePeriodError, GetLastTickProviderSubmittedProofError, ProofsDealerApi,
+    GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+    ProofsDealerApi,
 };
 use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
 
@@ -327,6 +328,86 @@ impl Actor for BlockchainService {
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send challenges: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryForestChallengesFromSeed {
+                    seed,
+                    provider_id,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let challenges = self.client.runtime_api().get_forest_challenges_from_seed(
+                        current_block_hash,
+                        &seed,
+                        &provider_id,
+                    );
+
+                    match callback.send(challenges) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Challenges sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send challenges: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryLastTickProviderSubmittedProof {
+                    provider_id,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let last_tick = self
+                        .client
+                        .runtime_api()
+                        .get_last_tick_provider_submitted_proof(current_block_hash, &provider_id)
+                        .unwrap_or_else(|_| {
+                            Err(GetLastTickProviderSubmittedProofError::InternalApiError)
+                        });
+
+                    match callback.send(last_tick) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Last tick sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send last tick provider submitted proof: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryLastCheckpointChallengeTick { callback } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let last_checkpoint_tick = self
+                        .client
+                        .runtime_api()
+                        .get_last_checkpoint_challenge_tick(current_block_hash);
+
+                    match callback.send(last_checkpoint_tick) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Last checkpoint tick sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send last checkpoint challenge tick: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryLastCheckpointChallenges { tick, callback } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let checkpoint_challenges = self
+                        .client
+                        .runtime_api()
+                        .get_checkpoint_challenges(current_block_hash, tick)
+                        .unwrap_or_else(|_| Err(GetCheckpointChallengesError::InternalApiError));
+
+                    match callback.send(checkpoint_challenges) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Checkpoint challenges sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send checkpoint challenges: {:?}", e);
                         }
                     }
                 }
@@ -894,6 +975,10 @@ impl BlockchainService {
                     }
                     GetLastTickProviderSubmittedProofError::ProviderNeverSubmittedProof => {
                         debug!(target: LOG_TARGET, "Provider [{:?}] does not have an initialised challenge cycle", provider_id);
+                        return false;
+                    }
+                    GetLastTickProviderSubmittedProofError::InternalApiError => {
+                        error!(target: LOG_TARGET, "This should be impossible, we just checked the API error. \nInternal API error while getting last tick Provider [{:?}] submitted a proof for: {:?}", provider_id, e);
                         return false;
                     }
                 },

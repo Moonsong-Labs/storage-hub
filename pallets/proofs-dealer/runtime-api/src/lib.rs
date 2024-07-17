@@ -32,6 +32,7 @@ sp_api::decl_runtime_apis! {
 pub enum GetLastTickProviderSubmittedProofError {
     ProviderNotRegistered,
     ProviderNeverSubmittedProof,
+    InternalApiError,
 }
 
 /// Error type for the `get_checkpoint_challenges` runtime API call.
@@ -39,6 +40,7 @@ pub enum GetLastTickProviderSubmittedProofError {
 pub enum GetCheckpointChallengesError {
     TickGreaterThanLastCheckpointTick,
     NoCheckpointChallengesInTick,
+    InternalApiError,
 }
 
 /// Error type for the `get_challenge_period` runtime API call.
