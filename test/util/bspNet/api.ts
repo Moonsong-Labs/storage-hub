@@ -12,17 +12,21 @@ import * as definitions from "../../node_modules/@storagehub/api-augment/src/int
 //TODO: Maybe make this a resource?
 export const createApiObject = async (uri: string): Promise<BspNetApi> => {
   const types = Object.values(definitions).reduce((res, { types }) => ({ ...res, ...types }), {});
-  const rpcMethods = Object.values(definitions).reduce((res, { rpc }) => ({ ...res, ...rpc }), {});
+  const rpcMethods = Object.entries(definitions).reduce(
+    (res: Record<string, any>, [key, { rpc }]) => {
+      if (rpc) {
+        res[key] = rpc;
+      }
+      return res;
+    },
+    {}
+  );
 
   const baseApi = await ApiPromise.create({
     provider: new WsProvider(uri),
     noInitWarn: true,
-    types: {
-      ...types
-    },
-    rpc: {
-      ...rpcMethods
-    }
+    types,
+    rpc: rpcMethods
   });
 
   return Object.assign(baseApi, {

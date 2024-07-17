@@ -141,19 +141,20 @@ for (const bspNetConfig of bspNetConfigCases) {
         throw new Error("Event doesn't match Type");
       }
 
-      const { fingerprint, size, location } = await user_api.rpc.storagehubclient.loadFileInStorage(
-        source,
-        destination,
-        NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
+      const { fingerprint, file_size, location } =
+        await user_api.rpc.storagehubclient.loadFileInStorage(
+          source,
+          destination,
+          NODE_INFOS.user.AddressId,
+          newBucketEventDataBlob.bucketId
+        );
 
       await user_api.sealBlock(
         user_api.tx.fileSystem.issueStorageRequest(
           newBucketEventDataBlob.bucketId,
           location,
           fingerprint,
-          size,
+          file_size,
           DUMMY_MSP_ID,
           [NODE_INFOS.user.expectedPeerId]
         ),
@@ -177,10 +178,10 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(resBspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
       strictEqual(resBucketId.toString(), newBucketEventDataBlob.bucketId.toString());
       strictEqual(resLoc.toHuman(), destination);
-      strictEqual(resFinger.toString(), fingerprint);
+      strictEqual(resFinger.toString(), fingerprint.toString());
       strictEqual(resMulti.length, 1);
       strictEqual((resMulti[0].toHuman() as string).includes(NODE_INFOS.bsp.expectedPeerId), true);
-      strictEqual(resSize.toBigInt(), size);
+      strictEqual(resSize.toBigInt(), file_size.toBigInt());
 
       await sleep(5000); // wait for the bsp to download the file
       const confirm_pending = await user_api.rpc.author.pendingExtrinsics();
