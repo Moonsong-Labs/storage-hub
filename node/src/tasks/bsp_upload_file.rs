@@ -3,8 +3,8 @@ use std::{fs::create_dir_all, path::Path, str::FromStr, time::Duration};
 use anyhow::anyhow;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use shp_file_key_verifier::consts::H_LENGTH;
-use shp_file_key_verifier::types::ChunkId;
+use shp_constants::H_LENGTH;
+use shp_file_metadata::ChunkId;
 use sp_core::H256;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
@@ -354,6 +354,13 @@ where
                 .map_err(|e| anyhow!("Failed to register new file peer: {:?}", e))?;
         }
 
+        // Also optimistically create file in file storage so we can write uploaded chunks as soon as possible.
+        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+        write_file_storage
+            .insert_file(metadata.file_key::<<T as TrieLayout>::Hash>(), metadata)
+            .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
+        drop(write_file_storage);
+
         // Build extrinsic.
         let call =
             storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
@@ -368,13 +375,6 @@ where
             .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
-
-        // Create file in file storage.
-        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        write_file_storage
-            .insert_file(metadata.file_key::<<T as TrieLayout>::Hash>(), metadata)
-            .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
-        drop(write_file_storage);
 
         Ok(())
     }

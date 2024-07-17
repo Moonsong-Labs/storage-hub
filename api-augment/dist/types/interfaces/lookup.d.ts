@@ -1525,10 +1525,13 @@ declare const _default: {
      * Lookup140: shp_file_key_verifier::types::FileMetadata
      **/
     ShpFileKeyVerifierFileMetadata: {
+        _alias: {
+            size_: string;
+        };
         owner: string;
         bucketId: string;
         location: string;
-        fileSize: string;
+        size_: string;
         fingerprint: string;
     };
     /**

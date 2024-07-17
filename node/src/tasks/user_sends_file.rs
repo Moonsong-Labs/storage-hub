@@ -7,7 +7,7 @@ use shc_common::types::FileMetadata;
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::ForestStorage;
-use shp_file_key_verifier::types::ChunkId;
+use shp_file_metadata::ChunkId;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
 
@@ -69,9 +69,6 @@ where
             event.owner,
             event.location,
         );
-
-        // TODO: FIND A BETTER WORKAROUND FOR THIS
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
         let file_metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),

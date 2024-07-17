@@ -14,7 +14,7 @@ use pallet_file_system_runtime_api::{
     QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
 };
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
-use shp_file_key_verifier::types::ChunkId;
+use shp_file_metadata::ChunkId;
 use shp_traits::{
     MutateProvidersInterface, ProvidersInterface, ReadProvidersInterface, TrieAddMutation,
     TrieRemoveMutation,
@@ -1121,10 +1121,10 @@ where
     ) -> MerkleHash<T> {
         let size: u32 = size.into();
 
-        shp_file_key_verifier::types::FileMetadata::<
-            { shp_file_key_verifier::consts::H_LENGTH },
-            { shp_file_key_verifier::consts::FILE_CHUNK_SIZE },
-            { shp_file_key_verifier::consts::FILE_SIZE_TO_CHALLENGES },
+        shp_file_metadata::FileMetadata::<
+            { shp_constants::H_LENGTH },
+            { shp_constants::FILE_CHUNK_SIZE },
+            { shp_constants::FILE_SIZE_TO_CHALLENGES },
         > {
             owner: owner.encode(),
             bucket_id: bucket_id.as_ref().to_vec(),

@@ -1,6 +1,9 @@
 use codec::Encode;
 use num_bigint::BigUint;
 use rand::Rng;
+use shp_file_metadata::ChunkId;
+use shp_file_metadata::FileMetadata;
+use shp_file_metadata::Fingerprint;
 use shp_traits::AsCompact;
 use shp_traits::CommitmentVerifier;
 use sp_runtime::traits::{BlakeTwo256, Keccak256};
@@ -10,9 +13,6 @@ use sp_trie::{
 };
 use trie_db::{Hasher, Trie, TrieIterator};
 
-use crate::types::FileMetadata;
-use crate::types::Fingerprint;
-use crate::ChunkId;
 use crate::{FileKeyProof, FileKeyVerifier};
 
 /// The hash type of trie node keys
@@ -65,7 +65,7 @@ where
         owner: user_id.to_vec(),
         bucket_id: bucket.to_vec(),
         location: file_path.as_bytes().to_vec(),
-        file_size: file_size,
+        file_size,
         fingerprint: fingerprint
             .as_ref()
             .try_into()
