@@ -3,8 +3,8 @@ use std::{fs::create_dir_all, path::Path, str::FromStr, time::Duration};
 use anyhow::anyhow;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use shp_file_key_verifier::consts::H_LENGTH;
-use shp_file_key_verifier::types::ChunkId;
+use shp_constants::H_LENGTH;
+use shp_file_metadata::ChunkId;
 use sp_core::H256;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
@@ -292,7 +292,7 @@ where
         let metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
             bucket_id: event.bucket_id.as_ref().to_vec(),
-            size: event.size as u64,
+            file_size: event.size as u64,
             fingerprint: event.fingerprint,
             location: event.location.to_vec(),
         };

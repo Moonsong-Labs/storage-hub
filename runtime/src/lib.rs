@@ -9,7 +9,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 mod configs;
 mod weights;
 
-use shp_file_key_verifier::types::ChunkId;
+use shp_file_metadata::ChunkId;
 use smallvec::smallvec;
 use sp_api::impl_runtime_apis;
 use sp_core::H256;

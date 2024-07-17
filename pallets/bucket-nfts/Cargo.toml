@@ -30,8 +30,8 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 
 # Local
+shp-file-metadata = { workspace = true }
 shp-traits = { workspace = true }
-shp-file-key-verifier = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
@@ -57,6 +57,8 @@ runtime-benchmarks = [
 	"pallet-file-system/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
+	"shp-file-metadata/runtime-benchmarks",
+	"shp-traits/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
 std = [
@@ -70,6 +72,7 @@ std = [
 	"pallet-proofs-dealer/std",
 	"pallet-storage-providers/std",
 	"scale-info/std",
+	"shp-file-metadata/std",
 	"shp-traits/std",
 	"sp-core/std",
 	"sp-io/std",
@@ -82,5 +85,7 @@ try-runtime = [
 	"pallet-file-system/try-runtime",
 	"pallet-proofs-dealer/try-runtime",
 	"pallet-storage-providers/try-runtime",
+	"shp-file-metadata/try-runtime",
+	"shp-traits/try-runtime",
 	"sp-runtime/try-runtime",
 ]
