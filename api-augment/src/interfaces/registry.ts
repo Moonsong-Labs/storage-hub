@@ -156,8 +156,8 @@ import type {
   PolkadotPrimitivesV6UpgradeGoAhead,
   PolkadotPrimitivesV6UpgradeRestriction,
   ShpFileKeyVerifierFileKeyProof,
-  ShpFileMetadataFileMetadata,
-  ShpFileMetadataFingerprint,
+  ShpFileKeyVerifierFileMetadata,
+  ShpFileKeyVerifierFingerprint,
   ShpTraitsTrieRemoveMutation,
   SpArithmeticArithmeticError,
   SpConsensusAuraSr25519AppSr25519Public,
@@ -402,8 +402,8 @@ declare module "@polkadot/types/types/registry" {
     PolkadotPrimitivesV6UpgradeGoAhead: PolkadotPrimitivesV6UpgradeGoAhead;
     PolkadotPrimitivesV6UpgradeRestriction: PolkadotPrimitivesV6UpgradeRestriction;
     ShpFileKeyVerifierFileKeyProof: ShpFileKeyVerifierFileKeyProof;
-    ShpFileMetadataFileMetadata: ShpFileMetadataFileMetadata;
-    ShpFileMetadataFingerprint: ShpFileMetadataFingerprint;
+    ShpFileKeyVerifierFileMetadata: ShpFileKeyVerifierFileMetadata;
+    ShpFileKeyVerifierFingerprint: ShpFileKeyVerifierFingerprint;
     ShpTraitsTrieRemoveMutation: ShpTraitsTrieRemoveMutation;
     SpArithmeticArithmeticError: SpArithmeticArithmeticError;
     SpConsensusAuraSr25519AppSr25519Public: SpConsensusAuraSr25519AppSr25519Public;

@@ -67,6 +67,7 @@ import type { FeeDetails, RuntimeDispatchInfoV1 } from "@polkadot/types/interfac
 import type { RpcMethods } from "@polkadot/types/interfaces/rpc";
 import type {
   AccountId,
+  AccountId32,
   BlockNumber,
   H160,
   H256,
@@ -96,6 +97,7 @@ import type {
   SyncState
 } from "@polkadot/types/interfaces/system";
 import type { IExtrinsic, Observable } from "@polkadot/types/types";
+import type { FileMetadata } from "@storagehub/api-augment/interfaces/storagehubclient";
 
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
 
@@ -1017,6 +1019,23 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        **/
       trieMigrationStatus: AugmentedRpc<
         (at?: BlockHash | string | Uint8Array) => Observable<MigrationStatusResult>
+      >;
+    };
+    storagehubclient: {
+      /**
+       * Get the root of the forest trie.
+       **/
+      getForestRoot: AugmentedRpc<() => Observable<H256>>;
+      /**
+       * Load a file in the local storage. This is the first step when uploading a file.
+       **/
+      loadFileInStorage: AugmentedRpc<
+        (
+          file_path: Text | string,
+          location: Text | string,
+          owner: AccountId32 | string | Uint8Array,
+          bucket_id: H256 | string | Uint8Array
+        ) => Observable<FileMetadata>
       >;
     };
     syncstate: {

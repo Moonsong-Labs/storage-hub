@@ -1584,19 +1584,19 @@ declare module '@polkadot/types/lookup' {
     }
     /** @name ShpFileKeyVerifierFileKeyProof (139) */
     interface ShpFileKeyVerifierFileKeyProof extends Struct {
-        readonly fileMetadata: ShpFileMetadataFileMetadata;
+        readonly fileMetadata: ShpFileKeyVerifierFileMetadata;
         readonly proof: SpTrieStorageProofCompactProof;
     }
-    /** @name ShpFileMetadataFileMetadata (140) */
-    interface ShpFileMetadataFileMetadata extends Struct {
+    /** @name ShpFileKeyVerifierFileMetadata (140) */
+    interface ShpFileKeyVerifierFileMetadata extends Struct {
         readonly owner: Bytes;
         readonly bucketId: Bytes;
         readonly location: Bytes;
         readonly size_: Compact<u64>;
-        readonly fingerprint: ShpFileMetadataFingerprint;
+        readonly fingerprint: ShpFileKeyVerifierFingerprint;
     }
-    /** @name ShpFileMetadataFingerprint (141) */
-    interface ShpFileMetadataFingerprint extends U8aFixed {
+    /** @name ShpFileKeyVerifierFingerprint (141) */
+    interface ShpFileKeyVerifierFingerprint extends U8aFixed {
     }
     /** @name ShpTraitsTrieRemoveMutation (147) */
     type ShpTraitsTrieRemoveMutation = Null;
