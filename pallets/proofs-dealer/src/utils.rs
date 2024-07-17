@@ -807,4 +807,12 @@ where
     pub fn get_checkpoint_challenge_period() -> BlockNumberFor<T> {
         CheckpointChallengePeriodFor::<T>::get()
     }
+
+    pub fn get_challenges_from_seed(
+        seed: &RandomnessOutputFor<T>,
+        provider_id: &ProviderIdFor<T>,
+        count: u32,
+    ) -> Vec<KeyFor<T>> {
+        Self::generate_challenges_from_seed(*seed, provider_id, count)
+    }
 }
