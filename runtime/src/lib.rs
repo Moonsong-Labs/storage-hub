@@ -561,6 +561,10 @@ impl_runtime_apis! {
         fn get_challenges_from_seed(seed: &RandomnessOutputFor<Runtime>, provider_id: &ProviderIdFor<Runtime>, count: u32) -> Vec<KeyFor<Runtime>> {
             ProofsDealer::get_challenges_from_seed(seed, provider_id, count)
         }
+
+        fn get_forest_challenges_from_seed(seed: &RandomnessOutputFor<Runtime>, provider_id: &ProviderIdFor<Runtime>) -> Vec<KeyFor<Runtime>> {
+            ProofsDealer::get_forest_challenges_from_seed(seed, provider_id)
+        }
     }
 }
 

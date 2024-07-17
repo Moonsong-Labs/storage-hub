@@ -815,4 +815,15 @@ where
     ) -> Vec<KeyFor<T>> {
         Self::generate_challenges_from_seed(*seed, provider_id, count)
     }
+
+    pub fn get_forest_challenges_from_seed(
+        seed: &RandomnessOutputFor<T>,
+        provider_id: &ProviderIdFor<T>,
+    ) -> Vec<KeyFor<T>> {
+        Self::generate_challenges_from_seed(
+            *seed,
+            provider_id,
+            RandomChallengesPerBlockFor::<T>::get(),
+        )
+    }
 }
