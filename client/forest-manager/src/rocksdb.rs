@@ -411,7 +411,7 @@ mod tests {
             owner,
             bucket_id,
             location,
-            size,
+            file_size: size,
             fingerprint: Fingerprint::default(),
         }
     }

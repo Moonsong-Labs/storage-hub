@@ -7,7 +7,7 @@ use shc_common::types::FileMetadata;
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::ForestStorage;
-use shp_file_key_verifier::types::ChunkId;
+use shp_file_metadata::ChunkId;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
 
@@ -73,7 +73,7 @@ where
         let file_metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),
             bucket_id: event.bucket_id.as_ref().to_vec(),
-            size: event.size.into(),
+            file_size: event.size.into(),
             fingerprint: event.fingerprint,
             location: event.location.into_inner(),
         };

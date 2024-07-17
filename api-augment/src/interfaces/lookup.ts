@@ -1534,13 +1534,13 @@ export default {
    * Lookup139: shp_file_key_verifier::types::FileKeyProof
    **/
   ShpFileKeyVerifierFileKeyProof: {
-    fileMetadata: "ShpFileKeyVerifierFileMetadata",
+    fileMetadata: "ShpFileMetadataFileMetadata",
     proof: "SpTrieStorageProofCompactProof"
   },
   /**
-   * Lookup140: shp_file_key_verifier::types::FileMetadata
+   * Lookup140: shp_file_metadata::FileMetadata
    **/
-  ShpFileKeyVerifierFileMetadata: {
+  ShpFileMetadataFileMetadata: {
     _alias: {
       size_: "size"
     },
@@ -1548,12 +1548,12 @@ export default {
     bucketId: "Bytes",
     location: "Bytes",
     size_: "Compact<u64>",
-    fingerprint: "ShpFileKeyVerifierFingerprint"
+    fingerprint: "ShpFileMetadataFingerprint"
   },
   /**
-   * Lookup141: shp_file_key_verifier::types::Fingerprint
+   * Lookup141: shp_file_metadata::Fingerprint
    **/
-  ShpFileKeyVerifierFingerprint: "[u8;32]",
+  ShpFileMetadataFingerprint: "[u8;32]",
   /**
    * Lookup147: shp_traits::TrieRemoveMutation
    **/

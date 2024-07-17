@@ -6,7 +6,7 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::CollectionConfig;
 use scale_info::TypeInfo;
-use shp_file_key_verifier::types::FileMetadata;
+use shp_file_metadata::FileMetadata;
 use shp_traits::ProvidersInterface;
 
 use crate::Config;
@@ -66,15 +66,15 @@ impl<T: Config> StorageRequestMetadata<T> {
     pub fn to_file_metadata(
         self,
     ) -> FileMetadata<
-        { shp_file_key_verifier::consts::H_LENGTH },
-        { shp_file_key_verifier::consts::FILE_CHUNK_SIZE },
-        { shp_file_key_verifier::consts::FILE_SIZE_TO_CHALLENGES },
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
     > {
         FileMetadata {
             owner: self.owner.encode(),
             bucket_id: self.bucket_id.as_ref().to_vec(),
             location: self.location.to_vec(),
-            size: self.size.into() as u64,
+            file_size: self.size.into() as u64,
             fingerprint: self.fingerprint.as_ref().into(),
         }
     }

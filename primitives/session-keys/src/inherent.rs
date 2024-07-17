@@ -1,6 +1,11 @@
-use codec::{Decode, Encode};
-use sp_inherents::{Error, InherentData, InherentIdentifier, IsFatalError};
+use codec::Encode;
+use sp_inherents::{InherentIdentifier, IsFatalError};
 use sp_runtime::RuntimeString;
+
+#[cfg(feature = "std")]
+use codec::Decode;
+#[cfg(feature = "std")]
+use sp_inherents::{Error, InherentData};
 
 #[derive(Encode)]
 #[cfg_attr(feature = "std", derive(Debug, Decode))]
