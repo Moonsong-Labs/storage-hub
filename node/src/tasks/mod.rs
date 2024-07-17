@@ -3,8 +3,8 @@
 
 pub mod bsp_submit_proof;
 pub mod bsp_upload_file;
-pub mod bsp_volunteer_mock;
-pub mod sp_react_to_event_mock;
+pub mod mock_bsp_volunteer;
+pub mod mock_sp_react_to_event;
 pub mod user_sends_file;
 
 use sc_tracing::tracing::info;
