@@ -97,7 +97,10 @@ import type {
   SyncState
 } from "@polkadot/types/interfaces/system";
 import type { IExtrinsic, Observable } from "@polkadot/types/types";
-import type { FileMetadata } from "@storagehub/api-augment/interfaces/storagehubclient";
+import type {
+  FileMetadata,
+  SaveFileToDisk
+} from "@storagehub/api-augment/interfaces/storagehubclient";
 
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
 
@@ -1036,6 +1039,15 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           owner: AccountId32 | string | Uint8Array,
           bucket_id: H256 | string | Uint8Array
         ) => Observable<FileMetadata>
+      >;
+      /**
+       * Save a file from the local storage to the disk.
+       **/
+      saveFileToDisk: AugmentedRpc<
+        (
+          file_key: H256 | string | Uint8Array,
+          file_path: Text | string
+        ) => Observable<SaveFileToDisk>
       >;
     };
     syncstate: {

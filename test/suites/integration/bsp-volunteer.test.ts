@@ -15,6 +15,7 @@ import {
   closeBspNet,
   sleep
 } from "../../util";
+import { assert } from "node:console";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
@@ -210,7 +211,8 @@ for (const bspNetConfig of bspNetConfigCases) {
       // TODO: check the file key. We need an RPC endpoint to compute the file key.
 
       await it("downloaded file passed integrity checks", async () => {
-        await bsp_api.saveFile(bspConfirmRes_fileKey, "/storage/test/whatsup.jpg");
+        const saveFileToDisk = await bsp_api.rpc.storagehubclient.saveFileToDisk(bspConfirmRes_fileKey, "/storage/test/whatsup.jpg");
+        assert(saveFileToDisk.isSuccess);
         const sha = await checkFileChecksum("test/whatsup.jpg");
         strictEqual(sha, TEST_ARTEFACTS["res/whatsup.jpg"].checksum);
       });
