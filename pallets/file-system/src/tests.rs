@@ -2025,6 +2025,11 @@ fn bsp_stop_storing_not_volunteered_success() {
             fingerprint,
         );
 
+        // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
+        assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
+            &bsp_id, size,
+        ));
+
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
             bsp_signed.clone(),
@@ -2116,6 +2121,11 @@ fn bsp_stop_storing_no_storage_request_success() {
             size,
             fingerprint,
         );
+
+		// Increase the data used by the registered bsp, to simulate that it is indeed storing the file
+        assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
+            &bsp_id, size,
+        ));
 
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
