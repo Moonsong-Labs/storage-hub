@@ -855,6 +855,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       StakeCouldNotBeConverted: AugmentedError<ApiType>;
       /**
+       * The limit of Providers that can submit a proof in a single block has been reached.
+       **/
+      TooManyValidProofSubmitters: AugmentedError<ApiType>;
+      /**
        * Provider is submitting a proof when they have a zero root.
        * Providers with zero roots are not providing any service, so they should not be
        * submitting proofs.

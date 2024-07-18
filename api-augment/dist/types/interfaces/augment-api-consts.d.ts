@@ -258,6 +258,12 @@ declare module '@polkadot/api-base/types/consts' {
              **/
             maxCustomChallengesPerBlock: u32 & AugmentedConst<ApiType>;
             /**
+             * The maximum amount of Providers that can submit a proof in a single block.
+             * This is not an arbitrary limit but making the limit based on the block weight explicit,
+             * to be able to bound the storage that holds the submitters.
+             **/
+            maxSubmittersPerTick: u32 & AugmentedConst<ApiType>;
+            /**
              * The number of random challenges that are generated per block, using the random seed
              * generated for that block.
              **/
@@ -268,6 +274,12 @@ declare module '@polkadot/api-base/types/consts' {
              * their stake. The period is calculated as `stake / StakeToBlockPeriod`, saturating at 1.
              **/
             stakeToChallengePeriod: u128 & AugmentedConst<ApiType>;
+            /**
+             * The target number of ticks for which to store the submitters that submitted valid proofs in them,
+             * stored in the `ValidProofSubmittersLastTicks` StorageMap. That storage will be trimmed down to this number
+             * of ticks in the `on_idle` hook of this pallet, to avoid bloating the state.
+             **/
+            targetTicksStorageOfSubmitters: u32 & AugmentedConst<ApiType>;
             /**
              * The Treasury AccountId.
              * The account to which:

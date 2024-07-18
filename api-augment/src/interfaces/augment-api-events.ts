@@ -1062,13 +1062,13 @@ declare module "@polkadot/api-base/types/events" {
         { userAccount: AccountId32; providerId: H256; newRate: u128 }
       >;
       /**
-       * Event emitted when a payment stream's last chargeable block is updated. Provides information about the User and Provider of the stream
-       * and the block number of the last chargeable block.
+       * Event emitted when a Provider's last chargeable block and price index are updated. Provides information about the Provider of the stream,
+       * the block number of the last chargeable block and the price index at that block.
        **/
-      LastChargeableBlockUpdated: AugmentedEvent<
+      LastChargeableInfoUpdated: AugmentedEvent<
         ApiType,
-        [userAccount: AccountId32, providerId: H256, lastChargeableBlock: u32],
-        { userAccount: AccountId32; providerId: H256; lastChargeableBlock: u32 }
+        [providerId: H256, lastChargeableBlock: u32, lastChargeablePriceIndex: u128],
+        { providerId: H256; lastChargeableBlock: u32; lastChargeablePriceIndex: u128 }
       >;
       /**
        * Event emitted when a payment is charged. Provides information about the user that was charged,
