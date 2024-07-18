@@ -307,7 +307,19 @@ where
             Some(()),
         );
 
-        // TODO: Register this block as the last block that this provider can charge for in the payment stream.
+        // Add this Provider to the `ValidProofSubmittersLastTicks` StorageMap, with the current tick number.
+        ValidProofSubmittersLastTicks::<T>::mutate(ChallengesTicker::<T>::get(), |submitters| {
+            // If there are already submitters for this tick, just insert the new submitter.
+            if let Some(submitters) = submitters {
+                submitters.insert(*submitter);
+            } else {
+                // If there are no submitters for this tick, create a new set and insert the submitter.
+                let mut submitters: BoundedBTreeSet<ProviderIdFor<T>, MaxSubmittersPerTickFor<T>> =
+                    BoundedBTreeSet::new();
+                submitters.insert(*submitter);
+            }
+            submitters
+        });
 
         Ok(())
     }
