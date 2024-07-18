@@ -308,18 +308,34 @@ where
         );
 
         // Add this Provider to the `ValidProofSubmittersLastTicks` StorageMap, with the current tick number.
-        ValidProofSubmittersLastTicks::<T>::mutate(ChallengesTicker::<T>::get(), |submitters| {
-            // If there are already submitters for this tick, just insert the new submitter.
-            if let Some(submitters) = submitters {
-                submitters.insert(*submitter);
-            } else {
-                // If there are no submitters for this tick, create a new set and insert the submitter.
-                let mut submitters: BoundedBTreeSet<ProviderIdFor<T>, MaxSubmittersPerTickFor<T>> =
-                    BoundedBTreeSet::new();
-                submitters.insert(*submitter);
+        let current_tick_valid_submitters =
+            ValidProofSubmittersLastTicks::<T>::take(ChallengesTicker::<T>::get());
+        match current_tick_valid_submitters {
+            // If the set already exists and has valid submitters, we just insert the new submitter.
+            Some(mut valid_submitters) => {
+                let already_existed = valid_submitters
+                    .try_insert(*submitter).expect("The set should never be full as the limit we set should be greater than the implicit limit given by max block weight.");
+                // We only update storage if the Provider ID wasn't yet in the set to avoid unnecessary writes.
+                if !already_existed {
+                    ValidProofSubmittersLastTicks::<T>::insert(
+                        ChallengesTicker::<T>::get(),
+                        valid_submitters,
+                    );
+                }
             }
-            submitters
-        });
+            // If the set doesn't exist, we create it and insert the submitter.
+            None => {
+                let mut new_valid_submitters =
+                    BoundedBTreeSet::<ProviderIdFor<T>, MaxSubmittersPerTickFor<T>>::new();
+                new_valid_submitters.try_insert(*submitter).expect(
+                    "The set has just been created, it's empty and as such won't be full. qed",
+                );
+                ValidProofSubmittersLastTicks::<T>::insert(
+                    ChallengesTicker::<T>::get(),
+                    new_valid_submitters,
+                );
+            }
+        }
 
         Ok(())
     }

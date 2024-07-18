@@ -427,6 +427,9 @@ pub mod pallet {
 
         /// Failed to apply delta to the forest proof partial trie.
         FailedToApplyDelta,
+
+        /// The limit of Providers that can submit a proof in a single block has been reached.
+        TooManyValidProofSubmitters,
     }
 
     #[pallet::call]
