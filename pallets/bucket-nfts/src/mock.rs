@@ -5,10 +5,8 @@ use frame_support::{
     weights::constants::RocksDbWeight,
 };
 use frame_system as system;
+use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
-use shp_traits::{
-    ProofsDealerInterface, SubscribeProvidersInterface, TrieMutation, TrieRemoveMutation,
-};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
@@ -18,6 +16,11 @@ use sp_runtime::{
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
 use system::pallet_prelude::BlockNumberFor;
+
+use shp_file_metadata::ChunkId;
+use shp_traits::{
+    ProofsDealerInterface, SubscribeProvidersInterface, TrieMutation, TrieRemoveMutation,
+};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
@@ -128,6 +131,7 @@ impl ProofsDealerInterface for MockProofsDealer {
     type ForestProof = u32;
     type KeyProof = u32;
     type MerkleHash = H256;
+    type RandomnessOutput = H256;
     type MerkleHashing = BlakeTwo256;
 
     fn challenge(_key_challenged: &Self::MerkleHash) -> frame_support::dispatch::DispatchResult {
@@ -157,6 +161,14 @@ impl ProofsDealerInterface for MockProofsDealer {
         Ok(BTreeSet::new())
     }
 
+    fn generate_challenges_from_seed(
+        _seed: Self::RandomnessOutput,
+        _provider_id: &Self::ProviderId,
+        _count: u32,
+    ) -> Vec<Self::MerkleHash> {
+        Vec::new()
+    }
+
     fn apply_delta(
         _commitment: &Self::MerkleHash,
         _mutations: &[(Self::MerkleHash, TrieMutation)],
@@ -181,6 +193,8 @@ impl pallet_file_system::Config for Test {
     type ThresholdType = ThresholdType;
     type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
     type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
+    type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
+    type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
@@ -347,5 +361,33 @@ pub struct BlockNumberToThresholdTypeConverter;
 impl Convert<BlockNumberFor<Test>, ThresholdType> for BlockNumberToThresholdTypeConverter {
     fn convert(block_number: BlockNumberFor<Test>) -> ThresholdType {
         FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
+    }
+}
+
+// Converter from the MerkleHash (H256) type to the RandomnessOutput type.
+pub struct MerkleHashToRandomnessOutputConverter;
+
+impl Convert<H256, H256> for MerkleHashToRandomnessOutputConverter {
+    fn convert(hash: H256) -> H256 {
+        hash
+    }
+}
+
+// Converter from the ChunkId type to the MerkleHash (H256) type.
+pub struct ChunkIdToMerkleHashConverter;
+
+impl Convert<ChunkId, H256> for ChunkIdToMerkleHashConverter {
+    fn convert(chunk_id: ChunkId) -> H256 {
+        let chunk_id_biguint = BigUint::from(chunk_id.as_u64());
+        let mut bytes = chunk_id_biguint.to_bytes_be();
+
+        // Ensure the byte slice is exactly 32 bytes long by padding with leading zeros
+        if bytes.len() < 32 {
+            let mut padded_bytes = vec![0u8; 32 - bytes.len()];
+            padded_bytes.extend(bytes);
+            bytes = padded_bytes;
+        }
+
+        H256::from_slice(&bytes)
     }
 }

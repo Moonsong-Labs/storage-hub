@@ -16,6 +16,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { workspace = true }
+num-bigint = { workspace = true }
 scale-info = { workspace = true }
 
 # Substrate
@@ -32,15 +33,15 @@ sp-trie = { workspace = true }
 # Local
 pallet-file-system-runtime-api = { workspace = true }
 
+shp-constants = { workspace = true }
+shp-file-metadata = { workspace = true }
 shp-traits = { workspace = true }
-shp-file-key-verifier = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
 pallet-bucket-nfts = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
-shp-forest-verifier = { workspace = true }
 
 # Substrate
 sp-io = { workspace = true }
@@ -62,7 +63,8 @@ std = [
 	"pallet-proofs-dealer/std",
 	"pallet-storage-providers/std",
 	"scale-info/std",
-	"shp-file-key-verifier/std",
+	"shp-constants/std",
+	"shp-file-metadata/std",
 	"shp-traits/std",
 	"sp-core/std",
 	"sp-io/std",
@@ -76,6 +78,8 @@ runtime-benchmarks = [
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
 	"pallet-bucket-nfts/runtime-benchmarks",
+	"shp-constants/runtime-benchmarks",
+	"shp-file-metadata/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
 try-runtime = [
@@ -84,5 +88,7 @@ try-runtime = [
 	"pallet-proofs-dealer/try-runtime",
 	"pallet-storage-providers/try-runtime",
 	"pallet-bucket-nfts/try-runtime",
+	"shp-constants/try-runtime",
+	"shp-file-metadata/try-runtime",
 	"sp-runtime/try-runtime",
 ]

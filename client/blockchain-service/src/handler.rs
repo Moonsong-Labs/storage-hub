@@ -36,7 +36,7 @@ use sc_tracing::tracing::{error, info};
 use serde_json::Number;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::Fingerprint;
-use shp_file_key_verifier::types::FileKey;
+use shp_file_metadata::FileKey;
 use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::{Keystore, KeystorePtr};
@@ -48,7 +48,9 @@ use sp_runtime::{
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
 
-use pallet_file_system_runtime_api::{FileSystemApi, QueryFileEarliestVolunteerBlockError};
+use pallet_file_system_runtime_api::{
+    FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
+};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetLastTickProviderSubmittedProofError, ProofsDealerApi,
 };
@@ -57,8 +59,8 @@ use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
 use crate::{
     commands::BlockchainServiceCommand,
     events::{
-        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, NewChallengeSeed,
-        NewStorageRequest,
+        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmedStoring,
+        NewChallengeSeed, NewStorageRequest,
     },
     transaction::SubmittedTransaction,
     types::{EventsVec, Extrinsic},
@@ -270,6 +272,34 @@ impl Actor for BlockchainService {
                     match callback.send(pub_key) {
                         Ok(_) => {
                             trace!(target: LOG_TARGET, "Node's public key sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryBspConfirmChunksToProveForFile {
+                    bsp_id,
+                    file_key,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let chunks_to_prove = self
+                        .client
+                        .runtime_api()
+                        .query_bsp_confirm_chunks_to_prove_for_file(
+                            current_block_hash,
+                            bsp_id.into(),
+                            file_key,
+                        )
+                        .unwrap_or_else(|_| {
+                            Err(QueryBspConfirmChunksToProveForFileError::InternalError)
+                        });
+
+                    match callback.send(chunks_to_prove) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Chunks to prove file sent successfully");
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
@@ -536,6 +566,27 @@ impl BlockchainService {
                                 owner,
                                 size,
                             })
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::BspConfirmedStoring {
+                                who,
+                                bsp_id,
+                                file_key,
+                                new_root,
+                            },
+                            // Filter the events by the BSP id.
+                        ) => {
+                            // TODO: Ideally we would be filtering by BSP ID here, but since we don't have a
+                            // TODO: way to properly initialise the BSP ID yet, we are just going to filter by the
+                            // TODO: caller's public key.
+                            if who == AccountId32::from(Self::caller_pub_key(self.keystore.clone()))
+                            {
+                                self.emit(BspConfirmedStoring {
+                                    bsp_id,
+                                    file_key: FileKey::from(file_key.as_ref()),
+                                    new_root,
+                                })
+                            }
                         }
                         // Ignore all other events.
                         _ => {}

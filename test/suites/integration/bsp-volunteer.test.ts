@@ -1,5 +1,5 @@
 import "@storagehub/api-augment";
-import { strictEqual } from "node:assert";
+import { strictEqual, notEqual } from "node:assert";
 import { after, before, describe, it } from "node:test";
 import {
   DUMMY_MSP_ID,
@@ -16,7 +16,6 @@ import {
   closeBspNet,
   sleep
 } from "../../util";
-import { hexToString } from "@polkadot/util";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
@@ -64,16 +63,17 @@ for (const bspNetConfig of bspNetConfigCases) {
         throw new Error("Event doesn't match Type");
       }
 
-      const { fingerprint, size, location } = await user_api.loadFile(
-        source,
-        destination,
-        NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
+      const { location, fingerprint, file_size } =
+        await user_api.rpc.storagehubclient.loadFileInStorage(
+          source,
+          destination,
+          NODE_INFOS.user.AddressId,
+          newBucketEventDataBlob.bucketId
+        );
 
-      strictEqual(hexToString(location), destination);
-      strictEqual(fingerprint, TEST_ARTEFACTS[source].fingerprint);
-      strictEqual(size, TEST_ARTEFACTS[source].size);
+      strictEqual(location.toHuman(), destination);
+      strictEqual(fingerprint.toString(), TEST_ARTEFACTS[source].fingerprint);
+      strictEqual(file_size.toBigInt(), TEST_ARTEFACTS[source].size);
     });
 
     it("issueStorageRequest sent correctly", async () => {
@@ -127,7 +127,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       const destination = "test/whatsup.jpg";
       const bucketName = "nothingmuch-2";
 
-      const initial_bsp_forest_root = await bsp_api.getForestRoot();
+      const initial_bsp_forest_root = await bsp_api.rpc.storagehubclient.getForestRoot();
       strictEqual(
         initial_bsp_forest_root.toString(),
         "0x03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314"
@@ -141,19 +141,20 @@ for (const bspNetConfig of bspNetConfigCases) {
         throw new Error("Event doesn't match Type");
       }
 
-      const { fingerprint, size, location } = await user_api.loadFile(
-        source,
-        destination,
-        NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
+      const { fingerprint, file_size, location } =
+        await user_api.rpc.storagehubclient.loadFileInStorage(
+          source,
+          destination,
+          NODE_INFOS.user.AddressId,
+          newBucketEventDataBlob.bucketId
+        );
 
       await user_api.sealBlock(
         user_api.tx.fileSystem.issueStorageRequest(
           newBucketEventDataBlob.bucketId,
           location,
           fingerprint,
-          size,
+          file_size,
           DUMMY_MSP_ID,
           [NODE_INFOS.user.expectedPeerId]
         ),
@@ -161,8 +162,12 @@ for (const bspNetConfig of bspNetConfigCases) {
       );
 
       await sleep(500); // wait for the bsp to volunteer
-      const pending = await user_api.rpc.author.pendingExtrinsics();
-      strictEqual(pending.length, 1, "There should be one pending extrinsic from BSP");
+      const volunteer_pending = await user_api.rpc.author.pendingExtrinsics();
+      strictEqual(
+        volunteer_pending.length,
+        1,
+        "There should be one pending extrinsic from BSP (volunteer)"
+      );
 
       await user_api.sealBlock();
       const [resBspId, resBucketId, resLoc, resFinger, resMulti, _, resSize] = fetchEventData(
@@ -173,21 +178,42 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(resBspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
       strictEqual(resBucketId.toString(), newBucketEventDataBlob.bucketId.toString());
       strictEqual(resLoc.toHuman(), destination);
-      strictEqual(resFinger.toString(), fingerprint);
+      strictEqual(resFinger.toString(), fingerprint.toString());
       strictEqual(resMulti.length, 1);
       strictEqual((resMulti[0].toHuman() as string).includes(NODE_INFOS.bsp.expectedPeerId), true);
-      strictEqual(resSize.toBigInt(), size);
+      strictEqual(resSize.toBigInt(), file_size.toBigInt());
+
+      await sleep(5000); // wait for the bsp to download the file
+      const confirm_pending = await user_api.rpc.author.pendingExtrinsics();
+      strictEqual(
+        confirm_pending.length,
+        1,
+        "There should be one pending extrinsic from BSP (confirm store)"
+      );
+
+      await user_api.sealBlock();
+      const [
+        _bspConfirmRes_who,
+        bspConfirmRes_bspId,
+        _bspConfirmRes_fileKey,
+        bspConfirmRes_newRoot
+      ] = fetchEventData(
+        user_api.events.fileSystem.BspConfirmedStoring,
+        await user_api.query.system.events()
+      );
+
+      strictEqual(bspConfirmRes_bspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
+
+      await sleep(1000); // wait for the bsp to process the BspConfirmedStoring event
+      const bsp_forest_root_after_confirm = await bsp_api.rpc.storagehubclient.getForestRoot();
+      strictEqual(bsp_forest_root_after_confirm.toString(), bspConfirmRes_newRoot.toString());
+      notEqual(bsp_forest_root_after_confirm.toString(), initial_bsp_forest_root.toString());
+      // TODO: check the file key. We need an RPC endpoint to compute the file key.
 
       await it("downloaded file passed integrity checks", async () => {
         await checkBspForFile("test/whatsup.jpg");
         const sha = await checkFileChecksum("test/whatsup.jpg");
         strictEqual(sha, TEST_ARTEFACTS["res/whatsup.jpg"].checksum);
-
-        const bsp_forest_root_after_confirm = await bsp_api.getForestRoot();
-        strictEqual(
-          bsp_forest_root_after_confirm.toString(),
-          "0x13523a10e123eb456ac5b9be431bec7eca4f7d218e3336aea175771a747978a8"
-        );
       });
     });
   });

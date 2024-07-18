@@ -1899,6 +1899,7 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isBspConfirmedStoring: boolean;
     readonly asBspConfirmedStoring: {
+      readonly who: AccountId32;
       readonly bspId: H256;
       readonly fileKey: H256;
       readonly newRoot: H256;

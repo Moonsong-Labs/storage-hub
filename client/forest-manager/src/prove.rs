@@ -1,4 +1,3 @@
-use hash_db::Hasher;
 use shc_common::types::{HasherOutT, Leaf, Proven};
 use trie_db::{TrieIterator, TrieLayout};
 
@@ -29,10 +28,10 @@ use crate::{
 /// or when deserialization of a leaf's value fails.
 pub(crate) fn prove<T: TrieLayout>(
     trie: &trie_db::TrieDB<'_, '_, T>,
-    challenged_file_key: &<T::Hash as Hasher>::Out,
+    challenged_file_key: &HasherOutT<T>,
 ) -> Result<Proven<HasherOutT<T>, ()>, ErrorT<T>>
 where
-    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     // Create an iterator over the leaf nodes.
     let mut iter = trie
@@ -76,7 +75,7 @@ where
             Ok(Proven::new_neighbour_keys(Some(leaf), None)
                 .map_err(|_| ForestStorageError::FailedToConstructProvenLeaves)?)
         }
-        _ => Err(ForestStorageError::InvalidProvingScenario.into()),
+        _ => Ok(Proven::Empty),
     }
 }
 

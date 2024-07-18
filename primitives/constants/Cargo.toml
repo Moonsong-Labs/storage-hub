@@ -1,6 +1,6 @@
 [package]
-name = "pallet-file-system-runtime-api"
-description = "Crate exposing StorageHub protocol related helper runtime API calls."
+name = "shp-constants"
+description = "A collection of constants used in StorageHub's runtime."
 version = "0.1.0"
 homepage = { workspace = true }
 license = { workspace = true }
@@ -15,14 +15,19 @@ workspace = true
 targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
-codec = { workspace = true, features = ["derive"] }
-scale-info = { workspace = true }
-sp-api = { workspace = true }
+# Substrate
+sp-core = { workspace = true }
 sp-runtime = { workspace = true }
-
-# Local
-shp-file-key-verifier = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["codec/std", "sp-api/std", "sp-runtime/std"]
+runtime-benchmarks = [
+    "sp-runtime/runtime-benchmarks",
+]
+std = [
+    "sp-core/std",
+    "sp-runtime/std",
+]
+try-runtime = [
+    "sp-runtime/try-runtime",
+]

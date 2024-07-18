@@ -4,7 +4,6 @@ use sp_trie::{recorder::Recorder, MemoryDB, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::{Trie, TrieDBMutBuilder};
 
 use shc_common::types::ForestProof;
-use shc_common::types::HashT;
 
 use crate::{
     error::{ErrorT, ForestStorageError},
@@ -19,7 +18,7 @@ pub struct InMemoryForestStorage<T: TrieLayout + 'static> {
 
 impl<T: TrieLayout> InMemoryForestStorage<T> {
     pub fn new() -> Self {
-        let (memdb, root) = MemoryDB::<HashT<T>>::default_with_root();
+        let (memdb, root) = MemoryDB::default_with_root();
 
         Self { root, memdb }
     }

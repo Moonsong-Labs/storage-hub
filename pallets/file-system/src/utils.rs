@@ -3,16 +3,21 @@ use frame_support::{
     ensure, pallet_prelude::DispatchResult, traits::nonfungibles_v2::Create, traits::Get,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
+use num_bigint::BigUint;
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
 
-use pallet_file_system_runtime_api::QueryFileEarliestVolunteerBlockError;
+use pallet_file_system_runtime_api::{
+    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
+};
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
+use shp_file_metadata::ChunkId;
 use shp_traits::{
-    MutateProvidersInterface, ReadProvidersInterface, TrieAddMutation, TrieRemoveMutation,
+    MutateProvidersInterface, ProvidersInterface, ReadProvidersInterface, TrieAddMutation,
+    TrieRemoveMutation,
 };
 
 use crate::types::{BucketNameFor, ExpiredItems};
@@ -124,6 +129,63 @@ where
             .saturating_add(T::ThresholdTypeToBlockNumber::convert(blocks_to_wait));
 
         Ok(volunteer_block_number)
+    }
+
+    pub fn query_bsp_confirm_chunks_to_prove_for_file(
+        bsp_id: ProviderIdFor<T>,
+        file_key: MerkleHash<T>,
+    ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
+        // Get the storage request metadata.
+        let storage_request_metadata = match <StorageRequests<T>>::get(&file_key) {
+            Some(storage_request) => storage_request,
+            None => {
+                return Err(QueryBspConfirmChunksToProveForFileError::StorageRequestNotFound);
+            }
+        };
+
+        // Generate the list of chunks to prove.
+        let challenges =
+            Self::generate_challenges_on_bsp_confirm(bsp_id, file_key, &storage_request_metadata);
+
+        let chunks = storage_request_metadata.to_file_metadata().chunks_count();
+
+        let chunks_to_prove = challenges
+            .iter()
+            .map(|challenge| {
+                let challenged_chunk = BigUint::from_bytes_be(challenge.as_ref()) % chunks;
+                let challenged_chunk: ChunkId = ChunkId::new(
+                    challenged_chunk
+                        .try_into()
+                        .map_err(|_| QueryBspConfirmChunksToProveForFileError::InternalError)?,
+                );
+
+                Ok(challenged_chunk)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(chunks_to_prove)
+    }
+
+    fn generate_challenges_on_bsp_confirm(
+        bsp_id: ProviderIdFor<T>,
+        file_key: MerkleHash<T>,
+        storage_request_metadata: &StorageRequestMetadata<T>,
+    ) -> Vec<<<T as pallet::Config>::Providers as ProvidersInterface>::MerkleHash> {
+        let file_metadata = storage_request_metadata.clone().to_file_metadata();
+        let chunks_to_check = file_metadata.chunks_to_check() as u32;
+
+        let mut challenges =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::generate_challenges_from_seed(
+                T::MerkleHashToRandomnessOutput::convert(file_key),
+                &bsp_id,
+                chunks_to_check - 1,
+            );
+
+        let last_chunk_id = file_metadata.last_chunk_id();
+
+        challenges.push(T::ChunkIdToMerkleHash::convert(last_chunk_id));
+
+        challenges
     }
 
     /// Create a bucket for an owner (user) under a given MSP account.
@@ -460,11 +522,11 @@ where
         );
 
         // Check that the storage request exists.
-        let mut file_metadata =
+        let mut storage_request_metadata =
             <StorageRequests<T>>::get(&file_key).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         expect_or_err!(
-            file_metadata.bsps_confirmed.into() < file_metadata.bsps_required.into(),
+            storage_request_metadata.bsps_confirmed < storage_request_metadata.bsps_required,
             "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
             Error::<T>::StorageRequestBspsRequiredFulfilled,
             bool
@@ -487,19 +549,19 @@ where
 
         // Check that the number of confirmed bsps is less than the required bsps and increment it.
         expect_or_err!(
-            file_metadata.bsps_confirmed.into() < file_metadata.bsps_required.into(),
+            storage_request_metadata.bsps_confirmed < storage_request_metadata.bsps_required,
             "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
             Error::<T>::StorageRequestBspsRequiredFulfilled,
             bool
         );
 
         // Increment the number of bsps confirmed.
-        match file_metadata
+        match storage_request_metadata
             .bsps_confirmed
             .checked_add(&T::StorageRequestBspsRequiredType::one())
         {
             Some(inc_bsps_confirmed) => {
-                file_metadata.bsps_confirmed = inc_bsps_confirmed;
+                storage_request_metadata.bsps_confirmed = inc_bsps_confirmed;
             }
             None => {
                 return Err(ArithmeticError::Overflow.into());
@@ -521,8 +583,8 @@ where
             Error::<T>::ExpectedNonInclusionProof
         );
 
-        // TODO: Generate challenges for the key proof properly.
-        let challenges = vec![];
+        let challenges =
+            Self::generate_challenges_on_bsp_confirm(bsp_id, file_key, &storage_request_metadata);
 
         // Check that the key proof is valid.
         <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
@@ -564,17 +626,17 @@ where
         // Add data to storage provider.
         <T::Providers as MutateProvidersInterface>::increase_data_used(
             &bsp_id,
-            file_metadata.size,
+            storage_request_metadata.size,
         )?;
 
         // Remove storage request if we reached the required number of bsps.
-        if file_metadata.bsps_confirmed == file_metadata.bsps_required {
+        if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required {
             // TODO: we should only delete if the MSP also confirmed to store the file (this is not implemented yet).
             // Remove storage request metadata.
             <StorageRequests<T>>::remove(&file_key);
 
             // There should only be the number of bsps volunteered under the storage request prefix.
-            let remove_limit: u32 = file_metadata
+            let remove_limit: u32 = storage_request_metadata
                 .bsps_volunteered
                 .try_into()
                 .map_err(|_| Error::<T>::FailedTypeConversion)?;
@@ -592,7 +654,7 @@ where
             );
         } else {
             // Update storage request metadata.
-            <StorageRequests<T>>::set(&file_key, Some(file_metadata.clone()));
+            <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata.clone()));
 
             // Update bsp for storage request.
             <StorageRequestBsps<T>>::mutate(&file_key, &bsp_id, |bsp| {
@@ -1059,15 +1121,15 @@ where
     ) -> MerkleHash<T> {
         let size: u32 = size.into();
 
-        shp_file_key_verifier::types::FileMetadata::<
-            { shp_file_key_verifier::consts::H_LENGTH },
-            { shp_file_key_verifier::consts::FILE_CHUNK_SIZE },
-            { shp_file_key_verifier::consts::FILE_SIZE_TO_CHALLENGES },
+        shp_file_metadata::FileMetadata::<
+            { shp_constants::H_LENGTH },
+            { shp_constants::FILE_CHUNK_SIZE },
+            { shp_constants::FILE_SIZE_TO_CHALLENGES },
         > {
             owner: owner.encode(),
             bucket_id: bucket_id.as_ref().to_vec(),
             location: location.clone().to_vec(),
-            size: size.into(),
+            file_size: size.into(),
             fingerprint: fingerprint.as_ref().into(),
         }
         .file_key::<FileKeyHasher<T>>()

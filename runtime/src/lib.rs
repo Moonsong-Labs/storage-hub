@@ -9,6 +9,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 mod configs;
 mod weights;
 
+use shp_file_metadata::ChunkId;
 use smallvec::smallvec;
 use sp_api::impl_runtime_apis;
 use sp_core::H256;
@@ -42,7 +43,9 @@ use sp_runtime::{
 pub use sp_runtime::{MultiAddress, Perbill, Permill};
 use sp_std::prelude::Vec;
 
-use pallet_file_system_runtime_api::QueryFileEarliestVolunteerBlockError;
+use pallet_file_system_runtime_api::{
+    QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
+};
 use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
@@ -387,6 +390,16 @@ impl_runtime_apis! {
         }
     }
 
+    impl pallet_file_system_runtime_api::FileSystemApi<Block, Hash, H256, BlockNumber, ChunkId> for Runtime {
+        fn query_earliest_file_volunteer_block(bsp_id: Hash, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
+            FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key)
+        }
+
+        fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: Hash, file_key: H256) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
+            FileSystem::query_bsp_confirm_chunks_to_prove_for_file(bsp_id, file_key)
+        }
+    }
+
     impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Nonce> for Runtime {
         fn account_nonce(account: AccountId) -> Nonce {
             System::account_nonce(account)
@@ -519,12 +532,6 @@ impl_runtime_apis! {
 
         fn build_config(config: Vec<u8>) -> sp_genesis_builder::Result {
             build_config::<RuntimeGenesisConfig>(config)
-        }
-    }
-
-    impl pallet_file_system_runtime_api::FileSystemApi<Block, Hash, H256, BlockNumber> for Runtime {
-        fn query_earliest_file_volunteer_block(bsp_id: Hash, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
-            FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key)
         }
     }
 

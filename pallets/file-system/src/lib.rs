@@ -62,6 +62,8 @@ pub mod pallet {
         FixedPointNumber,
     };
 
+    use shp_file_metadata::ChunkId;
+
     #[pallet::config]
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
@@ -109,6 +111,7 @@ pub mod pallet {
             + CheckedAdd
             + One
             + Saturating
+            + PartialOrd
             + Zero;
 
         /// Type representing the threshold a BSP must meet to be eligible to volunteer to store a file.
@@ -134,6 +137,18 @@ pub mod pallet {
 
         /// The type to convert a block number to a threshold.
         type BlockNumberToThresholdType: Convert<BlockNumberFor<Self>, Self::ThresholdType>;
+
+        /// The type to convert a MerkleHash to a RandomnessOutput.
+        type MerkleHashToRandomnessOutput: Convert<
+            <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash,
+            <Self::ProofDealer as shp_traits::ProofsDealerInterface>::RandomnessOutput,
+        >;
+
+        /// The type to convert a ChunkId to a MerkleHash
+        type ChunkIdToMerkleHash: Convert<
+            ChunkId,
+            <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash,
+        >;
 
         /// The currency mechanism, used for paying for reserves.
         type Currency: Currency<Self::AccountId>;
@@ -358,6 +373,7 @@ pub mod pallet {
         },
         /// Notifies that a BSP confirmed storing a file.
         BspConfirmedStoring {
+            who: T::AccountId,
             bsp_id: ProviderIdFor<T>,
             file_key: MerkleHash<T>,
             new_root: MerkleHash<T>,
@@ -669,6 +685,7 @@ pub mod pallet {
 
             // Emit event.
             Self::deposit_event(Event::BspConfirmedStoring {
+                who,
                 bsp_id,
                 file_key,
                 new_root,

@@ -329,6 +329,7 @@ jobs:
       - name: Run BSPNet Tests
         run: |
           cd test
+          pnpm i
           node --import tsx                        \
               --test                               \
               --test-reporter=@reporters/github    \
