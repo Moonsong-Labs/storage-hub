@@ -26,9 +26,9 @@ impl<T> MaybeDebug for T {}
 #[derive(Encode)]
 pub struct AsCompact<T: HasCompact>(#[codec(compact)] pub T);
 
-/// A trait to lookup registered Providers.
+/// A trait to lookup registered Providers and system-wide metrics.
 ///
-/// It is abstracted over the `AccountId` type, `Provider` type.
+/// It is abstracted over the `AccountId` type, `Provider` type, `MerkleHash` type and `Balance` type.
 pub trait ProvidersInterface {
     /// The type corresponding to the staking balance of a registered Provider.
     type Balance: fungible::Inspect<Self::AccountId> + fungible::hold::Inspect<Self::AccountId>;
@@ -87,6 +87,28 @@ pub trait ProvidersInterface {
     fn get_stake(
         who: Self::ProviderId,
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
+}
+
+/// A trait to get system-wide metrics, such as the total available capacity of the network and
+/// its total used capacity.
+pub trait SystemMetricsInterface {
+    /// Type of the unit provided by Providers
+    type ProvidedUnit: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Default
+        + MaybeDisplay
+        + AtLeast32BitUnsigned
+        + Copy
+        + MaxEncodedLen
+        + HasCompact
+        + Into<u32>;
+
+    /// Get the total available capacity of units of the network.
+    fn get_total_capacity() -> Self::ProvidedUnit;
+
+    /// Get the total used capacity of units of the network.
+    fn get_total_used_capacity() -> Self::ProvidedUnit;
 }
 
 pub trait ProvidersConfig {

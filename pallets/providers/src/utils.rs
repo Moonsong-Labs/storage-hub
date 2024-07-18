@@ -14,6 +14,7 @@ use frame_support::traits::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
     MutateProvidersInterface, ProvidersConfig, ProvidersInterface, ReadProvidersInterface,
+    SystemMetricsInterface,
 };
 use sp_runtime::BoundedVec;
 
@@ -795,6 +796,13 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
                 BackupStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
             bsp.data_used = bsp.data_used.saturating_add(delta);
             BackupStorageProviders::<T>::insert(&provider_id, bsp);
+            UsedBspsCapacity::<T>::mutate(|n| match n.checked_add(&delta) {
+                Some(new_total_bsp_capacity) => {
+                    *n = new_total_bsp_capacity;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Overflow)),
+            })?;
         } else {
             return Err(Error::<T>::NotRegistered.into());
         }
@@ -815,6 +823,13 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
                 BackupStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
             bsp.data_used = bsp.data_used.saturating_sub(delta);
             BackupStorageProviders::<T>::insert(&provider_id, bsp);
+            UsedBspsCapacity::<T>::mutate(|n| match n.checked_sub(&delta) {
+                Some(new_total_bsp_capacity) => {
+                    *n = new_total_bsp_capacity;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+            })?;
         } else {
             return Err(Error::<T>::NotRegistered.into());
         }
@@ -1078,5 +1093,17 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
 
     fn get_default_root() -> Self::MerkleHash {
         T::DefaultMerkleRoot::get()
+    }
+}
+
+impl<T: pallet::Config> SystemMetricsInterface for pallet::Pallet<T> {
+    type ProvidedUnit = StorageData<T>;
+
+    fn get_total_capacity() -> Self::ProvidedUnit {
+        Self::get_total_bsp_capacity()
+    }
+
+    fn get_total_used_capacity() -> Self::ProvidedUnit {
+        Self::get_used_bsp_capacity()
     }
 }

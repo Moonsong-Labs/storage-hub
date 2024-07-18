@@ -34,7 +34,10 @@ pub mod pallet {
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
-    use shp_traits::{ProvidersInterface, ReadProofSubmittersInterface, ReadProvidersInterface};
+    use shp_traits::{
+        ProvidersInterface, ReadProofSubmittersInterface, ReadProvidersInterface,
+        SystemMetricsInterface,
+    };
     use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, Saturating};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -51,7 +54,8 @@ pub mod pallet {
 
         /// The trait for reading provider data.
         type ProvidersPallet: ProvidersInterface<AccountId = Self::AccountId>
-            + ReadProvidersInterface<AccountId = Self::AccountId>;
+            + ReadProvidersInterface<AccountId = Self::AccountId>
+            + SystemMetricsInterface<ProvidedUnit = Self::Units>;
 
         /// The trait for reading the data of which providers submitted valid proofs in which blocks
         type ProvidersProofSubmitters: ReadProofSubmittersInterface<
@@ -167,6 +171,26 @@ pub mod pallet {
     #[pallet::storage]
     pub type RegisteredUsers<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, u32, ValueQuery>;
+
+    /// The current price per unit per block of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
+    ///
+    /// This is updated each block using the formula that considers current system capacity (total storage of the system) and system availability (total storage available).
+    ///
+    /// This storage is updated in:
+    /// - [do_update_current_price_per_unit_per_block](crate::utils::do_update_current_price_per_unit_per_block), which updates the current price per unit per block.
+    #[pallet::storage]
+    pub type CurrentPricePerUnitPerBlock<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+
+    /// The accumulated price index since genesis, used to calculate the amount to charge for dynamic-rate payment streams.
+    ///
+    /// This is equivalent to what it would have cost to store one unit of the provided service since the beginning of the network.
+    /// We use this to calculate the amount to charge for dynamic-rate payment streams, by checking out the difference between the index
+    /// when the payment stream was last charged, and the index at the last chargeable block.
+    ///
+    /// This storage is updated in:
+    /// - [do_update_price_index](crate::utils::do_update_price_index), which updates the accumulated price index, adding to it the current price.
+    #[pallet::storage]
+    pub type AccumulatedPriceIndex<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 
     // Events & Errors:
 
@@ -289,6 +313,8 @@ pub mod pallet {
         fn on_poll(n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
             // TODO: Benchmark computational weight cost of this hook.
             Self::do_update_last_chargeable_info(n, weight);
+            Self::do_update_current_price_per_unit_per_block(weight);
+            Self::do_update_price_index(weight);
         }
     }
 

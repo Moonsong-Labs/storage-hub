@@ -203,8 +203,8 @@ impl ReadProofSubmittersInterface for MockSubmittingProviders {
         block_number: &Self::BlockNumber,
     ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
         let mut set = BoundedBTreeSet::<Self::ProviderId, Self::MaxProofSubmitters>::new();
-        // We convert the block number to the corresponding Provider ID, to simulate that the Provider submitted a proof
-        <StorageProviders as ProvidersInterface>::get_provider_id(*block_number)
+        // We convert the block number + 1 to the corresponding Provider ID, to simulate that the Provider submitted a proof
+        <StorageProviders as ProvidersInterface>::get_provider_id(*block_number + 1)
             .map(|id| set.try_insert(id));
         Some(set)
     }

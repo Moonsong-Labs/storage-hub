@@ -1,7 +1,8 @@
 use crate::{
     mock::*,
     types::{BalanceOf, ProviderLastChargeable},
-    Error, Event, LastChargeableInfo, RegisteredUsers,
+    AccumulatedPriceIndex, CurrentPricePerUnitPerBlock, Error, Event, LastChargeableInfo,
+    RegisteredUsers, UsersWithoutFunds,
 };
 
 use frame_support::{
@@ -875,8 +876,6 @@ mod fixed_rate_streams {
 
     mod charge_stream {
 
-        use crate::UsersWithoutFunds;
-
         use super::*;
 
         #[test]
@@ -1535,11 +1534,9 @@ mod fixed_rate_streams {
                 );
 
                 // Set the last valid proof of the payment stream from Bob to Alice to block 123 (represented by Alice's account ID)
-                run_to_block(alice_on_poll);
-                let mut max_weight_meter = WeightMeter::new();
                 // Since we are using the mocked ReadProofSubmittersInterface, we can pass the account ID as the
                 // block number to the `on_poll` hook and it will consider that Provider as one that submitted a proof
-                PaymentStreams::on_poll(alice_on_poll, &mut max_weight_meter);
+                run_to_block(alice_on_poll);
 
                 // Get Alice's last chargeable information
                 let alice_last_chargeable_info =
@@ -1548,7 +1545,7 @@ mod fixed_rate_streams {
                 // The payment stream should be updated with the correct last valid proof
                 assert_eq!(
                     alice_last_chargeable_info.last_chargeable_block,
-                    System::block_number()
+                    System::block_number() - 1 // We subtract one since the chargeable info is set for the previous block always
                 );
             });
         }
@@ -1579,6 +1576,10 @@ mod dynamic_rate_streams {
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -1659,6 +1660,10 @@ mod dynamic_rate_streams {
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
@@ -1691,6 +1696,10 @@ mod dynamic_rate_streams {
                 let amount_provided = 100;
                 let current_price = 10;
                 let current_price_index = 10000;
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Try to create a payment stream from Bob to a random not registered BSP of 100 units provided
                 assert_noop!(
@@ -1726,6 +1735,10 @@ mod dynamic_rate_streams {
                 register_account_as_bsp(charlie, 1000);
                 let charlie_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(charlie).unwrap();
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units per block
                 assert_ok!(
@@ -1797,6 +1810,10 @@ mod dynamic_rate_streams {
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Transfer almost all of Bob's balance to Alice (Bob keeps `deposit_amount - 1` balance)
                 let new_stream_deposit_blocks_balance_typed =
                     BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
@@ -1844,6 +1861,10 @@ mod dynamic_rate_streams {
                 register_account_as_bsp(charlie, 1000);
                 let charlie_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(charlie).unwrap();
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Set the amount of payment streams that Bob has to u32::MAX - 1
                 RegisteredUsers::<Test>::insert(&bob, u32::MAX - 1);
@@ -1933,6 +1954,10 @@ mod dynamic_rate_streams {
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
@@ -1989,6 +2014,10 @@ mod dynamic_rate_streams {
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
@@ -2027,6 +2056,10 @@ mod dynamic_rate_streams {
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2113,6 +2146,10 @@ mod dynamic_rate_streams {
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
@@ -2182,6 +2219,10 @@ mod dynamic_rate_streams {
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2285,6 +2326,10 @@ mod dynamic_rate_streams {
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2390,6 +2435,10 @@ mod dynamic_rate_streams {
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
@@ -2456,6 +2505,10 @@ mod dynamic_rate_streams {
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units
                 assert_ok!(
@@ -2531,8 +2584,6 @@ mod dynamic_rate_streams {
 
     mod charge_stream {
 
-        use crate::UsersWithoutFunds;
-
         use super::*;
 
         #[test]
@@ -2549,6 +2600,10 @@ mod dynamic_rate_streams {
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2630,6 +2685,10 @@ mod dynamic_rate_streams {
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2714,6 +2773,10 @@ mod dynamic_rate_streams {
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2822,6 +2885,10 @@ mod dynamic_rate_streams {
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2975,6 +3042,10 @@ mod dynamic_rate_streams {
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
@@ -3038,6 +3109,10 @@ mod dynamic_rate_streams {
                 register_account_as_bsp(charlie, 1000);
                 let charlie_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(charlie).unwrap();
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -3124,6 +3199,10 @@ mod dynamic_rate_streams {
                 // Register Charlie as a BSP with 1000 units of data
                 register_account_as_bsp(charlie, 1000);
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
@@ -3208,8 +3287,7 @@ mod dynamic_rate_streams {
         }
     }
     mod update_last_chargeable_price_index {
-
-        // TODO: Update this once we have the price index tracking
+		
         use super::*;
 
         #[test]
@@ -3219,13 +3297,17 @@ mod dynamic_rate_streams {
                 let bob: AccountId = 1;
                 let amount_provided = 100;
                 let current_price = 10;
-                let current_price_index = 10000;
+                let initial_price_index = 10000;
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice_on_poll, 100);
                 let alice_bsp_id =
                     <StorageProviders as ProvidersInterface>::get_provider_id(alice_on_poll)
                         .unwrap();
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerBlock::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(initial_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units per block
                 assert_ok!(
@@ -3234,16 +3316,15 @@ mod dynamic_rate_streams {
                         &bob,
                         &amount_provided,
                         current_price,
-                        current_price_index
+                        initial_price_index
                     )
                 );
 
-                // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
-                // TODO: Price index is currently hardcoded, update this test once we have the price index tracking
-                let current_price_index = 1;
+                // Set the last chargeable price index of the payment stream from Bob to Alice to block 123
+                let blocks_to_advance = alice_on_poll - System::block_number();
+                let price_index_increment = current_price * (blocks_to_advance - 1) as u128; // We substract one since price index is updated after the chargeable info (since this one is for the previous block)
+                let current_price_index = initial_price_index + price_index_increment;
                 run_to_block(alice_on_poll);
-                let mut max_weight_meter = WeightMeter::new();
-                PaymentStreams::on_poll(alice_on_poll, &mut max_weight_meter);
 
                 // Get Alice's last chargeable info
                 let alice_last_chargeable_info =
@@ -3354,6 +3435,7 @@ fn run_to_block(n: u64) {
         AllPalletsWithSystem::on_finalize(System::block_number());
         System::set_block_number(System::block_number() + 1);
         AllPalletsWithSystem::on_initialize(System::block_number());
+        PaymentStreams::on_poll(System::block_number(), &mut WeightMeter::new());
         AllPalletsWithSystem::on_idle(System::block_number(), Weight::MAX);
     }
 }

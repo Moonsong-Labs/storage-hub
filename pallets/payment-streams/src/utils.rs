@@ -12,9 +12,12 @@ use frame_support::traits::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
     PaymentStreamsInterface, ProvidersInterface, ReadProofSubmittersInterface,
-    ReadProvidersInterface,
+    ReadProvidersInterface, SystemMetricsInterface,
 };
-use sp_runtime::traits::{Convert, One};
+use sp_runtime::{
+    traits::{Convert, One},
+    Saturating,
+};
 
 use crate::*;
 
@@ -727,6 +730,8 @@ where
         n: BlockNumberFor<T>,
         weight: &mut frame_support::weights::WeightMeter,
     ) {
+        // Get last block's number
+        let n = n.saturating_sub(One::one());
         // Get the Providers that submitted a valid proof in the last tick, if there are any
         let proof_submitters =
             <T::ProvidersProofSubmitters as ReadProofSubmittersInterface>::get_proof_submitters_for_block(&n);
@@ -747,7 +752,7 @@ where
                     // Update the last chargeable block and last chargeable price index of the Provider
                     LastChargeableInfo::<T>::mutate(provider_id, |provider_info| {
                         provider_info.last_chargeable_block = n;
-                        provider_info.price_index = One::one(); // TODO: Have an actual price index
+                        provider_info.price_index = AccumulatedPriceIndex::<T>::get();
                     });
                     weight.consume(T::DbWeight::get().reads_writes(1, 1));
                 }
@@ -755,6 +760,41 @@ where
             // TODO: What happens if we do not have enough weight? It should never happen so we should have a way to just reserve the
             // needed weight in the block for this, such as what `on_initialize` does.
         }
+    }
+
+    /// This functions calculates the current price of services provided for dynamic-rate streams and updates it in storage.
+    pub fn do_update_current_price_per_unit_per_block(
+        weight: &mut frame_support::weights::WeightMeter,
+    ) {
+        // Get the total used capacity of the network
+        let _total_used_capacity =
+            <T::ProvidersPallet as SystemMetricsInterface>::get_total_used_capacity();
+        weight.consume(T::DbWeight::get().reads(1));
+
+        // Get the total capacity of the network
+        let _total_capacity = <T::ProvidersPallet as SystemMetricsInterface>::get_total_capacity();
+        weight.consume(T::DbWeight::get().reads(1));
+
+        // Calculate the current price per unit per block
+        // TODO: Once the curve of price per unit per block is defined, implement it here
+        let current_price_per_unit_per_block: BalanceOf<T> =
+            CurrentPricePerUnitPerBlock::<T>::get();
+
+        // Update it in storage
+        CurrentPricePerUnitPerBlock::<T>::put(current_price_per_unit_per_block);
+        weight.consume(T::DbWeight::get().writes(1));
+    }
+
+    pub fn do_update_price_index(weight: &mut frame_support::weights::WeightMeter) {
+        // Get the current price
+        let current_price = CurrentPricePerUnitPerBlock::<T>::get();
+        weight.consume(T::DbWeight::get().reads(1));
+
+        // Add it to the accumulated price index
+        AccumulatedPriceIndex::<T>::mutate(|price_index| {
+            *price_index = price_index.saturating_add(current_price);
+        });
+        weight.consume(T::DbWeight::get().reads_writes(1, 1));
     }
 
     /// This function holds the logic that updates the deposit of a User based on the new deposit that should be held from them.
