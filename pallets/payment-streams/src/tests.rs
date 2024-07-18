@@ -3287,7 +3287,7 @@ mod dynamic_rate_streams {
         }
     }
     mod update_last_chargeable_price_index {
-		
+
         use super::*;
 
         #[test]
