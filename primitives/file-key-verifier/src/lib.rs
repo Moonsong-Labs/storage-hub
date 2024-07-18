@@ -2,16 +2,16 @@
 
 use frame_support::sp_runtime::DispatchError;
 use num_bigint::BigUint;
+use shp_file_metadata::ChunkId;
 use shp_traits::CommitmentVerifier;
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{TrieDBBuilder, TrieLayout};
 use trie_db::Trie;
-use types::{ChunkId, FileKeyProof};
+use types::FileKeyProof;
 
 #[cfg(test)]
 mod tests;
 
-pub mod consts;
 pub mod types;
 
 /// A struct that implements the `CommitmentVerifier` trait, where the commitment

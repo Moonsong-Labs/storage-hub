@@ -16,7 +16,6 @@ import {
   closeBspNet,
   sleep
 } from "../../util";
-import { hexToString } from "@polkadot/util";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
@@ -64,16 +63,17 @@ for (const bspNetConfig of bspNetConfigCases) {
         throw new Error("Event doesn't match Type");
       }
 
-      const { fingerprint, size, location } = await user_api.loadFile(
-        source,
-        destination,
-        NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
+      const { location, fingerprint, file_size } =
+        await user_api.rpc.storagehubclient.loadFileInStorage(
+          source,
+          destination,
+          NODE_INFOS.user.AddressId,
+          newBucketEventDataBlob.bucketId
+        );
 
-      strictEqual(hexToString(location), destination);
-      strictEqual(fingerprint, TEST_ARTEFACTS[source].fingerprint);
-      strictEqual(size, TEST_ARTEFACTS[source].size);
+      strictEqual(location.toHuman(), destination);
+      strictEqual(fingerprint.toString(), TEST_ARTEFACTS[source].fingerprint);
+      strictEqual(file_size.toBigInt(), TEST_ARTEFACTS[source].size);
     });
 
     it("issueStorageRequest sent correctly", async () => {
@@ -127,7 +127,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       const destination = "test/whatsup.jpg";
       const bucketName = "nothingmuch-2";
 
-      const initial_bsp_forest_root = await bsp_api.getForestRoot();
+      const initial_bsp_forest_root = await bsp_api.rpc.storagehubclient.getForestRoot();
       strictEqual(
         initial_bsp_forest_root.toString(),
         "0x03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314"
@@ -141,19 +141,20 @@ for (const bspNetConfig of bspNetConfigCases) {
         throw new Error("Event doesn't match Type");
       }
 
-      const { fingerprint, size, location } = await user_api.loadFile(
-        source,
-        destination,
-        NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
+      const { fingerprint, file_size, location } =
+        await user_api.rpc.storagehubclient.loadFileInStorage(
+          source,
+          destination,
+          NODE_INFOS.user.AddressId,
+          newBucketEventDataBlob.bucketId
+        );
 
       await user_api.sealBlock(
         user_api.tx.fileSystem.issueStorageRequest(
           newBucketEventDataBlob.bucketId,
           location,
           fingerprint,
-          size,
+          file_size,
           DUMMY_MSP_ID,
           [NODE_INFOS.user.expectedPeerId]
         ),
@@ -177,10 +178,10 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(resBspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
       strictEqual(resBucketId.toString(), newBucketEventDataBlob.bucketId.toString());
       strictEqual(resLoc.toHuman(), destination);
-      strictEqual(resFinger.toString(), fingerprint);
+      strictEqual(resFinger.toString(), fingerprint.toString());
       strictEqual(resMulti.length, 1);
       strictEqual((resMulti[0].toHuman() as string).includes(NODE_INFOS.bsp.expectedPeerId), true);
-      strictEqual(resSize.toBigInt(), size);
+      strictEqual(resSize.toBigInt(), file_size.toBigInt());
 
       await sleep(5000); // wait for the bsp to download the file
       const confirm_pending = await user_api.rpc.author.pendingExtrinsics();
@@ -204,7 +205,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(bspConfirmRes_bspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
 
       await sleep(1000); // wait for the bsp to process the BspConfirmedStoring event
-      const bsp_forest_root_after_confirm = await bsp_api.getForestRoot();
+      const bsp_forest_root_after_confirm = await bsp_api.rpc.storagehubclient.getForestRoot();
       strictEqual(bsp_forest_root_after_confirm.toString(), bspConfirmRes_newRoot.toString());
       notEqual(bsp_forest_root_after_confirm.toString(), initial_bsp_forest_root.toString());
       // TODO: check the file key. We need an RPC endpoint to compute the file key.
