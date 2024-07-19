@@ -10,13 +10,13 @@ export default {
         IncompleteFileStatus: {
             file_metadata: "FileMetadata",
             stored_chunks: "u64",
-            total_chunks: "u64",
+            total_chunks: "u64"
         },
         SaveFileToDisk: {
             _enum: {
                 FileNotFound: null,
                 Success: "FileMetadata",
-                IncompleteFile: "IncompleteFileStatus",
+                IncompleteFile: "IncompleteFileStatus"
             }
         }
     },
@@ -53,7 +53,7 @@ export default {
                 {
                     name: "file_path",
                     type: "String"
-                },
+                }
             ],
             type: "SaveFileToDisk"
         },

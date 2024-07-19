@@ -555,6 +555,40 @@ fn request_storage_success() {
 }
 
 #[test]
+fn request_storage_failure_if_size_is_zero() {
+    new_test_ext().execute_with(|| {
+        let owner_account_id = Keyring::Alice.to_account_id();
+        let user = RuntimeOrigin::signed(owner_account_id.clone());
+        let msp = Keyring::Charlie.to_account_id();
+        let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+        let size = 0;
+        let file_content = b"test".to_vec();
+        let fingerprint = BlakeTwo256::hash(&file_content);
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+        let msp_id = add_msp_to_provider_storage(&msp);
+
+        let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+        let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+
+        // Dispatch a signed extrinsic.
+        assert_noop!(
+            FileSystem::issue_storage_request(
+                user.clone(),
+                bucket_id,
+                location.clone(),
+                fingerprint,
+                size,
+                msp_id,
+                peer_ids.clone(),
+            ),
+            Error::<Test>::FileSizeCannotBeZero
+        );
+    });
+}
+
+#[test]
 fn request_storage_expiration_clear_success() {
     new_test_ext().execute_with(|| {
         let owner_account_id = Keyring::Alice.to_account_id();
