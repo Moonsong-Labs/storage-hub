@@ -9,6 +9,7 @@ repository = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
+serde = { workspace = true }
 log = { workspace = true }
 jsonrpsee = { workspace = true }
 tokio = { workspace = true }

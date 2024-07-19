@@ -1522,22 +1522,19 @@ declare const _default: {
         proof: string;
     };
     /**
-     * Lookup140: shp_file_key_verifier::types::FileMetadata
+     * Lookup140: shp_file_metadata::FileMetadata
      **/
-    ShpFileKeyVerifierFileMetadata: {
-        _alias: {
-            size_: string;
-        };
+    ShpFileMetadataFileMetadata: {
         owner: string;
         bucketId: string;
         location: string;
-        size_: string;
+        fileSize: string;
         fingerprint: string;
     };
     /**
-     * Lookup141: shp_file_key_verifier::types::Fingerprint
+     * Lookup141: shp_file_metadata::Fingerprint
      **/
-    ShpFileKeyVerifierFingerprint: string;
+    ShpFileMetadataFingerprint: string;
     /**
      * Lookup147: shp_traits::TrieRemoveMutation
      **/

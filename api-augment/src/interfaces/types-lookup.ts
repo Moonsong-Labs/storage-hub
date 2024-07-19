@@ -2023,21 +2023,21 @@ declare module "@polkadot/types/lookup" {
 
   /** @name ShpFileKeyVerifierFileKeyProof (139) */
   interface ShpFileKeyVerifierFileKeyProof extends Struct {
-    readonly fileMetadata: ShpFileKeyVerifierFileMetadata;
+    readonly fileMetadata: ShpFileMetadataFileMetadata;
     readonly proof: SpTrieStorageProofCompactProof;
   }
 
-  /** @name ShpFileKeyVerifierFileMetadata (140) */
-  interface ShpFileKeyVerifierFileMetadata extends Struct {
+  /** @name ShpFileMetadataFileMetadata (140) */
+  interface ShpFileMetadataFileMetadata extends Struct {
     readonly owner: Bytes;
     readonly bucketId: Bytes;
     readonly location: Bytes;
-    readonly size_: Compact<u64>;
-    readonly fingerprint: ShpFileKeyVerifierFingerprint;
+    readonly fileSize: Compact<u64>;
+    readonly fingerprint: ShpFileMetadataFingerprint;
   }
 
-  /** @name ShpFileKeyVerifierFingerprint (141) */
-  interface ShpFileKeyVerifierFingerprint extends U8aFixed {}
+  /** @name ShpFileMetadataFingerprint (141) */
+  interface ShpFileMetadataFingerprint extends U8aFixed {}
 
   /** @name ShpTraitsTrieRemoveMutation (147) */
   type ShpTraitsTrieRemoveMutation = Null;
@@ -4796,6 +4796,7 @@ declare module "@polkadot/types/lookup" {
     readonly isMaxUserPendingDeletionRequestsReached: boolean;
     readonly isMspNotStoringBucket: boolean;
     readonly isFileKeyNotPendingDeletion: boolean;
+    readonly isFileSizeCannotBeZero: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -4833,7 +4834,8 @@ declare module "@polkadot/types/lookup" {
       | "FileKeyAlreadyPendingDeletion"
       | "MaxUserPendingDeletionRequestsReached"
       | "MspNotStoringBucket"
-      | "FileKeyNotPendingDeletion";
+      | "FileKeyNotPendingDeletion"
+      | "FileSizeCannotBeZero";
   }
 
   /** @name PalletProofsDealerError (405) */
