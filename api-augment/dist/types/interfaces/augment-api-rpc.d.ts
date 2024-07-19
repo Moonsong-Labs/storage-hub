@@ -23,7 +23,7 @@ import type { AccountId, AccountId32, BlockNumber, H160, H256, H64, Hash, Header
 import type { MigrationStatusResult, ReadProof, RuntimeVersion, TraceBlockResponse } from '@polkadot/types/interfaces/state';
 import type { ApplyExtrinsicResult, ChainProperties, ChainType, Health, NetworkState, NodeRole, PeerInfo, SyncState } from '@polkadot/types/interfaces/system';
 import type { IExtrinsic, Observable } from '@polkadot/types/types';
-import type { FileMetadata } from '@storagehub/api-augment/interfaces/storagehubclient';
+import type { FileMetadata, SaveFileToDisk } from '@storagehub/api-augment/interfaces/storagehubclient';
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
 declare module '@polkadot/rpc-core/types/jsonrpc' {
     interface RpcInterface {
@@ -591,6 +591,10 @@ declare module '@polkadot/rpc-core/types/jsonrpc' {
              * Load a file in the local storage. This is the first step when uploading a file.
              **/
             loadFileInStorage: AugmentedRpc<(file_path: Text | string, location: Text | string, owner: AccountId32 | string | Uint8Array, bucket_id: H256 | string | Uint8Array) => Observable<FileMetadata>>;
+            /**
+             * Save a file from the local storage to the disk.
+             **/
+            saveFileToDisk: AugmentedRpc<(file_key: H256 | string | Uint8Array, file_path: Text | string) => Observable<SaveFileToDisk>>;
         };
         syncstate: {
             /**

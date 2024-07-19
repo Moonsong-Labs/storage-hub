@@ -231,6 +231,10 @@ declare module '@polkadot/api-base/types/errors' {
              **/
             FileKeyNotPendingDeletion: AugmentedError<ApiType>;
             /**
+             * File size cannot be zero.
+             **/
+            FileSizeCannotBeZero: AugmentedError<ApiType>;
+            /**
              * Failed to get value when just checked it existed.
              **/
             ImpossibleFailedToGetValue: AugmentedError<ApiType>;

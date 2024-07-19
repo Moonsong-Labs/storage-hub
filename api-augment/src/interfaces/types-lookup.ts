@@ -4796,6 +4796,7 @@ declare module "@polkadot/types/lookup" {
     readonly isMaxUserPendingDeletionRequestsReached: boolean;
     readonly isMspNotStoringBucket: boolean;
     readonly isFileKeyNotPendingDeletion: boolean;
+    readonly isFileSizeCannotBeZero: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -4833,7 +4834,8 @@ declare module "@polkadot/types/lookup" {
       | "FileKeyAlreadyPendingDeletion"
       | "MaxUserPendingDeletionRequestsReached"
       | "MspNotStoringBucket"
-      | "FileKeyNotPendingDeletion";
+      | "FileKeyNotPendingDeletion"
+      | "FileSizeCannotBeZero";
   }
 
   /** @name PalletProofsDealerError (407) */

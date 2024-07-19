@@ -3884,7 +3884,8 @@ export default {
       "FileKeyAlreadyPendingDeletion",
       "MaxUserPendingDeletionRequestsReached",
       "MspNotStoringBucket",
-      "FileKeyNotPendingDeletion"
+      "FileKeyNotPendingDeletion",
+      "FileSizeCannotBeZero"
     ]
   },
   /**
