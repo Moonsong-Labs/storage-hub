@@ -317,6 +317,9 @@ where
         // TODO: Check storage capacity of chosen MSP (when we support MSPs)
         // TODO: Return error if the file is already stored and overwrite is false.
 
+		// Check that the file size is greater than zero.
+        ensure!(size > Zero::zero(), Error::<T>::FileSizeCannotBeZero);
+
         if let Some(ref msp) = msp {
             ensure!(
                 <T::Providers as ReadProvidersInterface>::is_msp(msp),
