@@ -6,6 +6,18 @@ export default {
             location: "Vec<u8>",
             file_size: "u64",
             fingerprint: "[u8; 32]"
+        },
+        IncompleteFileStatus: {
+            file_metadata: "FileMetadata",
+            stored_chunks: "u64",
+            total_chunks: "u64",
+        },
+        SaveFileToDisk: {
+            _enum: {
+                FileNotFound: null,
+                Success: "FileMetadata",
+                IncompleteFile: "IncompleteFileStatus",
+            }
         }
     },
     rpc: {
@@ -30,6 +42,20 @@ export default {
                 }
             ],
             type: "FileMetadata"
+        },
+        saveFileToDisk: {
+            description: "Save a file from the local storage to the disk.",
+            params: [
+                {
+                    name: "file_key",
+                    type: "H256"
+                },
+                {
+                    name: "file_path",
+                    type: "String"
+                },
+            ],
+            type: "SaveFileToDisk"
         },
         getForestRoot: {
             description: "Get the root of the forest trie.",

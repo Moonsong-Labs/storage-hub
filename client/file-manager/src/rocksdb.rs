@@ -625,6 +625,18 @@ where
         Ok(())
     }
 
+    fn stored_chunks_count(&self, key: &HasherOutT<T>) -> Result<u64, FileStorageError> {
+        let metadata = self.get_metadata(key)?;
+
+        let raw_root = metadata.fingerprint.as_ref();
+        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec())
+            .map_err(|_| FileStorageError::FailedToParseFingerprint)?;
+        let file_trie =
+            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut root);
+
+        file_trie.stored_chunks_count()
+    }
+
     fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError> {
         let raw_metadata = self
             .storage

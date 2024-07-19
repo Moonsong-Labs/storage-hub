@@ -11,6 +11,7 @@ use sc_consensus_manual_seal::{
     rpc::{ManualSeal, ManualSealApiServer},
     EngineCommand,
 };
+use shc_common::types::HasherOutT;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
 use shc_rpc::StorageHubClientApiServer;
@@ -61,6 +62,7 @@ where
     T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
     use substrate_frame_rpc_system::{System, SystemApiServer};
