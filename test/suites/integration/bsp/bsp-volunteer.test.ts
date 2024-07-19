@@ -14,7 +14,7 @@ import {
   type BspNetConfig,
   closeBspNet,
   sleep
-} from "../../util";
+} from "../../../util";
 import { assert } from "node:console";
 
 const bspNetConfigCases: BspNetConfig[] = [

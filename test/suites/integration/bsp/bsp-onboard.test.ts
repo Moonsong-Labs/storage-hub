@@ -9,7 +9,7 @@ import {
   DOCKER_IMAGE,
   NODE_INFOS,
   runBspNet
-} from "../../util";
+} from "../../../util";
 import Docker from "dockerode";
 import { strictEqual } from "node:assert";
 

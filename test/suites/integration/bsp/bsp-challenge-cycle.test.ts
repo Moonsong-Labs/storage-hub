@@ -9,7 +9,7 @@ import {
   cleardownTest,
   DUMMY_BSP_ID,
   type BspNetConfig
-} from "../../util";
+} from "../../../util";
 import { sleep } from "@zombienet/utils";
 
 const bspNetConfigCases: BspNetConfig[] = [
