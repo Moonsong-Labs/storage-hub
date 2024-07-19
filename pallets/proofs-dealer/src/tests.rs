@@ -4,20 +4,23 @@ use std::vec;
 use crate::pallet::Event;
 use crate::types::{
     ChallengeHistoryLengthFor, ChallengeTicksToleranceFor, ChallengesQueueLengthFor,
-    CheckpointChallengePeriodFor, KeyProof, MaxCustomChallengesPerBlockFor, ProvidersPalletFor,
-    RandomChallengesPerBlockFor,
+    CheckpointChallengePeriodFor, KeyProof, MaxCustomChallengesPerBlockFor,
+    MaxSubmittersPerTickFor, ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
+    TargetTicksStorageOfSubmittersFor,
 };
 use crate::{mock::*, types::Proof};
 use crate::{
-    ChallengeTickToChallengedProviders, ChallengesTicker, LastCheckpointTick,
+    ChallengeTickToChallengedProviders, ChallengesTicker, LastCheckpointTick, LastDeletedTick,
     LastTickProviderSubmittedProofFor, SlashableProviders, TickToChallengesSeed,
-    TickToCheckpointChallenges,
+    TickToCheckpointChallenges, ValidProofSubmittersLastTicks,
 };
 use codec::Encode;
 use frame_support::{
     assert_err, assert_noop, assert_ok,
-    traits::{fungible::Mutate, OnPoll},
+    pallet_prelude::Weight,
+    traits::{fungible::Mutate, OnIdle, OnPoll},
     weights::WeightMeter,
+    BoundedBTreeSet,
 };
 use shp_traits::{ProofsDealerInterface, ProvidersInterface, TrieRemoveMutation};
 use sp_core::{blake2_256, Get, Hasher, H256};
@@ -882,6 +885,124 @@ fn submit_proof_success() {
         assert_eq!(
             ChallengeTickToChallengedProviders::<Test>::get(new_deadline, provider_id),
             Some(()),
+        );
+    });
+}
+
+#[test]
+fn submit_proof_adds_provider_to_valid_submitters_set() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Create user and add funds to the account.
+        let user = RuntimeOrigin::signed(1);
+        let user_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            user_balance
+        ));
+
+        // Register user as a Provider in Providers pallet.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                data_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
+            },
+        );
+
+        // Set Provider's last submitted proof block.
+        let current_tick = ChallengesTicker::<Test>::get();
+        let last_tick_provider_submitted_proof = current_tick;
+        LastTickProviderSubmittedProofFor::<Test>::insert(
+            &provider_id,
+            last_tick_provider_submitted_proof,
+        );
+
+        // Set Provider's deadline for submitting a proof.
+        // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id).unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = current_tick + challenge_period_plus_tolerance;
+        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
+
+        // Get the seed for block 2.
+        let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
+
+        // Calculate challenges from seed, so that we can mock a key proof for each.
+        let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
+            seed,
+            &provider_id,
+            RandomChallengesPerBlockFor::<Test>::get(),
+        );
+
+        // Creating a vec of proofs with some content to pass verification.
+        let mut key_proofs = BTreeMap::new();
+        for challenge in challenges {
+            key_proofs.insert(
+                challenge,
+                KeyProof::<Test> {
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
+                    challenge_count: Default::default(),
+                },
+            );
+        }
+
+        // Mock a proof.
+        let proof = Proof::<Test> {
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            key_proofs,
+        };
+
+        // Dispatch challenge extrinsic.
+        assert_ok!(ProofsDealer::submit_proof(user, proof.clone(), None));
+
+        // Check for event submitted.
+        System::assert_last_event(
+            Event::ProofAccepted {
+                provider: provider_id,
+                proof,
+            }
+            .into(),
+        );
+
+        // Check that the Provider is in the valid submitters set.
+        assert!(
+            ValidProofSubmittersLastTicks::<Test>::get(ChallengesTicker::<Test>::get())
+                .unwrap()
+                .contains(&provider_id)
         );
     });
 }
@@ -2678,4 +2799,274 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
             Some(()),
         );
     });
+}
+
+mod on_idle_hook_tests {
+
+    use super::*;
+
+    #[test]
+    fn on_idle_hook_works() {
+        new_test_ext().execute_with(|| {
+            // Go past genesis block so events get deposited.
+            run_to_block(1);
+
+            // Register user as a Provider in Providers pallet.
+            let provider_id = BlakeTwo256::hash(b"provider_id");
+            pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+                &1,
+                provider_id,
+            );
+            pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+                &provider_id,
+                pallet_storage_providers::types::BackupStorageProvider {
+                    capacity: Default::default(),
+                    data_used: Default::default(),
+                    multiaddresses: Default::default(),
+                    root: Default::default(),
+                    last_capacity_change: Default::default(),
+                    owner_account: 1u64,
+                    payment_account: Default::default(),
+                },
+            );
+
+            // Add the Provider to the `ValidProofSubmittersLastTicks` storage map for the current tick.
+            let tick_when_proof_provided = ChallengesTicker::<Test>::get();
+            let mut new_valid_submitters =
+                BoundedBTreeSet::<ProviderIdFor<Test>, MaxSubmittersPerTickFor<Test>>::new();
+            new_valid_submitters.try_insert(provider_id).unwrap();
+            ValidProofSubmittersLastTicks::<Test>::insert(
+                tick_when_proof_provided,
+                new_valid_submitters,
+            );
+
+            // Check that the Provider was successfully added to the set.
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+
+            // Advance a tick, executing `on_idle`, to check if the Provider is removed from the set.
+            run_to_block(System::block_number() + 1);
+            ProofsDealer::on_idle(System::block_number(), Weight::MAX);
+
+            // Check that the set which had the Provider that submitted a valid proof has not been deleted.
+            assert!(ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided).is_some());
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+
+            // Check that the last deleted tick is still 0
+            assert_eq!(LastDeletedTick::<Test>::get(), 0);
+
+            // Advance enough ticks so that the Provider list which has the `provider_id` is set to be deleted.
+            run_to_block(
+                System::block_number()
+                    + <TargetTicksStorageOfSubmittersFor<Test> as Get<u32>>::get() as u64,
+            );
+
+            // Call the `on_idle` hook.
+            ProofsDealer::on_idle(System::block_number(), Weight::MAX);
+
+            // Check that the set which had the Provider that submitted a valid proof has been correctly deleted.
+            assert!(ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided).is_none());
+
+            // Check that the last deleted tick is the one that was just deleted.
+            assert_eq!(
+                LastDeletedTick::<Test>::get(),
+                System::block_number()
+                    - <TargetTicksStorageOfSubmittersFor<Test> as Get<u32>>::get() as u64
+            );
+        });
+    }
+
+    #[test]
+    fn on_idle_hook_does_not_delete_with_not_enough_weight() {
+        new_test_ext().execute_with(|| {
+            // Go past genesis block so events get deposited.
+            run_to_block(1);
+
+            // Register user as a Provider in Providers pallet.
+            let provider_id = BlakeTwo256::hash(b"provider_id");
+            pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+                &1,
+                provider_id,
+            );
+            pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+                &provider_id,
+                pallet_storage_providers::types::BackupStorageProvider {
+                    capacity: Default::default(),
+                    data_used: Default::default(),
+                    multiaddresses: Default::default(),
+                    root: Default::default(),
+                    last_capacity_change: Default::default(),
+                    owner_account: 1u64,
+                    payment_account: Default::default(),
+                },
+            );
+
+            // Add the Provider to the `ValidProofSubmittersLastTicks` storage map for the current tick.
+            let tick_when_proof_provided = ChallengesTicker::<Test>::get();
+            let mut new_valid_submitters =
+                BoundedBTreeSet::<ProviderIdFor<Test>, MaxSubmittersPerTickFor<Test>>::new();
+            new_valid_submitters.try_insert(provider_id).unwrap();
+            ValidProofSubmittersLastTicks::<Test>::insert(
+                tick_when_proof_provided,
+                new_valid_submitters,
+            );
+
+            // Check that the Provider was successfully added to the set.
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+
+            // Advance a tick, executing `on_idle`, to check if the Provider is removed from the set.
+            run_to_block(System::block_number() + 1);
+            ProofsDealer::on_idle(System::block_number(), Weight::MAX);
+
+            // Check that the set which had the Provider that submitted a valid proof has not been deleted.
+            assert!(ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided).is_some());
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+
+            // Check that the last deleted tick is still 0
+            assert_eq!(LastDeletedTick::<Test>::get(), 0);
+
+            // Advance enough ticks so that the Provider list which has the `provider_id` is set to be deleted.
+            run_to_block(
+                System::block_number()
+                    + <TargetTicksStorageOfSubmittersFor<Test> as Get<u32>>::get() as u64,
+            );
+
+            // Call the `on_idle` hook, but without enough weight to delete the set.
+            ProofsDealer::on_idle(System::block_number(), Weight::zero());
+
+            // Check that the set which had the Provider that submitted a valid proof still exists and has the Provider
+            assert!(ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided).is_some());
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+
+            // Check that the last deleted tick is still zero.
+            assert_eq!(LastDeletedTick::<Test>::get(), 0);
+        });
+    }
+
+    #[test]
+    fn on_idle_hook_deletes_multiple_old_ticks_if_enough_weight_is_remaining() {
+        new_test_ext().execute_with(|| {
+            // Go past genesis block so events get deposited.
+            run_to_block(1); // Block number = 1
+
+            // Register user as a Provider in Providers pallet.
+            let provider_id = BlakeTwo256::hash(b"provider_id");
+            pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+                &1,
+                provider_id,
+            );
+            pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+                &provider_id,
+                pallet_storage_providers::types::BackupStorageProvider {
+                    capacity: Default::default(),
+                    data_used: Default::default(),
+                    multiaddresses: Default::default(),
+                    root: Default::default(),
+                    last_capacity_change: Default::default(),
+                    owner_account: 1u64,
+                    payment_account: Default::default(),
+                },
+            );
+
+            // Add the Provider to the `ValidProofSubmittersLastTicks` storage map for the current tick and two ticks after that.
+            let tick_when_first_proof_provided = ChallengesTicker::<Test>::get(); // Block number = 1
+            let mut new_valid_submitters =
+                BoundedBTreeSet::<ProviderIdFor<Test>, MaxSubmittersPerTickFor<Test>>::new();
+            new_valid_submitters.try_insert(provider_id).unwrap();
+            ValidProofSubmittersLastTicks::<Test>::insert(
+                tick_when_first_proof_provided,
+                new_valid_submitters.clone(),
+            );
+            let tick_when_second_proof_provided = tick_when_first_proof_provided + 2; // Block number = 1 + 2 = 3
+            ValidProofSubmittersLastTicks::<Test>::insert(
+                tick_when_second_proof_provided,
+                new_valid_submitters,
+            );
+
+            // Check that the Provider was successfully added to the set in both ticks
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_first_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_second_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+
+            // Advance a tick, executing `on_idle`, to check if the Provider is removed from any of the two sets.
+            run_to_block(System::block_number() + 1); // Block number = 2
+            ProofsDealer::on_idle(System::block_number(), Weight::MAX);
+
+            // Check that the sets which had the Provider that submitted a valid proof have not been deleted.
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_first_proof_provided)
+                    .is_some()
+            );
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_first_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_second_proof_provided)
+                    .is_some()
+            );
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_second_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+
+            // Check that the last deleted tick is still 0
+            assert_eq!(LastDeletedTick::<Test>::get(), 0);
+
+            // Advance enough ticks so that both the Provider lists which have the `provider_id` are set to be deleted.
+            run_to_block(
+                System::block_number()
+                    + <TargetTicksStorageOfSubmittersFor<Test> as Get<u32>>::get() as u64
+                    + 3,
+            ); // Block number = 2 + 3 + 3 = 8, 8 - 3 - 0 > 3 so both sets should be deleted.
+
+            // Call the `on_idle` hook with enough weight to delete both sets.
+            ProofsDealer::on_idle(System::block_number(), Weight::MAX);
+
+            // Check that the sets which had the Provider that submitted a valid proof have been correctly deleted.
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_first_proof_provided)
+                    .is_none()
+            );
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_second_proof_provided)
+                    .is_none()
+            );
+
+            // Check that the last deleted tick is the one that was just deleted.
+            assert_eq!(
+                LastDeletedTick::<Test>::get(),
+                System::block_number()
+                    - <TargetTicksStorageOfSubmittersFor<Test> as Get<u32>>::get() as u64
+            );
+        });
+    }
 }
