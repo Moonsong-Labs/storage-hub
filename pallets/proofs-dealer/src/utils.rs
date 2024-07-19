@@ -686,14 +686,15 @@ where
         let mut used_weight = Weight::zero();
 
         // Check how many ticks should be removed to keep the storage at the target amount.
-        let last_deleted_tick = LastDeletedTick::<T>::get();
+        let mut last_deleted_tick = LastDeletedTick::<T>::get();
         used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
         let target_ticks_to_keep = TargetTicksStorageOfSubmittersFor::<T>::get();
         used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
         let current_tick = ChallengesTicker::<T>::get();
         used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
         let ticks_to_remove = current_tick
-            .saturating_sub(last_deleted_tick.saturating_sub(target_ticks_to_keep.into()));
+            .saturating_sub(last_deleted_tick)
+            .saturating_sub(target_ticks_to_keep.into());
 
         // Check how much ticks can be removed considering weight limitations
         let weight_to_remove_tick = T::DbWeight::get().reads_writes(0, 2);
@@ -715,6 +716,7 @@ where
 
                 // Update the last removed tick
                 LastDeletedTick::<T>::set(next_tick_to_delete);
+                last_deleted_tick = next_tick_to_delete; // We do this to avoid having to read from storage again.
 
                 // Increment the used weight.
                 used_weight = used_weight.saturating_add(weight_to_remove_tick);
