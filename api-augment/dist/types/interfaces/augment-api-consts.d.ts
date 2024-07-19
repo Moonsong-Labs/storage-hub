@@ -259,8 +259,9 @@ declare module '@polkadot/api-base/types/consts' {
             maxCustomChallengesPerBlock: u32 & AugmentedConst<ApiType>;
             /**
              * The maximum amount of Providers that can submit a proof in a single block.
-             * This is not an arbitrary limit but making the limit based on the block weight explicit,
-             * to be able to bound the storage that holds the submitters.
+             * Although this can be seen as an arbitrary limit, if set to the already existing
+             * implicit limit that is "how many `submit_proof` extrinsics fit in the weight of
+             * a block, this wouldn't add any additional artificial limit.
              **/
             maxSubmittersPerTick: u32 & AugmentedConst<ApiType>;
             /**

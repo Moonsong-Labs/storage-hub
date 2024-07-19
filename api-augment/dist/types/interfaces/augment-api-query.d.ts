@@ -679,10 +679,6 @@ declare module '@polkadot/api-base/types/storage' {
              **/
             challengeTickToChallengedProviders: AugmentedQuery<ApiType, (arg1: u32 | AnyNumber | Uint8Array, arg2: H256 | string | Uint8Array) => Observable<Option<Null>>, [u32, H256]> & QueryableStorageEntry<ApiType, [u32, H256]>;
             /**
-             * Counter for the related counted storage map
-             **/
-            counterForValidProofSubmittersLastTicks: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
-            /**
              * The challenge tick of the last checkpoint challenge round.
              *
              * This is used to determine when to include the challenges from the `ChallengesQueue` and
@@ -691,6 +687,13 @@ declare module '@polkadot/api-base/types/storage' {
              * `submit_proof` extrinsic.
              **/
             lastCheckpointTick: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
+            /**
+             * A value that represents the last tick that was deleted from the `ValidProofSubmittersLastTicks` StorageMap.
+             *
+             * This is used to know which tick to delete from the `ValidProofSubmittersLastTicks` StorageMap when the
+             * `on_idle` hook is called.
+             **/
+            lastDeletedTick: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
             /**
              * A mapping from a Provider to the last challenge tick they submitted a proof for.
              * If for a Provider `p`, `LastTickProviderSubmittedProofFor[p]` is `n`, then the
@@ -728,7 +731,7 @@ declare module '@polkadot/api-base/types/storage' {
              **/
             tickToCheckpointChallenges: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
             /**
-             * A mapping from block number (tick) to Providers, which is set if the Provider submitted a valid proof in that tick.
+             * A mapping from tick to Providers, which is set if the Provider submitted a valid proof in that tick.
              *
              * This is used to keep track of the Providers that have submitted proofs in the last few
              * ticks, where availability only up to the last `TargetTicksStorageOfSubmitters` ticks is guaranteed.

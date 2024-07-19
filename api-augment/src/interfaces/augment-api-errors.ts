@@ -859,7 +859,7 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       StakeCouldNotBeConverted: AugmentedError<ApiType>;
       /**
-       * The limit of Providers that can submit a proof in a single block has been reached.
+       * The limit of Providers that can submit a proof in a single tick has been reached.
        **/
       TooManyValidProofSubmitters: AugmentedError<ApiType>;
       /**
