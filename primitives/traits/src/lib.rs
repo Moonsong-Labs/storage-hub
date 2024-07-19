@@ -26,7 +26,7 @@ impl<T> MaybeDebug for T {}
 #[derive(Encode)]
 pub struct AsCompact<T: HasCompact>(#[codec(compact)] pub T);
 
-/// A trait to lookup registered Providers and system-wide metrics.
+/// A trait to lookup registered Providers.
 ///
 /// It is abstracted over the `AccountId` type, `Provider` type, `MerkleHash` type and `Balance` type.
 pub trait ProvidersInterface {
@@ -554,12 +554,12 @@ pub trait ReadProofSubmittersInterface {
         + Ord
         + MaxEncodedLen
         + Copy;
-    /// The type which represents a block number.
-    type BlockNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-    /// The type which represents the maximum limit of the number of proof submitters for a block.
+    /// The type which represents a tick number.
+    type TickNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents the maximum limit of the number of proof submitters for a tick.
     type MaxProofSubmitters: Get<u32>;
 
-    fn get_proof_submitters_for_block(
-        block_number: &Self::BlockNumber,
+    fn get_proof_submitters_for_tick(
+        tick_number: &Self::TickNumber,
     ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>>;
 }

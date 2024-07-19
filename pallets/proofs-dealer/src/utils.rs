@@ -15,7 +15,7 @@ use shp_traits::{
     TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use sp_runtime::{
-    traits::{CheckedAdd, CheckedDiv, CheckedSub, Convert, Hash, Zero},
+    traits::{CheckedAdd, CheckedDiv, CheckedSub, Convert, Hash, One, Zero},
     ArithmeticError, BoundedVec, DispatchError, SaturatedConversion, Saturating,
 };
 use sp_std::{
@@ -35,8 +35,8 @@ use crate::{
         StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
     },
     ChallengeTickToChallengedProviders, ChallengesQueue, ChallengesTicker, Error, Event,
-    LastCheckpointTick, LastTickProviderSubmittedProofFor, Pallet, PriorityChallengesQueue,
-    SlashableProviders, TickToChallengesSeed, TickToCheckpointChallenges,
+    LastCheckpointTick, LastDeletedTick, LastTickProviderSubmittedProofFor, Pallet,
+    PriorityChallengesQueue, SlashableProviders, TickToChallengesSeed, TickToCheckpointChallenges,
     ValidProofSubmittersLastTicks,
 };
 
@@ -65,6 +65,21 @@ macro_rules! expect_or_err {
             #[allow(unreachable_code)]
             {
                 Err($error_type)?
+            }
+        }
+    }};
+    // Handle Result type
+    ($result:expr, $error_msg:expr, $error_type:path, result) => {{
+        match $result {
+            Ok(value) => value,
+            Err(_) => {
+                #[cfg(test)]
+                unreachable!($error_msg);
+
+                #[allow(unreachable_code)]
+                {
+                    Err($error_type)?
+                }
             }
         }
     }};
@@ -313,8 +328,7 @@ where
         match current_tick_valid_submitters {
             // If the set already exists and has valid submitters, we just insert the new submitter.
             Some(mut valid_submitters) => {
-                let already_existed = valid_submitters
-                    .try_insert(*submitter).expect("The set should never be full as the limit we set should be greater than the implicit limit given by max block weight.");
+                let already_existed = expect_or_err!(valid_submitters.try_insert(*submitter), "The set should never be full as the limit we set should be greater than the implicit limit given by max block weight.", Error::<T>::TooManyValidProofSubmitters, result);
                 // We only update storage if the Provider ID wasn't yet in the set to avoid unnecessary writes.
                 if !already_existed {
                     ValidProofSubmittersLastTicks::<T>::insert(
@@ -327,8 +341,11 @@ where
             None => {
                 let mut new_valid_submitters =
                     BoundedBTreeSet::<ProviderIdFor<T>, MaxSubmittersPerTickFor<T>>::new();
-                new_valid_submitters.try_insert(*submitter).expect(
+                expect_or_err!(
+                    new_valid_submitters.try_insert(*submitter),
                     "The set has just been created, it's empty and as such won't be full. qed",
+                    Error::<T>::TooManyValidProofSubmitters,
+                    result
                 );
                 ValidProofSubmittersLastTicks::<T>::insert(
                     ChallengesTicker::<T>::get(),
@@ -652,52 +669,55 @@ where
         challenges
     }
 
-    /// Trim the storage that holds the Providers that submitted valid proofs in the last blocks until there's
-    /// `TargetBlocksOfProofsStorage` blocks left (or until the remaining weight allows it).
+    /// Trim the storage that holds the Providers that submitted valid proofs in the last ticks until there's
+    /// `TargetTicksOfProofsStorage` ticks left (or until the remaining weight allows it).
     ///
     /// This function is called in the `on_idle` hook, which means it's only called when the block has
     /// unused weight.
     ///
-    /// It removes the oldest block from the storage that holds the providers that submitted valid proofs
-    /// in the last blocks as many times as the remaining weight allows it, but at most until the storage
-    /// has `TargetBlocksOfProofsStorage` blocks left.
-    pub fn do_trim_valid_proof_submitters_last_blocks(
+    /// It removes the oldest tick from the storage that holds the providers that submitted valid proofs
+    /// in the last ticks as many times as the remaining weight allows it, but at most until the storage
+    /// has `TargetTicksOfProofsStorage` ticks left.
+    pub fn do_trim_valid_proof_submitters_last_ticks(
         _n: BlockNumberFor<T>,
         usable_weight: Weight,
     ) -> Weight {
         // Initialize the weight used by this function.
         let mut used_weight = Weight::zero();
 
-        // Since we are using a double map and we don't know how many Providers are going to exist in each block, we delete
-        // not blocks but chunks of Providers. This means blocks older than "TargetBlocksOfProofsStorage" ago are in an undefined
-        // state and should not be used. This is a trade-off to avoid iterating over all Providers in each block, which could be
-        // computationally expensive.
-        let weight_to_remove_block = T::DbWeight::get().reads_writes(1, 1); // TODO: Benchmark this logic to get the actual weight.
-        let removable_blocks = usable_weight.checked_div_per_component(&weight_to_remove_block);
+        // Check how many ticks should be removed to keep the storage at the target amount.
+        let last_deleted_tick = LastDeletedTick::<T>::get();
+        used_weight.saturating_add(T::DbWeight::get().reads(1));
+        let target_ticks_to_keep = TargetTicksStorageOfSubmittersFor::<T>::get();
+        used_weight.saturating_add(T::DbWeight::get().reads(1));
+        let current_tick = ChallengesTicker::<T>::get();
+        used_weight.saturating_add(T::DbWeight::get().reads(1));
+        let ticks_to_remove = current_tick
+            .saturating_sub(last_deleted_tick.saturating_sub(target_ticks_to_keep.into()));
 
-        // If there is enough weight to remove blocks, try to remove them.
-        if let Some(removable_blocks) = removable_blocks {
-            // Check to see if our limiting factor for removing old blocks is weight remaining or the target amount of blocks to keep in storage.
-            let blocks_in_storage = ValidProofSubmittersLastTicks::<T>::count();
-            let target_blocks = TargetTicksStorageOfSubmittersFor::<T>::get();
-            let removable_blocks: u32 = removable_blocks
-                .try_into()
-                .unwrap_or(u32::MAX)
-                .min(blocks_in_storage.saturating_sub(target_blocks));
+        // Check how much ticks can be removed considering weight limitations
+        let weight_to_remove_tick = T::DbWeight::get().reads_writes(0, 2);
+        let removable_ticks = usable_weight
+            .saturating_sub(used_weight)
+            .checked_div_per_component(&weight_to_remove_tick);
 
-            // Remove all the blocks that we can.
-            for _ in 0..removable_blocks {
-                // Get the oldest block.
-                let mut available_blocks = ValidProofSubmittersLastTicks::<T>::iter_keys()
-                    .collect::<Vec<BlockNumberFor<T>>>();
-                available_blocks.sort();
-                let oldest_block = available_blocks.first().expect("We checked before how many blocks are available and at least one should be there.");
+        // If there is enough weight to remove ticks, try to remove as much ticks as possible until the target is reached.
+        if let Some(removable_ticks) = removable_ticks {
+            let removable_ticks =
+                removable_ticks.min(ticks_to_remove.try_into().unwrap_or(u64::MAX));
+            // Remove all the ticks that we can, until we reach the target amount.
+            for _ in 0..removable_ticks {
+                // Get the next tick to delete.
+                let next_tick_to_delete = last_deleted_tick.saturating_add(One::one());
 
-                // Remove the oldest block from storage.
-                ValidProofSubmittersLastTicks::<T>::remove(oldest_block);
+                // Remove it from storage
+                ValidProofSubmittersLastTicks::<T>::remove(next_tick_to_delete);
+
+                // Update the last removed tick
+                LastDeletedTick::<T>::set(next_tick_to_delete);
 
                 // Increment the used weight.
-                used_weight += weight_to_remove_block;
+                used_weight.saturating_add(weight_to_remove_tick);
             }
         }
 
@@ -846,13 +866,13 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
 impl<T: pallet::Config> ReadProofSubmittersInterface for Pallet<T> {
     type ProviderId = ProviderIdFor<T>;
-    type BlockNumber = BlockNumberFor<T>;
+    type TickNumber = BlockNumberFor<T>;
     type MaxProofSubmitters = MaxSubmittersPerTickFor<T>;
 
-    fn get_proof_submitters_for_block(
-        block_number: &Self::BlockNumber,
+    fn get_proof_submitters_for_tick(
+        tick_number: &Self::TickNumber,
     ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
-        ValidProofSubmittersLastTicks::<T>::get(block_number)
+        ValidProofSubmittersLastTicks::<T>::get(tick_number)
     }
 }
 

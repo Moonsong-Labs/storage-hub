@@ -638,7 +638,8 @@ where
         // If the dynamic-rate payment stream exists:
         if let Some(dynamic_rate_payment_stream) = dynamic_rate_payment_stream {
             // Calculate the difference between the last charged price index and the price index at the last chargeable block
-            // Note: If the last chargeable price index is less than the last charged price index, we charge 0 to the user
+            // Note: If the last chargeable price index is less than the last charged price index, we charge 0 to the user, because that would be an impossible state.
+
             let price_index_at_last_chargeable_block =
                 LastChargeableInfo::<T>::get(provider_id).price_index;
             if let Some(price_index_difference) = price_index_at_last_chargeable_block
@@ -734,29 +735,22 @@ where
         let n = n.saturating_sub(One::one());
         // Get the Providers that submitted a valid proof in the last tick, if there are any
         let proof_submitters =
-            <T::ProvidersProofSubmitters as ReadProofSubmittersInterface>::get_proof_submitters_for_block(&n);
+            <T::ProvidersProofSubmitters as ReadProofSubmittersInterface>::get_proof_submitters_for_tick(&n);
         weight.consume(T::DbWeight::get().reads(1));
 
         // If there are any proof submitters in the last tick
         if let Some(proof_submitters) = proof_submitters {
-            // See if we have enough weight limit to process all Providers
-            let weight_per_provider = T::DbWeight::get().reads_writes(1, 1);
-            let weight_limit = weight.remaining();
-            let max_providers = weight_limit
-                .checked_div_per_component(&weight_per_provider)
-                .unwrap_or(0);
-            // If we do have enough weight, update all Providers
-            if proof_submitters.len().try_into().unwrap_or(u64::MAX) <= max_providers {
-                // Iterate through the proof submitters and update their last chargeable block and last chargeable price index
-                for provider_id in proof_submitters {
-                    // Update the last chargeable block and last chargeable price index of the Provider
-                    LastChargeableInfo::<T>::mutate(provider_id, |provider_info| {
-                        provider_info.last_chargeable_block = n;
-                        provider_info.price_index = AccumulatedPriceIndex::<T>::get();
-                    });
-                    weight.consume(T::DbWeight::get().reads_writes(1, 1));
-                }
+            // Update all Providers
+            // Iterate through the proof submitters and update their last chargeable block and last chargeable price index
+            for provider_id in proof_submitters {
+                // Update the last chargeable block and last chargeable price index of the Provider
+                LastChargeableInfo::<T>::mutate(provider_id, |provider_info| {
+                    provider_info.last_chargeable_block = n;
+                    provider_info.price_index = AccumulatedPriceIndex::<T>::get();
+                });
+                weight.consume(T::DbWeight::get().reads_writes(1, 1));
             }
+
             // TODO: What happens if we do not have enough weight? It should never happen so we should have a way to just reserve the
             // needed weight in the block for this, such as what `on_initialize` does.
         }

@@ -199,7 +199,7 @@ impl ReadProofSubmittersInterface for MockSubmittingProviders {
     type ProviderId = <Test as frame_system::Config>::Hash;
     type BlockNumber = BlockNumberFor<Test>;
     type MaxProofSubmitters = ConstU32<1000>;
-    fn get_proof_submitters_for_block(
+    fn get_proof_submitters_for_tick(
         block_number: &Self::BlockNumber,
     ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
         let mut set = BoundedBTreeSet::<Self::ProviderId, Self::MaxProofSubmitters>::new();
