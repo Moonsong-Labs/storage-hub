@@ -197,10 +197,10 @@ impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
 pub struct MockSubmittingProviders;
 impl ReadProofSubmittersInterface for MockSubmittingProviders {
     type ProviderId = <Test as frame_system::Config>::Hash;
-    type BlockNumber = BlockNumberFor<Test>;
+    type TickNumber = BlockNumberFor<Test>;
     type MaxProofSubmitters = ConstU32<1000>;
     fn get_proof_submitters_for_tick(
-        block_number: &Self::BlockNumber,
+        block_number: &Self::TickNumber,
     ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
         let mut set = BoundedBTreeSet::<Self::ProviderId, Self::MaxProofSubmitters>::new();
         // We convert the block number + 1 to the corresponding Provider ID, to simulate that the Provider submitted a proof

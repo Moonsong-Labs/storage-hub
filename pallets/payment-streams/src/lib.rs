@@ -60,7 +60,7 @@ pub mod pallet {
         /// The trait for reading the data of which providers submitted valid proofs in which blocks
         type ProvidersProofSubmitters: ReadProofSubmittersInterface<
             ProviderId = <Self::ProvidersPallet as ProvidersInterface>::ProviderId,
-            BlockNumber = BlockNumberFor<Self>,
+            TickNumber = BlockNumberFor<Self>,
         >;
 
         /// The overarching hold reason
