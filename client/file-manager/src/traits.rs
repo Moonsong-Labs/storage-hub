@@ -71,6 +71,8 @@ pub enum FileStorageError {
     FailedToParsePartialRoot,
     /// Failed to convert raw bytes into [`HasherOutT`]
     FailedToHasherOutput,
+    /// File has size zero
+    FileIsEmpty,
 }
 
 #[derive(Debug)]

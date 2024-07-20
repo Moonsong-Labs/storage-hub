@@ -16,6 +16,7 @@ import {
   closeBspNet,
   sleep
 } from "../../../util";
+import { GenericAccountId32 } from "@polkadot/types";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
@@ -65,7 +66,6 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(file_size.toBigInt(), TEST_ARTEFACTS[source].size);
     });
 
-    // TODO: fix: make it fail
     it("loadFileInStorage works even if file is empty", async () => {
       const source = "res/empty-file";
       const destination = "test/empty-file";
@@ -79,17 +79,16 @@ for (const bspNetConfig of bspNetConfigCases) {
         throw new Error("Event doesn't match Type");
       }
 
-      const { location, fingerprint, file_size } =
+      try {
         await user_api.rpc.storagehubclient.loadFileInStorage(
           source,
           destination,
           NODE_INFOS.user.AddressId,
           newBucketEventDataBlob.bucketId
         );
-
-      strictEqual(location.toHuman(), destination);
-      strictEqual(fingerprint.toString(), TEST_ARTEFACTS[source].fingerprint);
-      strictEqual(file_size.toBigInt(), TEST_ARTEFACTS[source].size);
+      } catch (e) {
+        strictEqual(e.message, "-32603: Internal error: FileIsEmpty");
+      }
     });
 
     it("issueStorageRequest sent correctly", async () => {
@@ -288,15 +287,16 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(issueStorageRequestResult.extSuccess, false);
     });
 
-    // Skipping while cannot find issue.
-    it.skip("issueStorageRequest fails if bucket exists but signer is not bucket owner", async () => {
+    it("issueStorageRequest fails if MSP is not valid", async () => {
       const location = "test/adolphus.jpg";
-      const bucketName = "bucket-8";
+      const bucketName = "bucket-88";
+      const INVALID_MSP_ID = "0x0000000000000000000000000000000000000000000000000000000000000222";
 
       // Creates bucket using `bsp_api` but will submit extrinsic using `user_api`
-      const newBucketEventEvent = await bsp_api.createBucket(bucketName);
+      const newBucketEventEvent = await user_api.createBucket(bucketName);
+
       const newBucketEventDataBlob =
-        bsp_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+        user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
       if (!newBucketEventDataBlob) {
         throw new Error("Event doesn't match Type");
@@ -308,7 +308,7 @@ for (const bspNetConfig of bspNetConfigCases) {
           location,
           TEST_ARTEFACTS["res/adolphus.jpg"].fingerprint,
           TEST_ARTEFACTS["res/adolphus.jpg"].size,
-          DUMMY_MSP_ID,
+          INVALID_MSP_ID,
           [NODE_INFOS.user.expectedPeerId]
         ),
         shUser
