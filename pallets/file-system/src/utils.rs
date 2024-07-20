@@ -936,17 +936,13 @@ where
 
                 // Check if the file key is already in the pending deletion requests.
                 ensure!(
-                    !pending_file_deletion_requests
-                        .contains(&(file_key, bucket_id)),
+                    !pending_file_deletion_requests.contains(&(file_key, bucket_id)),
                     Error::<T>::FileKeyAlreadyPendingDeletion
                 );
 
                 // Add the file key to the pending deletion requests.
-                PendingFileDeletionRequests::<T>::try_append(
-                    &sender,
-                    (file_key, bucket_id),
-                )
-                .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
+                PendingFileDeletionRequests::<T>::try_append(&sender, (file_key, bucket_id))
+                    .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
 
                 // Queue the expiration item.
                 Self::queue_expiration_item(
