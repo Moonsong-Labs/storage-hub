@@ -24,7 +24,7 @@ const bspNetConfigCases: BspNetConfig[] = [
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
-  describe("User: File Upload", () => {
+  describe("User: Issue Storage Requests", () => {
     let user_api: BspNetApi;
     let bsp_api: BspNetApi;
 
@@ -39,58 +39,6 @@ for (const bspNetConfig of bspNetConfigCases) {
       await bsp_api.disconnect();
       await closeBspNet();
     });
-
-    it("loadFileInStorage works", async () => {
-      const source = "res/adolphus.jpg";
-      const destination = "test/adolphus.jpg";
-      const bucketName = "bucket-0";
-
-      const newBucketEventEvent = await user_api.createBucket(bucketName);
-      const newBucketEventDataBlob =
-        user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
-
-      if (!newBucketEventDataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
-
-      const { location, fingerprint, file_size } =
-        await user_api.rpc.storagehubclient.loadFileInStorage(
-          source,
-          destination,
-          NODE_INFOS.user.AddressId,
-          newBucketEventDataBlob.bucketId
-        );
-
-      strictEqual(location.toHuman(), destination);
-      strictEqual(fingerprint.toString(), TEST_ARTEFACTS[source].fingerprint);
-      strictEqual(file_size.toBigInt(), TEST_ARTEFACTS[source].size);
-    });
-
-    it("loadFileInStorage works even if file is empty", async () => {
-      const source = "res/empty-file";
-      const destination = "test/empty-file";
-      const bucketName = "bucket-1";
-
-      const newBucketEventEvent = await user_api.createBucket(bucketName);
-      const newBucketEventDataBlob =
-        user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
-
-      if (!newBucketEventDataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
-
-      try {
-        await user_api.rpc.storagehubclient.loadFileInStorage(
-          source,
-          destination,
-          NODE_INFOS.user.AddressId,
-          newBucketEventDataBlob.bucketId
-        );
-      } catch (e) {
-        strictEqual(e.message, "-32603: Internal error: FileIsEmpty");
-      }
-    });
-
     it("issueStorageRequest sent correctly", async () => {
       const destination = "test/smile.jpg";
       const bucketName = "bucket-2";
@@ -163,32 +111,6 @@ for (const bspNetConfig of bspNetConfigCases) {
       );
 
       strictEqual(issueStorageRequestResult.extSuccess, false);
-    });
-
-    it("loadFileInStorage for file with exactly 1024 bytes or 1 chunk", async () => {
-      const source = "res/one-chunk-file";
-      const destination = "test/one-chunk-file";
-      const bucketName = "bucket-5";
-
-      const newBucketEventEvent = await user_api.createBucket(bucketName);
-      const newBucketEventDataBlob =
-        user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
-
-      if (!newBucketEventDataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
-
-      const { location, fingerprint, file_size } =
-        await user_api.rpc.storagehubclient.loadFileInStorage(
-          source,
-          destination,
-          NODE_INFOS.user.AddressId,
-          newBucketEventDataBlob.bucketId
-        );
-
-      strictEqual(location.toHuman(), destination);
-      strictEqual(fingerprint.toString(), TEST_ARTEFACTS[source].fingerprint);
-      strictEqual(file_size.toBigInt(), TEST_ARTEFACTS[source].size);
     });
 
     it("issueStorageRequest for file with 512 bytes or half a chunk", async () => {
@@ -378,6 +300,102 @@ for (const bspNetConfig of bspNetConfigCases) {
       await sleep(500);
 
       strictEqual(issueStorageRequestResultTwice.extSuccess, false);
+    });
+  });
+}
+
+for (const bspNetConfig of bspNetConfigCases) {
+  describe("User: Load File Into Storage", () => {
+    let user_api: BspNetApi;
+    let bsp_api: BspNetApi;
+
+    before(async () => {
+      await runBspNet(bspNetConfig);
+      user_api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+      bsp_api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
+    });
+
+    after(async () => {
+      await user_api.disconnect();
+      await bsp_api.disconnect();
+      await closeBspNet();
+    });
+
+    it("loadFileInStorage works", async () => {
+      const source = "res/adolphus.jpg";
+      const destination = "test/adolphus.jpg";
+      const bucketName = "bucket-0";
+
+      const newBucketEventEvent = await user_api.createBucket(bucketName);
+      const newBucketEventDataBlob =
+        user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+
+      if (!newBucketEventDataBlob) {
+        throw new Error("Event doesn't match Type");
+      }
+
+      const { location, fingerprint, file_size } =
+        await user_api.rpc.storagehubclient.loadFileInStorage(
+          source,
+          destination,
+          NODE_INFOS.user.AddressId,
+          newBucketEventDataBlob.bucketId
+        );
+
+      strictEqual(location.toHuman(), destination);
+      strictEqual(fingerprint.toString(), TEST_ARTEFACTS[source].fingerprint);
+      strictEqual(file_size.toBigInt(), TEST_ARTEFACTS[source].size);
+    });
+
+    it("loadFileInStorage works even if file is empty", async () => {
+      const source = "res/empty-file";
+      const destination = "test/empty-file";
+      const bucketName = "bucket-1";
+
+      const newBucketEventEvent = await user_api.createBucket(bucketName);
+      const newBucketEventDataBlob =
+        user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+
+      if (!newBucketEventDataBlob) {
+        throw new Error("Event doesn't match Type");
+      }
+
+      try {
+        await user_api.rpc.storagehubclient.loadFileInStorage(
+          source,
+          destination,
+          NODE_INFOS.user.AddressId,
+          newBucketEventDataBlob.bucketId
+        );
+      } catch (e) {
+        strictEqual(e.message, "-32603: Internal error: FileIsEmpty");
+      }
+    });
+
+    it("loadFileInStorage for file with exactly 1024 bytes or 1 chunk", async () => {
+      const source = "res/one-chunk-file";
+      const destination = "test/one-chunk-file";
+      const bucketName = "bucket-5";
+
+      const newBucketEventEvent = await user_api.createBucket(bucketName);
+      const newBucketEventDataBlob =
+        user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+
+      if (!newBucketEventDataBlob) {
+        throw new Error("Event doesn't match Type");
+      }
+
+      const { location, fingerprint, file_size } =
+        await user_api.rpc.storagehubclient.loadFileInStorage(
+          source,
+          destination,
+          NODE_INFOS.user.AddressId,
+          newBucketEventDataBlob.bucketId
+        );
+
+      strictEqual(location.toHuman(), destination);
+      strictEqual(fingerprint.toString(), TEST_ARTEFACTS[source].fingerprint);
+      strictEqual(file_size.toBigInt(), TEST_ARTEFACTS[source].size);
     });
 
     it("loadFileInStorage for the same file twice fails", async () => {
