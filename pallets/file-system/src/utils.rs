@@ -937,14 +937,14 @@ where
                 // Check if the file key is already in the pending deletion requests.
                 ensure!(
                     !pending_file_deletion_requests
-                        .contains(&(file_key.clone(), bucket_id.clone())),
+                        .contains(&(file_key, bucket_id)),
                     Error::<T>::FileKeyAlreadyPendingDeletion
                 );
 
                 // Add the file key to the pending deletion requests.
                 PendingFileDeletionRequests::<T>::try_append(
                     &sender,
-                    (file_key.clone(), bucket_id.clone()),
+                    (file_key, bucket_id),
                 )
                 .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
 
@@ -1011,7 +1011,7 @@ where
 
         // Check if the file key is in the pending deletion requests.
         ensure!(
-            pending_file_deletion_requests.contains(&(file_key.clone(), bucket_id.clone())),
+            pending_file_deletion_requests.contains(&(file_key, bucket_id)),
             Error::<T>::FileKeyNotPendingDeletion
         );
 

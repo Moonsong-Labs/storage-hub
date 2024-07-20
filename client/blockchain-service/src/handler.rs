@@ -882,7 +882,7 @@ impl BlockchainService {
         let provider_challenge_period = match self
             .client
             .runtime_api()
-            .get_challenge_period(block_hash.clone(), provider_id)
+            .get_challenge_period(*block_hash, provider_id)
         {
             Ok(provider_challenge_period_result) => match provider_challenge_period_result {
                 Ok(provider_challenge_period) => provider_challenge_period,
