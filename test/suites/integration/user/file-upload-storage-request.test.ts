@@ -347,7 +347,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(file_size.toBigInt(), TEST_ARTEFACTS[source].size);
     });
 
-    it("loadFileInStorage works even if file is empty", async () => {
+    it("loadFileInStorage fails if file is empty", async () => {
       const source = "res/empty-file";
       const destination = "test/empty-file";
       const bucketName = "bucket-1";
