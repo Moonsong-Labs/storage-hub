@@ -901,8 +901,9 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
     fn remove_root_bucket(bucket_id: BucketId<T>) -> DispatchResult {
         let bucket = Buckets::<T>::take(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
-        MainStorageProviderIdsToBuckets::<T>::mutate_exists(&bucket.msp_id, |buckets| {
-            match buckets {
+        MainStorageProviderIdsToBuckets::<T>::mutate_exists(
+            &bucket.msp_id,
+            |buckets| match buckets {
                 Some(b) => {
                     b.retain(|b| b != &bucket_id);
 
@@ -911,8 +912,8 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
                     }
                 }
                 _ => {}
-            }
-        });
+            },
+        );
 
         Ok(())
     }

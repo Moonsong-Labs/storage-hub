@@ -1,13 +1,14 @@
 use crate::{
     mock::*,
     types::{
-        BackupStorageProvider, BalanceOf, MainStorageProvider, MaxMultiAddressAmount, MultiAddress,
-        StorageData, StorageProvider, ValuePropId, ValueProposition, MainStorageProviderId, MaxBuckets, Bucket
+        BackupStorageProvider, BalanceOf, Bucket, MainStorageProvider, MainStorageProviderId,
+        MaxBuckets, MaxMultiAddressAmount, MultiAddress, StorageData, StorageProvider, ValuePropId,
+        ValueProposition,
     },
     Error, Event,
 };
 
-use frame_support::{assert_noop, assert_ok, assert_err, dispatch::Pays, BoundedVec};
+use frame_support::{assert_err, assert_noop, assert_ok, dispatch::Pays, BoundedVec};
 use frame_support::{
     pallet_prelude::Weight,
     traits::{
@@ -4016,7 +4017,13 @@ mod add_bucket {
 
                 // Try to add a bucket to a non-registered MSP
                 assert_noop!(
-                    StorageProviders::add_bucket(MainStorageProviderId::<Test>::default(), bucket_owner, bucket_id, false, None),
+                    StorageProviders::add_bucket(
+                        MainStorageProviderId::<Test>::default(),
+                        bucket_owner,
+                        bucket_id,
+                        false,
+                        None
+                    ),
                     Error::<Test>::NotRegistered
                 );
             });
@@ -4040,7 +4047,8 @@ mod add_bucket {
 
                 // Add the maximum amount of buckets for Alice
                 for i in 0..MaxBuckets::<Test>::get() {
-                    let bucket_name = BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_name =
+                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
                         &bucket_owner,
                         bucket_name,
@@ -4060,7 +4068,6 @@ mod add_bucket {
                     Error::<Test>::AppendBucketToMspFailed
                 );
             });
-
         }
     }
 
@@ -4092,21 +4099,21 @@ mod add_bucket {
                     None
                 ));
 
-                let buckets =
-                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
+                let buckets = crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
 
                 assert_eq!(buckets.len(), 1);
 
                 let bucket = crate::Buckets::<Test>::get(&bucket_id).unwrap();
 
-                assert_eq!(bucket,
-                   Bucket::<Test> {
-                       root: DefaultMerkleRoot::get(),
-                       user_id: bucket_owner,
-                       msp_id,
-                       private: false,
-                       read_access_group_id: None,
-                   }
+                assert_eq!(
+                    bucket,
+                    Bucket::<Test> {
+                        root: DefaultMerkleRoot::get(),
+                        user_id: bucket_owner,
+                        msp_id,
+                        private: false,
+                        read_access_group_id: None,
+                    }
                 );
             });
         }
@@ -4124,7 +4131,8 @@ mod add_bucket {
 
                 // Add the maximum amount of buckets for Alice
                 for i in 0..MaxBuckets::<Test>::get() {
-                    let bucket_name = BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_name =
+                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
                         &bucket_owner,
                         bucket_name,
@@ -4138,8 +4146,7 @@ mod add_bucket {
                     ));
                 }
 
-                let buckets =
-                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
+                let buckets = crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
 
                 let max_buckets: u32 = MaxBuckets::<Test>::get();
                 assert_eq!(buckets.len(), max_buckets as usize);
@@ -4215,10 +4222,7 @@ mod remove_bucket {
                 assert_ok!(StorageProviders::remove_root_bucket(bucket_id));
 
                 // Check that the bucket was removed
-                assert_eq!(
-                    crate::Buckets::<Test>::get(&bucket_id),
-                    None
-                );
+                assert_eq!(crate::Buckets::<Test>::get(&bucket_id), None);
 
                 // Check that the bucket was removed from the MSP
                 assert_eq!(
@@ -4241,7 +4245,8 @@ mod remove_bucket {
 
                 // Add the maximum amount of buckets for Alice
                 for i in 0..MaxBuckets::<Test>::get() {
-                    let bucket_name = BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_name =
+                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
                         &bucket_owner,
                         bucket_name,
@@ -4255,15 +4260,15 @@ mod remove_bucket {
                     ));
                 }
 
-                let buckets =
-                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
+                let buckets = crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
 
                 let max_buckets: u32 = MaxBuckets::<Test>::get();
                 assert_eq!(buckets.len(), max_buckets as usize);
 
                 // Remove all the buckets
                 for i in 0..MaxBuckets::<Test>::get() {
-                    let bucket_name = BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_name =
+                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
                         &bucket_owner,
                         bucket_name,

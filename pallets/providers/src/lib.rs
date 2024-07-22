@@ -251,8 +251,12 @@ pub mod pallet {
     /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket)
     /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket)
     #[pallet::storage]
-    pub type MainStorageProviderIdsToBuckets<T: Config> =
-        StorageMap<_, Blake2_128Concat, MainStorageProviderId<T>, BoundedVec<BucketId<T>, T::MaxBuckets>>;
+    pub type MainStorageProviderIdsToBuckets<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        MainStorageProviderId<T>,
+        BoundedVec<BucketId<T>, T::MaxBuckets>,
+    >;
 
     /// The mapping from an AccountId to a BackupStorageProviderId.
     ///
@@ -433,7 +437,7 @@ pub mod pallet {
         /// Error thrown when a bucket ID already exists in storage.
         BucketAlreadyExists,
         /// Error thrown when a bucket ID could not be added to the list of buckets of a MSP.
-        AppendBucketToMspFailed
+        AppendBucketToMspFailed,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
