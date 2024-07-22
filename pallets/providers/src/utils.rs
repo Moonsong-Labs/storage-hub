@@ -847,7 +847,12 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
             private,
             read_access_group_id,
         };
+
         Buckets::<T>::insert(&bucket_id, &bucket);
+
+        MainStorageProviderIdsToBuckets::<T>::try_append(&msp_id, bucket_id)
+            .map_err(|_| Error::<T>::AppendBucketToMspFailed)?;
+
         Ok(())
     }
 
@@ -894,7 +899,21 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
     }
 
     fn remove_root_bucket(bucket_id: BucketId<T>) -> DispatchResult {
-        Buckets::<T>::remove(&bucket_id);
+        let bucket = Buckets::<T>::take(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+
+        MainStorageProviderIdsToBuckets::<T>::mutate_exists(&bucket.msp_id, |buckets| {
+            match buckets {
+                Some(b) => {
+                    b.retain(|b| b != &bucket_id);
+
+                    if b.is_empty() {
+                        *buckets = None;
+                    }
+                }
+                _ => {}
+            }
+        });
+
         Ok(())
     }
 }

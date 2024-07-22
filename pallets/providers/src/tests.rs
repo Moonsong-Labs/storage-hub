@@ -2,12 +2,12 @@ use crate::{
     mock::*,
     types::{
         BackupStorageProvider, BalanceOf, MainStorageProvider, MaxMultiAddressAmount, MultiAddress,
-        StorageData, StorageProvider, ValuePropId, ValueProposition,
+        StorageData, StorageProvider, ValuePropId, ValueProposition, MainStorageProviderId, MaxBuckets, Bucket
     },
     Error, Event,
 };
 
-use frame_support::{assert_noop, assert_ok, dispatch::Pays, BoundedVec};
+use frame_support::{assert_noop, assert_ok, assert_err, dispatch::Pays, BoundedVec};
 use frame_support::{
     pallet_prelude::Weight,
     traits::{
@@ -3960,6 +3960,321 @@ mod change_bucket {
                 assert_noop!(
                     StorageProviders::add_bucket(msp_id, bucket_owner, bucket_id, false, None),
                     Error::<Test>::BucketAlreadyExists
+                );
+            });
+        }
+    }
+}
+
+mod add_bucket {
+    use super::*;
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn add_bucket_already_exists() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = 1;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice
+                assert_ok!(StorageProviders::add_bucket(
+                    msp_id,
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None
+                ));
+
+                // Try to add the bucket for Alice with the same bucket id
+                assert_noop!(
+                    StorageProviders::add_bucket(msp_id, bucket_owner, bucket_id, false, None),
+                    Error::<Test>::BucketAlreadyExists
+                );
+            });
+        }
+
+        #[test]
+        fn add_bucket_msp_not_registered() {
+            ExtBuilder::build().execute_with(|| {
+                let bucket_owner = 1;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Try to add a bucket to a non-registered MSP
+                assert_noop!(
+                    StorageProviders::add_bucket(MainStorageProviderId::<Test>::default(), bucket_owner, bucket_id, false, None),
+                    Error::<Test>::NotRegistered
+                );
+            });
+        }
+
+        #[test]
+        fn add_bucket_passed_max_bucket_msp_capacity() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = 1;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add the maximum amount of buckets for Alice
+                for i in 0..MaxBuckets::<Test>::get() {
+                    let bucket_name = BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                        &bucket_owner,
+                        bucket_name,
+                    );
+                    assert_ok!(StorageProviders::add_bucket(
+                        msp_id,
+                        bucket_owner,
+                        bucket_id,
+                        false,
+                        None
+                    ));
+                }
+
+                // Try to add another bucket for Alice
+                assert_err!(
+                    StorageProviders::add_bucket(msp_id, bucket_owner, bucket_id, false, None),
+                    Error::<Test>::AppendBucketToMspFailed
+                );
+            });
+
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn add_bucket() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = 1;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice
+                assert_ok!(StorageProviders::add_bucket(
+                    msp_id,
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None
+                ));
+
+                let buckets =
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
+
+                assert_eq!(buckets.len(), 1);
+
+                let bucket = crate::Buckets::<Test>::get(&bucket_id).unwrap();
+
+                assert_eq!(bucket,
+                   Bucket::<Test> {
+                       root: DefaultMerkleRoot::get(),
+                       user_id: bucket_owner,
+                       msp_id,
+                       private: false,
+                       read_access_group_id: None,
+                   }
+                );
+            });
+        }
+
+        #[test]
+        fn add_buckets_to_max_capacity() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = 1;
+
+                // Add the maximum amount of buckets for Alice
+                for i in 0..MaxBuckets::<Test>::get() {
+                    let bucket_name = BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                        &bucket_owner,
+                        bucket_name,
+                    );
+                    assert_ok!(StorageProviders::add_bucket(
+                        msp_id,
+                        bucket_owner,
+                        bucket_id,
+                        false,
+                        None
+                    ));
+                }
+
+                let buckets =
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
+
+                let max_buckets: u32 = MaxBuckets::<Test>::get();
+                assert_eq!(buckets.len(), max_buckets as usize);
+            });
+        }
+    }
+}
+
+mod remove_bucket {
+    use super::*;
+
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn remove_bucket_when_bucket_does_not_exist() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let bucket_owner = 1;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Try to remove a bucket that does not exist
+                assert_noop!(
+                    StorageProviders::remove_root_bucket(bucket_id),
+                    Error::<Test>::BucketNotFound
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn remove_bucket() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = 1;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice
+                assert_ok!(StorageProviders::add_bucket(
+                    msp_id,
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None
+                ));
+
+                // Check that the bucket was added to the MSP
+                assert_eq!(
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap(),
+                    vec![bucket_id]
+                );
+
+                // Remove the bucket
+                assert_ok!(StorageProviders::remove_root_bucket(bucket_id));
+
+                // Check that the bucket was removed
+                assert_eq!(
+                    crate::Buckets::<Test>::get(&bucket_id),
+                    None
+                );
+
+                // Check that the bucket was removed from the MSP
+                assert_eq!(
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id),
+                    None
+                );
+            });
+        }
+
+        #[test]
+        fn remove_multiple_buckets() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = 1;
+
+                // Add the maximum amount of buckets for Alice
+                for i in 0..MaxBuckets::<Test>::get() {
+                    let bucket_name = BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                        &bucket_owner,
+                        bucket_name,
+                    );
+                    assert_ok!(StorageProviders::add_bucket(
+                        msp_id,
+                        bucket_owner,
+                        bucket_id,
+                        false,
+                        None
+                    ));
+                }
+
+                let buckets =
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
+
+                let max_buckets: u32 = MaxBuckets::<Test>::get();
+                assert_eq!(buckets.len(), max_buckets as usize);
+
+                // Remove all the buckets
+                for i in 0..MaxBuckets::<Test>::get() {
+                    let bucket_name = BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                        &bucket_owner,
+                        bucket_name,
+                    );
+                    assert_ok!(StorageProviders::remove_root_bucket(bucket_id));
+                }
+
+                // Check that all the buckets were removed
+                assert_eq!(
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id),
+                    None
                 );
             });
         }
