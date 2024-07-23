@@ -9,13 +9,12 @@ import {
   cleardownTest,
   DUMMY_BSP_ID,
   type BspNetConfig
-} from "../../util";
+} from "../../../util";
 import { sleep } from "@zombienet/utils";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
   { noisy: false, rocksdb: true }
-  // { noisy: true, rocksdb: false }
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {

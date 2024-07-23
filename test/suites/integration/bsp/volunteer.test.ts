@@ -14,13 +14,12 @@ import {
   type BspNetConfig,
   closeBspNet,
   sleep
-} from "../../util";
+} from "../../../util";
 import { assert } from "node:console";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
   { noisy: false, rocksdb: true }
-  // { noisy: true, rocksdb: false }
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {

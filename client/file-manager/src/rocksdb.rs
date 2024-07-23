@@ -124,39 +124,21 @@ where
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn new(storage: StorageDb<T, DB>) -> Self {
-        let (overlay, mut root) = PrefixedMemoryDB::<HashT<T>>::default_with_root();
-        let mut rocksdb_file_data_trie = RocksDbFileDataTrie::<T, DB> {
+        let (overlay, root) = PrefixedMemoryDB::<HashT<T>>::default_with_root();
+
+        RocksDbFileDataTrie::<T, DB> {
             storage,
             root,
             overlay,
-        };
-        let db = rocksdb_file_data_trie.as_hash_db_mut();
-        let trie = TrieDBMutBuilder::<T>::new(db, &mut root).build();
-
-        drop(trie);
-
-        rocksdb_file_data_trie.root = root;
-
-        rocksdb_file_data_trie
+        }
     }
 
-    fn from_existing(storage: StorageDb<T, DB>, root: &mut HasherOutT<T>) -> Self {
-        let mut rocksdb_file_data_trie = RocksDbFileDataTrie::<T, DB> {
+    fn from_existing(storage: StorageDb<T, DB>, root: &HasherOutT<T>) -> Self {
+        RocksDbFileDataTrie::<T, DB> {
             root: *root,
             storage,
             overlay: Default::default(),
-        };
-
-        let db = rocksdb_file_data_trie.as_hash_db_mut();
-        let mut trie = TrieDBMutBuilder::<T>::from_existing(db, root).build();
-
-        let new_root = *trie.root();
-
-        drop(trie);
-
-        rocksdb_file_data_trie.root = new_root;
-
-        rocksdb_file_data_trie
+        }
     }
 
     /// Persists the changes applied to the overlay.
@@ -231,15 +213,15 @@ where
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
 
-        let mut iter = trie
+        let count = trie
             .iter()
-            .map_err(|_| FileStorageError::FailedToConstructTrieIter)?;
-        let mut count = 0u64;
-        while let Some(_) = iter.next() {
-            count += 1
-        }
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to construct Trie iterator: {}", e);
+                FileStorageError::FailedToConstructTrieIter
+            })?
+            .count();
 
-        Ok(count)
+        Ok(count as u64)
     }
 
     // Generates a [`FileProof`] for requested chunks.
@@ -595,7 +577,7 @@ where
     }
 
     /// Stores file information with its (partial or final) root.
-    /// Should be used if any (or all) chunks have been written.
+    /// Should be used if any chunks have already been written.
     /// Otherwise use [`Self::insert_file`]
     fn insert_file_with_data(
         &mut self,
