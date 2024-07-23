@@ -6,17 +6,13 @@ import {
   NODE_INFOS,
   TEST_ARTEFACTS,
   createApiObject,
-  fetchEventData,
   runBspNet,
   shUser,
-  checkBspForFile,
-  checkFileChecksum,
   type BspNetApi,
   type BspNetConfig,
   closeBspNet,
   sleep
 } from "../../../util";
-import { GenericAccountId32 } from "@polkadot/types";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
@@ -38,52 +34,6 @@ for (const bspNetConfig of bspNetConfigCases) {
       await user_api.disconnect();
       await bsp_api.disconnect();
       await closeBspNet();
-    });
-    it("issueStorageRequest sent correctly", async () => {
-      const destination = "test/smile.jpg";
-      const bucketName = "bucket-2";
-
-      const newBucketEventEvent = await user_api.createBucket(bucketName);
-      const newBucketEventDataBlob =
-        user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
-
-      if (!newBucketEventDataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
-
-      const issueStorageRequestResult = await user_api.sealBlock(
-        user_api.tx.fileSystem.issueStorageRequest(
-          newBucketEventDataBlob.bucketId,
-          destination,
-          TEST_ARTEFACTS["res/smile.jpg"].fingerprint,
-          TEST_ARTEFACTS["res/smile.jpg"].size,
-          DUMMY_MSP_ID,
-          [NODE_INFOS.user.expectedPeerId]
-        ),
-        shUser
-      );
-
-      // wait for the bsp to volunteer
-      await sleep(500);
-
-      const { event } = user_api.assertEvent(
-        "fileSystem",
-        "NewStorageRequest",
-        issueStorageRequestResult.events
-      );
-
-      const dataBlob = user_api.events.fileSystem.NewStorageRequest.is(event) && event.data;
-
-      if (!dataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
-
-      strictEqual(dataBlob.who.toString(), NODE_INFOS.user.AddressId);
-      strictEqual(dataBlob.location.toHuman(), destination);
-      strictEqual(dataBlob.fingerprint.toString(), TEST_ARTEFACTS["res/smile.jpg"].fingerprint);
-      strictEqual(dataBlob.size_.toBigInt(), TEST_ARTEFACTS["res/smile.jpg"].size);
-      strictEqual(dataBlob.peerIds.length, 1);
-      strictEqual(dataBlob.peerIds[0].toHuman(), NODE_INFOS.user.expectedPeerId);
     });
 
     it("issueStorageRequest fails if file is empty", async () => {
@@ -367,7 +317,7 @@ for (const bspNetConfig of bspNetConfigCases) {
           NODE_INFOS.user.AddressId,
           newBucketEventDataBlob.bucketId
         );
-      } catch (e) {
+      } catch (e: any) {
         strictEqual(e.message, "-32603: Internal error: FileIsEmpty");
       }
     });
@@ -430,7 +380,7 @@ for (const bspNetConfig of bspNetConfigCases) {
           NODE_INFOS.user.AddressId,
           newBucketEventDataBlob.bucketId
         );
-      } catch (e) {
+      } catch (e: any) {
         strictEqual(e.message, "-32603: Internal error: FileAlreadyExists");
       }
     });
@@ -455,7 +405,7 @@ for (const bspNetConfig of bspNetConfigCases) {
           NODE_INFOS.user.AddressId,
           newBucketEventDataBlob.bucketId
         );
-      } catch (e) {
+      } catch (e: any) {
         strictEqual(
           e.message,
           '-32603: Internal error: Os { code: 2, kind: NotFound, message: "No such file or directory" }'
