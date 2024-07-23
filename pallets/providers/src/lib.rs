@@ -247,6 +247,21 @@ pub mod pallet {
     #[pallet::storage]
     pub type Buckets<T: Config> = StorageMap<_, Blake2_128Concat, BucketId<T>, Bucket<T>>;
 
+    /// The mapping from a MainStorageProviderId to a vector of BucketIds.
+    ///
+    /// This is used to efficiently retrieve the list of buckets that a Main Storage Provider is currently storing.
+    ///
+    /// This storage is updated in:
+    /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket)
+    /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket)
+    #[pallet::storage]
+    pub type MainStorageProviderIdsToBuckets<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        MainStorageProviderId<T>,
+        BoundedVec<BucketId<T>, T::MaxBuckets>,
+    >;
+
     /// The mapping from an AccountId to a BackupStorageProviderId.
     ///
     /// This is used to get a Backup Storage Provider's unique identifier needed to access its metadata.
@@ -425,6 +440,8 @@ pub mod pallet {
         BucketNotFound,
         /// Error thrown when a bucket ID already exists in storage.
         BucketAlreadyExists,
+        /// Error thrown when a bucket ID could not be added to the list of buckets of a MSP.
+        AppendBucketToMspFailed,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
