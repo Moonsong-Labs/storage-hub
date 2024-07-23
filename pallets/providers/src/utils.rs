@@ -840,6 +840,22 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
             Error::<T>::NotRegistered
         );
 
+        let user_balance = T::NativeBalance::reducible_balance(
+            &user_id,
+            Preservation::Preserve,
+            Fortitude::Polite,
+        );
+
+        let deposit = T::BucketDeposit::get();
+        ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
+        ensure!(
+            T::NativeBalance::can_hold(&HoldReason::BucketDeposit.into(), &user_id, deposit),
+            Error::<T>::CannotHoldDeposit
+        );
+
+        // Hold the bucket deposit
+        T::NativeBalance::hold(&HoldReason::BucketDeposit.into(), &user_id, deposit)?;
+
         let bucket = Bucket {
             root: T::DefaultMerkleRoot::get(),
             user_id,
@@ -847,7 +863,12 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
             private,
             read_access_group_id,
         };
+
         Buckets::<T>::insert(&bucket_id, &bucket);
+
+        MainStorageProviderIdsToBuckets::<T>::try_append(&msp_id, bucket_id)
+            .map_err(|_| Error::<T>::AppendBucketToMspFailed)?;
+
         Ok(())
     }
 
@@ -894,7 +915,30 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
     }
 
     fn remove_root_bucket(bucket_id: BucketId<T>) -> DispatchResult {
-        Buckets::<T>::remove(&bucket_id);
+        let bucket = Buckets::<T>::take(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+
+        MainStorageProviderIdsToBuckets::<T>::mutate_exists(
+            &bucket.msp_id,
+            |buckets| match buckets {
+                Some(b) => {
+                    b.retain(|b| b != &bucket_id);
+
+                    if b.is_empty() {
+                        *buckets = None;
+                    }
+                }
+                _ => {}
+            },
+        );
+
+        // Release the bucket deposit hold
+        T::NativeBalance::release(
+            &HoldReason::BucketDeposit.into(),
+            &bucket.user_id,
+            T::BucketDeposit::get(),
+            Precision::Exact,
+        )?;
+
         Ok(())
     }
 }

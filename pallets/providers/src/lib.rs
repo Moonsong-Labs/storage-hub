@@ -170,6 +170,10 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBuckets: Get<u32>;
 
+        /// The amount that an account has to deposit to create a bucket.
+        #[pallet::constant]
+        type BucketDeposit: Get<BalanceOf<Self>>;
+
         /// Type that represents the byte limit of a bucket name.
         #[pallet::constant]
         type BucketNameLimit: Get<u32>;
@@ -242,6 +246,21 @@ pub mod pallet {
     /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket), which removes the entry of the corresponding bucket.
     #[pallet::storage]
     pub type Buckets<T: Config> = StorageMap<_, Blake2_128Concat, BucketId<T>, Bucket<T>>;
+
+    /// The mapping from a MainStorageProviderId to a vector of BucketIds.
+    ///
+    /// This is used to efficiently retrieve the list of buckets that a Main Storage Provider is currently storing.
+    ///
+    /// This storage is updated in:
+    /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket)
+    /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket)
+    #[pallet::storage]
+    pub type MainStorageProviderIdsToBuckets<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        MainStorageProviderId<T>,
+        BoundedVec<BucketId<T>, T::MaxBuckets>,
+    >;
 
     /// The mapping from an AccountId to a BackupStorageProviderId.
     ///
@@ -421,6 +440,8 @@ pub mod pallet {
         BucketNotFound,
         /// Error thrown when a bucket ID already exists in storage.
         BucketAlreadyExists,
+        /// Error thrown when a bucket ID could not be added to the list of buckets of a MSP.
+        AppendBucketToMspFailed,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -431,6 +452,8 @@ pub mod pallet {
     pub enum HoldReason {
         /// Deposit that a Storage Provider has to pay to be registered as such
         StorageProviderDeposit,
+        /// Deposit that a user has to pay to create a bucket
+        BucketDeposit,
         // Only for testing, another unrelated hold reason
         #[cfg(test)]
         AnotherUnrelatedHold,
