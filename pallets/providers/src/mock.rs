@@ -66,6 +66,7 @@ parameter_types! {
     pub const BlockHashCount: u64 = 250;
     pub const SS58Prefix: u8 = 42;
     pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::StorageProviders(pallet_storage_providers::HoldReason::StorageProviderDeposit);
+    pub const BucketHoldReason: RuntimeHoldReason = RuntimeHoldReason::StorageProviders(pallet_storage_providers::HoldReason::BucketDeposit);
 }
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -137,6 +138,7 @@ impl crate::Config for Test {
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
+    type BucketDeposit = ConstU128<10>;
     type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
@@ -153,6 +155,16 @@ pub fn _new_test_ext() -> sp_io::TestExternalities {
         .into()
 }
 
+pub mod accounts {
+    pub const ALICE: (u64, u128) = (0, 5_000_000);
+    pub const BOB: (u64, u128) = (1, 10_000_000);
+    pub const CHARLIE: (u64, u128) = (2, 20_000_000);
+    pub const DAVID: (u64, u128) = (3, 30_000_000);
+    pub const EVE: (u64, u128) = (4, 400_000_000);
+    pub const FERDIE: (u64, u128) = (5, 5_000_000_000);
+    pub const GEORGE: (u64, u128) = (6, 600_000_000_000);
+}
+
 // Externalities builder with predefined balances for accounts and starting at block number 1
 pub struct ExtBuilder;
 impl ExtBuilder {
@@ -162,13 +174,13 @@ impl ExtBuilder {
             .unwrap();
         pallet_balances::GenesisConfig::<Test> {
             balances: vec![
-                (0, 5_000_000),       // Alice = 0
-                (1, 10_000_000),      // Bob = 1
-                (2, 20_000_000),      // Charlie = 2
-                (3, 30_000_000),      // David = 3
-                (4, 400_000_000),     // Eve = 4
-                (5, 5_000_000_000),   // Ferdie = 5
-                (6, 600_000_000_000), // George = 6
+                accounts::ALICE,
+                accounts::BOB,
+                accounts::CHARLIE,
+                accounts::DAVID,
+                accounts::EVE,
+                accounts::FERDIE,
+                accounts::GEORGE,
             ],
         }
         .assimilate_storage(&mut t)
