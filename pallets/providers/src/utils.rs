@@ -840,6 +840,21 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
             Error::<T>::NotRegistered
         );
 
+        let user_balance = T::NativeBalance::reducible_balance(
+            &user_id,
+            Preservation::Preserve,
+            Fortitude::Polite,
+        );
+
+        let deposit = T::BucketDeposit::get();
+        ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
+        ensure!(
+            T::NativeBalance::can_hold(&HoldReason::BucketDeposit.into(), &user_id, deposit),
+            Error::<T>::CannotHoldDeposit
+        );
+
+        T::NativeBalance::hold(&HoldReason::BucketDeposit.into(), &user_id, deposit)?;
+
         let bucket = Bucket {
             root: T::DefaultMerkleRoot::get(),
             user_id,

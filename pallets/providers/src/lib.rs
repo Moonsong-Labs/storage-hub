@@ -170,6 +170,10 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBuckets: Get<u32>;
 
+        /// The amount that an account has to deposit to create a bucket.
+        #[pallet::constant]
+        type BucketDeposit: Get<BalanceOf<Self>>;
+
         /// Type that represents the byte limit of a bucket name.
         #[pallet::constant]
         type BucketNameLimit: Get<u32>;
@@ -431,6 +435,8 @@ pub mod pallet {
     pub enum HoldReason {
         /// Deposit that a Storage Provider has to pay to be registered as such
         StorageProviderDeposit,
+        /// Deposit that a user has to pay to create a bucket
+        BucketDeposit,
         // Only for testing, another unrelated hold reason
         #[cfg(test)]
         AnotherUnrelatedHold,
