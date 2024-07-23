@@ -8,7 +8,7 @@ use shc_actors_framework::{
     event_bus::{EventBusListener, EventHandler},
 };
 use shc_blockchain_service::{
-    events::{BspConfirmedStoring, NewStorageRequest},
+    events::{BspConfirmedStoring, NewChallengeSeed, NewStorageRequest},
     BlockchainService,
 };
 use shc_file_manager::traits::FileStorage;
@@ -16,6 +16,7 @@ use shc_file_transfer_service::{events::RemoteUploadRequest, FileTransferService
 use shc_forest_manager::traits::ForestStorage;
 
 use crate::tasks::{
+    bsp_submit_proof::BspSubmitProofTask,
     bsp_upload_file::BspUploadFileTask,
     mock_sp_react_to_event::{EventToReactTo, SpReactToEventMockTask},
     user_sends_file::UserSendsFileTask,
@@ -116,6 +117,15 @@ where
         let fts_event_bus_listener: EventBusListener<RemoteUploadRequest, _> =
             bsp_upload_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
         fts_event_bus_listener.start();
+
+        // TODO: Document this task.
+        let bsp_submit_proof_task = BspSubmitProofTask::new(self.clone());
+        // Subscribing to NewChallengeSeed event from the BlockchainService.
+        let new_challenge_seed_event_bus_listener: EventBusListener<NewChallengeSeed, _> =
+            bsp_submit_proof_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        new_challenge_seed_event_bus_listener.start();
 
         // TODO: Remove this, this is just a mocked task for testing purposes.
         let sp_react_to_event_mock_task = SpReactToEventMockTask::new(self.clone());
