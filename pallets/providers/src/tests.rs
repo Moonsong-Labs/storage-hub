@@ -4156,7 +4156,8 @@ mod add_bucket {
                         None
                     ));
 
-                    let expected_hold_amount = (i + 1) as u128 * <BucketDeposit as Get<u128>>::get();
+                    let expected_hold_amount =
+                        (i + 1) as u128 * <BucketDeposit as Get<u128>>::get();
                     assert_eq!(
                         NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
                         expected_hold_amount
@@ -4239,10 +4240,7 @@ mod remove_root_bucket {
                 assert_ok!(StorageProviders::remove_root_bucket(bucket_id));
 
                 // Check that the bucket deposit is returned to the bucket owner
-                assert_eq!(
-                    NativeBalance::free_balance(&bucket_owner),
-                    accounts::BOB.1
-                );
+                assert_eq!(NativeBalance::free_balance(&bucket_owner), accounts::BOB.1);
 
                 // Check that the bucket deposit is no longer on hold
                 assert_eq!(
@@ -4288,7 +4286,8 @@ mod remove_root_bucket {
                         None
                     ));
 
-                    let expected_hold_amount = (i + 1) as u128 * <BucketDeposit as Get<u128>>::get();
+                    let expected_hold_amount =
+                        (i + 1) as u128 * <BucketDeposit as Get<u128>>::get();
                     assert_eq!(
                         NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
                         expected_hold_amount
@@ -4312,10 +4311,7 @@ mod remove_root_bucket {
                 }
 
                 // Check that the bucket deposits are returned to the bucket owner
-                assert_eq!(
-                    NativeBalance::free_balance(&bucket_owner),
-                    accounts::BOB.1
-                );
+                assert_eq!(NativeBalance::free_balance(&bucket_owner), accounts::BOB.1);
 
                 // Check that the bucket deposits are no longer on hold
                 assert_eq!(
