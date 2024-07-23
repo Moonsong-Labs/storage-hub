@@ -1,13 +1,14 @@
 use crate::{
     mock::*,
     types::{
-        BackupStorageProvider, BalanceOf, MainStorageProvider, MaxMultiAddressAmount, MultiAddress,
-        StorageData, StorageProvider, ValuePropId, ValueProposition,
+        BackupStorageProvider, BalanceOf, Bucket, MainStorageProvider, MainStorageProviderId,
+        MaxBuckets, MaxMultiAddressAmount, MultiAddress, StorageData, StorageProvider, ValuePropId,
+        ValueProposition,
     },
     Error, Event,
 };
 
-use frame_support::{assert_noop, assert_ok, dispatch::Pays, BoundedVec};
+use frame_support::{assert_err, assert_noop, assert_ok, dispatch::Pays, BoundedVec};
 use frame_support::{
     pallet_prelude::Weight,
     traits::{
@@ -29,6 +30,7 @@ type MaxMsps = <Test as crate::Config>::MaxMsps;
 type MaxBsps = <Test as crate::Config>::MaxBsps;
 type MinBlocksBetweenCapacityChanges = <Test as crate::Config>::MinBlocksBetweenCapacityChanges;
 type DefaultMerkleRoot = <Test as crate::Config>::DefaultMerkleRoot;
+type BucketDeposit = <Test as crate::Config>::BucketDeposit;
 
 // Runtime constants:
 // This is the duration of an epoch in blocks, a constant from the runtime configuration that we mock here
@@ -74,8 +76,8 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice and check its balance
-                    let alice: AccountId = 0;
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    let alice: AccountId = accounts::ALICE.0;
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -103,7 +105,7 @@ mod sign_up {
                     // Check the new free balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_storage_amount
+                        accounts::ALICE.1 - deposit_for_storage_amount
                     );
                     // Check the new held balance of Alice
                     assert_eq!(
@@ -173,8 +175,8 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice and check its balance
-                    let alice: AccountId = 0;
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    let alice: AccountId = accounts::ALICE.0;
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -202,7 +204,7 @@ mod sign_up {
                     // Check the new free balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_storage_amount
+                        accounts::ALICE.1 - deposit_for_storage_amount
                     );
                     // Check the new held balance of Alice
                     assert_eq!(
@@ -268,8 +270,8 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice and check its balance
-                    let alice: AccountId = 0;
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    let alice: AccountId = accounts::ALICE.0;
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -297,7 +299,7 @@ mod sign_up {
                     // Check the new free balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_storage_amount
+                        accounts::ALICE.1 - deposit_for_storage_amount
                     );
                     // Check the new held balance of Alice
                     assert_eq!(
@@ -364,8 +366,8 @@ mod sign_up {
                     let storage_amount_bob: StorageData<Test> = 300;
 
                     // Get the Account Id of Alice and check its balance
-                    let alice: AccountId = 0;
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    let alice: AccountId = accounts::ALICE.0;
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -373,7 +375,7 @@ mod sign_up {
 
                     // Do the same for Bob
                     let bob: AccountId = 1;
-                    assert_eq!(NativeBalance::free_balance(&bob), 10_000_000);
+                    assert_eq!(NativeBalance::free_balance(&bob), accounts::BOB.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
                         0
@@ -420,7 +422,7 @@ mod sign_up {
                     // Check the new free balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_storage_amount_alice
+                        accounts::ALICE.1 - deposit_for_storage_amount_alice
                     );
                     // Check the new held balance of Alice
                     assert_eq!(
@@ -431,7 +433,7 @@ mod sign_up {
                     // Check the new free balance of Bob
                     assert_eq!(
                         NativeBalance::free_balance(&bob),
-                        10_000_000 - deposit_for_storage_amount_bob
+                        accounts::BOB.1 - deposit_for_storage_amount_bob
                     );
                     // Check the new held balance of Bob
                     assert_eq!(
@@ -487,7 +489,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Request sign up Alice as a Main Storage Provider
                     assert_ok!(StorageProviders::request_msp_sign_up(
@@ -557,8 +559,8 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice and check its balance
-                    let alice: AccountId = 0;
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    let alice: AccountId = accounts::ALICE.0;
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -585,7 +587,7 @@ mod sign_up {
                     // Check the new free balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_storage_amount
+                        accounts::ALICE.1 - deposit_for_storage_amount
                     );
                     // Check the new held balance of Alice
                     assert_eq!(
@@ -650,8 +652,8 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice and check its balance
-                    let alice: AccountId = 0;
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    let alice: AccountId = accounts::ALICE.0;
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -678,7 +680,7 @@ mod sign_up {
                     // Check the new free balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_storage_amount
+                        accounts::ALICE.1 - deposit_for_storage_amount
                     );
                     // Check the new held balance of Alice
                     assert_eq!(
@@ -753,8 +755,8 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice and check its balance
-                    let alice: AccountId = 0;
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    let alice: AccountId = accounts::ALICE.0;
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -781,7 +783,7 @@ mod sign_up {
                     // Check the new free balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_storage_amount
+                        accounts::ALICE.1 - deposit_for_storage_amount
                     );
                     // Check the new held balance of Alice
                     assert_eq!(
@@ -857,8 +859,8 @@ mod sign_up {
                     let storage_amount_bob: StorageData<Test> = 300;
 
                     // Get the Account Id of Alice and check its balance
-                    let alice: AccountId = 0;
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    let alice: AccountId = accounts::ALICE.0;
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -866,7 +868,7 @@ mod sign_up {
 
                     // Do the same for Bob
                     let bob: AccountId = 1;
-                    assert_eq!(NativeBalance::free_balance(&bob), 10_000_000);
+                    assert_eq!(NativeBalance::free_balance(&bob), accounts::BOB.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
                         0
@@ -911,7 +913,7 @@ mod sign_up {
                     // Check the new free balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_storage_amount_alice
+                        accounts::ALICE.1 - deposit_for_storage_amount_alice
                     );
                     // Check the new held balance of Alice
                     assert_eq!(
@@ -922,7 +924,7 @@ mod sign_up {
                     // Check the new free balance of Bob
                     assert_eq!(
                         NativeBalance::free_balance(&bob),
-                        10_000_000 - deposit_for_storage_amount_bob
+                        accounts::BOB.1 - deposit_for_storage_amount_bob
                     );
                     // Check the new held balance of Bob
                     assert_eq!(
@@ -970,7 +972,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Request sign up Alice as a Backup Storage Provider
                     assert_ok!(StorageProviders::request_bsp_sign_up(
@@ -1044,8 +1046,8 @@ mod sign_up {
                     let storage_amount_bob: StorageData<Test> = 300;
 
                     // Get the Account Id of Alice and check its balance
-                    let alice: AccountId = 0;
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    let alice: AccountId = accounts::ALICE.0;
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -1053,7 +1055,7 @@ mod sign_up {
 
                     // Do the same for Bob
                     let bob: AccountId = 1;
-                    assert_eq!(NativeBalance::free_balance(&bob), 10_000_000);
+                    assert_eq!(NativeBalance::free_balance(&bob), accounts::BOB.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
                         0
@@ -1099,7 +1101,7 @@ mod sign_up {
                     // Check the new free balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_storage_amount_alice
+                        accounts::ALICE.1 - deposit_for_storage_amount_alice
                     );
                     // Check the new held balance of Alice
                     assert_eq!(
@@ -1110,7 +1112,7 @@ mod sign_up {
                     // Check the new free balance of Bob
                     assert_eq!(
                         NativeBalance::free_balance(&bob),
-                        10_000_000 - deposit_for_storage_amount_bob
+                        accounts::BOB.1 - deposit_for_storage_amount_bob
                     );
                     // Check the new held balance of Bob
                     assert_eq!(
@@ -1166,8 +1168,8 @@ mod sign_up {
                     let storage_amount_bob: StorageData<Test> = 300;
 
                     // Get the Account Id of Alice and check its balance
-                    let alice: AccountId = 0;
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    let alice: AccountId = accounts::ALICE.0;
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -1175,7 +1177,7 @@ mod sign_up {
 
                     // Do the same for Bob
                     let bob: AccountId = 1;
-                    assert_eq!(NativeBalance::free_balance(&bob), 10_000_000);
+                    assert_eq!(NativeBalance::free_balance(&bob), accounts::BOB.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
                         0
@@ -1257,8 +1259,8 @@ mod sign_up {
                     let storage_amount_bob: StorageData<Test> = 300;
 
                     // Get the Account Id of Alice and check its balance
-                    let alice: AccountId = 0;
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    let alice: AccountId = accounts::ALICE.0;
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -1266,7 +1268,7 @@ mod sign_up {
 
                     // Do the same for Bob
                     let bob: AccountId = 1;
-                    assert_eq!(NativeBalance::free_balance(&bob), 10_000_000);
+                    assert_eq!(NativeBalance::free_balance(&bob), accounts::BOB.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
                         0
@@ -1365,8 +1367,8 @@ mod sign_up {
                     let storage_amount_bob: StorageData<Test> = 300;
 
                     // Get the Account Id of Alice and check its balance
-                    let alice: AccountId = 0;
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    let alice: AccountId = accounts::ALICE.0;
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -1374,7 +1376,7 @@ mod sign_up {
 
                     // Do the same for Bob
                     let bob: AccountId = 1;
-                    assert_eq!(NativeBalance::free_balance(&bob), 10_000_000);
+                    assert_eq!(NativeBalance::free_balance(&bob), accounts::BOB.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
                         0
@@ -1466,7 +1468,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Request sign up of Alice as a Main Storage Provider
                     assert_ok!(StorageProviders::request_msp_sign_up(
@@ -1532,8 +1534,8 @@ mod sign_up {
                     let storage_amount_bob: StorageData<Test> = 300;
 
                     // Get the Account Id of Alice and check its balance
-                    let alice: AccountId = 0;
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    let alice: AccountId = accounts::ALICE.0;
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -1541,7 +1543,7 @@ mod sign_up {
 
                     // Do the same for Bob
                     let bob: AccountId = 1;
-                    assert_eq!(NativeBalance::free_balance(&bob), 10_000_000);
+                    assert_eq!(NativeBalance::free_balance(&bob), accounts::BOB.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
                         0
@@ -1587,7 +1589,7 @@ mod sign_up {
                     // Check the new free balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_storage_amount_alice
+                        accounts::ALICE.1 - deposit_for_storage_amount_alice
                     );
                     // Check the new held balance of Alice
                     assert_eq!(
@@ -1598,7 +1600,7 @@ mod sign_up {
                     // Check the new free balance of Bob
                     assert_eq!(
                         NativeBalance::free_balance(&bob),
-                        10_000_000 - deposit_for_storage_amount_bob
+                        accounts::BOB.1 - deposit_for_storage_amount_bob
                     );
                     // Check the new held balance of Bob
                     assert_eq!(
@@ -1633,7 +1635,7 @@ mod sign_up {
                     )));
 
                     // Check Alice's new free balance
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     // Check Alice's new held balance
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -1653,7 +1655,7 @@ mod sign_up {
                     assert_ok!(StorageProviders::cancel_sign_up(RuntimeOrigin::signed(bob)));
 
                     // Check Bob's new free balance
-                    assert_eq!(NativeBalance::free_balance(&bob), 10_000_000);
+                    assert_eq!(NativeBalance::free_balance(&bob), accounts::BOB.1);
                     // Check Bob's new held balance
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
@@ -1705,7 +1707,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Request sign up of Alice as a Main Storage Provider
                     assert_ok!(StorageProviders::request_msp_sign_up(
@@ -1765,7 +1767,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Request sign up of Alice as a Main Storage Provider
                     assert_ok!(StorageProviders::request_msp_sign_up(
@@ -1824,7 +1826,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Request to sign up Alice as a Main Storage Provider
                     assert_ok!(StorageProviders::request_msp_sign_up(
@@ -1872,7 +1874,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Request to sign up the maximum amount of Main Storage Providers
                     for i in 1..<MaxMsps as Get<u32>>::get() + 1 {
@@ -1943,7 +1945,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Request to sign up Alice
                     assert_ok!(StorageProviders::request_msp_sign_up(
@@ -2020,7 +2022,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Request sign up of Alice as a Backup Storage Provider
                     assert_ok!(StorageProviders::request_bsp_sign_up(
@@ -2074,7 +2076,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Request sign up of Alice as a Backup Storage Provider
                     assert_ok!(StorageProviders::request_bsp_sign_up(
@@ -2127,7 +2129,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Request to sign up Alice as a Backup Storage Provider
                     assert_ok!(StorageProviders::request_bsp_sign_up(
@@ -2168,7 +2170,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Request to sign up the maximum amount of Backup Storage Providers
                     for i in 1..<MaxBsps as Get<u32>>::get() + 1 {
@@ -2232,7 +2234,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Request to sign up Alice as a Backup Storage Provider
                     assert_ok!(StorageProviders::request_bsp_sign_up(
@@ -2312,7 +2314,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Request sign up of Alice as a Main Storage Provider
                     assert_ok!(StorageProviders::request_msp_sign_up(
@@ -2349,7 +2351,7 @@ mod sign_up {
             fn confirm_sign_up_fails_if_request_does_not_exist() {
                 ExtBuilder::build().execute_with(|| {
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Check that Alice does not have a pending sign up request
                     assert!(StorageProviders::get_sign_up_request(&alice)
@@ -2370,7 +2372,7 @@ mod sign_up {
             fn msp_and_bsp_request_sign_up_fails_when_already_registered() {
                 ExtBuilder::build().execute_with(|| {
                     // Get the Account Id of Alice and Bob
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let bob: AccountId = 1;
 
                     // Register Alice as a Main Storage Provider
@@ -2455,7 +2457,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice and Bob
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let bob: AccountId = 1;
 
                     // Request to sign up Alice as a Main Storage Provider
@@ -2523,7 +2525,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 1;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Try to sign up Alice as a Main Storage Provider with less than the minimum capacity
                     assert_noop!(
@@ -2616,7 +2618,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Try to sign up Alice as a Main Storage Provider with no multiaddresses
                     assert_noop!(
@@ -2663,7 +2665,7 @@ mod sign_up {
                     let storage_amount: StorageData<Test> = 100;
 
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Try to sign up Alice as a Main Storage Provider with an invalid multiaddress
                     assert_noop!(
@@ -2708,7 +2710,7 @@ mod sign_off {
             fn msp_sign_off_works() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let storage_amount: StorageData<Test> = 100;
                     let (deposit_amount, _alice_msp) =
                         register_account_as_msp(alice, storage_amount);
@@ -2716,7 +2718,7 @@ mod sign_off {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_amount
+                        accounts::ALICE.1 - deposit_amount
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -2730,7 +2732,7 @@ mod sign_off {
                     assert_ok!(StorageProviders::msp_sign_off(RuntimeOrigin::signed(alice)));
 
                     // Check the new free and held balance of Alice
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -2759,7 +2761,7 @@ mod sign_off {
             fn bsp_sign_off_works() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let storage_amount: StorageData<Test> = 100;
                     let (deposit_amount, _alice_bsp) =
                         register_account_as_bsp(alice, storage_amount);
@@ -2767,7 +2769,7 @@ mod sign_off {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_amount
+                        accounts::ALICE.1 - deposit_amount
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -2787,7 +2789,7 @@ mod sign_off {
                     assert_eq!(StorageProviders::get_total_bsp_capacity(), 0);
 
                     // Check the new free and held balance of Alice
-                    assert_eq!(NativeBalance::free_balance(&alice), 5_000_000);
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                         0
@@ -2821,7 +2823,7 @@ mod sign_off {
             fn msp_sign_off_fails_when_not_registered_as_msp() {
                 ExtBuilder::build().execute_with(|| {
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Try to sign off Alice as a Main Storage Provider
                     assert_noop!(
@@ -2843,7 +2845,7 @@ mod sign_off {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_amount
+                        accounts::ALICE.1 - deposit_amount
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -2896,7 +2898,7 @@ mod sign_off {
             fn bsp_sign_off_fails_when_not_registered_as_bsp() {
                 ExtBuilder::build().execute_with(|| {
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Try to sign off Alice as a Backup Storage Provider
                     assert_noop!(
@@ -2910,7 +2912,7 @@ mod sign_off {
             fn bsp_sign_off_fails_when_it_still_has_used_storage() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let storage_amount: StorageData<Test> = 100;
                     let (deposit_amount, _alice_bsp) =
                         register_account_as_bsp(alice, storage_amount);
@@ -2918,7 +2920,7 @@ mod sign_off {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_amount
+                        accounts::ALICE.1 - deposit_amount
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -2984,7 +2986,7 @@ mod change_capacity {
             fn msp_increase_change_capacity_works() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let increased_storage_amount: StorageData<Test> = 200;
                     let (old_deposit_amount, _alice_msp) =
@@ -2993,7 +2995,7 @@ mod change_capacity {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - old_deposit_amount
+                        accounts::ALICE.1 - old_deposit_amount
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -3024,7 +3026,7 @@ mod change_capacity {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_increased_storage
+                        accounts::ALICE.1 - deposit_for_increased_storage
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -3052,7 +3054,7 @@ mod change_capacity {
             fn msp_decrease_change_capacity_works() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let decreased_storage_amount: StorageData<Test> = 50;
                     let (old_deposit_amount, _alice_msp) =
@@ -3061,7 +3063,7 @@ mod change_capacity {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - old_deposit_amount
+                        accounts::ALICE.1 - old_deposit_amount
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -3092,7 +3094,7 @@ mod change_capacity {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_decreased_storage
+                        accounts::ALICE.1 - deposit_for_decreased_storage
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -3120,7 +3122,7 @@ mod change_capacity {
             fn msp_decrease_change_capacity_to_exactly_minimum_works() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 500;
                     let minimum_storage_amount: StorageData<Test> =
                         <SpMinCapacity as Get<u32>>::get();
@@ -3130,7 +3132,7 @@ mod change_capacity {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - old_deposit_amount
+                        accounts::ALICE.1 - old_deposit_amount
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -3156,7 +3158,7 @@ mod change_capacity {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_minimum_storage
+                        accounts::ALICE.1 - deposit_for_minimum_storage
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -3188,7 +3190,7 @@ mod change_capacity {
             fn bsp_increase_change_capacity_works() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let increased_storage_amount: StorageData<Test> = 200;
                     let (old_deposit_amount, _alice_bsp) =
@@ -3197,7 +3199,7 @@ mod change_capacity {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - old_deposit_amount
+                        accounts::ALICE.1 - old_deposit_amount
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -3234,7 +3236,7 @@ mod change_capacity {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_increased_storage
+                        accounts::ALICE.1 - deposit_for_increased_storage
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -3268,7 +3270,7 @@ mod change_capacity {
             fn bsp_decrease_change_capacity_works() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let decreased_storage_amount: StorageData<Test> = 50;
                     let (old_deposit_amount, _alice_bsp) =
@@ -3277,7 +3279,7 @@ mod change_capacity {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - old_deposit_amount
+                        accounts::ALICE.1 - old_deposit_amount
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -3314,7 +3316,7 @@ mod change_capacity {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_decreased_storage
+                        accounts::ALICE.1 - deposit_for_decreased_storage
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -3348,7 +3350,7 @@ mod change_capacity {
             fn bsp_decrease_change_capacity_to_exactly_minimum_works() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 500;
                     let minimum_storage_amount: StorageData<Test> =
                         <SpMinCapacity as Get<u32>>::get();
@@ -3358,7 +3360,7 @@ mod change_capacity {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - old_deposit_amount
+                        accounts::ALICE.1 - old_deposit_amount
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -3390,7 +3392,7 @@ mod change_capacity {
                     // Check the new free and held balance of Alice
                     assert_eq!(
                         NativeBalance::free_balance(&alice),
-                        5_000_000 - deposit_for_minimum_storage
+                        accounts::ALICE.1 - deposit_for_minimum_storage
                     );
                     assert_eq!(
                         NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
@@ -3434,7 +3436,7 @@ mod change_capacity {
             fn msp_change_capacity_fails_when_not_registered_as_msp() {
                 ExtBuilder::build().execute_with(|| {
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Try to change the capacity of Alice as a Main Storage Provider
                     assert_noop!(
@@ -3448,7 +3450,7 @@ mod change_capacity {
             fn msp_change_capacity_fails_if_not_enough_time_passed() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let new_storage_amount: StorageData<Test> = 200;
                     let (_old_deposit_amount, _alice_msp) =
@@ -3475,7 +3477,7 @@ mod change_capacity {
             fn msp_change_capacity_fails_when_changing_to_zero() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let zero_storage_amount: StorageData<Test> = 0;
                     let (_old_deposit_amount, _alice_msp) =
@@ -3502,7 +3504,7 @@ mod change_capacity {
             fn msp_change_capacity_fails_when_using_same_capacity() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let new_storage_amount: StorageData<Test> = old_storage_amount;
                     let (_old_deposit_amount, _alice_msp) =
@@ -3529,7 +3531,7 @@ mod change_capacity {
             fn msp_change_capacity_fails_when_under_min_capacity() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let decreased_storage_amount: StorageData<Test> = 1;
                     let (_old_deposit_amount, _alice_msp) =
@@ -3562,7 +3564,7 @@ mod change_capacity {
             fn msp_change_capacity_fails_when_under_used_capacity() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let decreased_storage_amount: StorageData<Test> = 50;
                     let (_old_deposit_amount, _alice_sp_id) =
@@ -3606,10 +3608,10 @@ mod change_capacity {
             fn msp_change_capacity_fails_when_not_enough_funds() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let new_storage_amount: StorageData<Test> =
-                        (5_000_000 / <DepositPerData as Get<u128>>::get() + 1)
+                        (accounts::ALICE.1 / <DepositPerData as Get<u128>>::get() + 1)
                             .try_into()
                             .unwrap();
                     let (_old_deposit_amount, _alice_msp) =
@@ -3647,7 +3649,7 @@ mod change_capacity {
             fn bsp_change_capacity_fails_when_not_registered_as_bsp() {
                 ExtBuilder::build().execute_with(|| {
                     // Get the Account Id of Alice
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
 
                     // Try to change the capacity of Alice as a Backup Storage Provider
                     assert_noop!(
@@ -3661,7 +3663,7 @@ mod change_capacity {
             fn bsp_change_capacity_fails_if_not_enough_time_passed() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let new_storage_amount: StorageData<Test> = 200;
                     let (_old_deposit_amount, _alice_bsp) =
@@ -3700,7 +3702,7 @@ mod change_capacity {
             fn bsp_change_capacity_fails_when_changing_to_zero() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let zero_storage_amount: StorageData<Test> = 0;
                     let (_old_deposit_amount, _alice_bsp) =
@@ -3739,7 +3741,7 @@ mod change_capacity {
             fn bsp_change_capacity_fails_when_using_same_capacity() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let new_storage_amount: StorageData<Test> = old_storage_amount;
                     let (_old_deposit_amount, _alice_bsp) =
@@ -3778,7 +3780,7 @@ mod change_capacity {
             fn bsp_change_capacity_fails_when_under_min_capacity() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let decreased_storage_amount: StorageData<Test> = 1;
                     let (_old_deposit_amount, _alice_bsp) =
@@ -3823,7 +3825,7 @@ mod change_capacity {
             fn bsp_change_capacity_fails_when_under_used_capacity() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let decreased_storage_amount: StorageData<Test> = 50;
                     let (_old_deposit_amount, _alice_bsp_id) =
@@ -3879,10 +3881,10 @@ mod change_capacity {
             fn bsp_change_capacity_fails_when_not_enough_funds() {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
-                    let alice: AccountId = 0;
+                    let alice: AccountId = accounts::ALICE.0;
                     let old_storage_amount: StorageData<Test> = 100;
                     let new_storage_amount: StorageData<Test> =
-                        (5_000_000 / <DepositPerData as Get<u128>>::get() + 1)
+                        (accounts::ALICE.1 / <DepositPerData as Get<u128>>::get() + 1)
                             .try_into()
                             .unwrap();
                     let (_old_deposit_amount, _alice_bsp) =
@@ -3934,13 +3936,13 @@ mod change_bucket {
         #[test]
         fn change_bucket_fails_when_bucket_id_already_exists() {
             ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = 0;
+                let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageData<Test> = 100;
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
-                let bucket_owner = 1;
+                let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
                     &bucket_owner,
@@ -3960,6 +3962,367 @@ mod change_bucket {
                 assert_noop!(
                     StorageProviders::add_bucket(msp_id, bucket_owner, bucket_id, false, None),
                     Error::<Test>::BucketAlreadyExists
+                );
+            });
+        }
+    }
+}
+
+mod add_bucket {
+    use super::*;
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn add_bucket_already_exists() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice
+                assert_ok!(StorageProviders::add_bucket(
+                    msp_id,
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None
+                ));
+
+                // Try to add the bucket for Alice with the same bucket id
+                assert_noop!(
+                    StorageProviders::add_bucket(msp_id, bucket_owner, bucket_id, false, None),
+                    Error::<Test>::BucketAlreadyExists
+                );
+            });
+        }
+
+        #[test]
+        fn add_bucket_msp_not_registered() {
+            ExtBuilder::build().execute_with(|| {
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Try to add a bucket to a non-registered MSP
+                assert_noop!(
+                    StorageProviders::add_bucket(
+                        MainStorageProviderId::<Test>::default(),
+                        bucket_owner,
+                        bucket_id,
+                        false,
+                        None
+                    ),
+                    Error::<Test>::NotRegistered
+                );
+            });
+        }
+
+        #[test]
+        fn add_bucket_passed_max_bucket_msp_capacity() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add the maximum amount of buckets for Alice
+                for i in 0..MaxBuckets::<Test>::get() {
+                    let bucket_name =
+                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                        &bucket_owner,
+                        bucket_name,
+                    );
+                    assert_ok!(StorageProviders::add_bucket(
+                        msp_id,
+                        bucket_owner,
+                        bucket_id,
+                        false,
+                        None
+                    ));
+                }
+
+                // Try to add another bucket for Alice
+                assert_err!(
+                    StorageProviders::add_bucket(msp_id, bucket_owner, bucket_id, false, None),
+                    Error::<Test>::AppendBucketToMspFailed
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn add_bucket() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice
+                assert_ok!(StorageProviders::add_bucket(
+                    msp_id,
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None
+                ));
+
+                assert_eq!(
+                    NativeBalance::free_balance(&bucket_owner),
+                    accounts::BOB.1 - <BucketDeposit as Get<u128>>::get()
+                );
+
+                assert_eq!(
+                    NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
+                    BucketDeposit::get()
+                );
+
+                let buckets = crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
+
+                assert_eq!(buckets.len(), 1);
+
+                let bucket = crate::Buckets::<Test>::get(&bucket_id).unwrap();
+
+                assert_eq!(
+                    bucket,
+                    Bucket::<Test> {
+                        root: DefaultMerkleRoot::get(),
+                        user_id: bucket_owner,
+                        msp_id,
+                        private: false,
+                        read_access_group_id: None,
+                    }
+                );
+            });
+        }
+
+        #[test]
+        fn add_buckets_to_max_capacity() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+
+                // Add the maximum amount of buckets for Alice
+                for i in 0..MaxBuckets::<Test>::get() {
+                    let bucket_name =
+                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                        &bucket_owner,
+                        bucket_name,
+                    );
+                    assert_ok!(StorageProviders::add_bucket(
+                        msp_id,
+                        bucket_owner,
+                        bucket_id,
+                        false,
+                        None
+                    ));
+
+                    let expected_hold_amount =
+                        (i + 1) as u128 * <BucketDeposit as Get<u128>>::get();
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
+                        expected_hold_amount
+                    );
+                }
+
+                let buckets = crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
+
+                let max_buckets: u32 = MaxBuckets::<Test>::get();
+                assert_eq!(buckets.len(), max_buckets as usize);
+            });
+        }
+    }
+}
+
+mod remove_root_bucket {
+    use super::*;
+
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn remove_root_bucket_when_bucket_does_not_exist() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Try to remove a bucket that does not exist
+                assert_noop!(
+                    StorageProviders::remove_root_bucket(bucket_id),
+                    Error::<Test>::BucketNotFound
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn remove_root_bucket() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice
+                assert_ok!(StorageProviders::add_bucket(
+                    msp_id,
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None
+                ));
+
+                // Check that the bucket was added to the MSP
+                assert_eq!(
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap(),
+                    vec![bucket_id]
+                );
+
+                // Remove the bucket
+                assert_ok!(StorageProviders::remove_root_bucket(bucket_id));
+
+                // Check that the bucket deposit is returned to the bucket owner
+                assert_eq!(NativeBalance::free_balance(&bucket_owner), accounts::BOB.1);
+
+                // Check that the bucket deposit is no longer on hold
+                assert_eq!(
+                    NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
+                    0
+                );
+
+                // Check that the bucket was removed
+                assert_eq!(crate::Buckets::<Test>::get(&bucket_id), None);
+
+                // Check that the bucket was removed from the MSP
+                assert_eq!(
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id),
+                    None
+                );
+            });
+        }
+
+        #[test]
+        fn remove_root_buckets_multiple() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+
+                // Add the maximum amount of buckets for Alice
+                for i in 0..MaxBuckets::<Test>::get() {
+                    let bucket_name =
+                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                        &bucket_owner,
+                        bucket_name,
+                    );
+                    assert_ok!(StorageProviders::add_bucket(
+                        msp_id,
+                        bucket_owner,
+                        bucket_id,
+                        false,
+                        None
+                    ));
+
+                    let expected_hold_amount =
+                        (i + 1) as u128 * <BucketDeposit as Get<u128>>::get();
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
+                        expected_hold_amount
+                    );
+                }
+
+                let buckets = crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id).unwrap();
+
+                let max_buckets: u32 = MaxBuckets::<Test>::get();
+                assert_eq!(buckets.len(), max_buckets as usize);
+
+                // Remove all the buckets
+                for i in 0..MaxBuckets::<Test>::get() {
+                    let bucket_name =
+                        BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
+                    let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                        &bucket_owner,
+                        bucket_name,
+                    );
+                    assert_ok!(StorageProviders::remove_root_bucket(bucket_id));
+                }
+
+                // Check that the bucket deposits are returned to the bucket owner
+                assert_eq!(NativeBalance::free_balance(&bucket_owner), accounts::BOB.1);
+
+                // Check that the bucket deposits are no longer on hold
+                assert_eq!(
+                    NativeBalance::balance_on_hold(&BucketHoldReason::get(), &bucket_owner),
+                    0
+                );
+
+                // Check that all the buckets were removed
+                assert_eq!(
+                    crate::MainStorageProviderIdsToBuckets::<Test>::get(&msp_id),
+                    None
                 );
             });
         }
@@ -4158,7 +4521,7 @@ mod randomness {
     #[test]
     fn test_randomness() {
         ExtBuilder::build().execute_with(|| {
-            let alice: AccountId = 0;
+            let alice: AccountId = accounts::ALICE.0;
             let (sp_id, block_number) = test_randomness_output(&alice);
             println!(
                 "current block_number: {:?}",

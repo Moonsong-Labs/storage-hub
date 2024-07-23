@@ -441,6 +441,7 @@ impl pallet_randomness::Config for Runtime {
 
 parameter_types! {
     pub const SpMinDeposit: Balance = 20 * UNIT;
+    pub const BucketDeposit: Balance = 20 * UNIT;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -465,6 +466,7 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
+    type BucketDeposit = BucketDeposit;
     type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = ConstU32<2>;
