@@ -853,6 +853,7 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
             Error::<T>::CannotHoldDeposit
         );
 
+        // Hold the bucket deposit
         T::NativeBalance::hold(&HoldReason::BucketDeposit.into(), &user_id, deposit)?;
 
         let bucket = Bucket {
@@ -929,6 +930,14 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
                 _ => {}
             },
         );
+
+        // Release the bucket deposit hold
+        T::NativeBalance::release(
+            &HoldReason::BucketDeposit.into(),
+            &bucket.user_id,
+            T::BucketDeposit::get(),
+            Precision::Exact,
+        )?;
 
         Ok(())
     }
