@@ -411,3 +411,7 @@ Any account can call the `add_redundancy` extrinsic which requires a proof of in
 This creates a traditional storage request with the specified amount of BSPs required. The caller of the extrinsic can optionally pass a list of data servers for the file key, which then will be marked in the storage request for the volunteers to request the data from. The caller is be able to obtain this information from the off-chain indexer.
 
 If the file was originally stored by an MSP, it is up to the user of the lost file or files within a bucket to execute the `transfer_file` or `transfer_bucket` extrinsics exposed by the file system pallet to move the data to a new MSP.
+
+For every file key submitted for redundancy which was stored by an insolvent Storage Provider, the caller will be rewarded with a configurable amount of tokens which must be less than the slash factor to prevent abuse. The runtime will accrue the file size of each file key submitted for redundancy for the given insolvent Storage Provider. Once the total accrued file size reaches the total data size stored by the insolvent Storage Provider, the Storage Provider is deleted from the runtime.
+
+This process ensures that total redundancy is regained before the insolvent Storage Provider is removed from the network.
