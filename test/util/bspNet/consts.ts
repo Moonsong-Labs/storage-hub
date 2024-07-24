@@ -45,6 +45,21 @@ export const TEST_ARTEFACTS = {
     size: 346248n,
     checksum: "8e06811883fc3e5e6a0331825b365e4bd7b83ba7683fa9da17e4daea25d7a9f5",
     fingerprint: "0x00b122b1b40969f3b6ce9277d511d7f771f8a4e213fa1a8a2951662bd3044000"
+  },
+  "res/empty-file": {
+    size: 0n,
+    checksum: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    fingerprint: "0x03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314"
+  },
+  "res/half-chunk-file": {
+    size: 512n,
+    checksum: "c7b3b7dd37d7e0947b04550613692950c72b0551e038a01ab8679a3ea5631104",
+    fingerprint: "0x6a62615cbe76b0ad7052849b414d96f847ea29953ba73ac3d98476d3f54109fe"
+  },
+  "res/one-chunk-file": {
+    size: 1024n,
+    checksum: "1f006b6a97eeb0dfd8cbc91ed815e6a429dcfdc2f3f32f2ac3e7977e70df4988",
+    fingerprint: "0xce794511342582a9a466fbf3a02fb81ae4b8d4632ec88f39895e4700d03fb902"
   }
 } as const;
 

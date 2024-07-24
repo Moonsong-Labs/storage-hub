@@ -192,6 +192,10 @@ where
         let root = file_data_trie.get_root();
         let fs_metadata = file.metadata().map_err(into_rpc_error)?;
 
+        if fs_metadata.len() == 0 {
+            return Err(into_rpc_error(FileStorageError::FileIsEmpty));
+        }
+
         // Build StorageHub's [`FileMetadata`]
         let file_metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&owner).to_vec(),

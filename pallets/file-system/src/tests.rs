@@ -2389,8 +2389,7 @@ mod delete_file_tests {
                 // Find file key in vec of queued priority challenges
                 pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                     .iter()
-                    .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
-                    .is_some(),
+                    .any(|x| *x == (file_key, Some(TrieRemoveMutation))),
             );
 
             // Assert that the correct event was deposited
@@ -2421,7 +2420,7 @@ mod delete_file_tests {
             let msp_id = add_msp_to_provider_storage(&msp);
 
             let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-            let _ = create_bucket(&owner_account_id.clone(), name.clone(), msp_id.clone());
+            let _ = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
 
             let other_user = Keyring::Bob.to_account_id();
             let bucket_id = create_bucket(&other_user.clone(), name, msp_id);
@@ -2468,7 +2467,7 @@ mod delete_file_tests {
             let msp_id = add_msp_to_provider_storage(&msp);
 
             let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-            let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id.clone());
+            let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
 
             // For loop to create 1 over maximum of MaxUserPendingDeletionRequests
             for i in 0..<Test as crate::Config>::MaxUserPendingDeletionRequests::get() {
@@ -2483,7 +2482,7 @@ mod delete_file_tests {
                 assert_ok!(FileSystem::delete_file(
                     owner_signed.clone(),
                     bucket_id,
-                    file_key.clone(),
+                    file_key,
                     location.clone(),
                     i,
                     fingerprint,
@@ -2602,8 +2601,7 @@ mod delete_file_tests {
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
             assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                 .iter()
-                .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
-                .is_some(),);
+                .any(|x| *x == (file_key, Some(TrieRemoveMutation))),);
         });
     }
 
@@ -2680,8 +2678,7 @@ mod delete_file_tests {
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
             assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                 .iter()
-                .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
-                .is_some(),);
+                .any(|x| *x == (file_key, Some(TrieRemoveMutation))),);
 
             // Assert that the pending file deletion request was removed from storage
             assert_eq!(
@@ -2762,10 +2759,11 @@ mod delete_file_tests {
             );
 
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
-            assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
-                .iter()
-                .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
-                .is_none(),);
+            assert!(
+                !pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
+                    .iter()
+                    .any(|x| *x == (file_key, Some(TrieRemoveMutation))),
+            );
 
             // Assert that the pending file deletion request was removed from storage
             assert_eq!(
