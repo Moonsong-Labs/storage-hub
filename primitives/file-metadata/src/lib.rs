@@ -5,6 +5,7 @@ use core::fmt::Debug;
 use scale_info::TypeInfo;
 use serde::{Deserialize, Serialize};
 use shp_traits::AsCompact;
+use sp_arithmetic::traits::SaturatedConversion;
 use sp_std::vec::Vec;
 
 /// A struct containing all the information about a file in StorageHub.
@@ -45,8 +46,11 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         T::hash(self.encode().as_slice())
     }
 
-    pub fn chunks_to_check(&self) -> u64 {
-        self.file_size / SIZE_TO_CHALLENGES + (self.file_size % SIZE_TO_CHALLENGES != 0) as u64
+    pub fn chunks_to_check(&self) -> u32 {
+        // In here we downcast and saturate to u32, as we consider u32::MAX to be an already large
+        // enough number of challenges to be generated.
+        (self.file_size / SIZE_TO_CHALLENGES + (self.file_size % SIZE_TO_CHALLENGES != 0) as u64)
+            .saturated_into::<u32>()
     }
 
     pub fn chunks_count(&self) -> u64 {

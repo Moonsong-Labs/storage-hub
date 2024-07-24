@@ -25,6 +25,7 @@ shp-traits = { workspace = true }
 # Substrate
 sp-core = { workspace = true }
 sp-std = { workspace = true }
+sp-arithmetic = { workspace = true }
 
 [features]
 default = ["std"]

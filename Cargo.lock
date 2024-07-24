@@ -12605,6 +12605,7 @@ dependencies = [
  "scale-info",
  "serde",
  "shp-traits",
+ "sp-arithmetic 23.0.0",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
 ]
