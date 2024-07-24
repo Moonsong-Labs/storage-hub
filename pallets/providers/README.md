@@ -41,8 +41,8 @@ The remaining portion of the user's payment for storing a file, after the MSP's 
 
 The sign up process for Storage Providers is a two-step process to avoid malicious users from predicting the randomness used to generate the unique ID of the Storage Provider.
 
-1) The first step is the request to sign up, where the user provides the necessary information to become a Storage Provider, commiting to that information, and the necessary deposit is held.
-2) The second step is the confirmation of the sign-up, which must be done by the user (or a third-party) after enough time has passed to ensure that the randomness used to generate the unique ID was not predictable when the sign-up request (commitment) was made.
+1. The first step is the request to sign up, where the user provides the necessary information to become a Storage Provider, commiting to that information, and the necessary deposit is held.
+2. The second step is the confirmation of the sign-up, which must be done by the user (or a third-party) after enough time has passed to ensure that the randomness used to generate the unique ID was not predictable when the sign-up request (commitment) was made.
 
 This process exists because the unique ID of a Storage Provider is what determines if they can volunteer to store a new file of the system after a store request was made by a user, and if the randomness used to generate the unique ID was predictable, malicious users could generate multiple Storage Provider accounts with similar IDs and collude to store the same file, which would be detrimental to the system as it would allow file storage centralization, allowing censorship and data loss.
 
@@ -61,7 +61,6 @@ The Storage Providers pallet provides the following extrinsics, which are explai
 ### request_msp_sign_up
 
 The purpose of this extrinsic is to handle the sign-up process for a new Main Storage Provider. It performs several checks and updates the blockchain's storage accordingly. We have a two-step process for signing up as a Storage Provider to avoid malicious users from predicting the randomness used to generate the unique ID of the Storage Provider, and that's why we have a request and a confirmation extrinsic, as a commitment scheme.
-
 
 ### request_bsp_sign_up
 
@@ -278,7 +277,7 @@ BspSignOffSuccess { who: T::AccountId }
 
 ### `CapacityChanged`
 
-This event is emitted when a  Storage Provider has successfully changed its registered capacity on the network. It holds the information about the account ID of that Storage Provider, its previous capacity, the new registered capacity and the next block after which the timelock expires and it is able to change its capacity again.
+This event is emitted when a Storage Provider has successfully changed its registered capacity on the network. It holds the information about the account ID of that Storage Provider, its previous capacity, the new registered capacity and the next block after which the timelock expires and it is able to change its capacity again.
 
 The nature of this event is to allow the caller of the extrinsic to know that the change of capacity was successful and that the difference in deposit was held or returned. It also allows users of the network to know that this Storage Provider has changed its capacity, which can be useful for them to choose which Storage Provider to use.
 
@@ -378,3 +377,41 @@ Error thrown when trying to get a root from a Main Storage Provider without pass
 ### `SpRegisteredButDataNotFound`
 
 Error thrown when a user has a Storage Provider ID assigned to it but its metadata data does not exist in storage (storage inconsistency error, should never happen).
+
+## Slashing Protocol
+
+Storage Providers who fail to submit a proof by their challenge deadline _will_ be slashed. In the case of the StorageHub protocol, this is predefined in the proofs-dealer pallet.
+
+Slashing is an asynchronous process, therefore it is possible for a Storage Provider to have failed more than one challenge before being slashed. This pallet requires an external data source to fetch the number of failed proof submissions. In the case of the StorageHub protocol, the proofs-dealer pallet would keep track of this data and expose an interface for this pallet to access it. This avoids the possibility of a Storage Provider not being slashed for all their failed challenges. Slashing a Storage Provider takes into account the aforementioned total number of failed challenges since the Provider's last slash and multiply it by a configurable slash factor. This factor is a value that is associated to the punishment for a single lost file.
+
+### Manual and Automatic Slashing
+
+The `slash` extrinsic can be called by any account to manually slash any Storage Provider that has been marked as slashable, and only requires the Storage Provider ID of a Storage Provider to be slashed.
+
+An automated slashing mechanism is implemented in an off-chain worker process to be executed by collators which efficiently slashes many Storage Providers.
+
+### Grace Period and Insolvency
+
+Since the Storage Provider's stake determines their total storage capacity, it is entirely possible that the amount of data currently stored would be above their total storage capacity after slashing. StorageHub grants a predetermined configurable grace period for Storage Providers to top-up their stake to have their total capacity equal to or greater than the amount of data they currently store. If the grace period has been reached, they are considered to be insolvent and cease to be a Storage Provider.
+
+The grace period is based on the total stake/capacity of the Storage Provider. In essence, the more stake a Storage Provider has, the longer the grace period.
+This is to avoid a high stake Storage Provider from being removed from the network prematurely.
+
+The runtime automatically processes any expired grace periods within the `on_poll` hook to ensure that the redundancy process is initiated as soon as possible. For every insolvent Storage Provider, an event is emitted to notify the network and also mark the Storage Provider as insolvent, rendering them unable to operate as a Storage Provider. Finally all the of the Storage Provider's stake is slashed and transfered to the treasury.
+
+### Ensuring Data Redundancy
+
+> [!IMPORTANT]
+> The runtime cannot ensure that all the data stored from an insolvent Storage Provider would be recovered. Given that the runtime has no knowledge of file keys stored by whom, it is up to external services to expose information of the files that are lost so that new storage requests can be initiated. Such external services can be indexer services or MSPs which are expected to run an indexer as well.
+
+Any account can call the `add_redundancy` extrinsic which requires a proof of inclusion of a given file key and the number of required BSPs needed to fulfill this request. The root is checked to be the current forest root of insolvent Storage Provider to ensure that the file key does indeed exist as part of a Storage Provider's forest.
+
+This creates a traditional storage request with the specified amount of BSPs required. The caller of the extrinsic can optionally pass a list of data servers for the file key, which then is marked in the storage request for the volunteers to request the data from. The caller is able to obtain this information from the off-chain indexer.
+
+#### Incentives and Storage Cleanup
+
+For every file key submitted for redundancy which was stored by an insolvent Storage Provider, the caller is rewarded with a configurable amount of tokens which must be less than the slash factor to prevent abuse.
+
+The runtime will automatically remove the file keys from the insolvent provider's forest. Once the forest root becomes an empty root, the Storage Provider is removed from storage.
+
+This process ensures that total redundancy is regained before the insolvent Storage Provider is removed from the network.
