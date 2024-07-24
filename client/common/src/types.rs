@@ -108,3 +108,12 @@ impl FileProof {
         )
     }
 }
+
+#[derive(Clone, Eq, Hash, PartialEq)]
+pub struct RequestId(u64);
+
+impl RequestId {
+    pub fn new(id: u64) -> Self {
+        RequestId(id)
+    }
+}

@@ -1,7 +1,6 @@
 use sc_network::PeerId;
-use shc_common::types::{ChunkId, FileKey, FileKeyProof};
-
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
+use shc_common::types::{ChunkId, FileKey, FileKeyProof, RequestId};
 
 #[derive(Clone)]
 pub struct RemoteUploadRequest {
@@ -16,6 +15,7 @@ impl EventBusMessage for RemoteUploadRequest {}
 pub struct RemoteDownloadRequest {
     pub file_key: FileKey,
     pub chunk_id: ChunkId,
+    pub request_id: RequestId,
 }
 
 impl EventBusMessage for RemoteDownloadRequest {}

@@ -38,7 +38,7 @@ use sc_network::{
 };
 use sc_tracing::tracing::{debug, error, info, warn};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::{FileKey, FileKeyProof, ParachainNetworkService};
+use shc_common::types::{FileKey, FileKeyProof, ParachainNetworkService, RequestId};
 use shp_file_metadata::ChunkId;
 
 use crate::events::RemoteUploadRequest;
@@ -65,6 +65,8 @@ pub struct FileTransferService {
     /// The event bus provider for the file transfer service.
     /// Part of the actor framework, allows for emitting events.
     event_bus_provider: FileTransferServiceEventBusProvider,
+    /// Mapping from RequestId to a pending response channel
+    pending_responses: HashMap<RequestId, futures::channel::oneshot::Sender<OutgoingResponse>>,
 }
 
 impl Actor for FileTransferService {
@@ -278,6 +280,7 @@ impl FileTransferService {
             peer_file_allow_list: HashSet::new(),
             peers_by_file: HashMap::new(),
             event_bus_provider: FileTransferServiceEventBusProvider::new(),
+            pending_responses: HashMap::new(),
         }
     }
 
@@ -387,10 +390,17 @@ impl FileTransferService {
                         return;
                     }
                 };
+
                 let chunk_id = ChunkId::new(r.file_chunk_id);
-                // TODO: A request id and mapping to the pending_response is required to respond to
-                // the download request from upper layers.
-                self.emit(RemoteDownloadRequest { file_key, chunk_id });
+                let request_id = RequestId::new(self.pending_responses.len() as u64);
+                self.pending_responses
+                    .insert(request_id.clone(), pending_response);
+
+                self.emit(RemoteDownloadRequest {
+                    file_key,
+                    chunk_id,
+                    request_id,
+                });
             }
             None => {
                 error!(
