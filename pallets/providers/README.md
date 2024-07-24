@@ -382,7 +382,7 @@ Error thrown when a user has a Storage Provider ID assigned to it but its metada
 
 Storage Providers who fail to submit a proof by the last challenge tick will be slashed, predetermined by the challenge period defined in the proofs-dealer pallet.
 
-Slashing is an asynchronous process, therefore it is possible for a Storage Provider to have failed more than one challenge before being slashed. To avoid all possibility for a Storage Provider to not be slashed for the number of failed proof submissions, the runtime will accrue the number of failed challenges for each Storage Provider. Slashing a Storage Provider will take into account the total number of failed challenges and multiply it by a configurable slash factor.
+Slashing is an asynchronous process, therefore it is possible for a Storage Provider to have failed more than one challenge before being slashed. To avoid the possibility of a Storage Provider not being slashed for all their failed challenges, the runtime accrues the number of failed challenges for each Storage Provider since it has last been slashed. Slashing a Storage Provider will then take into account the aforementioned total number of failed challenges since the Provider's last slash and multiply it by a configurable slash factor.
 
 ### Manual and Automatic Slashing
 
