@@ -390,12 +390,14 @@ The `slash` extrinsic can be called by any account to manually slash a Storage P
 
 An automated slashing mechanism is implemented in an off-chain worker process to be executed by collators which efficiently slashes many Storage Providers.
 
-### Grace Period
+### Grace Period and Insolvency
 
 Since the Storage Provider's stake determines their total storage capacity, it is entirely possible that the amount of data currently stored would be above their total storage capacity. StorageHub grants a predetermined configurable grace period for Storage Providers to top-up their stake to have their total capacity equal to or greater than the amount of data they currently store. If the grace period has been reached, they are considered to be insolvent and cease to be a Storage Provider.
 
 The grace period is based on the total stake/capacity of the Storage Provider. In essence, the more stake a Storage Provider has, the longer the grace period.
 This is to avoid a high stake Storage Provider from being removed from the network prematurely.
+
+The runtime will automatically process any expired grace periods within the `on_poll` hook to ensure that the redundancy process is initiated as soon as possible. For every insolvent Storage Provider, an event will be emitted to notify the network and also mark the Storage Provider as insolvent, rendering them unable to operate as a Storage Provider. Finally all the of the Storage Provider's stake will be slashed and transfered to the treasury.
 
 ### Ensuring Data Redundancy
 
