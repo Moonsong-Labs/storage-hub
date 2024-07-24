@@ -408,6 +408,6 @@ To accomplish this, an off-chain indexer is required to discover the file keys w
 
 Any account can call the `add_redundancy` extrinsic which requires a proof of inclusion of a given file key and the number of required BSPs needed to fulfill this request. The root is checked to be a current Bucket or BSP’s forest root to ensure that the file key does indeed exist as part of a Storage Provider's forest.
 
-This will trigger a traditional storage request with the specified minimum amount of BSPs required and optionally the data server’s that should have that file in their possession to supply the data to the volunteers. The caller of the extrinsic can pass in optionally a list of data servers for the file key, which then will be marked in the storage request for the volunteers to request the data from. The caller will be able to obtain this information from the off-chain indexer.
+This creates a traditional storage request with the specified amount of BSPs required. The caller of the extrinsic can optionally pass a list of data servers for the file key, which then will be marked in the storage request for the volunteers to request the data from. The caller is be able to obtain this information from the off-chain indexer.
 
-If the file was originally stored by an MSP, it is up to the user of the lost file or files within a bucket to execute the `transfer_file` or `transfer_bucket` extrinsics to move the data to a new MSP.
+If the file was originally stored by an MSP, it is up to the user of the lost file or files within a bucket to execute the `transfer_file` or `transfer_bucket` extrinsics exposed by the file system pallet to move the data to a new MSP.
