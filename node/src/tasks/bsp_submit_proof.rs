@@ -4,7 +4,7 @@ use sp_trie::TrieLayout;
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewChallengeSeed};
-use shc_common::types::{HasherOutT, Proven};
+use shc_common::types::{HasherOutT, Proven, ProviderId, RandomnessOutput, TrieRemoveMutation};
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
 
@@ -74,72 +74,15 @@ where
         let provider_id = event.provider_id;
 
         // Derive forest challenges from seed.
-        let forest_challenges = self
-            .storage_hub_handler
-            .blockchain
-            .query_forest_challenges_from_seed(seed, provider_id)
+        let mut forest_challenges = self
+            .derive_forest_challenges_from_seed(seed, provider_id)
             .await?;
-        let mut converted_forest_challenges: Vec<HasherOutT<T>> = Vec::new();
-        for challenge in forest_challenges {
-            let raw_key: [u8; 32] = challenge.into();
-            match raw_key.try_into() {
-                Ok(key) => converted_forest_challenges.push(key),
-                Err(_) => {
-                    error!(target: LOG_TARGET, "Failed to challenge key to hasher output. This should not be possible, as the challenge keys are hasher outputs.");
-                    return Err(anyhow!("Failed to challenge key to hasher output. This should not be possible, as the challenge keys are hasher outputs."));
-                }
-            }
-        }
-        let mut forest_challenges = converted_forest_challenges;
 
         // Check if there are checkpoint challenges since last tick this provider submitted a proof for.
-        let last_tick_provided_submitted_proof = self
-            .storage_hub_handler
-            .blockchain
-            .query_last_tick_provider_submitted_proof(provider_id)
-            .await
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to query last tick provider submitted proof: {:?}",
-                    e
-                )
-            })?;
-        let last_checkpoint_tick = self
-            .storage_hub_handler
-            .blockchain
-            .query_last_checkpoint_challenge_tick()
+        // If so, this will add them to the forest challenges.
+        let checkpoint_challenges = self
+            .add_checkpoint_challenges_to_forest_challenges(provider_id, &mut forest_challenges)
             .await?;
-        // This variable is going to be used to apply mutations down the line if there are checkpoint challenges,
-        // and if the proof is successfully verified.
-        let mut checkpoint_challenges = None;
-        if last_tick_provided_submitted_proof <= last_checkpoint_tick {
-            // If so, get the last checkpoint challenges.
-            checkpoint_challenges = Some(
-                self.storage_hub_handler
-                    .blockchain
-                    .query_last_checkpoint_challenges(last_checkpoint_tick)
-                    .await
-                    .map_err(|e| anyhow!("Failed to query last checkpoint challenges: {:?}", e))?,
-            );
-
-            let checkpoint_challenges = checkpoint_challenges
-                .expect("`checkpoint_challenges` was just instantiated with Some()")
-                .clone();
-            let mut converted_checkpoint_challenges: Vec<HasherOutT<T>> = Vec::new();
-            for challenge in checkpoint_challenges {
-                let raw_key: [u8; 32] = challenge.0.into();
-                match raw_key.try_into() {
-                    Ok(key) => converted_checkpoint_challenges.push(key),
-                    Err(_) => {
-                        error!(target: LOG_TARGET, "Failed to challenge key to hasher output. This should not be possible, as the challenge keys are hasher outputs.");
-                        return Err(anyhow!("Failed to challenge key to hasher output. This should not be possible, as the challenge keys are hasher outputs."));
-                    }
-                }
-            }
-
-            // Add the checkpoint challenges to the forest challenges.
-            forest_challenges.extend(converted_checkpoint_challenges);
-        }
 
         // Get a read lock on the forest storage to generate a proof for the file.
         let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
@@ -184,5 +127,97 @@ where
         // TODO: Apply mutations if extrinsic was successful, if any, update the Forest storage and file storage.
 
         Ok(())
+    }
+}
+
+impl<T, FL, FS> BspSubmitProofTask<T, FL, FS>
+where
+    T: TrieLayout + Send + Sync + 'static,
+    FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    async fn derive_forest_challenges_from_seed(
+        &self,
+        seed: RandomnessOutput,
+        provider_id: ProviderId,
+    ) -> anyhow::Result<Vec<HasherOutT<T>>> {
+        let forest_challenges = self
+            .storage_hub_handler
+            .blockchain
+            .query_forest_challenges_from_seed(seed, provider_id)
+            .await?;
+
+        let mut converted_forest_challenges: Vec<HasherOutT<T>> = Vec::new();
+        for challenge in forest_challenges {
+            let raw_key: [u8; 32] = challenge.into();
+            match raw_key.try_into() {
+                Ok(key) => converted_forest_challenges.push(key),
+                Err(_) => {
+                    error!(target: LOG_TARGET, "Failed to challenge key to hasher output. This should not be possible, as the challenge keys are hasher outputs.");
+                    return Err(anyhow!("Failed to challenge key to hasher output. This should not be possible, as the challenge keys are hasher outputs."));
+                }
+            }
+        }
+
+        Ok(converted_forest_challenges)
+    }
+
+    async fn add_checkpoint_challenges_to_forest_challenges(
+        &self,
+        provider_id: ProviderId,
+        forest_challenges: &mut Vec<HasherOutT<T>>,
+    ) -> anyhow::Result<Vec<(HasherOutT<T>, Option<TrieRemoveMutation>)>> {
+        let last_tick_provided_submitted_proof = self
+            .storage_hub_handler
+            .blockchain
+            .query_last_tick_provider_submitted_proof(provider_id)
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to query last tick provider submitted proof: {:?}",
+                    e
+                )
+            })?;
+        let last_checkpoint_tick = self
+            .storage_hub_handler
+            .blockchain
+            .query_last_checkpoint_challenge_tick()
+            .await?;
+
+        // If there were checkpoint challenges since the last tick this provider submitted a proof for,
+        // get the checkpoint challenges.
+        if last_tick_provided_submitted_proof <= last_checkpoint_tick {
+            let checkpoint_challenges = self
+                .storage_hub_handler
+                .blockchain
+                .query_last_checkpoint_challenges(last_checkpoint_tick)
+                .await
+                .map_err(|e| anyhow!("Failed to query last checkpoint challenges: {:?}", e))?;
+
+            let mut converted_checkpoint_challenges: Vec<(
+                HasherOutT<T>,
+                Option<TrieRemoveMutation>,
+            )> = Vec::new();
+            for challenge in checkpoint_challenges {
+                let raw_key: [u8; 32] = challenge.0.into();
+                match raw_key.try_into() {
+                    Ok(key) => converted_checkpoint_challenges.push((key, challenge.1)),
+                    Err(_) => {
+                        error!(target: LOG_TARGET, "Failed to challenge key to hasher output. This should not be possible, as the challenge keys are hasher outputs.");
+                        return Err(anyhow!("Failed to challenge key to hasher output. This should not be possible, as the challenge keys are hasher outputs."));
+                    }
+                }
+            }
+
+            // Add the checkpoint challenges to the forest challenges.
+            forest_challenges.extend(converted_checkpoint_challenges.iter().map(|(key, _)| *key));
+
+            // Return the checkpoint challenges.
+            return Ok(converted_checkpoint_challenges);
+        } else {
+            // Else, return an empty checkpoint challenges vector.
+            return Ok(Vec::new());
+        }
     }
 }
