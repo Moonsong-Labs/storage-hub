@@ -9,6 +9,7 @@ pub use shp_file_metadata::{Chunk, ChunkId, Leaf};
 use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
 use sp_runtime::traits::Block as BlockT;
+use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
 use storage_hub_runtime::{opaque::Block, Runtime, RuntimeApi};
 use trie_db::TrieLayout;
@@ -37,6 +38,10 @@ pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Run
 pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;
 pub type TrieRemoveMutation = shp_traits::TrieRemoveMutation;
 pub type StorageProofsMerkleTrieLayout = storage_hub_runtime::StorageProofsMerkleTrieLayout;
+pub type StorageProof = pallet_proofs_dealer::types::Proof<Runtime>;
+pub type ForestVerifierProof = pallet_proofs_dealer::types::ForestVerifierProofFor<Runtime>;
+pub type KeyProof = pallet_proofs_dealer::types::KeyProof<Runtime>;
+pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = (

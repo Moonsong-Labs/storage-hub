@@ -114,7 +114,26 @@ where
             }
         }
 
-        // TODO: Build key challenges from seed for every key proven.
+        // Construct key challenges and generate key proofs for them.
+        for file_key in proven_keys {
+            // Get the metadata for the file.
+            let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+            let metadata = read_file_storage
+                .get_metadata(&file_key)
+                .expect("File metadata not found");
+            // Release the file storage read lock as soon as possible.
+            drop(read_file_storage);
+
+            // Calculate the number of challenges for this file.
+            let challenges_count = metadata.chunks_to_check();
+
+            // Generate the challenges for this file.
+            let file_key_challenges = self
+                .storage_hub_handler
+                .blockchain
+                .query_challenges_from_seed(seed, provider_id, challenges_count)
+                .await?;
+        }
 
         // TODO: Construct key proofs.
 
