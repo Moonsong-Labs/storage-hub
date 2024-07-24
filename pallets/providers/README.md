@@ -380,13 +380,13 @@ Error thrown when a user has a Storage Provider ID assigned to it but its metada
 
 ## Slashing Protocol
 
-Storage Providers who fail to submit a proof by their challenge deadline _will_ be slashed, predetermined by the challenge period defined in the proofs-dealer pallet.
+Storage Providers who fail to submit a proof by their challenge deadline _will_ be slashed. In the case of the StorageHub protocol, this is predefined in the proofs-dealer pallet.
 
-Slashing is an asynchronous process, therefore it is possible for a Storage Provider to have failed more than one challenge before being slashed. To avoid the possibility of a Storage Provider not being slashed for all their failed challenges, the runtime accrues the number of failed challenges for each Storage Provider since it has last been slashed. Slashing a Storage Provider takes into account the aforementioned total number of failed challenges since the Provider's last slash and multiply it by a configurable slash factor.
+Slashing is an asynchronous process, therefore it is possible for a Storage Provider to have failed more than one challenge before being slashed. This pallet requires an external data source to fetch the number of failed proof submissions. In the case of the StorageHub protocol, the proofs-dealer pallet would keep track of this data and expose an interface for this pallet to access it. This avoids the possibility of a Storage Provider not being slashed for all their failed challenges. Slashing a Storage Provider takes into account the aforementioned total number of failed challenges since the Provider's last slash and multiply it by a configurable slash factor. This factor is a value that is associated to the punishment for a single lost file.
 
 ### Manual and Automatic Slashing
 
-The `slash` extrinsic can be called by any account to manually slash any Storage Provider that has been marked as slashable, and only requires the Storage Provider ID of a Storage Provider to be slashed, be it either an MSP or a BSP.
+The `slash` extrinsic can be called by any account to manually slash any Storage Provider that has been marked as slashable, and only requires the Storage Provider ID of a Storage Provider to be slashed.
 
 An automated slashing mechanism is implemented in an off-chain worker process to be executed by collators which efficiently slashes many Storage Providers.
 
@@ -402,20 +402,16 @@ The runtime automatically processes any expired grace periods within the `on_pol
 ### Ensuring Data Redundancy
 
 > [!IMPORTANT]
-> The runtime cannot ensure that all the data stored from an insolvent Storage Provider would be recovered. It is up to users and other Storage Providers to ensure data redundancy since the runtime has no knowledge of file keys stored by whom.
+> The runtime cannot ensure that all the data stored from an insolvent Storage Provider would be recovered. Given that the runtime has no knowledge of file keys stored by whom, it is up to external services to expose information of the files that are lost so that new storage requests can be initiated. Such external services can be indexer services or MSPs which are expected to run an indexer as well.
 
-In the event when a BSP would become insolvent, the entire network of BSPs are responsible to regain data redundancy for the data they lost.
+Any account can call the `add_redundancy` extrinsic which requires a proof of inclusion of a given file key and the number of required BSPs needed to fulfill this request. The root is checked to be the current forest root of insolvent Storage Provider to ensure that the file key does indeed exist as part of a Storage Provider's forest.
 
-To accomplish this, an off-chain indexer is required to discover the file keys which were stored by that insolvent Storage Provider. This is necessary since the runtime does not hold any file key in data in storage.
-
-Any account can call the `add_redundancy` extrinsic which requires a proof of inclusion of a given file key and the number of required BSPs needed to fulfill this request. The root is checked to be a current Bucket or BSP’s forest root to ensure that the file key does indeed exist as part of a Storage Provider's forest.
-
-This creates a traditional storage request with the specified amount of BSPs required. The caller of the extrinsic can optionally pass a list of data servers for the file key, which then is marked in the storage request for the volunteers to request the data from. The caller is be able to obtain this information from the off-chain indexer.
-
-If the file was originally stored by an MSP, it is up to the user of the lost file or files within a bucket to execute the `transfer_file` or `transfer_bucket` extrinsics exposed by the file system pallet to move the data to a new MSP.
+This creates a traditional storage request with the specified amount of BSPs required. The caller of the extrinsic can optionally pass a list of data servers for the file key, which then is marked in the storage request for the volunteers to request the data from. The caller is able to obtain this information from the off-chain indexer.
 
 #### Incentives and Storage Cleanup
 
-For every file key submitted for redundancy which was stored by an insolvent Storage Provider, the caller is rewarded with a configurable amount of tokens which must be less than the slash factor to prevent abuse. The runtime accrues the file size of each file key submitted for redundancy for the given insolvent Storage Provider. Once the total accrued file size reaches the total data size stored by the insolvent Storage Provider, the Storage Provider is deleted from the runtime.
+For every file key submitted for redundancy which was stored by an insolvent Storage Provider, the caller is rewarded with a configurable amount of tokens which must be less than the slash factor to prevent abuse.
+
+The runtime will automatically remove the file keys from the insolvent provider's forest. Once the forest root becomes an empty root, the Storage Provider is removed from storage.
 
 This process ensures that total redundancy is regained before the insolvent Storage Provider is removed from the network.
