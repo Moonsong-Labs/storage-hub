@@ -114,6 +114,7 @@ import type {
   PalletPaymentStreamsEvent,
   PalletPaymentStreamsFixedRatePaymentStream,
   PalletPaymentStreamsHoldReason,
+  PalletPaymentStreamsProviderLastChargeable,
   PalletProofsDealerCall,
   PalletProofsDealerError,
   PalletProofsDealerEvent,
@@ -360,6 +361,7 @@ declare module "@polkadot/types/types/registry" {
     PalletPaymentStreamsEvent: PalletPaymentStreamsEvent;
     PalletPaymentStreamsFixedRatePaymentStream: PalletPaymentStreamsFixedRatePaymentStream;
     PalletPaymentStreamsHoldReason: PalletPaymentStreamsHoldReason;
+    PalletPaymentStreamsProviderLastChargeable: PalletPaymentStreamsProviderLastChargeable;
     PalletProofsDealerCall: PalletProofsDealerCall;
     PalletProofsDealerError: PalletProofsDealerError;
     PalletProofsDealerEvent: PalletProofsDealerEvent;

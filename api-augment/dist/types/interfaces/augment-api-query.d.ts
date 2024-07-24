@@ -3,7 +3,7 @@ import type { ApiTypes, AugmentedQuery, QueryableStorageEntry } from '@polkadot/
 import type { BTreeMap, BTreeSet, Bytes, Null, Option, Struct, Vec, bool, u128, u16, u32, u64, u8 } from '@polkadot/types-codec';
 import type { AnyNumber, ITuple } from '@polkadot/types-codec/types';
 import type { AccountId32, H256 } from '@polkadot/types/interfaces/runtime';
-import type { CumulusPalletParachainSystemRelayStateSnapshotMessagingStateSnapshot, CumulusPalletParachainSystemUnincludedSegmentAncestor, CumulusPalletParachainSystemUnincludedSegmentSegmentTracker, CumulusPalletXcmpQueueOutboundChannelDetails, CumulusPalletXcmpQueueQueueConfigData, CumulusPrimitivesCoreAggregateMessageOrigin, FrameSupportDispatchPerDispatchClassWeight, FrameSystemAccountInfo, FrameSystemCodeUpgradeAuthorization, FrameSystemEventRecord, FrameSystemLastRuntimeUpgradeInfo, FrameSystemPhase, PalletBalancesAccountData, PalletBalancesBalanceLock, PalletBalancesIdAmount, PalletBalancesReserveData, PalletCollatorSelectionCandidateInfo, PalletFileSystemExpiredItems, PalletFileSystemStorageRequestBspsMetadata, PalletFileSystemStorageRequestMetadata, PalletMessageQueueBookState, PalletMessageQueuePage, PalletNftsAttributeDeposit, PalletNftsAttributeNamespace, PalletNftsCollectionConfig, PalletNftsCollectionDetails, PalletNftsCollectionMetadata, PalletNftsItemConfig, PalletNftsItemDetails, PalletNftsItemMetadata, PalletNftsPendingSwap, PalletPaymentStreamsDynamicRatePaymentStream, PalletPaymentStreamsFixedRatePaymentStream, PalletStorageProvidersBackupStorageProvider, PalletStorageProvidersBucket, PalletStorageProvidersMainStorageProvider, PalletStorageProvidersStorageProvider, PalletTransactionPaymentReleases, PalletXcmQueryStatus, PalletXcmRemoteLockedFungibleRecord, PalletXcmVersionMigrationStage, PolkadotCorePrimitivesOutboundHrmpMessage, PolkadotPrimitivesV6AbridgedHostConfiguration, PolkadotPrimitivesV6PersistedValidationData, PolkadotPrimitivesV6UpgradeGoAhead, PolkadotPrimitivesV6UpgradeRestriction, ShpTraitsTrieRemoveMutation, SpConsensusAuraSr25519AppSr25519Public, SpCoreCryptoKeyTypeId, SpRuntimeDigest, SpTrieStorageProof, SpWeightsWeightV2Weight, StorageHubRuntimeRuntimeHoldReason, StorageHubRuntimeSessionKeys, XcmVersionedAssetId, XcmVersionedLocation } from '@polkadot/types/lookup';
+import type { CumulusPalletParachainSystemRelayStateSnapshotMessagingStateSnapshot, CumulusPalletParachainSystemUnincludedSegmentAncestor, CumulusPalletParachainSystemUnincludedSegmentSegmentTracker, CumulusPalletXcmpQueueOutboundChannelDetails, CumulusPalletXcmpQueueQueueConfigData, CumulusPrimitivesCoreAggregateMessageOrigin, FrameSupportDispatchPerDispatchClassWeight, FrameSystemAccountInfo, FrameSystemCodeUpgradeAuthorization, FrameSystemEventRecord, FrameSystemLastRuntimeUpgradeInfo, FrameSystemPhase, PalletBalancesAccountData, PalletBalancesBalanceLock, PalletBalancesIdAmount, PalletBalancesReserveData, PalletCollatorSelectionCandidateInfo, PalletFileSystemExpiredItems, PalletFileSystemStorageRequestBspsMetadata, PalletFileSystemStorageRequestMetadata, PalletMessageQueueBookState, PalletMessageQueuePage, PalletNftsAttributeDeposit, PalletNftsAttributeNamespace, PalletNftsCollectionConfig, PalletNftsCollectionDetails, PalletNftsCollectionMetadata, PalletNftsItemConfig, PalletNftsItemDetails, PalletNftsItemMetadata, PalletNftsPendingSwap, PalletPaymentStreamsDynamicRatePaymentStream, PalletPaymentStreamsFixedRatePaymentStream, PalletPaymentStreamsProviderLastChargeable, PalletStorageProvidersBackupStorageProvider, PalletStorageProvidersBucket, PalletStorageProvidersMainStorageProvider, PalletStorageProvidersStorageProvider, PalletTransactionPaymentReleases, PalletXcmQueryStatus, PalletXcmRemoteLockedFungibleRecord, PalletXcmVersionMigrationStage, PolkadotCorePrimitivesOutboundHrmpMessage, PolkadotPrimitivesV6AbridgedHostConfiguration, PolkadotPrimitivesV6PersistedValidationData, PolkadotPrimitivesV6UpgradeGoAhead, PolkadotPrimitivesV6UpgradeRestriction, ShpTraitsTrieRemoveMutation, SpConsensusAuraSr25519AppSr25519Public, SpCoreCryptoKeyTypeId, SpRuntimeDigest, SpTrieStorageProof, SpWeightsWeightV2Weight, StorageHubRuntimeRuntimeHoldReason, StorageHubRuntimeSessionKeys, XcmVersionedAssetId, XcmVersionedLocation } from '@polkadot/types/lookup';
 import type { Observable } from '@polkadot/types/types';
 export type __AugmentedQuery<ApiType extends ApiTypes> = AugmentedQuery<ApiType, () => unknown>;
 export type __QueryableStorageEntry<ApiType extends ApiTypes> = QueryableStorageEntry<ApiType>;
@@ -481,6 +481,26 @@ declare module '@polkadot/api-base/types/storage' {
         };
         paymentStreams: {
             /**
+             * The accumulated price index since genesis, used to calculate the amount to charge for dynamic-rate payment streams.
+             *
+             * This is equivalent to what it would have cost to store one unit of the provided service since the beginning of the network.
+             * We use this to calculate the amount to charge for dynamic-rate payment streams, by checking out the difference between the index
+             * when the payment stream was last charged, and the index at the last chargeable block.
+             *
+             * This storage is updated in:
+             * - [do_update_price_index](crate::utils::do_update_price_index), which updates the accumulated price index, adding to it the current price.
+             **/
+            accumulatedPriceIndex: AugmentedQuery<ApiType, () => Observable<u128>, []> & QueryableStorageEntry<ApiType, []>;
+            /**
+             * The current price per unit per block of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
+             *
+             * This is updated each block using the formula that considers current system capacity (total storage of the system) and system availability (total storage available).
+             *
+             * This storage is updated in:
+             * - [do_update_current_price_per_unit_per_block](crate::utils::do_update_current_price_per_unit_per_block), which updates the current price per unit per block.
+             **/
+            currentPricePerUnitPerBlock: AugmentedQuery<ApiType, () => Observable<u128>, []> & QueryableStorageEntry<ApiType, []>;
+            /**
              * The double mapping from a Provider, to its provided Users, to their dynamic-rate payment streams.
              *
              * This is used to store and manage dynamic-rate payment streams between Users and Providers.
@@ -506,6 +526,16 @@ declare module '@polkadot/api-base/types/storage' {
              * - [update_last_chargeable_block](crate::dispatchables::update_last_chargeable_block), which updates the entry's `last_chargeable_block`.
              **/
             fixedRatePaymentStreams: AugmentedQuery<ApiType, (arg1: H256 | string | Uint8Array, arg2: AccountId32 | string | Uint8Array) => Observable<Option<PalletPaymentStreamsFixedRatePaymentStream>>, [H256, AccountId32]> & QueryableStorageEntry<ApiType, [H256, AccountId32]>;
+            /**
+             * The mapping from a Provider to its last chargeable price index (for dynamic-rate payment streams) and last chargeable block (for fixed-rate payment streams).
+             *
+             * This is used to keep track of the last chargeable price index and block number for each Provider, updated by the PaymentManager, so this pallet can charge the payment streams correctly.
+             *
+             * This storage is updated in:
+             * - [update_last_chargeable_block](crate::PaymentManager::update_last_chargeable_block), which updates the entry's `last_chargeable_block`.
+             * - [update_last_chargeable_price_index](crate::PaymentManager::update_last_chargeable_price_index), which updates the entry's `last_chargeable_price_index`.
+             **/
+            lastChargeableInfo: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<PalletPaymentStreamsProviderLastChargeable>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
             /**
              * The mapping from a user to if it has been registered to the network and the amount of payment streams it has.
              *
@@ -658,6 +688,13 @@ declare module '@polkadot/api-base/types/storage' {
              **/
             lastCheckpointTick: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
             /**
+             * A value that represents the last tick that was deleted from the `ValidProofSubmittersLastTicks` StorageMap.
+             *
+             * This is used to know which tick to delete from the `ValidProofSubmittersLastTicks` StorageMap when the
+             * `on_idle` hook is called.
+             **/
+            lastDeletedTick: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
+            /**
              * A mapping from a Provider to the last challenge tick they submitted a proof for.
              * If for a Provider `p`, `LastTickProviderSubmittedProofFor[p]` is `n`, then the
              * Provider should submit a proof for tick `n + stake_to_challenge_period(p)`.
@@ -693,6 +730,14 @@ declare module '@polkadot/api-base/types/storage' {
              * This mapping goes back only `ChallengeHistoryLength` ticks. Previous challenges are removed.
              **/
             tickToCheckpointChallenges: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
+            /**
+             * A mapping from tick to Providers, which is set if the Provider submitted a valid proof in that tick.
+             *
+             * This is used to keep track of the Providers that have submitted proofs in the last few
+             * ticks, where availability only up to the last `TargetTicksStorageOfSubmitters` ticks is guaranteed.
+             * This storage is then made available for other pallets to use through the `ReadProofSubmittersInterface`.
+             **/
+            validProofSubmittersLastTicks: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Option<BTreeSet<H256>>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
             /**
              * Generic query
              **/
@@ -801,6 +846,13 @@ declare module '@polkadot/api-base/types/storage' {
              * - [bsp_sign_off](crate::dispatchables::bsp_sign_off), which subtracts the capacity of the Backup Storage Provider to sign off from this storage.
              **/
             totalBspsCapacity: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
+            /**
+             * The total amount of storage capacity of BSPs that is currently in use.
+             *
+             * This is used to keep track of the total amount of storage capacity that is currently in use by users, which is useful for
+             * system metrics and also to calculate the current price of storage.
+             **/
+            usedBspsCapacity: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
             /**
              * Generic query
              **/

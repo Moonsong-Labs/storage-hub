@@ -75,6 +75,7 @@ pub type BalanceOf<T> =
     <<T as Config>::NativeBalance as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
 /// BackupStorageProviderId is the type that represents an ID of a Backup Storage Provider, uniquely linked with an AccountId
+/// TODO: We should make these IDs configurable from the runtime...
 pub type BackupStorageProviderId<T> = <T as frame_system::Config>::Hash;
 /// MainStorageProviderId is the type that represents an ID of a Main Storage Provider, uniquely linked with an AccountId
 pub type MainStorageProviderId<T> = <T as frame_system::Config>::Hash;

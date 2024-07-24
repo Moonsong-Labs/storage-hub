@@ -34,7 +34,10 @@ pub mod pallet {
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
-    use shp_traits::{ProvidersInterface, ReadProvidersInterface};
+    use shp_traits::{
+        ProvidersInterface, ReadProofSubmittersInterface, ReadProvidersInterface,
+        SystemMetricsInterface,
+    };
     use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, Saturating};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -51,7 +54,14 @@ pub mod pallet {
 
         /// The trait for reading provider data.
         type ProvidersPallet: ProvidersInterface<AccountId = Self::AccountId>
-            + ReadProvidersInterface<AccountId = Self::AccountId>;
+            + ReadProvidersInterface<AccountId = Self::AccountId>
+            + SystemMetricsInterface<ProvidedUnit = Self::Units>;
+
+        /// The trait for reading the data of which providers submitted valid proofs in which blocks
+        type ProvidersProofSubmitters: ReadProofSubmittersInterface<
+            ProviderId = <Self::ProvidersPallet as ProvidersInterface>::ProviderId,
+            TickNumber = BlockNumberFor<Self>,
+        >;
 
         /// The overarching hold reason
         type RuntimeHoldReason: From<HoldReason>;
@@ -126,6 +136,17 @@ pub mod pallet {
         DynamicRatePaymentStream<T>,
     >;
 
+    /// The mapping from a Provider to its last chargeable price index (for dynamic-rate payment streams) and last chargeable block (for fixed-rate payment streams).
+    ///
+    /// This is used to keep track of the last chargeable price index and block number for each Provider, updated by the PaymentManager, so this pallet can charge the payment streams correctly.
+    ///
+    /// This storage is updated in:
+    /// - [update_last_chargeable_block](crate::PaymentManager::update_last_chargeable_block), which updates the entry's `last_chargeable_block`.
+    /// - [update_last_chargeable_price_index](crate::PaymentManager::update_last_chargeable_price_index), which updates the entry's `last_chargeable_price_index`.
+    #[pallet::storage]
+    pub type LastChargeableInfo<T: Config> =
+        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, ProviderLastChargeable<T>, ValueQuery>;
+
     /// The mapping from a user to if it has been flagged for not having enough funds to pay for its requested services.
     ///
     /// This is used to flag users that do not have enough funds to pay for their requested services, so other Providers
@@ -150,6 +171,26 @@ pub mod pallet {
     #[pallet::storage]
     pub type RegisteredUsers<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, u32, ValueQuery>;
+
+    /// The current price per unit per block of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
+    ///
+    /// This is updated each block using the formula that considers current system capacity (total storage of the system) and system availability (total storage available).
+    ///
+    /// This storage is updated in:
+    /// - [do_update_current_price_per_unit_per_block](crate::utils::do_update_current_price_per_unit_per_block), which updates the current price per unit per block.
+    #[pallet::storage]
+    pub type CurrentPricePerUnitPerBlock<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+
+    /// The accumulated price index since genesis, used to calculate the amount to charge for dynamic-rate payment streams.
+    ///
+    /// This is equivalent to what it would have cost to store one unit of the provided service since the beginning of the network.
+    /// We use this to calculate the amount to charge for dynamic-rate payment streams, by checking out the difference between the index
+    /// when the payment stream was last charged, and the index at the last chargeable block.
+    ///
+    /// This storage is updated in:
+    /// - [do_update_price_index](crate::utils::do_update_price_index), which updates the accumulated price index, adding to it the current price.
+    #[pallet::storage]
+    pub type AccumulatedPriceIndex<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
 
     // Events & Errors:
 
@@ -202,12 +243,12 @@ pub mod pallet {
             provider_id: ProviderIdFor<T>,
             amount: BalanceOf<T>,
         },
-        /// Event emitted when a payment stream's last chargeable block is updated. Provides information about the User and Provider of the stream
-        /// and the block number of the last chargeable block.
-        LastChargeableBlockUpdated {
-            user_account: T::AccountId,
+        /// Event emitted when a Provider's last chargeable block and price index are updated. Provides information about the Provider of the stream,
+        /// the block number of the last chargeable block and the price index at that block.
+        LastChargeableInfoUpdated {
             provider_id: ProviderIdFor<T>,
             last_chargeable_block: BlockNumberFor<T>,
+            last_chargeable_price_index: BalanceOf<T>,
         },
         /// Event emitted when a Provider is correctly trying to charge a User and that User does not have enough funds to pay for their services.
         /// This event is emitted to flag the user and let the network know that the user is not paying for the requested services, so other Providers can
@@ -259,6 +300,22 @@ pub mod pallet {
         // Only for testing, another unrelated hold reason
         #[cfg(test)]
         AnotherUnrelatedHold,
+    }
+
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        /// This hook is used to update the last chargeable info of the Providers that submitted a valid proof.
+        ///
+        /// It will be called at the beginning of every block, if the block is not being part of a
+        /// [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
+        /// For more information on the lifecycle of the block and its hooks, see the [Substrate
+        /// documentation](https://paritytech.github.io/polkadot-sdk/master/frame_support/traits/trait.Hooks.html#method.on_poll).
+        fn on_poll(n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
+            // TODO: Benchmark computational weight cost of this hook.
+            Self::do_update_last_chargeable_info(n, weight);
+            Self::do_update_current_price_per_unit_per_block(weight);
+            Self::do_update_price_index(weight);
+        }
     }
 
     /// Dispatchables (extrinsics) exposed by this pallet
@@ -582,6 +639,11 @@ pub mod pallet {
 
 /// Helper functions (getters, setters, etc.) for this pallet
 impl<T: Config> Pallet<T> {
+    /// A helper function to get the information of the last chargeable block and price index of a Provider
+    pub fn get_last_chargeable_info(provider_id: &ProviderIdFor<T>) -> ProviderLastChargeable<T> {
+        LastChargeableInfo::<T>::get(provider_id)
+    }
+
     /// A helper function to get the information of a fixed-rate payment stream
     pub fn get_fixed_rate_payment_stream_info(
         provider_id: &ProviderIdFor<T>,

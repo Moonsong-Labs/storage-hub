@@ -318,6 +318,13 @@ pub mod pallet {
     #[pallet::storage]
     pub type TotalBspsCapacity<T: Config> = StorageValue<_, StorageData<T>, ValueQuery>;
 
+    /// The total amount of storage capacity of BSPs that is currently in use.
+    ///
+    /// This is used to keep track of the total amount of storage capacity that is currently in use by users, which is useful for
+    /// system metrics and also to calculate the current price of storage.
+    #[pallet::storage]
+    pub type UsedBspsCapacity<T: Config> = StorageValue<_, StorageData<T>, ValueQuery>;
+
     // Events & Errors:
 
     /// The events that can be emitted by this pallet
@@ -963,6 +970,11 @@ impl<T: Config> Pallet<T> {
     /// A helper function to get the total capacity of all BSPs which is the total capacity of the network.
     pub fn get_total_bsp_capacity() -> StorageData<T> {
         TotalBspsCapacity::<T>::get()
+    }
+
+    /// A helper function to get the total used capacity of all BSPs.
+    pub fn get_used_bsp_capacity() -> StorageData<T> {
+        UsedBspsCapacity::<T>::get()
     }
 
     /// A helper function to get the total data used by a Main Storage Provider.
