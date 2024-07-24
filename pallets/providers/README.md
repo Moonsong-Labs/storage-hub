@@ -41,8 +41,8 @@ The remaining portion of the user's payment for storing a file, after the MSP's 
 
 The sign up process for Storage Providers is a two-step process to avoid malicious users from predicting the randomness used to generate the unique ID of the Storage Provider.
 
-1) The first step is the request to sign up, where the user provides the necessary information to become a Storage Provider, commiting to that information, and the necessary deposit is held.
-2) The second step is the confirmation of the sign-up, which must be done by the user (or a third-party) after enough time has passed to ensure that the randomness used to generate the unique ID was not predictable when the sign-up request (commitment) was made.
+1. The first step is the request to sign up, where the user provides the necessary information to become a Storage Provider, commiting to that information, and the necessary deposit is held.
+2. The second step is the confirmation of the sign-up, which must be done by the user (or a third-party) after enough time has passed to ensure that the randomness used to generate the unique ID was not predictable when the sign-up request (commitment) was made.
 
 This process exists because the unique ID of a Storage Provider is what determines if they can volunteer to store a new file of the system after a store request was made by a user, and if the randomness used to generate the unique ID was predictable, malicious users could generate multiple Storage Provider accounts with similar IDs and collude to store the same file, which would be detrimental to the system as it would allow file storage centralization, allowing censorship and data loss.
 
@@ -61,7 +61,6 @@ The Storage Providers pallet provides the following extrinsics, which are explai
 ### request_msp_sign_up
 
 The purpose of this extrinsic is to handle the sign-up process for a new Main Storage Provider. It performs several checks and updates the blockchain's storage accordingly. We have a two-step process for signing up as a Storage Provider to avoid malicious users from predicting the randomness used to generate the unique ID of the Storage Provider, and that's why we have a request and a confirmation extrinsic, as a commitment scheme.
-
 
 ### request_bsp_sign_up
 
@@ -278,7 +277,7 @@ BspSignOffSuccess { who: T::AccountId }
 
 ### `CapacityChanged`
 
-This event is emitted when a  Storage Provider has successfully changed its registered capacity on the network. It holds the information about the account ID of that Storage Provider, its previous capacity, the new registered capacity and the next block after which the timelock expires and it is able to change its capacity again.
+This event is emitted when a Storage Provider has successfully changed its registered capacity on the network. It holds the information about the account ID of that Storage Provider, its previous capacity, the new registered capacity and the next block after which the timelock expires and it is able to change its capacity again.
 
 The nature of this event is to allow the caller of the extrinsic to know that the change of capacity was successful and that the difference in deposit was held or returned. It also allows users of the network to know that this Storage Provider has changed its capacity, which can be useful for them to choose which Storage Provider to use.
 
@@ -378,3 +377,37 @@ Error thrown when trying to get a root from a Main Storage Provider without pass
 ### `SpRegisteredButDataNotFound`
 
 Error thrown when a user has a Storage Provider ID assigned to it but its metadata data does not exist in storage (storage inconsistency error, should never happen).
+
+## Slashing Protocol
+
+Storage Providers who fail to submit a proof by the last challenge tick will be slashed, predetermined by the challenge period defined in the proofs-dealer pallet.
+
+Slashing is an asynchronous process, therefore it is possible for a Storage Provider to have failed more than one challenge before being slashed. To avoid all possibility for a Storage Provider to not be slashed for the number of failed proof submissions, the runtime will accrue the number of failed challenges for each Storage Provider. Slashing a Storage Provider will take into account the total number of failed challenges and multiply it by a configurable slash factor.
+
+### Manual and Automatic Slashing
+
+The `slash` extrinsic can be called by any account to manually slash a Storage Provider and only requires the Storage Provider ID of a Storage Provider to be slashed, be it either an MSP or a BSP.
+
+An automated slashing mechanism is implemented in an off-chain worker process to be executed by collators which efficiently slashes many Storage Providers.
+
+### Grace Period
+
+Since the Storage Provider's stake determines their total storage capacity, it is entirely possible that the amount of data currently stored would be above their total storage capacity. StorageHub grants a predetermined configurable grace period for Storage Providers to top-up their stake to have their total capacity equal to or greater than the amount of data they currently store. If the grace period has been reached, they are considered to be insolvent and cease to be a Storage Provider.
+
+The grace period is based on the total stake/capacity of the Storage Provider. In essence, the more stake a Storage Provider has, the longer the grace period.
+This is to avoid a high stake Storage Provider from being removed from the network prematurely.
+
+### Ensuring Data Redundancy
+
+> [!WARNING]  
+> The runtime cannot ensure that all the data stored from an insolvent storage provider would be recovered. It is up to users and storage providers to ensure data redundancy since the runtime has no knowledge of file keys stored by whom.
+
+In the event when a BSP would become insolvent, the entire network of BSPs are responsible to regain data redundancy for the data they lost.
+
+To accomplish this, an off-chain indexer is required to discover the file keys which were stored by that insolvent Storage Provider. This is necessary since the runtime does not hold any file key in data in storage.
+
+Any account can call the `add_redundancy` extrinsic which requires a proof of inclusion of a given file key and the number of required BSPs needed to fulfill this request. The root is checked to be a current Bucket or BSP’s forest root to ensure that the file key does indeed exist as part of a Storage Provider's forest.
+
+This will trigger a traditional storage request with the specified minimum amount of BSPs required and optionally the data server’s that should have that file in their possession to supply the data to the volunteers. The caller of the extrinsic can pass in optionally a list of data servers for the file key, which then will be marked in the storage request for the volunteers to request the data from. The caller will be able to obtain this information from the off-chain indexer.
+
+If the file was originally stored by an MSP, it is up to the user of the lost file or files within a bucket to execute the `transfer_file` or `transfer_bucket` extrinsics to move the data to a new MSP.
