@@ -399,7 +399,7 @@ This is to avoid a high stake Storage Provider from being removed from the netwo
 
 ### Ensuring Data Redundancy
 
-> [!WARNING]  
+> [!IMPORTANT]
 > The runtime cannot ensure that all the data stored from an insolvent storage provider would be recovered. It is up to users and storage providers to ensure data redundancy since the runtime has no knowledge of file keys stored by whom.
 
 In the event when a BSP would become insolvent, the entire network of BSPs are responsible to regain data redundancy for the data they lost.
