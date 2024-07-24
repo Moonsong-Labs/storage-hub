@@ -412,6 +412,8 @@ This creates a traditional storage request with the specified amount of BSPs req
 
 If the file was originally stored by an MSP, it is up to the user of the lost file or files within a bucket to execute the `transfer_file` or `transfer_bucket` extrinsics exposed by the file system pallet to move the data to a new MSP.
 
+#### Incentives and Storage Cleanup
+
 For every file key submitted for redundancy which was stored by an insolvent Storage Provider, the caller will be rewarded with a configurable amount of tokens which must be less than the slash factor to prevent abuse. The runtime will accrue the file size of each file key submitted for redundancy for the given insolvent Storage Provider. Once the total accrued file size reaches the total data size stored by the insolvent Storage Provider, the Storage Provider is deleted from the runtime.
 
 This process ensures that total redundancy is regained before the insolvent Storage Provider is removed from the network.
