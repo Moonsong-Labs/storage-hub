@@ -317,6 +317,9 @@ where
         // TODO: Check storage capacity of chosen MSP (when we support MSPs)
         // TODO: Return error if the file is already stored and overwrite is false.
 
+        // Check that the file size is greater than zero.
+        ensure!(size > Zero::zero(), Error::<T>::FileSizeCannotBeZero);
+
         if let Some(ref msp) = msp {
             ensure!(
                 <T::Providers as ReadProvidersInterface>::is_msp(msp),
@@ -933,17 +936,13 @@ where
 
                 // Check if the file key is already in the pending deletion requests.
                 ensure!(
-                    !pending_file_deletion_requests
-                        .contains(&(file_key.clone(), bucket_id.clone())),
+                    !pending_file_deletion_requests.contains(&(file_key, bucket_id)),
                     Error::<T>::FileKeyAlreadyPendingDeletion
                 );
 
                 // Add the file key to the pending deletion requests.
-                PendingFileDeletionRequests::<T>::try_append(
-                    &sender,
-                    (file_key.clone(), bucket_id.clone()),
-                )
-                .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
+                PendingFileDeletionRequests::<T>::try_append(&sender, (file_key, bucket_id))
+                    .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
 
                 // Queue the expiration item.
                 Self::queue_expiration_item(
@@ -1008,7 +1007,7 @@ where
 
         // Check if the file key is in the pending deletion requests.
         ensure!(
-            pending_file_deletion_requests.contains(&(file_key.clone(), bucket_id.clone())),
+            pending_file_deletion_requests.contains(&(file_key, bucket_id)),
             Error::<T>::FileKeyNotPendingDeletion
         );
 

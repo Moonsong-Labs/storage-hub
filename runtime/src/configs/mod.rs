@@ -443,6 +443,7 @@ impl pallet_randomness::Config for Runtime {
 
 parameter_types! {
     pub const SpMinDeposit: Balance = 20 * UNIT;
+    pub const BucketDeposit: Balance = 20 * UNIT;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -467,6 +468,7 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
+    type BucketDeposit = BucketDeposit;
     type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = ConstU32<2>;
@@ -499,6 +501,7 @@ impl pallet_payment_streams::Config for Runtime {
     type NewStreamDeposit = ConstU32<10>; // Amount of blocks that the deposit of a new stream should be able to pay for
     type Units = u32; // Storage unit
     type BlockNumberToBalance = BlockNumberToBalance;
+    type ProvidersProofSubmitters = ProofsDealer;
 }
 
 // TODO: remove this and replace with pallet treasury
@@ -518,6 +521,8 @@ parameter_types! {
     pub const ChallengesFee: Balance = 1 * UNIT;
     pub const StakeToChallengePeriod: Balance = 10 * UNIT;
     pub const ChallengeTicksTolerance: u32 = 50;
+    pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
+    pub const TargetTicksStorageOfSubmitters: u32 = 3;
 }
 
 impl pallet_proofs_dealer::Config for Runtime {
@@ -536,6 +541,8 @@ impl pallet_proofs_dealer::Config for Runtime {
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = RandomChallengesPerBlock;
     type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
+    type MaxSubmittersPerTick = MaxSubmittersPerTick;
+    type TargetTicksStorageOfSubmitters = TargetTicksStorageOfSubmitters;
     type ChallengeHistoryLength = ChallengeHistoryLength;
     type ChallengesQueueLength = ChallengesQueueLength;
     type CheckpointChallengePeriod = CheckpointChallengePeriod;

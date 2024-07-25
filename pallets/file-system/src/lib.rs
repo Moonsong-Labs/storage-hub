@@ -1,4 +1,4 @@
-//! # Voting Pallet
+//! # File System Pallet
 //!
 //! - [`Config`]
 //! - [`Call`]
@@ -498,6 +498,8 @@ pub mod pallet {
         MspNotStoringBucket,
         /// File key not found in pending deletion requests.
         FileKeyNotPendingDeletion,
+        /// File size cannot be zero.
+        FileSizeCannotBeZero,
     }
 
     #[pallet::call]

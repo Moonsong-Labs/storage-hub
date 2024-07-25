@@ -12551,6 +12551,7 @@ version = "0.1.0"
 dependencies = [
  "jsonrpsee",
  "log",
+ "serde",
  "shc-common",
  "shc-file-manager",
  "shc-forest-manager",

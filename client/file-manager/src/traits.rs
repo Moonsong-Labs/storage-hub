@@ -71,6 +71,8 @@ pub enum FileStorageError {
     FailedToParsePartialRoot,
     /// Failed to convert raw bytes into [`HasherOutT`]
     FailedToHasherOutput,
+    /// File has size zero
+    FileIsEmpty,
 }
 
 #[derive(Debug)]
@@ -149,6 +151,9 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         metadata: FileMetadata,
         file_data: Self::FileDataTrie,
     ) -> Result<(), FileStorageError>;
+
+    /// Get the number of stored chunks for a file key.
+    fn stored_chunks_count(&self, key: &HasherOutT<T>) -> Result<u64, FileStorageError>;
 
     // TODO: Return Result<Option> instead of Result only
     /// Get a file chunk from storage.

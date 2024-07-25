@@ -67,7 +67,7 @@ async function bootStrapNetwork() {
   const remotePath = CONFIG.remotePath;
 
   // Issue file Storage request
-  const rpcResponse = await api.loadFile(
+  const rpcResponse = await api.rpc.storagehubclient.loadFileInStorage(
     localPath,
     remotePath,
     NODE_INFOS.user.AddressId,

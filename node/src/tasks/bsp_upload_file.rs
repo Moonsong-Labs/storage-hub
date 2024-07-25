@@ -1,14 +1,12 @@
-use std::{fs::create_dir_all, path::Path, str::FromStr, time::Duration};
+use std::{str::FromStr, time::Duration};
 
 use anyhow::anyhow;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shp_constants::H_LENGTH;
-use shp_file_metadata::ChunkId;
 use sp_core::H256;
 use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
-use tokio::{fs::File, io::AsyncWriteExt};
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
@@ -432,7 +430,7 @@ where
 
         // Get the metadata for the file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let metadata = read_file_storage
+        let _metadata = read_file_storage
             .get_metadata(file_key)
             .map_err(|e| anyhow!("File metadata not found: {:?}", e))?;
         let added_file_key_proof = read_file_storage
@@ -466,34 +464,6 @@ where
             .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
-
-        // TODO: move this under an RPC call
-        let file_path = Path::new("./storage/").join(
-            String::from_utf8(metadata.location.clone())
-                .map_err(|e| anyhow!("File location should be an utf8 string: {:?}", e))?,
-        );
-        dbg!(
-            "Current dir: {}",
-            std::env::current_dir().unwrap().display()
-        );
-        info!("Intended file path: {:?}", file_path);
-
-        create_dir_all(&file_path.parent().unwrap())
-            .map_err(|e| anyhow!("Failed to create directory: {:?}", e))?;
-        let mut file = File::create(file_path)
-            .await
-            .map_err(|e| anyhow!("Failed to open file for writing: {:?}", e))?;
-
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        for chunk_id in 0..metadata.chunks_count() {
-            let chunk = read_file_storage
-                .get_chunk(&file_key, &ChunkId::new(chunk_id))
-                .map_err(|e| anyhow!("Chunk not found in storage: {:?}", e))?;
-            file.write_all(&chunk)
-                .await
-                .map_err(|e| anyhow!("Failed to write file chunk: {:?}", e))?;
-        }
-        drop(read_file_storage);
 
         Ok(())
     }

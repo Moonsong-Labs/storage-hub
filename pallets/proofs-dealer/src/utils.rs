@@ -3,18 +3,19 @@ use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
     traits::{fungible::Mutate, tokens::Preservation, Get, Randomness},
-    weights::WeightMeter,
+    weights::{Weight, WeightMeter},
+    BoundedBTreeSet,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
 };
 use shp_traits::{
-    CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, TrieMutation,
-    TrieProofDeltaApplier, TrieRemoveMutation,
+    CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, ReadProofSubmittersInterface,
+    TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use sp_runtime::{
-    traits::{CheckedAdd, CheckedDiv, CheckedSub, Convert, Hash, Zero},
+    traits::{CheckedAdd, CheckedDiv, CheckedSub, Convert, Hash, One, Zero},
     ArithmeticError, BoundedVec, DispatchError, SaturatedConversion, Saturating,
 };
 use sp_std::{
@@ -28,13 +29,15 @@ use crate::{
         AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor,
         ChallengeTicksToleranceFor, ChallengesFeeFor, ChallengesQueueLengthFor,
         CheckpointChallengePeriodFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor,
-        KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor, Proof, ProviderIdFor,
-        ProvidersPalletFor, RandomChallengesPerBlockFor, RandomnessOutputFor,
-        RandomnessProviderFor, StakeToChallengePeriodFor, TreasuryAccountFor,
+        KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor,
+        MaxSubmittersPerTickFor, Proof, ProviderIdFor, ProvidersPalletFor,
+        RandomChallengesPerBlockFor, RandomnessOutputFor, RandomnessProviderFor,
+        StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
     },
     ChallengeTickToChallengedProviders, ChallengesQueue, ChallengesTicker, Error, Event,
-    LastCheckpointTick, LastTickProviderSubmittedProofFor, Pallet, PriorityChallengesQueue,
-    SlashableProviders, TickToChallengesSeed, TickToCheckpointChallenges,
+    LastCheckpointTick, LastDeletedTick, LastTickProviderSubmittedProofFor, Pallet,
+    PriorityChallengesQueue, SlashableProviders, TickToChallengesSeed, TickToCheckpointChallenges,
+    ValidProofSubmittersLastTicks,
 };
 
 macro_rules! expect_or_err {
@@ -62,6 +65,21 @@ macro_rules! expect_or_err {
             #[allow(unreachable_code)]
             {
                 Err($error_type)?
+            }
+        }
+    }};
+    // Handle Result type
+    ($result:expr, $error_msg:expr, $error_type:path, result) => {{
+        match $result {
+            Ok(value) => value,
+            Err(_) => {
+                #[cfg(test)]
+                unreachable!($error_msg);
+
+                #[allow(unreachable_code)]
+                {
+                    Err($error_type)?
+                }
             }
         }
     }};
@@ -304,7 +322,37 @@ where
             Some(()),
         );
 
-        // TODO: Register this block as the last block that this provider can charge for in the payment stream.
+        // Add this Provider to the `ValidProofSubmittersLastTicks` StorageMap, with the current tick number.
+        let current_tick_valid_submitters =
+            ValidProofSubmittersLastTicks::<T>::take(ChallengesTicker::<T>::get());
+        match current_tick_valid_submitters {
+            // If the set already exists and has valid submitters, we just insert the new submitter.
+            Some(mut valid_submitters) => {
+                let already_existed = expect_or_err!(valid_submitters.try_insert(*submitter), "The set should never be full as the limit we set should be greater than the implicit limit given by max block weight.", Error::<T>::TooManyValidProofSubmitters, result);
+                // We only update storage if the Provider ID wasn't yet in the set to avoid unnecessary writes.
+                if !already_existed {
+                    ValidProofSubmittersLastTicks::<T>::insert(
+                        ChallengesTicker::<T>::get(),
+                        valid_submitters,
+                    );
+                }
+            }
+            // If the set doesn't exist, we create it and insert the submitter.
+            None => {
+                let mut new_valid_submitters =
+                    BoundedBTreeSet::<ProviderIdFor<T>, MaxSubmittersPerTickFor<T>>::new();
+                expect_or_err!(
+                    new_valid_submitters.try_insert(*submitter),
+                    "The set has just been created, it's empty and as such won't be full. qed",
+                    Error::<T>::TooManyValidProofSubmitters,
+                    result
+                );
+                ValidProofSubmittersLastTicks::<T>::insert(
+                    ChallengesTicker::<T>::get(),
+                    new_valid_submitters,
+                );
+            }
+        }
 
         Ok(())
     }
@@ -620,6 +668,64 @@ where
 
         challenges
     }
+
+    /// Trim the storage that holds the Providers that submitted valid proofs in the last ticks until there's
+    /// `TargetTicksOfProofsStorage` ticks left (or until the remaining weight allows it).
+    ///
+    /// This function is called in the `on_idle` hook, which means it's only called when the block has
+    /// unused weight.
+    ///
+    /// It removes the oldest tick from the storage that holds the providers that submitted valid proofs
+    /// in the last ticks as many times as the remaining weight allows it, but at most until the storage
+    /// has `TargetTicksOfProofsStorage` ticks left.
+    pub fn do_trim_valid_proof_submitters_last_ticks(
+        _n: BlockNumberFor<T>,
+        usable_weight: Weight,
+    ) -> Weight {
+        // Initialize the weight used by this function.
+        let mut used_weight = Weight::zero();
+
+        // Check how many ticks should be removed to keep the storage at the target amount.
+        let mut last_deleted_tick = LastDeletedTick::<T>::get();
+        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
+        let target_ticks_to_keep = TargetTicksStorageOfSubmittersFor::<T>::get();
+        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
+        let current_tick = ChallengesTicker::<T>::get();
+        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
+        let ticks_to_remove = current_tick
+            .saturating_sub(last_deleted_tick)
+            .saturating_sub(target_ticks_to_keep.into());
+
+        // Check how much ticks can be removed considering weight limitations
+        let weight_to_remove_tick = T::DbWeight::get().reads_writes(0, 2);
+        let removable_ticks = usable_weight
+            .saturating_sub(used_weight)
+            .checked_div_per_component(&weight_to_remove_tick);
+
+        // If there is enough weight to remove ticks, try to remove as much ticks as possible until the target is reached.
+        if let Some(removable_ticks) = removable_ticks {
+            let removable_ticks =
+                removable_ticks.min(ticks_to_remove.try_into().unwrap_or(u64::MAX));
+            // Remove all the ticks that we can, until we reach the target amount.
+            for _ in 0..removable_ticks {
+                // Get the next tick to delete.
+                let next_tick_to_delete = last_deleted_tick.saturating_add(One::one());
+
+                // Remove it from storage
+                ValidProofSubmittersLastTicks::<T>::remove(next_tick_to_delete);
+
+                // Update the last removed tick
+                LastDeletedTick::<T>::set(next_tick_to_delete);
+                last_deleted_tick = next_tick_to_delete; // We do this to avoid having to read from storage again.
+
+                // Increment the used weight.
+                used_weight = used_weight.saturating_add(weight_to_remove_tick);
+            }
+        }
+
+        // Return the weight used by this function.
+        used_weight
+    }
 }
 
 impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
@@ -757,6 +863,18 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         });
 
         Ok(())
+    }
+}
+
+impl<T: pallet::Config> ReadProofSubmittersInterface for Pallet<T> {
+    type ProviderId = ProviderIdFor<T>;
+    type TickNumber = BlockNumberFor<T>;
+    type MaxProofSubmitters = MaxSubmittersPerTickFor<T>;
+
+    fn get_proof_submitters_for_tick(
+        tick_number: &Self::TickNumber,
+    ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
+        ValidProofSubmittersLastTicks::<T>::get(tick_number)
     }
 }
 

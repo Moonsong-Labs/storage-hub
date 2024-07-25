@@ -14,6 +14,7 @@ use frame_support::traits::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
     MutateProvidersInterface, ProvidersConfig, ProvidersInterface, ReadProvidersInterface,
+    SystemMetricsInterface,
 };
 use sp_runtime::BoundedVec;
 
@@ -795,6 +796,13 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
                 BackupStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
             bsp.data_used = bsp.data_used.saturating_add(delta);
             BackupStorageProviders::<T>::insert(&provider_id, bsp);
+            UsedBspsCapacity::<T>::mutate(|n| match n.checked_add(&delta) {
+                Some(new_total_bsp_capacity) => {
+                    *n = new_total_bsp_capacity;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Overflow)),
+            })?;
         } else {
             return Err(Error::<T>::NotRegistered.into());
         }
@@ -815,6 +823,13 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
                 BackupStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
             bsp.data_used = bsp.data_used.saturating_sub(delta);
             BackupStorageProviders::<T>::insert(&provider_id, bsp);
+            UsedBspsCapacity::<T>::mutate(|n| match n.checked_sub(&delta) {
+                Some(new_total_bsp_capacity) => {
+                    *n = new_total_bsp_capacity;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+            })?;
         } else {
             return Err(Error::<T>::NotRegistered.into());
         }
@@ -840,6 +855,22 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
             Error::<T>::NotRegistered
         );
 
+        let user_balance = T::NativeBalance::reducible_balance(
+            &user_id,
+            Preservation::Preserve,
+            Fortitude::Polite,
+        );
+
+        let deposit = T::BucketDeposit::get();
+        ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
+        ensure!(
+            T::NativeBalance::can_hold(&HoldReason::BucketDeposit.into(), &user_id, deposit),
+            Error::<T>::CannotHoldDeposit
+        );
+
+        // Hold the bucket deposit
+        T::NativeBalance::hold(&HoldReason::BucketDeposit.into(), &user_id, deposit)?;
+
         let bucket = Bucket {
             root: T::DefaultMerkleRoot::get(),
             user_id,
@@ -847,7 +878,12 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
             private,
             read_access_group_id,
         };
+
         Buckets::<T>::insert(&bucket_id, &bucket);
+
+        MainStorageProviderIdsToBuckets::<T>::try_append(&msp_id, bucket_id)
+            .map_err(|_| Error::<T>::AppendBucketToMspFailed)?;
+
         Ok(())
     }
 
@@ -894,7 +930,30 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
     }
 
     fn remove_root_bucket(bucket_id: BucketId<T>) -> DispatchResult {
-        Buckets::<T>::remove(&bucket_id);
+        let bucket = Buckets::<T>::take(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+
+        MainStorageProviderIdsToBuckets::<T>::mutate_exists(
+            &bucket.msp_id,
+            |buckets| match buckets {
+                Some(b) => {
+                    b.retain(|b| b != &bucket_id);
+
+                    if b.is_empty() {
+                        *buckets = None;
+                    }
+                }
+                _ => {}
+            },
+        );
+
+        // Release the bucket deposit hold
+        T::NativeBalance::release(
+            &HoldReason::BucketDeposit.into(),
+            &bucket.user_id,
+            T::BucketDeposit::get(),
+            Precision::Exact,
+        )?;
+
         Ok(())
     }
 }
@@ -1078,5 +1137,17 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
 
     fn get_default_root() -> Self::MerkleHash {
         T::DefaultMerkleRoot::get()
+    }
+}
+
+impl<T: pallet::Config> SystemMetricsInterface for pallet::Pallet<T> {
+    type ProvidedUnit = StorageData<T>;
+
+    fn get_total_capacity() -> Self::ProvidedUnit {
+        Self::get_total_bsp_capacity()
+    }
+
+    fn get_total_used_capacity() -> Self::ProvidedUnit {
+        Self::get_used_bsp_capacity()
     }
 }

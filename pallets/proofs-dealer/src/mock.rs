@@ -136,6 +136,7 @@ impl pallet_storage_providers::Config for Test {
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
+    type BucketDeposit = ConstU128<10>;
     type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU32<2>;
@@ -156,6 +157,8 @@ impl crate::Config for Test {
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
+    type MaxSubmittersPerTick = ConstU32<1000>; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
+    type TargetTicksStorageOfSubmitters = ConstU32<3>;
     type ChallengeHistoryLength = ConstU64<30>;
     type ChallengesQueueLength = ConstU32<25>;
     type CheckpointChallengePeriod = ConstU64<10>;

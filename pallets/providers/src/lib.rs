@@ -170,6 +170,10 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBuckets: Get<u32>;
 
+        /// The amount that an account has to deposit to create a bucket.
+        #[pallet::constant]
+        type BucketDeposit: Get<BalanceOf<Self>>;
+
         /// Type that represents the byte limit of a bucket name.
         #[pallet::constant]
         type BucketNameLimit: Get<u32>;
@@ -243,6 +247,21 @@ pub mod pallet {
     #[pallet::storage]
     pub type Buckets<T: Config> = StorageMap<_, Blake2_128Concat, BucketId<T>, Bucket<T>>;
 
+    /// The mapping from a MainStorageProviderId to a vector of BucketIds.
+    ///
+    /// This is used to efficiently retrieve the list of buckets that a Main Storage Provider is currently storing.
+    ///
+    /// This storage is updated in:
+    /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket)
+    /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket)
+    #[pallet::storage]
+    pub type MainStorageProviderIdsToBuckets<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        MainStorageProviderId<T>,
+        BoundedVec<BucketId<T>, T::MaxBuckets>,
+    >;
+
     /// The mapping from an AccountId to a BackupStorageProviderId.
     ///
     /// This is used to get a Backup Storage Provider's unique identifier needed to access its metadata.
@@ -298,6 +317,13 @@ pub mod pallet {
     /// - [bsp_sign_off](crate::dispatchables::bsp_sign_off), which subtracts the capacity of the Backup Storage Provider to sign off from this storage.
     #[pallet::storage]
     pub type TotalBspsCapacity<T: Config> = StorageValue<_, StorageData<T>, ValueQuery>;
+
+    /// The total amount of storage capacity of BSPs that is currently in use.
+    ///
+    /// This is used to keep track of the total amount of storage capacity that is currently in use by users, which is useful for
+    /// system metrics and also to calculate the current price of storage.
+    #[pallet::storage]
+    pub type UsedBspsCapacity<T: Config> = StorageValue<_, StorageData<T>, ValueQuery>;
 
     // Events & Errors:
 
@@ -421,6 +447,8 @@ pub mod pallet {
         BucketNotFound,
         /// Error thrown when a bucket ID already exists in storage.
         BucketAlreadyExists,
+        /// Error thrown when a bucket ID could not be added to the list of buckets of a MSP.
+        AppendBucketToMspFailed,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -431,6 +459,8 @@ pub mod pallet {
     pub enum HoldReason {
         /// Deposit that a Storage Provider has to pay to be registered as such
         StorageProviderDeposit,
+        /// Deposit that a user has to pay to create a bucket
+        BucketDeposit,
         // Only for testing, another unrelated hold reason
         #[cfg(test)]
         AnotherUnrelatedHold,
@@ -940,6 +970,11 @@ impl<T: Config> Pallet<T> {
     /// A helper function to get the total capacity of all BSPs which is the total capacity of the network.
     pub fn get_total_bsp_capacity() -> StorageData<T> {
         TotalBspsCapacity::<T>::get()
+    }
+
+    /// A helper function to get the total used capacity of all BSPs.
+    pub fn get_used_bsp_capacity() -> StorageData<T> {
+        UsedBspsCapacity::<T>::get()
     }
 
     /// A helper function to get the total data used by a Main Storage Provider.

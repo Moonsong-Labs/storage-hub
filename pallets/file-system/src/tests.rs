@@ -555,6 +555,40 @@ fn request_storage_success() {
 }
 
 #[test]
+fn request_storage_failure_if_size_is_zero() {
+    new_test_ext().execute_with(|| {
+        let owner_account_id = Keyring::Alice.to_account_id();
+        let user = RuntimeOrigin::signed(owner_account_id.clone());
+        let msp = Keyring::Charlie.to_account_id();
+        let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+        let size = 0;
+        let file_content = b"test".to_vec();
+        let fingerprint = BlakeTwo256::hash(&file_content);
+        let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+        let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+        let msp_id = add_msp_to_provider_storage(&msp);
+
+        let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+        let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+
+        // Dispatch a signed extrinsic.
+        assert_noop!(
+            FileSystem::issue_storage_request(
+                user.clone(),
+                bucket_id,
+                location.clone(),
+                fingerprint,
+                size,
+                msp_id,
+                peer_ids.clone(),
+            ),
+            Error::<Test>::FileSizeCannotBeZero
+        );
+    });
+}
+
+#[test]
 fn request_storage_expiration_clear_success() {
     new_test_ext().execute_with(|| {
         let owner_account_id = Keyring::Alice.to_account_id();
@@ -2025,6 +2059,11 @@ fn bsp_stop_storing_not_volunteered_success() {
             fingerprint,
         );
 
+        // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
+        assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
+            &bsp_id, size,
+        ));
+
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
             bsp_signed.clone(),
@@ -2116,6 +2155,11 @@ fn bsp_stop_storing_no_storage_request_success() {
             size,
             fingerprint,
         );
+
+		// Increase the data used by the registered bsp, to simulate that it is indeed storing the file
+        assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
+            &bsp_id, size,
+        ));
 
         // Dispatch BSP stop storing.
         assert_ok!(FileSystem::bsp_stop_storing(
@@ -2345,8 +2389,7 @@ mod delete_file_tests {
                 // Find file key in vec of queued priority challenges
                 pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                     .iter()
-                    .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
-                    .is_some(),
+                    .any(|x| *x == (file_key, Some(TrieRemoveMutation))),
             );
 
             // Assert that the correct event was deposited
@@ -2377,7 +2420,7 @@ mod delete_file_tests {
             let msp_id = add_msp_to_provider_storage(&msp);
 
             let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-            let _ = create_bucket(&owner_account_id.clone(), name.clone(), msp_id.clone());
+            let _ = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
 
             let other_user = Keyring::Bob.to_account_id();
             let bucket_id = create_bucket(&other_user.clone(), name, msp_id);
@@ -2424,7 +2467,7 @@ mod delete_file_tests {
             let msp_id = add_msp_to_provider_storage(&msp);
 
             let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-            let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id.clone());
+            let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
 
             // For loop to create 1 over maximum of MaxUserPendingDeletionRequests
             for i in 0..<Test as crate::Config>::MaxUserPendingDeletionRequests::get() {
@@ -2439,7 +2482,7 @@ mod delete_file_tests {
                 assert_ok!(FileSystem::delete_file(
                     owner_signed.clone(),
                     bucket_id,
-                    file_key.clone(),
+                    file_key,
                     location.clone(),
                     i,
                     fingerprint,
@@ -2558,8 +2601,7 @@ mod delete_file_tests {
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
             assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                 .iter()
-                .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
-                .is_some(),);
+                .any(|x| *x == (file_key, Some(TrieRemoveMutation))),);
         });
     }
 
@@ -2636,8 +2678,7 @@ mod delete_file_tests {
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
             assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                 .iter()
-                .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
-                .is_some(),);
+                .any(|x| *x == (file_key, Some(TrieRemoveMutation))),);
 
             // Assert that the pending file deletion request was removed from storage
             assert_eq!(
@@ -2718,10 +2759,11 @@ mod delete_file_tests {
             );
 
             // Assert that there is a queued priority challenge for file key in proofs dealer pallet
-            assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
-                .iter()
-                .find(|&x| *x == (file_key, Some(TrieRemoveMutation)))
-                .is_none(),);
+            assert!(
+                !pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
+                    .iter()
+                    .any(|x| *x == (file_key, Some(TrieRemoveMutation))),
+            );
 
             // Assert that the pending file deletion request was removed from storage
             assert_eq!(

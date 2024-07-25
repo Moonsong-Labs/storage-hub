@@ -231,6 +231,10 @@ declare module '@polkadot/api-base/types/errors' {
              **/
             FileKeyNotPendingDeletion: AugmentedError<ApiType>;
             /**
+             * File size cannot be zero.
+             **/
+            FileSizeCannotBeZero: AugmentedError<ApiType>;
+            /**
              * Failed to get value when just checked it existed.
              **/
             ImpossibleFailedToGetValue: AugmentedError<ApiType>;
@@ -846,6 +850,10 @@ declare module '@polkadot/api-base/types/errors' {
              * This should not be possible, as the `Balance` type should be an unsigned integer type.
              **/
             StakeCouldNotBeConverted: AugmentedError<ApiType>;
+            /**
+             * The limit of Providers that can submit a proof in a single tick has been reached.
+             **/
+            TooManyValidProofSubmitters: AugmentedError<ApiType>;
             /**
              * Provider is submitting a proof when they have a zero root.
              * Providers with zero roots are not providing any service, so they should not be
