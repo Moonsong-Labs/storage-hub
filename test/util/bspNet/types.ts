@@ -2,8 +2,8 @@ import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
-import type { FileSendResponse, SealedBlock } from "./helpers";
-import type { EventRecord, Event, H256 } from "@polkadot/types/interfaces";
+import type { SealedBlock } from "./helpers";
+import type { EventRecord, Event } from "@polkadot/types/interfaces";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -20,23 +20,6 @@ export type BspNetApi = ApiPromise & {
     call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
     signer?: KeyringPair
   ) => Promise<SealedBlock>;
-
-  /**
-   * @description Issues a sendFile RPC call to UserNode.
-   * N.B. Local file must exist in mounted volume '/res'
-   *
-   * @param localPath - The local file path.
-   * @param remotePath - The destination path on the blockchain.
-   * @param addressId - The address ID associated with the file transfer.
-   * @param bucketId - The bucket ID associated with the file transfer.
-   * @returns A promise that resolves to a file send response.
-   */
-  loadFile: (
-    localPath: string,
-    remotePath: string,
-    addressId: string,
-    bucketId: H256
-  ) => Promise<FileSendResponse>;
 
   /** @description Creates a new bucket.
    *
@@ -67,3 +50,32 @@ export type BspNetApi = ApiPromise & {
    */
   // fetchEvent: () => void;
 };
+
+/**
+ * Represents information about a network toxicity.
+ * This interface is used to describe a Toxic "debuff" that can be applied to a running toxiproxy.
+ *
+ * @interface
+ * @property {("latency"|"down"|"bandwidth"|"slow_close"|"timeout"|"reset_peer"|"slicer"|"limit_data")} type - The type of network toxic.
+ * @property {string} name - The name of the network toxic.
+ * @property {("upstream"|"downstream")} stream - The link direction of the network toxic.
+ * @property {number} toxicity - The probability of the toxic being applied to a link (defaults to 1.0, 100%)
+ * @property {Object} attributes - A map of toxic-specific attributes
+ */
+export interface ToxicInfo {
+  type:
+    | "latency"
+    | "down"
+    | "bandwidth"
+    | "slow_close"
+    | "timeout"
+    | "reset_peer"
+    | "slicer"
+    | "limit_data";
+  name: string;
+  stream: "upstream" | "downstream";
+  toxicity: number;
+  attributes: {
+    [key: string]: string | number | undefined;
+  };
+}

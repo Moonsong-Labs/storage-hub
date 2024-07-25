@@ -19,10 +19,11 @@ import type { MmrHash, MmrLeafBatchProof } from '@polkadot/types/interfaces/mmr'
 import type { StorageKind } from '@polkadot/types/interfaces/offchain';
 import type { FeeDetails, RuntimeDispatchInfoV1 } from '@polkadot/types/interfaces/payment';
 import type { RpcMethods } from '@polkadot/types/interfaces/rpc';
-import type { AccountId, BlockNumber, H160, H256, H64, Hash, Header, Index, Justification, KeyValue, SignedBlock, StorageData } from '@polkadot/types/interfaces/runtime';
+import type { AccountId, AccountId32, BlockNumber, H160, H256, H64, Hash, Header, Index, Justification, KeyValue, SignedBlock, StorageData } from '@polkadot/types/interfaces/runtime';
 import type { MigrationStatusResult, ReadProof, RuntimeVersion, TraceBlockResponse } from '@polkadot/types/interfaces/state';
 import type { ApplyExtrinsicResult, ChainProperties, ChainType, Health, NetworkState, NodeRole, PeerInfo, SyncState } from '@polkadot/types/interfaces/system';
 import type { IExtrinsic, Observable } from '@polkadot/types/types';
+import type { FileMetadata, SaveFileToDisk } from '@storagehub/api-augment/interfaces/storagehubclient';
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
 declare module '@polkadot/rpc-core/types/jsonrpc' {
     interface RpcInterface {
@@ -580,6 +581,20 @@ declare module '@polkadot/rpc-core/types/jsonrpc' {
              * Check current migration state
              **/
             trieMigrationStatus: AugmentedRpc<(at?: BlockHash | string | Uint8Array) => Observable<MigrationStatusResult>>;
+        };
+        storagehubclient: {
+            /**
+             * Get the root of the forest trie.
+             **/
+            getForestRoot: AugmentedRpc<() => Observable<H256>>;
+            /**
+             * Load a file in the local storage. This is the first step when uploading a file.
+             **/
+            loadFileInStorage: AugmentedRpc<(file_path: Text | string, location: Text | string, owner: AccountId32 | string | Uint8Array, bucket_id: H256 | string | Uint8Array) => Observable<FileMetadata>>;
+            /**
+             * Save a file from the local storage to the disk.
+             **/
+            saveFileToDisk: AugmentedRpc<(file_key: H256 | string | Uint8Array, file_path: Text | string) => Observable<SaveFileToDisk>>;
         };
         syncstate: {
             /**

@@ -1,0 +1,44 @@
+[package]
+name = "shc-file-transfer-service"
+version = "0.1.0"
+description = ""
+homepage = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
+build = "build.rs"
+publish = false
+
+[lib]
+
+[lints]
+workspace = true
+
+[dependencies]
+prost = { workspace = true }
+async-channel = { workspace = true }
+tokio = { workspace = true }
+libp2p-identity = { workspace = true, features = ["peerid"] }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+array-bytes = { workspace = true }
+futures = { workspace = true }
+codec = { workspace = true }
+
+# Substrate
+sc-client-api = { workspace = true }
+sc-service = { workspace = true }
+sc-network = { workspace = true }
+sc-utils = { workspace = true }
+sc-tracing = { workspace = true }
+
+# Local
+shc-actors-framework = { workspace = true }
+shc-common = { workspace = true }
+shp-file-key-verifier = { workspace = true }
+shp-file-metadata = { workspace = true }
+
+[build-dependencies]
+prost-build = { workspace = true }

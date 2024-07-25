@@ -20,6 +20,7 @@ use shc_forest_manager::{
 use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
+use shc_blockchain_service::{BlockchainService, KEY_TYPE};
 use shc_common::types::HasherOutT;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
@@ -48,58 +49,38 @@ use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
 use sc_client_api::{Backend, HeaderBackend};
 use sc_consensus::{ImportQueue, LongestChain};
-use sc_executor::{HeapAllocStrategy, WasmExecutor, DEFAULT_HEAP_ALLOC_STRATEGY};
-use sc_network::{config::IncomingRequest, NetworkBlock, NetworkService, ProtocolName};
+use sc_executor::{HeapAllocStrategy, DEFAULT_HEAP_ALLOC_STRATEGY};
+use sc_network::{config::IncomingRequest, NetworkBlock, ProtocolName};
 use sc_network_sync::SyncingService;
-use sc_service::{
-    Configuration, PartialComponents, RpcHandlers, TFullBackend, TFullClient, TaskManager,
-};
+use sc_service::{Configuration, PartialComponents, RpcHandlers, TFullBackend, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
+use shc_file_transfer_service::configure_file_transfer_network;
 use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::traits::Block as BlockT;
 use substrate_prometheus_endpoint::Registry;
 
 use crate::{
     cli::StorageLayer,
     services::{
-        blockchain::BlockchainService,
         builder::{StorageHubBuilder, StorageLayerBuilder},
-        file_transfer::configure_file_transfer_network,
         handler::StorageHubHandler,
     },
 };
 use crate::{
     cli::{self, ProviderType},
     command::ProviderOptions,
-    services::blockchain::KEY_TYPE,
 };
 
-#[cfg(not(feature = "runtime-benchmarks"))]
-type HostFunctions = (
-    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
-    sp_io::SubstrateHostFunctions,
-    cumulus_client_service::storage_proof_size::HostFunctions,
-);
-
-#[cfg(feature = "runtime-benchmarks")]
-type HostFunctions = (
-    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
-    sp_io::SubstrateHostFunctions,
-    cumulus_client_service::storage_proof_size::HostFunctions,
-    frame_benchmarking::benchmarking::HostFunctions,
-);
-
-pub(crate) type ParachainExecutor = WasmExecutor<HostFunctions>;
-
-pub(crate) type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
+//* These type definitions were moved from this file to the common crate to be used by'
+//* the StorageHub services crates
+type ParachainExecutor = shc_common::types::ParachainExecutor;
+type ParachainClient = shc_common::types::ParachainClient;
+type ParachainNetworkService = shc_common::types::ParachainNetworkService;
 
 pub(crate) type ParachainBackend = TFullBackend<Block>;
 
 pub(crate) type ParachainBlockImport =
     TParachainBlockImport<Block, Arc<ParachainClient>, ParachainBackend>;
-
-pub(crate) type ParachainNetworkService = NetworkService<Block, <Block as BlockT>::Hash>;
 
 type MaybeSelectChain = Option<sc_consensus::LongestChain<ParachainBackend, Block>>;
 
@@ -217,6 +198,7 @@ async fn init_sh_builder<T, FL, FS>(
     task_manager: &TaskManager,
     file_transfer_request_protocol: Option<(ProtocolName, Receiver<IncomingRequest>)>,
     network: Arc<ParachainNetworkService>,
+    keystore: KeystorePtr,
 ) -> Option<StorageHubBuilder<T, FL, FS>>
 where
     StorageHubBuilder<T, FL, FS>: StorageLayerBuilder,
@@ -226,7 +208,7 @@ where
     HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     match provider_options {
-        Some(_) => {
+        Some(ProviderOptions { storage_path, .. }) => {
             // Start building the StorageHubHandler, if running as a provider.
             let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
@@ -245,7 +227,12 @@ where
                 )
                 .await;
 
-            storage_hub_builder.setup_storage_layer();
+            // Getting the caller pub key used for the blockchain service, from the keystore.
+            // Then add it to the StorageHub builder.
+            let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
+            storage_hub_builder.with_provider_pub_key(caller_pub_key);
+
+            storage_hub_builder.setup_storage_layer(storage_path.clone());
             Some(storage_hub_builder)
         }
         None => None,
@@ -270,11 +257,6 @@ async fn finish_sh_builder_and_build<T, FL, FS>(
     sh_builder
         .with_blockchain(client.clone(), Arc::new(rpc_handlers), keystore.clone())
         .await;
-
-    // Getting the caller pub key used for the blockchain service, from the keystore.
-    // Then add it to the StorageHub builder.
-    let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-    sh_builder.with_provider_pub_key(caller_pub_key);
 
     // Finally build the StorageHubBuilder and start the Provider tasks.
     let sh_handler = sh_builder.build();
@@ -440,11 +422,12 @@ where
         &task_manager,
         file_transfer_request_protocol,
         network.clone(),
+        keystore.clone(),
     )
     .await;
 
-    let maybe_file_storage = if let Some(ref sh_builder) = sh_builder {
-        sh_builder.file_storage().clone()
+    let maybe_storage_hub_client_rpc_config = if let Some(ref sh_builder) = sh_builder {
+        Some(sh_builder.rpc_config())
     } else {
         None
     };
@@ -457,7 +440,7 @@ where
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
-                maybe_file_storage: maybe_file_storage.clone(),
+                maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: command_sink.clone(),
                 deny_unsafe,
             };
@@ -753,11 +736,12 @@ where
         &task_manager,
         file_transfer_request_protocol,
         network.clone(),
+        keystore.clone(),
     )
     .await;
 
-    let maybe_file_storage = if let Some(ref sh_builder) = sh_builder {
-        sh_builder.file_storage().clone()
+    let maybe_storage_hub_client_rpc_config = if let Some(ref sh_builder) = sh_builder {
+        Some(sh_builder.rpc_config())
     } else {
         None
     };
@@ -770,7 +754,7 @@ where
             let deps = crate::rpc::FullDeps {
                 client: client.clone(),
                 pool: transaction_pool.clone(),
-                maybe_file_storage: maybe_file_storage.clone(),
+                maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
                 command_sink: None,
                 deny_unsafe,
             };
@@ -1017,8 +1001,8 @@ pub async fn start_dev_node(
             StorageLayer::RocksDB => {
                 start_dev_impl::<
                     LayoutV1<BlakeTwo256>,
-                    RocksDbFileStorage<_>,
-                    RocksDBForestStorage<_>,
+                    RocksDbFileStorage<_, kvdb_rocksdb::Database>,
+                    RocksDBForestStorage<_, kvdb_rocksdb::Database>,
                 >(config, Some(provider_options), hwbench, para_id, sealing)
                 .await
             }
@@ -1063,8 +1047,8 @@ pub async fn start_parachain_node(
             StorageLayer::RocksDB => {
                 start_node_impl::<
                     LayoutV1<BlakeTwo256>,
-                    RocksDbFileStorage<_>,
-                    RocksDBForestStorage<_>,
+                    RocksDbFileStorage<_, kvdb_rocksdb::Database>,
+                    RocksDBForestStorage<_, kvdb_rocksdb::Database>,
                 >(
                     parachain_config,
                     polkadot_config,

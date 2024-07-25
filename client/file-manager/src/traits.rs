@@ -25,6 +25,12 @@ pub enum FileStorageWriteError {
     FailedToReadStorage,
     /// Failed to convert raw bytes into [`Fingerprint`].
     FailedToParseFingerprint,
+    /// Failed to update root after a chunk was written.
+    FailedToUpdatePartialRoot,
+    /// Failed to convert raw bytes into partial root.
+    FailedToParsePartialRoot,
+    /// Failed to get chunks count in storage.
+    FailedToGetStoredChunksCount,
 }
 
 #[derive(Debug)]
@@ -61,6 +67,12 @@ pub enum FileStorageError {
     FailedToParseFingerprint,
     /// Failed to delete chunk from storage.
     FailedToDeleteFileChunk,
+    /// Failed to convert raw bytes into partial root.
+    FailedToParsePartialRoot,
+    /// Failed to convert raw bytes into [`HasherOutT`]
+    FailedToHasherOutput,
+    /// File has size zero
+    FileIsEmpty,
 }
 
 #[derive(Debug)]
@@ -83,7 +95,6 @@ pub trait FileDataTrie<T: TrieLayout> {
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError>;
 
     // TODO: make it accept a list of chunks to be retrieved
-    // TODO: Return Result<Option> instead of Result only
     /// Get a file chunk from storage. Returns error if the chunk does not exist.
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError>;
 
@@ -97,12 +108,16 @@ pub trait FileDataTrie<T: TrieLayout> {
 
     /// Removes all references to chunks in the trie data and removes
     /// chunks themselves from storage.
-    fn delete(&mut self, chunk_count: u64) -> Result<(), FileStorageWriteError>;
+    fn delete(&mut self) -> Result<(), FileStorageWriteError>;
 }
 
 /// Storage interface to be implemented by the storage providers.
 pub trait FileStorage<T: TrieLayout>: 'static {
-    type FileDataTrie: FileDataTrie<T> + Send + Sync + Default;
+    type FileDataTrie: FileDataTrie<T> + Send + Sync;
+
+    /// Creates a new [`FileDataTrie`] with no data and empty default root.
+    /// Should be used as the default way of generating new tries.
+    fn new_file_data_trie(&self) -> Self::FileDataTrie;
 
     /// Generate proof for a chunk of a file. If the file does not exists or any chunk is missing,
     /// no proof will be returned.
@@ -119,7 +134,6 @@ pub trait FileStorage<T: TrieLayout>: 'static {
     /// Get metadata for a file.
     fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError>;
 
-    // TODO: check if this method is necessary and what is its use case.
     /// Inserts a new file. If the file already exists, it will return an error.
     /// It is expected that the file key is indeed computed from the [Metadata].
     /// This method does not require the actual data, file [`Chunk`]s being inserted separately.
@@ -137,6 +151,9 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         metadata: FileMetadata,
         file_data: Self::FileDataTrie,
     ) -> Result<(), FileStorageError>;
+
+    /// Get the number of stored chunks for a file key.
+    fn stored_chunks_count(&self, key: &HasherOutT<T>) -> Result<u64, FileStorageError>;
 
     // TODO: Return Result<Option> instead of Result only
     /// Get a file chunk from storage.

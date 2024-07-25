@@ -8,20 +8,18 @@ use std::{marker::PhantomData, sync::Arc};
 use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
+use shc_blockchain_service::{spawn_blockchain_service, BlockchainService};
+use shc_common::types::{ParachainClient, ParachainNetworkService};
 use shc_file_manager::{
     in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage, traits::FileStorage,
 };
+use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_forest_manager::{
     in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
 };
+use shc_rpc::StorageHubClientRpcConfig;
 
-use crate::service::{ParachainClient, ParachainNetworkService};
-
-use super::{
-    blockchain::{spawn_blockchain_service, BlockchainService},
-    file_transfer::{spawn_file_transfer_service, FileTransferService},
-    handler::StorageHubHandler,
-};
+use super::handler::StorageHubHandler;
 
 /// Builds the [`StorageHubHandler`] by adding each component separately.
 /// Provides setters and getters for each component.
@@ -130,9 +128,16 @@ where
         self
     }
 
-    /// Get the [`FileStorage`] from the builder.
-    pub fn file_storage(&self) -> &Option<Arc<RwLock<FL>>> {
-        &self.file_storage
+    /// Creates a new [`StorageHubClientRpcConfig`] to be used when setting up the RPCs.
+    pub fn rpc_config(&self) -> StorageHubClientRpcConfig<T, FL, FS> {
+        StorageHubClientRpcConfig::new(
+            self.file_storage
+                .clone()
+                .expect("File Storage not initialized"),
+            self.forest_storage
+                .clone()
+                .expect("Forest Storage not initialized"),
+        )
     }
 
     /// Build the [`StorageHubHandler`] with the configuration set in the builder.
@@ -150,7 +155,7 @@ where
 /// Provides an interface for defining the concrete types of
 /// each `StorageLayer` kind, so that their specific requirements can be fulfilled.
 pub trait StorageLayerBuilder {
-    fn setup_storage_layer(&mut self) -> &mut Self;
+    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self;
 }
 
 impl<T> StorageLayerBuilder
@@ -159,33 +164,47 @@ where
     T: TrieLayout + Send + Sync,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
-    fn setup_storage_layer(&mut self) -> &mut Self {
+    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.with_file_storage(Arc::new(RwLock::new(InMemoryFileStorage::<T>::new())))
             .with_forest_storage(Arc::new(RwLock::new(InMemoryForestStorage::<T>::new())))
     }
 }
 
-impl<T> StorageLayerBuilder for StorageHubBuilder<T, RocksDbFileStorage<T>, RocksDBForestStorage<T>>
+impl<T> StorageLayerBuilder
+    for StorageHubBuilder<
+        T,
+        RocksDbFileStorage<T, kvdb_rocksdb::Database>,
+        RocksDBForestStorage<T, kvdb_rocksdb::Database>,
+    >
 where
     T: TrieLayout + Send + Sync,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
-    fn setup_storage_layer(&mut self) -> &mut Self {
-        let provider_pub_key = self
-            .provider_pub_key
-            .expect("Provider public key not set before building the storage layer.");
-        let storage_path = hex::encode(provider_pub_key);
-        let forest_storage = RocksDBForestStorage::<T>::rocksdb_storage(storage_path.clone())
-            .expect("Failed to create RocksDB");
-        let file_storage = RocksDbFileStorage::<T>::rocksdb_storage(storage_path)
-            .expect("Failed to create RocksDB");
+    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
+        let rocksdb_path = if let Some(path) = storage_path {
+            path
+        } else {
+            let provider_pub_key = self
+                .provider_pub_key
+                .expect("Provider public key not set before building the storage layer.");
+            hex::encode(provider_pub_key)
+        };
 
-        self.with_file_storage(Arc::new(RwLock::new(RocksDbFileStorage::<T>::new(
-            Arc::new(std::sync::RwLock::new(file_storage)),
-        ))))
-        .with_forest_storage(Arc::new(RwLock::new(
-            RocksDBForestStorage::<T>::new(Box::new(forest_storage))
-                .expect("Failed to create RocksDB"),
-        )))
+        let forest_storage = RocksDBForestStorage::<T, kvdb_rocksdb::Database>::rocksdb_storage(
+            rocksdb_path.clone(),
+        )
+        .expect("Failed to create RocksDB");
+        let file_storage =
+            RocksDbFileStorage::<T, kvdb_rocksdb::Database>::rocksdb_storage(rocksdb_path)
+                .expect("Failed to create RocksDB");
+
+        self.with_file_storage(Arc::new(RwLock::new(RocksDbFileStorage::<
+            T,
+            kvdb_rocksdb::Database,
+        >::new(file_storage))))
+            .with_forest_storage(Arc::new(RwLock::new(
+                RocksDBForestStorage::<T, kvdb_rocksdb::Database>::new(forest_storage)
+                    .expect("Failed to create RocksDB"),
+            )))
     }
 }

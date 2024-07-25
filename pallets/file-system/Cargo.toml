@@ -16,6 +16,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { workspace = true }
+num-bigint = { workspace = true }
 scale-info = { workspace = true }
 
 # Substrate
@@ -32,15 +33,15 @@ sp-trie = { workspace = true }
 # Local
 pallet-file-system-runtime-api = { workspace = true }
 
+shp-constants = { workspace = true }
+shp-file-metadata = { workspace = true }
 shp-traits = { workspace = true }
-shp-file-key-verifier = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
 pallet-bucket-nfts = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
-shp-forest-verifier = { workspace = true }
 
 # Substrate
 sp-io = { workspace = true }
@@ -51,34 +52,43 @@ pallet-balances = { workspace = true, features = ["std"] }
 
 [features]
 default = ["std"]
-runtime-benchmarks = [
-    "frame-benchmarking/runtime-benchmarks",
-    "frame-support/runtime-benchmarks",
-    "frame-system/runtime-benchmarks",
-    "pallet-proofs-dealer/runtime-benchmarks",
-    "pallet-storage-providers/runtime-benchmarks",
-    "pallet-bucket-nfts/runtime-benchmarks",
-    "sp-runtime/runtime-benchmarks",
-]
 std = [
-    "codec/std",
-    "frame-benchmarking?/std",
-    "frame-support/std",
-    "frame-system/std",
-    "pallet-proofs-dealer/std",
-    "pallet-storage-providers/std",
-    "pallet-bucket-nfts/std",
-    "scale-info/std",
-    "sp-core/std",
-    "sp-io/std",
-    "sp-runtime/std",
-    "sp-trie/std",
+	"codec/std",
+	"frame-benchmarking?/std",
+	"frame-support/std",
+	"frame-system/std",
+	"pallet-bucket-nfts/std",
+	"pallet-file-system-runtime-api/std",
+	"pallet-nfts/std",
+	"pallet-proofs-dealer/std",
+	"pallet-storage-providers/std",
+	"scale-info/std",
+	"shp-constants/std",
+	"shp-file-metadata/std",
+	"shp-traits/std",
+	"sp-core/std",
+	"sp-io/std",
+	"sp-runtime/std",
+	"sp-trie/std",
+]
+runtime-benchmarks = [
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-support/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"pallet-proofs-dealer/runtime-benchmarks",
+	"pallet-storage-providers/runtime-benchmarks",
+	"pallet-bucket-nfts/runtime-benchmarks",
+	"shp-constants/runtime-benchmarks",
+	"shp-file-metadata/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
 ]
 try-runtime = [
-    "frame-support/try-runtime",
-    "frame-system/try-runtime",
-    "pallet-proofs-dealer/try-runtime",
-    "pallet-storage-providers/try-runtime",
-    "pallet-bucket-nfts/try-runtime",
-    "sp-runtime/try-runtime",
+	"frame-support/try-runtime",
+	"frame-system/try-runtime",
+	"pallet-proofs-dealer/try-runtime",
+	"pallet-storage-providers/try-runtime",
+	"pallet-bucket-nfts/try-runtime",
+	"shp-constants/try-runtime",
+	"shp-file-metadata/try-runtime",
+	"sp-runtime/try-runtime",
 ]

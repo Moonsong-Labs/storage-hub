@@ -1,0 +1,63 @@
+[package]
+name = "shc-blockchain-service"
+version = "0.1.0"
+description = ""
+homepage = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
+publish = false
+
+[lib]
+
+[lints]
+workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+array-bytes = { workspace = true }
+lazy-static = { workspace = true }
+log = { workspace = true }
+futures = { workspace = true }
+serde_json = { workspace = true }
+codec = { workspace = true }
+serde = { workspace = true, default-features = true }
+
+# Substrate
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+pallet-transaction-payment = { workspace = true }
+sc-client-api = { workspace = true }
+sc-service = { workspace = true }
+sc-network = { workspace = true }
+sc-utils = { workspace = true }
+sc-tracing = { workspace = true }
+sp-api = { workspace = true }
+sp-core = { workspace = true, default-features = true }
+sp-keystore = { workspace = true }
+sp-runtime = { workspace = true, default-features = true }
+substrate-frame-rpc-system = { workspace = true }
+
+# Polkadot
+polkadot-runtime-common = { workspace = true }
+polkadot-primitives = { workspace = true }
+
+# Cumulus
+cumulus-primitives-core = { workspace = true }
+cumulus-primitives-storage-weight-reclaim = { workspace = true }
+
+# Local
+pallet-proofs-dealer = { workspace = true }
+pallet-proofs-dealer-runtime-api = { workspace = true }
+storage-hub-runtime = { workspace = true }
+shc-actors-framework = { workspace = true }
+shc-common = { workspace = true }
+shp-file-key-verifier = { workspace = true }
+shp-file-metadata = { workspace = true }
+
+# Local pallets
+pallet-file-system = { workspace = true }
+pallet-file-system-runtime-api = { workspace = true }

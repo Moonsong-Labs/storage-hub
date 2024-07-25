@@ -4,7 +4,9 @@ use trie_db::TrieLayout;
 use crate::error::ErrorT;
 
 /// Forest storage interface to be implemented by the storage providers.
-pub trait ForestStorage<T: TrieLayout> {
+pub trait ForestStorage<T: TrieLayout>: 'static {
+    /// Get the root hash of the forest.
+    fn root(&self) -> HasherOutT<T>;
     /// Check if the file key exists in the storage.
     fn contains_file_key(&self, file_key: &HasherOutT<T>) -> Result<bool, ErrorT<T>>;
     /// Generate proof for file key(s).

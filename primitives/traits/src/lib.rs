@@ -5,13 +5,14 @@ use frame_support::dispatch::DispatchResult;
 use frame_support::pallet_prelude::{MaxEncodedLen, MaybeSerializeDeserialize, Member};
 use frame_support::sp_runtime::traits::{CheckEqual, MaybeDisplay, SimpleBitOps};
 use frame_support::traits::{fungible, Incrementable};
-use frame_support::Parameter;
+use frame_support::{BoundedBTreeSet, Parameter};
 use scale_info::prelude::fmt::Debug;
 use scale_info::TypeInfo;
 use sp_core::Get;
 use sp_runtime::traits::{AtLeast32BitUnsigned, Hash, Saturating};
 use sp_runtime::{BoundedVec, DispatchError};
 use sp_std::collections::btree_set::BTreeSet;
+use sp_std::vec::Vec;
 
 #[cfg(feature = "std")]
 pub trait MaybeDebug: Debug {}
@@ -27,7 +28,7 @@ pub struct AsCompact<T: HasCompact>(#[codec(compact)] pub T);
 
 /// A trait to lookup registered Providers.
 ///
-/// It is abstracted over the `AccountId` type, `Provider` type.
+/// It is abstracted over the `AccountId` type, `Provider` type, `MerkleHash` type and `Balance` type.
 pub trait ProvidersInterface {
     /// The type corresponding to the staking balance of a registered Provider.
     type Balance: fungible::Inspect<Self::AccountId> + fungible::hold::Inspect<Self::AccountId>;
@@ -38,9 +39,16 @@ pub trait ProvidersInterface {
         + Member
         + MaybeSerializeDeserialize
         + Debug
+        + MaybeDisplay
+        + SimpleBitOps
         + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
         + MaxEncodedLen
-        + Copy;
+        + FullCodec;
     /// The type corresponding to the root of a registered Provider.
     type MerkleHash: Parameter
         + Member
@@ -63,16 +71,44 @@ pub trait ProvidersInterface {
     /// Get the ProviderId from AccountId, if it is a registered Provider.
     fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId>;
 
+    /// Get the AccountId of the owner of a registered Provider.
+    fn get_owner_account(who: Self::ProviderId) -> Option<Self::AccountId>;
+
     /// Get the root for a registered Provider.
     fn get_root(who: Self::ProviderId) -> Option<Self::MerkleHash>;
 
     /// Update the root for a registered Provider.
     fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult;
 
+    /// Get the default value for the root of a Merkle Patricia Forest.
+    fn get_default_root() -> Self::MerkleHash;
+
     /// Get the stake for a registered  Provider.
     fn get_stake(
         who: Self::ProviderId,
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
+}
+
+/// A trait to get system-wide metrics, such as the total available capacity of the network and
+/// its total used capacity.
+pub trait SystemMetricsInterface {
+    /// Type of the unit provided by Providers
+    type ProvidedUnit: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Default
+        + MaybeDisplay
+        + AtLeast32BitUnsigned
+        + Copy
+        + MaxEncodedLen
+        + HasCompact
+        + Into<u32>;
+
+    /// Get the total available capacity of units of the network.
+    fn get_total_capacity() -> Self::ProvidedUnit;
+
+    /// Get the total used capacity of units of the network.
+    fn get_total_used_capacity() -> Self::ProvidedUnit;
 }
 
 pub trait ProvidersConfig {
@@ -147,10 +183,16 @@ pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
         bucket_id: &Self::BucketId,
     ) -> Result<bool, DispatchError>;
 
+    /// Is bucket stored by MSP.
+    fn is_bucket_stored_by_msp(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId) -> bool;
+
     /// Get `collection_id` of a bucket if there is one.
     fn get_read_access_group_id_of_bucket(
         bucket_id: &Self::BucketId,
     ) -> Result<Option<Self::ReadAccessGroupId>, DispatchError>;
+
+    /// Get MSP storing a bucket.
+    fn get_msp_of_bucket(bucket_id: &Self::BucketId) -> Option<Self::ProviderId>;
 
     /// Check if a bucket is private.
     fn is_bucket_private(bucket_id: &Self::BucketId) -> Result<bool, DispatchError>;
@@ -267,6 +309,8 @@ pub trait ProofsDealerInterface {
         + FullCodec;
     /// The hashing system (algorithm) being used for the Merkle Patricia Forests (e.g. Blake2).
     type MerkleHashing: Hash<Output = Self::MerkleHash>;
+    /// The type that represents the randomness output.
+    type RandomnessOutput: Parameter + Member + Debug;
 
     /// Verify a proof just for the Merkle Patricia Forest, for a given Provider.
     ///
@@ -297,6 +341,13 @@ pub trait ProofsDealerInterface {
         mutation: Option<TrieRemoveMutation>,
     ) -> DispatchResult;
 
+    /// Given a randomness seed, a provider id and a count, generate a list of challenges.
+    fn generate_challenges_from_seed(
+        seed: Self::RandomnessOutput,
+        provider_id: &Self::ProviderId,
+        count: u32,
+    ) -> Vec<Self::MerkleHash>;
+
     /// Apply delta (mutations) to the partial trie based on the proof and the commitment.
     ///
     /// The new root is returned.
@@ -305,6 +356,13 @@ pub trait ProofsDealerInterface {
         mutations: &[(Self::MerkleHash, TrieMutation)],
         proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, DispatchError>;
+
+    /// Initialise a Provider's challenge cycle.
+    ///
+    /// Sets the last tick the Provider submitted a proof for to the current tick and sets the
+    /// deadline for submitting a proof to the current tick + the Provider's period (based on its
+    /// stake) + the challenges tick tolerance.
+    fn initialise_challenge_cycle(who: &Self::ProviderId) -> DispatchResult;
 }
 
 /// A trait to verify proofs based on commitments and challenges.
@@ -487,13 +545,7 @@ pub trait PaymentStreamsInterface {
     ) -> Option<Self::DynamicRatePaymentStream>;
 }
 
-/// The interface of a Payment Manager, which has to be made aware of the last block for which a charge of a payment can be made by a provider.
-/// Example: the Proofs Dealer pallet uses this interface to update the block when a Storage Provider last submitted a valid proof for the Payment Streams pallet.
-pub trait PaymentManager {
-    /// The type which represents the balance of the runtime.
-    type Balance: fungible::Inspect<Self::AccountId>;
-    /// The type which represents an account identifier.
-    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+pub trait ReadProofSubmittersInterface {
     /// The type which represents a provider identifier.
     type ProviderId: Parameter
         + Member
@@ -502,22 +554,12 @@ pub trait PaymentManager {
         + Ord
         + MaxEncodedLen
         + Copy;
-    /// The type which represents a block number.
-    type BlockNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents a tick number.
+    type TickNumber: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+    /// The type which represents the maximum limit of the number of proof submitters for a tick.
+    type MaxProofSubmitters: Get<u32>;
 
-    /// Update the last valid block for which a charge of a payment can be made
-    fn update_last_chargeable_block(
-        provider_id: &Self::ProviderId,
-        user_account: &Self::AccountId,
-        new_last_chargeable_block: Self::BlockNumber,
-    ) -> DispatchResult;
-
-    /// Update the accumulated price index that can be used to calculate the amount to be charged
-    /// TODO: The way to avoid having to have this function is to only allow `update_last_chargeable_block` to use the current
-    /// block number (that way, the price index is readily available in the Payment Streams pallet). I'd rather not do that.
-    fn update_chargeable_price_index(
-        provider_id: &Self::ProviderId,
-        user_account: &Self::AccountId,
-        new_last_chargeable_price_index: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
-    ) -> DispatchResult;
+    fn get_proof_submitters_for_tick(
+        tick_number: &Self::TickNumber,
+    ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>>;
 }

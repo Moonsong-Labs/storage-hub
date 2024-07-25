@@ -1,1 +1,1 @@
-export * from './custom/types.js';
+export * from './storagehubclient/types.js';

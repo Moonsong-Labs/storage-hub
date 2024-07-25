@@ -111,6 +111,10 @@ This will start a BSPNet network with a BSP and a User node. As part of the setu
 > [!NOTE]  
 > The BSP id is chosen to be the fingerprint of a file that is uploaded by the user node. This is to "game the system" to ensure that the BSP is guaranteed to be selected to store the file.
 
+### Spawning NoisyNet
+
+- Docker launch (local): `pnpm docker:start:noisynet` / `pnpm docker:stop:noisynet`
+ 
 ### Spawning ZombieNet Native
 
 > [!TIP]
@@ -151,4 +155,5 @@ pnpm typegen
 
 ### Why do we use Docker so much?
 
-![docker](scripts/docker.jpg)
+![docker](../resources/docker.jpg)
+********

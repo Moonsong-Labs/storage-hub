@@ -16,6 +16,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { workspace = true }
+num-bigint = { workspace = true }
 scale-info = { workspace = true }
 
 # Substrate
@@ -29,6 +30,7 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 
 # Local
+shp-file-metadata = { workspace = true }
 shp-traits = { workspace = true }
 
 [dev-dependencies]
@@ -41,6 +43,7 @@ pallet-storage-providers = { workspace = true }
 # Substrate
 sp-io = { workspace = true }
 sp-keyring = { workspace = true }
+sp-trie = { workspace = true }
 
 # Frame
 pallet-balances = { workspace = true, features = ["std"] }
@@ -54,6 +57,8 @@ runtime-benchmarks = [
 	"pallet-file-system/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
+	"shp-file-metadata/runtime-benchmarks",
+	"shp-traits/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
 std = [
@@ -61,12 +66,17 @@ std = [
 	"frame-benchmarking?/std",
 	"frame-support/std",
 	"frame-system/std",
+	"pallet-balances/std",
 	"pallet-file-system/std",
+	"pallet-nfts/std",
 	"pallet-proofs-dealer/std",
 	"pallet-storage-providers/std",
 	"scale-info/std",
+	"shp-file-metadata/std",
+	"shp-traits/std",
 	"sp-core/std",
 	"sp-io/std",
+	"sp-keyring/std",
 	"sp-runtime/std",
 ]
 try-runtime = [
@@ -75,5 +85,7 @@ try-runtime = [
 	"pallet-file-system/try-runtime",
 	"pallet-proofs-dealer/try-runtime",
 	"pallet-storage-providers/try-runtime",
+	"shp-file-metadata/try-runtime",
+	"shp-traits/try-runtime",
 	"sp-runtime/try-runtime",
 ]

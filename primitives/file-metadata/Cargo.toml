@@ -1,0 +1,43 @@
+[package]
+name = "shp-file-metadata"
+description = "A crate containing the types and utilities for handling file metadata in StorageHub."
+version = "0.1.0"
+homepage = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+codec = { workspace = true }
+scale-info = { workspace = true }
+serde = { workspace = true }
+
+# Local
+shp-traits = { workspace = true }
+
+# Substrate
+sp-core = { workspace = true }
+sp-std = { workspace = true }
+
+[features]
+default = ["std"]
+runtime-benchmarks = [
+    "shp-traits/runtime-benchmarks",
+]
+std = [
+    "codec/std",
+    "scale-info/std",
+    "shp-traits/std",
+    "sp-core/std",
+    "sp-std/std",
+]
+try-runtime = [
+    "shp-traits/try-runtime",
+]

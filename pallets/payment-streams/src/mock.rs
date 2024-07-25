@@ -1,29 +1,31 @@
 use crate as pallet_payment_streams;
+use core::marker::PhantomData;
 use frame_support::{
-    construct_runtime, derive_impl, parameter_types,
+    construct_runtime, derive_impl,
+    pallet_prelude::Get,
+    parameter_types,
     traits::{AsEnsureOriginWithArg, Everything, Randomness},
     weights::constants::RocksDbWeight,
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
-use shp_traits::SubscribeProvidersInterface;
-use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, H256};
-use sp_runtime::traits::Convert;
+use shp_traits::{ProvidersInterface, ReadProofSubmittersInterface, SubscribeProvidersInterface};
+use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     testing::TestSignature,
     traits::{BlakeTwo256, IdentityLookup},
     BuildStorage, DispatchResult,
 };
+use sp_runtime::{traits::Convert, BoundedBTreeSet};
+use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
 type StorageUnit = u32;
-// type Signature = MultiSignature;
-// type AccountPublic = <Signature as Verify>::Signer;
 type AccountId = u64;
-const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
 
+const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumberFor<Test> = 3;
 pub struct MockRandomness;
@@ -111,6 +113,13 @@ impl pallet_balances::Config for Test {
 parameter_types! {
     pub const StorageProvidersHoldReason: RuntimeHoldReason = RuntimeHoldReason::StorageProviders(pallet_storage_providers::HoldReason::StorageProviderDeposit);
 }
+pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
+pub struct DefaultMerkleRoot<T>(PhantomData<T>);
+impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
+    fn get() -> HasherOutT<T> {
+        sp_trie::empty_trie_root::<T>()
+    }
+}
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -118,6 +127,7 @@ impl pallet_storage_providers::Config for Test {
     type StorageData = StorageUnit;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = ConstU32<100>;
@@ -128,6 +138,7 @@ impl pallet_storage_providers::Config for Test {
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
+    type BucketDeposit = ConstU128<10>;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
@@ -183,6 +194,23 @@ impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
     }
 }
 
+// Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
+pub struct MockSubmittingProviders;
+impl ReadProofSubmittersInterface for MockSubmittingProviders {
+    type ProviderId = <Test as frame_system::Config>::Hash;
+    type TickNumber = BlockNumberFor<Test>;
+    type MaxProofSubmitters = ConstU32<1000>;
+    fn get_proof_submitters_for_tick(
+        block_number: &Self::TickNumber,
+    ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
+        let mut set = BoundedBTreeSet::<Self::ProviderId, Self::MaxProofSubmitters>::new();
+        // We convert the block number + 1 to the corresponding Provider ID, to simulate that the Provider submitted a proof
+        <StorageProviders as ProvidersInterface>::get_provider_id(*block_number + 1)
+            .map(|id| set.try_insert(id));
+        Some(set)
+    }
+}
+
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -191,6 +219,7 @@ impl crate::Config for Test {
     type Units = StorageUnit;
     type NewStreamDeposit = ConstU64<10>;
     type BlockNumberToBalance = BlockNumberToBalance;
+    type ProvidersProofSubmitters = MockSubmittingProviders;
 }
 
 // Build genesis storage according to the mock runtime.
@@ -217,6 +246,7 @@ impl ExtBuilder {
                 (4, 400_000_000),     // Eve = 4
                 (5, 5_000_000_000),   // Ferdie = 5
                 (6, 600_000_000_000), // George = 6
+                (123, 5_000_000),     // Alice for `on_poll` testing = 123
             ],
         }
         .assimilate_storage(&mut t)

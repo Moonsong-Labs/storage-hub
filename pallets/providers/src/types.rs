@@ -29,6 +29,7 @@ pub struct MainStorageProvider<T: Config> {
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub value_prop: ValueProposition<T>,
     pub last_capacity_change: BlockNumberFor<T>,
+    pub owner_account: T::AccountId,
     pub payment_account: T::AccountId,
 }
 
@@ -42,6 +43,7 @@ pub struct BackupStorageProvider<T: Config> {
     pub multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
     pub root: MerklePatriciaRoot<T>,
     pub last_capacity_change: BlockNumberFor<T>,
+    pub owner_account: T::AccountId,
     pub payment_account: T::AccountId,
 }
 
@@ -73,6 +75,7 @@ pub type BalanceOf<T> =
     <<T as Config>::NativeBalance as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
 /// BackupStorageProviderId is the type that represents an ID of a Backup Storage Provider, uniquely linked with an AccountId
+/// TODO: We should make these IDs configurable from the runtime...
 pub type BackupStorageProviderId<T> = <T as frame_system::Config>::Hash;
 /// MainStorageProviderId is the type that represents an ID of a Main Storage Provider, uniquely linked with an AccountId
 pub type MainStorageProviderId<T> = <T as frame_system::Config>::Hash;
@@ -87,6 +90,7 @@ pub type MultiAddress<T> = BoundedVec<u8, MaxMultiAddressSize<T>>;
 
 /// MerklePatriciaRoot is the type of the root of a Merkle Patricia Trie, either the root of a BSP or a bucket from an MSP.
 pub type MerklePatriciaRoot<T> = <T as crate::Config>::MerklePatriciaRoot;
+
 /// HashId is the type that uniquely identifies either a Storage Provider (MSP or BSP) or a Bucket.
 pub type HashId<T> = <T as frame_system::Config>::Hash;
 

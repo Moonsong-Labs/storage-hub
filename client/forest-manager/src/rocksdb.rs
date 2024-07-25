@@ -2,14 +2,13 @@ use std::{io, path::PathBuf, sync::Arc};
 
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
-use kvdb_rocksdb::{Database, DatabaseConfig};
 use log::debug;
 use shc_common::types::{FileMetadata, ForestProof, HashT, HasherOutT};
 use sp_state_machine::{warn, Storage};
 use sp_trie::{
     prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieDBBuilder, TrieLayout, TrieMut,
 };
-use trie_db::{DBValue, Hasher, Trie, TrieDBMutBuilder};
+use trie_db::{DBValue, Trie, TrieDBMutBuilder};
 
 use crate::{
     error::{ErrorT, ForestStorageError},
@@ -28,53 +27,34 @@ pub(crate) fn other_io_error(err: String) -> io::Error {
 }
 
 /// Open the database on disk, creating it if it doesn't exist.
-fn open_or_creating_rocksdb(db_path: String) -> io::Result<Database> {
-    // TODO: add a configuration option for the base path
-    let root = PathBuf::from("/tmp/");
-    let path = root.join("storagehub").join(db_path);
+fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Database> {
+    let mut path = PathBuf::new();
+    path.push(db_path.as_str());
+    path.push("storagehub/forest_storage/");
 
-    let db_config = DatabaseConfig::with_columns(1);
+    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(1);
 
     let path_str = path
         .to_str()
         .ok_or_else(|| other_io_error(format!("Bad database path: {:?}", path)))?;
 
     std::fs::create_dir_all(&path_str)?;
-    let db = Database::open(&db_config, &path_str)?;
+    let db = kvdb_rocksdb::Database::open(&db_config, &path_str)?;
 
     Ok(db)
 }
 
 /// Storage backend for RocksDB.
-pub struct StorageDb<Hasher> {
-    pub db: Arc<dyn KeyValueDB>,
-    pub _phantom: std::marker::PhantomData<Hasher>,
+pub struct StorageDb<T, DB> {
+    pub db: Arc<DB>,
+    pub _phantom: std::marker::PhantomData<T>,
 }
 
-impl<H: Hasher> Storage<H> for StorageDb<H> {
-    fn get(&self, key: &H::Out, prefix: Prefix) -> Result<Option<DBValue>, String> {
-        let prefixed_key = prefixed_key::<H>(key, prefix);
-        self.db.get(0, &prefixed_key).map_err(|e| {
-            warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
-            format!("Failed to read from DB: {}", e)
-        })
-    }
-}
-
-/// Trait that [`RocksDBForestStorage`] requires to interact with the storage backend.
-pub trait Backend<T: TrieLayout>: Storage<HashT<T>>
+impl<T, DB> StorageDb<T, DB>
 where
-    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
-{
-    /// Write the transaction to the storage.
-    fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>>;
-    /// Get the [`ROOT`](`well_known_keys::ROOT`) from storage.
-    fn storage_root(&self) -> Result<Option<HasherOutT<T>>, ErrorT<T>>;
-}
-
-impl<T: TrieLayout> Backend<T> for StorageDb<HashT<T>>
-where
-    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
+    T: TrieLayout,
+    DB: KeyValueDB,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>> {
         self.db.write(transaction).map_err(|e| {
@@ -97,10 +77,29 @@ where
     }
 }
 
+impl<T, DB> Storage<HashT<T>> for StorageDb<T, DB>
+where
+    T: TrieLayout + Send + Sync,
+    DB: KeyValueDB,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
+    fn get(&self, key: &HasherOutT<T>, prefix: Prefix) -> Result<Option<DBValue>, String> {
+        let prefixed_key = prefixed_key::<HashT<T>>(key, prefix);
+        self.db.get(0, &prefixed_key).map_err(|e| {
+            warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
+            format!("Failed to read from DB: {}", e)
+        })
+    }
+}
+
 /// RocksDB based [`ForestStorage`] implementation.
-pub struct RocksDBForestStorage<T: TrieLayout> {
+pub struct RocksDBForestStorage<T, DB>
+where
+    T: TrieLayout + 'static,
+    DB: KeyValueDB + 'static,
+{
     /// RocksDB storage backend.
-    storage: Box<dyn Backend<T>>,
+    storage: StorageDb<T, DB>,
     /// In-memory overlay of the trie with changes not yet committed to the backend.
     ///
     /// Once all operations are done, the overlay will be committed to the storage by executing [`RocksDBForestStorage::commit`].
@@ -108,20 +107,22 @@ pub struct RocksDBForestStorage<T: TrieLayout> {
     root: HasherOutT<T>,
 }
 
-impl<T: TrieLayout + Send + Sync> RocksDBForestStorage<T>
+impl<T, DB> RocksDBForestStorage<T, DB>
 where
-    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
+    T: TrieLayout + Send + Sync,
+    DB: KeyValueDB,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     /// This will open the RocksDB database and read the storage [`ROOT`](`well_known_keys::ROOT`) from it.
     /// If the root hash is not found in storage, a new trie will be created and the root hash will be stored in storage.
-    pub fn new(storage: Box<dyn Backend<T>>) -> Result<Self, ErrorT<T>> {
+    pub fn new(storage: StorageDb<T, DB>) -> Result<Self, ErrorT<T>> {
         let maybe_root = storage.storage_root()?;
 
         let rocksdb_forest_storage = match maybe_root {
             Some(root) => {
                 debug!(target: LOG_TARGET, "Found existing root in storage: {:?}\n Reusing trie", root);
 
-                RocksDBForestStorage::<T> {
+                RocksDBForestStorage::<T, DB> {
                     storage,
                     overlay: Default::default(),
                     root,
@@ -132,7 +133,7 @@ where
 
                 let mut root = HasherOutT::<T>::default();
 
-                let mut rocksdb_forest_storage = RocksDBForestStorage::<T> {
+                let mut rocksdb_forest_storage = RocksDBForestStorage::<T, DB> {
                     storage,
                     overlay: Default::default(),
                     root,
@@ -163,9 +164,11 @@ where
         Ok(rocksdb_forest_storage)
     }
 
-    /// Open the RocksDB database at `dp_path` and return a new instance of [`StorageDb`].
-    pub fn rocksdb_storage(dp_path: String) -> Result<StorageDb<HashT<T>>, ErrorT<T>> {
-        let db = open_or_creating_rocksdb(dp_path).map_err(|e| {
+    /// Open the RocksDB database at `db_path` and return a new instance of [`StorageDb`].
+    pub fn rocksdb_storage(
+        db_path: String,
+    ) -> Result<StorageDb<T, kvdb_rocksdb::Database>, ErrorT<T>> {
+        let db = open_or_creating_rocksdb(db_path).map_err(|e| {
             warn!(target: LOG_TARGET, "Failed to open RocksDB: {}", e);
             ForestStorageError::FailedToReadStorage
         })?;
@@ -222,7 +225,12 @@ where
     }
 }
 
-impl<T: TrieLayout + Send + Sync> AsHashDB<HashT<T>, DBValue> for RocksDBForestStorage<T> {
+impl<T, DB> AsHashDB<HashT<T>, DBValue> for RocksDBForestStorage<T, DB>
+where
+    T: TrieLayout + Send + Sync,
+    DB: KeyValueDB,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
     fn as_hash_db<'b>(&'b self) -> &'b (dyn HashDB<HashT<T>, DBValue> + 'b) {
         self
     }
@@ -231,7 +239,12 @@ impl<T: TrieLayout + Send + Sync> AsHashDB<HashT<T>, DBValue> for RocksDBForestS
     }
 }
 
-impl<T: TrieLayout + Send + Sync> hash_db::HashDB<HashT<T>, DBValue> for RocksDBForestStorage<T> {
+impl<T, DB> hash_db::HashDB<HashT<T>, DBValue> for RocksDBForestStorage<T, DB>
+where
+    T: TrieLayout + Send + Sync,
+    DB: KeyValueDB,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
+{
     fn get(&self, key: &HasherOutT<T>, prefix: Prefix) -> Option<DBValue> {
         HashDB::get(&self.overlay, key, prefix).or_else(|| {
             self.storage.get(key, prefix).unwrap_or_else(|e| {
@@ -258,10 +271,16 @@ impl<T: TrieLayout + Send + Sync> hash_db::HashDB<HashT<T>, DBValue> for RocksDB
     }
 }
 
-impl<T: TrieLayout + Send + Sync> ForestStorage<T> for RocksDBForestStorage<T>
+impl<T, DB> ForestStorage<T> for RocksDBForestStorage<T, DB>
 where
-    <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
+    T: TrieLayout + Send + Sync + 'static,
+    DB: KeyValueDB + 'static,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
 {
+    fn root(&self) -> HasherOutT<T> {
+        self.root
+    }
+
     fn contains_file_key(&self, file_key: &HasherOutT<T>) -> Result<bool, ErrorT<T>> {
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
@@ -360,68 +379,25 @@ mod tests {
     use crate::error::ErrorT;
 
     use super::*;
+    use kvdb_memorydb::InMemory;
     use shc_common::types::{FileMetadata, Fingerprint, Proven};
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_trie::LayoutV1;
     use trie_db::Trie;
 
-    /// Mock that simulates the backend for testing purposes.
-    struct MockStorageDb {
-        pub data: std::collections::HashMap<Vec<u8>, Vec<u8>>,
-    }
-
-    impl<H: Hasher> Storage<H> for MockStorageDb {
-        fn get(&self, key: &H::Out, prefix: Prefix) -> Result<Option<DBValue>, String> {
-            let prefixed_key = prefixed_key::<H>(key, prefix);
-            Ok(self.data.get(&prefixed_key).cloned())
-        }
-    }
-
-    impl<T: TrieLayout> Backend<T> for MockStorageDb
-    where
-        <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
-    {
-        fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>> {
-            for op in transaction.ops {
-                match op {
-                    kvdb::DBOp::Insert {
-                        col: _col,
-                        key,
-                        value,
-                    } => {
-                        self.data.insert(key.to_vec(), value);
-                    }
-                    kvdb::DBOp::Delete { col: _col, key } => {
-                        self.data.remove(&key.to_vec());
-                    }
-                    kvdb::DBOp::DeletePrefix { col: _col, prefix } => {
-                        self.data.retain(|k, _| !k.starts_with(&prefix));
-                    }
-                };
-            }
-
-            Ok(())
-        }
-
-        fn storage_root(&self) -> Result<Option<HasherOutT<T>>, ErrorT<T>> {
-            self.data
-                .get(well_known_keys::ROOT)
-                .map(|root| convert_raw_bytes_to_hasher_out::<T>(root.to_owned()))
-                .transpose()
-        }
-    }
-
-    // Reusable function to setup a new `MockStorageDb` and `RocksDBForestStorage`.
-    fn setup_storage<T>() -> Result<RocksDBForestStorage<T>, ErrorT<T>>
+    // Reusable function to setup a new `StorageDb` and `RocksDBForestStorage`.
+    fn setup_storage<T, DB>() -> Result<RocksDBForestStorage<T, InMemory>, ErrorT<T>>
     where
         T: TrieLayout + Send + Sync,
-        <T::Hash as Hasher>::Out: TryFrom<[u8; 32]>,
+        DB: KeyValueDB,
+        HasherOutT<T>: TryFrom<[u8; 32]>,
     {
-        let storage = Box::new(MockStorageDb {
-            data: Default::default(),
-        });
-        RocksDBForestStorage::<T>::new(storage)
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(1)),
+            _phantom: Default::default(),
+        };
+        RocksDBForestStorage::<T, InMemory>::new(storage)
     }
 
     // Reused function to create metadata with variable parameters.
@@ -429,20 +405,20 @@ mod tests {
         owner: Vec<u8>,
         bucket_id: Vec<u8>,
         location: Vec<u8>,
-        size: u64,
+        file_size: u64,
     ) -> FileMetadata {
         FileMetadata {
             owner,
             bucket_id,
             location,
-            size,
+            file_size,
             fingerprint: Fingerprint::default(),
         }
     }
 
     /// Reusable function to create metadata, insert it into the storage and return the lookup key and metadata.
-    fn create_and_insert_metadata<T>(
-        forest_storage: &mut RocksDBForestStorage<T>,
+    fn create_and_insert_metadata<T, DB>(
+        forest_storage: &mut RocksDBForestStorage<T, DB>,
         owner: Vec<u8>,
         bucket_id: Vec<u8>,
         location: Vec<u8>,
@@ -450,6 +426,7 @@ mod tests {
     ) -> HasherOutT<T>
     where
         T: TrieLayout + Send + Sync,
+        DB: KeyValueDB,
         HasherOutT<T>: TryFrom<[u8; 32]>,
     {
         let metadata = create_metadata(owner, bucket_id, location.clone(), size);
@@ -459,7 +436,7 @@ mod tests {
 
     #[test]
     fn test_initialization_with_no_existing_root() {
-        let forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>().unwrap();
+        let forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
         let expected_hash = HasherOutT::<LayoutV1<BlakeTwo256>>::try_from([
             3, 23, 10, 46, 117, 151, 183, 183, 227, 216, 76, 5, 57, 29, 19, 154, 98, 177, 87, 231,
             135, 134, 216, 192, 130, 242, 157, 207, 76, 17, 19, 20,
@@ -474,7 +451,7 @@ mod tests {
 
     #[test]
     fn test_write_read() {
-        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>().unwrap();
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
 
         let file_key = create_and_insert_metadata(
             &mut forest_storage,
@@ -489,7 +466,7 @@ mod tests {
 
     #[test]
     fn test_remove_existing_file_key() {
-        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>().unwrap();
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
 
         let file_key = create_and_insert_metadata(
             &mut forest_storage,
@@ -505,13 +482,13 @@ mod tests {
 
     #[test]
     fn test_remove_non_existent_file_key() {
-        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>().unwrap();
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
         assert!(forest_storage.delete_file_key(&[0u8; 32].into()).is_ok());
     }
 
     #[test]
     fn test_generate_proof_exact_key() {
-        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>().unwrap();
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
 
         let mut keys = Vec::new();
         for i in 0..50 {
@@ -537,7 +514,7 @@ mod tests {
 
     #[test]
     fn test_generate_proof_neighbor_keys() {
-        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>().unwrap();
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
 
         let mut keys = Vec::new();
         for i in 0..50 {
@@ -577,7 +554,7 @@ mod tests {
 
     #[test]
     fn test_generate_proof_challenge_before_first_leaf() {
-        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>().unwrap();
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
 
         let file_key1 = create_and_insert_metadata(
             &mut forest_storage,
@@ -616,7 +593,7 @@ mod tests {
 
     #[test]
     fn test_generate_proof_challenge_after_last_leaf() {
-        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>().unwrap();
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
 
         let mut keys = Vec::new();
         for i in 0..50 {
@@ -645,7 +622,7 @@ mod tests {
 
     #[test]
     fn test_trie_with_over_16_consecutive_leaves() {
-        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>>().unwrap();
+        let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
 
         let mut keys = Vec::new();
         for i in 0..50 {

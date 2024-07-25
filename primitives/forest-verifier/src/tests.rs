@@ -4,6 +4,7 @@ use serde::Serialize;
 use shp_traits::{
     CommitmentVerifier, TrieAddMutation, TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
 };
+use sp_core::H256;
 use sp_runtime::traits::BlakeTwo256;
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{
@@ -1401,6 +1402,37 @@ mod verify_proof_tests {
                 &proof
             ),
             Err("Failed to get next leaf.".into())
+        );
+    }
+
+    #[test]
+    fn verify_proof_works_for_empty_proof() {
+        let (memdb, root) = MemoryDB::<BlakeTwo256>::default_with_root();
+
+        // This recorder is used to record accessed keys in the trie and later generate a proof for them.
+        let recorder: Recorder<BlakeTwo256> = Recorder::default();
+
+        {
+            // Creating trie inside of closure to drop it before generating proof.
+            let mut trie_recorder = recorder.as_trie_recorder(root);
+            let _trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root)
+                .with_recorder(&mut trie_recorder)
+                .build();
+        }
+
+        // Generate empty proof
+        let proof = recorder
+            .drain_storage_proof()
+            .to_compact_proof::<BlakeTwo256>(root)
+            .expect("Failed to create empty compact proof from recorder");
+
+        assert_eq!(
+            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::verify_proof(
+                &root,
+                &[H256::random(), H256::random(), H256::random()],
+                &proof
+            ),
+            Ok(BTreeSet::new())
         );
     }
 }

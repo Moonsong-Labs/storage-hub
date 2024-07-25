@@ -26,6 +26,7 @@
 mod xcm_config;
 
 // Substrate and Polkadot dependencies
+use core::marker::PhantomData;
 use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
 use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
 use crate::PolkadotXcm;
@@ -45,6 +46,7 @@ use frame_system::{
     pallet_prelude::BlockNumberFor,
     EnsureRoot, EnsureSigned,
 };
+use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
 use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
@@ -52,6 +54,7 @@ use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
 use shp_file_key_verifier::FileKeyVerifier;
+use shp_file_metadata::ChunkId;
 use shp_forest_verifier::ForestVerifier;
 use shp_traits::{CommitmentVerifier, MaybeDebug};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -61,8 +64,8 @@ use sp_runtime::{
     AccountId32, DispatchError, FixedPointNumber, FixedU128, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
-use sp_trie::CompactProof;
-use sp_trie::LayoutV1;
+use sp_std::vec;
+use sp_trie::{CompactProof, LayoutV1, TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
 
@@ -425,13 +428,10 @@ impl pallet_randomness::GetBabeData<u64, Option<Hash>> for BabeDataGetter {
 }
 
 parameter_types! {
+    // TODO: If the next line is uncommented (which should be eventually), compilation breaks (most likely because of mismatched dependency issues)
+    // pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * runtime_constants::time::EPOCH_DURATION_IN_SLOTS, 2 * MINUTES);
     pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * HOURS, 2 * MINUTES);
 }
-
-// TODO: If the next line is uncommented (which should be eventually), compilation breaks (most likely because of mismatched dependency issues)
-/* parameter_types! {
-    pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * runtime_constants::time::EPOCH_DURATION_IN_SLOTS, 2 * MINUTES);
-} */
 
 /// Configure the randomness pallet
 impl pallet_randomness::Config for Runtime {
@@ -440,12 +440,25 @@ impl pallet_randomness::Config for Runtime {
     type WeightInfo = ();
 }
 
+parameter_types! {
+    pub const SpMinDeposit: Balance = 20 * UNIT;
+    pub const BucketDeposit: Balance = 20 * UNIT;
+}
+
+pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
+pub struct DefaultMerkleRoot<T>(PhantomData<T>);
+impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
+    fn get() -> HasherOutT<T> {
+        sp_trie::empty_trie_root::<T>()
+    }
+}
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = ConstU32<100>;
@@ -454,8 +467,9 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
+    type BucketDeposit = BucketDeposit;
     type BucketNameLimit = ConstU32<100>;
-    type SpMinDeposit = ConstU128<10>;
+    type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
     type RuntimeHoldReason = RuntimeHoldReason;
@@ -486,6 +500,7 @@ impl pallet_payment_streams::Config for Runtime {
     type NewStreamDeposit = ConstU32<10>; // Amount of blocks that the deposit of a new stream should be able to pay for
     type Units = u32; // Storage unit
     type BlockNumberToBalance = BlockNumberToBalance;
+    type ProvidersProofSubmitters = ProofsDealer;
 }
 
 // TODO: remove this and replace with pallet treasury
@@ -505,6 +520,8 @@ parameter_types! {
     pub const ChallengesFee: Balance = 1 * UNIT;
     pub const StakeToChallengePeriod: Balance = 10 * UNIT;
     pub const ChallengeTicksTolerance: u32 = 50;
+    pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
+    pub const TargetTicksStorageOfSubmitters: u32 = 3;
 }
 
 impl pallet_proofs_dealer::Config for Runtime {
@@ -516,13 +533,15 @@ impl pallet_proofs_dealer::Config for Runtime {
     type ForestVerifier = ForestVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type KeyVerifier = FileKeyVerifier<
         LayoutV1<BlakeTwo256>,
-        { shp_file_key_verifier::consts::H_LENGTH },
-        { shp_file_key_verifier::consts::FILE_CHUNK_SIZE },
-        { shp_file_key_verifier::consts::FILE_SIZE_TO_CHALLENGES },
+        { shp_constants::H_LENGTH },
+        { shp_constants::FILE_CHUNK_SIZE },
+        { shp_constants::FILE_SIZE_TO_CHALLENGES },
     >;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = RandomChallengesPerBlock;
     type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
+    type MaxSubmittersPerTick = MaxSubmittersPerTick;
+    type TargetTicksStorageOfSubmitters = TargetTicksStorageOfSubmitters;
     type ChallengeHistoryLength = ChallengeHistoryLength;
     type ChallengesQueueLength = ChallengesQueueLength;
     type CheckpointChallengePeriod = CheckpointChallengePeriod;
@@ -577,6 +596,8 @@ impl pallet_file_system::Config for Runtime {
     type ThresholdType = ThresholdType;
     type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
     type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
+    type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
+    type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
@@ -592,7 +613,9 @@ impl pallet_file_system::Config for Runtime {
     type MaxNumberOfPeerIds = ConstU32<5>;
     type MaxDataServerMultiAddresses = ConstU32<10>;
     type StorageRequestTtl = ConstU32<40>;
-    type MaxExpiredStorageRequests = ConstU32<100>;
+    type PendingFileDeletionRequestTtl = ConstU32<40u32>;
+    type MaxExpiredItemsInBlock = ConstU32<100>;
+    type MaxUserPendingDeletionRequests = ConstU32<10u32>;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.
@@ -623,6 +646,34 @@ pub struct BlockNumberToThresholdTypeConverter;
 impl Convert<BlockNumberFor<Runtime>, ThresholdType> for BlockNumberToThresholdTypeConverter {
     fn convert(block_number: BlockNumberFor<Runtime>) -> ThresholdType {
         FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
+    }
+}
+
+// Converter from the MerkleHash (H256) type to the RandomnessOutput (H256) type.
+pub struct MerkleHashToRandomnessOutputConverter;
+
+impl Convert<H256, H256> for MerkleHashToRandomnessOutputConverter {
+    fn convert(hash: H256) -> H256 {
+        hash
+    }
+}
+
+// Converter from the ChunkId type to the MerkleHash (H256) type.
+pub struct ChunkIdToMerkleHashConverter;
+
+impl Convert<ChunkId, H256> for ChunkIdToMerkleHashConverter {
+    fn convert(chunk_id: ChunkId) -> H256 {
+        let chunk_id_biguint = BigUint::from(chunk_id.as_u64());
+        let mut bytes = chunk_id_biguint.to_bytes_be();
+
+        // Ensure the byte slice is exactly 32 bytes long by padding with leading zeros
+        if bytes.len() < 32 {
+            let mut padded_bytes = vec![0u8; 32 - bytes.len()];
+            padded_bytes.extend(bytes);
+            bytes = padded_bytes;
+        }
+
+        H256::from_slice(&bytes)
     }
 }
 

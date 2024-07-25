@@ -1,10 +1,13 @@
+use core::marker::PhantomData;
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
     traits::{AsEnsureOriginWithArg, Everything, Hooks, Randomness},
-    weights::{constants::RocksDbWeight, Weight},
+    weights::{constants::RocksDbWeight, Weight, WeightMeter},
 };
 use frame_system as system;
+use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
+use shp_file_metadata::ChunkId;
 use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
@@ -14,7 +17,7 @@ use sp_runtime::{
     BuildStorage, DispatchError, FixedU128, MultiSignature, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
-use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieLayout};
+use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -27,11 +30,6 @@ type AccountId = <AccountPublic as IdentifyAccount>::AccountId;
 const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10;
 const UNITS: Balance = 1_000_000_000_000;
 const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
-
-pub type ForestProof =
-    <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::ForestProof;
-pub type KeyProof =
-    <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::KeyProof;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;
@@ -71,6 +69,7 @@ pub(crate) fn roll_to(n: BlockNumber) -> BlockNumber {
 // Rolls forward one block. Returns the new block number.
 fn roll_one_block() -> BlockNumber {
     System::set_block_number(System::block_number() + 1);
+    ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
     FileSystem::on_idle(System::block_number(), Weight::MAX);
     System::block_number()
 }
@@ -178,6 +177,13 @@ parameter_types! {
     pub const MaxMultiAddressAmount: u32 = 5;
 }
 
+pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
+pub struct DefaultMerkleRoot<T>(PhantomData<T>);
+impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
+    fn get() -> HasherOutT<T> {
+        sp_trie::empty_trie_root::<T>()
+    }
+}
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -185,6 +191,7 @@ impl pallet_storage_providers::Config for Test {
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type MaxMultiAddressSize = MaxMultiAddressSize;
@@ -193,6 +200,7 @@ impl pallet_storage_providers::Config for Test {
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
+    type BucketDeposit = ConstU128<10>;
     type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
@@ -222,6 +230,8 @@ impl pallet_proofs_dealer::Config for Test {
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
+    type MaxSubmittersPerTick = ConstU32<1000>; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
+    type TargetTicksStorageOfSubmitters = ConstU32<3>;
     type ChallengeHistoryLength = ConstU64<10>;
     type ChallengesQueueLength = ConstU32<10>;
     type CheckpointChallengePeriod = ConstU64<10>;
@@ -306,6 +316,8 @@ impl crate::Config for Test {
     type ThresholdType = ThresholdType;
     type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
     type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
+    type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
+    type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
@@ -319,7 +331,9 @@ impl crate::Config for Test {
     type MaxDataServerMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
     type MaxFilePathSize = ConstU32<512u32>;
     type StorageRequestTtl = ConstU32<40u32>;
-    type MaxExpiredStorageRequests = ConstU32<100u32>;
+    type PendingFileDeletionRequestTtl = ConstU32<40u32>;
+    type MaxExpiredItemsInBlock = ConstU32<100u32>;
+    type MaxUserPendingDeletionRequests = ConstU32<10u32>;
 }
 
 // Build genesis storage according to the mock runtime.
@@ -384,5 +398,33 @@ pub struct BlockNumberToThresholdTypeConverter;
 impl Convert<BlockNumberFor<Test>, ThresholdType> for BlockNumberToThresholdTypeConverter {
     fn convert(block_number: BlockNumberFor<Test>) -> ThresholdType {
         FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
+    }
+}
+
+// Converter from the MerkleHash (H256) type to the RandomnessOutput type.
+pub struct MerkleHashToRandomnessOutputConverter;
+
+impl Convert<H256, H256> for MerkleHashToRandomnessOutputConverter {
+    fn convert(hash: H256) -> H256 {
+        hash
+    }
+}
+
+// Converter from the ChunkId type to the MerkleHash (H256) type.
+pub struct ChunkIdToMerkleHashConverter;
+
+impl Convert<ChunkId, H256> for ChunkIdToMerkleHashConverter {
+    fn convert(chunk_id: ChunkId) -> H256 {
+        let chunk_id_biguint = BigUint::from(chunk_id.as_u64());
+        let mut bytes = chunk_id_biguint.to_bytes_be();
+
+        // Ensure the byte slice is exactly 32 bytes long by padding with leading zeros
+        if bytes.len() < 32 {
+            let mut padded_bytes = vec![0u8; 32 - bytes.len()];
+            padded_bytes.extend(bytes);
+            bytes = padded_bytes;
+        }
+
+        H256::from_slice(&bytes)
     }
 }

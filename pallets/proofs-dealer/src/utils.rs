@@ -3,15 +3,19 @@ use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
     traits::{fungible::Mutate, tokens::Preservation, Get, Randomness},
-    weights::WeightMeter,
+    weights::{Weight, WeightMeter},
+    BoundedBTreeSet,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
+use pallet_proofs_dealer_runtime_api::{
+    GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+};
 use shp_traits::{
-    CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, TrieMutation,
-    TrieProofDeltaApplier, TrieRemoveMutation,
+    CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, ReadProofSubmittersInterface,
+    TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use sp_runtime::{
-    traits::{CheckedAdd, CheckedDiv, CheckedSub, Convert, Hash, Zero},
+    traits::{CheckedAdd, CheckedDiv, CheckedSub, Convert, Hash, One, Zero},
     ArithmeticError, BoundedVec, DispatchError, SaturatedConversion, Saturating,
 };
 use sp_std::{
@@ -22,16 +26,18 @@ use sp_std::{
 use crate::{
     pallet,
     types::{
-        AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor, ChallengesFeeFor,
-        ChallengesQueueLengthFor, CheckpointChallengePeriodFor, ForestRootFor, ForestVerifierFor,
-        ForestVerifierProofFor, KeyFor, KeyVerifierFor, KeyVerifierProofFor,
-        MaxCustomChallengesPerBlockFor, Proof, ProviderFor, ProvidersPalletFor,
+        AccountIdFor, BalanceFor, BalancePalletFor, ChallengeHistoryLengthFor,
+        ChallengeTicksToleranceFor, ChallengesFeeFor, ChallengesQueueLengthFor,
+        CheckpointChallengePeriodFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor,
+        KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor,
+        MaxSubmittersPerTickFor, Proof, ProviderIdFor, ProvidersPalletFor,
         RandomChallengesPerBlockFor, RandomnessOutputFor, RandomnessProviderFor,
-        StakeToChallengePeriodFor, TreasuryAccountFor,
+        StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
     },
     ChallengeTickToChallengedProviders, ChallengesQueue, ChallengesTicker, Error, Event,
-    LastCheckpointTick, LastTickProviderSubmittedProofFor, Pallet, PriorityChallengesQueue,
-    SlashableProviders, TickToChallengesSeed, TickToCheckpointChallenges,
+    LastCheckpointTick, LastDeletedTick, LastTickProviderSubmittedProofFor, Pallet,
+    PriorityChallengesQueue, SlashableProviders, TickToChallengesSeed, TickToCheckpointChallenges,
+    ValidProofSubmittersLastTicks,
 };
 
 macro_rules! expect_or_err {
@@ -59,6 +65,21 @@ macro_rules! expect_or_err {
             #[allow(unreachable_code)]
             {
                 Err($error_type)?
+            }
+        }
+    }};
+    // Handle Result type
+    ($result:expr, $error_msg:expr, $error_type:path, result) => {{
+        match $result {
+            Ok(value) => value,
+            Err(_) => {
+                #[cfg(test)]
+                unreachable!($error_msg);
+
+                #[allow(unreachable_code)]
+                {
+                    Err($error_type)?
+                }
             }
         }
     }};
@@ -105,7 +126,7 @@ where
     /// has been a Checkpoint Challenge block in between the last tick proven and the current tick.
     /// If there has been, the Provider should have included proofs for the challenges in that block.
     /// It then verifies the forest proof and each key proof, using the `ForestVerifier` and `KeyVerifier`.
-    pub fn do_submit_proof(submitter: &ProviderFor<T>, proof: &Proof<T>) -> DispatchResult {
+    pub fn do_submit_proof(submitter: &ProviderIdFor<T>, proof: &Proof<T>) -> DispatchResult {
         let forest_proof = &proof.forest_proof;
         let key_proofs = &proof.key_proofs;
 
@@ -128,14 +149,16 @@ where
         let root = ProvidersPalletFor::<T>::get_root(*submitter)
             .ok_or(Error::<T>::ProviderRootNotFound)?;
 
-        // Check if root is non-zero.
-        // A zero root means that the Provider is not providing any service yet, so he shouldn't be
+        // Check that the root is not the default root.
+        // A default root means that the Provider is not providing any service yet, so he shouldn't be
         // submitting any proofs.
-        ensure!(root == Self::default_forest_root(), Error::<T>::ZeroRoot);
+        ensure!(
+            root != ProvidersPalletFor::<T>::get_default_root(),
+            Error::<T>::ZeroRoot
+        );
 
         // Get last tick for which the submitter submitted a proof.
-        let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(submitter.clone())
-        {
+        let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(*submitter) {
             Some(tick) => tick,
             None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
         };
@@ -276,7 +299,7 @@ where
 
         // Update `LastTickProviderSubmittedProofFor` to the challenge tick the provider has just
         // submitted a proof for.
-        LastTickProviderSubmittedProofFor::<T>::set(submitter.clone(), Some(challenges_tick));
+        LastTickProviderSubmittedProofFor::<T>::set(*submitter, Some(challenges_tick));
 
         // Remove the submitter from its current deadline registered in `ChallengeTickToChallengedProviders`.
         ChallengeTickToChallengedProviders::<T>::remove(challenges_tick_deadline, submitter);
@@ -299,7 +322,37 @@ where
             Some(()),
         );
 
-        // TODO: Register this block as the last block that this provider can charge for in the payment stream.
+        // Add this Provider to the `ValidProofSubmittersLastTicks` StorageMap, with the current tick number.
+        let current_tick_valid_submitters =
+            ValidProofSubmittersLastTicks::<T>::take(ChallengesTicker::<T>::get());
+        match current_tick_valid_submitters {
+            // If the set already exists and has valid submitters, we just insert the new submitter.
+            Some(mut valid_submitters) => {
+                let already_existed = expect_or_err!(valid_submitters.try_insert(*submitter), "The set should never be full as the limit we set should be greater than the implicit limit given by max block weight.", Error::<T>::TooManyValidProofSubmitters, result);
+                // We only update storage if the Provider ID wasn't yet in the set to avoid unnecessary writes.
+                if !already_existed {
+                    ValidProofSubmittersLastTicks::<T>::insert(
+                        ChallengesTicker::<T>::get(),
+                        valid_submitters,
+                    );
+                }
+            }
+            // If the set doesn't exist, we create it and insert the submitter.
+            None => {
+                let mut new_valid_submitters =
+                    BoundedBTreeSet::<ProviderIdFor<T>, MaxSubmittersPerTickFor<T>>::new();
+                expect_or_err!(
+                    new_valid_submitters.try_insert(*submitter),
+                    "The set has just been created, it's empty and as such won't be full. qed",
+                    Error::<T>::TooManyValidProofSubmitters,
+                    result
+                );
+                ValidProofSubmittersLastTicks::<T>::insert(
+                    ChallengesTicker::<T>::get(),
+                    new_valid_submitters,
+                );
+            }
+        }
 
         Ok(())
     }
@@ -322,7 +375,7 @@ where
     /// - The `TickToChallengesSeed` StorageMap, removing entries older than `ChallengeHistoryLength`.
     /// - The `TickToCheckpointChallenges` StorageMap, removing the previous checkpoint challenge block.
     /// - The `ChallengeTickToChallengedProviders` StorageMap, removing entries for the current challenges tick.
-    pub fn do_new_challenges_round(n: BlockNumberFor<T>, weight: &mut WeightMeter) {
+    pub fn do_new_challenges_round(weight: &mut WeightMeter) {
         // Increment the challenges ticker.
         let mut challenges_ticker = ChallengesTicker::<T>::get();
         challenges_ticker.saturating_inc();
@@ -594,7 +647,7 @@ where
     /// Challenges are generated by hashing the seed, the Provider's ID and an index.
     pub(crate) fn generate_challenges_from_seed(
         seed: RandomnessOutputFor<T>,
-        provider_id: &ProviderFor<T>,
+        provider_id: &ProviderIdFor<T>,
         count: u32,
     ) -> Vec<T::MerkleTrieHash> {
         let mut challenges = Vec::new();
@@ -616,17 +669,70 @@ where
         challenges
     }
 
-    /// Returns the default forest root.
-    fn default_forest_root() -> ForestRootFor<T> {
-        // TODO: Check that this returns the root for an empty forest and change if necessary.
-        ForestRootFor::<T>::default()
+    /// Trim the storage that holds the Providers that submitted valid proofs in the last ticks until there's
+    /// `TargetTicksOfProofsStorage` ticks left (or until the remaining weight allows it).
+    ///
+    /// This function is called in the `on_idle` hook, which means it's only called when the block has
+    /// unused weight.
+    ///
+    /// It removes the oldest tick from the storage that holds the providers that submitted valid proofs
+    /// in the last ticks as many times as the remaining weight allows it, but at most until the storage
+    /// has `TargetTicksOfProofsStorage` ticks left.
+    pub fn do_trim_valid_proof_submitters_last_ticks(
+        _n: BlockNumberFor<T>,
+        usable_weight: Weight,
+    ) -> Weight {
+        // Initialize the weight used by this function.
+        let mut used_weight = Weight::zero();
+
+        // Check how many ticks should be removed to keep the storage at the target amount.
+        let mut last_deleted_tick = LastDeletedTick::<T>::get();
+        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
+        let target_ticks_to_keep = TargetTicksStorageOfSubmittersFor::<T>::get();
+        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
+        let current_tick = ChallengesTicker::<T>::get();
+        used_weight = used_weight.saturating_add(T::DbWeight::get().reads(1));
+        let ticks_to_remove = current_tick
+            .saturating_sub(last_deleted_tick)
+            .saturating_sub(target_ticks_to_keep.into());
+
+        // Check how much ticks can be removed considering weight limitations
+        let weight_to_remove_tick = T::DbWeight::get().reads_writes(0, 2);
+        let removable_ticks = usable_weight
+            .saturating_sub(used_weight)
+            .checked_div_per_component(&weight_to_remove_tick);
+
+        // If there is enough weight to remove ticks, try to remove as much ticks as possible until the target is reached.
+        if let Some(removable_ticks) = removable_ticks {
+            let removable_ticks =
+                removable_ticks.min(ticks_to_remove.try_into().unwrap_or(u64::MAX));
+            // Remove all the ticks that we can, until we reach the target amount.
+            for _ in 0..removable_ticks {
+                // Get the next tick to delete.
+                let next_tick_to_delete = last_deleted_tick.saturating_add(One::one());
+
+                // Remove it from storage
+                ValidProofSubmittersLastTicks::<T>::remove(next_tick_to_delete);
+
+                // Update the last removed tick
+                LastDeletedTick::<T>::set(next_tick_to_delete);
+                last_deleted_tick = next_tick_to_delete; // We do this to avoid having to read from storage again.
+
+                // Increment the used weight.
+                used_weight = used_weight.saturating_add(weight_to_remove_tick);
+            }
+        }
+
+        // Return the weight used by this function.
+        used_weight
     }
 }
 
 impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
-    type ProviderId = ProviderFor<T>;
+    type ProviderId = ProviderIdFor<T>;
     type ForestProof = ForestVerifierProofFor<T>;
     type KeyProof = KeyVerifierProofFor<T>;
+    type RandomnessOutput = RandomnessOutputFor<T>;
     type MerkleHash = T::MerkleTrieHash;
     type MerkleHashing = T::MerkleTrieHashing;
 
@@ -672,6 +778,14 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         Self::enqueue_challenge_with_priority(key_challenged, mutation)
     }
 
+    fn generate_challenges_from_seed(
+        seed: Self::RandomnessOutput,
+        provider_id: &Self::ProviderId,
+        count: u32,
+    ) -> Vec<Self::MerkleHash> {
+        Self::generate_challenges_from_seed(seed, provider_id, count)
+    }
+
     fn apply_delta(
         commitment: &Self::MerkleHash,
         mutations: &[(Self::MerkleHash, TrieMutation)],
@@ -686,8 +800,129 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         )
     }
 
-    // TODO: Add `initialise_provider` method to be called by the FileSystem pallet.
-    // TODO: when a file is first uploaded to a BSP or bucket.
-    // TODO: It would set `LastTickProviderSubmittedProofFor` to the current tick and
-    // TODO: the deadline for submitting a proof in `ChallengeTickToChallengedProviders`.
+    fn initialise_challenge_cycle(provider_id: &Self::ProviderId) -> DispatchResult {
+        // Check that `who` is a registered Provider.
+        if !ProvidersPalletFor::<T>::is_provider(*provider_id) {
+            return Err(Error::<T>::NotProvider.into());
+        }
+
+        // Get stake for submitter.
+        // If a submitter is a registered Provider, it must have a stake, so this shouldn't happen.
+        // However, since the implementation of that is not up to this pallet, we need to check.
+        let stake = ProvidersPalletFor::<T>::get_stake(*provider_id)
+            .ok_or(Error::<T>::ProviderStakeNotFound)?;
+
+        // Check that the stake is non-zero.
+        ensure!(stake > BalanceFor::<T>::zero(), Error::<T>::ZeroStake);
+
+        // Check if this Provider previously had a challenge cycle initialised.
+        if let Some(last_tick_proven) = LastTickProviderSubmittedProofFor::<T>::get(*provider_id) {
+            // Compute the next tick for which the Provider should have been submitting a proof.
+            let old_next_challenge_tick = last_tick_proven
+                .checked_add(&Self::stake_to_challenge_period(stake))
+                .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+            // Calculate the deadline for submitting a proof. Should be the next challenge tick + the challenges tick tolerance.
+            let old_next_challenge_deadline = old_next_challenge_tick
+                .checked_add(&ChallengeTicksToleranceFor::<T>::get())
+                .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+            // Remove the old deadline.
+            ChallengeTickToChallengedProviders::<T>::remove(
+                old_next_challenge_deadline,
+                *provider_id,
+            );
+        }
+
+        // Set `LastTickProviderSubmittedProofFor` to the current tick.
+        let current_tick = ChallengesTicker::<T>::get();
+        LastTickProviderSubmittedProofFor::<T>::set(*provider_id, Some(current_tick));
+
+        // Compute the next tick for which the Provider should be submitting a proof.
+        let next_challenge_tick = current_tick
+            .checked_add(&Self::stake_to_challenge_period(stake))
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Calculate the deadline for submitting a proof. Should be the next challenge tick + the challenges tick tolerance.
+        let next_challenge_deadline = next_challenge_tick
+            .checked_add(&ChallengeTicksToleranceFor::<T>::get())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+        // Set the deadline for submitting a proof.
+        ChallengeTickToChallengedProviders::<T>::set(
+            next_challenge_deadline,
+            *provider_id,
+            Some(()),
+        );
+
+        // Emit event.
+        Self::deposit_event(Event::<T>::NewChallengeCycleInitialised {
+            current_tick,
+            provider: *provider_id,
+            maybe_provider_account: ProvidersPalletFor::<T>::get_owner_account(*provider_id),
+        });
+
+        Ok(())
+    }
+}
+
+impl<T: pallet::Config> ReadProofSubmittersInterface for Pallet<T> {
+    type ProviderId = ProviderIdFor<T>;
+    type TickNumber = BlockNumberFor<T>;
+    type MaxProofSubmitters = MaxSubmittersPerTickFor<T>;
+
+    fn get_proof_submitters_for_tick(
+        tick_number: &Self::TickNumber,
+    ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
+        ValidProofSubmittersLastTicks::<T>::get(tick_number)
+    }
+}
+
+/// Runtime API implementation for the ProofsDealer pallet.
+impl<T> Pallet<T>
+where
+    T: pallet::Config,
+{
+    pub fn get_last_tick_provider_submitted_proof(
+        who: &ProviderIdFor<T>,
+    ) -> Result<BlockNumberFor<T>, GetLastTickProviderSubmittedProofError> {
+        // Check if submitter is a registered Provider.
+        if !ProvidersPalletFor::<T>::is_provider(*who) {
+            return Err(GetLastTickProviderSubmittedProofError::ProviderNotRegistered);
+        }
+
+        LastTickProviderSubmittedProofFor::<T>::get(who)
+            .ok_or(GetLastTickProviderSubmittedProofError::ProviderNeverSubmittedProof)
+    }
+
+    pub fn get_last_checkpoint_challenge_tick() -> BlockNumberFor<T> {
+        LastCheckpointTick::<T>::get()
+    }
+
+    pub fn get_checkpoint_challenges(
+        tick: BlockNumberFor<T>,
+    ) -> Result<Vec<(KeyFor<T>, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError> {
+        // Check that the tick is smaller than the last checkpoint tick.
+        if LastCheckpointTick::<T>::get() < tick {
+            return Err(GetCheckpointChallengesError::TickGreaterThanLastCheckpointTick);
+        }
+
+        let checkpoint_challenges = TickToCheckpointChallenges::<T>::get(tick)
+            .ok_or(GetCheckpointChallengesError::NoCheckpointChallengesInTick)?;
+
+        Ok(checkpoint_challenges.into())
+    }
+
+    pub fn get_challenge_period(
+        provider_id: &ProviderIdFor<T>,
+    ) -> Result<BlockNumberFor<T>, GetChallengePeriodError> {
+        let stake = ProvidersPalletFor::<T>::get_stake(*provider_id)
+            .ok_or(GetChallengePeriodError::ProviderNotRegistered)?;
+
+        Ok(Self::stake_to_challenge_period(stake))
+    }
+
+    pub fn get_checkpoint_challenge_period() -> BlockNumberFor<T> {
+        CheckpointChallengePeriodFor::<T>::get()
+    }
 }

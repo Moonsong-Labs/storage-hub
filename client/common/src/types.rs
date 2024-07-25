@@ -1,12 +1,16 @@
 use std::fmt::Debug;
 
 use codec::{Decode, Encode};
-pub use shp_file_key_verifier::consts::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
-pub use shp_file_key_verifier::types::{Chunk, ChunkId, Leaf};
+use sc_executor::WasmExecutor;
+use sc_network::NetworkService;
+use sc_service::TFullClient;
+pub use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
+pub use shp_file_metadata::{Chunk, ChunkId, Leaf};
 use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
+use sp_runtime::traits::Block as BlockT;
 use sp_trie::CompactProof;
-use storage_hub_runtime::Runtime;
+use storage_hub_runtime::{opaque::Block, Runtime, RuntimeApi};
 use trie_db::TrieLayout;
 
 /// The hash type of trie node keys
@@ -18,17 +22,42 @@ pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 /// here to be used by the node/client.
 pub type FileKeyVerifier = <Runtime as pallet_proofs_dealer::Config>::KeyVerifier;
 pub type FileKeyProof = <FileKeyVerifier as CommitmentVerifier>::Proof;
-
-pub type Hash = shp_file_key_verifier::types::Hash<H_LENGTH>;
-pub type Fingerprint = shp_file_key_verifier::types::Fingerprint<H_LENGTH>;
+pub type Hash = shp_file_metadata::Hash<H_LENGTH>;
+pub type Fingerprint = shp_file_metadata::Fingerprint<H_LENGTH>;
 pub type FileMetadata =
-    shp_file_key_verifier::types::FileMetadata<H_LENGTH, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES>;
-pub type FileKey = shp_file_key_verifier::types::FileKey<H_LENGTH>;
-
+    shp_file_metadata::FileMetadata<H_LENGTH, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES>;
+pub type FileKey = shp_file_metadata::FileKey<H_LENGTH>;
 pub type BlockNumber = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
+pub type StorageData = pallet_file_system::types::StorageData<Runtime>;
+pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
+pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
+pub type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<Runtime>;
+pub type RandomSeed = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
+pub type ProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
+pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
+
+#[cfg(not(feature = "runtime-benchmarks"))]
+type HostFunctions = (
+    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
+    sp_io::SubstrateHostFunctions,
+    cumulus_client_service::storage_proof_size::HostFunctions,
+);
+
+#[cfg(feature = "runtime-benchmarks")]
+type HostFunctions = (
+    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
+    sp_io::SubstrateHostFunctions,
+    cumulus_client_service::storage_proof_size::HostFunctions,
+    frame_benchmarking::benchmarking::HostFunctions,
+);
+
+pub type ParachainExecutor = WasmExecutor<HostFunctions>;
+pub type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
+pub type ParachainNetworkService = NetworkService<Block, <Block as BlockT>::Hash>;
 
 /// Proving either the exact key or the neighbour keys of the challenged key.
 pub enum Proven<K, D: Debug> {
+    Empty,
     ExactKey(Leaf<K, D>),
     NeighbourKeys((Option<Leaf<K, D>>, Option<Leaf<K, D>>)),
 }
@@ -69,9 +98,13 @@ pub struct FileProof {
 
 impl FileProof {
     pub fn to_file_key_proof(&self, file_metadata: FileMetadata) -> FileKeyProof {
-        FileKeyProof {
-            proof: self.proof.clone(),
-            file_metadata,
-        }
+        FileKeyProof::new(
+            file_metadata.owner.clone(),
+            file_metadata.bucket_id.clone(),
+            file_metadata.location.clone(),
+            file_metadata.file_size,
+            file_metadata.fingerprint,
+            self.proof.clone(),
+        )
     }
 }

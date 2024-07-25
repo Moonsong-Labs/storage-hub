@@ -1,59 +1,24 @@
 import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
-import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import compose from "docker-compose";
-import { alice, bsp, shUser } from "../pjsKeyring";
-import { DUMMY_MSP_ID, VALUE_PROP, NODE_INFOS, DUMMY_BSP_ID, CAPACITY_512 } from "./consts";
-import { createApiObject } from "./api";
-import path from "node:path";
-import { u8aToHex } from "@polkadot/util";
-import * as util from "node:util";
-import * as child_process from "node:child_process";
-import type {
-  CreatedBlock,
-  EventRecord,
-  H256,
-  Hash,
-  SignedBlock
-} from "@polkadot/types/interfaces";
-import { execSync } from "node:child_process";
-import { showContainers } from "./docker";
-import { isExtSuccess } from "../extrinsics";
-import type { BspNetApi } from "./types";
-import { assertEventPresent } from "../asserts.ts";
+import type { CreatedBlock, EventRecord, Hash, SignedBlock } from "@polkadot/types/interfaces";
+import type { ISubmittableResult } from "@polkadot/types/types";
+import { v2 as compose } from "docker-compose";
 import Docker from "dockerode";
+import * as child_process from "node:child_process";
+import { execSync } from "node:child_process";
+import path from "node:path";
+import * as util from "node:util";
+import { assertEventPresent } from "../asserts.ts";
 import { DOCKER_IMAGE } from "../constants.ts";
-const exec = util.promisify(child_process.exec);
+import { isExtSuccess } from "../extrinsics";
+import { alice, bsp, shUser } from "../pjsKeyring";
+import { createApiObject } from "./api";
+import { CAPACITY_512, DUMMY_BSP_ID, DUMMY_MSP_ID, NODE_INFOS, VALUE_PROP } from "./consts";
+import { showContainers } from "./docker";
+import type { BspNetApi } from "./types";
 
-export const sendLoadFileRpc = async (
-  api: ApiPromise,
-  filePath: string,
-  remotePath: string,
-  userNodeAccountId: string,
-  bucket: H256
-): Promise<FileSendResponse> => {
-  try {
-    // @ts-expect-error - rpc provider not officially exposed
-    const resp = await api._rpcCore.provider.send("filestorage_loadFileInStorage", [
-      filePath,
-      remotePath,
-      userNodeAccountId,
-      bucket
-    ]);
-    const { owner, bucket_id, location, size, fingerprint } = resp;
-    return {
-      owner: u8aToHex(owner),
-      bucket_id,
-      location: u8aToHex(location),
-      size: BigInt(size),
-      fingerprint: u8aToHex(fingerprint)
-    };
-  } catch (e) {
-    console.error("Error sending file to user node:", e);
-    throw new Error("filestorage_loadFileInStorage RPC call failed");
-  }
-};
+const exec = util.promisify(child_process.exec);
 
 export const getContainerIp = async (containerName: string, verbose = false): Promise<string> => {
   const maxRetries = 60;
@@ -88,14 +53,6 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
   showContainers();
   throw new Error("Error fetching container IP");
 };
-
-export interface FileSendResponse {
-  owner: string;
-  bucket_id: string;
-  location: string;
-  size: bigint;
-  fingerprint: string;
-}
 
 export const getContainerPeerId = async (url: string, verbose = false) => {
   const maxRetries = 60;
@@ -135,21 +92,40 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
   throw new Error(`Error fetching peerId from ${url}`);
 };
 
-export const runBspNet = async () => {
+export type BspNetConfig = {
+  noisy: boolean;
+  rocksdb: boolean;
+};
+
+export const runBspNet = async (bspNetConfig: BspNetConfig) => {
+  let api: BspNetApi | undefined;
   try {
     console.log(`sh user id: ${shUser.address}`);
     console.log(`sh bsp id: ${bsp.address}`);
-    const composeFilePath = path.resolve(
-      process.cwd(),
-      "..",
-      "docker",
-      "local-dev-bsp-compose.yml"
-    );
+    let file = "local-dev-bsp-compose.yml";
+    if (bspNetConfig.rocksdb) {
+      file = "local-dev-bsp-rocksdb-compose.yml";
+    }
+    if (bspNetConfig.noisy) {
+      file = "noisy-bsp-compose.yml";
+    }
+    const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
+
+    if (bspNetConfig.noisy) {
+      await compose.upOne("toxiproxy", { config: composeFilePath, log: true });
+    }
 
     await compose.upOne("sh-bsp", { config: composeFilePath, log: true });
 
-    const bspIp = await getContainerIp(NODE_INFOS.bsp.containerName);
-    console.log(`sh-bsp IP: ${bspIp}`);
+    const bspIp = await getContainerIp(
+      bspNetConfig.noisy ? "toxiproxy" : NODE_INFOS.bsp.containerName
+    );
+
+    if (bspNetConfig.noisy) {
+      console.log(`toxiproxy IP: ${bspIp}`);
+    } else {
+      console.log(`sh-bsp IP: ${bspIp}`);
+    }
 
     const bspPeerId = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.bsp.port}`, true);
     console.log(`sh-bsp Peer ID: ${bspPeerId}`);
@@ -173,9 +149,7 @@ export const runBspNet = async () => {
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
     // Create Connection API Object to User Node
-    // biome-ignore lint/style/noVar: <explanation>
-    // biome-ignore lint/correctness/noInnerDeclarations: <explanation>
-    var api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+    api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
     // Give Balances
     const amount = 10000n * 10n ** 12n;
@@ -222,7 +196,6 @@ export const runBspNet = async () => {
   } catch (e) {
     console.error("Error ", e);
   } finally {
-    // @ts-expect-error - bug in tsc
     api?.disconnect();
   }
 };
@@ -241,9 +214,9 @@ export const closeBspNet = async () => {
   await docker.pruneVolumes();
 };
 
-// TODO: Add a succesful flag to track whether ext was successful or not
+// TODO: Add a successful flag to track whether ext was successful or not
 //        Determine whether extrinsic was successful or not based on the
-//        ExtrinsicSucess event
+//        ExtrinsicSuccess event
 export interface SealedBlock {
   blockReceipt: CreatedBlock;
   txHash?: string;
@@ -279,9 +252,10 @@ export const sealBlock = async (
     txHash: results.hash?.toString()
   };
 
+  const blockHash = sealedResults.blockReceipt.blockHash;
+  const allEvents = await (await api.at(blockHash)).query.system.events();
+
   if (results.hash) {
-    const blockHash = sealedResults.blockReceipt.blockHash;
-    const allEvents = await (await api.at(blockHash)).query.system.events();
     const blockData = await api.rpc.chain.getBlock(blockHash);
     const getExtIndex = (txHash: Hash) => {
       return blockData.block.extrinsics.findIndex((ext) => ext.hash.toHex() === txHash.toString());
@@ -294,6 +268,8 @@ export const sealBlock = async (
     results.blockData = blockData;
     results.events = extEvents;
     results.success = isExtSuccess(extEvents);
+  } else {
+    results.events = allEvents;
   }
 
   // Allow time for chain to settle
@@ -327,4 +303,15 @@ export const createBucket = async (api: ApiPromise, bucketName: string) => {
 export const cleardownTest = async (api: BspNetApi) => {
   await api.disconnect();
   await closeBspNet();
+};
+
+export const createCheckBucket = async (api: BspNetApi, bucketName: string) => {
+  const newBucketEventEvent = await api.createBucket(bucketName);
+  const newBucketEventDataBlob =
+    api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+
+  if (!newBucketEventDataBlob) {
+    throw new Error("Event doesn't match Type");
+  }
+  return newBucketEventDataBlob;
 };

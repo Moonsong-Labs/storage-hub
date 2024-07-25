@@ -8,7 +8,7 @@ import "@polkadot/api-base/types/consts";
 import type { ApiTypes, AugmentedConst } from "@polkadot/api-base/types";
 import type { Option, u128, u16, u32, u64, u8 } from "@polkadot/types-codec";
 import type { Codec } from "@polkadot/types-codec/types";
-import type { AccountId32 } from "@polkadot/types/interfaces/runtime";
+import type { AccountId32, H256 } from "@polkadot/types/interfaces/runtime";
 import type {
   FrameSystemLimitsBlockLength,
   FrameSystemLimitsBlockWeights,
@@ -69,7 +69,7 @@ declare module "@polkadot/api-base/types/consts" {
        * Maximum number of BSPs that can store a file.
        *
        * This is used to limit the number of BSPs storing a file and claiming rewards for it.
-       * If this number is to high, then the reward for storing a file might be to diluted and pointless to store.
+       * If this number is too high, then the reward for storing a file might be to diluted and pointless to store.
        **/
       maxBspsPerStorageRequest: u32 & AugmentedConst<ApiType>;
       /**
@@ -79,7 +79,7 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * Maximum number of expired storage requests to clean up in a single block.
        **/
-      maxExpiredStorageRequests: u32 & AugmentedConst<ApiType>;
+      maxExpiredItemsInBlock: u32 & AugmentedConst<ApiType>;
       /**
        * Maximum byte size of a file path.
        **/
@@ -92,6 +92,10 @@ declare module "@polkadot/api-base/types/consts" {
        * Maximum byte size of a peer id.
        **/
       maxPeerIdSize: u32 & AugmentedConst<ApiType>;
+      /**
+       * Maximum number of file deletion requests a user can have pending.
+       **/
+      maxUserPendingDeletionRequests: u32 & AugmentedConst<ApiType>;
       /**
        * Time-to-live for a storage request.
        **/
@@ -268,6 +272,13 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxCustomChallengesPerBlock: u32 & AugmentedConst<ApiType>;
       /**
+       * The maximum amount of Providers that can submit a proof in a single block.
+       * Although this can be seen as an arbitrary limit, if set to the already existing
+       * implicit limit that is "how many `submit_proof` extrinsics fit in the weight of
+       * a block, this wouldn't add any additional artificial limit.
+       **/
+      maxSubmittersPerTick: u32 & AugmentedConst<ApiType>;
+      /**
        * The number of random challenges that are generated per block, using the random seed
        * generated for that block.
        **/
@@ -278,6 +289,12 @@ declare module "@polkadot/api-base/types/consts" {
        * their stake. The period is calculated as `stake / StakeToBlockPeriod`, saturating at 1.
        **/
       stakeToChallengePeriod: u128 & AugmentedConst<ApiType>;
+      /**
+       * The target number of ticks for which to store the submitters that submitted valid proofs in them,
+       * stored in the `ValidProofSubmittersLastTicks` StorageMap. That storage will be trimmed down to this number
+       * of ticks in the `on_idle` hook of this pallet, to avoid bloating the state.
+       **/
+      targetTicksStorageOfSubmitters: u32 & AugmentedConst<ApiType>;
       /**
        * The Treasury AccountId.
        * The account to which:
@@ -295,6 +312,10 @@ declare module "@polkadot/api-base/types/consts" {
        * Type that represents the byte limit of a bucket name.
        **/
       bucketNameLimit: u32 & AugmentedConst<ApiType>;
+      /**
+       * The default value of the root of the Merkle Patricia Trie of the runtime
+       **/
+      defaultMerkleRoot: H256 & AugmentedConst<ApiType>;
       /**
        * The slope of the collateral vs storage capacity curve. In other terms, how many tokens a Storage Provider should add as collateral to increase its storage capacity in one unit of StorageData.
        **/

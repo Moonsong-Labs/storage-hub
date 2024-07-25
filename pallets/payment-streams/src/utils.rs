@@ -11,9 +11,13 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
-    PaymentManager, PaymentStreamsInterface, ProvidersInterface, ReadProvidersInterface,
+    PaymentStreamsInterface, ProvidersInterface, ReadProofSubmittersInterface,
+    ReadProvidersInterface, SystemMetricsInterface,
 };
-use sp_runtime::traits::Convert;
+use sp_runtime::{
+    traits::{Convert, One},
+    Saturating,
+};
 
 use crate::*;
 
@@ -132,7 +136,6 @@ where
             user_account,
             FixedRatePaymentStream {
                 rate,
-                last_chargeable_block: frame_system::Pallet::<T>::block_number(),
                 last_charged_block: frame_system::Pallet::<T>::block_number(),
                 user_deposit: deposit,
             },
@@ -362,7 +365,6 @@ where
             DynamicRatePaymentStream {
                 amount_provided,
                 price_index_when_last_charged: current_accumulated_price_index,
-                price_index_at_last_chargeable_block: current_accumulated_price_index,
                 user_deposit: deposit,
             },
         );
@@ -512,6 +514,7 @@ where
     /// the last charged block of this payment stream.  As such, the last charged block can't ever be greater than the last chargeable block, and if they are equal then no charge is made.
     /// For dynamic-rate payment streams, the charge is calculated as: `amount_provided * (price_index_when_last_charged - price_index_at_last_chargeable_block)`. In this case,
     /// the price index at the last charged block can't ever be greater than the price index at the last chargeable block, and if they are equal then no charge is made.
+    /// TODO: Maybe add a way to pass an array of users to charge them all at once?
     pub fn do_charge_payment_streams(
         provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
@@ -547,44 +550,44 @@ where
         // If the fixed-rate payment stream exists:
         if let Some(fixed_rate_payment_stream) = fixed_rate_payment_stream {
             // Calculate the time passed between the last chargeable block and the last charged block
-            let time_passed = expect_or_err!(fixed_rate_payment_stream
-            .last_chargeable_block
-            .checked_sub(&fixed_rate_payment_stream.last_charged_block), "Last chargeable block should always be greater than or equal to the last charged block, inconsistency error.",
-            Error::<T>::LastChargedGreaterThanLastChargeable);
+            let last_chargeable_block =
+                LastChargeableInfo::<T>::get(provider_id).last_chargeable_block;
+            if let Some(time_passed) =
+                last_chargeable_block.checked_sub(&fixed_rate_payment_stream.last_charged_block)
+            {
+                // Convert it to the balance type (for math)
+                let time_passed_balance_typed = T::BlockNumberToBalance::convert(time_passed);
 
-            // Convert it to the balance type (for math)
-            let time_passed_balance_typed = T::BlockNumberToBalance::convert(time_passed);
+                // Calculate the amount to charge
+                let amount_to_charge = fixed_rate_payment_stream
+                    .rate
+                    .checked_mul(&time_passed_balance_typed)
+                    .ok_or(Error::<T>::ChargeOverflow)?;
 
-            // Calculate the amount to charge
-            let amount_to_charge = fixed_rate_payment_stream
-                .rate
-                .checked_mul(&time_passed_balance_typed)
-                .ok_or(Error::<T>::ChargeOverflow)?;
+                // Check the free balance of the user
+                let user_balance = T::NativeBalance::reducible_balance(
+                    &user_account,
+                    Preservation::Preserve,
+                    Fortitude::Polite,
+                );
 
-            // Check the free balance of the user
-            let user_balance = T::NativeBalance::reducible_balance(
-                &user_account,
-                Preservation::Preserve,
-                Fortitude::Polite,
-            );
+                // If the user does not have enough balance to pay for its storage:
+                if user_balance < amount_to_charge {
+                    // TODO: Probably just charge what the user has and then flag it
+                    // Flag it in the UsersWithoutFunds mapping and emit the UserWithoutFunds event
+                    UsersWithoutFunds::<T>::insert(user_account, ());
+                    Self::deposit_event(Event::<T>::UserWithoutFunds {
+                        who: user_account.clone(),
+                    });
+                } else {
+                    // If the user does have enough funds to pay for its storage:
 
-            // If the user does not have enough balance to pay for its storage:
-            if user_balance < amount_to_charge {
-                // TODO: Probably just charge what the user has and then flag it
-                // Flag it in the UsersWithoutFunds mapping and emit the UserWithoutFunds event
-                UsersWithoutFunds::<T>::insert(user_account, ());
-                Self::deposit_event(Event::<T>::UserWithoutFunds {
-                    who: user_account.clone(),
-                });
-            } else {
-                // If the user does have enough funds to pay for its storage:
+                    // Clear the user from the UsersWithoutFunds mapping
+                    // TODO: Design a more robust way of handling out-of-funds users
+                    UsersWithoutFunds::<T>::remove(user_account);
 
-                // Clear the user from the UsersWithoutFunds mapping
-                // TODO: Design a more robust way of handling out-of-funds users
-                UsersWithoutFunds::<T>::remove(user_account);
-
-                // Get the payment account of the SP
-                let provider_payment_account = expect_or_err!(
+                    // Get the payment account of the SP
+                    let provider_payment_account = expect_or_err!(
                     <T::ProvidersPallet as ReadProvidersInterface>::get_provider_payment_account(
                         *provider_id
                     ),
@@ -592,82 +595,85 @@ where
                     Error::<T>::ProviderInconsistencyError
                 );
 
-                // Check if the total amount charged would overflow
-                // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
-                ensure!(
-                    total_amount_charged
+                    // Check if the total amount charged would overflow
+                    // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
+                    ensure!(
+                        total_amount_charged
+                            .checked_add(&amount_to_charge)
+                            .is_some(),
+                        ArithmeticError::Overflow
+                    );
+
+                    // Charge the payment stream from the user's balance
+                    T::NativeBalance::transfer(
+                        user_account,
+                        &provider_payment_account,
+                        amount_to_charge,
+                        Preservation::Preserve,
+                    )?;
+
+                    // Set the last charged block to the block number of the last chargeable block
+                    FixedRatePaymentStreams::<T>::mutate(
+                        provider_id,
+                        user_account,
+                        |payment_stream| {
+                            let payment_stream = expect_or_err!(
+                                payment_stream,
+                                "Payment stream should exist if it was found before.",
+                                Error::<T>::PaymentStreamNotFound
+                            );
+                            payment_stream.last_charged_block = last_chargeable_block;
+                            Ok::<(), DispatchError>(())
+                        },
+                    )?;
+
+                    // Update the total amount charged:
+                    total_amount_charged = total_amount_charged
                         .checked_add(&amount_to_charge)
-                        .is_some(),
-                    ArithmeticError::Overflow
-                );
-
-                // Charge the payment stream from the user's balance
-                T::NativeBalance::transfer(
-                    user_account,
-                    &provider_payment_account,
-                    amount_to_charge,
-                    Preservation::Preserve,
-                )?;
-
-                // Set the last charged block to the block number of the last chargeable block
-                FixedRatePaymentStreams::<T>::mutate(
-                    provider_id,
-                    user_account,
-                    |payment_stream| {
-                        let payment_stream = expect_or_err!(
-                            payment_stream,
-                            "Payment stream should exist if it was found before.",
-                            Error::<T>::PaymentStreamNotFound
-                        );
-                        payment_stream.last_charged_block = payment_stream.last_chargeable_block;
-                        Ok::<(), DispatchError>(())
-                    },
-                )?;
-
-                // Update the total amount charged:
-                total_amount_charged = total_amount_charged
-                    .checked_add(&amount_to_charge)
-                    .ok_or(Error::<T>::ChargeOverflow)?;
+                        .ok_or(Error::<T>::ChargeOverflow)?;
+                }
             }
         }
 
         // If the dynamic-rate payment stream exists:
         if let Some(dynamic_rate_payment_stream) = dynamic_rate_payment_stream {
             // Calculate the difference between the last charged price index and the price index at the last chargeable block
-            let price_index_difference = expect_or_err!(dynamic_rate_payment_stream
-				.price_index_at_last_chargeable_block
-				.checked_sub(&dynamic_rate_payment_stream.price_index_when_last_charged), "Last chargeable price index should always be greater than or equal to the last charged price index, inconsistency error.",
-				Error::<T>::LastChargedGreaterThanLastChargeable);
+            // Note: If the last chargeable price index is less than the last charged price index, we charge 0 to the user, because that would be an impossible state.
 
-            // Calculate the amount to charge
-            let amount_to_charge = price_index_difference
-                .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
-                .ok_or(Error::<T>::ChargeOverflow)?;
+            let price_index_at_last_chargeable_block =
+                LastChargeableInfo::<T>::get(provider_id).price_index;
+            if let Some(price_index_difference) = price_index_at_last_chargeable_block
+                .checked_sub(&dynamic_rate_payment_stream.price_index_when_last_charged)
+            {
+                // Calculate the amount to charge
+                let amount_to_charge = price_index_difference
+                    .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
+                    .ok_or(Error::<T>::ChargeOverflow)?;
 
-            // Check the free balance of the user
-            let user_balance = T::NativeBalance::reducible_balance(
-                &user_account,
-                Preservation::Preserve,
-                Fortitude::Polite,
-            );
+                // Check the free balance of the user
+                let user_balance = T::NativeBalance::reducible_balance(
+                    &user_account,
+                    Preservation::Preserve,
+                    Fortitude::Polite,
+                );
 
-            // If the user does not have enough balance to pay for its storage:
-            if user_balance < amount_to_charge {
-                // TODO: Probably just charge what the user has and then flag it
-                // Flag it in the UsersWithoutFunds mapping and emit the UserWithoutFunds event
-                UsersWithoutFunds::<T>::insert(user_account, ());
-                Self::deposit_event(Event::<T>::UserWithoutFunds {
-                    who: user_account.clone(),
-                });
-            } else {
-                // If the user does have enough funds to pay for its storage:
+                // If the user does not have enough balance to pay for its storage:
+                if user_balance < amount_to_charge {
+                    // TODO: Probably just charge what the user has and then flag it
+                    // Flag it in the UsersWithoutFunds mapping and emit the UserWithoutFunds event
+                    UsersWithoutFunds::<T>::insert(user_account, ());
+                    Self::deposit_event(Event::<T>::UserWithoutFunds {
+                        who: user_account.clone(),
+                    });
+                } else {
+                    // If the user does have enough funds to pay for its storage:
 
-                // Clear the user from the UsersWithoutFunds mapping
-                // TODO: Design a more robust way of handling out-of-funds users
-                UsersWithoutFunds::<T>::remove(user_account);
+                    // Clear the user from the UsersWithoutFunds mapping
+                    // TODO: Design a more robust way of handling out-of-funds users
+                    UsersWithoutFunds::<T>::remove(user_account);
 
-                // Get the payment account of the SP
-                let provider_payment_account = expect_or_err!(
+                    // Get the payment account of the SP
+                    let provider_payment_account = expect_or_err!(
                     <T::ProvidersPallet as ReadProvidersInterface>::get_provider_payment_account(
                         *provider_id
                     ),
@@ -675,47 +681,114 @@ where
                     Error::<T>::ProviderInconsistencyError
                 );
 
-                // Check if the total amount charged would overflow
-                // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
-                ensure!(
-                    total_amount_charged
+                    // Check if the total amount charged would overflow
+                    // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
+                    ensure!(
+                        total_amount_charged
+                            .checked_add(&amount_to_charge)
+                            .is_some(),
+                        ArithmeticError::Overflow
+                    );
+
+                    // Charge the payment stream from the user's balance
+                    T::NativeBalance::transfer(
+                        user_account,
+                        &provider_payment_account,
+                        amount_to_charge,
+                        Preservation::Preserve,
+                    )?;
+
+                    // Set the last charged price index to be the price index of the last chargeable block
+                    DynamicRatePaymentStreams::<T>::mutate(
+                        provider_id,
+                        user_account,
+                        |payment_stream| {
+                            let payment_stream = expect_or_err!(
+                                payment_stream,
+                                "Payment stream should exist if it was found before.",
+                                Error::<T>::PaymentStreamNotFound
+                            );
+                            payment_stream.price_index_when_last_charged =
+                                price_index_at_last_chargeable_block;
+                            Ok::<(), DispatchError>(())
+                        },
+                    )?;
+
+                    // Update the total amount charged:
+                    total_amount_charged = total_amount_charged
                         .checked_add(&amount_to_charge)
-                        .is_some(),
-                    ArithmeticError::Overflow
-                );
-
-                // Charge the payment stream from the user's balance
-                T::NativeBalance::transfer(
-                    user_account,
-                    &provider_payment_account,
-                    amount_to_charge,
-                    Preservation::Preserve,
-                )?;
-
-                // Set the last charged price index to be the price index of the last chargeable block
-                DynamicRatePaymentStreams::<T>::mutate(
-                    provider_id,
-                    user_account,
-                    |payment_stream| {
-                        let payment_stream = expect_or_err!(
-                            payment_stream,
-                            "Payment stream should exist if it was found before.",
-                            Error::<T>::PaymentStreamNotFound
-                        );
-                        payment_stream.price_index_when_last_charged =
-                            payment_stream.price_index_at_last_chargeable_block;
-                        Ok::<(), DispatchError>(())
-                    },
-                )?;
-
-                // Update the total amount charged:
-                total_amount_charged = total_amount_charged
-                    .checked_add(&amount_to_charge)
-                    .ok_or(Error::<T>::ChargeOverflow)?;
+                        .ok_or(Error::<T>::ChargeOverflow)?;
+                }
             }
         }
 
         Ok(total_amount_charged)
+    }
+
+    /// This function gets the Providers that submitted a valid proof in the last tick using the `ReadProofSubmittersInterface`,
+    /// and updates the last chargeable block and last chargeable price index of those Providers.
+    pub fn do_update_last_chargeable_info(
+        n: BlockNumberFor<T>,
+        weight: &mut frame_support::weights::WeightMeter,
+    ) {
+        // Get last block's number
+        let n = n.saturating_sub(One::one());
+        // Get the Providers that submitted a valid proof in the last tick, if there are any
+        let proof_submitters =
+            <T::ProvidersProofSubmitters as ReadProofSubmittersInterface>::get_proof_submitters_for_tick(&n);
+        weight.consume(T::DbWeight::get().reads(1));
+
+        // If there are any proof submitters in the last tick
+        if let Some(proof_submitters) = proof_submitters {
+            // Update all Providers
+            // Iterate through the proof submitters and update their last chargeable block and last chargeable price index
+            for provider_id in proof_submitters {
+                // Update the last chargeable block and last chargeable price index of the Provider
+                LastChargeableInfo::<T>::mutate(provider_id, |provider_info| {
+                    provider_info.last_chargeable_block = n;
+                    provider_info.price_index = AccumulatedPriceIndex::<T>::get();
+                });
+                weight.consume(T::DbWeight::get().reads_writes(1, 1));
+            }
+
+            // TODO: What happens if we do not have enough weight? It should never happen so we should have a way to just reserve the
+            // needed weight in the block for this, such as what `on_initialize` does.
+        }
+    }
+
+    /// This functions calculates the current price of services provided for dynamic-rate streams and updates it in storage.
+    pub fn do_update_current_price_per_unit_per_block(
+        weight: &mut frame_support::weights::WeightMeter,
+    ) {
+        // Get the total used capacity of the network
+        let _total_used_capacity =
+            <T::ProvidersPallet as SystemMetricsInterface>::get_total_used_capacity();
+        weight.consume(T::DbWeight::get().reads(1));
+
+        // Get the total capacity of the network
+        let _total_capacity = <T::ProvidersPallet as SystemMetricsInterface>::get_total_capacity();
+        weight.consume(T::DbWeight::get().reads(1));
+
+        // Calculate the current price per unit per block
+        // TODO: Once the curve of price per unit per block is defined, implement it here
+        let current_price_per_unit_per_block: BalanceOf<T> =
+            CurrentPricePerUnitPerBlock::<T>::get();
+
+        // Update it in storage
+        CurrentPricePerUnitPerBlock::<T>::put(current_price_per_unit_per_block);
+        weight.consume(T::DbWeight::get().writes(1));
+    }
+
+    pub fn do_update_price_index(weight: &mut frame_support::weights::WeightMeter) {
+        // Get the current price
+        let current_price = CurrentPricePerUnitPerBlock::<T>::get();
+        weight.consume(T::DbWeight::get().reads(1));
+
+        // Add it to the accumulated price index
+        AccumulatedPriceIndex::<T>::mutate(|price_index| {
+            *price_index = price_index.saturating_add(current_price);
+        });
+        weight.consume(T::DbWeight::get().reads_writes(1, 1));
     }
 
     /// This function holds the logic that updates the deposit of a User based on the new deposit that should be held from them.
@@ -914,107 +987,5 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     ) -> Option<Self::DynamicRatePaymentStream> {
         // Return the payment stream information
         DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
-    }
-}
-
-impl<T: pallet::Config> PaymentManager for pallet::Pallet<T> {
-    type Balance = T::NativeBalance;
-    type AccountId = T::AccountId;
-    type ProviderId = ProviderIdFor<T>;
-    type BlockNumber = BlockNumberFor<T>;
-
-    fn update_last_chargeable_block(
-        provider_id: &Self::ProviderId,
-        user_account: &Self::AccountId,
-        new_last_chargeable_block: Self::BlockNumber,
-    ) -> DispatchResult {
-        // Check that the given ID belongs to an actual Provider
-        ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
-            Error::<T>::NotAProvider
-        );
-
-        // Ensure that the new last chargeable block number that is being set is not greater than the current block number
-        ensure!(
-            new_last_chargeable_block <= frame_system::Pallet::<T>::block_number(),
-            Error::<T>::InvalidLastChargeableBlockNumber
-        );
-
-        // Get the information of the payment stream to update
-        let payment_stream = FixedRatePaymentStreams::<T>::get(provider_id, user_account)
-            .ok_or(Error::<T>::PaymentStreamNotFound)?;
-
-        // Ensure that the new last chargeable block number that is being set is greater than the previous last chargeable block number of the payment stream
-        ensure!(
-            new_last_chargeable_block > payment_stream.last_chargeable_block,
-            Error::<T>::InvalidLastChargeableBlockNumber
-        );
-
-        // Ensure that the new last chargeable block number is greater than the last charged block number of the payment stream
-        expect_or_err!(
-			new_last_chargeable_block > payment_stream.last_charged_block,
-			"Last chargeable block (which was checked previously) should always be greater than or equal to the last charged block.",
-			Error::<T>::LastChargedGreaterThanLastChargeable,
-			bool
-		);
-
-        // Update the last chargeable block number of the payment stream
-        FixedRatePaymentStreams::<T>::mutate(provider_id, user_account, |payment_stream| {
-            let payment_stream = expect_or_err!(
-                payment_stream,
-                "Payment stream should exist if it was found before.",
-                Error::<T>::PaymentStreamNotFound
-            );
-            payment_stream.last_chargeable_block = new_last_chargeable_block;
-            Ok::<(), DispatchError>(())
-        })?;
-
-        // Return a successful DispatchResult
-        Ok(())
-    }
-
-    fn update_chargeable_price_index(
-        provider_id: &Self::ProviderId,
-        user_account: &Self::AccountId,
-        new_last_chargeable_price_index: <Self::Balance as frame_support::traits::fungible::Inspect<Self::AccountId>>::Balance,
-    ) -> DispatchResult {
-        // Check that the given ID belongs to an actual Provider
-        ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
-            Error::<T>::NotAProvider
-        );
-
-        // Get the information of the payment stream to update
-        let payment_stream = DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
-            .ok_or(Error::<T>::PaymentStreamNotFound)?;
-
-        // Ensure that the new last chargeable price index that is being set is greater than the previous last chargeable price index of the payment stream
-        // (it does not make sense to update it to the same or a lower value)
-        ensure!(
-            new_last_chargeable_price_index > payment_stream.price_index_at_last_chargeable_block,
-            Error::<T>::InvalidLastChargeablePriceIndex
-        );
-
-        // Ensure that the new last chargeable price index is greater than the last charged price index of the payment stream
-        expect_or_err!(
-            new_last_chargeable_price_index > payment_stream.price_index_when_last_charged,
-            "Last chargeable price index (which was checked previously) should always be greater than or equal to the last charged price index.",
-            Error::<T>::LastChargedGreaterThanLastChargeable,
-            bool
-        );
-
-        // Update the last chargeable price index of the payment stream
-        DynamicRatePaymentStreams::<T>::mutate(provider_id, user_account, |payment_stream| {
-            let payment_stream = expect_or_err!(
-                payment_stream,
-                "Payment stream should exist if it was found before.",
-                Error::<T>::PaymentStreamNotFound
-            );
-            payment_stream.price_index_at_last_chargeable_block = new_last_chargeable_price_index;
-            Ok::<(), DispatchError>(())
-        })?;
-
-        // Return a successful DispatchResult
-        Ok(())
     }
 }

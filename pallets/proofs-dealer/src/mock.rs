@@ -1,7 +1,10 @@
 #![allow(non_camel_case_types)]
 
+use core::marker::PhantomData;
 use frame_support::{
-    derive_impl, parameter_types,
+    derive_impl,
+    pallet_prelude::Get,
+    parameter_types,
     traits::{Everything, Randomness},
     weights::constants::RocksDbWeight,
 };
@@ -16,7 +19,7 @@ use sp_runtime::{
     BuildStorage, DispatchError, DispatchResult, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
-use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieLayout};
+use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use system::pallet_prelude::BlockNumberFor;
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -110,6 +113,13 @@ impl pallet_balances::Config for Test {
     type MaxFreezes = ConstU32<10>;
 }
 
+pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
+pub struct DefaultMerkleRoot<T>(PhantomData<T>);
+impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
+    fn get() -> HasherOutT<T> {
+        sp_trie::empty_trie_root::<T>()
+    }
+}
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -117,6 +127,7 @@ impl pallet_storage_providers::Config for Test {
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = H256;
     type ReadAccessGroupId = u32;
     type MaxMultiAddressSize = ConstU32<100>;
@@ -125,6 +136,7 @@ impl pallet_storage_providers::Config for Test {
     type MaxBsps = ConstU32<100>;
     type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
+    type BucketDeposit = ConstU128<10>;
     type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
     type SpMinCapacity = ConstU32<2>;
@@ -145,6 +157,8 @@ impl crate::Config for Test {
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = ConstU32<10>;
     type MaxCustomChallengesPerBlock = ConstU32<10>;
+    type MaxSubmittersPerTick = ConstU32<1000>; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
+    type TargetTicksStorageOfSubmitters = ConstU32<3>;
     type ChallengeHistoryLength = ConstU64<30>;
     type ChallengesQueueLength = ConstU32<25>;
     type CheckpointChallengePeriod = ConstU64<10>;
@@ -205,9 +219,9 @@ where
     type Key = <T::Hash as sp_core::Hasher>::Out;
 
     fn apply_delta(
-        root: &Self::Key,
+        _root: &Self::Key,
         mutations: &[(Self::Key, TrieMutation)],
-        proof: &Self::Proof,
+        _proof: &Self::Proof,
     ) -> Result<(MemoryDB<T::Hash>, Self::Key), DispatchError> {
         let last_key = mutations.last().unwrap().0;
 

@@ -81,6 +81,13 @@ pub type RandomChallengesPerBlockFor<T> = <T as crate::Config>::RandomChallenges
 /// Syntactic sugar for the MaxCustomChallengesPerBlock type used in the proofs pallet.
 pub type MaxCustomChallengesPerBlockFor<T> = <T as crate::Config>::MaxCustomChallengesPerBlock;
 
+/// Syntactic sugar for the MaxSubmittersPerBlock type used in the proofs pallet.
+pub type MaxSubmittersPerTickFor<T> = <T as crate::Config>::MaxSubmittersPerTick;
+
+/// Syntactic sugar for the TargetBlocksStorageOfSubmitters type used in the proofs pallet.
+pub type TargetTicksStorageOfSubmittersFor<T> =
+    <T as crate::Config>::TargetTicksStorageOfSubmitters;
+
 /// Syntactic sugar for the ChallengesQueueLength type used in the proofs pallet.
 pub type ChallengesQueueLengthFor<T> = <T as crate::Config>::ChallengesQueueLength;
 
@@ -106,7 +113,8 @@ pub type TreasuryAccountFor<T> = <T as crate::Config>::Treasury;
 pub type ProvidersPalletFor<T> = <T as crate::Config>::ProvidersPallet;
 
 /// Syntactic sugar for the Provider ID type used in the proofs pallet.
-pub type ProviderFor<T> = <<T as crate::Config>::ProvidersPallet as ProvidersInterface>::ProviderId;
+pub type ProviderIdFor<T> =
+    <<T as crate::Config>::ProvidersPallet as ProvidersInterface>::ProviderId;
 
 /// Syntactic sugar for the ForestVerifier type used in the proofs pallet.
 pub type ForestVerifierFor<T> = <T as crate::Config>::ForestVerifier;

@@ -2,7 +2,15 @@
   "$schema": "https://biomejs.dev/schemas/1.8.2/schema.json",
   "files": {
     "include": ["*.js", "*.ts", "*.json", "*.yml", "*.md"],
-    "ignore": ["./dist/*", "./node_modules/*", "./target/*","**/tmp/*", "**/typegen/*", "*.spec.json"]
+    "ignore": [
+      "./dist/*",
+      "./node_modules/*",
+      "./target/*",
+      "**/tmp/*",
+      "**/typegen/*",
+      "*.spec.json",
+      "**/augment-types.ts"
+    ]
   },
   "organizeImports": {
     "enabled": true
@@ -18,11 +26,10 @@
   },
   "javascript": {
     "formatter": {
-      "trailingCommas":"none",
+      "trailingCommas": "none",
       "semicolons": "always",
       "indentStyle": "space",
       "lineWidth": 100
-      
     }
   },
   "linter": {
@@ -32,6 +39,9 @@
       "suspicious": {
         "noExplicitAny": "off",
         "noAsyncPromiseExecutor": "off"
+      },
+      "performance":{
+        "noAccumulatingSpread": "off"
       }
     }
   }

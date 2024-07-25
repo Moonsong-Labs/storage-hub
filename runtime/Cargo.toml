@@ -19,6 +19,7 @@ substrate-wasm-builder = { workspace = true, optional = true }
 
 [dependencies]
 codec = { workspace = true }
+num-bigint = { workspace = true }
 hex-literal = { workspace = true, optional = true }
 log = { workspace = true }
 smallvec = { workspace = true }
@@ -29,11 +30,14 @@ pallet-file-system = { workspace = true }
 pallet-file-system-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
+pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-randomness = { workspace = true }
 pallet-bucket-nfts = { workspace = true }
 pallet-payment-streams = { workspace = true }
 
+shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
+shp-file-metadata = { workspace = true }
 shp-forest-verifier = { workspace = true }
 shp-traits = { workspace = true }
 
@@ -137,6 +141,10 @@ std = [
 	"polkadot-parachain-primitives/std",
 	"polkadot-runtime-common/std",
 	"scale-info/std",
+	"shp-constants/std",
+	"shp-file-key-verifier/std",
+	"shp-file-metadata/std",
+	"shp-forest-verifier/std",
 	"shp-traits/std",
 	"sp-api/std",
 	"sp-block-builder/std",
@@ -185,6 +193,11 @@ runtime-benchmarks = [
 	"parachains-common/runtime-benchmarks",
 	"polkadot-parachain-primitives/runtime-benchmarks",
 	"polkadot-runtime-common/runtime-benchmarks",
+	"shp-constants/runtime-benchmarks",
+	"shp-file-key-verifier/runtime-benchmarks",
+	"shp-file-metadata/runtime-benchmarks",
+	"shp-forest-verifier/runtime-benchmarks",
+	"shp-traits/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 	"xcm-builder/runtime-benchmarks",
 	"xcm-executor/runtime-benchmarks",
@@ -218,6 +231,11 @@ try-runtime = [
 	"pallet-xcm/try-runtime",
 	"parachain-info/try-runtime",
 	"polkadot-runtime-common/try-runtime",
+	"shp-constants/try-runtime",
+	"shp-file-key-verifier/try-runtime",
+	"shp-file-metadata/try-runtime",
+	"shp-forest-verifier/try-runtime",
+	"shp-traits/try-runtime",
 	"sp-runtime/try-runtime",
 ]
 

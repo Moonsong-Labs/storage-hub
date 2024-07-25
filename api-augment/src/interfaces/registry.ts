@@ -70,6 +70,7 @@ import type {
   PalletFileSystemCall,
   PalletFileSystemError,
   PalletFileSystemEvent,
+  PalletFileSystemExpiredItems,
   PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletMessageQueueBookState,
@@ -113,6 +114,7 @@ import type {
   PalletPaymentStreamsEvent,
   PalletPaymentStreamsFixedRatePaymentStream,
   PalletPaymentStreamsHoldReason,
+  PalletPaymentStreamsProviderLastChargeable,
   PalletProofsDealerCall,
   PalletProofsDealerError,
   PalletProofsDealerEvent,
@@ -155,8 +157,8 @@ import type {
   PolkadotPrimitivesV6UpgradeGoAhead,
   PolkadotPrimitivesV6UpgradeRestriction,
   ShpFileKeyVerifierFileKeyProof,
-  ShpFileKeyVerifierFileMetadata,
-  ShpFileKeyVerifierFingerprint,
+  ShpFileMetadataFileMetadata,
+  ShpFileMetadataFingerprint,
   ShpTraitsTrieRemoveMutation,
   SpArithmeticArithmeticError,
   SpConsensusAuraSr25519AppSr25519Public,
@@ -315,6 +317,7 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemCall: PalletFileSystemCall;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
+    PalletFileSystemExpiredItems: PalletFileSystemExpiredItems;
     PalletFileSystemStorageRequestBspsMetadata: PalletFileSystemStorageRequestBspsMetadata;
     PalletFileSystemStorageRequestMetadata: PalletFileSystemStorageRequestMetadata;
     PalletMessageQueueBookState: PalletMessageQueueBookState;
@@ -358,6 +361,7 @@ declare module "@polkadot/types/types/registry" {
     PalletPaymentStreamsEvent: PalletPaymentStreamsEvent;
     PalletPaymentStreamsFixedRatePaymentStream: PalletPaymentStreamsFixedRatePaymentStream;
     PalletPaymentStreamsHoldReason: PalletPaymentStreamsHoldReason;
+    PalletPaymentStreamsProviderLastChargeable: PalletPaymentStreamsProviderLastChargeable;
     PalletProofsDealerCall: PalletProofsDealerCall;
     PalletProofsDealerError: PalletProofsDealerError;
     PalletProofsDealerEvent: PalletProofsDealerEvent;
@@ -400,8 +404,8 @@ declare module "@polkadot/types/types/registry" {
     PolkadotPrimitivesV6UpgradeGoAhead: PolkadotPrimitivesV6UpgradeGoAhead;
     PolkadotPrimitivesV6UpgradeRestriction: PolkadotPrimitivesV6UpgradeRestriction;
     ShpFileKeyVerifierFileKeyProof: ShpFileKeyVerifierFileKeyProof;
-    ShpFileKeyVerifierFileMetadata: ShpFileKeyVerifierFileMetadata;
-    ShpFileKeyVerifierFingerprint: ShpFileKeyVerifierFingerprint;
+    ShpFileMetadataFileMetadata: ShpFileMetadataFileMetadata;
+    ShpFileMetadataFingerprint: ShpFileMetadataFingerprint;
     ShpTraitsTrieRemoveMutation: ShpTraitsTrieRemoveMutation;
     SpArithmeticArithmeticError: SpArithmeticArithmeticError;
     SpConsensusAuraSr25519AppSr25519Public: SpConsensusAuraSr25519AppSr25519Public;

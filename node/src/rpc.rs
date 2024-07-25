@@ -11,9 +11,12 @@ use sc_consensus_manual_seal::{
     rpc::{ManualSeal, ManualSealApiServer},
     EngineCommand,
 };
+use shc_common::types::HasherOutT;
 use shc_file_manager::traits::FileStorage;
-use shc_rpc::FileStorageApiServer;
-use shc_rpc::FileStorageRpc;
+use shc_forest_manager::traits::ForestStorage;
+use shc_rpc::StorageHubClientApiServer;
+use shc_rpc::StorageHubClientRpc;
+use shc_rpc::StorageHubClientRpcConfig;
 use sp_core::H256;
 use sp_trie::TrieLayout;
 use storage_hub_runtime::{opaque::Block, AccountId, Balance, Nonce};
@@ -23,19 +26,18 @@ use sc_transaction_pool_api::TransactionPool;
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
-use tokio::sync::RwLock;
 
 /// A type representing all RPC extensions.
 pub type RpcExtension = jsonrpsee::RpcModule<()>;
 
 /// Full client dependencies
-pub struct FullDeps<C, P, FL> {
+pub struct FullDeps<C, P, T, FL, FS> {
     /// The client instance to use.
     pub client: Arc<C>,
     /// Transaction pool instance.
     pub pool: Arc<P>,
     /// File Storage instance.
-    pub maybe_file_storage: Option<Arc<RwLock<FL>>>,
+    pub maybe_storage_hub_client_config: Option<StorageHubClientRpcConfig<T, FL, FS>>,
     /// Manual seal command sink
     pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<H256>>>,
     /// Whether to deny unsafe calls
@@ -43,8 +45,8 @@ pub struct FullDeps<C, P, FL> {
 }
 
 /// Instantiate all RPC extensions.
-pub fn create_full<C, P, T, FL>(
-    deps: FullDeps<C, P, FL>,
+pub fn create_full<C, P, T, FL, FS>(
+    deps: FullDeps<C, P, T, FL, FS>,
 ) -> Result<RpcExtension, Box<dyn std::error::Error + Send + Sync>>
 where
     C: ProvideRuntimeApi<Block>
@@ -59,6 +61,8 @@ where
     P: TransactionPool + Send + Sync + 'static,
     T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
+    FS: ForestStorage<T> + Send + Sync,
+    HasherOutT<T>: TryFrom<[u8; 32]>,
 {
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
     use substrate_frame_rpc_system::{System, SystemApiServer};
@@ -67,7 +71,7 @@ where
     let FullDeps {
         client,
         pool,
-        maybe_file_storage,
+        maybe_storage_hub_client_config,
         command_sink,
         deny_unsafe,
     } = deps;
@@ -75,8 +79,8 @@ where
     io.merge(System::new(client.clone(), pool, deny_unsafe).into_rpc())?;
     io.merge(TransactionPayment::new(client).into_rpc())?;
 
-    if let Some(file_storage) = maybe_file_storage {
-        io.merge(FileStorageRpc::new(file_storage).into_rpc())?;
+    if let Some(storage_hub_client_config) = maybe_storage_hub_client_config {
+        io.merge(StorageHubClientRpc::new(storage_hub_client_config).into_rpc())?;
     }
 
     if let Some(command_sink) = command_sink {

@@ -223,6 +223,18 @@ declare module '@polkadot/api-base/types/errors' {
              **/
             FailedTypeConversion: AugmentedError<ApiType>;
             /**
+             * File key already pending deletion.
+             **/
+            FileKeyAlreadyPendingDeletion: AugmentedError<ApiType>;
+            /**
+             * File key not found in pending deletion requests.
+             **/
+            FileKeyNotPendingDeletion: AugmentedError<ApiType>;
+            /**
+             * File size cannot be zero.
+             **/
+            FileSizeCannotBeZero: AugmentedError<ApiType>;
+            /**
              * Failed to get value when just checked it existed.
              **/
             ImpossibleFailedToGetValue: AugmentedError<ApiType>;
@@ -236,6 +248,14 @@ declare module '@polkadot/api-base/types/errors' {
              **/
             MaxBlockNumberReached: AugmentedError<ApiType>;
             /**
+             * Max number of user pending deletion requests reached.
+             **/
+            MaxUserPendingDeletionRequestsReached: AugmentedError<ApiType>;
+            /**
+             * Unauthorized operation, signer is not an MSP of the bucket id.
+             **/
+            MspNotStoringBucket: AugmentedError<ApiType>;
+            /**
              * Account is not a BSP.
              **/
             NotABsp: AugmentedError<ApiType>;
@@ -247,6 +267,10 @@ declare module '@polkadot/api-base/types/errors' {
              * Operation failed because the account is not the owner of the bucket.
              **/
             NotBucketOwner: AugmentedError<ApiType>;
+            /**
+             * Unauthorized operation, signer does not own the file.
+             **/
+            NotFileOwner: AugmentedError<ApiType>;
             /**
              * Root of the provider not found.
              **/
@@ -826,6 +850,10 @@ declare module '@polkadot/api-base/types/errors' {
              * This should not be possible, as the `Balance` type should be an unsigned integer type.
              **/
             StakeCouldNotBeConverted: AugmentedError<ApiType>;
+            /**
+             * The limit of Providers that can submit a proof in a single tick has been reached.
+             **/
+            TooManyValidProofSubmitters: AugmentedError<ApiType>;
             /**
              * Provider is submitting a proof when they have a zero root.
              * Providers with zero roots are not providing any service, so they should not be

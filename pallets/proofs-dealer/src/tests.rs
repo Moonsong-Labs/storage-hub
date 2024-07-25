@@ -4,20 +4,23 @@ use std::vec;
 use crate::pallet::Event;
 use crate::types::{
     ChallengeHistoryLengthFor, ChallengeTicksToleranceFor, ChallengesQueueLengthFor,
-    CheckpointChallengePeriodFor, KeyProof, MaxCustomChallengesPerBlockFor, ProvidersPalletFor,
-    RandomChallengesPerBlockFor,
+    CheckpointChallengePeriodFor, KeyProof, MaxCustomChallengesPerBlockFor,
+    MaxSubmittersPerTickFor, ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
+    TargetTicksStorageOfSubmittersFor,
 };
 use crate::{mock::*, types::Proof};
 use crate::{
-    ChallengeTickToChallengedProviders, ChallengesTicker, LastCheckpointTick,
+    ChallengeTickToChallengedProviders, ChallengesTicker, LastCheckpointTick, LastDeletedTick,
     LastTickProviderSubmittedProofFor, SlashableProviders, TickToChallengesSeed,
-    TickToCheckpointChallenges,
+    TickToCheckpointChallenges, ValidProofSubmittersLastTicks,
 };
 use codec::Encode;
 use frame_support::{
     assert_err, assert_noop, assert_ok,
-    traits::{fungible::Mutate, OnPoll},
+    pallet_prelude::Weight,
+    traits::{fungible::Mutate, OnIdle, OnPoll},
     weights::WeightMeter,
+    BoundedBTreeSet,
 };
 use shp_traits::{ProofsDealerInterface, ProvidersInterface, TrieRemoveMutation};
 use sp_core::{blake2_256, Get, Hasher, H256};
@@ -51,7 +54,7 @@ fn challenge_submit_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(user, file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -100,10 +103,7 @@ fn challenge_submit_twice_succeed() {
         let file_key_2 = BlakeTwo256::hash(b"file_key_2");
 
         // Dispatch challenge extrinsic twice.
-        assert_ok!(ProofsDealer::challenge(
-            RuntimeOrigin::signed(1),
-            file_key_1
-        ));
+        assert_ok!(ProofsDealer::challenge(user_1, file_key_1));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -114,10 +114,7 @@ fn challenge_submit_twice_succeed() {
             .into(),
         );
 
-        assert_ok!(ProofsDealer::challenge(
-            RuntimeOrigin::signed(2),
-            file_key_2
-        ));
+        assert_ok!(ProofsDealer::challenge(user_2, file_key_2));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -165,8 +162,8 @@ fn challenge_submit_existing_challenge_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic twice.
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(user.clone(), file_key));
+        assert_ok!(ProofsDealer::challenge(user, file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -209,7 +206,7 @@ fn challenge_submit_in_two_rounds_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic twice.
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(user.clone(), file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -238,7 +235,7 @@ fn challenge_submit_in_two_rounds_succeed() {
 
         // Dispatch challenge extrinsic twice.
         let file_key = BlakeTwo256::hash(b"file_key_2");
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(user, file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -286,7 +283,18 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -294,7 +302,7 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
         let file_key = BlakeTwo256::hash(b"file_key");
 
         // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+        assert_ok!(ProofsDealer::challenge(user, file_key));
 
         // Check that the event is emitted.
         System::assert_last_event(
@@ -343,7 +351,7 @@ fn challenge_submit_by_regular_user_with_no_funds_fail() {
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key),
+            ProofsDealer::challenge(user, file_key),
             crate::Error::<Test>::FeeChargeFailed
         );
     });
@@ -370,12 +378,12 @@ fn challenge_overflow_challenges_queue_fail() {
         let queue_size: u32 = <Test as crate::Config>::ChallengesQueueLength::get();
         for i in 0..queue_size {
             let file_key = BlakeTwo256::hash(&i.to_le_bytes());
-            assert_ok!(ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key));
+            assert_ok!(ProofsDealer::challenge(user.clone(), file_key));
         }
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::challenge(RuntimeOrigin::signed(1), file_key),
+            ProofsDealer::challenge(user, file_key),
             crate::Error::<Test>::ChallengesQueueOverflow
         );
     });
@@ -481,6 +489,279 @@ fn proofs_dealer_trait_challenge_with_priority_overflow_challenges_queue_fail() 
 }
 
 #[test]
+fn proofs_dealer_trait_initialise_challenge_cycle_success() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Mock a Provider ID.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+
+        // Register user as a Provider in Providers pallet.
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                data_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+            },
+        );
+
+        // Dispatch initialise provider extrinsic.
+        assert_ok!(ProofsDealer::force_initialise_challenge_cycle(
+            RuntimeOrigin::root(),
+            provider_id
+        ));
+
+        // Check that the Provider's last tick was set to 1.
+        let last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedProofFor::<Test>::get(&provider_id).unwrap();
+        assert_eq!(last_tick_provider_submitted_proof, 1);
+
+        // Check that the Provider's deadline was set to `challenge_period + challenge_ticks_tolerance`
+        // after the initialisation.
+        let stake =
+            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id).unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(stake);
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let expected_deadline =
+            last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
+        let deadline =
+            ChallengeTickToChallengedProviders::<Test>::get(expected_deadline, provider_id);
+        assert_eq!(deadline, Some(()));
+
+        // Check that the last event emitted is the correct one.
+        System::assert_last_event(
+            Event::NewChallengeCycleInitialised {
+                current_tick: 1,
+                provider: provider_id,
+                maybe_provider_account: Some(1u64),
+            }
+            .into(),
+        );
+    });
+}
+
+#[test]
+fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Mock a Provider ID.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+
+        // Register user as a Provider in Providers pallet.
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                data_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+            },
+        );
+
+        // Dispatch initialise provider extrinsic.
+        assert_ok!(ProofsDealer::force_initialise_challenge_cycle(
+            RuntimeOrigin::root(),
+            provider_id
+        ));
+
+        // Check that the Provider's last tick was set to 1.
+        let last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedProofFor::<Test>::get(&provider_id).unwrap();
+        assert_eq!(last_tick_provider_submitted_proof, 1);
+
+        // Check that the Provider's deadline was set to `challenge_period + challenge_ticks_tolerance`
+        // after the initialisation.
+        let stake =
+            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id).unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(stake);
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
+        let deadline = ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id);
+        assert_eq!(deadline, Some(()));
+
+        // Let some blocks pass (less than `ChallengeTicksTolerance` blocks).
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
+
+        // Re-initialise the provider.
+        assert_ok!(ProofsDealer::force_initialise_challenge_cycle(
+            RuntimeOrigin::root(),
+            provider_id
+        ));
+
+        // Check that the Provider's last tick is the current now.
+        let last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedProofFor::<Test>::get(&provider_id).unwrap();
+        let current_tick = ChallengesTicker::<Test>::get();
+        assert_eq!(last_tick_provider_submitted_proof, current_tick);
+
+        // Check that the Provider's deadline was set to `challenge_period + challenge_ticks_tolerance`
+        // after the initialisation.
+        let stake =
+            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id).unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(stake);
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let expected_deadline =
+            last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
+        let deadline =
+            ChallengeTickToChallengedProviders::<Test>::get(expected_deadline, provider_id);
+        assert_eq!(deadline, Some(()));
+
+        // Check that the Provider no longer has the previous deadline.
+        let deadline = ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id);
+        assert_eq!(deadline, None);
+
+        // Advance beyond the previous deadline block and check that the Provider is not marked as slashable.
+        run_to_block(current_block + challenge_ticks_tolerance + 1);
+        assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
+    });
+}
+
+#[test]
+fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_success() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Mock two Provider IDs.
+        let provider_id_1 = BlakeTwo256::hash(b"provider_id_1");
+        let provider_id_2 = BlakeTwo256::hash(b"provider_id_2");
+
+        // Register users as a Provider in Providers pallet.
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id_1,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id_1,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                data_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+            },
+        );
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &2,
+            provider_id_2,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id_2,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                data_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 2u64,
+                payment_account: Default::default(),
+            },
+        );
+
+        // Initialise providers
+        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id_1));
+        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id_2));
+
+        // Check that the Providers' last tick was set to 1.
+        let last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedProofFor::<Test>::get(&provider_id_1).unwrap();
+        assert_eq!(last_tick_provider_submitted_proof, 1);
+        let last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedProofFor::<Test>::get(&provider_id_2).unwrap();
+        assert_eq!(last_tick_provider_submitted_proof, 1);
+
+        // Check that Provider 1's deadline was set to `challenge_period + challenge_ticks_tolerance`
+        // after the initialisation.
+        let stake =
+            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id_1).unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(stake);
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
+        let deadline =
+            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id_1);
+        assert_eq!(deadline, Some(()));
+
+        // Let some blocks pass (less than `ChallengeTicksTolerance` blocks).
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
+
+        // Re-initialise the provider.
+        assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id_1));
+
+        // Check that the Provider's last tick is the current now.
+        let last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedProofFor::<Test>::get(&provider_id_1).unwrap();
+        let current_tick = ChallengesTicker::<Test>::get();
+        assert_eq!(last_tick_provider_submitted_proof, current_tick);
+
+        // Check that the Provider's deadline was set to `challenge_period + challenge_ticks_tolerance`
+        // after the initialisation.
+        let stake =
+            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id_1).unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(stake);
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let expected_deadline =
+            last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
+        let deadline =
+            ChallengeTickToChallengedProviders::<Test>::get(expected_deadline, provider_id_1);
+        assert_eq!(deadline, Some(()));
+
+        // Check that the Provider no longer has the previous deadline.
+        let deadline =
+            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id_1);
+        assert_eq!(deadline, None);
+
+        // Advance beyond the previous deadline block and check that the Provider is not marked as slashable.
+        run_to_block(current_block + challenge_ticks_tolerance + 1);
+        assert!(!SlashableProviders::<Test>::contains_key(&provider_id_1));
+    });
+}
+
+#[test]
+fn proofs_dealer_trait_initialise_challenge_cycle_not_provider_fail() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Mock a Provider ID.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+
+        // Expect failure since the user is not a provider.
+        assert_noop!(
+            ProofsDealer::initialise_challenge_cycle(&provider_id),
+            crate::Error::<Test>::NotProvider
+        );
+    });
+}
+
+#[test]
 fn submit_proof_success() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
@@ -508,7 +789,18 @@ fn submit_proof_success() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -567,11 +859,7 @@ fn submit_proof_success() {
         };
 
         // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::submit_proof(
-            RuntimeOrigin::signed(1),
-            proof.clone(),
-            None
-        ));
+        assert_ok!(ProofsDealer::submit_proof(user, proof.clone(), None));
 
         // Check for event submitted.
         System::assert_last_event(
@@ -602,18 +890,128 @@ fn submit_proof_success() {
 }
 
 #[test]
-fn submit_proof_submitted_by_not_a_provider_success() {
+fn submit_proof_adds_provider_to_valid_submitters_set() {
     new_test_ext().execute_with(|| {
         // Go past genesis block so events get deposited.
         run_to_block(1);
 
         // Create user and add funds to the account.
-        let user = RuntimeOrigin::signed(2);
+        let user = RuntimeOrigin::signed(1);
         let user_balance = 1_000_000_000_000_000;
         assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-            &2,
+            &1,
             user_balance
         ));
+
+        // Register user as a Provider in Providers pallet.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                data_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
+            },
+        );
+
+        // Set Provider's last submitted proof block.
+        let current_tick = ChallengesTicker::<Test>::get();
+        let last_tick_provider_submitted_proof = current_tick;
+        LastTickProviderSubmittedProofFor::<Test>::insert(
+            &provider_id,
+            last_tick_provider_submitted_proof,
+        );
+
+        // Set Provider's deadline for submitting a proof.
+        // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id).unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = current_tick + challenge_period_plus_tolerance;
+        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+
+        // Advance less than `ChallengeTicksTolerance` blocks.
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
+
+        // Get the seed for block 2.
+        let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
+
+        // Calculate challenges from seed, so that we can mock a key proof for each.
+        let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
+            seed,
+            &provider_id,
+            RandomChallengesPerBlockFor::<Test>::get(),
+        );
+
+        // Creating a vec of proofs with some content to pass verification.
+        let mut key_proofs = BTreeMap::new();
+        for challenge in challenges {
+            key_proofs.insert(
+                challenge,
+                KeyProof::<Test> {
+                    proof: CompactProof {
+                        encoded_nodes: vec![vec![0]],
+                    },
+                    challenge_count: Default::default(),
+                },
+            );
+        }
+
+        // Mock a proof.
+        let proof = Proof::<Test> {
+            forest_proof: CompactProof {
+                encoded_nodes: vec![vec![0]],
+            },
+            key_proofs,
+        };
+
+        // Dispatch challenge extrinsic.
+        assert_ok!(ProofsDealer::submit_proof(user, proof.clone(), None));
+
+        // Check for event submitted.
+        System::assert_last_event(
+            Event::ProofAccepted {
+                provider: provider_id,
+                proof,
+            }
+            .into(),
+        );
+
+        // Check that the Provider is in the valid submitters set.
+        assert!(
+            ValidProofSubmittersLastTicks::<Test>::get(ChallengesTicker::<Test>::get())
+                .unwrap()
+                .contains(&provider_id)
+        );
+    });
+}
+
+#[test]
+fn submit_proof_submitted_by_not_a_provider_success() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
 
         // Register user as a Provider in Providers pallet.
         // The registered Provider ID will be different from the one that will be used in the proof.
@@ -630,7 +1028,18 @@ fn submit_proof_submitted_by_not_a_provider_success() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -710,7 +1119,18 @@ fn submit_proof_with_checkpoint_challenges_success() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -757,7 +1177,7 @@ fn submit_proof_with_checkpoint_challenges_success() {
         let mut key_proofs = BTreeMap::new();
         for challenge in &challenges {
             key_proofs.insert(
-                challenge.clone(),
+                *challenge,
                 KeyProof::<Test> {
                     proof: CompactProof {
                         encoded_nodes: vec![vec![0]],
@@ -776,11 +1196,7 @@ fn submit_proof_with_checkpoint_challenges_success() {
         };
 
         // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::submit_proof(
-            RuntimeOrigin::signed(1),
-            proof,
-            None
-        ));
+        assert_ok!(ProofsDealer::submit_proof(user, proof, None));
     });
 }
 
@@ -812,7 +1228,18 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -865,7 +1292,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         let mut key_proofs = BTreeMap::new();
         for challenge in &challenges {
             key_proofs.insert(
-                challenge.clone(),
+                *challenge,
                 KeyProof::<Test> {
                     proof: CompactProof {
                         encoded_nodes: vec![vec![0]],
@@ -884,11 +1311,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         };
 
         // Dispatch challenge extrinsic.
-        assert_ok!(ProofsDealer::submit_proof(
-            RuntimeOrigin::signed(1),
-            proof,
-            None
-        ));
+        assert_ok!(ProofsDealer::submit_proof(user, proof, None));
 
         // Check if root of the provider was updated the last challenge key
         // Note: The apply_delta method is applying the mutation the root of the provider for every challenge key.
@@ -924,7 +1347,7 @@ fn submit_proof_caller_not_a_provider_fail() {
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::NotProvider
         );
     });
@@ -957,7 +1380,7 @@ fn submit_proof_provider_passed_not_registered_fail() {
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, Some(provider_id)),
+            ProofsDealer::submit_proof(user, proof, Some(provider_id)),
             crate::Error::<Test>::NotProvider
         );
     });
@@ -999,13 +1422,24 @@ fn submit_proof_empty_key_proofs_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::EmptyKeyProofs
         );
     });
@@ -1058,13 +1492,24 @@ fn submit_proof_no_record_of_last_proof_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::NoRecordOfLastSubmittedProof
         );
     });
@@ -1117,7 +1562,18 @@ fn submit_proof_challenges_block_not_reached_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1126,7 +1582,7 @@ fn submit_proof_challenges_block_not_reached_fail() {
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::ChallengesTickNotReached
         );
     });
@@ -1183,7 +1639,18 @@ fn submit_proof_challenges_block_too_old_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1195,7 +1662,7 @@ fn submit_proof_challenges_block_too_old_fail() {
         run_to_block(challenge_history_length * 2);
 
         // Dispatch challenge extrinsic.
-        let _ = ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None);
+        let _ = ProofsDealer::submit_proof(user, proof, None);
     });
 }
 
@@ -1249,7 +1716,18 @@ fn submit_proof_seed_not_found_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1264,7 +1742,7 @@ fn submit_proof_seed_not_found_fail() {
         TickToChallengesSeed::<Test>::remove(2);
 
         // Dispatch challenge extrinsic.
-        let _ = ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None);
+        let _ = ProofsDealer::submit_proof(user, proof, None);
     });
 }
 
@@ -1318,7 +1796,18 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1340,7 +1829,7 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
         LastCheckpointTick::<Test>::set(checkpoint_challenge_block);
 
         // Dispatch challenge extrinsic.
-        let _ = ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None);
+        let _ = ProofsDealer::submit_proof(user, proof, None);
     });
 }
 
@@ -1392,7 +1881,18 @@ fn submit_proof_forest_proof_verification_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1410,7 +1910,7 @@ fn submit_proof_forest_proof_verification_fail() {
 
         // Dispatch challenge extrinsic.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::ForestProofVerificationFailed
         );
     });
@@ -1464,7 +1964,18 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1485,7 +1996,7 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
         // and it will return the generated challenges as keys proven. The key proofs are an empty
         // vector, so it will fail saying that there are no key proofs for the keys proven.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::KeyProofNotFound
         );
     });
@@ -1519,7 +2030,18 @@ fn submit_proof_out_checkpoint_challenges_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1587,7 +2109,7 @@ fn submit_proof_out_checkpoint_challenges_fail() {
         // proofs for the regular challenges, not the checkpoint challenges, so it will fail saying
         // that there are no key proofs for the keys proven.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::KeyProofNotFound
         );
     });
@@ -1621,7 +2143,18 @@ fn submit_proof_key_proof_verification_fail() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -1670,7 +2203,7 @@ fn submit_proof_key_proof_verification_fail() {
         // for each key proven, but they are empty, so it will fail saying that the verification
         // failed.
         assert_noop!(
-            ProofsDealer::submit_proof(RuntimeOrigin::signed(1), proof, None),
+            ProofsDealer::submit_proof(user, proof, None),
             crate::Error::<Test>::KeyProofVerificationFailed
         );
     });
@@ -1991,14 +2524,6 @@ fn new_challenges_round_provider_marked_as_slashable() {
         // Go past genesis block so events get deposited.
         run_to_block(1);
 
-        // Create user and add funds to the account.
-        let user = RuntimeOrigin::signed(1);
-        let user_balance = 1_000_000_000_000_000;
-        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-            &1,
-            user_balance
-        ));
-
         // Register user as a Provider in Providers pallet.
         let provider_id = BlakeTwo256::hash(b"provider_id");
         pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
@@ -2013,7 +2538,18 @@ fn new_challenges_round_provider_marked_as_slashable() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -2082,22 +2618,6 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
         // Go past genesis block so events get deposited.
         run_to_block(1);
 
-        // Create an Alice user and add funds to the account.
-        let alice = RuntimeOrigin::signed(1);
-        let alice_balance = 1_000_000_000_000_000;
-        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-            &1,
-            alice_balance
-        ));
-
-        // Create a Bob user and add funds to the account.
-        let bob = RuntimeOrigin::signed(2);
-        let bob_balance = 1_000_000_000_000_000;
-        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-            &2,
-            bob_balance
-        ));
-
         // Register Alice as a Provider in Providers pallet.
         let alice_provider_id = BlakeTwo256::hash(b"alice_id");
         pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
@@ -2112,6 +2632,7 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 1u64,
                 payment_account: Default::default(),
             },
         );
@@ -2130,7 +2651,24 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
+                owner_account: 2u64,
                 payment_account: Default::default(),
+            },
+        );
+
+        // Set Alice and Bob's root to be an arbitrary value, different than the default root,
+        // to simulate that they are actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &alice_provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
+            },
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &bob_provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
             },
         );
 
@@ -2261,4 +2799,274 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
             Some(()),
         );
     });
+}
+
+mod on_idle_hook_tests {
+
+    use super::*;
+
+    #[test]
+    fn on_idle_hook_works() {
+        new_test_ext().execute_with(|| {
+            // Go past genesis block so events get deposited.
+            run_to_block(1);
+
+            // Register user as a Provider in Providers pallet.
+            let provider_id = BlakeTwo256::hash(b"provider_id");
+            pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+                &1,
+                provider_id,
+            );
+            pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+                &provider_id,
+                pallet_storage_providers::types::BackupStorageProvider {
+                    capacity: Default::default(),
+                    data_used: Default::default(),
+                    multiaddresses: Default::default(),
+                    root: Default::default(),
+                    last_capacity_change: Default::default(),
+                    owner_account: 1u64,
+                    payment_account: Default::default(),
+                },
+            );
+
+            // Add the Provider to the `ValidProofSubmittersLastTicks` storage map for the current tick.
+            let tick_when_proof_provided = ChallengesTicker::<Test>::get();
+            let mut new_valid_submitters =
+                BoundedBTreeSet::<ProviderIdFor<Test>, MaxSubmittersPerTickFor<Test>>::new();
+            new_valid_submitters.try_insert(provider_id).unwrap();
+            ValidProofSubmittersLastTicks::<Test>::insert(
+                tick_when_proof_provided,
+                new_valid_submitters,
+            );
+
+            // Check that the Provider was successfully added to the set.
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+
+            // Advance a tick, executing `on_idle`, to check if the Provider is removed from the set.
+            run_to_block(System::block_number() + 1);
+            ProofsDealer::on_idle(System::block_number(), Weight::MAX);
+
+            // Check that the set which had the Provider that submitted a valid proof has not been deleted.
+            assert!(ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided).is_some());
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+
+            // Check that the last deleted tick is still 0
+            assert_eq!(LastDeletedTick::<Test>::get(), 0);
+
+            // Advance enough ticks so that the Provider list which has the `provider_id` is set to be deleted.
+            run_to_block(
+                System::block_number()
+                    + <TargetTicksStorageOfSubmittersFor<Test> as Get<u32>>::get() as u64,
+            );
+
+            // Call the `on_idle` hook.
+            ProofsDealer::on_idle(System::block_number(), Weight::MAX);
+
+            // Check that the set which had the Provider that submitted a valid proof has been correctly deleted.
+            assert!(ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided).is_none());
+
+            // Check that the last deleted tick is the one that was just deleted.
+            assert_eq!(
+                LastDeletedTick::<Test>::get(),
+                System::block_number()
+                    - <TargetTicksStorageOfSubmittersFor<Test> as Get<u32>>::get() as u64
+            );
+        });
+    }
+
+    #[test]
+    fn on_idle_hook_does_not_delete_with_not_enough_weight() {
+        new_test_ext().execute_with(|| {
+            // Go past genesis block so events get deposited.
+            run_to_block(1);
+
+            // Register user as a Provider in Providers pallet.
+            let provider_id = BlakeTwo256::hash(b"provider_id");
+            pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+                &1,
+                provider_id,
+            );
+            pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+                &provider_id,
+                pallet_storage_providers::types::BackupStorageProvider {
+                    capacity: Default::default(),
+                    data_used: Default::default(),
+                    multiaddresses: Default::default(),
+                    root: Default::default(),
+                    last_capacity_change: Default::default(),
+                    owner_account: 1u64,
+                    payment_account: Default::default(),
+                },
+            );
+
+            // Add the Provider to the `ValidProofSubmittersLastTicks` storage map for the current tick.
+            let tick_when_proof_provided = ChallengesTicker::<Test>::get();
+            let mut new_valid_submitters =
+                BoundedBTreeSet::<ProviderIdFor<Test>, MaxSubmittersPerTickFor<Test>>::new();
+            new_valid_submitters.try_insert(provider_id).unwrap();
+            ValidProofSubmittersLastTicks::<Test>::insert(
+                tick_when_proof_provided,
+                new_valid_submitters,
+            );
+
+            // Check that the Provider was successfully added to the set.
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+
+            // Advance a tick, executing `on_idle`, to check if the Provider is removed from the set.
+            run_to_block(System::block_number() + 1);
+            ProofsDealer::on_idle(System::block_number(), Weight::MAX);
+
+            // Check that the set which had the Provider that submitted a valid proof has not been deleted.
+            assert!(ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided).is_some());
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+
+            // Check that the last deleted tick is still 0
+            assert_eq!(LastDeletedTick::<Test>::get(), 0);
+
+            // Advance enough ticks so that the Provider list which has the `provider_id` is set to be deleted.
+            run_to_block(
+                System::block_number()
+                    + <TargetTicksStorageOfSubmittersFor<Test> as Get<u32>>::get() as u64,
+            );
+
+            // Call the `on_idle` hook, but without enough weight to delete the set.
+            ProofsDealer::on_idle(System::block_number(), Weight::zero());
+
+            // Check that the set which had the Provider that submitted a valid proof still exists and has the Provider
+            assert!(ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided).is_some());
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+
+            // Check that the last deleted tick is still zero.
+            assert_eq!(LastDeletedTick::<Test>::get(), 0);
+        });
+    }
+
+    #[test]
+    fn on_idle_hook_deletes_multiple_old_ticks_if_enough_weight_is_remaining() {
+        new_test_ext().execute_with(|| {
+            // Go past genesis block so events get deposited.
+            run_to_block(1); // Block number = 1
+
+            // Register user as a Provider in Providers pallet.
+            let provider_id = BlakeTwo256::hash(b"provider_id");
+            pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+                &1,
+                provider_id,
+            );
+            pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+                &provider_id,
+                pallet_storage_providers::types::BackupStorageProvider {
+                    capacity: Default::default(),
+                    data_used: Default::default(),
+                    multiaddresses: Default::default(),
+                    root: Default::default(),
+                    last_capacity_change: Default::default(),
+                    owner_account: 1u64,
+                    payment_account: Default::default(),
+                },
+            );
+
+            // Add the Provider to the `ValidProofSubmittersLastTicks` storage map for the current tick and two ticks after that.
+            let tick_when_first_proof_provided = ChallengesTicker::<Test>::get(); // Block number = 1
+            let mut new_valid_submitters =
+                BoundedBTreeSet::<ProviderIdFor<Test>, MaxSubmittersPerTickFor<Test>>::new();
+            new_valid_submitters.try_insert(provider_id).unwrap();
+            ValidProofSubmittersLastTicks::<Test>::insert(
+                tick_when_first_proof_provided,
+                new_valid_submitters.clone(),
+            );
+            let tick_when_second_proof_provided = tick_when_first_proof_provided + 2; // Block number = 1 + 2 = 3
+            ValidProofSubmittersLastTicks::<Test>::insert(
+                tick_when_second_proof_provided,
+                new_valid_submitters,
+            );
+
+            // Check that the Provider was successfully added to the set in both ticks
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_first_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_second_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+
+            // Advance a tick, executing `on_idle`, to check if the Provider is removed from any of the two sets.
+            run_to_block(System::block_number() + 1); // Block number = 2
+            ProofsDealer::on_idle(System::block_number(), Weight::MAX);
+
+            // Check that the sets which had the Provider that submitted a valid proof have not been deleted.
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_first_proof_provided)
+                    .is_some()
+            );
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_first_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_second_proof_provided)
+                    .is_some()
+            );
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_second_proof_provided)
+                    .unwrap()
+                    .contains(&provider_id)
+            );
+
+            // Check that the last deleted tick is still 0
+            assert_eq!(LastDeletedTick::<Test>::get(), 0);
+
+            // Advance enough ticks so that both the Provider lists which have the `provider_id` are set to be deleted.
+            run_to_block(
+                System::block_number()
+                    + <TargetTicksStorageOfSubmittersFor<Test> as Get<u32>>::get() as u64
+                    + 3,
+            ); // Block number = 2 + 3 + 3 = 8, 8 - 3 - 0 > 3 so both sets should be deleted.
+
+            // Call the `on_idle` hook with enough weight to delete both sets.
+            ProofsDealer::on_idle(System::block_number(), Weight::MAX);
+
+            // Check that the sets which had the Provider that submitted a valid proof have been correctly deleted.
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_first_proof_provided)
+                    .is_none()
+            );
+            assert!(
+                ValidProofSubmittersLastTicks::<Test>::get(tick_when_second_proof_provided)
+                    .is_none()
+            );
+
+            // Check that the last deleted tick is the one that was just deleted.
+            assert_eq!(
+                LastDeletedTick::<Test>::get(),
+                System::block_number()
+                    - <TargetTicksStorageOfSubmittersFor<Test> as Get<u32>>::get() as u64
+            );
+        });
+    }
 }
