@@ -635,6 +635,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
 
         // Advance beyond the previous deadline block and check that the Provider is not marked as slashable.
         run_to_block(current_block + challenge_ticks_tolerance + 1);
+
         assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
     });
 }
@@ -2587,6 +2588,7 @@ fn new_challenges_round_provider_marked_as_slashable() {
 
         // Check that Provider is in the SlashableProviders storage map.
         assert!(SlashableProviders::<Test>::contains_key(&provider_id));
+        assert_eq!(SlashableProviders::<Test>::get(&provider_id), Some(1));
 
         // Check the new last time this provider submitted a proof.
         let current_tick_provider_submitted_proof =
@@ -2609,6 +2611,97 @@ fn new_challenges_round_provider_marked_as_slashable() {
             ChallengeTickToChallengedProviders::<Test>::get(new_deadline, provider_id),
             Some(()),
         );
+    });
+}
+
+#[test]
+fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Register user as a Provider in Providers pallet.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                data_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
+            },
+        );
+
+        // Set Provider's last submitted proof block.
+        let prev_tick_provider_submitted_proof = ChallengesTicker::<Test>::get();
+        LastTickProviderSubmittedProofFor::<Test>::insert(
+            &provider_id,
+            prev_tick_provider_submitted_proof,
+        );
+
+        // New challenges round
+        let current_tick = ChallengesTicker::<Test>::get();
+        let challenge_period = 1;
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = current_tick + challenge_period_plus_tolerance;
+
+        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+
+        // Check that Provider is not in the SlashableProviders storage map.
+        assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
+
+        // Advance to the deadline block for this Provider.
+        run_to_block(prev_deadline);
+
+        // Check event of provider being marked as slashable.
+        System::assert_has_event(
+            Event::SlashableProvider {
+                provider: provider_id,
+            }
+            .into(),
+        );
+
+        // Check that Provider is in the SlashableProviders storage map.
+        assert!(SlashableProviders::<Test>::contains_key(&provider_id));
+        assert_eq!(SlashableProviders::<Test>::get(&provider_id), Some(1));
+
+        // New challenges round
+        let current_tick = ChallengesTicker::<Test>::get();
+        let prev_deadline = current_tick + challenge_period_plus_tolerance;
+        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+
+        // Advance to the deadline block for this Provider.
+        run_to_block(prev_deadline);
+
+        // Check event of provider being marked as slashable.
+        System::assert_has_event(
+            Event::SlashableProvider {
+                provider: provider_id,
+            }
+            .into(),
+        );
+
+        // Check that Provider is in the SlashableProviders storage map.
+        assert!(SlashableProviders::<Test>::contains_key(&provider_id));
+        assert_eq!(SlashableProviders::<Test>::get(&provider_id), Some(2));
     });
 }
 
@@ -2769,6 +2862,7 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
             &alice_provider_id
         ));
         assert!(SlashableProviders::<Test>::contains_key(&bob_provider_id));
+        assert_eq!(SlashableProviders::<Test>::get(&bob_provider_id), Some(1));
 
         // Check the new last time Bob and Alice submitted a proof.
         let expected_new_tick = last_tick_provider_submitted_proof + challenge_period;

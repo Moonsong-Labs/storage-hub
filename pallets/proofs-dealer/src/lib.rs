@@ -162,9 +162,9 @@ pub mod pallet {
         #[pallet::constant]
         type TargetTicksStorageOfSubmitters: Get<u32>;
 
-        /// The maximum amount of Providers that can submit a proof in a single block.  
-        /// Although this can be seen as an arbitrary limit, if set to the already existing  
-        /// implicit limit that is "how many `submit_proof` extrinsics fit in the weight of  
+        /// The maximum amount of Providers that can submit a proof in a single block.
+        /// Although this can be seen as an arbitrary limit, if set to the already existing
+        /// implicit limit that is "how many `submit_proof` extrinsics fit in the weight of
         /// a block, this wouldn't add any additional artificial limit.
         #[pallet::constant]
         type MaxSubmittersPerTick: Get<u32>;
@@ -282,7 +282,7 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn slashable_providers)]
-    pub type SlashableProviders<T: Config> = StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, ()>;
+    pub type SlashableProviders<T: Config> = StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, u32>;
 
     /// A mapping from tick to Providers, which is set if the Provider submitted a valid proof in that tick.
     ///

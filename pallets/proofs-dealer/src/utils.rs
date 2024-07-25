@@ -419,8 +419,15 @@ where
             // One read for every provider in the prefix, and one write as we're consuming and deleting the entry.
             weight.consume(T::DbWeight::get().reads_writes(1, 1));
 
-            // Mark this provider as slashable.
-            SlashableProviders::<T>::set(provider, Some(()));
+            // Accrue number of failed proof submission for this slashable provider.
+            SlashableProviders::<T>::mutate_exists(provider, |slashable| {
+                if let Some(slashable) = slashable {
+                    slashable.saturating_inc();
+                } else {
+                    *slashable = Some(1);
+                }
+            });
+
             weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
             // Get the stake for this Provider, to know its challenge period.
@@ -439,8 +446,9 @@ where
             weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
             // Calculate the next challenge deadline for this Provider.
-            let next_challenge_deadline =
-                challenges_ticker.saturating_add(Self::stake_to_challenge_period(stake));
+            let next_challenge_deadline = challenges_ticker
+                .saturating_add(Self::stake_to_challenge_period(stake))
+                .saturating_add(T::ChallengeTicksTolerance::get());
 
             // Calculate the tick for which the Provider should have submitted a proof.
             let last_tick_proven =
