@@ -35,7 +35,7 @@ use crate::{
         StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
     },
     ChallengeTickToChallengedProviders, ChallengesQueue, ChallengesTicker, Error, Event,
-    LastCheckpointTick, LastDeletedTick, LastTickProviderSubmittedProofFor, Pallet,
+    LastCheckpointTick, LastDeletedTick, LastTickProviderSubmissionInterval, Pallet,
     PriorityChallengesQueue, SlashableProviders, TickToChallengesSeed, TickToCheckpointChallenges,
     ValidProofSubmittersLastTicks,
 };
@@ -158,7 +158,7 @@ where
         );
 
         // Get last tick for which the submitter submitted a proof.
-        let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(*submitter) {
+        let last_tick_proven = match LastTickProviderSubmissionInterval::<T>::get(*submitter) {
             Some(tick) => tick,
             None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
         };
@@ -299,7 +299,7 @@ where
 
         // Update `LastTickProviderSubmittedProofFor` to the challenge tick the provider has just
         // submitted a proof for.
-        LastTickProviderSubmittedProofFor::<T>::set(*submitter, Some(challenges_tick));
+        LastTickProviderSubmissionInterval::<T>::set(*submitter, Some(challenges_tick));
 
         // Remove the submitter from its current deadline registered in `ChallengeTickToChallengedProviders`.
         ChallengeTickToChallengedProviders::<T>::remove(challenges_tick_deadline, submitter);
@@ -451,7 +451,7 @@ where
                 .saturating_add(T::ChallengeTicksTolerance::get());
 
             // Calculate the tick for which the Provider should have submitted a proof.
-            let last_tick_proven =
+            let last_interval_tick =
                 challenges_ticker.saturating_sub(T::ChallengeTicksTolerance::get());
             weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
@@ -463,10 +463,8 @@ where
             );
             weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
-            // Update this Provider's last tick it submitted a proof for.
-            // It didn't actually submit a proof for this tick, but we need it to properly calculate next time
-            // it should submit a proof.
-            LastTickProviderSubmittedProofFor::<T>::set(provider, Some(last_tick_proven));
+            // Update this Provider's last interval tick for the next challenge.
+            LastTickProviderSubmissionInterval::<T>::set(provider, Some(last_interval_tick));
             weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
             // Emit slashable provider event.
@@ -824,7 +822,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         ensure!(stake > BalanceFor::<T>::zero(), Error::<T>::ZeroStake);
 
         // Check if this Provider previously had a challenge cycle initialised.
-        if let Some(last_tick_proven) = LastTickProviderSubmittedProofFor::<T>::get(*provider_id) {
+        if let Some(last_tick_proven) = LastTickProviderSubmissionInterval::<T>::get(*provider_id) {
             // Compute the next tick for which the Provider should have been submitting a proof.
             let old_next_challenge_tick = last_tick_proven
                 .checked_add(&Self::stake_to_challenge_period(stake))
@@ -844,7 +842,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
 
         // Set `LastTickProviderSubmittedProofFor` to the current tick.
         let current_tick = ChallengesTicker::<T>::get();
-        LastTickProviderSubmittedProofFor::<T>::set(*provider_id, Some(current_tick));
+        LastTickProviderSubmissionInterval::<T>::set(*provider_id, Some(current_tick));
 
         // Compute the next tick for which the Provider should be submitting a proof.
         let next_challenge_tick = current_tick
@@ -899,7 +897,7 @@ where
             return Err(GetLastTickProviderSubmittedProofError::ProviderNotRegistered);
         }
 
-        LastTickProviderSubmittedProofFor::<T>::get(who)
+        LastTickProviderSubmissionInterval::<T>::get(who)
             .ok_or(GetLastTickProviderSubmittedProofError::ProviderNeverSubmittedProof)
     }
 

@@ -233,12 +233,12 @@ pub mod pallet {
         (),
     >;
 
-    /// A mapping from a Provider to the last challenge tick they submitted a proof for.
+    /// A mapping from a Provider to the last tick interval for which they should have submitted a proof.
     /// If for a Provider `p`, `LastTickProviderSubmittedProofFor[p]` is `n`, then the
     /// Provider should submit a proof for tick `n + stake_to_challenge_period(p)`.
     #[pallet::storage]
     #[pallet::getter(fn last_tick_provider_submitted_proof_for)]
-    pub type LastTickProviderSubmittedProofFor<T: Config> =
+    pub type LastTickProviderSubmissionInterval<T: Config> =
         StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, BlockNumberFor<T>>;
 
     /// A queue of keys that have been challenged manually.
