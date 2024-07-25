@@ -1,7 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::sp_runtime::DispatchError;
-use num_bigint::BigUint;
 use shp_file_metadata::ChunkId;
 use shp_traits::CommitmentVerifier;
 use sp_std::collections::btree_set::BTreeSet;
@@ -102,12 +101,8 @@ where
             // Calculate the chunks of the file based on its size.
             let chunks = proof.file_metadata.chunks_count();
 
-            // Calculate the modulo of the challenge with the number of chunks in the file.
-            // The challenge is a big endian 32 byte array.
-            let challenged_chunk = BigUint::from_bytes_be(challenge.as_ref()) % chunks;
-            let challenged_chunk: ChunkId = ChunkId::new(challenged_chunk.try_into().map_err(|_| {
-                "This is impossible. The modulo of a number with a u64 should always fit in a u64."
-            })?);
+            // Convert the challenge to a chunk ID.
+            let challenged_chunk = ChunkId::from_challenge(challenge.as_ref(), chunks);
 
             // Check that the chunk is in the proof.
             let chunk = trie

@@ -16,7 +16,6 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { workspace = true }
-num-bigint = { workspace = true }
 scale-info = { workspace = true }
 serde = { workspace = true }
 
@@ -36,6 +35,7 @@ frame-support = { workspace = true }
 
 [dev-dependencies]
 bincode = { workspace = true }
+num-bigint = { workspace = true }
 rand = { workspace = true }
 reference-trie = { workspace = true }
 
