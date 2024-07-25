@@ -110,10 +110,10 @@ impl FileProof {
 }
 
 #[derive(Clone, Eq, Hash, PartialEq)]
-pub struct RequestId(u64);
+pub struct DownloadRequestId(u64);
 
-impl RequestId {
+impl DownloadRequestId {
     pub fn new(id: u64) -> Self {
-        RequestId(id)
+        DownloadRequestId(id)
     }
 }
