@@ -68,6 +68,7 @@ pub struct FileTransferService {
     /// Mapping from RequestId to a download pending response channel
     download_pending_responses:
         HashMap<DownloadRequestId, futures::channel::oneshot::Sender<OutgoingResponse>>,
+    download_pending_response_nonce: DownloadRequestId,
 }
 
 impl Actor for FileTransferService {
@@ -151,6 +152,73 @@ impl Actor for FileTransferService {
                         ),
                     }
                 }
+
+                FileTransferServiceCommand::DownloadResponse {
+                    request_id,
+                    file_key_proof,
+                    callback,
+                } => {
+                    let response =
+                        schema::v1::provider::response::Response::RemoteDownloadDataResponse(
+                            schema::v1::provider::RemoteDownloadDataResponse {
+                                file_key_proof: file_key_proof.encode(),
+                            },
+                        );
+
+                    let mut response_data = Vec::new();
+                    response.encode(&mut response_data);
+
+                    let outgoing_response = OutgoingResponse {
+                        sent_feedback: None,
+                        result: Ok(response_data),
+                        reputation_changes: Vec::new(),
+                    };
+
+                    let maybe_pending_response =
+                        self.download_pending_responses.remove(&request_id).take();
+
+                    match maybe_pending_response {
+                        Some(pending_response_sender) => {
+                            let pending_response_result =
+                                pending_response_sender.send(outgoing_response);
+                            match pending_response_result {
+                                Ok(()) => {
+                                    match callback.send(Ok(())) {
+                                        Ok(()) => {}
+                                        Err(_) => error!(
+                                            target: LOG_TARGET,
+                                            "Failed to send the response back. Looks like the requester task is gone."
+                                        ),
+                                    };
+                                }
+                                Err(e) => {
+                                    error!(
+                                        target: LOG_TARGET,
+                                        "Failed to return Download Response {:?}", e
+                                    );
+                                    match callback.send(Err(RequestError::ResponseFailure(e))) {
+                                        Ok(()) => {}
+                                        Err(_) => error!(
+                                            target: LOG_TARGET,
+                                            "Failed to send the response back. Looks like the requester task is gone."
+                                        ),
+                                    };
+                                }
+                            }
+                        }
+                        None => {
+                            error!(target: LOG_TARGET, "No pending response channel found for request id {:?}", request_id);
+                            match callback.send(Err(RequestError::DownloadRequestIdNotFound)) {
+                                Ok(()) => {}
+                                Err(_) => error!(
+                                    target: LOG_TARGET,
+                                    "Failed to send the response back. Looks like the requester task is gone."
+                                ),
+                            };
+                        }
+                    }
+                }
+
                 FileTransferServiceCommand::AddKnownAddress {
                     peer_id,
                     multiaddress,
@@ -282,6 +350,7 @@ impl FileTransferService {
             peers_by_file: HashMap::new(),
             event_bus_provider: FileTransferServiceEventBusProvider::new(),
             download_pending_responses: HashMap::new(),
+            download_pending_response_nonce: DownloadRequestId::new(0),
         }
     }
 
@@ -393,8 +462,7 @@ impl FileTransferService {
                 };
 
                 let chunk_id = ChunkId::new(r.file_chunk_id);
-                let request_id =
-                    DownloadRequestId::new(self.download_pending_responses.len() as u64);
+                let request_id = self.download_pending_response_nonce.next();
                 self.download_pending_responses
                     .insert(request_id.clone(), pending_response);
 

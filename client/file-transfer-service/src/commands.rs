@@ -3,10 +3,11 @@ use async_trait::async_trait;
 use prost::Message;
 use thiserror::Error;
 
-use sc_network::{Multiaddr, PeerId, ProtocolName, RequestFailure};
+use sc_network::{config::OutgoingResponse, Multiaddr, PeerId, ProtocolName, RequestFailure};
 
+use codec::Encode;
 use shc_actors_framework::actor::ActorHandle;
-use shc_common::types::{ChunkId, FileKey, FileKeyProof};
+use shc_common::types::{ChunkId, DownloadRequestId, FileKey, FileKeyProof};
 
 use super::{schema, FileTransferService};
 
@@ -27,6 +28,11 @@ pub enum FileTransferServiceCommand {
         callback: tokio::sync::oneshot::Sender<
             futures::channel::oneshot::Receiver<Result<(Vec<u8>, ProtocolName), RequestFailure>>,
         >,
+    },
+    DownloadResponse {
+        request_id: DownloadRequestId,
+        file_key_proof: FileKeyProof,
+        callback: tokio::sync::oneshot::Sender<Result<(), RequestError>>,
     },
     AddKnownAddress {
         peer_id: PeerId,
@@ -61,6 +67,10 @@ pub enum RequestError {
     /// File not found in the registry.
     #[error("File not found in registry")]
     FileNotRegistered,
+    #[error("DownloadRequestId not found in internal mapping")]
+    DownloadRequestIdNotFound,
+    #[error("Failed to return response")]
+    ResponseFailure(OutgoingResponse),
 }
 
 /// Allows our ActorHandle to implement
@@ -79,6 +89,12 @@ pub trait FileTransferServiceInterface {
         peer_id: PeerId,
         file_key: FileKey,
         chunk_id: ChunkId,
+    ) -> Result<schema::v1::provider::RemoteDownloadDataResponse, RequestError>;
+
+    async fn download_response(
+        &self,
+        file_key_proof: FileKeyProof,
+        request_id: DownloadRequestId,
     ) -> Result<schema::v1::provider::RemoteDownloadDataResponse, RequestError>;
 
     async fn add_known_address(
@@ -185,6 +201,35 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
                 }
             }
             Err(error) => Err(RequestError::RequestFailure(error)),
+        }
+    }
+
+    async fn download_response(
+        &self,
+        file_key_proof: FileKeyProof,
+        request_id: DownloadRequestId,
+    ) -> Result<schema::v1::provider::RemoteDownloadDataResponse, RequestError> {
+        let (callback, file_transfer_rx) = tokio::sync::oneshot::channel();
+
+        let command = FileTransferServiceCommand::DownloadResponse {
+            request_id,
+            file_key_proof: file_key_proof.clone(),
+            callback,
+        };
+
+        self.send(command).await;
+
+        let result = file_transfer_rx.await.expect("Failed to received response from FileTransferService. Probably means FileTransferService has crashed.");
+
+        match result {
+            Ok(()) => {
+                let response = schema::v1::provider::RemoteDownloadDataResponse {
+                    file_key_proof: file_key_proof.encode(),
+                };
+
+                Ok(response)
+            }
+            Err(e) => Err(e),
         }
     }
 
