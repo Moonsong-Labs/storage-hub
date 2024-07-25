@@ -258,7 +258,7 @@ where
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let file_metadata = read_file_storage
             .get_metadata(&file_key)
-            .expect("Failed to get metadata.");
+            .map_err(|e| anyhow!("Failed to get metadata: {:?}", e))?;
         // Release the file storage lock.
         drop(read_file_storage);
 
@@ -266,7 +266,7 @@ where
         let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
         write_forest_storage
             .insert_metadata(&file_metadata)
-            .expect("Failed to insert metadata.");
+            .map_err(|e| anyhow!("Failed to insert metadata: {:?}", e))?;
         // Release the forest storage lock.
         drop(write_forest_storage);
 
@@ -409,7 +409,7 @@ where
         //     .file_transfer
         //     .unregister_file(file_key.as_ref().into())
         //     .await
-        //     .expect("File is not registered. This should not happen!");
+        //     .map_err(|e| anyhow!("File is not registered. This should not happen!: {:?}", e));
 
         // Query runtime for the chunks to prove for the file.
         let chunks_to_prove = self
@@ -434,10 +434,10 @@ where
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let metadata = read_file_storage
             .get_metadata(file_key)
-            .expect("File metadata not found");
+            .map_err(|e| anyhow!("File metadata not found: {:?}", e))?;
         let added_file_key_proof = read_file_storage
             .generate_proof(file_key, &chunks_to_prove)
-            .expect("File is not in storage, or proof does not exist.");
+            .map_err(|e| anyhow!("File is not in storage, or proof does not exist: {:?}", e))?;
         // Release the file storage read lock as soon as possible.
         drop(read_file_storage);
 
@@ -445,7 +445,7 @@ where
         let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
         let non_inclusion_forest_proof = read_forest_storage
             .generate_proof(vec![*file_key])
-            .expect("Failed to generate forest proof.");
+            .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
         // Release the forest storage read lock.
         drop(read_forest_storage);
 
@@ -470,7 +470,7 @@ where
         // TODO: move this under an RPC call
         let file_path = Path::new("./storage/").join(
             String::from_utf8(metadata.location.clone())
-                .expect("File location should be an utf8 string"),
+                .map_err(|e| anyhow!("File location should be an utf8 string: {:?}", e))?,
         );
         dbg!(
             "Current dir: {}",
@@ -478,19 +478,20 @@ where
         );
         info!("Intended file path: {:?}", file_path);
 
-        create_dir_all(&file_path.parent().unwrap()).expect("Failed to create directory");
+        create_dir_all(&file_path.parent().unwrap())
+            .map_err(|e| anyhow!("Failed to create directory: {:?}", e))?;
         let mut file = File::create(file_path)
             .await
-            .expect("Failed to open file for writing.");
+            .map_err(|e| anyhow!("Failed to open file for writing: {:?}", e))?;
 
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         for chunk_id in 0..metadata.chunks_count() {
             let chunk = read_file_storage
                 .get_chunk(&file_key, &ChunkId::new(chunk_id))
-                .expect("Chunk not found in storage.");
+                .map_err(|e| anyhow!("Chunk not found in storage: {:?}", e))?;
             file.write_all(&chunk)
                 .await
-                .expect("Failed to write file chunk.");
+                .map_err(|e| anyhow!("Failed to write file chunk: {:?}", e))?;
         }
         drop(read_file_storage);
 
