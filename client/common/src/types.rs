@@ -108,3 +108,12 @@ impl FileProof {
         )
     }
 }
+
+#[derive(Clone, Eq, Hash, PartialEq)]
+pub struct DownloadRequestId(u64);
+
+impl DownloadRequestId {
+    pub fn new(id: u64) -> Self {
+        DownloadRequestId(id)
+    }
+}
