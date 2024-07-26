@@ -1657,7 +1657,7 @@ mod mutate_root_tests {
             TrieRemoveMutation::default().into(),
         );
 
-        let challenge_keys = [add_mutation.clone(), remove_mutation.clone()];
+        let mutations = [add_mutation.clone(), remove_mutation.clone()];
 
         {
             let mut trie_recorder = recorder.as_trie_recorder(root);
@@ -1665,14 +1665,14 @@ mod mutate_root_tests {
                 .with_recorder(&mut trie_recorder)
                 .build();
 
-            for challenge_key in &challenge_keys {
+            for challenge_key in &mutations {
                 let mut iter = trie.into_double_ended_iter().unwrap();
                 iter.seek(challenge_key.0 .0.as_slice()).unwrap();
 
                 // Access the next leaf node.
                 iter.next();
 
-                // Access the previous leaf node only if it's a remove mutation.
+                // Access the previous leaf node only if it's an Add mutation.
                 if let TrieMutation::Add(_) = challenge_key.1 {
                     iter.next_back();
                 }
@@ -1682,7 +1682,7 @@ mod mutate_root_tests {
         let proof = generate_proof_and_verify(
             &mut recorder,
             &root,
-            &challenge_keys
+            &mutations
                 .iter()
                 .map(|(key, _)| *key)
                 .collect::<Vec<H256>>(),
@@ -1691,12 +1691,12 @@ mod mutate_root_tests {
         let (memdb, new_root) =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
                 &root,
-                &[add_mutation],
+                &mutations,
                 &proof,
             )
             .expect("Failed to mutate root");
 
-        for challenge_key in &challenge_keys {
+        for challenge_key in &mutations {
             if let TrieMutation::Add(_) = challenge_key.1 {
                 assert_key_in_trie(&memdb, &new_root, &challenge_key.0);
             } else {
