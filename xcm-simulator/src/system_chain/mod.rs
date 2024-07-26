@@ -23,7 +23,7 @@ use crate::mock_message_queue;
 use core::marker::PhantomData;
 use frame_support::{
     construct_runtime, derive_impl, parameter_types,
-    traits::{ConstU128, ContainsPair, EnsureOrigin, EnsureOriginWithArg, Everything, Nothing},
+    traits::{ConstU128, ContainsPair, EnsureOrigin, EnsureOriginWithArg, Everything},
     weights::{constants::WEIGHT_REF_TIME_PER_SECOND, Weight},
 };
 use frame_system::EnsureRoot;
