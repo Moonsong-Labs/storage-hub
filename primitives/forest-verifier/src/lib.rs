@@ -235,7 +235,7 @@ where
 
         let mut memdb = storage_proof.to_memory_db();
 
-        let mut trie = TrieDBMutBuilder::<T>::new(&mut memdb, &mut root).build();
+        let mut trie = TrieDBMutBuilder::<T>::from_existing(&mut memdb, &mut root).build();
 
         // Apply mutations to the trie
         for mutation in mutations.iter() {
