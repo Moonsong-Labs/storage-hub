@@ -16,6 +16,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { workspace = true }
+num-bigint = { workspace = true }
 hex-literal = { workspace = true, optional = true }
 log = { workspace = true }
 smallvec = { workspace = true }
@@ -23,13 +24,17 @@ scale-info = { workspace = true }
 
 # Local
 pallet-file-system = { workspace = true }
+pallet-file-system-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
+pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-randomness = { workspace = true }
 pallet-bucket-nfts = { workspace = true }
 pallet-payment-streams = { workspace = true }
 
+shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
+shp-file-metadata = { workspace = true }
 shp-forest-verifier = { workspace = true }
 shp-traits = { workspace = true }
 
