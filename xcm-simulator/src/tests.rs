@@ -451,7 +451,7 @@ mod providers {
             );
             assert_eq!(
                 storagehub::Balances::balance(&sh_sibling_account_id(NON_SYS_PARA_ID)),
-                10 * SpMinDeposit::get()
+                INITIAL_BALANCE
             );
         });
 
@@ -535,7 +535,7 @@ mod providers {
             );
             assert_eq!(
                 storagehub::Balances::balance(&sh_sibling_account_id(NON_SYS_PARA_ID)),
-                10 * SpMinDeposit::get()
+                INITIAL_BALANCE
             );
         });
 
@@ -665,7 +665,7 @@ mod providers {
             );
             assert_eq!(
                 storagehub::Balances::balance(&sh_sibling_account_id(NON_SYS_PARA_ID)),
-                10 * SpMinDeposit::get()
+                INITIAL_BALANCE
             );
         });
 
@@ -789,7 +789,7 @@ mod providers {
             );
             assert_eq!(
                 storagehub::Balances::balance(&sh_sibling_account_id(NON_SYS_PARA_ID)),
-                10 * SpMinDeposit::get()
+                INITIAL_BALANCE
             );
         });
 
@@ -972,7 +972,7 @@ mod providers {
             );
             assert_eq!(
                 storagehub::Balances::balance(&sh_sibling_account_id(NON_SYS_PARA_ID)),
-                10 * SpMinDeposit::get()
+                INITIAL_BALANCE
             );
         });
 
@@ -1337,7 +1337,6 @@ mod users {
             assert_ok!(storagehub::FileSystem::bsp_confirm_storing(
                 storagehub::RuntimeOrigin::signed(BOB),
                 file_key.clone(),
-                H256::random(),
                 simulated_proof.clone(),
                 simulated_proof.clone()
             ));
@@ -1702,7 +1701,6 @@ mod users {
             assert_ok!(storagehub::FileSystem::bsp_confirm_storing(
                 storagehub::RuntimeOrigin::signed(BOB),
                 file_key.clone(),
-                H256::random(),
                 simulated_proof.clone(),
                 simulated_proof.clone()
             ));

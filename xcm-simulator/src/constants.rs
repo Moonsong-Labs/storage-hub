@@ -10,7 +10,7 @@ pub const CHARLIE: sp_runtime::AccountId32 = sp_runtime::AccountId32::new([3u8; 
 // Currency units.
 pub const UNITS: u128 = 1_000_000_000_000; // 12 decimals.
 pub const CENTS: u128 = UNITS / 100; // 100 cents = 1 unit.
-pub const INITIAL_BALANCE: u128 = 10 * SpMinDeposit::get();
+pub const INITIAL_BALANCE: u128 = 10 * SpMinDeposit::get() + 100 * CENTS;
 
 // Para IDs
 pub const SH_PARA_ID: u32 = 1;
