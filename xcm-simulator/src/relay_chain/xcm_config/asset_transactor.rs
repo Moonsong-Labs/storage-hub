@@ -15,24 +15,24 @@
 // along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
 
 use crate::relay_chain::{
-	constants::TokenLocation, location_converter::LocationConverter, AccountId, Balances, Uniques,
+    constants::TokenLocation, location_converter::LocationConverter, AccountId, Balances, Uniques,
 };
 use xcm_builder::{
-	AsPrefixedGeneralIndex, ConvertedConcreteId, FungibleAdapter, IsConcrete, NoChecking,
-	NonFungiblesAdapter,
+    AsPrefixedGeneralIndex, ConvertedConcreteId, FungibleAdapter, IsConcrete, NoChecking,
+    NonFungiblesAdapter,
 };
 use xcm_executor::traits::JustTry;
 
 type LocalAssetTransactor = (
-	FungibleAdapter<Balances, IsConcrete<TokenLocation>, LocationConverter, AccountId, ()>,
-	NonFungiblesAdapter<
-		Uniques,
-		ConvertedConcreteId<u32, u32, AsPrefixedGeneralIndex<(), u32, JustTry>, JustTry>,
-		LocationConverter,
-		AccountId,
-		NoChecking,
-		(),
-	>,
+    FungibleAdapter<Balances, IsConcrete<TokenLocation>, LocationConverter, AccountId, ()>,
+    NonFungiblesAdapter<
+        Uniques,
+        ConvertedConcreteId<u32, u32, AsPrefixedGeneralIndex<(), u32, JustTry>, JustTry>,
+        LocationConverter,
+        AccountId,
+        NoChecking,
+        (),
+    >,
 );
 
 pub type AssetTransactor = LocalAssetTransactor;

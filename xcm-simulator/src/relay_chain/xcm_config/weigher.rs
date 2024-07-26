@@ -20,8 +20,8 @@ use xcm::latest::prelude::*;
 use xcm_builder::FixedWeightBounds;
 
 parameter_types! {
-	pub const BaseXcmWeight: Weight = Weight::from_parts(1_000, 1_000);
-	pub const MaxInstructions: u32 = 100;
+    pub const BaseXcmWeight: Weight = Weight::from_parts(1_000, 1_000);
+    pub const MaxInstructions: u32 = 100;
 }
 
 pub type Weigher = FixedWeightBounds<BaseXcmWeight, RuntimeCall, MaxInstructions>;
