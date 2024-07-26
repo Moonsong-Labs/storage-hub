@@ -2768,14 +2768,8 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
         // Set Alice and Bob's last submitted proof block.
         let current_tick = ChallengesTicker::<Test>::get();
         let last_interval_tick = current_tick;
-        LastTickProviderSubmittedAProofFor::<Test>::insert(
-            &alice_provider_id,
-            last_interval_tick,
-        );
-        LastTickProviderSubmittedAProofFor::<Test>::insert(
-            &bob_provider_id,
-            last_interval_tick,
-        );
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&alice_provider_id, last_interval_tick);
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&bob_provider_id, last_interval_tick);
 
         // Set Alice and Bob's deadline for submitting a proof.
         // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.

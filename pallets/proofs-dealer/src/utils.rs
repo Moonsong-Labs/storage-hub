@@ -454,8 +454,8 @@ where
             //
             // Therefore, the next deadline is one period from now:
             // next_challenge_deadline = challenge_ticker + provider_period
-            let next_challenge_deadline = challenges_ticker
-                .saturating_add(Self::stake_to_challenge_period(stake));
+            let next_challenge_deadline =
+                challenges_ticker.saturating_add(Self::stake_to_challenge_period(stake));
 
             // Update this Provider's next challenge deadline.
             ChallengeTickToChallengedProviders::<T>::set(
