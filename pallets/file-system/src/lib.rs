@@ -669,7 +669,6 @@ pub mod pallet {
         pub fn bsp_confirm_storing(
             origin: OriginFor<T>,
             file_key: MerkleHash<T>,
-            root: MerkleHash<T>,
             non_inclusion_forest_proof: ForestProof<T>,
             added_file_key_proof: KeyProof<T>,
         ) -> DispatchResult {
@@ -680,7 +679,6 @@ pub mod pallet {
             let (bsp_id, new_root) = Self::do_bsp_confirm_storing(
                 who.clone(),
                 file_key,
-                root,
                 non_inclusion_forest_proof.clone(),
                 added_file_key_proof.clone(),
             )?;

@@ -875,6 +875,10 @@ declare module '@polkadot/api-base/types/errors' {
              **/
             AlreadyRegistered: AugmentedError<ApiType>;
             /**
+             * Error thrown when a bucket ID could not be added to the list of buckets of a MSP.
+             **/
+            AppendBucketToMspFailed: AugmentedError<ApiType>;
+            /**
              * Error thrown when a bucket ID already exists in storage.
              **/
             BucketAlreadyExists: AugmentedError<ApiType>;
