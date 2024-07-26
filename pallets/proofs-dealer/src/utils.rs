@@ -737,20 +737,20 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     type MerkleHashing = T::MerkleTrieHashing;
 
     fn verify_forest_proof(
-        who: &Self::ProviderId,
+        provider_id: &Self::ProviderId,
         challenges: &[Self::MerkleHash],
         proof: &Self::ForestProof,
     ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError> {
         // Check if submitter is a registered Provider.
         ensure!(
-            ProvidersPalletFor::<T>::is_provider(*who),
+            ProvidersPalletFor::<T>::is_provider(*provider_id),
             Error::<T>::NotProvider
         );
 
         // Get root for submitter.
         // If a submitter is a registered Provider, it must have a root.
-        let root =
-            ProvidersPalletFor::<T>::get_root(*who).ok_or(Error::<T>::ProviderRootNotFound)?;
+        let root = ProvidersPalletFor::<T>::get_root(*provider_id)
+            .ok_or(Error::<T>::ProviderRootNotFound)?;
 
         // Verify forest proof.
         ForestVerifierFor::<T>::verify_proof(&root, challenges, proof)
@@ -787,13 +787,24 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     }
 
     fn apply_delta(
-        commitment: &Self::MerkleHash,
+        provider_id: &Self::ProviderId,
         mutations: &[(Self::MerkleHash, TrieMutation)],
         proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, DispatchError> {
+        // Check if submitter is a registered Provider.
+        ensure!(
+            ProvidersPalletFor::<T>::is_provider(*provider_id),
+            Error::<T>::NotProvider
+        );
+
+        // Get root for submitter.
+        // If a submitter is a registered Provider, it must have a root.
+        let root = ProvidersPalletFor::<T>::get_root(*provider_id)
+            .ok_or(Error::<T>::ProviderRootNotFound)?;
+
         Ok(
             <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
-                commitment, mutations, proof,
+                &root, mutations, proof,
             )
             .map_err(|_| Error::<T>::FailedToApplyDelta)?
             .1,
