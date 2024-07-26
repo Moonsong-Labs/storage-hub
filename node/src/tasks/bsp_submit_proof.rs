@@ -1,16 +1,24 @@
+use std::time::Duration;
+
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
+use shp_file_metadata::ChunkId;
+use sp_core::H256;
 use sp_trie::TrieLayout;
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewChallengeSeed};
-use shc_common::types::{HasherOutT, Proven, ProviderId, RandomnessOutput, TrieRemoveMutation};
+use shc_common::types::{
+    HasherOutT, KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
+    TrieRemoveMutation,
+};
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
 
 use crate::services::handler::StorageHubHandler;
 
 const LOG_TARGET: &str = "bsp-submit-proof-task";
+const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
 
 /// TODO: Document this task.
 pub struct BspSubmitProofTask<T, FL, FS>
@@ -77,18 +85,20 @@ where
         let mut forest_challenges = self
             .derive_forest_challenges_from_seed(seed, provider_id)
             .await?;
+        trace!(target: LOG_TARGET, "Forest challenges to respond to: {:?}", forest_challenges);
 
         // Check if there are checkpoint challenges since last tick this provider submitted a proof for.
         // If so, this will add them to the forest challenges.
         let checkpoint_challenges = self
             .add_checkpoint_challenges_to_forest_challenges(provider_id, &mut forest_challenges)
             .await?;
+        trace!(target: LOG_TARGET, "Checkpoint challenges to respond to: {:?}", checkpoint_challenges);
 
         // Get a read lock on the forest storage to generate a proof for the file.
         let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
         let proven_file_keys = read_forest_storage
             .generate_proof(forest_challenges)
-            .expect("Failed to generate forest proof.");
+            .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
         // Release the forest storage read lock.
         drop(read_forest_storage);
 
@@ -113,37 +123,89 @@ where
                 }
             }
         }
+        trace!(target: LOG_TARGET, "Proven file keys: {:?}", proven_keys);
 
         // Construct key challenges and generate key proofs for them.
-        for file_key in proven_keys {
-            // Get the metadata for the file.
-            let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-            let metadata = read_file_storage
-                .get_metadata(&file_key)
-                .expect("File metadata not found");
-            // Release the file storage read lock as soon as possible.
-            drop(read_file_storage);
-
-            // Calculate the number of challenges for this file.
-            let challenges_count = metadata.chunks_to_check();
-
-            // Generate the challenges for this file.
-            let file_key_challenges = self
-                .storage_hub_handler
-                .blockchain
-                .query_challenges_from_seed(seed, provider_id, challenges_count)
+        let mut key_proofs = KeyProofs::new();
+        for file_key in &proven_keys {
+            // Generate the key proof for each file key.
+            let key_proof = self
+                .generate_key_proof(*file_key, seed, provider_id)
                 .await?;
+
+            // Convert the file key to the runtime's hasher output type.
+            // Although redundant in reality, this is done because technically the type of `file_key` is
+            // a `HasherOutT<T>` and not a `H256`, which is what the runtime expects.
+            let file_key = H256::from_slice(file_key.as_ref());
+            key_proofs.insert(file_key, key_proof);
         }
 
-        // TODO: Construct key proofs.
+        // Construct full proof.
+        let proof = StorageProof {
+            forest_proof: proven_file_keys.proof,
+            key_proofs,
+        };
 
-        // TODO: Submit proofs to the runtime.
+        // Submit proof to the runtime.
+        // Provider is `None` since we're submitting with the account linked to the BSP.
+        let call = storage_hub_runtime::RuntimeCall::ProofsDealer(
+            pallet_proofs_dealer::Call::submit_proof {
+                proof,
+                provider: None,
+            },
+        );
 
-        // TODO: Handle extrinsic submission result.
+        // Attempt three times to submit extrinsic if it fails.
+        let mut extrinsic_submitted = false;
+        for attempt in 0..MAX_PROOF_SUBMISSION_ATTEMPTS {
+            if self
+                .storage_hub_handler
+                .blockchain
+                .send_extrinsic(call.clone())
+                .await?
+                .with_timeout(Duration::from_secs(60))
+                .watch_for_success(&self.storage_hub_handler.blockchain)
+                .await
+                .is_ok()
+            {
+                // TODO: Wait for finality of the extrinsic.
 
-        // TODO: Attempt to submit again if there is a failure.
+                extrinsic_submitted = true;
+                break;
+            }
 
-        // TODO: Apply mutations if extrinsic was successful, if any, update the Forest storage and file storage.
+            warn!(target: LOG_TARGET, "Failed to submit proof, attempt #{}", attempt + 1);
+        }
+
+        // Exit with error if extrinsic was not submitted.
+        if !extrinsic_submitted {
+            return Err(anyhow!(
+                "Failed to submit proof after {} attempts",
+                MAX_PROOF_SUBMISSION_ATTEMPTS
+            ));
+        }
+
+        trace!(target: LOG_TARGET, "Proof submitted successfully");
+
+        // TODO: Get root from runtime for this provider.
+
+        // Apply mutations, if any.
+        for (file_key, maybe_mutation) in &checkpoint_challenges {
+            if proven_keys.contains(file_key) {
+                // If the file key is proven, it means that this provider had an exact match for a checkpoint challenge.
+                trace!(target: LOG_TARGET, "Checkpoint challenge proven with exact match for file key: {:?}", file_key);
+
+                if let Some(mutation) = maybe_mutation {
+                    // If the mutation (which is a remove mutation) is Some and the file key was proven exactly,
+                    // then the mutation needs to be applied (i.e. the file key is removed from the Forest).
+                    trace!(target: LOG_TARGET, "Applying mutation: {:?}", mutation);
+
+                    self.remove_file(file_key).await?;
+                }
+            }
+        }
+
+        // TODO: Check that the new Forest root matches the one on-chain.
 
         Ok(())
     }
@@ -238,5 +300,79 @@ where
             // Else, return an empty checkpoint challenges vector.
             return Ok(Vec::new());
         }
+    }
+
+    async fn generate_key_proof(
+        &self,
+        file_key: HasherOutT<T>,
+        seed: RandomnessOutput,
+        provider_id: ProviderId,
+    ) -> anyhow::Result<KeyProof> {
+        // Get the metadata for the file.
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let metadata = read_file_storage
+            .get_metadata(&file_key)
+            .map_err(|e| anyhow!("File metadata not found: {:?}", e))?;
+        // Release the file storage read lock as soon as possible.
+        drop(read_file_storage);
+
+        // Calculate the number of challenges for this file.
+        let challenge_count = metadata.chunks_to_check();
+
+        // Generate the challenges for this file.
+        let file_key_challenges = self
+            .storage_hub_handler
+            .blockchain
+            .query_challenges_from_seed(seed, provider_id, challenge_count)
+            .await?;
+
+        // Convert the challenges to chunk IDs.
+        let chunks_count = metadata.chunks_count();
+        let chunks_to_prove = file_key_challenges
+            .iter()
+            .map(|challenge| ChunkId::from_challenge(challenge.as_ref(), chunks_count))
+            .collect::<Vec<_>>();
+
+        // Construct file key proofs for the challenges.
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let file_key_proof = read_file_storage
+            .generate_proof(&file_key, &chunks_to_prove)
+            .map_err(|e| anyhow!("File is not in storage, or proof does not exist: {:?}", e))?;
+        // Release the file storage read lock as soon as possible.
+        drop(read_file_storage);
+
+        // Return the key proof.
+        Ok(KeyProof {
+            proof: file_key_proof,
+            challenge_count,
+        })
+    }
+
+    async fn remove_file(&self, file_key: &HasherOutT<T>) -> anyhow::Result<()> {
+        // Remove the file key from the Forest.
+        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
+        write_forest_storage.delete_file_key(file_key).map_err(|e| {
+            error!(target: LOG_TARGET, "CRITICAL! Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
+            anyhow!(
+                "Failed to remove file key from Forest storage: {:?}",
+                e
+            )
+        })?;
+        // Release the forest storage write lock.
+        drop(write_forest_storage);
+
+        // Remove the file from the File Storage.
+        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+        write_file_storage.delete_file(file_key).map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to remove file from File Storage after it was removed from the Forest. \nError: {:?}", e);
+            anyhow!(
+                "Failed to delete file from File Storage after it was removed from the Forest: {:?}",
+                e
+            )
+        })?;
+        // Release the file storage write lock.
+        drop(write_file_storage);
+
+        Ok(())
     }
 }
