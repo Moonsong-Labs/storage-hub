@@ -510,7 +510,6 @@ where
     pub(crate) fn do_bsp_confirm_storing(
         sender: T::AccountId,
         file_key: MerkleHash<T>,
-        root: MerkleHash<T>,
         non_inclusion_forest_proof: ForestProof<T>,
         added_file_key_proof: KeyProof<T>,
     ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
@@ -618,7 +617,7 @@ where
 
         // Compute new root after inserting new file key in forest partial trie.
         let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
-            &root,
+            &bsp_id,
             &[(file_key, TrieAddMutation::default().into())],
             &non_inclusion_forest_proof,
         )?;
@@ -874,13 +873,9 @@ where
             Error::<T>::ExpectedInclusionProof
         );
 
-        // Get the current root of the BSP.
-        let root = <T::Providers as shp_traits::ProvidersInterface>::get_root(bsp_id)
-            .ok_or(Error::<T>::ProviderRootNotFound)?;
-
         // Compute new root after removing file key from forest partial trie.
         let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
-            &root,
+            &bsp_id,
             &[(file_key, TrieRemoveMutation::default().into())],
             &inclusion_forest_proof,
         )?;
