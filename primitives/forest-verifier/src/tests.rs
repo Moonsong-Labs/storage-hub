@@ -42,8 +42,8 @@ pub fn build_merkle_patricia_forest<T: TrieLayout>() -> (
 ) {
     let user_ids = vec![
         b"01", b"02", b"03", b"04", b"05", b"06", b"07", b"08", b"09", b"10", b"11", b"12", b"13",
-        b"12", b"13", b"14", b"15", b"16", b"17", b"18", b"19", b"20", b"21", b"22", b"23", b"24",
-        b"25", b"26", b"27", b"28", b"29", b"30", b"31", b"32",
+        b"14", b"15", b"16", b"17", b"18", b"19", b"20", b"21", b"22", b"23", b"24", b"25", b"26",
+        b"27", b"28", b"29", b"30", b"31", b"32", b"33", b"34", b"35", b"36", b"37", b"38", b"39",
     ];
     let bucket = b"bucket";
     let file_name = b"file64b";
@@ -1484,8 +1484,23 @@ mod mutate_root_tests {
     fn assert_key_not_in_trie(memdb: &MemoryDB<BlakeTwo256>, root: &H256, key: &H256) {
         let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(memdb, root).build();
         let mut iter = trie.iter().unwrap();
+
+        // Seek to the key that shouldn't exist.
         iter.seek(&key.0).unwrap();
-        assert!(iter.next().is_none());
+
+        // Get the next key. The acceptable scenarios are...
+        let next_key = iter.next();
+        // 1. `next_key` is None, which means that the key we searched for a key at the end of the trie, and there's nothing after it.
+        if let Some(next_key) = next_key {
+            // If the next key is Some, it means that there is something after the key we searched for.
+            // 2. If that something is an error, it means that the trie knows that there is something, but that something is not
+            // in `memdb`, so in fact the `key` searched is not in the trie.
+            if let Ok(next_key) = next_key {
+                // 3. If the next key is not an error, it means that there is something after the key we searched for, and that something is in `memdb`.
+                // In this case, we have to check that that something is not the key we searched for.
+                assert_ne!(next_key.0, key.0);
+            }
+        }
     }
 
     fn generate_unique_key(existing_keys: &Vec<H256>) -> H256 {
@@ -1682,17 +1697,12 @@ mod mutate_root_tests {
         let proof = generate_proof_and_verify(
             &mut recorder,
             &root,
-            &mutations
-                .iter()
-                .map(|(key, _)| *key)
-                .collect::<Vec<H256>>(),
+            &mutations.iter().map(|(key, _)| *key).collect::<Vec<H256>>(),
         );
 
         let (memdb, new_root) =
             ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
-                &root,
-                &mutations,
-                &proof,
+                &root, &mutations, &proof,
             )
             .expect("Failed to mutate root");
 
