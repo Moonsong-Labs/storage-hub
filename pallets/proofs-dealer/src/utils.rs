@@ -847,7 +847,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             );
         }
 
-        // Set `LastTickProviderSubmissionInterval` to the current tick.
+        // Set `LastTickProviderSubmittedAProofFor` to the current tick.
         let current_tick = ChallengesTicker::<T>::get();
         LastTickProviderSubmittedAProofFor::<T>::set(*provider_id, Some(current_tick));
 
