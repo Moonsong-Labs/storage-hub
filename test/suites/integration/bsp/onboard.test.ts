@@ -96,7 +96,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       const bcsv_key_type = "bcsv";
       const bob_seed = "//Bob";
 
-      let has_alice_key = await api.rpc.author.hasKey(alice_pub_key, bcsv_key_type);
+      const has_alice_key = await api.rpc.author.hasKey(alice_pub_key, bcsv_key_type);
       strictEqual(has_alice_key.toHuman().valueOf(), true);
 
       let has_bob_key = await api.rpc.author.hasKey(bob_pub_key, bcsv_key_type);
@@ -107,6 +107,5 @@ for (const bspNetConfig of bspNetConfigCases) {
       has_bob_key = await api.rpc.author.hasKey(bob_pub_key, bcsv_key_type);
       strictEqual(has_bob_key.toHuman().valueOf(), true);
     });
-
   });
 }
