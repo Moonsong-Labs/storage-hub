@@ -3066,7 +3066,6 @@ declare module '@polkadot/types/lookup' {
         readonly isBspConfirmStoring: boolean;
         readonly asBspConfirmStoring: {
             readonly fileKey: H256;
-            readonly root: H256;
             readonly nonInclusionForestProof: SpTrieStorageProofCompactProof;
             readonly addedFileKeyProof: ShpFileKeyVerifierFileKeyProof;
         } & Struct;

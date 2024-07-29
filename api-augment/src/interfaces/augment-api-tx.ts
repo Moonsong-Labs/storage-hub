@@ -405,7 +405,6 @@ declare module "@polkadot/api-base/types/submittable" {
       bspConfirmStoring: AugmentedSubmittable<
         (
           fileKey: H256 | string | Uint8Array,
-          root: H256 | string | Uint8Array,
           nonInclusionForestProof:
             | SpTrieStorageProofCompactProof
             | { encodedNodes?: any }
@@ -417,7 +416,7 @@ declare module "@polkadot/api-base/types/submittable" {
             | string
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, H256, SpTrieStorageProofCompactProof, ShpFileKeyVerifierFileKeyProof]
+        [H256, SpTrieStorageProofCompactProof, ShpFileKeyVerifierFileKeyProof]
       >;
       /**
        * Executed by a BSP to stop storing a file.

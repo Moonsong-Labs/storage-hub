@@ -451,7 +451,6 @@ where
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
             pallet_file_system::Call::bsp_confirm_storing {
                 file_key: H256::from_slice(file_key.as_ref()),
-                root: H256::from_slice(non_inclusion_forest_proof.root.as_ref()),
                 non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
                 added_file_key_proof,
             },
