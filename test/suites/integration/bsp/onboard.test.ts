@@ -89,5 +89,24 @@ for (const bspNetConfig of bspNetConfigCases) {
 
       strictEqual(sh_nodes.length > 3, true);
     });
+
+    it("Rotates the blockchain service keys (bcsv)", async () => {
+      const alice_pub_key = "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d";
+      const bob_pub_key = "0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48";
+      const bcsv_key_type = "bcsv";
+      const bob_seed = "//Bob";
+
+      let has_alice_key = await api.rpc.author.hasKey(alice_pub_key, bcsv_key_type);
+      strictEqual(has_alice_key.toHuman().valueOf(), true);
+
+      let has_bob_key = await api.rpc.author.hasKey(bob_pub_key, bcsv_key_type);
+      strictEqual(has_bob_key.toHuman().valueOf(), false);
+
+      // Rotate keys and check that Bob's pub key is now in Keystore.
+      await api.rpc.storagehubclient.rotateBcsvKeys(bob_seed);
+      has_bob_key = await api.rpc.author.hasKey(bob_pub_key, bcsv_key_type);
+      strictEqual(has_bob_key.toHuman().valueOf(), true);
+    });
+
   });
 }

@@ -1,5 +1,4 @@
 use jsonrpsee::core::async_trait;
-use jsonrpsee::core::client::async_client;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::proc_macros::rpc;
 use jsonrpsee::types::error::ErrorObjectOwned as JsonRpseeError;
@@ -12,7 +11,6 @@ use shc_common::types::FileMetadata;
 use shc_common::types::HasherOutT;
 use shc_common::types::FILE_CHUNK_SIZE;
 use shp_constants::BCSV_KEY_TYPE;
-use sp_core::sr25519;
 use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::AccountId32;
@@ -39,8 +37,6 @@ use tokio::fs::create_dir_all;
 use tokio::sync::RwLock;
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
-
-type Sr25519Public = sr25519::Public;
 
 pub struct StorageHubClientRpcConfig<T, FL, FS> {
     pub file_storage: Arc<RwLock<FL>>,
@@ -120,7 +116,7 @@ pub trait StorageHubClientApi {
     async fn get_forest_root(&self) -> RpcResult<H256>;
 
     #[method(name = "rotateBcsvKeys")]
-    async fn rotate_bcsv_keys(&self, seed: String) -> RpcResult<Sr25519Public>;
+    async fn rotate_bcsv_keys(&self, seed: String) -> RpcResult<String>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -296,13 +292,13 @@ where
         Ok(root)
     }
 
-    async fn rotate_bcsv_keys(&self, seed: String) -> RpcResult<Sr25519Public> {
+    async fn rotate_bcsv_keys(&self, seed: String) -> RpcResult<String> {
         let new_pub_key = self
             .keystore
             .sr25519_generate_new(BCSV_KEY_TYPE, Some(seed.as_ref()))
-            .expect("Invalid signing key provided.");
+            .map_err(into_rpc_error)?;
 
-        Ok(new_pub_key)
+        Ok(new_pub_key.to_string())
     }
 }
 
