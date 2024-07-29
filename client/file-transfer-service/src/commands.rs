@@ -67,10 +67,12 @@ pub enum RequestError {
     /// File not found in the registry.
     #[error("File not found in registry")]
     FileNotRegistered,
+    /// Download request id was not found in internal mapping
     #[error("DownloadRequestId not found in internal mapping")]
     DownloadRequestIdNotFound,
-    #[error("Failed to return response")]
-    ResponseFailure(OutgoingResponse),
+    /// Failed to return response from Download request
+    #[error("Failed to return download response: {0:?}")]
+    DownloadResponseFailure(OutgoingResponse),
 }
 
 /// Allows our ActorHandle to implement

@@ -174,49 +174,43 @@ impl Actor for FileTransferService {
                         reputation_changes: Vec::new(),
                     };
 
+                    // Tries to find the sender half of the response channel
                     let maybe_pending_response =
                         self.download_pending_responses.remove(&request_id).take();
 
-                    match maybe_pending_response {
+                    // Tries to send back the download response and then gets the request callback result.
+                    let request_callback_result = match maybe_pending_response {
                         Some(pending_response_sender) => {
+                            // Tries to send download response back
                             let pending_response_result =
                                 pending_response_sender.send(outgoing_response);
+
+                            // Checks if response was sent back
                             match pending_response_result {
-                                Ok(()) => {
-                                    match callback.send(Ok(())) {
-                                        Ok(()) => {}
-                                        Err(_) => error!(
-                                            target: LOG_TARGET,
-                                            "Failed to send the response back. Looks like the requester task is gone."
-                                        ),
-                                    };
-                                }
+                                Ok(()) => callback.send(Ok(())),
                                 Err(e) => {
                                     error!(
                                         target: LOG_TARGET,
                                         "Failed to return Download Response {:?}", e
                                     );
-                                    match callback.send(Err(RequestError::ResponseFailure(e))) {
-                                        Ok(()) => {}
-                                        Err(_) => error!(
-                                            target: LOG_TARGET,
-                                            "Failed to send the response back. Looks like the requester task is gone."
-                                        ),
-                                    };
+                                    callback.send(Err(RequestError::DownloadResponseFailure(e)))
                                 }
                             }
                         }
                         None => {
                             error!(target: LOG_TARGET, "No pending response channel found for request id {:?}", request_id);
-                            match callback.send(Err(RequestError::DownloadRequestIdNotFound)) {
-                                Ok(()) => {}
-                                Err(_) => error!(
-                                    target: LOG_TARGET,
-                                    "Failed to send the response back. Looks like the requester task is gone."
-                                ),
-                            };
+                            callback.send(Err(RequestError::DownloadRequestIdNotFound))
                         }
-                    }
+                    };
+
+                    // Checks that request callback was returned correctly.
+                    match request_callback_result {
+                        Ok(()) => {}
+                        Err(_) => error!(
+                            target: LOG_TARGET,
+                            "Failed to send the response back. Looks like the requester task is gone."
+                        ),
+                    };
                 }
 
                 FileTransferServiceCommand::AddKnownAddress {
