@@ -456,7 +456,7 @@ where
         transaction_pool: transaction_pool.clone(),
         task_manager: &mut task_manager,
         config,
-        keystore: keystore_container.keystore(),
+        keystore: keystore.clone(),
         backend: backend.clone(),
         network: network.clone(),
         sync_service: sync_service.clone(),
@@ -471,7 +471,7 @@ where
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
             rpc_handlers,
-            keystore_container.keystore(),
+            keystore.clone(),
             provider_options,
         )
         .await;
@@ -770,7 +770,7 @@ where
         transaction_pool: transaction_pool.clone(),
         task_manager: &mut task_manager,
         config: parachain_config,
-        keystore: params.keystore_container.keystore(),
+        keystore: keystore.clone(),
         backend: backend.clone(),
         network: network.clone(),
         sync_service: sync_service.clone(),
@@ -785,7 +785,7 @@ where
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
             rpc_handlers,
-            params.keystore_container.keystore(),
+            keystore.clone(),
             provider_options,
         )
         .await;
