@@ -24,7 +24,6 @@ sp-keystore = { workspace = true }
 shc-common = { workspace = true }
 shc-file-manager = { workspace = true }
 shc-forest-manager = { workspace = true }
-shp-constants = { workspace = true }
 
 [features]
 default = ["std"]

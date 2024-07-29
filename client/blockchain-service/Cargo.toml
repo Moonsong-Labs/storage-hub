@@ -55,7 +55,6 @@ pallet-proofs-dealer-runtime-api = { workspace = true }
 storage-hub-runtime = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }
-shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
 

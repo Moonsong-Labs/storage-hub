@@ -8,7 +8,7 @@ pub use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
 pub use shp_file_metadata::{Chunk, ChunkId, Leaf};
 use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
-use sp_runtime::traits::Block as BlockT;
+use sp_runtime::{traits::Block as BlockT, KeyTypeId};
 use sp_trie::CompactProof;
 use storage_hub_runtime::{opaque::Block, Runtime, RuntimeApi};
 use trie_db::TrieLayout;
@@ -54,6 +54,9 @@ type HostFunctions = (
 pub type ParachainExecutor = WasmExecutor<HostFunctions>;
 pub type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
 pub type ParachainNetworkService = NetworkService<Block, <Block as BlockT>::Hash>;
+
+/// The type of key used for [`BlockchainService`]` operations.
+pub const BCSV_KEY_TYPE: KeyTypeId = KeyTypeId(*b"bcsv");
 
 /// Proving either the exact key or the neighbour keys of the challenged key.
 pub enum Proven<K, D: Debug> {
