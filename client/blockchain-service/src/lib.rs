@@ -8,14 +8,11 @@ use std::sync::Arc;
 
 use sc_service::RpcHandlers;
 use sp_keystore::KeystorePtr;
-use sp_runtime::KeyTypeId;
 
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::types::ParachainClient;
 
 pub use self::handler::BlockchainService;
-
-pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"bcsv");
 
 pub async fn spawn_blockchain_service(
     task_spawner: &TaskSpawner,

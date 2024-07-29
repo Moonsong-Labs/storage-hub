@@ -11,7 +11,7 @@ use crate::types::{
 use crate::{mock::*, types::Proof};
 use crate::{
     ChallengeTickToChallengedProviders, ChallengesTicker, LastCheckpointTick, LastDeletedTick,
-    LastTickProviderSubmittedProofFor, SlashableProviders, TickToChallengesSeed,
+    LastTickProviderSubmittedAProofFor, SlashableProviders, TickToChallengesSeed,
     TickToCheckpointChallenges, ValidProofSubmittersLastTicks,
 };
 use codec::Encode;
@@ -523,7 +523,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
 
         // Check that the Provider's last tick was set to 1.
         let last_tick_provider_submitted_proof =
-            LastTickProviderSubmittedProofFor::<Test>::get(&provider_id).unwrap();
+            LastTickProviderSubmittedAProofFor::<Test>::get(&provider_id).unwrap();
         assert_eq!(last_tick_provider_submitted_proof, 1);
 
         // Check that the Provider's deadline was set to `challenge_period + challenge_ticks_tolerance`
@@ -586,7 +586,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
 
         // Check that the Provider's last tick was set to 1.
         let last_tick_provider_submitted_proof =
-            LastTickProviderSubmittedProofFor::<Test>::get(&provider_id).unwrap();
+            LastTickProviderSubmittedAProofFor::<Test>::get(&provider_id).unwrap();
         assert_eq!(last_tick_provider_submitted_proof, 1);
 
         // Check that the Provider's deadline was set to `challenge_period + challenge_ticks_tolerance`
@@ -612,7 +612,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
 
         // Check that the Provider's last tick is the current now.
         let last_tick_provider_submitted_proof =
-            LastTickProviderSubmittedProofFor::<Test>::get(&provider_id).unwrap();
+            LastTickProviderSubmittedAProofFor::<Test>::get(&provider_id).unwrap();
         let current_tick = ChallengesTicker::<Test>::get();
         assert_eq!(last_tick_provider_submitted_proof, current_tick);
 
@@ -635,6 +635,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
 
         // Advance beyond the previous deadline block and check that the Provider is not marked as slashable.
         run_to_block(current_block + challenge_ticks_tolerance + 1);
+
         assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
     });
 }
@@ -689,10 +690,10 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
 
         // Check that the Providers' last tick was set to 1.
         let last_tick_provider_submitted_proof =
-            LastTickProviderSubmittedProofFor::<Test>::get(&provider_id_1).unwrap();
+            LastTickProviderSubmittedAProofFor::<Test>::get(&provider_id_1).unwrap();
         assert_eq!(last_tick_provider_submitted_proof, 1);
         let last_tick_provider_submitted_proof =
-            LastTickProviderSubmittedProofFor::<Test>::get(&provider_id_2).unwrap();
+            LastTickProviderSubmittedAProofFor::<Test>::get(&provider_id_2).unwrap();
         assert_eq!(last_tick_provider_submitted_proof, 1);
 
         // Check that Provider 1's deadline was set to `challenge_period + challenge_ticks_tolerance`
@@ -716,7 +717,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
 
         // Check that the Provider's last tick is the current now.
         let last_tick_provider_submitted_proof =
-            LastTickProviderSubmittedProofFor::<Test>::get(&provider_id_1).unwrap();
+            LastTickProviderSubmittedAProofFor::<Test>::get(&provider_id_1).unwrap();
         let current_tick = ChallengesTicker::<Test>::get();
         assert_eq!(last_tick_provider_submitted_proof, current_tick);
 
@@ -807,7 +808,7 @@ fn submit_proof_success() {
         // Set Provider's last submitted proof block.
         let current_tick = ChallengesTicker::<Test>::get();
         let last_tick_provider_submitted_proof = current_tick;
-        LastTickProviderSubmittedProofFor::<Test>::insert(
+        LastTickProviderSubmittedAProofFor::<Test>::insert(
             &provider_id,
             last_tick_provider_submitted_proof,
         );
@@ -873,7 +874,7 @@ fn submit_proof_success() {
         // Check the new last time this provider submitted a proof.
         let expected_new_tick = last_tick_provider_submitted_proof + challenge_period;
         let new_last_tick_provider_submitted_proof =
-            LastTickProviderSubmittedProofFor::<Test>::get(provider_id).unwrap();
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
         assert_eq!(expected_new_tick, new_last_tick_provider_submitted_proof);
 
         // Check that the Provider's deadline was pushed forward.
@@ -935,7 +936,7 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
         // Set Provider's last submitted proof block.
         let current_tick = ChallengesTicker::<Test>::get();
         let last_tick_provider_submitted_proof = current_tick;
-        LastTickProviderSubmittedProofFor::<Test>::insert(
+        LastTickProviderSubmittedAProofFor::<Test>::insert(
             &provider_id,
             last_tick_provider_submitted_proof,
         );
@@ -1044,7 +1045,7 @@ fn submit_proof_submitted_by_not_a_provider_success() {
         );
 
         // Set Provider's last submitted proof block.
-        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
@@ -1136,7 +1137,7 @@ fn submit_proof_with_checkpoint_challenges_success() {
 
         // Set Provider's last submitted proof tick.
         let last_tick_provider_submitted_proof = System::block_number();
-        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
@@ -1245,7 +1246,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
 
         // Set Provider's last submitted proof tick.
         let last_tick_provider_submitted_proof = System::block_number();
-        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
@@ -1578,7 +1579,7 @@ fn submit_proof_challenges_block_not_reached_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, 1);
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, 1);
 
         // Dispatch challenge extrinsic.
         assert_noop!(
@@ -1655,7 +1656,7 @@ fn submit_proof_challenges_block_too_old_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, 1);
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, 1);
 
         // Advance more than `ChallengeHistoryLength` blocks.
         let challenge_history_length: u64 = ChallengeHistoryLengthFor::<Test>::get();
@@ -1732,7 +1733,7 @@ fn submit_proof_seed_not_found_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, 1);
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, 1);
 
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
@@ -1812,7 +1813,7 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
@@ -1897,7 +1898,7 @@ fn submit_proof_forest_proof_verification_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
@@ -1980,7 +1981,7 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
@@ -2046,7 +2047,7 @@ fn submit_proof_out_checkpoint_challenges_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
@@ -2159,7 +2160,7 @@ fn submit_proof_key_proof_verification_fail() {
         );
 
         // Set Provider's last submitted proof block.
-        LastTickProviderSubmittedProofFor::<Test>::insert(&provider_id, System::block_number());
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
 
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
@@ -2556,7 +2557,7 @@ fn new_challenges_round_provider_marked_as_slashable() {
         // Set Provider's last submitted proof block.
         let current_tick = ChallengesTicker::<Test>::get();
         let prev_tick_provider_submitted_proof = current_tick;
-        LastTickProviderSubmittedProofFor::<Test>::insert(
+        LastTickProviderSubmittedAProofFor::<Test>::insert(
             &provider_id,
             prev_tick_provider_submitted_proof,
         );
@@ -2587,12 +2588,13 @@ fn new_challenges_round_provider_marked_as_slashable() {
 
         // Check that Provider is in the SlashableProviders storage map.
         assert!(SlashableProviders::<Test>::contains_key(&provider_id));
+        assert_eq!(SlashableProviders::<Test>::get(&provider_id), Some(1));
 
         // Check the new last time this provider submitted a proof.
         let current_tick_provider_submitted_proof =
             prev_tick_provider_submitted_proof + challenge_period;
         let new_last_tick_provider_submitted_proof =
-            LastTickProviderSubmittedProofFor::<Test>::get(provider_id).unwrap();
+            LastTickProviderSubmittedAProofFor::<Test>::get(provider_id).unwrap();
         assert_eq!(
             current_tick_provider_submitted_proof,
             new_last_tick_provider_submitted_proof
@@ -2604,11 +2606,102 @@ fn new_challenges_round_provider_marked_as_slashable() {
             None
         );
         let new_deadline =
-            current_tick_provider_submitted_proof + challenge_period + challenge_ticks_tolerance;
+            new_last_tick_provider_submitted_proof + challenge_period + challenge_ticks_tolerance;
         assert_eq!(
             ChallengeTickToChallengedProviders::<Test>::get(new_deadline, provider_id),
             Some(()),
         );
+    });
+}
+
+#[test]
+fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Register user as a Provider in Providers pallet.
+        let provider_id = BlakeTwo256::hash(b"provider_id");
+        pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
+            &1,
+            provider_id,
+        );
+        pallet_storage_providers::BackupStorageProviders::<Test>::insert(
+            &provider_id,
+            pallet_storage_providers::types::BackupStorageProvider {
+                capacity: Default::default(),
+                data_used: Default::default(),
+                multiaddresses: Default::default(),
+                root: Default::default(),
+                last_capacity_change: Default::default(),
+                owner_account: 1u64,
+                payment_account: Default::default(),
+            },
+        );
+
+        // Set Provider's root to be an arbitrary value, different than the default root,
+        // to simulate that it is actually providing a service.
+        let root = BlakeTwo256::hash(b"1234");
+        pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+            &provider_id,
+            |provider| {
+                provider.as_mut().expect("Provider should exist").root = root;
+            },
+        );
+
+        // Set Provider's last submitted proof block.
+        let prev_tick_provider_submitted_proof = ChallengesTicker::<Test>::get();
+        LastTickProviderSubmittedAProofFor::<Test>::insert(
+            &provider_id,
+            prev_tick_provider_submitted_proof,
+        );
+
+        // New challenges round
+        let current_tick = ChallengesTicker::<Test>::get();
+        let challenge_period = 1;
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
+        let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
+        let prev_deadline = current_tick + challenge_period_plus_tolerance;
+
+        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+
+        // Check that Provider is not in the SlashableProviders storage map.
+        assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
+
+        // Advance to the deadline block for this Provider.
+        run_to_block(prev_deadline);
+
+        // Check event of provider being marked as slashable.
+        System::assert_has_event(
+            Event::SlashableProvider {
+                provider: provider_id,
+            }
+            .into(),
+        );
+
+        // Check that Provider is in the SlashableProviders storage map.
+        assert!(SlashableProviders::<Test>::contains_key(&provider_id));
+        assert_eq!(SlashableProviders::<Test>::get(&provider_id), Some(1));
+
+        // New challenges round
+        let current_tick = ChallengesTicker::<Test>::get();
+        let prev_deadline = current_tick + challenge_period;
+        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+
+        // Advance to the deadline block for this Provider.
+        run_to_block(prev_deadline);
+
+        // Check event of provider being marked as slashable.
+        System::assert_has_event(
+            Event::SlashableProvider {
+                provider: provider_id,
+            }
+            .into(),
+        );
+
+        // Check that Provider is in the SlashableProviders storage map.
+        assert!(SlashableProviders::<Test>::contains_key(&provider_id));
+        assert_eq!(SlashableProviders::<Test>::get(&provider_id), Some(2));
     });
 }
 
@@ -2674,15 +2767,9 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
 
         // Set Alice and Bob's last submitted proof block.
         let current_tick = ChallengesTicker::<Test>::get();
-        let last_tick_provider_submitted_proof = current_tick;
-        LastTickProviderSubmittedProofFor::<Test>::insert(
-            &alice_provider_id,
-            last_tick_provider_submitted_proof,
-        );
-        LastTickProviderSubmittedProofFor::<Test>::insert(
-            &bob_provider_id,
-            last_tick_provider_submitted_proof,
-        );
+        let last_interval_tick = current_tick;
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&alice_provider_id, last_interval_tick);
+        LastTickProviderSubmittedAProofFor::<Test>::insert(&bob_provider_id, last_interval_tick);
 
         // Set Alice and Bob's deadline for submitting a proof.
         // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
@@ -2756,44 +2843,44 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
         // Advance to the deadline block for this Provider.
         run_to_block(prev_deadline);
 
-        // // Check event of Bob being marked as slashable.
-        // System::assert_has_event(
-        //     Event::SlashableProvider {
-        //         provider: bob_provider_id,
-        //     }
-        //     .into(),
-        // );
+        System::assert_has_event(
+            Event::SlashableProvider {
+                provider: bob_provider_id,
+            }
+            .into(),
+        );
 
         // Check that Bob is in the SlashableProviders storage map and that Alice is not.
         assert!(!SlashableProviders::<Test>::contains_key(
             &alice_provider_id
         ));
         assert!(SlashableProviders::<Test>::contains_key(&bob_provider_id));
+        assert_eq!(SlashableProviders::<Test>::get(&bob_provider_id), Some(1));
 
-        // Check the new last time Bob and Alice submitted a proof.
-        let expected_new_tick = last_tick_provider_submitted_proof + challenge_period;
-        let new_last_tick_alice_submitted_proof =
-            LastTickProviderSubmittedProofFor::<Test>::get(alice_provider_id).unwrap();
-        assert_eq!(expected_new_tick, new_last_tick_alice_submitted_proof);
-        let new_last_tick_bob_submitted_proof =
-            LastTickProviderSubmittedProofFor::<Test>::get(bob_provider_id).unwrap();
-        assert_eq!(expected_new_tick, new_last_tick_bob_submitted_proof);
+        // Check the new last tick interval for Alice and Bob.
+        let expected_new_tick = last_interval_tick + challenge_period;
+        let new_last_interval_tick_alice =
+            LastTickProviderSubmittedAProofFor::<Test>::get(alice_provider_id).unwrap();
+        assert_eq!(expected_new_tick, new_last_interval_tick_alice);
+        let new_last_interval_tick_bob =
+            LastTickProviderSubmittedAProofFor::<Test>::get(bob_provider_id).unwrap();
+        assert_eq!(expected_new_tick, new_last_interval_tick_bob);
 
-        // Check that the both Alice and Bob's deadlines were pushed forward.
         assert_eq!(
             ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, alice_provider_id),
             None
-        );
-        let new_deadline = expected_new_tick + challenge_period + challenge_ticks_tolerance;
-        assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(new_deadline, alice_provider_id),
-            Some(()),
         );
         assert_eq!(
             ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, bob_provider_id),
             None
         );
-        let new_deadline = expected_new_tick + challenge_period + challenge_ticks_tolerance;
+
+        // Check that the both Alice and Bob's deadlines were pushed forward.
+        let new_deadline = expected_new_tick + challenge_period_plus_tolerance;
+        assert_eq!(
+            ChallengeTickToChallengedProviders::<Test>::get(new_deadline, alice_provider_id),
+            Some(()),
+        );
         assert_eq!(
             ChallengeTickToChallengedProviders::<Test>::get(new_deadline, bob_provider_id),
             Some(()),

@@ -62,6 +62,16 @@ export default {
       description: "Get the root of the forest trie.",
       params: [],
       type: "H256"
+    },
+    rotateBcsvKeys: {
+      description: "Rotate (generate and insert) new keys of BCSV type for the Blockchain Service.",
+      params: [
+        {
+          name: "seed",
+          type: "String"
+        }
+      ],
+      type: "String"
     }
   }
 };
