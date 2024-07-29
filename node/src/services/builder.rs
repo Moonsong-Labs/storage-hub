@@ -129,7 +129,7 @@ where
     }
 
     /// Creates a new [`StorageHubClientRpcConfig`] to be used when setting up the RPCs.
-    pub fn rpc_config(&self) -> StorageHubClientRpcConfig<T, FL, FS> {
+    pub fn rpc_config(&self, keystore: KeystorePtr) -> StorageHubClientRpcConfig<T, FL, FS> {
         StorageHubClientRpcConfig::new(
             self.file_storage
                 .clone()
@@ -137,6 +137,7 @@ where
             self.forest_storage
                 .clone()
                 .expect("Forest Storage not initialized"),
+            keystore,
         )
     }
 

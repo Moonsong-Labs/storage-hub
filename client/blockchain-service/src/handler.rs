@@ -35,7 +35,7 @@ use sc_service::RpcHandlers;
 use sc_tracing::tracing::{error, info};
 use serde_json::Number;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::Fingerprint;
+use shc_common::types::{Fingerprint, BCSV_KEY_TYPE};
 use shp_file_metadata::FileKey;
 use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Hasher, H256};
@@ -64,7 +64,6 @@ use crate::{
     },
     transaction::SubmittedTransaction,
     types::{EventsVec, Extrinsic},
-    KEY_TYPE,
 };
 
 const LOG_TARGET: &str = "blockchain-service";
@@ -488,7 +487,7 @@ impl BlockchainService {
                                 let account: Vec<u8> =
                                     <sp_runtime::AccountId32 as AsRef<[u8; 32]>>::as_ref(&account)
                                         .to_vec();
-                                if self.keystore.has_keys(&[(account.clone(), KEY_TYPE)]) {
+                                if self.keystore.has_keys(&[(account.clone(), BCSV_KEY_TYPE)]) {
                                     // If so, add the Provider ID to the list of Providers that this node is monitoring.
                                     info!(target: LOG_TARGET, "New Provider ID to monitor [{:?}] for account [{:?}]", provider_id, account);
                                     self.provider_ids.push(provider_id);
@@ -718,7 +717,7 @@ impl BlockchainService {
 
         // Sign the payload.
         let signature = raw_payload
-            .using_encoded(|e| self.keystore.sr25519_sign(KEY_TYPE, &caller_pub_key, e))
+            .using_encoded(|e| self.keystore.sr25519_sign(BCSV_KEY_TYPE, &caller_pub_key, e))
             .expect("The payload is always valid and should be possible to sign; qed")
             .expect("They key type and public key are valid because we just extracted them from the keystore; qed");
 
@@ -735,10 +734,10 @@ impl BlockchainService {
 
     // Getting signer public key.
     pub fn caller_pub_key(keystore: KeystorePtr) -> sp_core::sr25519::Public {
-        let caller_pub_key = keystore.sr25519_public_keys(KEY_TYPE).pop().expect(
+        let caller_pub_key = keystore.sr25519_public_keys(BCSV_KEY_TYPE).pop().expect(
             format!(
                 "There should be at least one sr25519 key in the keystore with key type '{:?}' ; qed",
-                KEY_TYPE
+                BCSV_KEY_TYPE
             )
             .as_str(),
         );

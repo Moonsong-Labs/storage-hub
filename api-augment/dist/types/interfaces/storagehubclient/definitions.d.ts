@@ -42,6 +42,14 @@ declare const _default: {
             params: never[];
             type: string;
         };
+        rotateBcsvKeys: {
+            description: string;
+            params: {
+                name: string;
+                type: string;
+            }[];
+            type: string;
+        };
     };
 };
 export default _default;
