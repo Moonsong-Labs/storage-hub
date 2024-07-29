@@ -25,6 +25,7 @@ use frame_support::{StorageHasher, Twox128};
 use futures::{prelude::*, stream::select};
 use lazy_static::lazy_static;
 use log::{debug, trace, warn};
+use pallet_storage_providers_runtime_api::{GetBspInfoError, StorageProvidersApi};
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{
     BlockBackend, BlockImportNotification, BlockchainEvents, HeaderBackend, StorageKey,
@@ -73,7 +74,7 @@ lazy_static! {
     // Would be cool to be able to do this...
     // let events_storage_key = frame_system::Events::<storage_hub_runtime::Runtime>::hashed_key();
 
-    // Static and lazily initialized `events_storage_key`
+    // Static and lazily initialised `events_storage_key`
     static ref EVENTS_STORAGE_KEY: Vec<u8> = {
         let key = [
             Twox128::hash(b"System").to_vec(),
@@ -407,6 +408,29 @@ impl Actor for BlockchainService {
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send checkpoint challenges: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryProviderForestRoot {
+                    provider_id,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let bsp_info = self
+                        .client
+                        .runtime_api()
+                        .get_bsp_info(current_block_hash, &provider_id)
+                        .unwrap_or_else(|_| Err(GetBspInfoError::InternalApiError));
+
+                    let root = bsp_info.map(|bsp_info| bsp_info.root);
+
+                    match callback.send(root) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "BSP root sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send BSP root: {:?}", e);
                         }
                     }
                 }

@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use pallet_proofs_dealer_runtime_api::{
     GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
 };
+use pallet_storage_providers_runtime_api::GetBspInfoError;
 use serde_json::Number;
 use sp_api::ApiError;
 use sp_core::H256;
@@ -82,6 +83,10 @@ pub enum BlockchainServiceCommand {
             Result<Vec<(ForestLeaf, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError>,
         >,
     },
+    QueryProviderForestRoot {
+        provider_id: ProviderId,
+        callback: tokio::sync::oneshot::Sender<Result<H256, GetBspInfoError>>,
+    },
 }
 
 /// Interface for interacting with the BlockchainService actor.
@@ -158,6 +163,12 @@ pub trait BlockchainServiceInterface {
         &self,
         tick: BlockNumber,
     ) -> Result<Vec<(ForestLeaf, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError>;
+
+    /// Query the Merkle Patricia Forest root for a given Provider.
+    async fn query_provider_forest_root(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<H256, GetBspInfoError>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -345,6 +356,19 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     ) -> Result<Vec<(ForestLeaf, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryLastCheckpointChallenges { tick, callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_provider_forest_root(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<H256, GetBspInfoError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryProviderForestRoot {
+            provider_id,
+            callback,
+        };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }

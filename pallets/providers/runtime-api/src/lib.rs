@@ -19,4 +19,5 @@ sp_api::decl_runtime_apis! {
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum GetBspInfoError {
     BspNotRegistered,
+    InternalApiError,
 }
