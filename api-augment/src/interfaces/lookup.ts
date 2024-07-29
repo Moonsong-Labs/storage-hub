@@ -3056,6 +3056,7 @@ export default {
       },
       bsp_confirm_storing: {
         fileKey: "H256",
+        root: "H256",
         nonInclusionForestProof: "SpTrieStorageProofCompactProof",
         addedFileKeyProof: "ShpFileKeyVerifierFileKeyProof"
       },

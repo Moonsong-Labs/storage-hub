@@ -3007,6 +3007,7 @@ declare const _default: {
             };
             bsp_confirm_storing: {
                 fileKey: string;
+                root: string;
                 nonInclusionForestProof: string;
                 addedFileKeyProof: string;
             };
