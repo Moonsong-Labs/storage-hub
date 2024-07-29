@@ -1296,6 +1296,21 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256]>;
       /**
+       * The mapping from a MainStorageProviderId to a vector of BucketIds.
+       *
+       * This is used to efficiently retrieve the list of buckets that a Main Storage Provider is currently storing.
+       *
+       * This storage is updated in:
+       * - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket)
+       * - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket)
+       **/
+      mainStorageProviderIdsToBuckets: AugmentedQuery<
+        ApiType,
+        (arg: H256 | string | Uint8Array) => Observable<Option<Vec<H256>>>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
+      /**
        * The mapping from a MainStorageProviderId to a MainStorageProvider.
        *
        * This is used to get a Main Storage Provider's metadata.

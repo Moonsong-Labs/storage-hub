@@ -592,6 +592,10 @@ declare module '@polkadot/rpc-core/types/jsonrpc' {
              **/
             loadFileInStorage: AugmentedRpc<(file_path: Text | string, location: Text | string, owner: AccountId32 | string | Uint8Array, bucket_id: H256 | string | Uint8Array) => Observable<FileMetadata>>;
             /**
+             * Rotate (generate and insert) new keys of BCSV type for the Blockchain Service.
+             **/
+            rotateBcsvKeys: AugmentedRpc<(seed: Text | string) => Observable<Text>>;
+            /**
              * Save a file from the local storage to the disk.
              **/
             saveFileToDisk: AugmentedRpc<(file_key: H256 | string | Uint8Array, file_path: Text | string) => Observable<SaveFileToDisk>>;

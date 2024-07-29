@@ -317,7 +317,7 @@ pub trait ProofsDealerInterface {
     /// This only verifies that something is included in the forest of the Provider. It is not a full
     /// proof of the Provider's data.
     fn verify_forest_proof(
-        who: &Self::ProviderId,
+        provider_id: &Self::ProviderId,
         challenges: &[Self::MerkleHash],
         proof: &Self::ForestProof,
     ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError>;
@@ -352,7 +352,7 @@ pub trait ProofsDealerInterface {
     ///
     /// The new root is returned.
     fn apply_delta(
-        commitment: &Self::MerkleHash,
+        provider_id: &Self::ProviderId,
         mutations: &[(Self::MerkleHash, TrieMutation)],
         proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, DispatchError>;

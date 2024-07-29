@@ -14,7 +14,7 @@ use frame_support::{
     weights::Weight,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-use pallet_proofs_dealer::{LastTickProviderSubmittedProofFor, PriorityChallengesQueue};
+use pallet_proofs_dealer::{LastTickProviderSubmittedAProofFor, PriorityChallengesQueue};
 use pallet_storage_providers::types::Bucket;
 use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface, TrieRemoveMutation};
 use sp_core::{ByteArray, Hasher, H256};
@@ -1126,7 +1126,6 @@ fn revoke_storage_request_with_confirmed_bsps_success() {
         assert_ok!(FileSystem::bsp_confirm_storing(
             bsp_signed.clone(),
             file_key,
-            H256::zero(),
             CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             },
@@ -1416,7 +1415,6 @@ fn bsp_confirm_storing_success() {
         assert_ok!(FileSystem::bsp_confirm_storing(
             bsp_signed.clone(),
             file_key,
-            H256::zero(), // TODO construct a real proof
             CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             },
@@ -1481,7 +1479,7 @@ fn bsp_confirm_storing_success() {
 
         // Assert that the proving cycle was initialised for this BSP.
         let last_tick_provider_submitted_proof =
-            LastTickProviderSubmittedProofFor::<Test>::get(&bsp_id).unwrap();
+            LastTickProviderSubmittedAProofFor::<Test>::get(&bsp_id).unwrap();
         assert_eq!(last_tick_provider_submitted_proof, tick_when_confirming);
 
         // Assert that the correct event was deposited.
@@ -1518,7 +1516,6 @@ fn bsp_confirm_storing_storage_request_not_found_fail() {
             FileSystem::bsp_confirm_storing(
                 bsp_signed.clone(),
                 file_key,
-                H256::zero(),
                 CompactProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 },
@@ -1578,7 +1575,6 @@ fn bsp_confirm_storing_not_volunteered_fail() {
             FileSystem::bsp_confirm_storing(
                 bsp_signed.clone(),
                 file_key,
-                H256::zero(), // TODO construct a real proof
                 CompactProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 },
@@ -1641,7 +1637,6 @@ fn bsp_already_confirmed_fail() {
         assert_ok!(FileSystem::bsp_confirm_storing(
             bsp_signed.clone(),
             file_key,
-            H256::zero(), // TODO construct a real proof
             CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             },
@@ -1654,7 +1649,6 @@ fn bsp_already_confirmed_fail() {
             FileSystem::bsp_confirm_storing(
                 bsp_signed.clone(),
                 file_key,
-                H256::zero(), // TODO construct a real proof
                 CompactProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 },
@@ -1714,7 +1708,6 @@ fn bsp_actions_not_a_bsp_fail() {
             FileSystem::bsp_confirm_storing(
                 bsp_signed.clone(),
                 file_key,
-                H256::zero(), // TODO construct a real proof
                 CompactProof {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 },
@@ -1783,7 +1776,6 @@ fn bsp_stop_storing_success() {
         assert_ok!(FileSystem::bsp_confirm_storing(
             bsp_signed.clone(),
             file_key,
-            H256::zero(), // TODO construct a real proof
             CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             },
@@ -1939,7 +1931,6 @@ fn bsp_stop_storing_while_storage_request_open_success() {
         assert_ok!(FileSystem::bsp_confirm_storing(
             bsp_signed.clone(),
             file_key,
-            H256::zero(),
             CompactProof {
                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
             },

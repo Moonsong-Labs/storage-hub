@@ -18,6 +18,7 @@ tokio = { workspace = true }
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
 sp-trie = { workspace = true }
+sp-keystore = { workspace = true }
 
 # Local
 shc-common = { workspace = true }
