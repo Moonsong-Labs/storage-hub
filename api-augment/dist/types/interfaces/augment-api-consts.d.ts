@@ -295,6 +295,10 @@ declare module '@polkadot/api-base/types/consts' {
         };
         providers: {
             /**
+             * The amount that an account has to deposit to create a bucket.
+             **/
+            bucketDeposit: u128 & AugmentedConst<ApiType>;
+            /**
              * Type that represents the byte limit of a bucket name.
              **/
             bucketNameLimit: u32 & AugmentedConst<ApiType>;
