@@ -50,6 +50,8 @@ use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor, RandomnessOutputFor};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
 };
+use pallet_storage_providers::types::{BackupStorageProvider, BackupStorageProviderId};
+use pallet_storage_providers_runtime_api::GetBspInfoError;
 use shp_traits::TrieRemoveMutation;
 
 #[cfg(any(feature = "std", test))]
@@ -566,6 +568,12 @@ impl_runtime_apis! {
 
         fn get_forest_challenges_from_seed(seed: &RandomnessOutputFor<Runtime>, provider_id: &ProviderIdFor<Runtime>) -> Vec<KeyFor<Runtime>> {
             ProofsDealer::get_forest_challenges_from_seed(seed, provider_id)
+        }
+    }
+
+    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>> for Runtime {
+        fn get_bsp_info(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<BackupStorageProvider<Runtime>, GetBspInfoError> {
+            Providers::get_bsp_info(bsp_id)
         }
     }
 }
