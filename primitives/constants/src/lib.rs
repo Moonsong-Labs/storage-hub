@@ -1,7 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use sp_core::Hasher;
-use sp_runtime::traits::BlakeTwo256;
+use sp_runtime::{traits::BlakeTwo256, KeyTypeId};
+
+/// The type of key used for [`BlockchainService`]` operations.
+pub const BCSV_KEY_TYPE: KeyTypeId = KeyTypeId(*b"bcsv");
 
 /// The size of the hash output in bytes.
 pub const H_LENGTH: usize = BlakeTwo256::LENGTH;

@@ -18,11 +18,13 @@ tokio = { workspace = true }
 sp-core = { workspace = true }
 sp-runtime = { workspace = true }
 sp-trie = { workspace = true }
+sp-keystore = { workspace = true }
 
 # Local
 shc-common = { workspace = true }
 shc-file-manager = { workspace = true }
 shc-forest-manager = { workspace = true }
+shp-constants = { workspace = true }
 
 [features]
 default = ["std"]

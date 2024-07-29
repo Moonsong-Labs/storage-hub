@@ -20,8 +20,9 @@ use shc_forest_manager::{
 use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
-use shc_blockchain_service::{BlockchainService, KEY_TYPE};
+use shc_blockchain_service::BlockchainService;
 use shc_common::types::HasherOutT;
+use shp_constants::BCSV_KEY_TYPE;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
 use sp_trie::{LayoutV1, TrieLayout};
@@ -319,7 +320,7 @@ where
     // Initialise seed for signing transactions using blockchain service.
     // In dev mode we use a well known dev account.
     keystore
-        .sr25519_generate_new(KEY_TYPE, Some(signing_dev_key.as_ref()))
+        .sr25519_generate_new(BCSV_KEY_TYPE, Some(signing_dev_key.as_ref()))
         .expect("Invalid dev signing key provided.");
 
     let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
@@ -427,7 +428,7 @@ where
     .await;
 
     let maybe_storage_hub_client_rpc_config = if let Some(ref sh_builder) = sh_builder {
-        Some(sh_builder.rpc_config())
+        Some(sh_builder.rpc_config(keystore.clone()))
     } else {
         None
     };
@@ -470,7 +471,7 @@ where
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
             rpc_handlers,
-            keystore.clone(),
+            keystore_container.keystore(),
             provider_options,
         )
         .await;
@@ -741,7 +742,7 @@ where
     .await;
 
     let maybe_storage_hub_client_rpc_config = if let Some(ref sh_builder) = sh_builder {
-        Some(sh_builder.rpc_config())
+        Some(sh_builder.rpc_config(keystore.clone()))
     } else {
         None
     };
@@ -784,7 +785,7 @@ where
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
             rpc_handlers,
-            keystore.clone(),
+            params.keystore_container.keystore(),
             provider_options,
         )
         .await;
