@@ -162,9 +162,9 @@ pub mod pallet {
         #[pallet::constant]
         type TargetTicksStorageOfSubmitters: Get<u32>;
 
-        /// The maximum amount of Providers that can submit a proof in a single block.  
-        /// Although this can be seen as an arbitrary limit, if set to the already existing  
-        /// implicit limit that is "how many `submit_proof` extrinsics fit in the weight of  
+        /// The maximum amount of Providers that can submit a proof in a single block.
+        /// Although this can be seen as an arbitrary limit, if set to the already existing
+        /// implicit limit that is "how many `submit_proof` extrinsics fit in the weight of
         /// a block, this wouldn't add any additional artificial limit.
         #[pallet::constant]
         type MaxSubmittersPerTick: Get<u32>;
@@ -233,12 +233,18 @@ pub mod pallet {
         (),
     >;
 
-    /// A mapping from a Provider to the last challenge tick they submitted a proof for.
+    /// A mapping from a Provider to the last tick for which they SHOULD have submitted a proof.
     /// If for a Provider `p`, `LastTickProviderSubmittedProofFor[p]` is `n`, then the
     /// Provider should submit a proof for tick `n + stake_to_challenge_period(p)`.
+    ///
+    /// This gets updated when a Provider submits a proof successfully and is used to determine the
+    /// next tick for which the Provider should submit a proof, and it's deadline.
+    ///
+    /// If the Provider fails to submit a proof in time and is slashed, this will still get updated
+    /// to the tick it should have submitted a proof for.
     #[pallet::storage]
     #[pallet::getter(fn last_tick_provider_submitted_proof_for)]
-    pub type LastTickProviderSubmittedProofFor<T: Config> =
+    pub type LastTickProviderSubmittedAProofFor<T: Config> =
         StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, BlockNumberFor<T>>;
 
     /// A queue of keys that have been challenged manually.
@@ -282,7 +288,7 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn slashable_providers)]
-    pub type SlashableProviders<T: Config> = StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, ()>;
+    pub type SlashableProviders<T: Config> = StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, u32>;
 
     /// A mapping from tick to Providers, which is set if the Provider submitted a valid proof in that tick.
     ///

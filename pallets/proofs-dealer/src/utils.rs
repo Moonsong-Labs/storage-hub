@@ -35,7 +35,7 @@ use crate::{
         StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
     },
     ChallengeTickToChallengedProviders, ChallengesQueue, ChallengesTicker, Error, Event,
-    LastCheckpointTick, LastDeletedTick, LastTickProviderSubmittedProofFor, Pallet,
+    LastCheckpointTick, LastDeletedTick, LastTickProviderSubmittedAProofFor, Pallet,
     PriorityChallengesQueue, SlashableProviders, TickToChallengesSeed, TickToCheckpointChallenges,
     ValidProofSubmittersLastTicks,
 };
@@ -158,7 +158,7 @@ where
         );
 
         // Get last tick for which the submitter submitted a proof.
-        let last_tick_proven = match LastTickProviderSubmittedProofFor::<T>::get(*submitter) {
+        let last_tick_proven = match LastTickProviderSubmittedAProofFor::<T>::get(*submitter) {
             Some(tick) => tick,
             None => return Err(Error::<T>::NoRecordOfLastSubmittedProof.into()),
         };
@@ -299,7 +299,7 @@ where
 
         // Update `LastTickProviderSubmittedProofFor` to the challenge tick the provider has just
         // submitted a proof for.
-        LastTickProviderSubmittedProofFor::<T>::set(*submitter, Some(challenges_tick));
+        LastTickProviderSubmittedAProofFor::<T>::set(*submitter, Some(challenges_tick));
 
         // Remove the submitter from its current deadline registered in `ChallengeTickToChallengedProviders`.
         ChallengeTickToChallengedProviders::<T>::remove(challenges_tick_deadline, submitter);
@@ -419,8 +419,15 @@ where
             // One read for every provider in the prefix, and one write as we're consuming and deleting the entry.
             weight.consume(T::DbWeight::get().reads_writes(1, 1));
 
-            // Mark this provider as slashable.
-            SlashableProviders::<T>::set(provider, Some(()));
+            // Accrue number of failed proof submission for this slashable provider.
+            SlashableProviders::<T>::mutate_exists(provider, |slashable| {
+                if let Some(slashable) = slashable {
+                    slashable.saturating_inc();
+                } else {
+                    *slashable = Some(1);
+                }
+            });
+
             weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
             // Get the stake for this Provider, to know its challenge period.
@@ -439,13 +446,16 @@ where
             weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
             // Calculate the next challenge deadline for this Provider.
+            // At this point, we are processing all providers who have reached their deadline (i.e. tolerance ticks after the tick they should provide a proof for):
+            // challenge_ticker = last_tick_provider_should_have_submitted_a_proof_for + ChallengeTicksTolerance
+            //
+            // By definition, the next deadline should be tolerance ticks after the next tick they should submit proof for (i.e. one period after the last tick they should have submitted a proof for):
+            // next_challenge_deadline = last_tick_provider_should_have_submitted_a_proof_for + provider_period + ChallengeTicksTolerance
+            //
+            // Therefore, the next deadline is one period from now:
+            // next_challenge_deadline = challenge_ticker + provider_period
             let next_challenge_deadline =
                 challenges_ticker.saturating_add(Self::stake_to_challenge_period(stake));
-
-            // Calculate the tick for which the Provider should have submitted a proof.
-            let last_tick_proven =
-                challenges_ticker.saturating_sub(T::ChallengeTicksTolerance::get());
-            weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
             // Update this Provider's next challenge deadline.
             ChallengeTickToChallengedProviders::<T>::set(
@@ -455,10 +465,13 @@ where
             );
             weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
-            // Update this Provider's last tick it submitted a proof for.
-            // It didn't actually submit a proof for this tick, but we need it to properly calculate next time
-            // it should submit a proof.
-            LastTickProviderSubmittedProofFor::<T>::set(provider, Some(last_tick_proven));
+            // Calculate the tick for which the Provider should have submitted a proof.
+            let last_interval_tick =
+                challenges_ticker.saturating_sub(T::ChallengeTicksTolerance::get());
+            weight.consume(T::DbWeight::get().reads_writes(1, 0));
+
+            // Update this Provider's last interval tick for the next challenge.
+            LastTickProviderSubmittedAProofFor::<T>::set(provider, Some(last_interval_tick));
             weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
             // Emit slashable provider event.
@@ -827,7 +840,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         ensure!(stake > BalanceFor::<T>::zero(), Error::<T>::ZeroStake);
 
         // Check if this Provider previously had a challenge cycle initialised.
-        if let Some(last_tick_proven) = LastTickProviderSubmittedProofFor::<T>::get(*provider_id) {
+        if let Some(last_tick_proven) = LastTickProviderSubmittedAProofFor::<T>::get(*provider_id) {
             // Compute the next tick for which the Provider should have been submitting a proof.
             let old_next_challenge_tick = last_tick_proven
                 .checked_add(&Self::stake_to_challenge_period(stake))
@@ -845,9 +858,9 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             );
         }
 
-        // Set `LastTickProviderSubmittedProofFor` to the current tick.
+        // Set `LastTickProviderSubmittedAProofFor` to the current tick.
         let current_tick = ChallengesTicker::<T>::get();
-        LastTickProviderSubmittedProofFor::<T>::set(*provider_id, Some(current_tick));
+        LastTickProviderSubmittedAProofFor::<T>::set(*provider_id, Some(current_tick));
 
         // Compute the next tick for which the Provider should be submitting a proof.
         let next_challenge_tick = current_tick
@@ -902,7 +915,7 @@ where
             return Err(GetLastTickProviderSubmittedProofError::ProviderNotRegistered);
         }
 
-        LastTickProviderSubmittedProofFor::<T>::get(who)
+        LastTickProviderSubmittedAProofFor::<T>::get(who)
             .ok_or(GetLastTickProviderSubmittedProofError::ProviderNeverSubmittedProof)
     }
 
