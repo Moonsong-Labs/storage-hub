@@ -44,7 +44,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use shp_traits::{ReadProofSubmittersInterface, SubscribeProvidersInterface};
+    use shp_traits::{ProofSubmittersInterface, SubscribeProvidersInterface};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -134,7 +134,7 @@ pub mod pallet {
         type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
 
         /// The trait exposing data of which providers failed to respond to challenges for proofs of storage.
-        type ProvidersProofSubmitters: ReadProofSubmittersInterface<
+        type ProvidersProofSubmitters: ProofSubmittersInterface<
             ProviderId = HashId<Self>,
             TickNumber = BlockNumberFor<Self>,
         >;
@@ -197,7 +197,7 @@ pub mod pallet {
         #[pallet::constant]
         type DefaultMerkleRoot: Get<Self::MerklePatriciaRoot>;
 
-        /// The slash factor deducted from a Storage Provider's deposit when they have failed to provide proof of storage for a challenged file key.
+        /// The slash factor deducted from a Storage Provider's deposit for every single storage proof they fail to provide.
         #[pallet::constant]
         type SlashFactor: Get<BalanceOf<Self>>;
     }

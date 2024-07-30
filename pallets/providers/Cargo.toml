@@ -19,8 +19,6 @@ codec = { workspace = true }
 scale-info = { workspace = true }
 
 # Local
-pallet-proofs-dealer = { workspace = true }
-
 shp-traits = { workspace = true, default-features = false }
 
 # Substrate
@@ -33,6 +31,9 @@ sp-trie = { workspace = true }
 
 [dev-dependencies]
 serde = { workspace = true }
+
+#Local
+pallet-proofs-dealer = { workspace = true }
 
 # Substrate
 sp-core = { workspace = true }

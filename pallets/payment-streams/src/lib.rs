@@ -35,7 +35,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use shp_traits::{
-        ProvidersInterface, ReadProofSubmittersInterface, ReadProvidersInterface,
+        ProvidersInterface, ProofSubmittersInterface, ReadProvidersInterface,
         SystemMetricsInterface,
     };
     use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, Saturating};
@@ -58,7 +58,7 @@ pub mod pallet {
             + SystemMetricsInterface<ProvidedUnit = Self::Units>;
 
         /// The trait exposing data of which providers submitted valid proofs in which blocks
-        type ProvidersProofSubmitters: ReadProofSubmittersInterface<
+        type ProvidersProofSubmitters: ProofSubmittersInterface<
             ProviderId = <Self::ProvidersPallet as ProvidersInterface>::ProviderId,
             TickNumber = BlockNumberFor<Self>,
         >;

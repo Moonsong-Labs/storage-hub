@@ -10,7 +10,7 @@ use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    ProofsDealerInterface, ReadProofSubmittersInterface, SubscribeProvidersInterface, TrieMutation,
+    ProofsDealerInterface, ProofSubmittersInterface, SubscribeProvidersInterface, TrieMutation,
     TrieRemoveMutation,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
@@ -291,7 +291,7 @@ impl pallet_storage_providers::Config for Test {
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
 pub struct MockSubmittingProviders;
-impl ReadProofSubmittersInterface for MockSubmittingProviders {
+impl ProofSubmittersInterface for MockSubmittingProviders {
     type ProviderId = <Test as frame_system::Config>::Hash;
     type TickNumber = BlockNumberFor<Test>;
     type MaxProofSubmitters = ConstU32<1000>;

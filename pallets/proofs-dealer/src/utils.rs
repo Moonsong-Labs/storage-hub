@@ -11,7 +11,7 @@ use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
 };
 use shp_traits::{
-    CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, ReadProofSubmittersInterface,
+    CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, ProofSubmittersInterface,
     TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use sp_runtime::{
@@ -890,7 +890,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     }
 }
 
-impl<T: pallet::Config> ReadProofSubmittersInterface for Pallet<T> {
+impl<T: pallet::Config> ProofSubmittersInterface for Pallet<T> {
     type ProviderId = ProviderIdFor<T>;
     type TickNumber = BlockNumberFor<T>;
     type MaxProofSubmitters = MaxSubmittersPerTickFor<T>;

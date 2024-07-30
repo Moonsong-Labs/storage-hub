@@ -545,7 +545,7 @@ pub trait PaymentStreamsInterface {
     ) -> Option<Self::DynamicRatePaymentStream>;
 }
 
-pub trait ReadProofSubmittersInterface {
+pub trait ProofSubmittersInterface {
     /// The type which represents a provider identifier.
     type ProviderId: Parameter
         + Member

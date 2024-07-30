@@ -11,7 +11,7 @@ use frame_support::{
 };
 use frame_system as system;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ReadProofSubmittersInterface, SubscribeProvidersInterface,
+    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, SubscribeProvidersInterface,
     TrieMutation, TrieProofDeltaApplier,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
@@ -152,7 +152,7 @@ impl pallet_storage_providers::Config for Test {
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
 pub struct MockSubmittingProviders;
-impl ReadProofSubmittersInterface for MockSubmittingProviders {
+impl ProofSubmittersInterface for MockSubmittingProviders {
     type ProviderId = <Test as frame_system::Config>::Hash;
     type TickNumber = BlockNumberFor<Test>;
     type MaxProofSubmitters = ConstU32<1000>;

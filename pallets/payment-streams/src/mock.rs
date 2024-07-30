@@ -9,7 +9,7 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
-use shp_traits::{ProvidersInterface, ReadProofSubmittersInterface, SubscribeProvidersInterface};
+use shp_traits::{ProvidersInterface, ProofSubmittersInterface, SubscribeProvidersInterface};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     testing::TestSignature,
@@ -198,7 +198,7 @@ impl Convert<BlockNumberFor<Test>, Balance> for BlockNumberToBalance {
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
 pub struct MockSubmittingProviders;
-impl ReadProofSubmittersInterface for MockSubmittingProviders {
+impl ProofSubmittersInterface for MockSubmittingProviders {
     type ProviderId = <Test as frame_system::Config>::Hash;
     type TickNumber = BlockNumberFor<Test>;
     type MaxProofSubmitters = ConstU32<1000>;

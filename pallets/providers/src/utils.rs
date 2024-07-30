@@ -14,7 +14,7 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
-    MutateProvidersInterface, ProvidersConfig, ProvidersInterface, ReadProofSubmittersInterface,
+    MutateProvidersInterface, ProvidersConfig, ProvidersInterface, ProofSubmittersInterface,
     ReadProvidersInterface, SystemMetricsInterface,
 };
 use sp_runtime::BoundedVec;
@@ -720,7 +720,7 @@ where
             .ok_or(Error::<T>::NotRegistered)?;
 
         // Calculate the amount to be slashed.
-        let slashable_amount = T::SlashFactor::get() * <T::ProvidersProofSubmitters as ReadProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id).ok_or(Error::<T>::ProviderNotSlashable)?.into();
+        let slashable_amount = T::SlashFactor::get() * <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id).ok_or(Error::<T>::ProviderNotSlashable)?.into();
 
         let (credit, _unpaid) = T::NativeBalance::slash(
             &HoldReason::StorageProviderDeposit.into(),
@@ -729,7 +729,7 @@ where
         );
 
         // Clear the accrued failed proof submissions for the Storage Provider
-        <T::ProvidersProofSubmitters as ReadProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
+        <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
 
         // TODO: Transfer credit to the treasury
 
