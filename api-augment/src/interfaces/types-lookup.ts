@@ -1835,6 +1835,11 @@ declare module "@polkadot/types/lookup" {
       readonly newCapacity: u32;
       readonly nextBlockWhenChangeAllowed: u32;
     } & Struct;
+    readonly isSlashed: boolean;
+    readonly asSlashed: {
+      readonly providerId: H256;
+      readonly amountSlashed: u128;
+    } & Struct;
     readonly type:
       | "MspRequestSignUpSuccess"
       | "MspSignUpSuccess"
@@ -1843,7 +1848,8 @@ declare module "@polkadot/types/lookup" {
       | "SignUpRequestCanceled"
       | "MspSignOffSuccess"
       | "BspSignOffSuccess"
-      | "CapacityChanged";
+      | "CapacityChanged"
+      | "Slashed";
   }
 
   /** @name PalletStorageProvidersValueProposition (128) */
@@ -3782,6 +3788,10 @@ declare module "@polkadot/types/lookup" {
       readonly multiaddresses: Vec<Bytes>;
       readonly paymentAccount: AccountId32;
     } & Struct;
+    readonly isSlash: boolean;
+    readonly asSlash: {
+      readonly providerAccountId: AccountId32;
+    } & Struct;
     readonly type:
       | "RequestMspSignUp"
       | "RequestBspSignUp"
@@ -3792,7 +3802,8 @@ declare module "@polkadot/types/lookup" {
       | "ChangeCapacity"
       | "AddValueProp"
       | "ForceMspSignUp"
-      | "ForceBspSignUp";
+      | "ForceBspSignUp"
+      | "Slash";
   }
 
   /** @name PalletFileSystemCall (297) */
@@ -4702,6 +4713,7 @@ declare module "@polkadot/types/lookup" {
     readonly isBucketNotFound: boolean;
     readonly isBucketAlreadyExists: boolean;
     readonly isAppendBucketToMspFailed: boolean;
+    readonly isProviderNotSlashable: boolean;
     readonly type:
       | "AlreadyRegistered"
       | "MaxBspsReached"
@@ -4726,7 +4738,8 @@ declare module "@polkadot/types/lookup" {
       | "SpRegisteredButDataNotFound"
       | "BucketNotFound"
       | "BucketAlreadyExists"
-      | "AppendBucketToMspFailed";
+      | "AppendBucketToMspFailed"
+      | "ProviderNotSlashable";
   }
 
   /** @name PalletFileSystemStorageRequestMetadata (392) */

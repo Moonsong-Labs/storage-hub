@@ -1362,7 +1362,11 @@ export default {
                 who: 'AccountId32',
                 oldCapacity: 'u32',
                 newCapacity: 'u32',
-                nextBlockWhenChangeAllowed: 'u32'
+                nextBlockWhenChangeAllowed: 'u32',
+            },
+            Slashed: {
+                providerId: 'H256',
+                amountSlashed: 'u128'
             }
         }
     },
@@ -2970,7 +2974,10 @@ export default {
                 bspId: 'H256',
                 capacity: 'u32',
                 multiaddresses: 'Vec<Bytes>',
-                paymentAccount: 'AccountId32'
+                paymentAccount: 'AccountId32',
+            },
+            slash: {
+                providerAccountId: 'AccountId32'
             }
         }
     },
@@ -3663,7 +3670,7 @@ export default {
      * Lookup391: pallet_storage_providers::pallet::Error<T>
      **/
     PalletStorageProvidersError: {
-        _enum: ['AlreadyRegistered', 'MaxBspsReached', 'MaxMspsReached', 'SignUpNotRequested', 'SignUpRequestPending', 'NoMultiAddress', 'InvalidMultiAddress', 'StorageTooLow', 'NotEnoughBalance', 'CannotHoldDeposit', 'StorageStillInUse', 'RandomnessNotValidYet', 'SignUpRequestExpired', 'NewCapacityLessThanUsedStorage', 'NewCapacityEqualsCurrentCapacity', 'NewCapacityCantBeZero', 'NotEnoughTimePassed', 'NotRegistered', 'NoUserId', 'NoBucketId', 'SpRegisteredButDataNotFound', 'BucketNotFound', 'BucketAlreadyExists', 'AppendBucketToMspFailed']
+        _enum: ['AlreadyRegistered', 'MaxBspsReached', 'MaxMspsReached', 'SignUpNotRequested', 'SignUpRequestPending', 'NoMultiAddress', 'InvalidMultiAddress', 'StorageTooLow', 'NotEnoughBalance', 'CannotHoldDeposit', 'StorageStillInUse', 'RandomnessNotValidYet', 'SignUpRequestExpired', 'NewCapacityLessThanUsedStorage', 'NewCapacityEqualsCurrentCapacity', 'NewCapacityCantBeZero', 'NotEnoughTimePassed', 'NotRegistered', 'NoUserId', 'NoBucketId', 'SpRegisteredButDataNotFound', 'BucketNotFound', 'BucketAlreadyExists', 'AppendBucketToMspFailed', 'ProviderNotSlashable']
     },
     /**
      * Lookup392: pallet_file_system::types::StorageRequestMetadata<T>

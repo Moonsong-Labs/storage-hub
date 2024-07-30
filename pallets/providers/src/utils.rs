@@ -1,5 +1,6 @@
 use crate::types::{Bucket, MainStorageProvider, MultiAddress, StorageProvider};
 use codec::Encode;
+use frame_support::dispatch::{DispatchResultWithPostInfo, Pays};
 use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::sp_runtime::{
@@ -7,14 +8,14 @@ use frame_support::sp_runtime::{
     ArithmeticError, DispatchError,
 };
 use frame_support::traits::{
-    fungible::{Inspect, InspectHold, MutateHold},
+    fungible::{BalancedHold, Inspect, InspectHold, MutateHold},
     tokens::{Fortitude, Precision, Preservation},
-    Get, Randomness,
+    Get, Imbalance, Randomness,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
-    MutateProvidersInterface, ProvidersConfig, ProvidersInterface, ReadProvidersInterface,
-    SystemMetricsInterface,
+    MutateProvidersInterface, ProvidersConfig, ProvidersInterface, ReadProofSubmittersInterface,
+    ReadProvidersInterface, SystemMetricsInterface,
 };
 use sp_runtime::BoundedVec;
 
@@ -702,6 +703,45 @@ where
 
         // Return the old capacity
         Ok(old_capacity)
+    }
+
+    /// Slash a Storage Provider.
+    ///
+    /// The amount slashed is calculated as the product of the [`SlashFactor`] and the accrued failed proof submissions.
+    /// The amount is then slashed from the Storage Provider's held deposit and transferred to the treasury.
+    ///
+    /// This will return an error when the Storage Provider is not slashable. In the context of the StorageHub protocol,
+    /// a Storage Provider is slashable when the proofs-dealer pallet has marked them as such.
+    pub(crate) fn do_slash(account_id: &T::AccountId) -> DispatchResultWithPostInfo {
+        let provider_id = AccountIdToMainStorageProviderId::<T>::get(account_id)
+            .or(AccountIdToBackupStorageProviderId::<T>::get(account_id))
+            .ok_or(Error::<T>::NotRegistered)?;
+
+        // Calculate the amount to be slashed.
+        let slashable_amount = T::SlashFactor::get() * <T::ProvidersProofSubmitters as ReadProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id).ok_or(Error::<T>::ProviderNotSlashable)?.into();
+
+        let (credit, _unpaid) = T::NativeBalance::slash(
+            &HoldReason::StorageProviderDeposit.into(),
+            account_id,
+            slashable_amount,
+        );
+
+        // Clear the accrued failed proof submissions for the Storage Provider
+        <T::ProvidersProofSubmitters as ReadProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
+
+        // TODO: Transfer credit to the treasury
+
+        Self::deposit_event(Event::<T>::Slashed {
+            provider_id: provider_id.clone(),
+            amount_slashed: credit.peek(),
+        });
+
+        Ok((
+            // TODO: improve this to return the actual weight consumed
+            None,
+            Pays::No,
+        )
+            .into())
     }
 
     fn hold_balance(

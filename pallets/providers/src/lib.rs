@@ -44,7 +44,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use shp_traits::SubscribeProvidersInterface;
+    use shp_traits::{ReadProofSubmittersInterface, SubscribeProvidersInterface};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -61,6 +61,7 @@ pub mod pallet {
             + hold::Inspect<Self::AccountId, Reason = Self::RuntimeHoldReason>
             // , Reason = Self::HoldReason> We will probably have to hold deposits
             + hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>
+            + hold::Balanced<Self::AccountId>
             + freeze::Inspect<Self::AccountId>
             + freeze::Mutate<Self::AccountId>;
 
@@ -132,6 +133,12 @@ pub mod pallet {
         /// The type of the Bucket NFT Collection ID.
         type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
 
+        /// The trait exposing data of which providers failed to respond to challenges for proofs of storage.
+        type ProvidersProofSubmitters: ReadProofSubmittersInterface<
+            ProviderId = HashId<Self>,
+            TickNumber = BlockNumberFor<Self>,
+        >;
+
         /// The minimum amount that an account has to deposit to become a storage provider.
         #[pallet::constant]
         type SpMinDeposit: Get<BalanceOf<Self>>;
@@ -189,6 +196,10 @@ pub mod pallet {
         /// The default value of the root of the Merkle Patricia Trie of the runtime
         #[pallet::constant]
         type DefaultMerkleRoot: Get<Self::MerklePatriciaRoot>;
+
+        /// The slash factor deducted from a Storage Provider's deposit when they have failed to provide proof of storage for a challenged file key.
+        #[pallet::constant]
+        type SlashFactor: Get<BalanceOf<Self>>;
     }
 
     #[pallet::pallet]
@@ -385,6 +396,12 @@ pub mod pallet {
             new_capacity: StorageData<T>,
             next_block_when_change_allowed: BlockNumberFor<T>,
         },
+
+        /// Event emitted when an SP has been slashed.
+        Slashed {
+            provider_id: HashId<T>,
+            amount_slashed: BalanceOf<T>,
+        },
     }
 
     /// The errors that can be thrown by this pallet to inform users about what went wrong
@@ -449,6 +466,8 @@ pub mod pallet {
         BucketAlreadyExists,
         /// Error thrown when a bucket ID could not be added to the list of buckets of a MSP.
         AppendBucketToMspFailed,
+        /// Error thrown when an attempt was made to slash an unslashable Storage Provider.
+        ProviderNotSlashable,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -941,6 +960,22 @@ pub mod pallet {
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
+        }
+
+        /// Dispatchable extrinsic to slash a _slashable_ Storage Provider.
+        ///
+        /// A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
+        /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
+        #[pallet::call_index(10)]
+        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        pub fn slash(
+            origin: OriginFor<T>,
+            provider_account_id: T::AccountId,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was sent with root origin.
+            ensure_signed(origin)?;
+
+            Self::do_slash(&provider_account_id)
         }
     }
 }

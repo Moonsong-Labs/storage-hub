@@ -3,10 +3,16 @@ use frame_support::{
     construct_runtime, derive_impl, parameter_types,
     traits::{AsEnsureOriginWithArg, Everything, Randomness},
     weights::constants::RocksDbWeight,
+    BoundedBTreeSet,
 };
 use frame_system as system;
 use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
+use shp_file_metadata::ChunkId;
+use shp_traits::{
+    ProofsDealerInterface, ReadProofSubmittersInterface, SubscribeProvidersInterface, TrieMutation,
+    TrieRemoveMutation,
+};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
@@ -16,11 +22,6 @@ use sp_runtime::{
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
 use system::pallet_prelude::BlockNumberFor;
-
-use shp_file_metadata::ChunkId;
-use shp_traits::{
-    ProofsDealerInterface, SubscribeProvidersInterface, TrieMutation, TrieRemoveMutation,
-};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
@@ -269,6 +270,7 @@ impl pallet_storage_providers::Config for Test {
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
+    type ProvidersProofSubmitters = MockSubmittingProviders;
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = ConstU32<100>;
@@ -284,6 +286,26 @@ impl pallet_storage_providers::Config for Test {
     type BucketNameLimit = ConstU32<100>;
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
     type ProvidersRandomness = MockRandomness;
+    type SlashFactor = ConstU128<10>;
+}
+
+// Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
+pub struct MockSubmittingProviders;
+impl ReadProofSubmittersInterface for MockSubmittingProviders {
+    type ProviderId = <Test as frame_system::Config>::Hash;
+    type TickNumber = BlockNumberFor<Test>;
+    type MaxProofSubmitters = ConstU32<1000>;
+    fn get_proof_submitters_for_tick(
+        _block_number: &Self::TickNumber,
+    ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
+        None
+    }
+
+    fn get_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) -> Option<u32> {
+        None
+    }
+
+    fn clear_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) {}
 }
 
 pub struct MockedProvidersSubscriber;

@@ -900,6 +900,14 @@ impl<T: pallet::Config> ReadProofSubmittersInterface for Pallet<T> {
     ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
         ValidProofSubmittersLastTicks::<T>::get(tick_number)
     }
+
+    fn get_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) -> Option<u32> {
+        SlashableProviders::<T>::get(provider_id)
+    }
+
+    fn clear_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) {
+        SlashableProviders::<T>::remove(provider_id);
+    }
 }
 
 /// Runtime API implementation for the ProofsDealer pallet.

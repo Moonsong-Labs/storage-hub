@@ -130,6 +130,7 @@ impl pallet_storage_providers::Config for Test {
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
+    type ProvidersProofSubmitters = MockSubmittingProviders;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
@@ -145,6 +146,7 @@ impl pallet_storage_providers::Config for Test {
     type Subscribers = MockedProvidersSubscriber;
     type ProvidersRandomness = MockRandomness;
     type BucketNameLimit = ConstU32<100>;
+    type SlashFactor = ConstU128<10>;
 }
 
 parameter_types! {
@@ -209,6 +211,12 @@ impl ReadProofSubmittersInterface for MockSubmittingProviders {
             .map(|id| set.try_insert(id));
         Some(set)
     }
+
+    fn get_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) -> Option<u32> {
+        None
+    }
+
+    fn clear_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) {}
 }
 
 impl crate::Config for Test {

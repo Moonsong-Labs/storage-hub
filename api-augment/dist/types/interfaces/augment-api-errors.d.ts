@@ -939,6 +939,10 @@ declare module '@polkadot/api-base/types/errors' {
              **/
             NoUserId: AugmentedError<ApiType>;
             /**
+             * Error thrown when an attempt was made to slash an unslashable Storage Provider.
+             **/
+            ProviderNotSlashable: AugmentedError<ApiType>;
+            /**
              * Error thrown when a user tries to confirm a sign up but the randomness is too fresh to be used yet.
              **/
             RandomnessNotValidYet: AugmentedError<ApiType>;

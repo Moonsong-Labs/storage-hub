@@ -1361,6 +1361,10 @@ declare const _default: {
                 newCapacity: string;
                 nextBlockWhenChangeAllowed: string;
             };
+            Slashed: {
+                providerId: string;
+                amountSlashed: string;
+            };
         };
     };
     /**
@@ -2968,6 +2972,9 @@ declare const _default: {
                 capacity: string;
                 multiaddresses: string;
                 paymentAccount: string;
+            };
+            slash: {
+                providerAccountId: string;
             };
         };
     };

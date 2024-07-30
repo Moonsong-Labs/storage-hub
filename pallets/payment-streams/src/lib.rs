@@ -57,7 +57,7 @@ pub mod pallet {
             + ReadProvidersInterface<AccountId = Self::AccountId>
             + SystemMetricsInterface<ProvidedUnit = Self::Units>;
 
-        /// The trait for reading the data of which providers submitted valid proofs in which blocks
+        /// The trait exposing data of which providers submitted valid proofs in which blocks
         type ProvidersProofSubmitters: ReadProofSubmittersInterface<
             ProviderId = <Self::ProvidersPallet as ProvidersInterface>::ProviderId,
             TickNumber = BlockNumberFor<Self>,

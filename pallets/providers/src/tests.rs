@@ -4329,6 +4329,84 @@ mod remove_root_bucket {
     }
 }
 
+mod slash {
+    use super::*;
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn slash_when_storage_provider_not_slashable() {
+            ExtBuilder::build().execute_with(|| {
+                // register msp
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let caller = accounts::BOB.0;
+                let caller_balance = accounts::BOB.1;
+
+                // Try to slash the provider
+                assert_noop!(
+                    StorageProviders::slash(RuntimeOrigin::signed(caller), alice),
+                    Error::<Test>::ProviderNotSlashable
+                );
+
+                // Check that the caller has paid for the slash weight consumed
+                assert!(NativeBalance::free_balance(&caller) < caller_balance);
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn slash_storage_provider() {
+            ExtBuilder::build().execute_with(|| {
+                // register msp
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let provider_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                // Set proofs-dealer storage to have a slashable provider
+                pallet_proofs_dealer::SlashableProviders::<Test>::insert(&provider_id, 1);
+
+                let deposit_on_hold =
+                    NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice);
+
+                let caller = accounts::BOB.0;
+                let caller_balance = accounts::BOB.1;
+
+                // Slash the provider
+                assert_ok!(StorageProviders::slash(
+                    RuntimeOrigin::signed(caller),
+                    alice
+                ));
+
+                // Check that the provider is no longer slashable
+                assert_eq!(
+                    pallet_proofs_dealer::SlashableProviders::<Test>::get(&provider_id),
+                    None
+                );
+
+                let slash_factor: BalanceOf<Test> = <Test as crate::Config>::SlashFactor::get();
+
+                // Check that the held deposit of the provider has been reduced by slash factor
+                assert_eq!(
+                    NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                    deposit_on_hold - slash_factor
+                );
+
+                // Check that the caller hasn't paid for the slash weight consumed
+                assert_eq!(NativeBalance::free_balance(&caller), caller_balance);
+            });
+        }
+    }
+}
+
 // Helper functions for testing:
 
 /// Helper function that registers an account as a Main Storage Provider, with storage_amount StorageData units

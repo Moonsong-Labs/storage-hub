@@ -343,6 +343,10 @@ declare module '@polkadot/api-base/types/consts' {
              **/
             minBlocksBetweenCapacityChanges: u32 & AugmentedConst<ApiType>;
             /**
+             * The slash factor deducted from a Storage Provider's deposit when they have failed to provide proof of storage for a challenged file key.
+             **/
+            slashFactor: u128 & AugmentedConst<ApiType>;
+            /**
              * The amount that a BSP receives as allocation of storage capacity when it deposits SpMinDeposit.
              **/
             spMinCapacity: u32 & AugmentedConst<ApiType>;

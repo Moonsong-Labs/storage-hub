@@ -562,4 +562,8 @@ pub trait ReadProofSubmittersInterface {
     fn get_proof_submitters_for_tick(
         tick_number: &Self::TickNumber,
     ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>>;
+
+    fn get_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) -> Option<u32>;
+
+    fn clear_accrued_failed_proof_submissions(provider_id: &Self::ProviderId);
 }
