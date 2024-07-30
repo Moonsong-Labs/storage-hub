@@ -4388,7 +4388,8 @@ mod slash {
 
                 let caller = accounts::BOB.0;
 
-                let treasury_balance = NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
+                let treasury_balance =
+                    NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
 
                 // Slash the provider
                 assert_ok!(StorageProviders::slash(
@@ -4438,8 +4439,14 @@ mod slash {
                 let bob_accrued_failed_proof_submissions = 20;
 
                 // Set proofs-dealer storage to have a slashable provider
-                pallet_proofs_dealer::SlashableProviders::<Test>::insert(&alice_provider_id, alice_accrued_failed_proof_submissions);
-                pallet_proofs_dealer::SlashableProviders::<Test>::insert(&bob_provider_id, bob_accrued_failed_proof_submissions);
+                pallet_proofs_dealer::SlashableProviders::<Test>::insert(
+                    &alice_provider_id,
+                    alice_accrued_failed_proof_submissions,
+                );
+                pallet_proofs_dealer::SlashableProviders::<Test>::insert(
+                    &bob_provider_id,
+                    bob_accrued_failed_proof_submissions,
+                );
 
                 let alice_deposit_on_hold =
                     NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice);
@@ -4448,17 +4455,15 @@ mod slash {
 
                 let caller = accounts::CHARLIE.0;
 
-                let treasury_balance = NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
+                let treasury_balance =
+                    NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
 
                 // Slash the providers
                 assert_ok!(StorageProviders::slash(
                     RuntimeOrigin::signed(caller),
                     alice
                 ));
-                assert_ok!(StorageProviders::slash(
-                    RuntimeOrigin::signed(caller),
-                    bob
-                ));
+                assert_ok!(StorageProviders::slash(RuntimeOrigin::signed(caller), bob));
 
                 // Check that the providers are no longer slashable
                 assert_eq!(
@@ -4473,13 +4478,15 @@ mod slash {
                 let slash_factor: BalanceOf<Test> = <Test as crate::Config>::SlashFactor::get();
 
                 // Check that the held deposit of the providers has been reduced by slash factor
-                let alice_slash_amount: BalanceOf<Test> = slash_factor * <u32 as Into<BalanceOf<Test>>>::into(alice_accrued_failed_proof_submissions);
+                let alice_slash_amount: BalanceOf<Test> = slash_factor
+                    * <u32 as Into<BalanceOf<Test>>>::into(alice_accrued_failed_proof_submissions);
                 assert_eq!(
                     NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                     alice_deposit_on_hold - alice_slash_amount
                 );
 
-                let bob_slash_amount: BalanceOf<Test> = slash_factor * <u32 as Into<BalanceOf<Test>>>::into(bob_accrued_failed_proof_submissions);
+                let bob_slash_amount: BalanceOf<Test> = slash_factor
+                    * <u32 as Into<BalanceOf<Test>>>::into(bob_accrued_failed_proof_submissions);
                 assert_eq!(
                     NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
                     bob_deposit_on_hold - bob_slash_amount

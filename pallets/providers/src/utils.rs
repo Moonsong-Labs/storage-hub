@@ -7,12 +7,12 @@ use frame_support::sp_runtime::{
     traits::{CheckedAdd, CheckedMul, CheckedSub, One, Saturating, Zero},
     ArithmeticError, DispatchError,
 };
+use frame_support::traits::tokens::Restriction;
 use frame_support::traits::{
     fungible::{Inspect, InspectHold, MutateHold},
     tokens::{Fortitude, Precision, Preservation},
     Get, Randomness,
 };
-use frame_support::traits::tokens::Restriction;
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
     MutateProvidersInterface, ProofSubmittersInterface, ProvidersConfig, ProvidersInterface,
@@ -730,7 +730,7 @@ where
             slashable_amount,
             Precision::BestEffort,
             Restriction::Free,
-            Fortitude::Polite
+            Fortitude::Polite,
         )?;
 
         // Clear the accrued failed proof submissions for the Storage Provider
