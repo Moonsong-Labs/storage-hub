@@ -4,7 +4,7 @@ import { after, before, describe, it } from "node:test";
 import {
   NODE_INFOS,
   createApiObject,
-  runBspNet,
+  runSimpleBspNet,
   type BspNetApi,
   cleardownTest,
   DUMMY_BSP_ID,
@@ -22,7 +22,7 @@ for (const bspNetConfig of bspNetConfigCases) {
     let api: BspNetApi;
 
     before(async () => {
-      await runBspNet(bspNetConfig);
+      await runSimpleBspNet(bspNetConfig);
       api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
     });
 

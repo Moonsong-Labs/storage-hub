@@ -97,7 +97,7 @@ export type BspNetConfig = {
   rocksdb: boolean;
 };
 
-export const runBspNet = async (bspNetConfig: BspNetConfig) => {
+export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
   let api: BspNetApi | undefined;
   try {
     console.log(`sh user id: ${shUser.address}`);
@@ -200,7 +200,124 @@ export const runBspNet = async (bspNetConfig: BspNetConfig) => {
   }
 };
 
-export const closeBspNet = async () => {
+export const closeSimpleBspNet = async () => {
+  const docker = new Docker();
+
+  const existingNodes = await docker.listContainers({
+    filters: { ancestor: [DOCKER_IMAGE] }
+  });
+
+  const promises = existingNodes.map(async (node) => docker.getContainer(node.Id).stop());
+  await Promise.all(promises);
+
+  await docker.pruneContainers();
+  await docker.pruneVolumes();
+};
+
+export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
+  let api: BspNetApi | undefined;
+  try {
+    console.log(`sh user id: ${shUser.address}`);
+    console.log(`sh bsp id: ${bsp.address}`);
+    let file = "local-dev-bsp-compose.yml";
+    if (bspNetConfig.rocksdb) {
+      file = "local-dev-bsp-rocksdb-compose.yml";
+    }
+    if (bspNetConfig.noisy) {
+      file = "noisy-bsp-compose.yml";
+    }
+    const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
+
+    if (bspNetConfig.noisy) {
+      await compose.upOne("toxiproxy", { config: composeFilePath, log: true });
+    }
+
+    await compose.upOne("sh-bsp", { config: composeFilePath, log: true });
+
+    const bspIp = await getContainerIp(
+      bspNetConfig.noisy ? "toxiproxy" : NODE_INFOS.bsp.containerName
+    );
+
+    if (bspNetConfig.noisy) {
+      console.log(`toxiproxy IP: ${bspIp}`);
+    } else {
+      console.log(`sh-bsp IP: ${bspIp}`);
+    }
+
+    const bspPeerId = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.bsp.port}`, true);
+    console.log(`sh-bsp Peer ID: ${bspPeerId}`);
+
+    process.env.BSP_IP = bspIp;
+    process.env.BSP_PEER_ID = bspPeerId;
+
+    await compose.upOne("sh-user", {
+      config: composeFilePath,
+      log: true,
+      env: {
+        ...process.env,
+        BSP_IP: bspIp,
+        BSP_PEER_ID: bspPeerId
+      }
+    });
+
+    const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
+    console.log(`sh-user Peer ID: ${peerIDUser}`);
+
+    const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
+
+    // Create Connection API Object to User Node
+    api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+
+    // Give Balances
+    const amount = 10000n * 10n ** 12n;
+    await api.sealBlock(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bsp.address, amount)));
+    await api.sealBlock(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(shUser.address, amount)));
+
+    // Make BSP
+    await api.sealBlock(
+      api.tx.sudo.sudo(
+        api.tx.providers.forceBspSignUp(
+          bsp.address,
+          DUMMY_BSP_ID,
+          CAPACITY_512,
+          [multiAddressBsp],
+          bsp.address
+        )
+      )
+    );
+
+    // Make MSP
+    await api.sealBlock(
+      api.tx.sudo.sudo(
+        api.tx.providers.forceMspSignUp(
+          alice.address,
+          DUMMY_MSP_ID,
+          CAPACITY_512,
+          [multiAddressBsp],
+          {
+            identifier: VALUE_PROP,
+            dataLimit: 500,
+            protocols: ["https", "ssh", "telnet"]
+          },
+          alice.address
+        )
+      )
+    );
+
+    // u128 max value
+    const u128Max = (BigInt(1) << BigInt(128)) - BigInt(1);
+
+    await api.sealBlock(
+      api.tx.sudo.sudo(api.tx.fileSystem.forceUpdateBspsAssignmentThreshold(u128Max))
+    );
+  } catch (e) {
+    console.error("Error ", e);
+  } finally {
+    api?.disconnect();
+  }
+};
+
+export const closeMultipleInitialisedBspsNet = async () => {
   const docker = new Docker();
 
   const existingNodes = await docker.listContainers({
@@ -302,7 +419,7 @@ export const createBucket = async (api: ApiPromise, bucketName: string) => {
 
 export const cleardownTest = async (api: BspNetApi) => {
   await api.disconnect();
-  await closeBspNet();
+  await closeSimpleBspNet();
 };
 
 export const createCheckBucket = async (api: BspNetApi, bucketName: string) => {
