@@ -712,6 +712,8 @@ where
     ///
     /// This will return an error when the Storage Provider is not slashable. In the context of the StorageHub protocol,
     /// a Storage Provider is slashable when the proofs-dealer pallet has marked them as such.
+    ///
+    /// Successfully slashing a Storage Provider should be a free operation.
     pub(crate) fn do_slash(account_id: &T::AccountId) -> DispatchResultWithPostInfo {
         let provider_id = AccountIdToMainStorageProviderId::<T>::get(account_id)
             .or(AccountIdToBackupStorageProviderId::<T>::get(account_id))
@@ -736,12 +738,7 @@ where
             amount_slashed: credit.peek(),
         });
 
-        Ok((
-            // TODO: improve this to return the actual weight consumed
-            None,
-            Pays::No,
-        )
-            .into())
+        Ok(Pays::No.into())
     }
 
     fn hold_balance(

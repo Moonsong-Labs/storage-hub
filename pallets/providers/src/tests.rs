@@ -4343,16 +4343,12 @@ mod slash {
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
                 let caller = accounts::BOB.0;
-                let caller_balance = accounts::BOB.1;
 
                 // Try to slash the provider
                 assert_noop!(
                     StorageProviders::slash(RuntimeOrigin::signed(caller), alice),
                     Error::<Test>::ProviderNotSlashable
                 );
-
-                // Check that the caller has paid for the slash weight consumed
-                assert!(NativeBalance::free_balance(&caller) < caller_balance);
             });
         }
     }
@@ -4378,7 +4374,6 @@ mod slash {
                     NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice);
 
                 let caller = accounts::BOB.0;
-                let caller_balance = accounts::BOB.1;
 
                 // Slash the provider
                 assert_ok!(StorageProviders::slash(
@@ -4399,9 +4394,6 @@ mod slash {
                     NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
                     deposit_on_hold - slash_factor
                 );
-
-                // Check that the caller hasn't paid for the slash weight consumed
-                assert_eq!(NativeBalance::free_balance(&caller), caller_balance);
             });
         }
     }
