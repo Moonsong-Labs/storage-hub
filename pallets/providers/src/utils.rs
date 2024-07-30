@@ -14,7 +14,7 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
-    MutateProvidersInterface, ProvidersConfig, ProvidersInterface, ProofSubmittersInterface,
+    MutateProvidersInterface, ProofSubmittersInterface, ProvidersConfig, ProvidersInterface,
     ReadProvidersInterface, SystemMetricsInterface,
 };
 use sp_runtime::BoundedVec;

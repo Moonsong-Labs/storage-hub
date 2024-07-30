@@ -10,7 +10,7 @@ use frame_support::{
 use frame_system as system;
 use pallet_proofs_dealer::SlashableProviders;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ProvidersInterface, ProofSubmittersInterface,
+    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ProvidersInterface,
     SubscribeProvidersInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};

@@ -9,7 +9,7 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
-use shp_traits::{ProvidersInterface, ProofSubmittersInterface, SubscribeProvidersInterface};
+use shp_traits::{ProofSubmittersInterface, ProvidersInterface, SubscribeProvidersInterface};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     testing::TestSignature,

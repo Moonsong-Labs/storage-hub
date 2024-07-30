@@ -35,7 +35,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use shp_traits::{
-        ProvidersInterface, ProofSubmittersInterface, ReadProvidersInterface,
+        ProofSubmittersInterface, ProvidersInterface, ReadProvidersInterface,
         SystemMetricsInterface,
     };
     use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, Saturating};

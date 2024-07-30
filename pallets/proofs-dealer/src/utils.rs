@@ -11,7 +11,7 @@ use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
 };
 use shp_traits::{
-    CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, ProofSubmittersInterface,
+    CommitmentVerifier, ProofSubmittersInterface, ProofsDealerInterface, ProvidersInterface,
     TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use sp_runtime::{

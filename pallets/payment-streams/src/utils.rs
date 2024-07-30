@@ -11,8 +11,8 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
-    PaymentStreamsInterface, ProvidersInterface, ProofSubmittersInterface,
-    ReadProvidersInterface, SystemMetricsInterface,
+    PaymentStreamsInterface, ProofSubmittersInterface, ProvidersInterface, ReadProvidersInterface,
+    SystemMetricsInterface,
 };
 use sp_runtime::{
     traits::{Convert, One},
