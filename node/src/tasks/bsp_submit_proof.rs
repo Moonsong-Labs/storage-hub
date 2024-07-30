@@ -20,7 +20,16 @@ use crate::services::handler::StorageHubHandler;
 const LOG_TARGET: &str = "bsp-submit-proof-task";
 const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
 
-/// TODO: Document this task.
+/// BSP Submit Proof Task: Handles the submission of proof for BSP (Block Storage Provider) to the runtime.
+///
+/// The flow includes the following steps:
+/// - Reacting to `NewChallengeSeed` event from the runtime:
+///     - Derive forest challenges from the seed.
+///     - Check and add checkpoint challenges.
+///     - Generate proof for the file from the forest storage.
+///     - Generate key proofs for each file key.
+///     - Submit the proof to the runtime.
+///     - Apply mutations if necessary and ensure the new Forest root matches the one on-chain.
 pub struct BspSubmitProofTask<T, FL, FS>
 where
     T: TrieLayout,
@@ -61,8 +70,13 @@ where
 
 /// Handles the `NewChallengeSeed` event.
 ///
-/// This event is triggered by an on-chain event of a new challenge seed being generated.
-/// TODO: Complete this docs.
+/// This event is triggered by an on-chain event of a new challenge seed being generated. The task performs the following actions:
+/// - Derives forest challenges from the seed.
+/// - Checks for checkpoint challenges and adds them to the forest challenges.
+/// - Generates proofs for the challenges.
+/// - Constructs key proofs and submits the proof to the runtime.
+/// - Applies any necessary mutations.
+/// - Ensures the new Forest root matches the one on-chain.
 impl<T, FL, FS> EventHandler<NewChallengeSeed> for BspSubmitProofTask<T, FL, FS>
 where
     T: TrieLayout + Send + Sync + 'static,
@@ -158,12 +172,14 @@ where
         // Attempt three times to submit extrinsic if it fails.
         let mut extrinsic_submitted = false;
         for attempt in 0..MAX_PROOF_SUBMISSION_ATTEMPTS {
-            if self
+            let mut transaction = self
                 .storage_hub_handler
                 .blockchain
                 .send_extrinsic(call.clone())
                 .await?
-                .with_timeout(Duration::from_secs(60))
+                .with_timeout(Duration::from_secs(60));
+
+            if transaction
                 .watch_for_success(&self.storage_hub_handler.blockchain)
                 .await
                 .is_ok()
@@ -179,6 +195,7 @@ where
 
         // Exit with error if extrinsic was not submitted.
         if !extrinsic_submitted {
+            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to submit proof after {} attempts", MAX_PROOF_SUBMISSION_ATTEMPTS);
             return Err(anyhow!(
                 "Failed to submit proof after {} attempts",
                 MAX_PROOF_SUBMISSION_ATTEMPTS
@@ -187,9 +204,8 @@ where
 
         trace!(target: LOG_TARGET, "Proof submitted successfully");
 
-        // TODO: Get root from runtime for this provider.
-
         // Apply mutations, if any.
+        let mut mutations_applied = false;
         for (file_key, maybe_mutation) in &checkpoint_challenges {
             if proven_keys.contains(file_key) {
                 // If the file key is proven, it means that this provider had an exact match for a checkpoint challenge.
@@ -201,11 +217,17 @@ where
                     trace!(target: LOG_TARGET, "Applying mutation: {:?}", mutation);
 
                     self.remove_file(file_key).await?;
+                    mutations_applied = true;
                 }
             }
         }
 
-        // TODO: Check that the new Forest root matches the one on-chain.
+        if mutations_applied {
+            trace!(target: LOG_TARGET, "Mutations applied successfully");
+
+            // Check that the new Forest root matches the one on-chain.
+            self.check_provider_root(provider_id).await?;
+        }
 
         Ok(())
     }
@@ -352,7 +374,7 @@ where
         // Remove the file key from the Forest.
         let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
         write_forest_storage.delete_file_key(file_key).map_err(|e| {
-            error!(target: LOG_TARGET, "CRITICAL! Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
+            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
             anyhow!(
                 "Failed to remove file key from Forest storage: {:?}",
                 e
@@ -361,6 +383,7 @@ where
         // Release the forest storage write lock.
         drop(write_forest_storage);
 
+        // TODO: This should actually be done after waiting for finality of the extrinsic.
         // Remove the file from the File Storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
         write_file_storage.delete_file(file_key).map_err(|e| {
@@ -372,6 +395,44 @@ where
         })?;
         // Release the file storage write lock.
         drop(write_file_storage);
+
+        Ok(())
+    }
+
+    async fn check_provider_root(&self, provider_id: ProviderId) -> anyhow::Result<()> {
+        // Get root for this provider according to the runtime.
+        let onchain_root = self
+            .storage_hub_handler
+            .blockchain
+            .query_provider_forest_root(provider_id)
+            .await
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to query provider root from runtime after successfully submitting proof. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                anyhow!(
+                    "Failed to query provider root from runtime after successfully submitting proof: {:?}",
+                    e
+                )
+            })?;
+
+        trace!(target: LOG_TARGET, "Provider root according to runtime: {:?}", onchain_root);
+
+        // Check that the new Forest root matches the one on-chain.
+        let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
+        let root = read_forest_storage.root();
+        // Release the forest storage read lock.
+        drop(read_forest_storage);
+
+        // Convert the root to H256 for comparison.
+        let root = H256::from_slice(root.as_ref());
+
+        trace!(target: LOG_TARGET, "Provider root according to Forest Storage: {:?}", root);
+
+        if root != onchain_root {
+            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Applying mutations yielded different root than the one on-chain. This means that there is a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team.");
+            return Err(anyhow!(
+                "Applying mutations yielded different root than the one on-chain."
+            ));
+        }
 
         Ok(())
     }
