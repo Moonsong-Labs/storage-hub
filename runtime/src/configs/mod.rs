@@ -442,6 +442,7 @@ impl pallet_randomness::Config for Runtime {
 parameter_types! {
     pub const SpMinDeposit: Balance = 20 * UNIT;
     pub const BucketDeposit: Balance = 20 * UNIT;
+    pub const SlashFactor: Balance = 20 * UNIT;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -460,6 +461,8 @@ impl pallet_storage_providers::Config for Runtime {
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
+    type ProvidersProofSubmitters = ProofsDealer;
+    type Treasury = TreasuryAccount;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
@@ -476,6 +479,7 @@ impl pallet_storage_providers::Config for Runtime {
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = ConstU32<10>;
+    type SlashFactor = SlashFactor;
 }
 
 parameter_types! {

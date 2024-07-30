@@ -1233,6 +1233,13 @@ declare module '@polkadot/api-base/types/events' {
                 who: AccountId32;
             }>;
             /**
+             * Event emitted when an SP has been slashed.
+             **/
+            Slashed: AugmentedEvent<ApiType, [providerId: H256, amountSlashed: u128], {
+                providerId: H256;
+                amountSlashed: u128;
+            }>;
+            /**
              * Generic event
              **/
             [key: string]: AugmentedEvent<ApiType>;

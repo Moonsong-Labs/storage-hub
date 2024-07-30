@@ -4329,6 +4329,179 @@ mod remove_root_bucket {
     }
 }
 
+mod slash {
+    use super::*;
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn slash_when_storage_provider_not_registered() {
+            ExtBuilder::build().execute_with(|| {
+                let caller = accounts::BOB.0;
+
+                // Try to slash a provider that is not registered
+                assert_noop!(
+                    StorageProviders::slash(RuntimeOrigin::signed(caller), caller),
+                    Error::<Test>::NotRegistered
+                );
+            });
+        }
+
+        #[test]
+        fn slash_when_storage_provider_not_slashable() {
+            ExtBuilder::build().execute_with(|| {
+                // register msp
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let caller = accounts::BOB.0;
+
+                // Try to slash the provider
+                assert_noop!(
+                    StorageProviders::slash(RuntimeOrigin::signed(caller), alice),
+                    Error::<Test>::ProviderNotSlashable
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn slash_storage_provider() {
+            ExtBuilder::build().execute_with(|| {
+                // register msp
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let provider_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                // Set proofs-dealer storage to have a slashable provider
+                pallet_proofs_dealer::SlashableProviders::<Test>::insert(&provider_id, 1);
+
+                let deposit_on_hold =
+                    NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice);
+
+                let caller = accounts::BOB.0;
+
+                let treasury_balance =
+                    NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
+
+                // Slash the provider
+                assert_ok!(StorageProviders::slash(
+                    RuntimeOrigin::signed(caller),
+                    alice
+                ));
+
+                // Check that the provider is no longer slashable
+                assert_eq!(
+                    pallet_proofs_dealer::SlashableProviders::<Test>::get(&provider_id),
+                    None
+                );
+
+                let slash_factor: BalanceOf<Test> = <Test as crate::Config>::SlashFactor::get();
+
+                // Check that the held deposit of the provider has been reduced by slash factor
+                assert_eq!(
+                    NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                    deposit_on_hold - slash_factor
+                );
+
+                // Check that the Treasury has received the slash amount
+                assert_eq!(
+                    NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get()),
+                    treasury_balance + slash_factor
+                );
+            });
+        }
+
+        #[test]
+        fn slash_multiple_storage_providers() {
+            ExtBuilder::build().execute_with(|| {
+                // register msp and bsp
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageData<Test> = 100;
+                let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
+
+                let bob: AccountId = accounts::BOB.0;
+                let (_deposit_amount, _bob_bsp) = register_account_as_bsp(bob, storage_amount);
+
+                let alice_provider_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+                let bob_provider_id =
+                    crate::AccountIdToBackupStorageProviderId::<Test>::get(&bob).unwrap();
+
+                let alice_accrued_failed_proof_submissions = 10;
+                let bob_accrued_failed_proof_submissions = 20;
+
+                // Set proofs-dealer storage to have a slashable provider
+                pallet_proofs_dealer::SlashableProviders::<Test>::insert(
+                    &alice_provider_id,
+                    alice_accrued_failed_proof_submissions,
+                );
+                pallet_proofs_dealer::SlashableProviders::<Test>::insert(
+                    &bob_provider_id,
+                    bob_accrued_failed_proof_submissions,
+                );
+
+                let alice_deposit_on_hold =
+                    NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice);
+                let bob_deposit_on_hold =
+                    NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob);
+
+                let caller = accounts::CHARLIE.0;
+
+                let treasury_balance =
+                    NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
+
+                // Slash the providers
+                assert_ok!(StorageProviders::slash(
+                    RuntimeOrigin::signed(caller),
+                    alice
+                ));
+                assert_ok!(StorageProviders::slash(RuntimeOrigin::signed(caller), bob));
+
+                // Check that the providers are no longer slashable
+                assert_eq!(
+                    pallet_proofs_dealer::SlashableProviders::<Test>::get(&alice_provider_id),
+                    None
+                );
+                assert_eq!(
+                    pallet_proofs_dealer::SlashableProviders::<Test>::get(&bob_provider_id),
+                    None
+                );
+
+                let slash_factor: BalanceOf<Test> = <Test as crate::Config>::SlashFactor::get();
+
+                // Check that the held deposit of the providers has been reduced by slash factor
+                let alice_slash_amount: BalanceOf<Test> = slash_factor
+                    * <u32 as Into<BalanceOf<Test>>>::into(alice_accrued_failed_proof_submissions);
+                assert_eq!(
+                    NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                    alice_deposit_on_hold - alice_slash_amount
+                );
+
+                let bob_slash_amount: BalanceOf<Test> = slash_factor
+                    * <u32 as Into<BalanceOf<Test>>>::into(bob_accrued_failed_proof_submissions);
+                assert_eq!(
+                    NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
+                    bob_deposit_on_hold - bob_slash_amount
+                );
+
+                // Check that the Treasury has received the slash amount
+                assert_eq!(
+                    NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get()),
+                    treasury_balance + alice_slash_amount + bob_slash_amount
+                );
+            });
+        }
+    }
+}
+
 // Helper functions for testing:
 
 /// Helper function that registers an account as a Main Storage Provider, with storage_amount StorageData units

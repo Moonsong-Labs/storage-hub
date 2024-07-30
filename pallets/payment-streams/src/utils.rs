@@ -11,8 +11,8 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
-    PaymentStreamsInterface, ProvidersInterface, ReadProofSubmittersInterface,
-    ReadProvidersInterface, SystemMetricsInterface,
+    PaymentStreamsInterface, ProofSubmittersInterface, ProvidersInterface, ReadProvidersInterface,
+    SystemMetricsInterface,
 };
 use sp_runtime::{
     traits::{Convert, One},
@@ -735,7 +735,7 @@ where
         let n = n.saturating_sub(One::one());
         // Get the Providers that submitted a valid proof in the last tick, if there are any
         let proof_submitters =
-            <T::ProvidersProofSubmitters as ReadProofSubmittersInterface>::get_proof_submitters_for_tick(&n);
+            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_proof_submitters_for_tick(&n);
         weight.consume(T::DbWeight::get().reads(1));
 
         // If there are any proof submitters in the last tick

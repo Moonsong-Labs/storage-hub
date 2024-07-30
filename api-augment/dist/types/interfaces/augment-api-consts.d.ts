@@ -343,6 +343,10 @@ declare module '@polkadot/api-base/types/consts' {
              **/
             minBlocksBetweenCapacityChanges: u32 & AugmentedConst<ApiType>;
             /**
+             * The slash factor deducted from a Storage Provider's deposit for every single storage proof they fail to provide.
+             **/
+            slashFactor: u128 & AugmentedConst<ApiType>;
+            /**
              * The amount that a BSP receives as allocation of storage capacity when it deposits SpMinDeposit.
              **/
             spMinCapacity: u32 & AugmentedConst<ApiType>;
@@ -350,6 +354,13 @@ declare module '@polkadot/api-base/types/consts' {
              * The minimum amount that an account has to deposit to become a storage provider.
              **/
             spMinDeposit: u128 & AugmentedConst<ApiType>;
+            /**
+             * The Treasury AccountId.
+             * The account to which:
+             * - The fees for submitting a challenge are transferred.
+             * - The slashed funds are transferred.
+             **/
+            treasury: AccountId32 & AugmentedConst<ApiType>;
             /**
              * Generic const
              **/

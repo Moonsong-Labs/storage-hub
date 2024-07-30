@@ -1376,6 +1376,10 @@ export default {
         oldCapacity: "u32",
         newCapacity: "u32",
         nextBlockWhenChangeAllowed: "u32"
+      },
+      Slashed: {
+        providerId: "H256",
+        amountSlashed: "u128"
       }
     }
   },
@@ -3017,6 +3021,9 @@ export default {
         capacity: "u32",
         multiaddresses: "Vec<Bytes>",
         paymentAccount: "AccountId32"
+      },
+      slash: {
+        providerAccountId: "AccountId32"
       }
     }
   },
@@ -3805,7 +3812,8 @@ export default {
       "SpRegisteredButDataNotFound",
       "BucketNotFound",
       "BucketAlreadyExists",
-      "AppendBucketToMspFailed"
+      "AppendBucketToMspFailed",
+      "ProviderNotSlashable"
     ]
   },
   /**

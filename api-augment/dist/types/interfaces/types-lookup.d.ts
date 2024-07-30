@@ -1430,7 +1430,12 @@ declare module '@polkadot/types/lookup' {
             readonly newCapacity: u32;
             readonly nextBlockWhenChangeAllowed: u32;
         } & Struct;
-        readonly type: 'MspRequestSignUpSuccess' | 'MspSignUpSuccess' | 'BspRequestSignUpSuccess' | 'BspSignUpSuccess' | 'SignUpRequestCanceled' | 'MspSignOffSuccess' | 'BspSignOffSuccess' | 'CapacityChanged';
+        readonly isSlashed: boolean;
+        readonly asSlashed: {
+            readonly providerId: H256;
+            readonly amountSlashed: u128;
+        } & Struct;
+        readonly type: 'MspRequestSignUpSuccess' | 'MspSignUpSuccess' | 'BspRequestSignUpSuccess' | 'BspSignUpSuccess' | 'SignUpRequestCanceled' | 'MspSignOffSuccess' | 'BspSignOffSuccess' | 'CapacityChanged' | 'Slashed';
     }
     /** @name PalletStorageProvidersValueProposition (128) */
     interface PalletStorageProvidersValueProposition extends Struct {
@@ -3027,7 +3032,11 @@ declare module '@polkadot/types/lookup' {
             readonly multiaddresses: Vec<Bytes>;
             readonly paymentAccount: AccountId32;
         } & Struct;
-        readonly type: 'RequestMspSignUp' | 'RequestBspSignUp' | 'ConfirmSignUp' | 'CancelSignUp' | 'MspSignOff' | 'BspSignOff' | 'ChangeCapacity' | 'AddValueProp' | 'ForceMspSignUp' | 'ForceBspSignUp';
+        readonly isSlash: boolean;
+        readonly asSlash: {
+            readonly providerAccountId: AccountId32;
+        } & Struct;
+        readonly type: 'RequestMspSignUp' | 'RequestBspSignUp' | 'ConfirmSignUp' | 'CancelSignUp' | 'MspSignOff' | 'BspSignOff' | 'ChangeCapacity' | 'AddValueProp' | 'ForceMspSignUp' | 'ForceBspSignUp' | 'Slash';
     }
     /** @name PalletFileSystemCall (297) */
     interface PalletFileSystemCall extends Enum {
@@ -3773,7 +3782,8 @@ declare module '@polkadot/types/lookup' {
         readonly isBucketNotFound: boolean;
         readonly isBucketAlreadyExists: boolean;
         readonly isAppendBucketToMspFailed: boolean;
-        readonly type: 'AlreadyRegistered' | 'MaxBspsReached' | 'MaxMspsReached' | 'SignUpNotRequested' | 'SignUpRequestPending' | 'NoMultiAddress' | 'InvalidMultiAddress' | 'StorageTooLow' | 'NotEnoughBalance' | 'CannotHoldDeposit' | 'StorageStillInUse' | 'RandomnessNotValidYet' | 'SignUpRequestExpired' | 'NewCapacityLessThanUsedStorage' | 'NewCapacityEqualsCurrentCapacity' | 'NewCapacityCantBeZero' | 'NotEnoughTimePassed' | 'NotRegistered' | 'NoUserId' | 'NoBucketId' | 'SpRegisteredButDataNotFound' | 'BucketNotFound' | 'BucketAlreadyExists' | 'AppendBucketToMspFailed';
+        readonly isProviderNotSlashable: boolean;
+        readonly type: 'AlreadyRegistered' | 'MaxBspsReached' | 'MaxMspsReached' | 'SignUpNotRequested' | 'SignUpRequestPending' | 'NoMultiAddress' | 'InvalidMultiAddress' | 'StorageTooLow' | 'NotEnoughBalance' | 'CannotHoldDeposit' | 'StorageStillInUse' | 'RandomnessNotValidYet' | 'SignUpRequestExpired' | 'NewCapacityLessThanUsedStorage' | 'NewCapacityEqualsCurrentCapacity' | 'NewCapacityCantBeZero' | 'NotEnoughTimePassed' | 'NotRegistered' | 'NoUserId' | 'NoBucketId' | 'SpRegisteredButDataNotFound' | 'BucketNotFound' | 'BucketAlreadyExists' | 'AppendBucketToMspFailed' | 'ProviderNotSlashable';
     }
     /** @name PalletFileSystemStorageRequestMetadata (392) */
     interface PalletFileSystemStorageRequestMetadata extends Struct {
