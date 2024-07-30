@@ -4335,6 +4335,19 @@ mod slash {
         use super::*;
 
         #[test]
+        fn slash_when_storage_provider_not_registered() {
+            ExtBuilder::build().execute_with(|| {
+                let caller = accounts::BOB.0;
+
+                // Try to slash a provider that is not registered
+                assert_noop!(
+                    StorageProviders::slash(RuntimeOrigin::signed(caller), caller),
+                    Error::<Test>::NotRegistered
+                );
+            });
+        }
+
+        #[test]
         fn slash_when_storage_provider_not_slashable() {
             ExtBuilder::build().execute_with(|| {
                 // register msp
