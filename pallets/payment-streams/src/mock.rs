@@ -120,6 +120,16 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
         sp_trie::empty_trie_root::<T>()
     }
 }
+
+
+// TODO: remove this and replace with pallet treasury
+pub struct TreasuryAccount;
+impl Get<AccountId> for TreasuryAccount {
+    fn get() -> AccountId {
+        0
+    }
+}
+
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -131,6 +141,7 @@ impl pallet_storage_providers::Config for Test {
     type ValuePropId = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type Treasury = TreasuryAccount;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;

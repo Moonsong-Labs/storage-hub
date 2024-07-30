@@ -8,10 +8,11 @@ use frame_support::sp_runtime::{
     ArithmeticError, DispatchError,
 };
 use frame_support::traits::{
-    fungible::{BalancedHold, Inspect, InspectHold, MutateHold},
+    fungible::{Inspect, InspectHold, MutateHold},
     tokens::{Fortitude, Precision, Preservation},
-    Get, Imbalance, Randomness,
+    Get, Randomness,
 };
+use frame_support::traits::tokens::Restriction;
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
     MutateProvidersInterface, ProofSubmittersInterface, ProvidersConfig, ProvidersInterface,
@@ -722,20 +723,22 @@ where
         // Calculate the amount to be slashed.
         let slashable_amount = T::SlashFactor::get() * <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id).ok_or(Error::<T>::ProviderNotSlashable)?.into();
 
-        let (credit, _unpaid) = T::NativeBalance::slash(
+        let amount_slashed = T::NativeBalance::transfer_on_hold(
             &HoldReason::StorageProviderDeposit.into(),
             account_id,
+            &T::Treasury::get(),
             slashable_amount,
-        );
+            Precision::BestEffort,
+            Restriction::Free,
+            Fortitude::Polite
+        )?;
 
         // Clear the accrued failed proof submissions for the Storage Provider
         <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
 
-        // TODO: Transfer credit to the treasury
-
         Self::deposit_event(Event::<T>::Slashed {
             provider_id: provider_id.clone(),
-            amount_slashed: credit.peek(),
+            amount_slashed,
         });
 
         Ok(Pays::No.into())

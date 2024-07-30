@@ -139,6 +139,13 @@ pub mod pallet {
             TickNumber = BlockNumberFor<Self>,
         >;
 
+        /// The Treasury AccountId.
+        /// The account to which:
+        /// - The fees for submitting a challenge are transferred.
+        /// - The slashed funds are transferred.
+        #[pallet::constant]
+        type Treasury: Get<Self::AccountId>;
+
         /// The minimum amount that an account has to deposit to become a storage provider.
         #[pallet::constant]
         type SpMinDeposit: Get<BalanceOf<Self>>;

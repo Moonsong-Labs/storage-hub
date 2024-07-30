@@ -369,6 +369,13 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       spMinDeposit: u128 & AugmentedConst<ApiType>;
       /**
+       * The Treasury AccountId.
+       * The account to which:
+       * - The fees for submitting a challenge are transferred.
+       * - The slashed funds are transferred.
+       **/
+      treasury: AccountId32 & AugmentedConst<ApiType>;
+      /**
        * Generic const
        **/
       [key: string]: Codec;

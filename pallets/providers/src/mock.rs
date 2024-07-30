@@ -231,6 +231,7 @@ impl crate::Config for Test {
     type ValuePropId = H256;
     type ReadAccessGroupId = u32;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type Treasury = TreasuryAccount;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
