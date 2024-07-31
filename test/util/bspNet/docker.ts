@@ -83,7 +83,8 @@ export const addBspContainer = async (options?: {
       PortBindings: {
         "9944/tcp": [{ HostPort: rpcPort.toString() }],
         [`${p2pPort}/tcp`]: [{ HostPort: p2pPort.toString() }]
-      }
+      },
+      Binds: [`${process.cwd()}/../docker/dev-keystores:/keystore:ro`]
     },
     Cmd: [
       "--dev",
