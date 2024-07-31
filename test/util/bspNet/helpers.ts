@@ -12,11 +12,22 @@ import * as util from "node:util";
 import { assertEventPresent } from "../asserts.ts";
 import { DOCKER_IMAGE } from "../constants.ts";
 import { isExtSuccess } from "../extrinsics";
-import { alice, bsp, shUser } from "../pjsKeyring";
+import {
+  alice,
+  bspKey,
+  shUser,
+  bspDownKey,
+  bspTwoKey,
+  bspThreeKey,
+  bspTwoSeed,
+  bspThreeSeed
+} from "../pjsKeyring";
 import { createApiObject } from "./api";
 import { CAPACITY_512, DUMMY_BSP_ID, DUMMY_MSP_ID, NODE_INFOS, VALUE_PROP } from "./consts";
-import { showContainers } from "./docker";
+import { addBspContainer, showContainers } from "./docker";
 import type { BspNetApi } from "./types";
+import { sleep } from "../timer.ts";
+import { strictEqual } from "node:assert";
 
 const exec = util.promisify(child_process.exec);
 
@@ -101,7 +112,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
   let api: BspNetApi | undefined;
   try {
     console.log(`sh user id: ${shUser.address}`);
-    console.log(`sh bsp id: ${bsp.address}`);
+    console.log(`sh bsp id: ${bspKey.address}`);
     let file = "local-dev-bsp-compose.yml";
     if (bspNetConfig.rocksdb) {
       file = "local-dev-bsp-rocksdb-compose.yml";
@@ -153,18 +164,18 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
 
     // Give Balances
     const amount = 10000n * 10n ** 12n;
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bsp.address, amount)));
+    await api.sealBlock(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bspKey.address, amount)));
     await api.sealBlock(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(shUser.address, amount)));
 
     // Make BSP
     await api.sealBlock(
       api.tx.sudo.sudo(
         api.tx.providers.forceBspSignUp(
-          bsp.address,
+          bspKey.address,
           DUMMY_BSP_ID,
           CAPACITY_512,
           [multiAddressBsp],
-          bsp.address
+          bspKey.address
         )
       )
     );
@@ -215,10 +226,10 @@ export const closeSimpleBspNet = async () => {
 };
 
 export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
-  let api: BspNetApi | undefined;
+  let userApi: BspNetApi | undefined;
   try {
-    console.log(`sh user id: ${shUser.address}`);
-    console.log(`sh bsp id: ${bsp.address}`);
+    console.log(`SH user id: ${shUser.address}`);
+    console.log(`SH BSP id: ${bspKey.address}`);
     let file = "local-dev-bsp-compose.yml";
     if (bspNetConfig.rocksdb) {
       file = "local-dev-bsp-rocksdb-compose.yml";
@@ -266,30 +277,34 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
     // Create Connection API Object to User Node
-    api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+    userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
     // Give Balances
     const amount = 10000n * 10n ** 12n;
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bsp.address, amount)));
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(shUser.address, amount)));
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(bspKey.address, amount))
+    );
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(shUser.address, amount))
+    );
 
     // Make BSP
-    await api.sealBlock(
-      api.tx.sudo.sudo(
-        api.tx.providers.forceBspSignUp(
-          bsp.address,
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(
+        userApi.tx.providers.forceBspSignUp(
+          bspKey.address,
           DUMMY_BSP_ID,
           CAPACITY_512,
           [multiAddressBsp],
-          bsp.address
+          bspKey.address
         )
       )
     );
 
     // Make MSP
-    await api.sealBlock(
-      api.tx.sudo.sudo(
-        api.tx.providers.forceMspSignUp(
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(
+        userApi.tx.providers.forceMspSignUp(
           alice.address,
           DUMMY_MSP_ID,
           CAPACITY_512,
@@ -307,28 +322,96 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
     // u128 max value
     const u128Max = (BigInt(1) << BigInt(128)) - BigInt(1);
 
-    await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.fileSystem.forceUpdateBspsAssignmentThreshold(u128Max))
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.forceUpdateBspsAssignmentThreshold(u128Max))
     );
+
+    // Add more BSPs to the network.
+    // One BSP will be down, two more will be up.
+    const { containerName: bspDownContainerName } = await addBsp(userApi, bspDownKey, {
+      name: "sh-bsp-down",
+      rocksdb: bspNetConfig.rocksdb
+    });
+    await stopBsp(bspDownContainerName);
+    const { rpcPort: bspTwoRpcPort } = await addBsp(userApi, bspTwoKey, {
+      name: "sh-bsp-two",
+      rocksdb: bspNetConfig.rocksdb,
+      bspKeySeed: bspTwoSeed,
+      additionalArgs: ["--keystore-path=/keystore/bsp-two"]
+    });
+    const { rpcPort: bspThreeRpcPort } = await addBsp(userApi, bspThreeKey, {
+      name: "sh-bsp-three",
+      rocksdb: bspNetConfig.rocksdb,
+      bspKeySeed: bspThreeSeed,
+      additionalArgs: ["--keystore-path=/keystore/bsp-three"]
+    });
+
+    // Everything executed below is tested in `volunteer.test.ts` and `onboard.test.ts` files.
+    // For the context of this test, this is a preamble, so that a BSP has a challenge cycle initiated.
+
+    /**** CREATE BUCKET AND ISSUE STORAGE REQUEST ****/
+    const source = "res/whatsup.jpg";
+    const destination = "test/smile.jpg";
+    const bucketName = "nothingmuch-1";
+
+    const newBucketEventEvent = await userApi.createBucket(bucketName);
+    const newBucketEventDataBlob =
+      userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+
+    if (!newBucketEventDataBlob) {
+      throw new Error("Event doesn't match Type");
+    }
+
+    const { fingerprint, file_size, location } =
+      await userApi.rpc.storagehubclient.loadFileInStorage(
+        source,
+        destination,
+        NODE_INFOS.user.AddressId,
+        newBucketEventDataBlob.bucketId
+      );
+
+    await userApi.sealBlock(
+      userApi.tx.fileSystem.issueStorageRequest(
+        newBucketEventDataBlob.bucketId,
+        location,
+        fingerprint,
+        file_size,
+        DUMMY_MSP_ID,
+        [NODE_INFOS.user.expectedPeerId]
+      ),
+      shUser
+    );
+
+    /**** BSP VOLUNTEERS ****/
+    await sleep(500); // wait for the BSPs to volunteer
+
+    const volunteerPending = await userApi.rpc.author.pendingExtrinsics();
+    strictEqual(
+      volunteerPending.length,
+      3,
+      "There should be three pending extrinsics from BSPs (volunteer)"
+    );
+
+    await userApi.sealBlock();
+
+    await sleep(5000); // wait for the BSPs to download the file
+    const confirmPending = await userApi.rpc.author.pendingExtrinsics();
+    strictEqual(
+      confirmPending.length,
+      3,
+      "There should be three pending extrinsics from BSPs (confirm store)"
+    );
+
+    await userApi.sealBlock();
+
+    await sleep(1000); // wait for the BSPs to process the BspConfirmedStoring event
+
+    return { bspTwoRpcPort, bspThreeRpcPort };
   } catch (e) {
     console.error("Error ", e);
   } finally {
-    api?.disconnect();
+    userApi?.disconnect();
   }
-};
-
-export const closeMultipleInitialisedBspsNet = async () => {
-  const docker = new Docker();
-
-  const existingNodes = await docker.listContainers({
-    filters: { ancestor: [DOCKER_IMAGE] }
-  });
-
-  const promises = existingNodes.map(async (node) => docker.getContainer(node.Id).stop());
-  await Promise.all(promises);
-
-  await docker.pruneContainers();
-  await docker.pruneVolumes();
 };
 
 // TODO: Add a successful flag to track whether ext was successful or not
@@ -431,4 +514,51 @@ export const createCheckBucket = async (api: BspNetApi, bucketName: string) => {
     throw new Error("Event doesn't match Type");
   }
   return newBucketEventDataBlob;
+};
+
+const addBsp = async (
+  api: BspNetApi,
+  bspKey: KeyringPair,
+  options?: { name?: string; rocksdb?: boolean; bspKeySeed?: string; additionalArgs?: string[] }
+) => {
+  // Launch a BSP node.
+  const additionalArgs = options?.additionalArgs ?? [];
+  if (options?.rocksdb) {
+    additionalArgs.push("--storage-layer=rocks-db");
+    additionalArgs.push(`--storage-path=/tmp/bsp/${bspKey.address}`);
+  }
+  const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer(options);
+
+  //Give it some balance.
+  const amount = 10000n * 10n ** 12n;
+  await api.sealBlock(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bspKey.address, amount)));
+
+  const bspIp = await getContainerIp(containerName);
+  const multiAddressBsp = `/ip4/${bspIp}/tcp/${p2pPort}/p2p/${peerId}`;
+
+  // Make BSP
+  await api.sealBlock(
+    api.tx.sudo.sudo(
+      api.tx.providers.forceBspSignUp(
+        bspKey.address,
+        bspKey.publicKey,
+        CAPACITY_512,
+        [multiAddressBsp],
+        bspKey.address
+      )
+    )
+  );
+
+  return { containerName, rpcPort, p2pPort, peerId };
+};
+
+const stopBsp = async (name: string) => {
+  const docker = new Docker();
+
+  const containersToStop = await docker.listContainers({
+    filters: { name: [name] }
+  });
+
+  await docker.getContainer(containersToStop[0].Id).stop();
+  await docker.getContainer(containersToStop[0].Id).remove();
 };

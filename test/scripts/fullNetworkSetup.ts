@@ -1,7 +1,7 @@
 import _ from "lodash";
 import {
   alice,
-  bsp,
+  bspKey,
   collator,
   getZombieClients,
   sendTransaction,
@@ -43,11 +43,11 @@ async function main() {
   // Settings Balances
   const {
     data: { free }
-  } = await resources.storageApi.query.system.account(bsp.address);
+  } = await resources.storageApi.query.system.account(bspKey.address);
 
   if (free.toBigInt() < 1_000_000_000_000n) {
     const setBal = resources.storageApi.tx.balances.forceSetBalance(
-      bsp.address,
+      bspKey.address,
       1000_000_000_000_000_000n
     );
     const setBal2 = resources.storageApi.tx.balances.forceSetBalance(
@@ -71,7 +71,7 @@ async function main() {
     process.stdout.write("✅\n");
     const {
       data: { free }
-    } = await resources.storageApi.query.system.account(bsp.address);
+    } = await resources.storageApi.query.system.account(bspKey.address);
 
     console.log(
       `BSP account balance reset by sudo, new free is ${free.toBigInt() / 10n ** 12n} balance ✅`
@@ -85,11 +85,11 @@ async function main() {
   const buffer = Buffer.from(string, "utf8");
   const uint8Array = new Uint8Array(buffer);
 
-  process.stdout.write(`Requesting sign up for ${bsp.address} ...`);
+  process.stdout.write(`Requesting sign up for ${bspKey.address} ...`);
   await sendTransaction(
-    resources.storageApi.tx.providers.requestBspSignUp(5000000, [uint8Array], bsp.address),
+    resources.storageApi.tx.providers.requestBspSignUp(5000000, [uint8Array], bspKey.address),
     {
-      signer: bsp
+      signer: bspKey
     }
   );
   process.stdout.write("✅\n");
@@ -97,9 +97,9 @@ async function main() {
   await waitForRandomness(resources.storageApi);
 
   // Confirm sign up
-  process.stdout.write(`Confirming sign up for ${bsp.address} ...`);
-  await sendTransaction(resources.storageApi.tx.providers.confirmSignUp(bsp.address), {
-    signer: bsp
+  process.stdout.write(`Confirming sign up for ${bspKey.address} ...`);
+  await sendTransaction(resources.storageApi.tx.providers.confirmSignUp(bspKey.address), {
+    signer: bspKey
   });
   process.stdout.write("✅\n");
 
