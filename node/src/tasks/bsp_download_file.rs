@@ -1,7 +1,7 @@
 use sc_tracing::tracing::{error, info};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_common::types::HasherOutT;
-use shc_file_manager::traits::{FileStorage, FileStorageError};
+use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteDownloadRequest,
 };
