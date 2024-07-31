@@ -20,9 +20,6 @@ scale-info = { workspace = true }
 sp-api = { workspace = true }
 sp-runtime = { workspace = true }
 
-# Local
-shp-file-key-verifier = { workspace = true }
-
 [features]
 default = ["std"]
 std = ["codec/std", "sp-api/std", "sp-runtime/std"]

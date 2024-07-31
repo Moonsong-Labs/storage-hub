@@ -54,7 +54,6 @@ codec = { workspace = true }
 serde = { workspace = true, default-features = true }
 jsonrpsee = { workspace = true }
 futures = { workspace = true }
-reference-trie = { workspace = true }
 serde_json = { workspace = true }
 
 # Substrate
