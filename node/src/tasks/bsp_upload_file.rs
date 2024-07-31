@@ -44,7 +44,7 @@ where
     T: TrieLayout,
     FL: Send + Sync + FileStorage<T>,
     FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     storage_hub_handler: StorageHubHandler<T, FL, FS>,
     file_key_cleanup: Option<HasherOutT<T>>,
@@ -55,7 +55,7 @@ where
     T: TrieLayout,
     FL: Send + Sync + FileStorage<T>,
     FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn clone(&self) -> BspUploadFileTask<T, FL, FS> {
         Self {
@@ -70,7 +70,7 @@ where
     T: TrieLayout,
     FL: Send + Sync + FileStorage<T>,
     FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
         Self {
@@ -92,7 +92,7 @@ where
     T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
@@ -121,7 +121,7 @@ where
     T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync + 'static,
-    <T::Hash as sp_core::Hasher>::Out: TryFrom<[u8; H_LENGTH]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
@@ -240,7 +240,7 @@ where
     T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     async fn handle_event(&mut self, event: BspConfirmedStoring) -> anyhow::Result<()> {
         info!(
@@ -277,14 +277,14 @@ where
     T: TrieLayout,
     FL: Send + Sync + FileStorage<T>,
     FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     async fn handle_new_storage_request_event(
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()>
     where
-        HasherOutT<T>: TryFrom<[u8; 32]>,
+        HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
     {
         // Construct file metadata.
         let metadata = FileMetadata {
