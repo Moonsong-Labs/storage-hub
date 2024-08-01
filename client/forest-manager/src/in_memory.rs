@@ -88,19 +88,13 @@ where
 
         let mut root = self.root;
 
-        let mut trie = TrieDBMutBuilder::<T>::from_existing(&mut self.memdb, &mut root).build();
+        let mut trie = TrieDBMutBuilder::<T>::from_existing(&mut self.memdb, &mut self.root).build();
 
         // Batch insert all keys
         for file_key in &file_keys {
             trie.insert(file_key.as_ref(), b"")
                 .map_err(|_| ForestStorageError::FailedToInsertFileKey(*file_key))?;
         }
-
-        // Drop trie to free `self`.
-        drop(trie);
-
-        // Update the root
-        self.root = root;
 
         Ok(file_keys)
     }

@@ -331,14 +331,12 @@ where
         // Pre-check for existing keys
         for metadata in files_metadata {
             let file_key = metadata.file_key::<T::Hash>();
-            file_keys.push(file_key);
-        }
 
-        // Check if any of the new keys already exist in the trie
-        for file_key in &file_keys {
-            if self.contains_file_key(file_key)? {
-                return Err(ForestStorageError::FileKeyAlreadyExists(*file_key).into());
+            if self.contains_file_key(&file_key)? {
+                return Err(ForestStorageError::FileKeyAlreadyExists(file_key).into());
             }
+
+            file_keys.push(file_key);
         }
 
         let mut root = self.root;
