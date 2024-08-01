@@ -20,7 +20,8 @@ import {
   bspTwoKey,
   bspThreeKey,
   bspTwoSeed,
-  bspThreeSeed
+  bspThreeSeed,
+  bspDownSeed
 } from "../pjsKeyring";
 import { createApiObject } from "./api";
 import { CAPACITY_512, DUMMY_BSP_ID, DUMMY_MSP_ID, NODE_INFOS, VALUE_PROP } from "./consts";
@@ -330,9 +331,10 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
     // One BSP will be down, two more will be up.
     const { containerName: bspDownContainerName } = await addBsp(userApi, bspDownKey, {
       name: "sh-bsp-down",
-      rocksdb: bspNetConfig.rocksdb
+      rocksdb: bspNetConfig.rocksdb,
+      bspKeySeed: bspDownSeed,
+      additionalArgs: ["--keystore-path=/keystore/bsp-down"]
     });
-    await stopBsp(bspDownContainerName);
     const { rpcPort: bspTwoRpcPort } = await addBsp(userApi, bspTwoKey, {
       name: "sh-bsp-two",
       rocksdb: bspNetConfig.rocksdb,
@@ -383,28 +385,34 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
     );
 
     /**** BSP VOLUNTEERS ****/
-    await sleep(500); // wait for the BSPs to volunteer
+    // Wait for the BSPs to volunteer.
+    await sleep(500);
 
     const volunteerPending = await userApi.rpc.author.pendingExtrinsics();
     strictEqual(
       volunteerPending.length,
-      3,
+      4,
       "There should be three pending extrinsics from BSPs (volunteer)"
     );
 
     await userApi.sealBlock();
 
-    await sleep(5000); // wait for the BSPs to download the file
+    // Wait for the BSPs to download the file.
+    await sleep(5000);
     const confirmPending = await userApi.rpc.author.pendingExtrinsics();
     strictEqual(
       confirmPending.length,
-      3,
+      4,
       "There should be three pending extrinsics from BSPs (confirm store)"
     );
 
     await userApi.sealBlock();
 
-    await sleep(1000); // wait for the BSPs to process the BspConfirmedStoring event
+    // Wait for the BSPs to process the BspConfirmedStoring event.
+    await sleep(1000);
+
+    // Stopping BSP that is supposed to be down.
+    await stopBsp(bspDownContainerName);
 
     return { bspTwoRpcPort, bspThreeRpcPort };
   } catch (e) {
