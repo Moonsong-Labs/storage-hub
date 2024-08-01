@@ -206,6 +206,7 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         }
     }
 
+    /// Responds a download request of a file chunk with a [`FileKeyProof`]
     async fn download_response(
         &self,
         file_key_proof: FileKeyProof,

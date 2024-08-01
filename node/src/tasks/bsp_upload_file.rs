@@ -27,18 +27,18 @@ const LOG_TARGET: &str = "bsp-upload-file-task";
 /// BSP Upload File Task: Handles the whole flow of a file being uploaded to a BSP, from
 /// the BSP's perspective.
 ///
-/// The flow is split into two parts, which are represented here as 3 handlers for 3
+/// The flow is split into three parts, which are represented here as 3 handlers for 3
 /// different events:
-/// - `NewStorageRequest` event: The first part of the flow. It is triggered by an
+/// - [`NewStorageRequest`] event: The first part of the flow. It is triggered by an
 ///   on-chain event of a user submitting a storage request to StorageHub. It responds
 ///   by sending a volunteer transaction and registering the interest of this BSP in
 ///   receiving the file.
-/// - `RemoteUploadRequest` event: The second part of the flow. It is triggered by a
+/// - [`RemoteUploadRequest`] event: The second part of the flow. It is triggered by a
 ///   user sending a chunk of the file to the BSP. It checks the proof for the chunk
 ///   and if it is valid, stores it, until the whole file is stored.
-/// - `BspConfirmedStoring` event: The third part of the flow. It is triggered by the
+/// - [`BspConfirmedStoring`] event: The third part of the flow. It is triggered by the
 ///   runtime confirming that the BSP is now storing the file so that the BSP can update
-///   it's Forest storage.
+///   its Forest storage.
 pub struct BspUploadFileTask<T, FL, FS>
 where
     T: TrieLayout,
