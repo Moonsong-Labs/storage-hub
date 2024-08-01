@@ -607,8 +607,8 @@ impl pallet_file_system::Config for Runtime {
     type AssignmentThresholdMultiplier = ThresholdMultiplier;
     type Fingerprint = Hash;
     type StorageRequestBspsRequiredType = u32;
-    type TargetBspsRequired = ConstU32<1>;
-    type MaxBspsPerStorageRequest = ConstU32<5>;
+    type TargetBspsRequired = ConstU32<5>;
+    type MaxBspsPerStorageRequest = ConstU32<500>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = ConstU32<5>;
