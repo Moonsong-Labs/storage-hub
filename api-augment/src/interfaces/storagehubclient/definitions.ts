@@ -24,6 +24,7 @@ export default {
     BackupStorageProviderId: "H256",
     StorageData: "u32",
     MerklePatriciaRoot: "H256",
+    ChunkId: "u64",
     BackupStorageProvider: {
       capacity: "StorageData",
       data_used: "StorageData",
@@ -37,6 +38,21 @@ export default {
       _enum: {
         BspNotRegistered: null,
         InternalApiError: null
+      }
+    },
+    QueryFileEarliestVolunteerBlockError: {
+      _enum: {
+        FailedToEncodeFingerprint: null,
+        FailedToEncodeBsp: null,
+        ThresholdArithmeticError: null,
+        StorageRequestNotFound: null,
+        InternalError: null
+      }
+    },
+    QueryBspConfirmChunksToProveForFileError: {
+      _enum: {
+        StorageRequestNotFound: null,
+        InternalError: null
       }
     }
   },

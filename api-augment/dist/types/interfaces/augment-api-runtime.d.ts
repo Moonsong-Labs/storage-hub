@@ -10,12 +10,12 @@ import type { Extrinsic } from '@polkadot/types/interfaces/extrinsics';
 import type { GenesisBuildErr } from '@polkadot/types/interfaces/genesisBuilder';
 import type { OpaqueMetadata } from '@polkadot/types/interfaces/metadata';
 import type { FeeDetails, RuntimeDispatchInfo } from '@polkadot/types/interfaces/payment';
-import type { AccountId, Balance, Block, Call, ExtrinsicInclusionMode, Header, Index, KeyTypeId, Slot, SlotDuration, Weight } from '@polkadot/types/interfaces/runtime';
+import type { AccountId, Balance, Block, BlockNumber, Call, ExtrinsicInclusionMode, H256, Header, Index, KeyTypeId, Slot, SlotDuration, Weight } from '@polkadot/types/interfaces/runtime';
 import type { RuntimeVersion } from '@polkadot/types/interfaces/state';
 import type { ApplyExtrinsicResult } from '@polkadot/types/interfaces/system';
 import type { TransactionSource, TransactionValidity } from '@polkadot/types/interfaces/txqueue';
 import type { IExtrinsic, Observable } from '@polkadot/types/types';
-import type { BackupStorageProvider, BackupStorageProviderId, GetBspInfoError } from '@storagehub/api-augment/interfaces/storagehubclient';
+import type { BackupStorageProvider, BackupStorageProviderId, ChunkId, GetBspInfoError, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError } from '@storagehub/api-augment/interfaces/storagehubclient';
 export type __AugmentedCall<ApiType extends ApiTypes> = AugmentedCall<ApiType>;
 export type __DecoratedCallBase<ApiType extends ApiTypes> = DecoratedCallBase<ApiType>;
 declare module '@polkadot/api-base/types/calls' {
@@ -127,6 +127,21 @@ declare module '@polkadot/api-base/types/calls' {
              * Returns the version of the runtime.
              **/
             version: AugmentedCall<ApiType, () => Observable<RuntimeVersion>>;
+            /**
+             * Generic call
+             **/
+            [key: string]: DecoratedCallBase<ApiType>;
+        };
+        /** 0xb9e7717ace5b45cd/1 */
+        fileSystemApi: {
+            /**
+             * Query the chunks that a BSP needs to prove to confirm that it is storing a file.
+             **/
+            queryBspConfirmChunksToProveForFile: AugmentedCall<ApiType, (bspId: BackupStorageProviderId | string | Uint8Array, fileKey: H256 | string | Uint8Array) => Observable<Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>>>;
+            /**
+             * Query the earliest block number that a BSP can volunteer for a file.
+             **/
+            queryEarliestFileVolunteerBlock: AugmentedCall<ApiType, (bspId: BackupStorageProviderId | string | Uint8Array, fileKey: H256 | string | Uint8Array) => Observable<Result<BlockNumber, QueryFileEarliestVolunteerBlockError>>>;
             /**
              * Generic call
              **/

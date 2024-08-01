@@ -18,6 +18,9 @@ export interface BackupStorageProvider extends Struct {
 /** @name BackupStorageProviderId */
 export interface BackupStorageProviderId extends H256 {}
 
+/** @name ChunkId */
+export interface ChunkId extends u64 {}
+
 /** @name FileMetadata */
 export interface FileMetadata extends Struct {
   readonly owner: Bytes;
@@ -43,6 +46,28 @@ export interface IncompleteFileStatus extends Struct {
 
 /** @name MerklePatriciaRoot */
 export interface MerklePatriciaRoot extends H256 {}
+
+/** @name QueryBspConfirmChunksToProveForFileError */
+export interface QueryBspConfirmChunksToProveForFileError extends Enum {
+  readonly isStorageRequestNotFound: boolean;
+  readonly isInternalError: boolean;
+  readonly type: "StorageRequestNotFound" | "InternalError";
+}
+
+/** @name QueryFileEarliestVolunteerBlockError */
+export interface QueryFileEarliestVolunteerBlockError extends Enum {
+  readonly isFailedToEncodeFingerprint: boolean;
+  readonly isFailedToEncodeBsp: boolean;
+  readonly isThresholdArithmeticError: boolean;
+  readonly isStorageRequestNotFound: boolean;
+  readonly isInternalError: boolean;
+  readonly type:
+    | "FailedToEncodeFingerprint"
+    | "FailedToEncodeBsp"
+    | "ThresholdArithmeticError"
+    | "StorageRequestNotFound"
+    | "InternalError";
+}
 
 /** @name SaveFileToDisk */
 export interface SaveFileToDisk extends Enum {

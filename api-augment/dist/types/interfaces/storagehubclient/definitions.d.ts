@@ -22,6 +22,7 @@ declare const _default: {
         BackupStorageProviderId: string;
         StorageData: string;
         MerklePatriciaRoot: string;
+        ChunkId: string;
         BackupStorageProvider: {
             capacity: string;
             data_used: string;
@@ -35,6 +36,21 @@ declare const _default: {
             _enum: {
                 BspNotRegistered: null;
                 InternalApiError: null;
+            };
+        };
+        QueryFileEarliestVolunteerBlockError: {
+            _enum: {
+                FailedToEncodeFingerprint: null;
+                FailedToEncodeBsp: null;
+                ThresholdArithmeticError: null;
+                StorageRequestNotFound: null;
+                InternalError: null;
+            };
+        };
+        QueryBspConfirmChunksToProveForFileError: {
+            _enum: {
+                StorageRequestNotFound: null;
+                InternalError: null;
             };
         };
     };
