@@ -71,22 +71,39 @@ where
         })
     }
 
-    fn insert_metadata(&mut self, metadata: &FileMetadata) -> Result<HasherOutT<T>, ErrorT<T>> where
-    {
-        let file_key = metadata.file_key::<T::Hash>();
-        if self.contains_file_key(&file_key)? {
-            return Err(ForestStorageError::FileKeyAlreadyExists(file_key).into());
+    fn insert_files_metadata(
+        &mut self,
+        files_metadata: &[FileMetadata],
+    ) -> Result<Vec<HasherOutT<T>>, ErrorT<T>> {
+        let mut file_keys = Vec::with_capacity(files_metadata.len());
+
+        // Pre-check for duplicate keys in input and existing keys in trie
+        for metadata in files_metadata {
+            let file_key = metadata.file_key::<T::Hash>();
+            if self.contains_file_key(&file_key)? {
+                return Err(ForestStorageError::FileKeyAlreadyExists(file_key).into());
+            }
+            file_keys.push(file_key);
         }
 
-        let mut trie =
-            TrieDBMutBuilder::<T>::from_existing(&mut self.memdb, &mut self.root).build();
+        let mut root = self.root;
 
-        // Insert the file key and metadata into the trie.
-        trie.insert(file_key.as_ref(), b"")?;
+        let mut trie = TrieDBMutBuilder::<T>::from_existing(&mut self.memdb, &mut root).build();
 
-        Ok(file_key)
+        // Batch insert all keys
+        for file_key in &file_keys {
+            trie.insert(file_key.as_ref(), b"")
+                .map_err(|_| ForestStorageError::FailedToInsertFileKey(*file_key))?;
+        }
+
+        // Drop trie to free `self`.
+        drop(trie);
+
+        // Update the root
+        self.root = root;
+
+        Ok(file_keys)
     }
-
     fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>> {
         let mut trie =
             TrieDBMutBuilder::<T>::from_existing(&mut self.memdb, &mut self.root).build();

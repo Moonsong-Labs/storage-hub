@@ -1,5 +1,3 @@
-use std::{io, path::PathBuf, sync::Arc};
-
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use log::debug;
@@ -8,6 +6,7 @@ use sp_state_machine::{warn, Storage};
 use sp_trie::{
     prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieDBBuilder, TrieLayout, TrieMut,
 };
+use std::{io, path::PathBuf, sync::Arc};
 use trie_db::{DBValue, Trie, TrieDBMutBuilder};
 
 use crate::{
@@ -323,32 +322,43 @@ where
         })
     }
 
-    fn insert_metadata(&mut self, metadata: &FileMetadata) -> Result<HasherOutT<T>, ErrorT<T>> {
-        let file_key = metadata.file_key::<T::Hash>();
+    fn insert_files_metadata(
+        &mut self,
+        files_metadata: &[FileMetadata],
+    ) -> Result<Vec<HasherOutT<T>>, ErrorT<T>> {
+        let mut file_keys = Vec::with_capacity(files_metadata.len());
 
-        if self.contains_file_key(&file_key)? {
-            return Err(ForestStorageError::FileKeyAlreadyExists(file_key).into());
+        // Pre-check for existing keys
+        for metadata in files_metadata {
+            let file_key = metadata.file_key::<T::Hash>();
+            file_keys.push(file_key);
+        }
+
+        // Check if any of the new keys already exist in the trie
+        for file_key in &file_keys {
+            if self.contains_file_key(file_key)? {
+                return Err(ForestStorageError::FileKeyAlreadyExists(*file_key).into());
+            }
         }
 
         let mut root = self.root;
+
         let mut trie =
             TrieDBMutBuilder::<T>::from_existing(self.as_hash_db_mut(), &mut root).build();
 
-        // Insert the file key with a dummy value to make it a leaf node.
-        // We only need a set of `file_key`s, not a map.
-        trie.insert(file_key.as_ref(), b"")
-            .map_err(|_| ForestStorageError::FailedToInsertFileKey(file_key))?;
+        for file_key in &file_keys {
+            trie.insert(file_key.as_ref(), b"")
+                .map_err(|_| ForestStorageError::FailedToInsertFileKey(*file_key))?;
+        }
 
         // Drop trie to free `self`.
         drop(trie);
 
-        // Update the root hash.
+        // Update the root and commit changes
         self.root = root;
-
-        // Commit the changes to disk.
         self.commit()?;
 
-        Ok(file_key)
+        Ok(file_keys)
     }
 
     fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>> {
@@ -400,40 +410,6 @@ mod tests {
         RocksDBForestStorage::<T, InMemory>::new(storage)
     }
 
-    // Reused function to create metadata with variable parameters.
-    fn create_metadata(
-        owner: Vec<u8>,
-        bucket_id: Vec<u8>,
-        location: Vec<u8>,
-        file_size: u64,
-    ) -> FileMetadata {
-        FileMetadata {
-            owner,
-            bucket_id,
-            location,
-            file_size,
-            fingerprint: Fingerprint::default(),
-        }
-    }
-
-    /// Reusable function to create metadata, insert it into the storage and return the lookup key and metadata.
-    fn create_and_insert_metadata<T, DB>(
-        forest_storage: &mut RocksDBForestStorage<T, DB>,
-        owner: Vec<u8>,
-        bucket_id: Vec<u8>,
-        location: Vec<u8>,
-        size: u64,
-    ) -> HasherOutT<T>
-    where
-        T: TrieLayout + Send + Sync,
-        DB: KeyValueDB,
-        HasherOutT<T>: TryFrom<[u8; 32]>,
-    {
-        let metadata = create_metadata(owner, bucket_id, location.clone(), size);
-        let file_key = forest_storage.insert_metadata(&metadata).unwrap();
-        file_key
-    }
-
     #[test]
     fn test_initialization_with_no_existing_root() {
         let forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
@@ -453,28 +429,40 @@ mod tests {
     fn test_write_read() {
         let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
 
-        let file_key = create_and_insert_metadata(
-            &mut forest_storage,
-            "bucket".as_bytes().to_vec(),
-            "Bob".as_bytes().to_vec(),
-            vec![7, 8, 9],
-            200,
-        );
+        let file_metadata = FileMetadata {
+            bucket_id: "bucket".as_bytes().to_vec(),
+            location: "location".as_bytes().to_vec(),
+            owner: "Alice".as_bytes().to_vec(),
+            file_size: 100,
+            fingerprint: Fingerprint::default(),
+        };
 
-        assert!(forest_storage.contains_file_key(&file_key).unwrap());
+        let file_key = forest_storage
+            .insert_files_metadata(&[file_metadata])
+            .unwrap();
+
+        assert!(forest_storage
+            .contains_file_key(&file_key.first().unwrap())
+            .unwrap());
     }
 
     #[test]
     fn test_remove_existing_file_key() {
         let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
 
-        let file_key = create_and_insert_metadata(
-            &mut forest_storage,
-            "bucket".as_bytes().to_vec(),
-            "Bob".as_bytes().to_vec(),
-            vec![7, 8, 9],
-            200,
-        );
+        let file_metadata = FileMetadata {
+            bucket_id: "bucket".as_bytes().to_vec(),
+            location: "location".as_bytes().to_vec(),
+            owner: "Alice".as_bytes().to_vec(),
+            file_size: 100,
+            fingerprint: Fingerprint::default(),
+        };
+
+        let file_key = forest_storage
+            .insert_files_metadata(&[file_metadata])
+            .unwrap();
+
+        let file_key = file_key.first().unwrap();
 
         assert!(forest_storage.delete_file_key(&file_key).is_ok());
         assert!(!forest_storage.contains_file_key(&file_key).unwrap());
@@ -492,14 +480,19 @@ mod tests {
 
         let mut keys = Vec::new();
         for i in 0..50 {
-            let file_key = create_and_insert_metadata(
-                &mut forest_storage,
-                "bucket".as_bytes().to_vec(),
-                "Alice".as_bytes().to_vec(),
-                vec![i],
-                200,
-            );
-            keys.push(file_key);
+            let file_metadata = FileMetadata {
+                bucket_id: "bucket".as_bytes().to_vec(),
+                location: "location".as_bytes().to_vec(),
+                owner: "Alice".as_bytes().to_vec(),
+                file_size: i,
+                fingerprint: Fingerprint::default(),
+            };
+
+            let file_key = forest_storage
+                .insert_files_metadata(&[file_metadata])
+                .unwrap();
+
+            keys.push(*file_key.first().unwrap());
         }
 
         let challenge = keys[0];
@@ -518,14 +511,19 @@ mod tests {
 
         let mut keys = Vec::new();
         for i in 0..50 {
-            let file_key = create_and_insert_metadata(
-                &mut forest_storage,
-                "bucket".as_bytes().to_vec(),
-                "Alice".as_bytes().to_vec(),
-                vec![i],
-                200,
-            );
-            keys.push(file_key);
+            let file_metadata = FileMetadata {
+                bucket_id: "bucket".as_bytes().to_vec(),
+                location: "location".as_bytes().to_vec(),
+                owner: "Alice".as_bytes().to_vec(),
+                file_size: i,
+                fingerprint: Fingerprint::default(),
+            };
+
+            let file_key = forest_storage
+                .insert_files_metadata(&[file_metadata])
+                .unwrap();
+
+            keys.push(*file_key.first().unwrap());
         }
 
         let hash_db = forest_storage.as_hash_db();
@@ -556,22 +554,27 @@ mod tests {
     fn test_generate_proof_challenge_before_first_leaf() {
         let mut forest_storage = setup_storage::<LayoutV1<BlakeTwo256>, InMemory>().unwrap();
 
-        let file_key1 = create_and_insert_metadata(
-            &mut forest_storage,
-            "bucket".as_bytes().to_vec(),
-            "Alice".as_bytes().to_vec(),
-            vec![10],
-            200,
-        );
-        let file_key2 = create_and_insert_metadata(
-            &mut forest_storage,
-            "bucket".as_bytes().to_vec(),
-            "Alice".as_bytes().to_vec(),
-            vec![11],
-            200,
-        );
+        let file_metadata_one = FileMetadata {
+            bucket_id: "bucket".as_bytes().to_vec(),
+            location: "location".as_bytes().to_vec(),
+            owner: "Alice".as_bytes().to_vec(),
+            file_size: 10,
+            fingerprint: Fingerprint::default(),
+        };
 
-        let smallest_key_challenge = min(file_key1, file_key2);
+        let file_metadata_two = FileMetadata {
+            bucket_id: "bucket".as_bytes().to_vec(),
+            location: "location".as_bytes().to_vec(),
+            owner: "Alice".as_bytes().to_vec(),
+            file_size: 11,
+            fingerprint: Fingerprint::default(),
+        };
+
+        let file_keys = forest_storage
+            .insert_files_metadata(&[file_metadata_one, file_metadata_two])
+            .unwrap();
+
+        let smallest_key_challenge = min(file_keys[0], file_keys[1]);
         let mut challenge_bytes: H256 = smallest_key_challenge;
         let challenge_bytes = challenge_bytes.as_mut();
         challenge_bytes[31] = challenge_bytes[31] - 1;
@@ -597,18 +600,23 @@ mod tests {
 
         let mut keys = Vec::new();
         for i in 0..50 {
-            let file_key = create_and_insert_metadata(
-                &mut forest_storage,
-                "bucket".as_bytes().to_vec(),
-                "Alice".as_bytes().to_vec(),
-                vec![i],
-                200,
-            );
-            keys.push(file_key);
+            let file_metadata = FileMetadata {
+                bucket_id: "bucket".as_bytes().to_vec(),
+                location: "location".as_bytes().to_vec(),
+                owner: "Alice".as_bytes().to_vec(),
+                file_size: i,
+                fingerprint: Fingerprint::default(),
+            };
+
+            let file_key = forest_storage
+                .insert_files_metadata(&[file_metadata])
+                .unwrap();
+
+            keys.push(*file_key.first().unwrap());
         }
 
-        let largest = keys.iter().max().unwrap();
-        let mut challenge = *largest;
+        let largest = keys.into_iter().max().unwrap();
+        let mut challenge = largest;
         let challenge_bytes = challenge.as_mut();
         challenge_bytes[0] = challenge_bytes[0] + 1;
 
@@ -626,14 +634,19 @@ mod tests {
 
         let mut keys = Vec::new();
         for i in 0..50 {
-            let file_key = create_and_insert_metadata(
-                &mut forest_storage,
-                "bucket".as_bytes().to_vec(),
-                "Alice".as_bytes().to_vec(),
-                vec![i],
-                200,
-            );
-            keys.push(file_key);
+            let file_metadata = FileMetadata {
+                bucket_id: "bucket".as_bytes().to_vec(),
+                location: "location".as_bytes().to_vec(),
+                owner: "Alice".as_bytes().to_vec(),
+                file_size: i,
+                fingerprint: Fingerprint::default(),
+            };
+
+            let file_key = forest_storage
+                .insert_files_metadata(&[file_metadata])
+                .unwrap();
+
+            keys.push(*file_key.first().unwrap());
         }
 
         // Remove specific keys

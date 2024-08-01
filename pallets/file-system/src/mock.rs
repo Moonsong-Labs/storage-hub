@@ -351,6 +351,7 @@ impl crate::Config for Test {
     type AssignmentThresholdMultiplier = ThresholdMultiplier;
     type TargetBspsRequired = ConstU32<3>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
+    type MaxBatchConfirmStorageRequests = ConstU32<10>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = MaxNumberOfPeerIds;
     type MaxDataServerMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
