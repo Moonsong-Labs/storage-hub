@@ -19,7 +19,26 @@ declare const _default: {
                 IncompleteFile: string;
             };
         };
+        BackupStorageProviderId: string;
+        StorageData: string;
+        MerklePatriciaRoot: string;
+        BackupStorageProvider: {
+            capacity: string;
+            data_used: string;
+            multiaddresses: string;
+            root: string;
+            last_capacity_change: string;
+            owner_account: string;
+            payment_account: string;
+        };
+        GetBspInfoError: {
+            _enum: {
+                BspNotRegistered: null;
+                InternalApiError: null;
+            };
+        };
     };
+    runtime: import("@polkadot/types/types").DefinitionsCall;
     rpc: {
         loadFileInStorage: {
             description: string;

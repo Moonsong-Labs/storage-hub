@@ -15,6 +15,7 @@ import type { RuntimeVersion } from '@polkadot/types/interfaces/state';
 import type { ApplyExtrinsicResult } from '@polkadot/types/interfaces/system';
 import type { TransactionSource, TransactionValidity } from '@polkadot/types/interfaces/txqueue';
 import type { IExtrinsic, Observable } from '@polkadot/types/types';
+import type { BackupStorageProvider, BackupStorageProviderId, GetBspInfoError } from '@storagehub/api-augment/interfaces/storagehubclient';
 export type __AugmentedCall<ApiType extends ApiTypes> = AugmentedCall<ApiType>;
 export type __DecoratedCallBase<ApiType extends ApiTypes> = DecoratedCallBase<ApiType>;
 declare module '@polkadot/api-base/types/calls' {
@@ -192,6 +193,17 @@ declare module '@polkadot/api-base/types/calls' {
              * Generate a set of session keys with optionally using the given seed.
              **/
             generateSessionKeys: AugmentedCall<ApiType, (seed: Option<Bytes> | null | Uint8Array | Bytes | string) => Observable<Bytes>>;
+            /**
+             * Generic call
+             **/
+            [key: string]: DecoratedCallBase<ApiType>;
+        };
+        /** 0x966604ffe78eb092/1 */
+        storageProvidersApi: {
+            /**
+             * Get the BSP info for a given BSP ID.
+             **/
+            getBspInfo: AugmentedCall<ApiType, (bspId: BackupStorageProviderId | string | Uint8Array) => Observable<Result<BackupStorageProvider, GetBspInfoError>>>;
             /**
              * Generic call
              **/

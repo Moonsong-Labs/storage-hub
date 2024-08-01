@@ -1,3 +1,4 @@
+import { runtime } from "./runtime";
 export default {
     types: {
         FileMetadata: {
@@ -18,8 +19,27 @@ export default {
                 Success: "FileMetadata",
                 IncompleteFile: "IncompleteFileStatus"
             }
+        },
+        BackupStorageProviderId: "H256",
+        StorageData: "u32",
+        MerklePatriciaRoot: "H256",
+        BackupStorageProvider: {
+            capacity: "StorageData",
+            data_used: "StorageData",
+            multiaddresses: "BoundedVec<u8, 5>",
+            root: "MerklePatriciaRoot",
+            last_capacity_change: "BlockNumber",
+            owner_account: "AccountId",
+            payment_account: "AccountId"
+        },
+        GetBspInfoError: {
+            _enum: {
+                BspNotRegistered: null,
+                InternalApiError: null
+            }
         }
     },
+    runtime,
     rpc: {
         loadFileInStorage: {
             description: "Load a file in the local storage. This is the first step when uploading a file.",
