@@ -529,12 +529,12 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_file_system_runtime_api::FileSystemApi<Block, Hash, H256, BlockNumber, ChunkId> for Runtime {
-        fn query_earliest_file_volunteer_block(bsp_id: Hash, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
+    impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, H256, BlockNumber, ChunkId> for Runtime {
+        fn query_earliest_file_volunteer_block(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
             FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key)
         }
 
-        fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: Hash, file_key: H256) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
+        fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
             FileSystem::query_bsp_confirm_chunks_to_prove_for_file(bsp_id, file_key)
         }
     }
