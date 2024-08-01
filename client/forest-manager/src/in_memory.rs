@@ -86,8 +86,6 @@ where
             file_keys.push(file_key);
         }
 
-        let mut root = self.root;
-
         let mut trie =
             TrieDBMutBuilder::<T>::from_existing(&mut self.memdb, &mut self.root).build();
 
