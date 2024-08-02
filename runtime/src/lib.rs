@@ -569,6 +569,10 @@ impl_runtime_apis! {
         fn get_forest_challenges_from_seed(seed: &RandomnessOutputFor<Runtime>, provider_id: &ProviderIdFor<Runtime>) -> Vec<KeyFor<Runtime>> {
             ProofsDealer::get_forest_challenges_from_seed(seed, provider_id)
         }
+
+        fn get_current_tick() -> BlockNumber {
+            ProofsDealer::get_current_tick()
+        }
     }
 
     impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>> for Runtime {

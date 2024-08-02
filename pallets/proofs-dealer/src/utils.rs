@@ -968,4 +968,8 @@ where
             RandomChallengesPerBlockFor::<T>::get(),
         )
     }
+
+    pub fn get_current_tick() -> BlockNumberFor<T> {
+        ChallengesTicker::<T>::get()
+    }
 }

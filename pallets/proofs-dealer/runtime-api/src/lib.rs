@@ -24,6 +24,7 @@ sp_api::decl_runtime_apis! {
         fn get_checkpoint_challenge_period() -> BlockNumber;
         fn get_challenges_from_seed(seed: &RandomnessOutput, provider_id: &ProviderId, count: u32) -> Vec<Key>;
         fn get_forest_challenges_from_seed(seed: &RandomnessOutput, provider_id: &ProviderId) -> Vec<Key>;
+        fn get_current_tick() -> BlockNumber;
     }
 }
 
