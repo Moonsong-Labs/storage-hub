@@ -20,6 +20,10 @@ export default {
                 IncompleteFile: "IncompleteFileStatus"
             }
         },
+        ProviderId: "H256",
+        Key: "H256",
+        RandomnessOutput: "H256",
+        TrieRemoveMutation: {},
         BackupStorageProviderId: "H256",
         StorageData: "u32",
         MerklePatriciaRoot: "H256",
@@ -32,6 +36,25 @@ export default {
             last_capacity_change: "BlockNumber",
             owner_account: "AccountId",
             payment_account: "AccountId"
+        },
+        GetLastTickProviderSubmittedProofError: {
+            _enum: {
+                ProviderNotRegistered: null,
+                ProviderNeverSubmittedProof: null,
+                InternalApiError: null
+            }
+        },
+        GetCheckpointChallengesError: {
+            _enum: {
+                TickGreaterThanLastCheckpointTick: null,
+                NoCheckpointChallengesInTick: null,
+                InternalApiError: null
+            }
+        },
+        GetChallengePeriodError: {
+            _enum: {
+                ProviderNotRegistered: null
+            }
         },
         GetBspInfoError: {
             _enum: {

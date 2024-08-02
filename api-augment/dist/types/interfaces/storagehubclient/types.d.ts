@@ -30,14 +30,39 @@ export interface GetBspInfoError extends Enum {
     readonly isInternalApiError: boolean;
     readonly type: 'BspNotRegistered' | 'InternalApiError';
 }
+/** @name GetChallengePeriodError */
+export interface GetChallengePeriodError extends Enum {
+    readonly isProviderNotRegistered: boolean;
+    readonly type: 'ProviderNotRegistered';
+}
+/** @name GetCheckpointChallengesError */
+export interface GetCheckpointChallengesError extends Enum {
+    readonly isTickGreaterThanLastCheckpointTick: boolean;
+    readonly isNoCheckpointChallengesInTick: boolean;
+    readonly isInternalApiError: boolean;
+    readonly type: 'TickGreaterThanLastCheckpointTick' | 'NoCheckpointChallengesInTick' | 'InternalApiError';
+}
+/** @name GetLastTickProviderSubmittedProofError */
+export interface GetLastTickProviderSubmittedProofError extends Enum {
+    readonly isProviderNotRegistered: boolean;
+    readonly isProviderNeverSubmittedProof: boolean;
+    readonly isInternalApiError: boolean;
+    readonly type: 'ProviderNotRegistered' | 'ProviderNeverSubmittedProof' | 'InternalApiError';
+}
 /** @name IncompleteFileStatus */
 export interface IncompleteFileStatus extends Struct {
     readonly file_metadata: FileMetadata;
     readonly stored_chunks: u64;
     readonly total_chunks: u64;
 }
+/** @name Key */
+export interface Key extends H256 {
+}
 /** @name MerklePatriciaRoot */
 export interface MerklePatriciaRoot extends H256 {
+}
+/** @name ProviderId */
+export interface ProviderId extends H256 {
 }
 /** @name QueryBspConfirmChunksToProveForFileError */
 export interface QueryBspConfirmChunksToProveForFileError extends Enum {
@@ -54,6 +79,9 @@ export interface QueryFileEarliestVolunteerBlockError extends Enum {
     readonly isInternalError: boolean;
     readonly type: 'FailedToEncodeFingerprint' | 'FailedToEncodeBsp' | 'ThresholdArithmeticError' | 'StorageRequestNotFound' | 'InternalError';
 }
+/** @name RandomnessOutput */
+export interface RandomnessOutput extends H256 {
+}
 /** @name SaveFileToDisk */
 export interface SaveFileToDisk extends Enum {
     readonly isFileNotFound: boolean;
@@ -65,5 +93,8 @@ export interface SaveFileToDisk extends Enum {
 }
 /** @name StorageData */
 export interface StorageData extends u32 {
+}
+/** @name TrieRemoveMutation */
+export interface TrieRemoveMutation extends Struct {
 }
 export type PHANTOM_STORAGEHUBCLIENT = 'storagehubclient';

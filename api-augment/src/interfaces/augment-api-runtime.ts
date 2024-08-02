@@ -32,7 +32,7 @@ import type {
   Weight
 } from "@polkadot/types/interfaces/runtime";
 import type { RuntimeVersion } from "@polkadot/types/interfaces/state";
-import type { ApplyExtrinsicResult } from "@polkadot/types/interfaces/system";
+import type { ApplyExtrinsicResult, Key } from "@polkadot/types/interfaces/system";
 import type { TransactionSource, TransactionValidity } from "@polkadot/types/interfaces/txqueue";
 import type { IExtrinsic, Observable } from "@polkadot/types/types";
 import type {
@@ -40,8 +40,14 @@ import type {
   BackupStorageProviderId,
   ChunkId,
   GetBspInfoError,
+  GetChallengePeriodError,
+  GetCheckpointChallengesError,
+  GetLastTickProviderSubmittedProofError,
+  ProviderId,
   QueryBspConfirmChunksToProveForFileError,
-  QueryFileEarliestVolunteerBlockError
+  QueryFileEarliestVolunteerBlockError,
+  RandomnessOutput,
+  TrieRemoveMutation
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 
 export type __AugmentedCall<ApiType extends ApiTypes> = AugmentedCall<ApiType>;
@@ -286,6 +292,71 @@ declare module "@polkadot/api-base/types/calls" {
             | string
             | Uint8Array
         ) => Observable<Null>
+      >;
+      /**
+       * Generic call
+       **/
+      [key: string]: DecoratedCallBase<ApiType>;
+    };
+    /** 0x0be7208954c7c6c9/1 */
+    proofsDealerApi: {
+      /**
+       * Get the challenge period for a given Provider.
+       **/
+      getChallengePeriod: AugmentedCall<
+        ApiType,
+        (
+          providerId: ProviderId | string | Uint8Array
+        ) => Observable<Result<BlockNumber, GetChallengePeriodError>>
+      >;
+      /**
+       * Get challenges from a seed.
+       **/
+      getChallengesFromSeed: AugmentedCall<
+        ApiType,
+        (
+          seed: RandomnessOutput | string | Uint8Array,
+          providerId: ProviderId | string | Uint8Array,
+          count: u32 | AnyNumber | Uint8Array
+        ) => Observable<Vec<Key>>
+      >;
+      /**
+       * Get the checkpoint challenge period.
+       **/
+      getCheckpointChallengePeriod: AugmentedCall<ApiType, () => Observable<BlockNumber>>;
+      /**
+       * Get checkpoint challenges for a given block.
+       **/
+      getCheckpointChallenges: AugmentedCall<
+        ApiType,
+        (
+          tick: BlockNumber | AnyNumber | Uint8Array
+        ) => Observable<
+          Result<Vec<ITuple<[Key, Option<TrieRemoveMutation>]>>, GetCheckpointChallengesError>
+        >
+      >;
+      /**
+       * Get forest challenges from a seed.
+       **/
+      getForestChallengesFromSeed: AugmentedCall<
+        ApiType,
+        (
+          seed: RandomnessOutput | string | Uint8Array,
+          providerId: ProviderId | string | Uint8Array
+        ) => Observable<Vec<Key>>
+      >;
+      /**
+       * Get the last checkpoint challenge tick.
+       **/
+      getLastCheckpointChallengeTick: AugmentedCall<ApiType, () => Observable<BlockNumber>>;
+      /**
+       * Get the last tick for which the submitter submitted a proof.
+       **/
+      getLastTickProviderSubmittedProof: AugmentedCall<
+        ApiType,
+        (
+          providerId: ProviderId | string | Uint8Array
+        ) => Observable<Result<BlockNumber, GetLastTickProviderSubmittedProofError>>
       >;
       /**
        * Generic call

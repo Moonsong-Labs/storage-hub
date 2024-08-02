@@ -19,6 +19,10 @@ declare const _default: {
                 IncompleteFile: string;
             };
         };
+        ProviderId: string;
+        Key: string;
+        RandomnessOutput: string;
+        TrieRemoveMutation: {};
         BackupStorageProviderId: string;
         StorageData: string;
         MerklePatriciaRoot: string;
@@ -31,6 +35,25 @@ declare const _default: {
             last_capacity_change: string;
             owner_account: string;
             payment_account: string;
+        };
+        GetLastTickProviderSubmittedProofError: {
+            _enum: {
+                ProviderNotRegistered: null;
+                ProviderNeverSubmittedProof: null;
+                InternalApiError: null;
+            };
+        };
+        GetCheckpointChallengesError: {
+            _enum: {
+                TickGreaterThanLastCheckpointTick: null;
+                NoCheckpointChallengesInTick: null;
+                InternalApiError: null;
+            };
+        };
+        GetChallengePeriodError: {
+            _enum: {
+                ProviderNotRegistered: null;
+            };
         };
         GetBspInfoError: {
             _enum: {
