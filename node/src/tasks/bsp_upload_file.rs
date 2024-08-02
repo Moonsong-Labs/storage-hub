@@ -255,6 +255,7 @@ where
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
 
         for fk in &event.file_keys {
+            // TODO: use `convert_raw_bytes_to_hasher_out` when moved to shc_common
             match TryFrom::<[u8; 32]>::try_from(*fk.as_ref()) {
                 Ok(file_key_hash) => match read_file_storage.get_metadata(&file_key_hash) {
                     Ok(file_metadata) => successful_metadatas.push(file_metadata),
