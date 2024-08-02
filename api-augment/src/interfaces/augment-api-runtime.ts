@@ -336,6 +336,10 @@ declare module "@polkadot/api-base/types/calls" {
         >
       >;
       /**
+       * Get the current tick.
+       **/
+      getCurrentTick: AugmentedCall<ApiType, () => Observable<BlockNumber>>;
+      /**
        * Get forest challenges from a seed.
        **/
       getForestChallengesFromSeed: AugmentedCall<

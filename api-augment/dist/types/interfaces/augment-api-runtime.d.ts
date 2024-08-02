@@ -217,6 +217,10 @@ declare module '@polkadot/api-base/types/calls' {
              **/
             getCheckpointChallenges: AugmentedCall<ApiType, (tick: BlockNumber | AnyNumber | Uint8Array) => Observable<Result<Vec<ITuple<[Key, Option<TrieRemoveMutation>]>>, GetCheckpointChallengesError>>>;
             /**
+             * Get the current tick.
+             **/
+            getCurrentTick: AugmentedCall<ApiType, () => Observable<BlockNumber>>;
+            /**
              * Get forest challenges from a seed.
              **/
             getForestChallengesFromSeed: AugmentedCall<ApiType, (seed: RandomnessOutput | string | Uint8Array, providerId: ProviderId | string | Uint8Array) => Observable<Vec<Key>>>;

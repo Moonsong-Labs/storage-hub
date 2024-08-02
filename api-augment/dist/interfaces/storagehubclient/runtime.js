@@ -100,6 +100,11 @@ const PROOFS_DEALER_V1 = {
             }
         ],
         type: "Vec<Key>"
+    },
+    get_current_tick: {
+        description: "Get the current tick.",
+        params: [],
+        type: "BlockNumber"
     }
 };
 const STORAGE_PROVIDERS_V1 = {

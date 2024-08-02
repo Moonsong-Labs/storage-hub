@@ -103,6 +103,11 @@ const PROOFS_DEALER_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "Vec<Key>"
+  },
+  get_current_tick: {
+    description: "Get the current tick.",
+    params: [],
+    type: "BlockNumber"
   }
 };
 
