@@ -1,16 +1,16 @@
 import "@storagehub/api-augment";
-import { strictEqual } from "node:assert";
+import assert, { strictEqual } from "node:assert";
 import { after, before, describe, it } from "node:test";
 import {
   NODE_INFOS,
   createApiObject,
-  runSimpleBspNet,
   type BspNetApi,
-  cleardownTest,
   DUMMY_BSP_ID,
-  type BspNetConfig
+  type BspNetConfig,
+  runInitialisedBspsNet,
+  closeSimpleBspNet,
+  sleep
 } from "../../../util";
-import { sleep } from "@zombienet/utils";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
@@ -18,61 +18,69 @@ const bspNetConfigCases: BspNetConfig[] = [
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
-  describe("BSPNet: BSP Challenge Cycle", () => {
-    let api: BspNetApi;
+  describe("BSPNet: BSP Challenge Cycle and Proof Submission", () => {
+    let userApi: BspNetApi;
+    let bspApi: BspNetApi;
 
     before(async () => {
-      await runSimpleBspNet(bspNetConfig);
-      api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+      await runInitialisedBspsNet(bspNetConfig);
+      userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+      bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
     });
 
     after(async () => {
-      await cleardownTest(api);
+      await userApi.disconnect();
+      await bspApi.disconnect();
+      await closeSimpleBspNet();
     });
 
     it("Network launches and can be queried", async () => {
-      const userNodePeerId = await api.rpc.system.localPeerId();
+      const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), NODE_INFOS.user.expectedPeerId);
 
-      const bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
       const bspNodePeerId = await bspApi.rpc.system.localPeerId();
-      await bspApi.disconnect();
       strictEqual(bspNodePeerId.toString(), NODE_INFOS.bsp.expectedPeerId);
     });
 
-    it("Challenge cycle initialised correctly by root", async () => {
-      // Force initialise challenge cycle of Provider.
-      const initialiseChallengeCycleResult = await api.sealBlock(
-        api.tx.sudo.sudo(api.tx.proofsDealer.forceInitialiseChallengeCycle(DUMMY_BSP_ID))
-      );
-
-      // Assert that event for challenge cycle initialisation is emitted.
-      api.assertEvent(
-        "proofsDealer",
-        "NewChallengeCycleInitialised",
-        initialiseChallengeCycleResult.events
-      );
-
+    it("Challenge cycle initialised correctly", async () => {
       // Get the challenge period for the Provider.
-      // For now, we are abusing the fact that all BSPs have the same (minimum) challenge period.
-      // But...
-      // TODO: Make this get the challenge period either from a runtime API or an RPC call.
-      const spMinDeposit = api.consts.providers.spMinDeposit;
-      const stakeToChallengePeriod = api.consts.proofsDealer.stakeToChallengePeriod;
-      const challengePeriod = spMinDeposit.toNumber() / stakeToChallengePeriod.toNumber();
+      const challengePeriodResult =
+        await bspApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
+
+      // Assert that the result is not an error.
+      // This means tha the provider exists and is initialised with a challenge cycle.
+      assert(challengePeriodResult.isOk);
+
+      const challengePeriod = challengePeriodResult.asOk.toNumber();
 
       // Advance `challengePeriod + 1` blocks. In `challengePeriod` blocks, the node will detect
       // a new challenge seed event to which it will respond by sending a remark with event transaction.
       // That transaction will be included in the next block.
       for (let i = 0; i < challengePeriod; i++) {
-        await api.sealBlock();
+        await userApi.sealBlock();
       }
       // Wait for task to execute and seal one more block.
       await sleep(500);
-      const blockResult = await api.sealBlock();
+      const blockResult = await userApi.sealBlock();
 
       // Assert for the remark event as a response to the challenge seed event.
-      api.assertEvent("system", "Remarked", blockResult.events);
+      bspApi.assertEvent("system", "Remarked", blockResult.events);
+    });
+
+    it("BSP is challenged and correctly submits proof", async () => {
+      const result = await bspApi.call.storageProvidersApi.getBspInfo(DUMMY_BSP_ID);
+      const bspInfo = result.asOk;
+      const capacity: number = Number(bspInfo.capacity.toString());
+
+      // TODO: Query when is the next challenge block.
+      // TODO: Advance to next challenge block.
+      // TODO: Build block with proof submission.
+      // TODO: Check that proof submission was successful.
+    });
+    it("BSP fails to submit proof and is marked as slashable", async () => {
+      // TODO: Stop BSP.
+      // TODO: Advance to BSP deadline.
+      // TODO: Check that BSP is slashable.
     });
   });
 }
