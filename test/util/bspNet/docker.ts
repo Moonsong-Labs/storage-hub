@@ -142,8 +142,6 @@ export const pauseBspContainer = async (containerName: string) => {
   await container.pause();
 };
 
-export const resumeBspContainer = async (containerName: string) => {
-  const docker = new Docker();
-  const container = docker.getContainer(containerName);
-  await container.unpause();
+export const resumeBspContainer = async (_containerName: string) => {
+  throw new Error("This function is not implemented yet.");
 };
