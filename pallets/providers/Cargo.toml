@@ -17,6 +17,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 [dependencies]
 codec = { workspace = true }
 scale-info = { workspace = true }
+log = "0.4.22"
 
 # Local
 shp-traits = { workspace = true, default-features = false }
@@ -26,8 +27,11 @@ frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 
+sp-application-crypto = { workspace = true }
+sp-core = { workspace = true }
 sp-runtime = { workspace = true }
 sp-trie = { workspace = true }
+
 
 [dev-dependencies]
 serde = { workspace = true }
@@ -36,7 +40,6 @@ serde = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 
 # Substrate
-sp-core = { workspace = true }
 sp-io = { workspace = true }
 
 # Frame
@@ -59,6 +62,7 @@ std = [
 	"pallet-proofs-dealer/std",
 	"scale-info/std",
 	"shp-traits/std",
+	"sp-application-crypto/std",
 	"sp-core/std",
 	"sp-io/std",
 	"sp-runtime/std",

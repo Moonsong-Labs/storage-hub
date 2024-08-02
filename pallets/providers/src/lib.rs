@@ -42,15 +42,65 @@ pub mod pallet {
         traits::{fungible::*, Incrementable},
         Blake2_128Concat,
     };
-    use frame_system::pallet_prelude::{BlockNumberFor, *};
+    use frame_system::{
+        offchain::{AppCrypto, CreateSignedTransaction},
+        pallet_prelude::{BlockNumberFor, *},
+    };
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{ProofSubmittersInterface, SubscribeProvidersInterface};
+    use sp_runtime::KeyTypeId;
+
+    /// Defines application identifier for crypto keys of this module.
+    ///
+    /// Every module that deals with signatures needs to declare its unique identifier for
+    /// its crypto keys.
+    /// When offchain worker is signing transactions it's going to request keys of type
+    /// `KeyTypeId` from the keystore and use the ones it finds to sign the transaction.
+    /// The keys can be inserted manually via RPC (see `author_insertKey`).
+    pub const KEY_TYPE: KeyTypeId = KeyTypeId(*b"bcsv");
+
+    /// Based on the above `KeyTypeId` we need to generate a pallet-specific crypto type wrappers.
+    /// We can use from supported crypto kinds (`sr25519`, `ed25519` and `ecdsa`) and augment
+    /// the types with this pallet-specific identifier.
+    pub mod crypto {
+        use super::KEY_TYPE;
+        use sp_core::sr25519::Signature as Sr25519Signature;
+        use sp_runtime::{
+            app_crypto::{app_crypto, sr25519},
+            traits::Verify,
+            MultiSignature, MultiSigner,
+        };
+        app_crypto!(sr25519, KEY_TYPE);
+
+        pub struct AuthId;
+
+        impl frame_system::offchain::AppCrypto<MultiSigner, MultiSignature> for AuthId {
+            type RuntimeAppPublic = Public;
+            type GenericPublic = sp_core::sr25519::Public;
+            type GenericSignature = sp_core::sr25519::Signature;
+        }
+
+        // implemented for mock runtime in test
+        impl
+            frame_system::offchain::AppCrypto<
+                <Sr25519Signature as Verify>::Signer,
+                Sr25519Signature,
+            > for AuthId
+        {
+            type RuntimeAppPublic = Public;
+            type GenericPublic = sp_core::sr25519::Public;
+            type GenericSignature = sp_core::sr25519::Signature;
+        }
+    }
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
-    pub trait Config: frame_system::Config {
+    pub trait Config: CreateSignedTransaction<Call<Self>> + frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
+        /// The identifier type for an offchain worker.
+        type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
 
         /// Type to access randomness to salt AccountIds and get the corresponding HashId
         type ProvidersRandomness: Randomness<HashId<Self>, BlockNumberFor<Self>>;
@@ -475,6 +525,8 @@ pub mod pallet {
         AppendBucketToMspFailed,
         /// Error thrown when an attempt was made to slash an unslashable Storage Provider.
         ProviderNotSlashable,
+        /// Error thrown when a Storage Provider was not found.
+        ProviderNotFound,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -492,9 +544,14 @@ pub mod pallet {
         AnotherUnrelatedHold,
     }
 
-    /// The hooks that this pallet utilizes (TODO: Check this, we might not need any)
     #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn offchain_worker(_block_number: BlockNumberFor<T>) {
+            if let Err(e) = Self::do_offchain_worker() {
+                log::error!("Error: {}", e);
+            }
+        }
+    }
 
     /// Dispatchables (extrinsics) exposed by this pallet
     #[pallet::call]
@@ -975,14 +1032,11 @@ pub mod pallet {
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
         #[pallet::call_index(10)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn slash(
-            origin: OriginFor<T>,
-            provider_account_id: T::AccountId,
-        ) -> DispatchResultWithPostInfo {
+        pub fn slash(origin: OriginFor<T>, provider_id: HashId<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was sent with root origin.
             ensure_signed(origin)?;
 
-            Self::do_slash(&provider_account_id)
+            Self::do_slash(&provider_id)
         }
     }
 }

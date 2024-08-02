@@ -901,6 +901,10 @@ impl<T: pallet::Config> ProofSubmittersInterface for Pallet<T> {
         ValidProofSubmittersLastTicks::<T>::get(tick_number)
     }
 
+    fn iter_slashable_providers() -> impl Iterator<Item = (Self::ProviderId, u32)> {
+        SlashableProviders::<T>::iter()
+    }
+
     fn get_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) -> Option<u32> {
         SlashableProviders::<T>::get(provider_id)
     }

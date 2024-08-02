@@ -13,23 +13,57 @@ use shp_traits::{
     CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ProvidersInterface,
     SubscribeProvidersInterface, TrieMutation, TrieProofDeltaApplier,
 };
+use sp_core::crypto::AccountId32;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, Convert, IdentityLookup},
-    BuildStorage, DispatchError, DispatchResult, SaturatedConversion,
+    testing::TestXt,
+    traits::{
+        BlakeTwo256, Convert, Extrinsic as ExtrinsicT, IdentifyAccount, IdentityLookup, Verify,
+    },
+    BuildStorage, DispatchError, DispatchResult, MultiSignature, SaturatedConversion,
 };
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use std::collections::BTreeSet;
 use system::pallet_prelude::BlockNumberFor;
 
+pub(crate) type Extrinsic = TestXt<RuntimeCall, ()>;
+type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
-type AccountId = u64;
+type AccountId = AccountId32;
+type Signature = MultiSignature;
 const EPOCH_DURATION_IN_BLOCKS: BlockNumberFor<Test> = 10;
 const UNITS: Balance = 1_000_000_000_000;
 const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumberFor<Test> = 3;
+
+impl frame_system::offchain::SigningTypes for Test {
+    type Public = <Signature as Verify>::Signer;
+    type Signature = Signature;
+}
+
+impl<LocalCall> frame_system::offchain::SendTransactionTypes<LocalCall> for Test
+where
+    RuntimeCall: From<LocalCall>,
+{
+    type Extrinsic = Extrinsic;
+    type OverarchingCall = RuntimeCall;
+}
+
+impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Test
+where
+    RuntimeCall: From<LocalCall>,
+{
+    fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
+        call: RuntimeCall,
+        _public: <Signature as Verify>::Signer,
+        _account: <<Signature as Verify>::Signer as IdentifyAccount>::AccountId,
+        nonce: u64,
+    ) -> Option<(RuntimeCall, <Extrinsic as ExtrinsicT>::SignaturePayload)> {
+        Some((call, (nonce, ())))
+    }
+}
 
 pub struct MockRandomness;
 impl Randomness<H256, BlockNumberFor<Test>> for MockRandomness {
@@ -106,18 +140,18 @@ impl system::Config for Test {
 }
 
 impl pallet_balances::Config for Test {
-    type Balance = Balance;
-    type DustRemoval = ();
     type RuntimeEvent = RuntimeEvent;
-    type ExistentialDeposit = ConstU128<1>;
-    type AccountStore = System;
-    type WeightInfo = ();
-    type MaxLocks = ConstU32<10>;
-    type MaxReserves = ();
-    type ReserveIdentifier = [u8; 8];
     type RuntimeHoldReason = RuntimeHoldReason;
     type RuntimeFreezeReason = ();
+    type WeightInfo = ();
+    type Balance = Balance;
+    type DustRemoval = ();
+    type ExistentialDeposit = ConstU128<1>;
+    type AccountStore = System;
+    type ReserveIdentifier = [u8; 8];
     type FreezeIdentifier = ();
+    type MaxLocks = ConstU32<10>;
+    type MaxReserves = ();
     type MaxFreezes = ConstU32<10>;
 }
 
@@ -125,7 +159,7 @@ impl pallet_balances::Config for Test {
 pub struct TreasuryAccount;
 impl Get<AccountId> for TreasuryAccount {
     fn get() -> AccountId {
-        0
+        AccountId::new([0u8; 32])
     }
 }
 
@@ -165,7 +199,7 @@ impl pallet_proofs_dealer::Config for Test {
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
 /// and `false` otherwise.
 pub struct MockVerifier<C, T: TrieLayout, const H_LENGTH: usize> {
-    _phantom: core::marker::PhantomData<(C, T)>,
+    _phantom: PhantomData<(C, T)>,
 }
 
 /// Implement the `TrieVerifier` trait for the `MockForestManager` struct.
@@ -197,10 +231,10 @@ where
 impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
     for MockVerifier<C, T, H_LENGTH>
 where
-    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
+    <T::Hash as Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
 {
     type Proof = CompactProof;
-    type Key = <T::Hash as sp_core::Hasher>::Out;
+    type Key = <T::Hash as Hasher>::Out;
 
     fn apply_delta(
         root: &Self::Key,
@@ -222,33 +256,45 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type AuthorityId = crate::crypto::AuthId;
+    type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
-    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = H256;
+    type Subscribers = MockedProvidersSubscriber;
     type ReadAccessGroupId = u32;
     type ProvidersProofSubmitters = MockSubmittingProviders;
     type Treasury = TreasuryAccount;
-    type MaxMultiAddressSize = ConstU32<100>;
-    type MaxMultiAddressAmount = ConstU32<5>;
-    type MaxProtocols = ConstU32<100>;
-    type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
-    type MinBlocksBetweenCapacityChanges = ConstU64<10>;
-    type MaxBsps = ConstU32<100>;
-    type MaxMsps = ConstU32<100>;
-    type MaxBuckets = ConstU32<10000>;
-    type BucketDeposit = ConstU128<10>;
-    type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
-    type Subscribers = MockedProvidersSubscriber;
-    type ProvidersRandomness = MockRandomness;
+    type MaxBsps = ConstU32<100>;
+    type MaxMsps = ConstU32<100>;
+    type MaxMultiAddressSize = ConstU32<100>;
+    type MaxMultiAddressAmount = ConstU32<5>;
+    type MaxProtocols = ConstU32<100>;
+    type MaxBuckets = ConstU32<10000>;
+    type BucketDeposit = ConstU128<10>;
+    type BucketNameLimit = ConstU32<100>;
+    type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
+    type MinBlocksBetweenCapacityChanges = ConstU64<10>;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashFactor = ConstU128<10>;
 }
+
+/// The `SignedExtension` to the basic transaction logic.
+pub type SignedExtra = (
+    frame_system::CheckNonZeroSender<Test>,
+    frame_system::CheckSpecVersion<Test>,
+    frame_system::CheckTxVersion<Test>,
+    frame_system::CheckGenesis<Test>,
+    frame_system::CheckMortality<Test>,
+    frame_system::CheckNonce<Test>,
+    frame_system::CheckWeight<Test>,
+);
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
 pub struct MockSubmittingProviders;
@@ -261,9 +307,14 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
     ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
         let mut set = BoundedBTreeSet::<Self::ProviderId, Self::MaxProofSubmitters>::new();
         // We convert the block number + 1 to the corresponding Provider ID, to simulate that the Provider submitted a proof
-        <StorageProviders as ProvidersInterface>::get_provider_id(*block_number + 1)
+        // TODO: make this different
+        <StorageProviders as ProvidersInterface>::get_provider_id(accounts::ALICE.0)
             .map(|id| set.try_insert(id));
         Some(set)
+    }
+
+    fn iter_slashable_providers() -> impl Iterator<Item = (Self::ProviderId, u32)> {
+        SlashableProviders::<Test>::iter()
     }
 
     fn get_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) -> Option<u32> {
@@ -284,13 +335,16 @@ pub fn _new_test_ext() -> sp_io::TestExternalities {
 }
 
 pub mod accounts {
-    pub const ALICE: (u64, u128) = (0, 5_000_000);
-    pub const BOB: (u64, u128) = (1, 10_000_000);
-    pub const CHARLIE: (u64, u128) = (2, 20_000_000);
-    pub const DAVID: (u64, u128) = (3, 30_000_000);
-    pub const EVE: (u64, u128) = (4, 400_000_000);
-    pub const FERDIE: (u64, u128) = (5, 5_000_000_000);
-    pub const GEORGE: (u64, u128) = (6, 600_000_000_000);
+    use sp_core::crypto::AccountId32;
+
+    pub const ALICE: (AccountId32, u128) = (AccountId32::new([1u8; 32]), 1_000_000);
+    pub const BOB: (AccountId32, u128) = (AccountId32::new([2u8; 32]), 10_000_000);
+    pub const CHARLIE: (AccountId32, u128) = (AccountId32::new([3u8; 32]), 100_000_000);
+    pub const DAVID: (AccountId32, u128) = (AccountId32::new([4u8; 32]), 1_000_000_000);
+    pub const EVE: (AccountId32, u128) = (AccountId32::new([5u8; 32]), 10_000_000_000);
+    pub const FERDIE: (AccountId32, u128) = (AccountId32::new([6u8; 32]), 100_000_000_000);
+    pub const GEORGE: (AccountId32, u128) = (AccountId32::new([7u8; 32]), 1_000_000_000_000);
+    pub const HELEN: (AccountId32, u128) = (AccountId32::new([8u8; 32]), 0);
 }
 
 // Externalities builder with predefined balances for accounts and starting at block number 1
@@ -324,10 +378,10 @@ pub struct MockedProvidersSubscriber;
 impl SubscribeProvidersInterface for MockedProvidersSubscriber {
     type ProviderId = u64;
 
-    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
+    fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
         Ok(())
     }
-    fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
+    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
         Ok(())
     }
 }

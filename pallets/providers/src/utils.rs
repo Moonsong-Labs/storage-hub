@@ -13,7 +13,9 @@ use frame_support::traits::{
     tokens::{Fortitude, Precision, Preservation},
     Get, Randomness,
 };
+use frame_system::offchain::{SendSignedTransaction, Signer};
 use frame_system::pallet_prelude::BlockNumberFor;
+use scale_info::prelude::vec::Vec;
 use shp_traits::{
     MutateProvidersInterface, ProofSubmittersInterface, ProvidersConfig, ProvidersInterface,
     ReadProvidersInterface, SystemMetricsInterface,
@@ -54,7 +56,7 @@ macro_rules! expect_or_err {
 
 impl<T> Pallet<T>
 where
-    T: pallet::Config,
+    T: Config,
 {
     /// This function holds the logic that checks if a user can request to sign up as a Main Storage Provider
     /// and, if so, stores the request in the SignUpRequests mapping
@@ -252,7 +254,7 @@ where
         T::NativeBalance::release_all(
             &HoldReason::StorageProviderDeposit.into(),
             who,
-            frame_support::traits::tokens::Precision::Exact,
+            Precision::Exact,
         )?;
 
         Ok(())
@@ -427,7 +429,7 @@ where
         T::NativeBalance::release_all(
             &HoldReason::StorageProviderDeposit.into(),
             who,
-            frame_support::traits::tokens::Precision::Exact,
+            Precision::Exact,
         )?;
 
         // Decrement the storage that holds total amount of MSPs currently in the system
@@ -482,7 +484,7 @@ where
         T::NativeBalance::release_all(
             &HoldReason::StorageProviderDeposit.into(),
             who,
-            frame_support::traits::tokens::Precision::Exact,
+            Precision::Exact,
         )?;
 
         // Decrement the storage that holds total amount of BSPs currently in the system
@@ -715,17 +717,22 @@ where
     /// a Storage Provider is slashable when the proofs-dealer pallet has marked them as such.
     ///
     /// Successfully slashing a Storage Provider should be a free operation.
-    pub(crate) fn do_slash(account_id: &T::AccountId) -> DispatchResultWithPostInfo {
-        let provider_id = AccountIdToMainStorageProviderId::<T>::get(account_id)
-            .or(AccountIdToBackupStorageProviderId::<T>::get(account_id))
-            .ok_or(Error::<T>::NotRegistered)?;
+    pub(crate) fn do_slash(provider_id: &HashId<T>) -> DispatchResultWithPostInfo {
+        // Read MainStorageProviders and/or BackupStorageProviders to get the account_id of the Storage Provider
+        let account_id = if let Some(msp_id) = MainStorageProviders::<T>::get(provider_id) {
+            msp_id.owner_account
+        } else if let Some(bsp_id) = BackupStorageProviders::<T>::get(provider_id) {
+            bsp_id.owner_account
+        } else {
+            return Err(Error::<T>::ProviderNotFound.into());
+        };
 
         // Calculate the amount to be slashed.
         let slashable_amount = T::SlashFactor::get() * <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id).ok_or(Error::<T>::ProviderNotSlashable)?.into();
 
         let amount_slashed = T::NativeBalance::transfer_on_hold(
             &HoldReason::StorageProviderDeposit.into(),
-            account_id,
+            &account_id,
             &T::Treasury::get(),
             slashable_amount,
             Precision::BestEffort,
@@ -742,6 +749,31 @@ where
         });
 
         Ok(Pays::No.into())
+    }
+
+    pub fn do_offchain_worker() -> Result<(), &'static str> {
+        let slashable_providers_iter =
+            <T::ProvidersProofSubmitters as ProofSubmittersInterface>::iter_slashable_providers();
+
+        for (provider_id, _) in slashable_providers_iter {
+            let signer = Signer::<T, T::AuthorityId>::all_accounts();
+            if !signer.can_sign() {
+                return Err(
+                    "No local accounts available. Consider adding one via `author_insertKey` RPC.",
+                );
+            }
+
+            let results = signer.send_signed_transaction(|_account| Call::slash { provider_id });
+
+            for (_acc, res) in &results {
+                match res {
+                    Ok(()) => log::info!("Slash request sent for provider: {:?}", provider_id),
+                    Err(e) => log::error!("Failed to send slash request: {:?}", e),
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn hold_balance(
@@ -821,7 +853,7 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
 }
 
 /// Implement the StorageProvidersInterface trait for the Storage Providers pallet.
-impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
+impl<T: Config> MutateProvidersInterface for Pallet<T> {
     type StorageData = T::StorageData;
     type MerklePatriciaRoot = T::MerklePatriciaRoot;
 
@@ -998,16 +1030,16 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
     }
 }
 
-impl<T: pallet::Config> ProvidersConfig for pallet::Pallet<T> {
+impl<T: Config> ProvidersConfig for Pallet<T> {
     type BucketId = BucketId<T>;
     type ReadAccessGroupId = T::ReadAccessGroupId;
 }
 
-impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
+impl<T: Config> ReadProvidersInterface for Pallet<T> {
     type SpCount = T::SpCount;
     type MultiAddress = MultiAddress<T>;
-    type MaxNumberOfMultiAddresses = T::MaxMultiAddressAmount;
     type BucketNameLimit = T::BucketNameLimit;
+    type MaxNumberOfMultiAddresses = T::MaxMultiAddressAmount;
 
     fn is_bsp(who: &Self::ProviderId) -> bool {
         BackupStorageProviders::<T>::contains_key(&who)
@@ -1050,13 +1082,6 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         Ok(&bucket.user_id == who)
     }
 
-    fn is_bucket_private(
-        bucket_id: &<Self as ProvidersConfig>::BucketId,
-    ) -> Result<bool, DispatchError> {
-        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
-        Ok(bucket.private)
-    }
-
     fn is_bucket_stored_by_msp(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId) -> bool {
         if let Some(bucket) = Buckets::<T>::get(bucket_id) {
             bucket.msp_id == *msp_id
@@ -1076,6 +1101,13 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         Buckets::<T>::get(bucket_id).map(|bucket| bucket.msp_id)
     }
 
+    fn is_bucket_private(
+        bucket_id: &<Self as ProvidersConfig>::BucketId,
+    ) -> Result<bool, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.private)
+    }
+
     fn derive_bucket_id(
         owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
@@ -1084,13 +1116,13 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
             .encode()
             .into_iter()
             .chain(bucket_name.encode().into_iter())
-            .collect::<scale_info::prelude::vec::Vec<u8>>();
+            .collect::<Vec<u8>>();
 
         <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)
     }
 }
 
-impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
+impl<T: Config> ProvidersInterface for Pallet<T> {
     type Balance = T::NativeBalance;
     type AccountId = T::AccountId;
     type ProviderId = HashId<T>;
@@ -1140,18 +1172,6 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
         }
     }
 
-    fn get_stake(who: Self::ProviderId) -> Option<BalanceOf<T>> {
-        // TODO: This is not the stake, this logic will be done later down the line
-        if let Some(bucket) = Buckets::<T>::get(&who) {
-            let _related_msp = MainStorageProviders::<T>::get(bucket.msp_id);
-            Some(T::SpMinDeposit::get())
-        } else if let Some(_bsp) = BackupStorageProviders::<T>::get(&who) {
-            Some(T::SpMinDeposit::get())
-        } else {
-            None
-        }
-    }
-
     fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult {
         if let Some(bucket) = Buckets::<T>::get(&who) {
             Buckets::<T>::insert(
@@ -1178,9 +1198,21 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
     fn get_default_root() -> Self::MerkleHash {
         T::DefaultMerkleRoot::get()
     }
+
+    fn get_stake(who: Self::ProviderId) -> Option<BalanceOf<T>> {
+        // TODO: This is not the stake, this logic will be done later down the line
+        if let Some(bucket) = Buckets::<T>::get(&who) {
+            let _related_msp = MainStorageProviders::<T>::get(bucket.msp_id);
+            Some(T::SpMinDeposit::get())
+        } else if let Some(_bsp) = BackupStorageProviders::<T>::get(&who) {
+            Some(T::SpMinDeposit::get())
+        } else {
+            None
+        }
+    }
 }
 
-impl<T: pallet::Config> SystemMetricsInterface for pallet::Pallet<T> {
+impl<T: Config> SystemMetricsInterface for Pallet<T> {
     type ProvidedUnit = StorageData<T>;
 
     fn get_total_capacity() -> Self::ProvidedUnit {

@@ -26,6 +26,7 @@
 mod xcm_config;
 
 // Substrate and Polkadot dependencies
+use codec::Encode;
 use core::marker::PhantomData;
 use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
 use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
@@ -40,6 +41,7 @@ use frame_support::{
     weights::{ConstantMultiplier, Weight},
     PalletId,
 };
+use frame_system::offchain::AppCrypto;
 use frame_system::{
     limits::{BlockLength, BlockWeights},
     pallet_prelude::BlockNumberFor,
@@ -59,8 +61,10 @@ use shp_traits::{CommitmentVerifier, MaybeDebug};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
-    traits::{BlakeTwo256, Convert, Verify},
-    AccountId32, DispatchError, FixedPointNumber, FixedU128, Perbill, SaturatedConversion,
+    generic,
+    traits::{BlakeTwo256, Convert, Extrinsic as ExtrinsicT, Verify},
+    AccountId32, DispatchError, FixedPointNumber, FixedU128, MultiSignature, MultiSigner, Perbill,
+    SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec;
@@ -71,10 +75,10 @@ use xcm::latest::prelude::BodyId;
 // Local module imports
 use super::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
-    AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection,
+    AccountId, Address, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection,
     FileSystem, Hash, MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem,
     ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
-    RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
+    RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, Signer, System,
     WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS,
     EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
     RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
@@ -361,7 +365,7 @@ impl pallet_nfts::Config for Runtime {
     type MaxAttributesPerCall = MaxAttributesPerCall;
     type Features = Features;
     type OffchainSignature = Signature;
-    type OffchainPublic = <Signature as Verify>::Signer;
+    type OffchainPublic = Signer;
     type WeightInfo = pallet_nfts::weights::SubstrateWeight<Runtime>;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
@@ -452,33 +456,43 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
         sp_trie::empty_trie_root::<T>()
     }
 }
+
+// TODO snowmead: understand this
+pub struct AppCryptoAuthorityId;
+impl AppCrypto<MultiSigner, MultiSignature> for AppCryptoAuthorityId {
+    type RuntimeAppPublic = AuraId;
+    type GenericPublic = sp_core::sr25519::Public;
+    type GenericSignature = sp_core::sr25519::Signature;
+}
+
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type AuthorityId = AppCryptoAuthorityId;
+    type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type NativeBalance = Balances;
+    type RuntimeHoldReason = RuntimeHoldReason;
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
-    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = Hash;
+    type Subscribers = FileSystem;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
     type Treasury = TreasuryAccount;
-    type MaxMultiAddressSize = ConstU32<100>;
-    type MaxMultiAddressAmount = ConstU32<5>;
-    type MaxProtocols = ConstU32<100>;
-    type MaxBsps = ConstU32<100>;
-    type MaxMsps = ConstU32<100>;
-    type MaxBuckets = ConstU32<10000>;
-    type BucketDeposit = BucketDeposit;
-    type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = SpMinDeposit;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
-    type RuntimeHoldReason = RuntimeHoldReason;
-    type Subscribers = FileSystem;
-    type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
+    type MaxBsps = ConstU32<100>;
+    type MaxMsps = ConstU32<100>;
+    type MaxMultiAddressSize = ConstU32<100>;
+    type MaxMultiAddressAmount = ConstU32<5>;
+    type MaxProtocols = ConstU32<100>;
+    type MaxBuckets = ConstU32<10000>;
+    type BucketDeposit = BucketDeposit;
+    type BucketNameLimit = ConstU32<100>;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = ConstU32<10>;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashFactor = SlashFactor;
 }
 
@@ -685,4 +699,90 @@ impl pallet_bucket_nfts::Config for Runtime {
     type Providers = Providers;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
+}
+
+/// The `SignedExtension` to the basic transaction logic.
+pub type SignedExtra = (
+    frame_system::CheckNonZeroSender<Runtime>,
+    frame_system::CheckSpecVersion<Runtime>,
+    frame_system::CheckTxVersion<Runtime>,
+    frame_system::CheckGenesis<Runtime>,
+    frame_system::CheckMortality<Runtime>,
+    frame_system::CheckNonce<Runtime>,
+    frame_system::CheckWeight<Runtime>,
+    pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
+);
+
+/// The payload being signed in transactions.
+pub type SignedPayload = generic::SignedPayload<RuntimeCall, SignedExtra>;
+
+/// Unchecked extrinsic type as expected by this runtime.
+pub type UncheckedExtrinsic =
+    generic::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
+
+impl frame_system::offchain::SigningTypes for Runtime {
+    type Public = Signer;
+    type Signature = Signature;
+}
+
+impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
+where
+    RuntimeCall: From<C>,
+{
+    type Extrinsic = UncheckedExtrinsic;
+    type OverarchingCall = RuntimeCall;
+}
+
+/// Submits a transaction with the node's public and signature type. Adheres to the signed extension
+/// format of the chain.
+impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime
+where
+    RuntimeCall: From<LocalCall>,
+{
+    fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
+        call: RuntimeCall,
+        public: Signer,
+        account: AccountId,
+        nonce: <Runtime as frame_system::Config>::Nonce,
+    ) -> Option<(
+        RuntimeCall,
+        <UncheckedExtrinsic as ExtrinsicT>::SignaturePayload,
+    )> {
+        use sp_runtime::traits::StaticLookup;
+        // take the biggest period possible.
+        let period = BlockHashCount::get()
+            .checked_next_power_of_two()
+            .map(|c| c / 2)
+            .unwrap_or(2) as u64;
+
+        let current_block = System::block_number()
+            .saturated_into::<u64>()
+            // The `System::block_number` is initialized with `n+1`,
+            // so the actual block number is `n`.
+            .saturating_sub(1);
+        let tip = 0;
+        let extra: SignedExtra = (
+            frame_system::CheckNonZeroSender::<Runtime>::new(),
+            frame_system::CheckSpecVersion::<Runtime>::new(),
+            frame_system::CheckTxVersion::<Runtime>::new(),
+            frame_system::CheckGenesis::<Runtime>::new(),
+            frame_system::CheckMortality::<Runtime>::from(generic::Era::mortal(
+                period,
+                current_block,
+            )),
+            frame_system::CheckNonce::<Runtime>::from(nonce),
+            frame_system::CheckWeight::<Runtime>::new(),
+            pallet_transaction_payment::ChargeTransactionPayment::<Runtime>::from(tip),
+        );
+
+        let raw_payload = SignedPayload::new(call, extra)
+            .map_err(|e| {
+                log::warn!("Unable to create signed payload: {:?}", e);
+            })
+            .ok()?;
+        let signature = raw_payload.using_encoded(|payload| C::sign(payload, public))?;
+        let (call, extra, _) = raw_payload.deconstruct();
+        let address = <Runtime as frame_system::Config>::Lookup::unlookup(account);
+        Some((call, (address, signature, extra)))
+    }
 }
