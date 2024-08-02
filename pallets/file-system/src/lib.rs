@@ -188,6 +188,10 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBspsPerStorageRequest: Get<u32>;
 
+        /// Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
+        #[pallet::constant]
+        type MaxBatchConfirmStorageRequests: Get<u32>;
+
         /// Maximum byte size of a file path.
         #[pallet::constant]
         type MaxFilePathSize: Get<u32>;
@@ -371,11 +375,11 @@ pub mod pallet {
             owner: T::AccountId,
             size: StorageData<T>,
         },
-        /// Notifies that a BSP confirmed storing a file.
+        /// Notifies that a BSP confirmed storing a file(s).
         BspConfirmedStoring {
             who: T::AccountId,
             bsp_id: ProviderIdFor<T>,
-            file_key: MerkleHash<T>,
+            file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
             new_root: MerkleHash<T>,
         },
         /// Notifies the expiration of a storage request.
@@ -412,11 +416,10 @@ pub mod pallet {
             proof_of_inclusion: bool,
         },
         /// Notifies that a BSP's challenge cycle has been initialised, adding the first file
-        /// key to the BSP's Merkle Patricia Forest.
+        /// key(s) to the BSP's Merkle Patricia Forest.
         BspChallengeCycleInitialised {
             who: T::AccountId,
             bsp_id: ProviderIdFor<T>,
-            file_key: MerkleHash<T>,
         },
     }
 
@@ -668,30 +671,21 @@ pub mod pallet {
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
         pub fn bsp_confirm_storing(
             origin: OriginFor<T>,
-            file_key: MerkleHash<T>,
             non_inclusion_forest_proof: ForestProof<T>,
-            added_file_key_proof: KeyProof<T>,
+            file_keys_and_proofs: BoundedVec<
+                (MerkleHash<T>, KeyProof<T>),
+                T::MaxBatchConfirmStorageRequests,
+            >,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
             // Perform validations and confirm storage.
-            let (bsp_id, new_root) = Self::do_bsp_confirm_storing(
+            Self::do_bsp_confirm_storing(
                 who.clone(),
-                file_key,
                 non_inclusion_forest_proof.clone(),
-                added_file_key_proof.clone(),
-            )?;
-
-            // Emit event.
-            Self::deposit_event(Event::BspConfirmedStoring {
-                who,
-                bsp_id,
-                file_key,
-                new_root,
-            });
-
-            Ok(())
+                file_keys_and_proofs,
+            )
         }
 
         /// Executed by a BSP to stop storing a file.
