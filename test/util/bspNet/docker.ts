@@ -135,3 +135,15 @@ export const addBspContainer = async (options?: {
 
   return { containerName, rpcPort, p2pPort, peerId };
 };
+
+export const pauseBspContainer = async (containerName: string) => {
+  const docker = new Docker();
+  const container = docker.getContainer(containerName);
+  await container.pause();
+};
+
+export const resumeBspContainer = async (containerName: string) => {
+  const docker = new Docker();
+  const container = docker.getContainer(containerName);
+  await container.unpause();
+};

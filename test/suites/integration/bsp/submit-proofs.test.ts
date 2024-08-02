@@ -7,8 +7,7 @@ import {
   type BspNetApi,
   type BspNetConfig,
   closeSimpleBspNet,
-  runMultipleInitialisedBspsNet,
-  DUMMY_BSP_ID
+  runMultipleInitialisedBspsNet
 } from "../../../util";
 
 const bspNetConfigCases: BspNetConfig[] = [
@@ -17,52 +16,6 @@ const bspNetConfigCases: BspNetConfig[] = [
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
-  describe.only(
-    `BSPNet: BSP Submits Proofs (${bspNetConfig.noisy ? "Noisy" : "Noiseless"})`,
-    {
-      skip: "This test is not yet implemented."
-    },
-    () => {
-      let userApi: BspNetApi;
-      let bspApi: BspNetApi;
-
-      before(async () => {
-        await runMultipleInitialisedBspsNet(bspNetConfig);
-        userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
-        bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
-      });
-
-      after(async () => {
-        await userApi.disconnect();
-        await bspApi.disconnect();
-        await closeSimpleBspNet();
-      });
-
-      it("Network launches and can be queried", async () => {
-        const userNodePeerId = await userApi.rpc.system.localPeerId();
-        strictEqual(userNodePeerId.toString(), NODE_INFOS.user.expectedPeerId);
-
-        const bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
-        const bspNodePeerId = await bspApi.rpc.system.localPeerId();
-        await bspApi.disconnect();
-        strictEqual(bspNodePeerId.toString(), NODE_INFOS.bsp.expectedPeerId);
-      });
-
-      it("BSP is challenged and correctly submits proof", async () => {
-        const bspInfo = userApi.call.storageProvidersApi.getBspInfo(DUMMY_BSP_ID);
-        // TODO: Query when is the next challenge block.
-        // TODO: Advance to next challenge block.
-        // TODO: Build block with proof submission.
-        // TODO: Check that proof submission was successful.
-      });
-      it("BSP fails to submit proof and is marked as slashable", async () => {
-        // TODO: Stop BSP.
-        // TODO: Advance to BSP deadline.
-        // TODO: Check that BSP is slashable.
-      });
-    }
-  );
-
   describe(
     `BSPNet: Many BSPs Submit Proofs (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`,
     { skip: "This test is not yet implemented." },
