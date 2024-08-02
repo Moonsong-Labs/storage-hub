@@ -21,7 +21,7 @@ runtimes/
 **/tmp/
 
 .DS_Store
-.vscode/settings.json
+.vscode/
 
 # Chain Specs
 *.spec.json
