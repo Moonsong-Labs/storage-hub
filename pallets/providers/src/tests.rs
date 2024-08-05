@@ -1957,8 +1957,10 @@ mod sign_up {
                         alice.clone()
                     ));
 
+                    let bsp_sign_up_index_range = 2..<MaxMsps as Get<u32>>::get() + 2;
+
                     // Request to sign up the maximum amount of Main Storage Providers
-                    for i in 1..<MaxMsps as Get<u32>>::get() + 1 {
+                    for i in bsp_sign_up_index_range.clone() {
                         let account_id = AccountId32::new([i as u8; 32]);
                         let account_new_balance = 1_000_000_000_000_000;
                         assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
@@ -1981,7 +1983,7 @@ mod sign_up {
                     );
 
                     // Confirm the sign up of the maximum amount of Main Storage Providers
-                    for i in 1..<MaxMsps as Get<u32>>::get() + 1 {
+                    for i in bsp_sign_up_index_range {
                         let account_id = AccountId32::new([i as u8; 32]);
                         assert_ok!(StorageProviders::confirm_sign_up(
                             RuntimeOrigin::signed(account_id.clone()),
@@ -2245,8 +2247,10 @@ mod sign_up {
                         alice.clone()
                     ));
 
+                    let bsp_sign_up_index_range = 2..<MaxBsps as Get<u32>>::get() + 2;
+
                     // Request to sign up the maximum amount of Backup Storage Providers
-                    for i in 1..<MaxBsps as Get<u32>>::get() + 1 {
+                    for i in bsp_sign_up_index_range.clone() {
                         let account_id = AccountId32::new([i as u8; 32]);
                         let account_new_balance = 1_000_000_000_000_000;
                         assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
@@ -2268,7 +2272,7 @@ mod sign_up {
                     );
 
                     // Confirm the sign up of the maximum amount of Backup Storage Providers
-                    for i in 1..<MaxBsps as Get<u32>>::get() + 1 {
+                    for i in bsp_sign_up_index_range {
                         let account_id = AccountId32::new([i as u8; 32]);
                         assert_ok!(StorageProviders::confirm_sign_up(
                             RuntimeOrigin::signed(account_id.clone()),

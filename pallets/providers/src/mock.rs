@@ -27,7 +27,6 @@ use std::collections::BTreeSet;
 use system::pallet_prelude::BlockNumberFor;
 
 pub(crate) type Extrinsic = TestXt<RuntimeCall, ()>;
-type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
 type AccountId = AccountId32;
@@ -284,17 +283,6 @@ impl crate::Config for Test {
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashFactor = ConstU128<10>;
 }
-
-/// The `SignedExtension` to the basic transaction logic.
-pub type SignedExtra = (
-    frame_system::CheckNonZeroSender<Test>,
-    frame_system::CheckSpecVersion<Test>,
-    frame_system::CheckTxVersion<Test>,
-    frame_system::CheckGenesis<Test>,
-    frame_system::CheckMortality<Test>,
-    frame_system::CheckNonce<Test>,
-    frame_system::CheckWeight<Test>,
-);
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
 pub struct MockSubmittingProviders;
