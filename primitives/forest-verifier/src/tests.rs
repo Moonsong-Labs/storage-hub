@@ -1732,15 +1732,36 @@ mod mutate_root_tests {
             Err(err) => panic!("Error: {:?}", err),
         } */
 
-        let (memdb, new_root) =
-            ForestVerifier::<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>::apply_delta(
-                &root, &mutations, &proof,
-            )
-            .expect("Failed to mutate root");
+        // Execute mutations to remove the selected keys and generate the new root.
+        let (partial_trie_memdb, new_root) = ForestVerifier::<
+            LayoutV1<BlakeTwo256>,
+            { BlakeTwo256::LENGTH },
+        >::apply_delta(&root, &mutations, &proof)
+        .expect("Failed to mutate root");
 
+        // Check that none of the deleted keys are still in the generated partial trie.
         for challenge_key in &challenge_keys {
-            assert_key_not_in_trie(&memdb, &new_root, &challenge_key);
+            assert_key_not_in_trie(&partial_trie_memdb, &new_root, &challenge_key);
         }
+
+        // Reconstruct the full trie, remove the selected keys, calculate the root and compare it with the one obtained using the `apply_delta` function.
+        let mut full_memdb = memdb.clone();
+        let mut full_root = root.clone();
+        let mut full_trie = TrieDBMutBuilder::<LayoutV1<BlakeTwo256>>::from_existing(
+            &mut full_memdb,
+            &mut full_root,
+        )
+        .build();
+        for challenge_key in &challenge_keys {
+            // Remove the key from the trie.
+            full_trie.remove(&challenge_key.0).unwrap();
+        }
+
+        // Calculate the root of the trie after removing the keys.
+        let new_root_full_trie = full_trie.root();
+
+        // Check that the roots obtained using the two methods are the same.
+        assert_eq!(new_root, *new_root_full_trie);
     }
 
     #[test]
