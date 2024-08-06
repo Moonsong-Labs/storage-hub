@@ -42,7 +42,15 @@ declare const _default: {
             params: never[];
             type: string;
         };
-        rotateBcsvKeys: {
+        insertBcsvKeys: {
+            description: string;
+            params: {
+                name: string;
+                type: string;
+            }[];
+            type: string;
+        };
+        removeBcsvKeys: {
             description: string;
             params: {
                 name: string;
