@@ -7,6 +7,7 @@ use frame_support::{
 };
 use frame_system as system;
 use num_bigint::BigUint;
+use num_traits::FromPrimitive;
 use pallet_nfts::PalletFeatures;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
@@ -341,6 +342,7 @@ impl crate::Config for Test {
     type ThresholdType = ThresholdType;
     type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
     type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
+    type HashToThresholdType = HashToThresholdTypeConverter;
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
@@ -424,6 +426,34 @@ pub struct BlockNumberToThresholdTypeConverter;
 impl Convert<BlockNumberFor<Test>, ThresholdType> for BlockNumberToThresholdTypeConverter {
     fn convert(block_number: BlockNumberFor<Test>) -> ThresholdType {
         FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
+    }
+}
+
+// Converter from the Hash type from the runtime (BlakeTwo256) to the ThresholdType type (FixedU128).
+// Since we can't convert directly a hash to a FixedU128 (since the hash type used in the runtime has
+// 256 bits and FixedU128 has 128 bits), we convert the hash to a BigUint, then map it to a FixedU128
+// by keeping its relative position between zero and the maximum 256-bit number.
+pub struct HashToThresholdTypeConverter;
+impl Convert<<Test as frame_system::Config>::Hash, ThresholdType> for HashToThresholdTypeConverter {
+    fn convert(hash: <Test as frame_system::Config>::Hash) -> ThresholdType {
+        // Get the hash as a BigUint value
+        let hash_bytes = hash.as_ref();
+        let hash_biguint = BigUint::from_bytes_be(hash_bytes);
+
+        // Get the maximum 256-bit number and the maximum fixed unsigned 128-bit number as BigUint values
+        let max_u256_number = BigUint::from_bytes_be(&[0xff; 32]);
+        let max_fixed_point_u128_number = BigUint::from_u128(FixedU128::max_value().into_inner())
+            .expect("The inner field is a u128 number, it must fit.");
+
+        // Get the equivalent u128 of the hash after mapping it to the unsigned 128-bit space
+        let hash_in_fixed_u128_space = hash_biguint * max_fixed_point_u128_number / max_u256_number;
+
+        // Convert it to the actual primitive type `u128`
+        let hash_as_u128 = <BigUint as num_traits::ToPrimitive>::to_u128(&hash_in_fixed_u128_space)
+            .expect("The number was mapped to a u128 number, it must fit.");
+
+        // Return it as a FixedU128
+        FixedU128::from_inner(hash_as_u128)
     }
 }
 

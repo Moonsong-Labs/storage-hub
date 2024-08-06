@@ -138,6 +138,9 @@ pub mod pallet {
         /// The type to convert a block number to a threshold.
         type BlockNumberToThresholdType: Convert<BlockNumberFor<Self>, Self::ThresholdType>;
 
+        /// The type to convert a hash to a threshold.
+        type HashToThresholdType: Convert<Self::Hash, Self::ThresholdType>;
+
         /// The type to convert a MerkleHash to a RandomnessOutput.
         type MerkleHashToRandomnessOutput: Convert<
             <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash,

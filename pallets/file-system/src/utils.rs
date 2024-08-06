@@ -1,11 +1,13 @@
-use codec::{Decode, Encode};
+use codec::Encode;
 use frame_support::{
     ensure, pallet_prelude::DispatchResult, traits::nonfungibles_v2::Create, traits::Get,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use num_bigint::BigUint;
 use sp_runtime::{
-    traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, One, Saturating, Zero},
+    traits::{
+        CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, Hash, One, Saturating, Zero,
+    },
     ArithmeticError, BoundedVec, DispatchError,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
@@ -82,20 +84,16 @@ where
             }
         };
 
-        let bsp_xor = Self::compute_bsp_xor(
-            fingerprint
-                .as_ref()
-                .try_into()
-                .map_err(|_| QueryFileEarliestVolunteerBlockError::FailedToEncodeFingerprint)?,
-            &bsp_id
-                .encode()
-                .try_into()
-                .map_err(|_| QueryFileEarliestVolunteerBlockError::FailedToEncodeBsp)?,
-        )
-        .map_err(|_| QueryFileEarliestVolunteerBlockError::ThresholdArithmeticError)?;
+        // Concatenate BSP ID with the file's fingerprint and hash the concatenation to get the volunteering hash.
+        let concatenated = sp_std::vec![bsp_id.encode(), fingerprint.encode()].concat();
+        let volunteering_hash =
+            <<T as frame_system::Config>::Hashing as Hash>::hash(concatenated.as_ref());
+
+        // Get the threshold needed for the BSP to be able to volunteer for the storage request.
+        let bsp_threshold = T::HashToThresholdType::convert(volunteering_hash);
 
         // Compute the block number at which the BSP should send the volunteer request.
-        Self::compute_volunteer_block_number(bsp_xor, storage_request_block)
+        Self::compute_volunteer_block_number(bsp_threshold, storage_request_block)
             .map_err(|_| QueryFileEarliestVolunteerBlockError::ThresholdArithmeticError)
     }
 
@@ -436,18 +434,17 @@ where
             Error::<T>::BspAlreadyVolunteered
         );
 
-        // Compute BSP's xor
-        let bsp_xor: T::ThresholdType = Self::compute_bsp_xor(
-            storage_request_metadata
-                .fingerprint
-                .as_ref()
-                .try_into()
-                .map_err(|_| Error::<T>::FailedToEncodeFingerprint)?,
-            &bsp_id
-                .encode()
-                .try_into()
-                .map_err(|_| Error::<T>::FailedToEncodeBsp)?,
-        )?;
+        // Concatenate BSP ID with the file's fingerprint and hash the concatenation to get the volunteering hash.
+        let concatenated = sp_std::vec![
+            bsp_id.encode(),
+            storage_request_metadata.fingerprint.encode()
+        ]
+        .concat();
+        let volunteering_hash =
+            <<T as frame_system::Config>::Hashing as Hash>::hash(concatenated.as_ref());
+
+        // Get the threshold needed for the BSP to be able to volunteer for the storage request.
+        let bsp_threshold = T::HashToThresholdType::convert(volunteering_hash);
 
         let current_block_number = <frame_system::Pallet<T>>::block_number();
 
@@ -467,7 +464,7 @@ where
         let threshold = rate_increase.saturating_add(BspsAssignmentThreshold::<T>::get());
 
         // Check that the BSP's threshold is under the threshold required to qualify as BSP for the storage request.
-        ensure!(bsp_xor <= (threshold), Error::<T>::AboveThreshold);
+        ensure!(bsp_threshold <= (threshold), Error::<T>::AboveThreshold);
 
         // Add BSP to storage request metadata.
         <StorageRequestBsps<T>>::insert(
@@ -1122,21 +1119,6 @@ where
         );
 
         Ok(T::AssignmentThresholdAsymptote::get().saturating_add(asymptotic_decay_factor))
-    }
-
-    /// Calculate the XOR of the fingerprint and the BSP.
-    fn compute_bsp_xor(
-        fingerprint: &[u8; 32],
-        bsp: &[u8; 32],
-    ) -> Result<T::ThresholdType, Error<T>> {
-        let xor_result = fingerprint
-            .iter()
-            .zip(bsp.iter())
-            .map(|(&x1, &x2)| x1 ^ x2)
-            .collect::<Vec<_>>();
-
-        T::ThresholdType::decode(&mut &xor_result[..])
-            .map_err(|_| Error::<T>::FailedToDecodeThreshold)
     }
 
     pub(crate) fn compute_file_key(
