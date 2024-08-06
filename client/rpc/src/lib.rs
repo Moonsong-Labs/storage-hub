@@ -11,10 +11,13 @@ use shc_common::types::FileMetadata;
 use shc_common::types::HasherOutT;
 use shc_common::types::BCSV_KEY_TYPE;
 use shc_common::types::FILE_CHUNK_SIZE;
+use sp_core::sr25519::Pair as Sr25519Pair;
+use sp_core::Pair;
 use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::AccountId32;
 use sp_runtime::Deserialize;
+use sp_runtime::KeyTypeId;
 use sp_runtime::Serialize;
 use sp_trie::TrieLayout;
 
@@ -25,6 +28,7 @@ use shc_forest_manager::traits::ForestStorage;
 
 use log::debug;
 use log::error;
+use tokio::fs;
 
 use std::fmt::Debug;
 use std::fs::File;
@@ -115,8 +119,11 @@ pub trait StorageHubClientApi {
     #[method(name = "getForestRoot")]
     async fn get_forest_root(&self) -> RpcResult<H256>;
 
-    #[method(name = "rotateBcsvKeys")]
-    async fn rotate_bcsv_keys(&self, seed: String) -> RpcResult<String>;
+    #[method(name = "insertBcsvKeys")]
+    async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String>;
+
+    #[method(name = "removeBcsvKeys")]
+    async fn remove_bcsv_keys(&self, keystore_path: String) -> RpcResult<()>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -292,14 +299,61 @@ where
         Ok(root)
     }
 
-    async fn rotate_bcsv_keys(&self, seed: String) -> RpcResult<String> {
-        let new_pub_key = self
-            .keystore
-            .sr25519_generate_new(BCSV_KEY_TYPE, Some(seed.as_ref()))
-            .map_err(into_rpc_error)?;
+    async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String> {
+        let seed = seed.as_ref().map(|s| s.as_str());
+
+        let new_pub_key = match seed {
+            // This method only persists the key into file system if a seed is NOT provided.
+            // In case there is a seed, we need to manually generate and insert the key in the keystore.
+            // See https://paritytech.github.io/polkadot-sdk/master/sc_keystore/struct.LocalKeystore.html#method.sr25519_generate_new
+            None => self
+                .keystore
+                .sr25519_generate_new(BCSV_KEY_TYPE, seed)
+                .map_err(into_rpc_error)?,
+            // If there is a seed, we generate a new pair and insert into the keystore.
+            Some(seed) => {
+                let new_pair =
+                    Sr25519Pair::from_string_with_seed(seed, None).map_err(into_rpc_error)?;
+                let new_pub_key = new_pair.0.public();
+
+                // Actually writes new key to file system.
+                self.keystore
+                    .insert(BCSV_KEY_TYPE, seed, &new_pub_key)
+                    .map_err(into_rpc_error)?;
+                new_pub_key
+            }
+        };
 
         Ok(new_pub_key.to_string())
     }
+
+    async fn remove_bcsv_keys(&self, keystore_path: String) -> RpcResult<()> {
+        let pub_keys = self.keystore.keys(BCSV_KEY_TYPE).map_err(into_rpc_error)?;
+        let key_path = PathBuf::from(keystore_path);
+
+        for pub_key in pub_keys {
+            let mut key = key_path.clone();
+            let key_name = key_file_name(&pub_key, BCSV_KEY_TYPE);
+            key.push(key_name);
+
+            // In case the file is not found we just ignore it
+            // because there may be keys in memory that are not persisted in the file system.
+            let _ = fs::remove_file(key).await.map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to remove key: {:?}", e);
+            });
+        }
+
+        Ok(())
+    }
+}
+
+/// Get the file name for the given public key and key type.
+fn key_file_name(public: &[u8], key_type: KeyTypeId) -> PathBuf {
+    let mut buf = PathBuf::new();
+    let key_type = array_bytes::bytes2hex("", &key_type.0);
+    let key = array_bytes::bytes2hex("", public);
+    buf.push(key_type + key.as_str());
+    buf
 }
 
 /// Converts into the expected kind of error for `jsonrpsee`'s `RpcResult<_>`.
