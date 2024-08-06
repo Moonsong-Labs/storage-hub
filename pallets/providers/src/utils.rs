@@ -1141,12 +1141,19 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
     }
 
     fn get_stake(who: Self::ProviderId) -> Option<BalanceOf<T>> {
-        // TODO: This is not the stake, this logic will be done later down the line
         if let Some(bucket) = Buckets::<T>::get(&who) {
-            let _related_msp = MainStorageProviders::<T>::get(bucket.msp_id);
-            Some(T::SpMinDeposit::get())
-        } else if let Some(_bsp) = BackupStorageProviders::<T>::get(&who) {
-            Some(T::SpMinDeposit::get())
+            match MainStorageProviders::<T>::get(bucket.msp_id) {
+                Some(related_msp) => Some(T::NativeBalance::balance_on_hold(
+                    &HoldReason::StorageProviderDeposit.into(),
+                    &related_msp.owner_account,
+                )),
+                None => None,
+            }
+        } else if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
+            Some(T::NativeBalance::balance_on_hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &bsp.owner_account,
+            ))
         } else {
             None
         }
