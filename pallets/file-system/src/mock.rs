@@ -15,10 +15,9 @@ use shp_traits::{
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
-use sp_runtime::FixedPointNumber;
 use sp_runtime::{
     traits::{BlakeTwo256, Bounded, Convert, IdentifyAccount, IdentityLookup, Verify},
-    BuildStorage, DispatchError, FixedU128, MultiSignature, SaturatedConversion,
+    BuildStorage, DispatchError, FixedPointNumber, FixedU128, MultiSignature, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};

@@ -34,6 +34,7 @@ shp-file-metadata = { workspace = true }
 shp-traits = { workspace = true }
 
 [dev-dependencies]
+num-traits = { workspace = true }
 serde = { workspace = true }
 
 pallet-file-system = { workspace = true }
