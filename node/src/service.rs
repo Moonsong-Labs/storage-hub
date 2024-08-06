@@ -319,16 +319,11 @@ where
 
     // Initialise seed for signing transactions using blockchain service.
     // In dev mode we use a well known dev account.
-    let new_pair = Sr25519Pair::from_string_with_seed(signing_dev_key.as_ref(), None)
+    let new_pair = Sr25519Pair::from_string(signing_dev_key.as_ref(), None)
         .expect("Should be able to generate new pair from seed.");
-    // Writes new key to local keystore in the file system.
-    let x = keystore.insert(
-        BCSV_KEY_TYPE,
-        signing_dev_key.as_ref(),
-        &new_pair.0.public(),
-    );
-    println!("HERE! {:?}", x);
-    x.expect("Should be able to insert new key in local Keystore.");
+    keystore
+        .insert(BCSV_KEY_TYPE, signing_dev_key.as_ref(), &new_pair.public())
+        .expect("Should be able to insert new key in local Keystore.");
 
     let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
     let collator = config.role.is_authority();

@@ -121,7 +121,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       let has_dave_key = await api.rpc.author.hasKey(dave_pub_key, bcsv_key_type);
       strictEqual(has_dave_key.toHuman().valueOf(), false);
 
-      // Rotate keys and check that Bob's pub key is now in Keystore.
+      // Rotate keys and check that Dave's pub key is now in Keystore.
       await api.rpc.storagehubclient.insertBcsvKeys(dave_seed);
       has_dave_key = await api.rpc.author.hasKey(dave_pub_key, bcsv_key_type);
       strictEqual(has_dave_key.toHuman().valueOf(), true);

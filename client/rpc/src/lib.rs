@@ -312,11 +312,10 @@ where
                 .map_err(into_rpc_error)?,
             // If there is a seed, we generate a new pair and insert into the keystore.
             Some(seed) => {
-                let new_pair =
-                    Sr25519Pair::from_string_with_seed(seed, None).map_err(into_rpc_error)?;
-                let new_pub_key = new_pair.0.public();
+                let new_pair = Sr25519Pair::from_string(seed, None).map_err(into_rpc_error)?;
+                let new_pub_key = new_pair.public();
 
-                // Actually writes new key to file system.
+                // Persists new key to keystore in file system.
                 self.keystore
                     .insert(BCSV_KEY_TYPE, seed, &new_pub_key)
                     .map_err(into_rpc_error)?;
@@ -336,8 +335,8 @@ where
             let key_name = key_file_name(&pub_key, BCSV_KEY_TYPE);
             key.push(key_name);
 
-            // In case the file is not found we just ignore it
-            // because there may be keys in memory that are not persisted in the file system.
+            // In case a key is not found we just ignore it
+            // because there may be keys in memory that are not in the file system.
             let _ = fs::remove_file(key).await.map_err(|e| {
                 error!(target: LOG_TARGET, "Failed to remove key: {:?}", e);
             });
