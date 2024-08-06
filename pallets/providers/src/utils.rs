@@ -1144,7 +1144,7 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
         if let Some(bucket) = Buckets::<T>::get(&who) {
             match MainStorageProviders::<T>::get(bucket.msp_id) {
                 Some(related_msp) => Some(T::NativeBalance::balance_on_hold(
-                    &HoldReason::StorageProviderDeposit.into(),
+                    &HoldReason::BucketDeposit.into(),
                     &related_msp.owner_account,
                 )),
                 None => None,
