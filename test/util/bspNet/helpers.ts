@@ -371,7 +371,7 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
     strictEqual(
       volunteerPending.length,
       1,
-      "There should be three pending extrinsics from BSPs (volunteer)"
+      "There should be one pending extrinsic from the BSP (volunteer)"
     );
 
     await userApi.sealBlock();
@@ -382,7 +382,7 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
     strictEqual(
       confirmPending.length,
       1,
-      "There should be three pending extrinsics from BSPs (confirm store)"
+      "There should be one pending extrinsic from the BSP (confirm store)"
     );
 
     await userApi.sealBlock();
