@@ -52,8 +52,9 @@ describe("BSPNet: BSP Challenge Cycle", () => {
       await api.query.system.events()
     );
 
-    const challenged_providers = await api.query.proofsDealer.challengeTickToChallengedProviders(nextChallengeDeadline, DUMMY_BSP_ID);
-    console.log(`Challenged providers at block ${nextChallengeDeadline}: ${challenged_providers}`);
+    // Assert that challengeTickToChallengedProviders contains an entry for the challenged provider
+    const challengeTickToChallengedProviders = await api.query.proofsDealer.challengeTickToChallengedProviders(nextChallengeDeadline, DUMMY_BSP_ID);
+    strictEqual(challengeTickToChallengedProviders.isSome, true);
 
     const blockNumber = await api.query.system.number();
 
