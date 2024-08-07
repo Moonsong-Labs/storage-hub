@@ -60,9 +60,8 @@ use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
 use crate::{
     commands::BlockchainServiceCommand,
     events::{
-        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmedStoring,
-        NewChallengeSeed, NewStorageRequest, ProcessConfirmStoringRequest,
-        ProcessSubmitProofRequest,
+        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, NewChallengeSeed,
+        NewStorageRequest, ProcessConfirmStoringRequest, ProcessSubmitProofRequest,
     },
     transaction::SubmittedTransaction,
     types::{EventsVec, Extrinsic},
@@ -622,30 +621,6 @@ impl BlockchainService {
                                 owner,
                                 size,
                             })
-                        }
-                        RuntimeEvent::FileSystem(
-                            pallet_file_system::Event::BspConfirmedStoring {
-                                who,
-                                bsp_id,
-                                file_keys,
-                                new_root,
-                            },
-                            // Filter the events by the BSP id.
-                        ) => {
-                            // TODO: Ideally we would be filtering by BSP ID here, but since we don't have a
-                            // TODO: way to properly initialise the BSP ID yet, we are just going to filter by the
-                            // TODO: caller's public key.
-                            if who == AccountId32::from(Self::caller_pub_key(self.keystore.clone()))
-                            {
-                                self.emit(BspConfirmedStoring {
-                                    bsp_id,
-                                    file_keys: file_keys
-                                        .into_iter()
-                                        .map(|fk| FileKey::from(fk.as_ref()))
-                                        .collect(),
-                                    new_root,
-                                })
-                            }
                         }
                         // Ignore all other events.
                         _ => {}
