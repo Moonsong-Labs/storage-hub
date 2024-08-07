@@ -25,6 +25,7 @@ sp_api::decl_runtime_apis! {
         fn get_challenges_from_seed(seed: &RandomnessOutput, provider_id: &ProviderId, count: u32) -> Vec<Key>;
         fn get_forest_challenges_from_seed(seed: &RandomnessOutput, provider_id: &ProviderId) -> Vec<Key>;
         fn get_current_tick() -> BlockNumber;
+        fn get_next_deadline_tick(provider_id: &ProviderId) -> Result<BlockNumber, GetNextDeadlineTickError>;
     }
 }
 
@@ -48,4 +49,13 @@ pub enum GetCheckpointChallengesError {
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum GetChallengePeriodError {
     ProviderNotRegistered,
+}
+
+/// Error type for the `get_next_deadline_tick` runtime API call.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum GetNextDeadlineTickError {
+    ProviderNotRegistered,
+    ProviderNotInitialised,
+    ArithmeticOverflow,
+    InternalApiError,
 }

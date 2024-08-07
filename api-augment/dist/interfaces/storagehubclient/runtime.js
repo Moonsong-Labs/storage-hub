@@ -105,6 +105,16 @@ const PROOFS_DEALER_V1 = {
         description: "Get the current tick.",
         params: [],
         type: "BlockNumber"
+    },
+    get_next_deadline_tick: {
+        description: "Get the next deadline tick.",
+        params: [
+            {
+                name: "providerId",
+                type: "ProviderId"
+            }
+        ],
+        type: "Result<BlockNumber, GetNextDeadlineTickError>"
     }
 };
 const STORAGE_PROVIDERS_V1 = {

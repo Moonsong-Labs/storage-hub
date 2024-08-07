@@ -62,6 +62,19 @@ export interface GetLastTickProviderSubmittedProofError extends Enum {
   readonly type: "ProviderNotRegistered" | "ProviderNeverSubmittedProof" | "InternalApiError";
 }
 
+/** @name GetNextDeadlineTickError */
+export interface GetNextDeadlineTickError extends Enum {
+  readonly isProviderNotRegistered: boolean;
+  readonly isProviderNotInitialised: boolean;
+  readonly isArithmeticOverflow: boolean;
+  readonly isInternalApiError: boolean;
+  readonly type:
+    | "ProviderNotRegistered"
+    | "ProviderNotInitialised"
+    | "ArithmeticOverflow"
+    | "InternalApiError";
+}
+
 /** @name IncompleteFileStatus */
 export interface IncompleteFileStatus extends Struct {
   readonly file_metadata: FileMetadata;

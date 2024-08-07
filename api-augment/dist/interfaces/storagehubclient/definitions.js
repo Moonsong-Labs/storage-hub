@@ -62,6 +62,14 @@ export default {
                 InternalApiError: null
             }
         },
+        GetNextDeadlineTickError: {
+            _enum: {
+                ProviderNotRegistered: null,
+                ProviderNotInitialised: null,
+                ArithmeticOverflow: null,
+                InternalApiError: null
+            }
+        },
         QueryFileEarliestVolunteerBlockError: {
             _enum: {
                 FailedToEncodeFingerprint: null,

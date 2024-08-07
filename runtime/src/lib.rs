@@ -49,6 +49,7 @@ use pallet_file_system_runtime_api::{
 use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor, RandomnessOutputFor};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+    GetNextDeadlineTickError,
 };
 use pallet_storage_providers::types::{BackupStorageProvider, BackupStorageProviderId};
 use pallet_storage_providers_runtime_api::GetBspInfoError;
@@ -572,6 +573,10 @@ impl_runtime_apis! {
 
         fn get_current_tick() -> BlockNumber {
             ProofsDealer::get_current_tick()
+        }
+
+        fn get_next_deadline_tick(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetNextDeadlineTickError> {
+            ProofsDealer::get_next_deadline_tick(provider_id)
         }
     }
 

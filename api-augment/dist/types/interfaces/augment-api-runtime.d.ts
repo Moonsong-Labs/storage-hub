@@ -15,7 +15,7 @@ import type { RuntimeVersion } from '@polkadot/types/interfaces/state';
 import type { ApplyExtrinsicResult, Key } from '@polkadot/types/interfaces/system';
 import type { TransactionSource, TransactionValidity } from '@polkadot/types/interfaces/txqueue';
 import type { IExtrinsic, Observable } from '@polkadot/types/types';
-import type { BackupStorageProvider, BackupStorageProviderId, ChunkId, GetBspInfoError, GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError, ProviderId, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError, RandomnessOutput, TrieRemoveMutation } from '@storagehub/api-augment/interfaces/storagehubclient';
+import type { BackupStorageProvider, BackupStorageProviderId, ChunkId, GetBspInfoError, GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError, GetNextDeadlineTickError, ProviderId, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError, RandomnessOutput, TrieRemoveMutation } from '@storagehub/api-augment/interfaces/storagehubclient';
 export type __AugmentedCall<ApiType extends ApiTypes> = AugmentedCall<ApiType>;
 export type __DecoratedCallBase<ApiType extends ApiTypes> = DecoratedCallBase<ApiType>;
 declare module '@polkadot/api-base/types/calls' {
@@ -232,6 +232,10 @@ declare module '@polkadot/api-base/types/calls' {
              * Get the last tick for which the submitter submitted a proof.
              **/
             getLastTickProviderSubmittedProof: AugmentedCall<ApiType, (providerId: ProviderId | string | Uint8Array) => Observable<Result<BlockNumber, GetLastTickProviderSubmittedProofError>>>;
+            /**
+             * Get the next deadline tick.
+             **/
+            getNextDeadlineTick: AugmentedCall<ApiType, (providerId: ProviderId | string | Uint8Array) => Observable<Result<BlockNumber, GetNextDeadlineTickError>>>;
             /**
              * Generic call
              **/

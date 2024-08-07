@@ -70,7 +70,7 @@ import type { VestingInfo } from '@polkadot/types/interfaces/vesting';
 import type { AssetInstance, AssetInstanceV0, AssetInstanceV1, AssetInstanceV2, BodyId, BodyPart, DoubleEncodedCall, Fungibility, FungibilityV0, FungibilityV1, FungibilityV2, InboundStatus, InstructionV2, InteriorMultiLocation, Junction, JunctionV0, JunctionV1, JunctionV2, Junctions, JunctionsV1, JunctionsV2, MultiAsset, MultiAssetFilter, MultiAssetFilterV1, MultiAssetFilterV2, MultiAssetV0, MultiAssetV1, MultiAssetV2, MultiAssets, MultiAssetsV1, MultiAssetsV2, MultiLocation, MultiLocationV0, MultiLocationV1, MultiLocationV2, NetworkId, OriginKindV0, OriginKindV1, OriginKindV2, OutboundStatus, Outcome, QueryId, QueryStatus, QueueConfigData, Response, ResponseV0, ResponseV1, ResponseV2, ResponseV2Error, ResponseV2Result, VersionMigrationStage, VersionedMultiAsset, VersionedMultiAssets, VersionedMultiLocation, VersionedResponse, VersionedXcm, WeightLimitV2, WildFungibility, WildFungibilityV0, WildFungibilityV1, WildFungibilityV2, WildMultiAsset, WildMultiAssetV1, WildMultiAssetV2, Xcm, XcmAssetId, XcmError, XcmErrorV0, XcmErrorV1, XcmErrorV2, XcmOrder, XcmOrderV0, XcmOrderV1, XcmOrderV2, XcmOrigin, XcmOriginKind, XcmV0, XcmV1, XcmV2, XcmVersion, XcmpMessageFormat } from '@polkadot/types/interfaces/xcm';
 import type { XcmPaymentApiError } from '@polkadot/types/interfaces/xcmPaymentApi';
 import type { Error } from '@polkadot/types/interfaces/xcmRuntimeApi';
-import type { BackupStorageProvider, BackupStorageProviderId, ChunkId, FileMetadata, GetBspInfoError, GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError, IncompleteFileStatus, MerklePatriciaRoot, ProviderId, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError, RandomnessOutput, SaveFileToDisk, TrieRemoveMutation } from '@storagehub/api-augment/interfaces/storagehubclient';
+import type { BackupStorageProvider, BackupStorageProviderId, ChunkId, FileMetadata, GetBspInfoError, GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError, GetNextDeadlineTickError, IncompleteFileStatus, MerklePatriciaRoot, ProviderId, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError, RandomnessOutput, SaveFileToDisk, TrieRemoveMutation } from '@storagehub/api-augment/interfaces/storagehubclient';
 declare module '@polkadot/types/types/registry' {
     interface InterfaceTypes {
         AbridgedCandidateReceipt: AbridgedCandidateReceipt;
@@ -538,6 +538,7 @@ declare module '@polkadot/types/types/registry' {
         GetChallengePeriodError: GetChallengePeriodError;
         GetCheckpointChallengesError: GetCheckpointChallengesError;
         GetLastTickProviderSubmittedProofError: GetLastTickProviderSubmittedProofError;
+        GetNextDeadlineTickError: GetNextDeadlineTickError;
         GiltBid: GiltBid;
         GlobalValidationData: GlobalValidationData;
         GlobalValidationSchedule: GlobalValidationSchedule;

@@ -43,6 +43,7 @@ import type {
   GetChallengePeriodError,
   GetCheckpointChallengesError,
   GetLastTickProviderSubmittedProofError,
+  GetNextDeadlineTickError,
   ProviderId,
   QueryBspConfirmChunksToProveForFileError,
   QueryFileEarliestVolunteerBlockError,
@@ -361,6 +362,15 @@ declare module "@polkadot/api-base/types/calls" {
         (
           providerId: ProviderId | string | Uint8Array
         ) => Observable<Result<BlockNumber, GetLastTickProviderSubmittedProofError>>
+      >;
+      /**
+       * Get the next deadline tick.
+       **/
+      getNextDeadlineTick: AugmentedCall<
+        ApiType,
+        (
+          providerId: ProviderId | string | Uint8Array
+        ) => Observable<Result<BlockNumber, GetNextDeadlineTickError>>
       >;
       /**
        * Generic call
