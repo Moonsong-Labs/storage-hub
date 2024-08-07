@@ -4689,8 +4689,6 @@ declare module "@polkadot/types/lookup" {
   /** @name PalletStorageProvidersError (395) */
   interface PalletStorageProvidersError extends Enum {
     readonly isAlreadyRegistered: boolean;
-    readonly isMaxBspsReached: boolean;
-    readonly isMaxMspsReached: boolean;
     readonly isSignUpNotRequested: boolean;
     readonly isSignUpRequestPending: boolean;
     readonly isNoMultiAddress: boolean;
@@ -4715,8 +4713,6 @@ declare module "@polkadot/types/lookup" {
     readonly isProviderNotSlashable: boolean;
     readonly type:
       | "AlreadyRegistered"
-      | "MaxBspsReached"
-      | "MaxMspsReached"
       | "SignUpNotRequested"
       | "SignUpRequestPending"
       | "NoMultiAddress"

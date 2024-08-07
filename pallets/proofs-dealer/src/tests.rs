@@ -18,10 +18,14 @@ use codec::Encode;
 use frame_support::{
     assert_err, assert_noop, assert_ok,
     pallet_prelude::Weight,
-    traits::{fungible::Mutate, OnIdle, OnPoll},
+    traits::{
+        fungible::{Mutate, MutateHold},
+        OnIdle, OnPoll,
+    },
     weights::WeightMeter,
     BoundedBTreeSet,
 };
+use pallet_storage_providers::HoldReason;
 use shp_traits::{ProofsDealerInterface, ProvidersInterface, TrieRemoveMutation};
 use sp_core::{blake2_256, Get, Hasher, H256};
 use sp_runtime::{traits::BlakeTwo256, BoundedVec, DispatchError};
@@ -515,6 +519,18 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
             },
         );
 
+        // Add balance to that Provider and hold some so it has a stake.
+        let provider_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            provider_balance
+        ));
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            provider_balance / 100
+        ));
+
         // Dispatch initialise provider extrinsic.
         assert_ok!(ProofsDealer::force_initialise_challenge_cycle(
             RuntimeOrigin::root(),
@@ -578,6 +594,18 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
                 payment_account: Default::default(),
             },
         );
+
+        // Add balance to that Provider and hold some so it has a stake.
+        let provider_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            provider_balance
+        ));
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            provider_balance / 100
+        ));
 
         // Dispatch initialise provider extrinsic.
         assert_ok!(ProofsDealer::force_initialise_challenge_cycle(
@@ -684,6 +712,27 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
                 payment_account: Default::default(),
             },
         );
+
+        // Add balance to those Providers and hold some so they have a stake.
+        let provider_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            provider_balance
+        ));
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &2,
+            provider_balance
+        ));
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            provider_balance / 100
+        ));
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &2,
+            provider_balance / 100
+        ));
 
         // Initialise providers
         assert_ok!(ProofsDealer::initialise_challenge_cycle(&provider_id_1));
@@ -795,6 +844,13 @@ fn submit_proof_success() {
                 payment_account: Default::default(),
             },
         );
+
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            user_balance / 100
+        ));
 
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
@@ -924,6 +980,13 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
             },
         );
 
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            user_balance / 100
+        ));
+
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
         let root = BlakeTwo256::hash(b"1234");
@@ -1035,6 +1098,18 @@ fn submit_proof_submitted_by_not_a_provider_success() {
             },
         );
 
+        // Add balance to that Provider and hold some so it has a stake.
+        let provider_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            provider_balance
+        ));
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            provider_balance / 100
+        ));
+
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
         let root = BlakeTwo256::hash(b"1234");
@@ -1125,6 +1200,13 @@ fn submit_proof_with_checkpoint_challenges_success() {
                 payment_account: Default::default(),
             },
         );
+
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            user_balance / 100
+        ));
 
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
@@ -1234,6 +1316,13 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                 payment_account: Default::default(),
             },
         );
+
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            user_balance / 100
+        ));
 
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
@@ -1569,6 +1658,13 @@ fn submit_proof_challenges_block_not_reached_fail() {
             },
         );
 
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            user_balance / 100
+        ));
+
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
         let root = BlakeTwo256::hash(b"1234");
@@ -1646,6 +1742,13 @@ fn submit_proof_challenges_block_too_old_fail() {
             },
         );
 
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            user_balance / 100
+        ));
+
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
         let root = BlakeTwo256::hash(b"1234");
@@ -1722,6 +1825,13 @@ fn submit_proof_seed_not_found_fail() {
                 payment_account: Default::default(),
             },
         );
+
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            user_balance / 100
+        ));
 
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
@@ -1802,6 +1912,13 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
                 payment_account: Default::default(),
             },
         );
+
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            user_balance / 100
+        ));
 
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
@@ -1888,6 +2005,13 @@ fn submit_proof_forest_proof_verification_fail() {
             },
         );
 
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            user_balance / 100
+        ));
+
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
         let root = BlakeTwo256::hash(b"1234");
@@ -1971,6 +2095,13 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
             },
         );
 
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            user_balance / 100
+        ));
+
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
         let root = BlakeTwo256::hash(b"1234");
@@ -2036,6 +2167,13 @@ fn submit_proof_out_checkpoint_challenges_fail() {
                 payment_account: Default::default(),
             },
         );
+
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            user_balance / 100
+        ));
 
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
@@ -2149,6 +2287,13 @@ fn submit_proof_key_proof_verification_fail() {
                 payment_account: Default::default(),
             },
         );
+
+        // Hold some of the Provider's balance so it simulates it having a stake.
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            user_balance / 100
+        ));
 
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
@@ -2545,6 +2690,18 @@ fn new_challenges_round_provider_marked_as_slashable() {
             },
         );
 
+        // Add balance to that Provider and hold some so it has a stake.
+        let provider_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            provider_balance
+        ));
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            provider_balance / 100
+        ));
+
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
         let root = BlakeTwo256::hash(b"1234");
@@ -2731,6 +2888,18 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
             },
         );
 
+        // Add balance to Alice and hold some so it has a stake.
+        let alice_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            alice_balance
+        ));
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            alice_balance / 100
+        ));
+
         // Register Bob as a Provider in Providers pallet.
         let bob_provider_id = BlakeTwo256::hash(b"bob_id");
         pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
@@ -2749,6 +2918,18 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
                 payment_account: Default::default(),
             },
         );
+
+        // Add balance to Bob and hold some so it has a stake.
+        let bob_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &2,
+            bob_balance
+        ));
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &2,
+            bob_balance / 100
+        ));
 
         // Set Alice and Bob's root to be an arbitrary value, different than the default root,
         // to simulate that they are actually providing a service.

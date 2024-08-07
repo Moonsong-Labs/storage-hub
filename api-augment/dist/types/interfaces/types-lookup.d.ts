@@ -3758,8 +3758,6 @@ declare module '@polkadot/types/lookup' {
     /** @name PalletStorageProvidersError (395) */
     interface PalletStorageProvidersError extends Enum {
         readonly isAlreadyRegistered: boolean;
-        readonly isMaxBspsReached: boolean;
-        readonly isMaxMspsReached: boolean;
         readonly isSignUpNotRequested: boolean;
         readonly isSignUpRequestPending: boolean;
         readonly isNoMultiAddress: boolean;
@@ -3782,7 +3780,7 @@ declare module '@polkadot/types/lookup' {
         readonly isBucketAlreadyExists: boolean;
         readonly isAppendBucketToMspFailed: boolean;
         readonly isProviderNotSlashable: boolean;
-        readonly type: 'AlreadyRegistered' | 'MaxBspsReached' | 'MaxMspsReached' | 'SignUpNotRequested' | 'SignUpRequestPending' | 'NoMultiAddress' | 'InvalidMultiAddress' | 'StorageTooLow' | 'NotEnoughBalance' | 'CannotHoldDeposit' | 'StorageStillInUse' | 'RandomnessNotValidYet' | 'SignUpRequestExpired' | 'NewCapacityLessThanUsedStorage' | 'NewCapacityEqualsCurrentCapacity' | 'NewCapacityCantBeZero' | 'NotEnoughTimePassed' | 'NotRegistered' | 'NoUserId' | 'NoBucketId' | 'SpRegisteredButDataNotFound' | 'BucketNotFound' | 'BucketAlreadyExists' | 'AppendBucketToMspFailed' | 'ProviderNotSlashable';
+        readonly type: 'AlreadyRegistered' | 'SignUpNotRequested' | 'SignUpRequestPending' | 'NoMultiAddress' | 'InvalidMultiAddress' | 'StorageTooLow' | 'NotEnoughBalance' | 'CannotHoldDeposit' | 'StorageStillInUse' | 'RandomnessNotValidYet' | 'SignUpRequestExpired' | 'NewCapacityLessThanUsedStorage' | 'NewCapacityEqualsCurrentCapacity' | 'NewCapacityCantBeZero' | 'NotEnoughTimePassed' | 'NotRegistered' | 'NoUserId' | 'NoBucketId' | 'SpRegisteredButDataNotFound' | 'BucketNotFound' | 'BucketAlreadyExists' | 'AppendBucketToMspFailed' | 'ProviderNotSlashable';
     }
     /** @name PalletFileSystemStorageRequestMetadata (396) */
     interface PalletFileSystemStorageRequestMetadata extends Struct {

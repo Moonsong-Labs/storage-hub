@@ -37,7 +37,6 @@ shp-traits = { workspace = true }
 serde = { workspace = true }
 
 pallet-file-system = { workspace = true }
-pallet-proofs-dealer = { workspace = true }
 pallet-storage-providers = { workspace = true }
 
 # Substrate
@@ -55,7 +54,6 @@ runtime-benchmarks = [
 	"frame-support/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
 	"pallet-file-system/runtime-benchmarks",
-	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
 	"shp-file-metadata/runtime-benchmarks",
 	"shp-traits/runtime-benchmarks",
@@ -69,7 +67,6 @@ std = [
 	"pallet-balances/std",
 	"pallet-file-system/std",
 	"pallet-nfts/std",
-	"pallet-proofs-dealer/std",
 	"pallet-storage-providers/std",
 	"scale-info/std",
 	"shp-file-metadata/std",
@@ -83,7 +80,6 @@ try-runtime = [
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
 	"pallet-file-system/try-runtime",
-	"pallet-proofs-dealer/try-runtime",
 	"pallet-storage-providers/try-runtime",
 	"shp-file-metadata/try-runtime",
 	"shp-traits/try-runtime",

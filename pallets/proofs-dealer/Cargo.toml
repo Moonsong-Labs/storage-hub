@@ -37,7 +37,6 @@ serde = { workspace = true }
 
 # Local
 pallet-storage-providers = { workspace = true }
-shp-forest-verifier = { workspace = true }
 
 # Substrate
 sp-core = { workspace = true }
