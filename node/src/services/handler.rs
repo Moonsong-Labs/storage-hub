@@ -11,6 +11,7 @@ use shc_blockchain_service::{
     events::{BspConfirmedStoring, NewStorageRequest},
     BlockchainService,
 };
+use shc_blockchain_service::events::SlashableProvider;
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest},
@@ -24,6 +25,7 @@ use crate::tasks::{
     sp_react_to_event_mock::{EventToReactTo, SpReactToEventMockTask},
     user_sends_file::UserSendsFileTask,
 };
+use crate::tasks::slash_provider::SlashProviderTask;
 
 /// Represents the handler for the Storage Hub service.
 pub struct StorageHubHandler<T, FL, FS>
@@ -127,6 +129,16 @@ where
         let remote_download_request_event_bus_listener: EventBusListener<RemoteDownloadRequest, _> =
             bsp_download_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
         remote_download_request_event_bus_listener.start();
+
+        // Slash your own kin or potentially commit seppuku on your own stake.
+        // Running this is as BSP is very honourable and shows a great sense of justice.
+        let bsp_slash_provider_task = SlashProviderTask::new(self.clone());
+        // Subscribing to SlashableProvider event from the BlockchainService.
+        let slashable_provider_event_bus_listener: EventBusListener<SlashableProvider, _> =
+            bsp_slash_provider_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        slashable_provider_event_bus_listener.start();
 
         // TODO: Remove this, this is just a mocked task for testing purposes.
         let sp_react_to_event_mock_task = SpReactToEventMockTask::new(self.clone());

@@ -10,8 +10,9 @@ import {
   DUMMY_BSP_ID,
   fetchEventData,
 } from "../../../util";
+import { sleep } from "@zombienet/utils";
 
-describe("BSPNet: BSP Challenge Cycle", () => {
+describe("BSPNet: Slash Provider", () => {
   let api: BspNetApi;
 
   before(async () => {
@@ -54,15 +55,12 @@ describe("BSPNet: BSP Challenge Cycle", () => {
     await runToNextChallengePeriodBlock(api, nextChallengeDeadline.toNumber());
 
     let numBlocksPassed = 0;
-    // Slash the provider.
-    const slashResult = await api.sealBlock(
-      api.tx.providers.slash(DUMMY_BSP_ID)
-    );
+
+    // Weight for provider to be slashed.
+    sleep(1000);
+    const slashResult = await api.sealBlock();
 
     numBlocksPassed += 1;
-
-    // Assert extrinsic success
-    strictEqual(slashResult.extSuccess, true);
 
     // Assert that the ProviderSlashed event is emitted.
     api.assertEvent("providers", "Slashed", slashResult.events);
@@ -127,6 +125,5 @@ async function getNextChallengeDeadlineAfterFirst(api: BspNetApi): Promise<numbe
 
   const challengePeriod = spMinDeposit.toNumber() / stakeToChallengePeriod.toNumber();
 
-  console.log("currentTicker", currentTicker.toNumber(), "challengePeriod", challengePeriod);
   return currentTicker.toNumber() + challengePeriod;
 }
