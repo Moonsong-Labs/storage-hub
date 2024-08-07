@@ -58,16 +58,13 @@ describe("BSPNet: BSP Challenge Cycle", () => {
 
     const blockNumber = await api.query.system.number();
 
-    // Advance `challengePeriod + 1` blocks. In `challengePeriod` blocks.
-    for (let i = blockNumber.toNumber(); i < nextChallengeDeadline.toNumber(); i++) {
+    // Advance `challengePeriod - 1` blocks.
+    for (let i = blockNumber.toNumber(); i < nextChallengeDeadline.toNumber() - 1; i++) {
       await api.sealBlock();
     }
 
-    // Wait for task to execute and seal one more block.
-    await sleep(500);
-    const blockResult = await api.sealBlock();
-
     // Assert that the SlashableProvider event is emitted.
+    const blockResult = await api.sealBlock();
     api.assertEvent("proofsDealer", "SlashableProvider", blockResult.events);
   });
 });
