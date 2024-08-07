@@ -14,8 +14,11 @@ pub trait ForestStorage<T: TrieLayout>: 'static {
         &self,
         challenged_key: Vec<HasherOutT<T>>,
     ) -> Result<ForestProof<T>, ErrorT<T>>;
-    /// Insert metadata and get back the file key (hash of the metadata).
-    fn insert_metadata(&mut self, metadata: &FileMetadata) -> Result<HasherOutT<T>, ErrorT<T>>;
+    /// Insert files metadata and get back the file keys (hash of the metadata) that were inserted.
+    fn insert_files_metadata(
+        &mut self,
+        files_metadata: &[FileMetadata],
+    ) -> Result<Vec<HasherOutT<T>>, ErrorT<T>>;
     /// Delete a file key and generate a proof for it.
     fn delete_file_key(&mut self, file_key: &HasherOutT<T>) -> Result<(), ErrorT<T>>;
 }

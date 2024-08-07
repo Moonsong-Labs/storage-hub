@@ -1203,13 +1203,16 @@ mod revoke_storage_request {
 
                 assert_ok!(FileSystem::bsp_confirm_storing(
                     bsp_signed.clone(),
-                    file_key,
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    CompactProof {
-                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    }
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
                 ));
 
                 // Dispatch a signed extrinsic.
@@ -1538,13 +1541,16 @@ mod bsp_confirm {
                 assert_noop!(
                     FileSystem::bsp_confirm_storing(
                         bsp_signed.clone(),
-                        file_key,
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        CompactProof {
-                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                        }
+                        BoundedVec::try_from(vec![(
+                            file_key,
+                            CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            }
+                        )])
+                        .unwrap(),
                     ),
                     Error::<Test>::NotABsp
                 );
@@ -1572,13 +1578,16 @@ mod bsp_confirm {
                 assert_noop!(
                     FileSystem::bsp_confirm_storing(
                         bsp_signed.clone(),
-                        file_key,
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        CompactProof {
-                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                        }
+                        BoundedVec::try_from(vec![(
+                            file_key,
+                            CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            }
+                        )])
+                        .unwrap(),
                     ),
                     Error::<Test>::StorageRequestNotFound
                 );
@@ -1631,13 +1640,16 @@ mod bsp_confirm {
                 assert_noop!(
                     FileSystem::bsp_confirm_storing(
                         bsp_signed.clone(),
-                        file_key,
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        CompactProof {
-                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                        }
+                        BoundedVec::try_from(vec![(
+                            file_key,
+                            CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            }
+                        )])
+                        .unwrap(),
                     ),
                     Error::<Test>::BspNotVolunteered
                 );
@@ -1693,25 +1705,31 @@ mod bsp_confirm {
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
                     bsp_signed.clone(),
-                    file_key,
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    CompactProof {
-                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                    }
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
                 ));
 
                 assert_noop!(
                     FileSystem::bsp_confirm_storing(
                         bsp_signed.clone(),
-                        file_key,
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        CompactProof {
-                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                        }
+                        BoundedVec::try_from(vec![(
+                            file_key,
+                            CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            }
+                        )])
+                        .unwrap(),
                     ),
                     Error::<Test>::BspAlreadyConfirmed
                 );
@@ -1779,15 +1797,16 @@ mod bsp_confirm {
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
-            bsp_signed.clone(),
-            file_key,
-            CompactProof {
-                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-            },
-            CompactProof {
-                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-            }
-        ));
+                    bsp_signed.clone(),
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    BoundedVec::try_from(vec![(file_key,
+                            CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            })]).unwrap()
+                    ,
+                ));
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -1837,7 +1856,7 @@ mod bsp_confirm {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        file_key,
+                        file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
                         new_root,
                     }
                         .into(),
@@ -1853,7 +1872,6 @@ mod bsp_confirm {
                     Event::BspChallengeCycleInitialised {
                         who: bsp_account_id,
                         bsp_id,
-                        file_key,
                     }
                         .into(),
                 );
@@ -1982,15 +2000,15 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
-            bsp_signed.clone(),
-            file_key,
-            CompactProof {
-                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-            },
-            CompactProof {
-                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-            }
-        ));
+                    bsp_signed.clone(),
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },BoundedVec::try_from(vec![(file_key,
+                            CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            })]).unwrap()
+                    ,
+                ));
 
                 // Assert that the RequestStorageBsps now contains the BSP under the location
                 assert_eq!(
@@ -2137,15 +2155,15 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
-            bsp_signed.clone(),
-            file_key,
-            CompactProof {
-                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-            },
-            CompactProof {
-                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-            }
-        ));
+                    bsp_signed.clone(),
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    BoundedVec::try_from(vec![(file_key,
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    })]).unwrap()
+                ));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),

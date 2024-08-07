@@ -47,7 +47,7 @@ use sp_runtime::{
 };
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
-use tokio::sync::{oneshot::error::TryRecvError, RwLock};
+use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
@@ -627,7 +627,7 @@ impl BlockchainService {
                             pallet_file_system::Event::BspConfirmedStoring {
                                 who,
                                 bsp_id,
-                                file_key,
+                                file_keys,
                                 new_root,
                             },
                             // Filter the events by the BSP id.
@@ -639,7 +639,10 @@ impl BlockchainService {
                             {
                                 self.emit(BspConfirmedStoring {
                                     bsp_id,
-                                    file_key: FileKey::from(file_key.as_ref()),
+                                    file_keys: file_keys
+                                        .into_iter()
+                                        .map(|fk| FileKey::from(fk.as_ref()))
+                                        .collect(),
                                     new_root,
                                 })
                             }
@@ -975,7 +978,7 @@ impl BlockchainService {
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.forest_root_write_lock = Some(rx);
 
-        let forest_root_write_tx = Arc::new(RwLock::new(Some(tx)));
+        let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
 
         // If we have a submit proof request, prioritize it.
         if self.pending_submit_proof.len() > 0 {

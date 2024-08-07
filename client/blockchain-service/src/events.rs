@@ -7,7 +7,7 @@ use shc_common::types::{
 use sp_core::H256;
 use sp_runtime::AccountId32;
 use std::sync::Arc;
-use tokio::sync::{oneshot, RwLock};
+use tokio::sync::{oneshot, Mutex};
 
 /// New random challenge emitted by the StorageHub runtime.
 ///
@@ -69,7 +69,7 @@ impl EventBusMessage for AcceptedBspVolunteer {}
 #[derive(Debug, Clone)]
 pub struct BspConfirmedStoring {
     pub bsp_id: H256,
-    pub file_key: FileKey,
+    pub file_keys: Vec<FileKey>,
     pub new_root: H256,
 }
 
@@ -85,13 +85,13 @@ pub struct StorageRequestRevoked {
 #[derive(Debug, Clone)]
 pub struct ProcessSubmitProofRequest {
     pub seed: H256,
-    pub forest_root_write_tx: Arc<RwLock<Option<oneshot::Sender<()>>>>,
+    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ProcessConfirmStoringRequest {
     pub file_key: H256,
-    pub forest_root_write_tx: Arc<RwLock<Option<oneshot::Sender<()>>>>,
+    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
 impl EventBusMessage for StorageRequestRevoked {}

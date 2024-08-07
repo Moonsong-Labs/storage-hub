@@ -52,6 +52,10 @@ declare module '@polkadot/api-base/types/consts' {
              **/
             assignmentThresholdMultiplier: u128 & AugmentedConst<ApiType>;
             /**
+             * Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
+             **/
+            maxBatchConfirmStorageRequests: u32 & AugmentedConst<ApiType>;
+            /**
              * Maximum number of BSPs that can store a file.
              *
              * This is used to limit the number of BSPs storing a file and claiming rewards for it.
