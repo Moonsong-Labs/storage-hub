@@ -84,13 +84,8 @@ where
             }
         };
 
-        // Concatenate BSP ID with the file's fingerprint and hash the concatenation to get the volunteering hash.
-        let concatenated = sp_std::vec![bsp_id.encode(), fingerprint.encode()].concat();
-        let volunteering_hash =
-            <<T as frame_system::Config>::Hashing as Hash>::hash(concatenated.as_ref());
-
         // Get the threshold needed for the BSP to be able to volunteer for the storage request.
-        let bsp_threshold = T::HashToThresholdType::convert(volunteering_hash);
+        let bsp_threshold = Self::get_threshold_for_bsp_request(&bsp_id, &fingerprint);
 
         // Compute the block number at which the BSP should send the volunteer request.
         Self::compute_volunteer_block_number(bsp_threshold, storage_request_block)
@@ -434,17 +429,9 @@ where
             Error::<T>::BspAlreadyVolunteered
         );
 
-        // Concatenate BSP ID with the file's fingerprint and hash the concatenation to get the volunteering hash.
-        let concatenated = sp_std::vec![
-            bsp_id.encode(),
-            storage_request_metadata.fingerprint.encode()
-        ]
-        .concat();
-        let volunteering_hash =
-            <<T as frame_system::Config>::Hashing as Hash>::hash(concatenated.as_ref());
-
         // Get the threshold needed for the BSP to be able to volunteer for the storage request.
-        let bsp_threshold = T::HashToThresholdType::convert(volunteering_hash);
+        let bsp_threshold =
+            Self::get_threshold_for_bsp_request(&bsp_id, &storage_request_metadata.fingerprint);
 
         let current_block_number = <frame_system::Pallet<T>>::block_number();
 
@@ -1139,6 +1126,19 @@ where
             fingerprint: fingerprint.as_ref().into(),
         }
         .file_key::<FileKeyHasher<T>>()
+    }
+
+    pub fn get_threshold_for_bsp_request(
+        bsp_id: &ProviderIdFor<T>,
+        fingerprint: &Fingerprint<T>,
+    ) -> T::ThresholdType {
+        // Concatenate the BSP ID and the fingerprint and hash them to get the volunteering hash.
+        let concatenated = sp_std::vec![bsp_id.encode(), fingerprint.encode()].concat();
+        let volunteering_hash =
+            <<T as frame_system::Config>::Hashing as Hash>::hash(concatenated.as_ref());
+
+        // Return the threshold needed for the BSP to be able to volunteer for the storage request.
+        T::HashToThresholdType::convert(volunteering_hash)
     }
 }
 
