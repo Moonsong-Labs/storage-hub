@@ -56,14 +56,9 @@ describe("BSPNet: Slash Provider", () => {
 
     let numBlocksPassed = 0;
 
-    // Weight for provider to be slashed.
-    sleep(1000);
-    const slashResult = await api.sealBlock();
+    await checkProviderWasSlashed(api, DUMMY_BSP_ID);
 
     numBlocksPassed += 1;
-
-    // Assert that the ProviderSlashed event is emitted.
-    api.assertEvent("providers", "Slashed", slashResult.events);
 
     // Check that the provider is no longer slashable.
     const slashableProvidersAfterSlash = await api.query.proofsDealer.slashableProviders(DUMMY_BSP_ID);
@@ -72,18 +67,27 @@ describe("BSPNet: Slash Provider", () => {
     await runToNextChallengePeriodBlock(api, await getNextChallengeDeadlineAfterFirst(api) - numBlocksPassed);
     await runToNextChallengePeriodBlock(api, await getNextChallengeDeadlineAfterFirst(api));
 
-    // Slash the provider.
-    const slashResult2 = await api.sealBlock(
-      api.tx.providers.slash(DUMMY_BSP_ID)
-    );
-
-    // Assert extrinsic success
-    strictEqual(slashResult2.extSuccess, true);
-
-    // Check that the Slash event is emitted.
-    api.assertEvent("providers", "Slashed", slashResult2.events);
+    await checkProviderWasSlashed(api, DUMMY_BSP_ID);
   });
 });
+
+/**
+ * Wait some time before sealing a block and checking if the provider was slashed.
+ * @param api
+ * @param providerId
+ */
+async function checkProviderWasSlashed(api: BspNetApi, providerId: string) {
+  // Weight for provider to be slashed.
+  await sleep(1000);
+  await api.sealBlock();
+
+  const [provider, _amountSlashed] = fetchEventData(
+    api.events.providers.Slashed,
+    await api.query.system.events()
+  );
+
+  strictEqual(provider.toString(), providerId);
+}
 
 /**
  * Seal blocks until the next challenge period block.
