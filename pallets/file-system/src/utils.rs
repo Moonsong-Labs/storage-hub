@@ -451,9 +451,6 @@ where
         // Get number of blocks since the storage request was issued.
         let blocks_since_requested =
             current_block_number.saturating_sub(storage_request_metadata.requested_at);
-
-        // Note. This should never fail since the storage request expiration would never reach such a high number.
-        // Storage requests are cleared after reaching `StorageRequestTtl` blocks which is defined in the pallet Config.
         let blocks_since_requested = T::BlockNumberToThresholdType::convert(blocks_since_requested);
 
         // Compute the threshold increasing rate.
