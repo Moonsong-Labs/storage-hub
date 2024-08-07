@@ -68,9 +68,13 @@ describe("BSPNet: Slash Provider", () => {
     await runToNextChallengePeriodBlock(
       api,
       (await getNextChallengeDeadlineAfterFirst(api)) - numBlocksPassed,
-        DUMMY_BSP_ID
+      DUMMY_BSP_ID
     );
-    await runToNextChallengePeriodBlock(api, await getNextChallengeDeadlineAfterFirst(api), DUMMY_BSP_ID);
+    await runToNextChallengePeriodBlock(
+      api,
+      await getNextChallengeDeadlineAfterFirst(api),
+      DUMMY_BSP_ID
+    );
 
     await checkProviderWasSlashed(api, DUMMY_BSP_ID);
   });
@@ -102,7 +106,11 @@ async function checkProviderWasSlashed(api: BspNetApi, providerId: string) {
  * @param nextChallengeDeadline
  * @param provider
  */
-async function runToNextChallengePeriodBlock(api: BspNetApi, nextChallengeDeadline: number, provider: string) {
+async function runToNextChallengePeriodBlock(
+  api: BspNetApi,
+  nextChallengeDeadline: number,
+  provider: string
+) {
   // Assert that challengeTickToChallengedProviders contains an entry for the challenged provider
   const challengeTickToChallengedProviders =
     await api.query.proofsDealer.challengeTickToChallengedProviders(
