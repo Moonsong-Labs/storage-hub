@@ -7,11 +7,11 @@ use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::{EventBusListener, EventHandler},
 };
+use shc_blockchain_service::events::SlashableProvider;
 use shc_blockchain_service::{
     events::{BspConfirmedStoring, NewStorageRequest},
     BlockchainService,
 };
-use shc_blockchain_service::events::SlashableProvider;
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest},
@@ -19,13 +19,13 @@ use shc_file_transfer_service::{
 };
 use shc_forest_manager::traits::ForestStorage;
 
+use crate::tasks::slash_provider::SlashProviderTask;
 use crate::tasks::{
     bsp_download_file::BspDownloadFileTask,
     bsp_upload_file::BspUploadFileTask,
     sp_react_to_event_mock::{EventToReactTo, SpReactToEventMockTask},
     user_sends_file::UserSendsFileTask,
 };
-use crate::tasks::slash_provider::SlashProviderTask;
 
 /// Represents the handler for the Storage Hub service.
 pub struct StorageHubHandler<T, FL, FS>
