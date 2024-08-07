@@ -47,6 +47,7 @@ use sp_runtime::{
 };
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
+use tokio::sync::{oneshot::error::TryRecvError, RwLock};
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
@@ -60,7 +61,8 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmedStoring,
-        NewChallengeSeed, NewStorageRequest,
+        NewChallengeSeed, NewStorageRequest, ProcessConfirmStoringRequest,
+        ProcessSubmitProofRequest,
     },
     transaction::SubmittedTransaction,
     types::{EventsVec, Extrinsic},
@@ -81,6 +83,27 @@ lazy_static! {
         .concat();
         key
     };
+}
+
+// TODO: update this after implemented
+pub struct SubmitProofRequest {
+    pub seed: H256,
+}
+
+impl SubmitProofRequest {
+    pub fn new(seed: H256) -> Self {
+        Self { seed }
+    }
+}
+
+pub struct ConfirmStoringRequest {
+    pub file_key: H256,
+}
+
+impl ConfirmStoringRequest {
+    pub fn new(file_key: H256) -> Self {
+        Self { file_key }
+    }
 }
 
 /// The BlockchainService actor.
@@ -104,6 +127,12 @@ pub struct BlockchainService {
     /// A list of Provider IDs that this node has to pay attention to submit proofs for.
     /// This could be a BSP or a list of buckets that an MSP has.
     provider_ids: Vec<ProviderId>,
+    /// A lock to prevent multiple tasks from writing to the runtime forest root (send transactions) at the same time.
+    forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
+    /// A list of [SubmitProofRequest] that are waiting to be processed (sent to the runtime).
+    pending_submit_proof: Vec<SubmitProofRequest>,
+    /// A list of [ConfirmStoringRequest] that are waiting to be processed (sent to the runtime).
+    pending_confirm_storing: Vec<ConfirmStoringRequest>,
 }
 
 /// Implement the Actor trait for the BlockchainService actor.
@@ -305,6 +334,28 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::QueueConfirmBspRequest { request, callback } => {
+                    self.pending_confirm_storing.push(request);
+                    // We check right away if we can process the request so we don't waste time.
+                    self.check_pending_forest_root_writes();
+                    match callback.send(Ok(())) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueueSubmitProofRequest { request, callback } => {
+                    self.pending_submit_proof.push(request);
+                    // We check right away if we can process the request so we don't waste time.
+                    self.check_pending_forest_root_writes();
+                    match callback.send(Ok(())) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }
@@ -399,6 +450,9 @@ impl BlockchainService {
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
             provider_ids: Vec::new(),
+            forest_root_write_lock: None,
+            pending_submit_proof: Vec::new(),
+            pending_confirm_storing: Vec::new(),
         }
     }
 
@@ -447,6 +501,9 @@ impl BlockchainService {
         if latest_nonce > self.nonce_counter {
             self.nonce_counter = latest_nonce
         }
+
+        // Process pending requests that update the forest root.
+        self.check_pending_forest_root_writes();
 
         // Get events from storage.
         match self.get_events_storage_element(block_hash) {
@@ -898,5 +955,46 @@ impl BlockchainService {
             }
         };
         current_tick == &last_tick_provided.saturating_add(provider_challenge_period)
+    }
+
+    fn check_pending_forest_root_writes(&mut self) {
+        if let Some(mut rx) = self.forest_root_write_lock.take() {
+            // TODO: consider adding a timeout here to prevent a task from blocking the runtime.
+            match rx.try_recv() {
+                // If the channel is empty, means we still need to wait for the current task to finish.
+                Err(TryRecvError::Empty) => self.forest_root_write_lock = Some(rx),
+                _ => {}
+            }
+        }
+
+        // If we have a task writing to the runtime, we don't want to start another one.
+        if self.forest_root_write_lock.is_some() {
+            return;
+        }
+
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.forest_root_write_lock = Some(rx);
+
+        let forest_root_write_tx = Arc::new(RwLock::new(Some(tx)));
+
+        // If we have a submit proof request, prioritize it.
+        if self.pending_submit_proof.len() > 0 {
+            let request: SubmitProofRequest = self.pending_submit_proof.remove(0);
+            self.emit(ProcessSubmitProofRequest {
+                seed: request.seed,
+                forest_root_write_tx,
+            });
+            return;
+        }
+
+        // If we have a confirm storing request, start processing it.
+        if self.pending_confirm_storing.len() > 0 {
+            let request = self.pending_confirm_storing.remove(0);
+            self.emit(ProcessConfirmStoringRequest {
+                file_key: request.file_key,
+                forest_root_write_tx,
+            });
+            return;
+        }
     }
 }

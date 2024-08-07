@@ -9,9 +9,10 @@ use sp_runtime::AccountId32;
 use sp_trie::TrieLayout;
 
 use shc_actors_framework::event_bus::EventHandler;
+use shc_blockchain_service::handler::ConfirmStoringRequest;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
-    events::{BspConfirmedStoring, NewStorageRequest},
+    events::{NewStorageRequest, ProcessConfirmStoringRequest},
 };
 use shc_common::types::{FileKey, FileMetadata, HasherOutT};
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
@@ -235,22 +236,77 @@ where
 /// Handles the `BspConfirmedStoring` event.
 ///
 /// This event is triggered by the runtime confirming that the BSP is now storing the file.
-impl<T, FL, FS> EventHandler<BspConfirmedStoring> for BspUploadFileTask<T, FL, FS>
+impl<T, FL, FS> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<T, FL, FS>
 where
     T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync + 'static,
     HasherOutT<T>: TryFrom<[u8; 32]>,
 {
-    async fn handle_event(&mut self, event: BspConfirmedStoring) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: ProcessConfirmStoringRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Runtime confirmed BSP storing file: {:?}",
+            "Processing ConfirmStoringRequest: {:?}",
             event.file_key,
         );
 
-        let file_key: HasherOutT<T> = TryFrom::<[u8; 32]>::try_from(*event.file_key.as_ref())
-            .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
+        let file_key: HasherOutT<T> =
+            TryFrom::<[u8; 32]>::try_from(event.file_key.to_fixed_bytes())
+                .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
+
+        // Query runtime for the chunks to prove for the file.
+        let chunks_to_prove = self
+            .storage_hub_handler
+            .blockchain
+            .query_bsp_confirm_chunks_to_prove_for_file(
+                self.storage_hub_handler
+                    .blockchain
+                    .get_node_public_key()
+                    .await,
+                H256::from_slice(file_key.as_ref()),
+            )
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to query BSP confirm chunks to prove for file: {:?}",
+                    e
+                )
+            })?;
+
+        // Generate the proof for the file.
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let added_file_key_proof = read_file_storage
+            .generate_proof(&file_key, &chunks_to_prove)
+            .expect("File is not in storage, or proof does not exist.");
+        // Release the file storage read lock as soon as possible.
+        drop(read_file_storage);
+
+        // Get a read lock on the forest storage to generate a proof for the file.
+        let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
+        let non_inclusion_forest_proof = read_forest_storage
+            .generate_proof(vec![file_key])
+            .expect("Failed to generate forest proof.");
+        // Release the forest storage read lock.
+        drop(read_forest_storage);
+
+        // Build extrinsic.
+        let call = storage_hub_runtime::RuntimeCall::FileSystem(
+            pallet_file_system::Call::bsp_confirm_storing {
+                file_key: H256::from_slice(file_key.as_ref()),
+                non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
+                added_file_key_proof,
+            },
+        );
+
+        // Send the confirmation transaction and wait for it to be included in the block and
+        // continue only if it is successfull.
+        self.storage_hub_handler
+            .blockchain
+            .send_extrinsic(call)
+            .await?
+            .with_timeout(Duration::from_secs(60))
+            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .await?;
 
         // Get the metadata of the stored file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
@@ -409,59 +465,12 @@ where
         //     .await
         //     .expect("File is not registered. This should not happen!");
 
-        // Query runtime for the chunks to prove for the file.
-        let chunks_to_prove = self
-            .storage_hub_handler
-            .blockchain
-            .query_bsp_confirm_chunks_to_prove_for_file(
-                self.storage_hub_handler
-                    .blockchain
-                    .get_node_public_key()
-                    .await,
-                H256::from_slice(file_key.as_ref()),
-            )
-            .await
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to query BSP confirm chunks to prove for file: {:?}",
-                    e
-                )
-            })?;
-
-        // Get the metadata for the file.
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let _metadata = read_file_storage
-            .get_metadata(file_key)
-            .expect("File metadata not found");
-        let added_file_key_proof = read_file_storage
-            .generate_proof(file_key, &chunks_to_prove)
-            .expect("File is not in storage, or proof does not exist.");
-        // Release the file storage read lock as soon as possible.
-        drop(read_file_storage);
-
-        // Get a read lock on the forest storage to generate a proof for the file.
-        let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
-        let non_inclusion_forest_proof = read_forest_storage
-            .generate_proof(vec![*file_key])
-            .expect("Failed to generate forest proof.");
-        // Release the forest storage read lock.
-        drop(read_forest_storage);
-
-        // Build extrinsic.
-        let call = storage_hub_runtime::RuntimeCall::FileSystem(
-            pallet_file_system::Call::bsp_confirm_storing {
-                file_key: H256::from_slice(file_key.as_ref()),
-                non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
-                added_file_key_proof,
-            },
-        );
-
+        // Queue a request to confirm the storing of the file.
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call)
-            .await?
-            .with_timeout(Duration::from_secs(60))
-            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .queue_confirm_bsp_request(ConfirmStoringRequest {
+                file_key: H256::from_slice(file_key.as_ref()),
+            })
             .await?;
 
         Ok(())

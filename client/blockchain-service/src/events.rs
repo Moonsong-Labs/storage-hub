@@ -6,6 +6,8 @@ use shc_common::types::{
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
+use std::sync::Arc;
+use tokio::sync::{oneshot, RwLock};
 
 /// New random challenge emitted by the StorageHub runtime.
 ///
@@ -79,6 +81,19 @@ pub struct StorageRequestRevoked {
     pub location: String,
 }
 
+// TODO: use proper types
+#[derive(Debug, Clone)]
+pub struct ProcessSubmitProofRequest {
+    pub seed: H256,
+    pub forest_root_write_tx: Arc<RwLock<Option<oneshot::Sender<()>>>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProcessConfirmStoringRequest {
+    pub file_key: H256,
+    pub forest_root_write_tx: Arc<RwLock<Option<oneshot::Sender<()>>>>,
+}
+
 impl EventBusMessage for StorageRequestRevoked {}
 
 #[derive(Clone, Default)]
@@ -88,7 +103,11 @@ pub struct BlockchainServiceEventBusProvider {
     accepted_bsp_volunteer_event_bus: EventBus<AcceptedBspVolunteer>,
     bsp_confirmed_storing_event_bus: EventBus<BspConfirmedStoring>,
     storage_request_revoked_event_bus: EventBus<StorageRequestRevoked>,
+    process_submit_proof_request_event_bus: EventBus<ProcessSubmitProofRequest>,
+    process_confirm_storage_request_event_bus: EventBus<ProcessConfirmStoringRequest>,
 }
+
+impl EventBusMessage for ProcessSubmitProofRequest {}
 
 impl BlockchainServiceEventBusProvider {
     pub fn new() -> Self {
@@ -98,9 +117,13 @@ impl BlockchainServiceEventBusProvider {
             accepted_bsp_volunteer_event_bus: EventBus::new(),
             bsp_confirmed_storing_event_bus: EventBus::new(),
             storage_request_revoked_event_bus: EventBus::new(),
+            process_submit_proof_request_event_bus: EventBus::new(),
+            process_confirm_storage_request_event_bus: EventBus::new(),
         }
     }
 }
+
+impl EventBusMessage for ProcessConfirmStoringRequest {}
 
 impl ProvidesEventBus<NewChallengeSeed> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<NewChallengeSeed> {
@@ -129,5 +152,17 @@ impl ProvidesEventBus<BspConfirmedStoring> for BlockchainServiceEventBusProvider
 impl ProvidesEventBus<StorageRequestRevoked> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<StorageRequestRevoked> {
         &self.storage_request_revoked_event_bus
+    }
+}
+
+impl ProvidesEventBus<ProcessSubmitProofRequest> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<ProcessSubmitProofRequest> {
+        &self.process_submit_proof_request_event_bus
+    }
+}
+
+impl ProvidesEventBus<ProcessConfirmStoringRequest> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<ProcessConfirmStoringRequest> {
+        &self.process_confirm_storage_request_event_bus
     }
 }
