@@ -305,20 +305,19 @@ declare module '@polkadot/api-base/types/events' {
             }>;
             /**
              * Notifies that a BSP's challenge cycle has been initialised, adding the first file
-             * key to the BSP's Merkle Patricia Forest.
+             * key(s) to the BSP's Merkle Patricia Forest.
              **/
-            BspChallengeCycleInitialised: AugmentedEvent<ApiType, [who: AccountId32, bspId: H256, fileKey: H256], {
+            BspChallengeCycleInitialised: AugmentedEvent<ApiType, [who: AccountId32, bspId: H256], {
                 who: AccountId32;
                 bspId: H256;
-                fileKey: H256;
             }>;
             /**
-             * Notifies that a BSP confirmed storing a file.
+             * Notifies that a BSP confirmed storing a file(s).
              **/
-            BspConfirmedStoring: AugmentedEvent<ApiType, [who: AccountId32, bspId: H256, fileKey: H256, newRoot: H256], {
+            BspConfirmedStoring: AugmentedEvent<ApiType, [who: AccountId32, bspId: H256, fileKeys: Vec<H256>, newRoot: H256], {
                 who: AccountId32;
                 bspId: H256;
-                fileKey: H256;
+                fileKeys: Vec<H256>;
                 newRoot: H256;
             }>;
             /**
