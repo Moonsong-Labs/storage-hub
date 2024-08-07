@@ -24,7 +24,16 @@ import {
   bspDownSeed
 } from "../pjsKeyring";
 import { createApiObject } from "./api";
-import { CAPACITY_512, DUMMY_BSP_ID, DUMMY_MSP_ID, NODE_INFOS, VALUE_PROP } from "./consts";
+import {
+  BSP_DOWN_ID,
+  BSP_THREE_ID,
+  BSP_TWO_ID,
+  CAPACITY_512,
+  DUMMY_BSP_ID,
+  DUMMY_MSP_ID,
+  NODE_INFOS,
+  VALUE_PROP
+} from "./consts";
 import { addBspContainer, showContainers } from "./docker";
 import type { BspNetApi } from "./types";
 import { sleep } from "../timer.ts";
@@ -503,18 +512,21 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
       name: "sh-bsp-down",
       rocksdb: bspNetConfig.rocksdb,
       bspKeySeed: bspDownSeed,
+      bspId: BSP_DOWN_ID,
       additionalArgs: ["--keystore-path=/keystore/bsp-down"]
     });
     const { rpcPort: bspTwoRpcPort } = await addBsp(userApi, bspTwoKey, {
       name: "sh-bsp-two",
       rocksdb: bspNetConfig.rocksdb,
       bspKeySeed: bspTwoSeed,
+      bspId: BSP_TWO_ID,
       additionalArgs: ["--keystore-path=/keystore/bsp-two"]
     });
     const { rpcPort: bspThreeRpcPort } = await addBsp(userApi, bspThreeKey, {
       name: "sh-bsp-three",
       rocksdb: bspNetConfig.rocksdb,
       bspKeySeed: bspThreeSeed,
+      bspId: BSP_THREE_ID,
       additionalArgs: ["--keystore-path=/keystore/bsp-three"]
     });
 
@@ -697,7 +709,13 @@ export const createCheckBucket = async (api: BspNetApi, bucketName: string) => {
 const addBsp = async (
   api: BspNetApi,
   bspKey: KeyringPair,
-  options?: { name?: string; rocksdb?: boolean; bspKeySeed?: string; additionalArgs?: string[] }
+  options?: {
+    name?: string;
+    rocksdb?: boolean;
+    bspKeySeed?: string;
+    bspId?: string;
+    additionalArgs?: string[];
+  }
 ) => {
   // Launch a BSP node.
   const additionalArgs = options?.additionalArgs ?? [];
@@ -719,7 +737,7 @@ const addBsp = async (
     api.tx.sudo.sudo(
       api.tx.providers.forceBspSignUp(
         bspKey.address,
-        bspKey.publicKey,
+        options?.bspId ?? bspKey.publicKey,
         CAPACITY_512,
         [multiAddressBsp],
         bspKey.address
