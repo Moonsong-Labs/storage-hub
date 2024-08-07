@@ -20,7 +20,6 @@ scale-info = { workspace = true }
 
 # Frame
 frame-support = { workspace = true }
-frame-system = { workspace = true }
 
 # Substrate
 sp-core = { workspace = true }
