@@ -12,10 +12,14 @@ use shc_blockchain_service::{
     BlockchainService,
 };
 use shc_file_manager::traits::FileStorage;
-use shc_file_transfer_service::{events::RemoteUploadRequest, FileTransferService};
+use shc_file_transfer_service::{
+    events::{RemoteDownloadRequest, RemoteUploadRequest},
+    FileTransferService,
+};
 use shc_forest_manager::traits::ForestStorage;
 
 use crate::tasks::{
+    bsp_download_file::BspDownloadFileTask,
     bsp_upload_file::BspUploadFileTask,
     sp_react_to_event_mock::{EventToReactTo, SpReactToEventMockTask},
     user_sends_file::UserSendsFileTask,
@@ -106,6 +110,12 @@ where
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         new_storage_request_event_bus_listener.start();
+        // Subscribing to RemoteUploadRequest event from the FileTransferService.
+        let remote_upload_request_event_bus_listener: EventBusListener<RemoteUploadRequest, _> =
+            bsp_upload_file_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.file_transfer);
+        remote_upload_request_event_bus_listener.start();
         // Subscribing to ProcessConfirmStoringRequest event from the BlockchainService.
         let process_confirm_storing_request_event_bus_listener: EventBusListener<
             ProcessConfirmStoringRequest,
@@ -114,10 +124,13 @@ where
             .clone()
             .subscribe_to(&self.task_spawner, &self.blockchain);
         process_confirm_storing_request_event_bus_listener.start();
-        // Subscribing to RemoteUploadRequest event from the FileTransferService.
-        let fts_event_bus_listener: EventBusListener<RemoteUploadRequest, _> =
-            bsp_upload_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
-        fts_event_bus_listener.start();
+
+        // The BspDownloadFileTask
+        let bsp_download_file_task = BspDownloadFileTask::new(self.clone());
+        // Subscribing to RemoteDownloadRequest event from the FileTransferService.
+        let remote_download_request_event_bus_listener: EventBusListener<RemoteDownloadRequest, _> =
+            bsp_download_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
+        remote_download_request_event_bus_listener.start();
 
         // TODO: Remove this, this is just a mocked task for testing purposes.
         let sp_react_to_event_mock_task = SpReactToEventMockTask::new(self.clone());

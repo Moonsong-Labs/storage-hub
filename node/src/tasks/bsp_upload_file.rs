@@ -29,16 +29,16 @@ const LOG_TARGET: &str = "bsp-upload-file-task";
 /// BSP Upload File Task: Handles the whole flow of a file being uploaded to a BSP, from
 /// the BSP's perspective.
 ///
-/// The flow is split into two parts, which are represented here as 3 handlers for 3
+/// The flow is split into three parts, which are represented here as 3 handlers for 3
 /// different events:
-/// - `NewStorageRequest` event: The first part of the flow. It is triggered by an
+/// - [`NewStorageRequest`] event: The first part of the flow. It is triggered by an
 ///   on-chain event of a user submitting a storage request to StorageHub. It responds
 ///   by sending a volunteer transaction and registering the interest of this BSP in
 ///   receiving the file.
-/// - `RemoteUploadRequest` event: The second part of the flow. It is triggered by a
+/// - [`RemoteUploadRequest`] event: The second part of the flow. It is triggered by a
 ///   user sending a chunk of the file to the BSP. It checks the proof for the chunk
 ///   and if it is valid, stores it, until the whole file is stored.
-/// - `ProcessConfirmStoringRequest` event: The third part of the flow. It is triggered by the
+/// - [`ProcessConfirmStoringRequest`] event: The third part of the flow. It is triggered by the
 ///   runtime when the BSP should constuct a proof for the new file(s) and submit a confirm storing
 ///   before updating it's local Forest storage root.
 pub struct BspUploadFileTask<T, FL, FS>
@@ -46,7 +46,7 @@ where
     T: TrieLayout,
     FL: Send + Sync + FileStorage<T>,
     FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     storage_hub_handler: StorageHubHandler<T, FL, FS>,
     file_key_cleanup: Option<HasherOutT<T>>,
@@ -57,7 +57,7 @@ where
     T: TrieLayout,
     FL: Send + Sync + FileStorage<T>,
     FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn clone(&self) -> BspUploadFileTask<T, FL, FS> {
         Self {
@@ -72,7 +72,7 @@ where
     T: TrieLayout,
     FL: Send + Sync + FileStorage<T>,
     FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
         Self {
@@ -94,7 +94,7 @@ where
     T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
@@ -123,7 +123,7 @@ where
     T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync + 'static,
-    <T::Hash as sp_core::Hasher>::Out: TryFrom<[u8; H_LENGTH]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
@@ -243,7 +243,7 @@ where
     T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     async fn handle_event(&mut self, event: ProcessConfirmStoringRequest) -> anyhow::Result<()> {
         info!(
@@ -350,14 +350,14 @@ where
     T: TrieLayout,
     FL: Send + Sync + FileStorage<T>,
     FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     async fn handle_new_storage_request_event(
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()>
     where
-        HasherOutT<T>: TryFrom<[u8; 32]>,
+        HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
     {
         // Construct file metadata.
         let metadata = FileMetadata {
