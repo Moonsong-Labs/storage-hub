@@ -23,10 +23,13 @@
 //
 // For more information, please refer to <http://unlicense.org>
 
-mod xcm_config;
+pub mod xcm_config;
 
 // Substrate and Polkadot dependencies
-use crate::PolkadotXcm;
+use crate::mock_message_queue;
+use crate::storagehub::configs::xcm_config::XcmConfig;
+use crate::storagehub::MessageQueue;
+use crate::storagehub::PolkadotXcm;
 use core::marker::PhantomData;
 use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
 use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
@@ -53,31 +56,31 @@ use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
-use shp_file_key_verifier::FileKeyVerifier;
 use shp_file_metadata::ChunkId;
-use shp_forest_verifier::ForestVerifier;
-use shp_traits::{CommitmentVerifier, MaybeDebug};
+use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{ConstU128, Get, Hasher, H256};
+use sp_core::{Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, Verify},
     AccountId32, DispatchError, FixedPointNumber, FixedU128, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec;
-use sp_trie::{CompactProof, LayoutV1, TrieConfiguration, TrieLayout};
+use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
+use std::u128;
 use xcm::latest::prelude::BodyId;
+use xcm_simulator::XcmExecutor;
 
 // Local module imports
 use super::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection,
-    FileSystem, Hash, MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem,
-    ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
-    RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
-    WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS,
-    EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
+    FileSystem, Hash, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, ProofsDealer,
+    Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason,
+    RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System, WeightToFee, XcmpQueue,
+    AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS, EXISTENTIAL_DEPOSIT, HOURS,
+    MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
     RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
 };
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
@@ -199,6 +202,11 @@ impl pallet_sudo::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type RuntimeCall = RuntimeCall;
     type WeightInfo = ();
+}
+
+impl mock_message_queue::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type XcmExecutor = XcmExecutor<XcmConfig>;
 }
 
 parameter_types! {
@@ -428,10 +436,13 @@ impl pallet_randomness::GetBabeData<u64, Option<Hash>> for BabeDataGetter {
 }
 
 parameter_types! {
-    // TODO: If the next line is uncommented (which should be eventually), compilation breaks (most likely because of mismatched dependency issues)
-    // pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * runtime_constants::time::EPOCH_DURATION_IN_SLOTS, 2 * MINUTES);
     pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * HOURS, 2 * MINUTES);
 }
+
+// TODO: If the next line is uncommented (which should be eventually), compilation breaks (most likely because of mismatched dependency issues)
+/* parameter_types! {
+    pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * runtime_constants::time::EPOCH_DURATION_IN_SLOTS, 2 * MINUTES);
+} */
 
 /// Configure the randomness pallet
 impl pallet_randomness::Config for Runtime {
@@ -441,9 +452,18 @@ impl pallet_randomness::Config for Runtime {
 }
 
 parameter_types! {
-    pub const SpMinDeposit: Balance = 20 * UNIT;
     pub const BucketDeposit: Balance = 20 * UNIT;
-    pub const SlashFactor: Balance = 20 * UNIT;
+    pub const MaxMultiAddressSize: u32 = 100;
+    pub const MaxMultiAddressAmount: u32 = 5;
+    pub const MaxProtocols: u32 = 100;
+    pub const MaxBsps: u32 = 100;
+    pub const MaxMsps: u32 = 100;
+    pub const MaxBuckets: u32 = 10000;
+    pub const BucketNameLimit: u32 = 100;
+    pub const SpMinDeposit: Balance = 20 * UNIT;
+    pub const SpMinCapacity: u32 = 2;
+    pub const DepositPerData: Balance = 2;
+    pub const MinBlocksBetweenCapacityChanges: u32 = 10;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -462,25 +482,22 @@ impl pallet_storage_providers::Config for Runtime {
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
-    type ProvidersProofSubmitters = ProofsDealer;
-    type Treasury = TreasuryAccount;
-    type MaxMultiAddressSize = ConstU32<100>;
-    type MaxMultiAddressAmount = ConstU32<5>;
-    type MaxProtocols = ConstU32<100>;
-    type MaxBsps = ConstU32<100>;
-    type MaxMsps = ConstU32<100>;
-    type MaxBuckets = ConstU32<10000>;
+    type MaxMultiAddressSize = MaxMultiAddressSize;
+    type MaxMultiAddressAmount = MaxMultiAddressAmount;
+    type MaxProtocols = MaxProtocols;
+    type MaxBsps = MaxBsps;
+    type MaxMsps = MaxMsps;
+    type MaxBuckets = MaxBuckets;
     type BucketDeposit = BucketDeposit;
-    type BucketNameLimit = ConstU32<100>;
+    type BucketNameLimit = BucketNameLimit;
     type SpMinDeposit = SpMinDeposit;
-    type SpMinCapacity = ConstU32<2>;
-    type DepositPerData = ConstU128<2>;
+    type SpMinCapacity = SpMinCapacity;
+    type DepositPerData = DepositPerData;
     type RuntimeHoldReason = RuntimeHoldReason;
     type Subscribers = FileSystem;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
-    type MinBlocksBetweenCapacityChanges = ConstU32<10>;
-    type SlashFactor = SlashFactor;
+    type MinBlocksBetweenCapacityChanges = MinBlocksBetweenCapacityChanges;
 }
 
 parameter_types! {
@@ -534,13 +551,8 @@ impl pallet_proofs_dealer::Config for Runtime {
     type NativeBalance = Balances;
     type MerkleTrieHash = Hash;
     type MerkleTrieHashing = BlakeTwo256;
-    type ForestVerifier = ForestVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
-    type KeyVerifier = FileKeyVerifier<
-        LayoutV1<BlakeTwo256>,
-        { shp_constants::H_LENGTH },
-        { shp_constants::FILE_CHUNK_SIZE },
-        { shp_constants::FILE_SIZE_TO_CHALLENGES },
-    >;
+    type ForestVerifier = MockVerifier<H256, LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
+    type KeyVerifier = MockVerifier<H256, LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = RandomChallengesPerBlock;
     type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
@@ -558,29 +570,51 @@ impl pallet_proofs_dealer::Config for Runtime {
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
 /// and `false` otherwise.
-pub struct MockVerifier<C> {
-    _phantom: core::marker::PhantomData<C>,
+pub struct MockVerifier<C, T: TrieLayout, const H_LENGTH: usize> {
+    _phantom: core::marker::PhantomData<(C, T)>,
 }
 
-/// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl<C> CommitmentVerifier for MockVerifier<C>
+/// Implement the `TrieVerifier` trait for the `MockForestManager` struct.
+impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifier<C, T, H_LENGTH>
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
     type Proof = CompactProof;
     type Commitment = H256;
-    type Challenge = C;
+    type Challenge = H256;
 
     fn verify_proof(
         _root: &Self::Commitment,
-        challenges: &[Self::Challenge],
+        _challenges: &[Self::Challenge],
         proof: &CompactProof,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            Ok(challenges.iter().cloned().collect())
+            Ok(proof
+                .encoded_nodes
+                .iter()
+                .map(|node| H256::from_slice(&node[..]))
+                .collect())
         } else {
             Err("Proof is empty".into())
         }
+    }
+}
+
+impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
+    for MockVerifier<C, T, H_LENGTH>
+where
+    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
+{
+    type Proof = CompactProof;
+    type Key = <T::Hash as sp_core::Hasher>::Out;
+
+    fn apply_delta(
+        root: &Self::Key,
+        _mutations: &[(Self::Key, TrieMutation)],
+        _proof: &Self::Proof,
+    ) -> Result<(MemoryDB<T::Hash>, Self::Key), DispatchError> {
+        // Just return the root as is with no mutations
+        Ok((MemoryDB::<T::Hash>::default(), *root))
     }
 }
 
@@ -589,10 +623,9 @@ type ThresholdType = FixedU128;
 parameter_types! {
     pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
     pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100
-    pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100
+    pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(u128::MAX / 100_000_000_000_000_000, 1000); // Takes 1000 blocks to reach maximum threshold
 }
 
-/// Configure the pallet template in pallets/template.
 impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
@@ -612,7 +645,6 @@ impl pallet_file_system::Config for Runtime {
     type StorageRequestBspsRequiredType = u32;
     type TargetBspsRequired = ConstU32<1>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
-    type MaxBatchConfirmStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = ConstU32<5>;

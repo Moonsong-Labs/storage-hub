@@ -62,6 +62,7 @@ std = [
 	"sp-core/std",
 	"sp-io/std",
 	"sp-runtime/std",
+	"pallet-balances/std",
 	"sp-trie/std",
 ]
 try-runtime = [
