@@ -543,6 +543,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
         System::assert_last_event(
             Event::NewChallengeCycleInitialised {
                 current_tick: 1,
+                next_challenge_deadline: expected_deadline,
                 provider: provider_id,
                 maybe_provider_account: Some(1u64),
             }

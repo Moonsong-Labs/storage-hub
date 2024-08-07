@@ -1376,8 +1376,18 @@ declare module "@polkadot/api-base/types/events" {
        **/
       NewChallengeCycleInitialised: AugmentedEvent<
         ApiType,
-        [currentTick: u32, provider: H256, maybeProviderAccount: Option<AccountId32>],
-        { currentTick: u32; provider: H256; maybeProviderAccount: Option<AccountId32> }
+        [
+          currentTick: u32,
+          nextChallengeDeadline: u32,
+          provider: H256,
+          maybeProviderAccount: Option<AccountId32>
+        ],
+        {
+          currentTick: u32;
+          nextChallengeDeadline: u32;
+          provider: H256;
+          maybeProviderAccount: Option<AccountId32>;
+        }
       >;
       /**
        * A new challenge seed was generated.

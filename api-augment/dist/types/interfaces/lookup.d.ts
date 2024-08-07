@@ -1492,6 +1492,7 @@ declare const _default: {
             };
             NewChallengeCycleInitialised: {
                 currentTick: string;
+                nextChallengeDeadline: string;
                 provider: string;
                 maybeProviderAccount: string;
             };
@@ -2973,7 +2974,7 @@ declare const _default: {
                 paymentAccount: string;
             };
             slash: {
-                providerAccountId: string;
+                providerId: string;
             };
         };
     };

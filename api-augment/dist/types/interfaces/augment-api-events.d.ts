@@ -1124,8 +1124,9 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * A Provider's challenge cycle was initialised.
              **/
-            NewChallengeCycleInitialised: AugmentedEvent<ApiType, [currentTick: u32, provider: H256, maybeProviderAccount: Option<AccountId32>], {
+            NewChallengeCycleInitialised: AugmentedEvent<ApiType, [currentTick: u32, nextChallengeDeadline: u32, provider: H256, maybeProviderAccount: Option<AccountId32>], {
                 currentTick: u32;
+                nextChallengeDeadline: u32;
                 provider: H256;
                 maybeProviderAccount: Option<AccountId32>;
             }>;

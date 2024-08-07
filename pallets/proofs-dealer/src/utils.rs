@@ -882,6 +882,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         // Emit event.
         Self::deposit_event(Event::<T>::NewChallengeCycleInitialised {
             current_tick,
+            next_challenge_deadline,
             provider: *provider_id,
             maybe_provider_account: ProvidersPalletFor::<T>::get_owner_account(*provider_id),
         });
