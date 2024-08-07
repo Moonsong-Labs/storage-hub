@@ -7,7 +7,6 @@ use frame_support::{
 };
 use frame_system as system;
 use num_bigint::BigUint;
-use num_traits::FromPrimitive;
 use pallet_nfts::PalletFeatures;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
@@ -435,21 +434,13 @@ impl Convert<BlockNumberFor<Test>, ThresholdType> for BlockNumberToThresholdType
 pub struct HashToThresholdTypeConverter;
 impl Convert<<Test as frame_system::Config>::Hash, ThresholdType> for HashToThresholdTypeConverter {
     fn convert(hash: <Test as frame_system::Config>::Hash) -> ThresholdType {
-        // Get the hash as a BigUint value
+        // Get the hash as bytes
         let hash_bytes = hash.as_ref();
-        let hash_biguint = BigUint::from_bytes_be(hash_bytes);
 
-        // Get the maximum 256-bit number and the maximum fixed unsigned 128-bit number as BigUint values
-        let max_u256_number = BigUint::from_bytes_be(&[0xff; 32]);
-        let max_fixed_point_u128_number = BigUint::from_u128(FixedU128::max_value().into_inner())
-            .expect("The inner field is a u128 number, it must fit.");
-
-        // Get the equivalent u128 of the hash after mapping it to the unsigned 128-bit space
-        let hash_in_fixed_u128_space = hash_biguint * max_fixed_point_u128_number / max_u256_number;
-
-        // Convert it to the actual primitive type `u128`
-        let hash_as_u128 = <BigUint as num_traits::ToPrimitive>::to_u128(&hash_in_fixed_u128_space)
-            .expect("The number was mapped to a u128 number, it must fit.");
+        // Get the 16 least significant bytes of the hash and interpret them as a u128
+        let truncated_hash_bytes: [u8; 16] =
+            hash_bytes[16..].try_into().expect("Hash is 32 bytes; qed");
+        let hash_as_u128 = u128::from_be_bytes(truncated_hash_bytes);
 
         // Return it as a FixedU128
         FixedU128::from_inner(hash_as_u128)
