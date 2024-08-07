@@ -695,11 +695,17 @@ declare module '@polkadot/api-base/types/storage' {
              **/
             lastDeletedTick: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
             /**
-             * A mapping from a Provider to the last challenge tick they submitted a proof for.
+             * A mapping from a Provider to the last tick for which they SHOULD have submitted a proof.
              * If for a Provider `p`, `LastTickProviderSubmittedProofFor[p]` is `n`, then the
              * Provider should submit a proof for tick `n + stake_to_challenge_period(p)`.
+             *
+             * This gets updated when a Provider submits a proof successfully and is used to determine the
+             * next tick for which the Provider should submit a proof, and it's deadline.
+             *
+             * If the Provider fails to submit a proof in time and is slashed, this will still get updated
+             * to the tick it should have submitted a proof for.
              **/
-            lastTickProviderSubmittedProofFor: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<u32>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
+            lastTickProviderSubmittedAProofFor: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<u32>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
             /**
              * A priority queue of keys that have been challenged manually.
              *
@@ -713,7 +719,7 @@ declare module '@polkadot/api-base/types/storage' {
              * is required, but using a `VecDeque` would be more efficient as this is a FIFO queue.
              **/
             priorityChallengesQueue: AugmentedQuery<ApiType, () => Observable<Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>>, []> & QueryableStorageEntry<ApiType, []>;
-            slashableProviders: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<Null>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
+            slashableProviders: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<u32>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
             /**
              * A mapping from challenges tick to a random seed used for generating the challenges in that tick.
              *
@@ -799,6 +805,16 @@ declare module '@polkadot/api-base/types/storage' {
              * - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket), which removes the entry of the corresponding bucket.
              **/
             buckets: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<PalletStorageProvidersBucket>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
+            /**
+             * The mapping from a MainStorageProviderId to a vector of BucketIds.
+             *
+             * This is used to efficiently retrieve the list of buckets that a Main Storage Provider is currently storing.
+             *
+             * This storage is updated in:
+             * - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket)
+             * - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket)
+             **/
+            mainStorageProviderIdsToBuckets: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<Vec<H256>>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
             /**
              * The mapping from a MainStorageProviderId to a MainStorageProvider.
              *

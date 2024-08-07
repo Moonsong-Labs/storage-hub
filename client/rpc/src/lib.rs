@@ -9,8 +9,10 @@ use jsonrpsee::types::ErrorObjectOwned;
 use shc_common::types::ChunkId;
 use shc_common::types::FileMetadata;
 use shc_common::types::HasherOutT;
+use shc_common::types::BCSV_KEY_TYPE;
 use shc_common::types::FILE_CHUNK_SIZE;
 use sp_core::H256;
+use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::AccountId32;
 use sp_runtime::Deserialize;
 use sp_runtime::Serialize;
@@ -39,6 +41,7 @@ const LOG_TARGET: &str = "storage-hub-client-rpc";
 pub struct StorageHubClientRpcConfig<T, FL, FS> {
     pub file_storage: Arc<RwLock<FL>>,
     pub forest_storage: Arc<RwLock<FS>>,
+    pub keystore: KeystorePtr,
     _marker: PhantomData<T>,
 }
 
@@ -47,6 +50,7 @@ impl<T, FL, FS> Clone for StorageHubClientRpcConfig<T, FL, FS> {
         Self {
             file_storage: self.file_storage.clone(),
             forest_storage: self.forest_storage.clone(),
+            keystore: self.keystore.clone(),
             _marker: Default::default(),
         }
     }
@@ -58,10 +62,15 @@ where
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync,
 {
-    pub fn new(file_storage: Arc<RwLock<FL>>, forest_storage: Arc<RwLock<FS>>) -> Self {
+    pub fn new(
+        file_storage: Arc<RwLock<FL>>,
+        forest_storage: Arc<RwLock<FS>>,
+        keystore: KeystorePtr,
+    ) -> Self {
         Self {
             file_storage,
             forest_storage,
+            keystore,
             _marker: Default::default(),
         }
     }
@@ -105,12 +114,16 @@ pub trait StorageHubClientApi {
 
     #[method(name = "getForestRoot")]
     async fn get_forest_root(&self) -> RpcResult<H256>;
+
+    #[method(name = "rotateBcsvKeys")]
+    async fn rotate_bcsv_keys(&self, seed: String) -> RpcResult<String>;
 }
 
 /// Stores the required objects to be used in our RPC method.
 pub struct StorageHubClientRpc<T, FL, FS> {
     file_storage: Arc<RwLock<FL>>,
     forest_storage: Arc<RwLock<FS>>,
+    keystore: KeystorePtr,
     _marker: PhantomData<T>,
 }
 
@@ -124,6 +137,7 @@ where
         Self {
             file_storage: storage_hub_client_rpc_config.file_storage,
             forest_storage: storage_hub_client_rpc_config.forest_storage,
+            keystore: storage_hub_client_rpc_config.keystore,
             _marker: Default::default(),
         }
     }
@@ -276,6 +290,15 @@ where
         let root = forest_storage_read_lock.root();
         let root = H256::from_slice(root.as_ref());
         Ok(root)
+    }
+
+    async fn rotate_bcsv_keys(&self, seed: String) -> RpcResult<String> {
+        let new_pub_key = self
+            .keystore
+            .sr25519_generate_new(BCSV_KEY_TYPE, Some(seed.as_ref()))
+            .map_err(into_rpc_error)?;
+
+        Ok(new_pub_key.to_string())
     }
 }
 

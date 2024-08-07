@@ -1,6 +1,7 @@
 use std::{str::FromStr, time::Duration};
 
 use anyhow::anyhow;
+use frame_support::BoundedVec;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shp_constants::H_LENGTH;
@@ -245,28 +246,54 @@ where
     async fn handle_event(&mut self, event: BspConfirmedStoring) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Runtime confirmed BSP storing file: {:?}",
-            event.file_key,
+            "Runtime confirmed BSP storing files: {:?}",
+            event.file_keys,
         );
-
-        let file_key: HasherOutT<T> = TryFrom::<[u8; 32]>::try_from(*event.file_key.as_ref())
-            .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
+        let mut successful_metadatas = Vec::new();
 
         // Get the metadata of the stored file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let file_metadata = read_file_storage
-            .get_metadata(&file_key)
-            .expect("Failed to get metadata.");
+
+        for fk in &event.file_keys {
+            // TODO: use `convert_raw_bytes_to_hasher_out` when moved to shc_common
+            match TryFrom::<[u8; 32]>::try_from(*fk.as_ref()) {
+                Ok(file_key_hash) => match read_file_storage.get_metadata(&file_key_hash) {
+                    Ok(file_metadata) => successful_metadatas.push(file_metadata),
+                    Err(e) => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Failed to get metadata for file key: {:?}, error: {:?}", fk, e
+                        );
+                    }
+                },
+                Err(_) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "File key and HasherOutT mismatch for key: {:?}", fk
+                    );
+                }
+            }
+        }
+
         // Release the file storage lock.
         drop(read_file_storage);
 
-        // Save [`FileMetadata`] of the newly confirmed stored file in the forest storage.
-        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
-        write_forest_storage
-            .insert_metadata(&file_metadata)
-            .expect("Failed to insert metadata.");
-        // Release the forest storage lock.
-        drop(write_forest_storage);
+        if !successful_metadatas.is_empty() {
+            // Save [`FileMetadata`] of the successfully retrieved stored files in the forest storage.
+            let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
+            if let Err(e) = write_forest_storage.insert_files_metadata(&successful_metadatas) {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to insert metadata into forest storage: {:?}", e
+                );
+            }
+        } else {
+            warn!(
+                target: LOG_TARGET,
+                "No valid metadata was retrieved for any of the file keys: {:?}",
+                event.file_keys
+            );
+        }
 
         Ok(())
     }
@@ -450,10 +477,12 @@ where
         // Build extrinsic.
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
             pallet_file_system::Call::bsp_confirm_storing {
-                file_key: H256::from_slice(file_key.as_ref()),
-                root: H256::from_slice(non_inclusion_forest_proof.root.as_ref()),
                 non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
-                added_file_key_proof,
+                file_keys_and_proofs: BoundedVec::try_from(vec![(
+                    H256::from_slice(file_key.as_ref()),
+                    added_file_key_proof,
+                )])
+                .expect("Failed to convert file keys and proofs."),
             },
         );
 

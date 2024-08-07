@@ -404,20 +404,24 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       bspConfirmStoring: AugmentedSubmittable<
         (
-          fileKey: H256 | string | Uint8Array,
-          root: H256 | string | Uint8Array,
           nonInclusionForestProof:
             | SpTrieStorageProofCompactProof
             | { encodedNodes?: any }
             | string
             | Uint8Array,
-          addedFileKeyProof:
-            | ShpFileKeyVerifierFileKeyProof
-            | { fileMetadata?: any; proof?: any }
-            | string
-            | Uint8Array
+          fileKeysAndProofs:
+            | Vec<ITuple<[H256, ShpFileKeyVerifierFileKeyProof]>>
+            | [
+                H256 | string | Uint8Array,
+                (
+                  | ShpFileKeyVerifierFileKeyProof
+                  | { fileMetadata?: any; proof?: any }
+                  | string
+                  | Uint8Array
+                )
+              ][]
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, H256, SpTrieStorageProofCompactProof, ShpFileKeyVerifierFileKeyProof]
+        [SpTrieStorageProofCompactProof, Vec<ITuple<[H256, ShpFileKeyVerifierFileKeyProof]>>]
       >;
       /**
        * Executed by a BSP to stop storing a file.
@@ -2775,6 +2779,16 @@ declare module "@polkadot/api-base/types/submittable" {
           paymentAccount: AccountId32 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
         [u32, Vec<Bytes>, PalletStorageProvidersValueProposition, AccountId32]
+      >;
+      /**
+       * Dispatchable extrinsic to slash a _slashable_ Storage Provider.
+       *
+       * A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
+       * In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
+       **/
+      slash: AugmentedSubmittable<
+        (providerAccountId: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [AccountId32]
       >;
       /**
        * Generic tx

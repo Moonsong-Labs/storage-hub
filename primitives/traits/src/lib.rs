@@ -317,7 +317,7 @@ pub trait ProofsDealerInterface {
     /// This only verifies that something is included in the forest of the Provider. It is not a full
     /// proof of the Provider's data.
     fn verify_forest_proof(
-        who: &Self::ProviderId,
+        provider_id: &Self::ProviderId,
         challenges: &[Self::MerkleHash],
         proof: &Self::ForestProof,
     ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError>;
@@ -352,7 +352,7 @@ pub trait ProofsDealerInterface {
     ///
     /// The new root is returned.
     fn apply_delta(
-        commitment: &Self::MerkleHash,
+        provider_id: &Self::ProviderId,
         mutations: &[(Self::MerkleHash, TrieMutation)],
         proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, DispatchError>;
@@ -545,7 +545,7 @@ pub trait PaymentStreamsInterface {
     ) -> Option<Self::DynamicRatePaymentStream>;
 }
 
-pub trait ReadProofSubmittersInterface {
+pub trait ProofSubmittersInterface {
     /// The type which represents a provider identifier.
     type ProviderId: Parameter
         + Member
@@ -562,4 +562,8 @@ pub trait ReadProofSubmittersInterface {
     fn get_proof_submitters_for_tick(
         tick_number: &Self::TickNumber,
     ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>>;
+
+    fn get_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) -> Option<u32>;
+
+    fn clear_accrued_failed_proof_submissions(provider_id: &Self::ProviderId);
 }

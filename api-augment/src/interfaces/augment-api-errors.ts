@@ -883,6 +883,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       AlreadyRegistered: AugmentedError<ApiType>;
       /**
+       * Error thrown when a bucket ID could not be added to the list of buckets of a MSP.
+       **/
+      AppendBucketToMspFailed: AugmentedError<ApiType>;
+      /**
        * Error thrown when a bucket ID already exists in storage.
        **/
       BucketAlreadyExists: AugmentedError<ApiType>;
@@ -942,6 +946,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when trying to get a root from a MSP without passing a User ID.
        **/
       NoUserId: AugmentedError<ApiType>;
+      /**
+       * Error thrown when an attempt was made to slash an unslashable Storage Provider.
+       **/
+      ProviderNotSlashable: AugmentedError<ApiType>;
       /**
        * Error thrown when a user tries to confirm a sign up but the randomness is too fresh to be used yet.
        **/

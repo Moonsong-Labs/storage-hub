@@ -1041,6 +1041,10 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         ) => Observable<FileMetadata>
       >;
       /**
+       * Rotate (generate and insert) new keys of BCSV type for the Blockchain Service.
+       **/
+      rotateBcsvKeys: AugmentedRpc<(seed: Text | string) => Observable<Text>>;
+      /**
        * Save a file from the local storage to the disk.
        **/
       saveFileToDisk: AugmentedRpc<
