@@ -3669,7 +3669,7 @@ export default {
      * Lookup395: pallet_storage_providers::pallet::Error<T>
      **/
     PalletStorageProvidersError: {
-        _enum: ['AlreadyRegistered', 'SignUpNotRequested', 'SignUpRequestPending', 'NoMultiAddress', 'InvalidMultiAddress', 'StorageTooLow', 'NotEnoughBalance', 'CannotHoldDeposit', 'StorageStillInUse', 'RandomnessNotValidYet', 'SignUpRequestExpired', 'NewCapacityLessThanUsedStorage', 'NewCapacityEqualsCurrentCapacity', 'NewCapacityCantBeZero', 'NotEnoughTimePassed', 'NotRegistered', 'NoUserId', 'NoBucketId', 'SpRegisteredButDataNotFound', 'BucketNotFound', 'BucketAlreadyExists', 'AppendBucketToMspFailed', 'ProviderNotSlashable']
+        _enum: ['AlreadyRegistered', 'MaxBspsReached', 'MaxMspsReached', 'SignUpNotRequested', 'SignUpRequestPending', 'NoMultiAddress', 'InvalidMultiAddress', 'StorageTooLow', 'NotEnoughBalance', 'CannotHoldDeposit', 'StorageStillInUse', 'RandomnessNotValidYet', 'SignUpRequestExpired', 'NewCapacityLessThanUsedStorage', 'NewCapacityEqualsCurrentCapacity', 'NewCapacityCantBeZero', 'NotEnoughTimePassed', 'NotRegistered', 'NoUserId', 'NoBucketId', 'SpRegisteredButDataNotFound', 'BucketNotFound', 'BucketAlreadyExists', 'AppendBucketToMspFailed', 'ProviderNotSlashable']
     },
     /**
      * Lookup396: pallet_file_system::types::StorageRequestMetadata<T>

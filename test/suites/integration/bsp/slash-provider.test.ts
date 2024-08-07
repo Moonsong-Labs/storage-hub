@@ -52,7 +52,7 @@ describe("BSPNet: Slash Provider", () => {
       await api.query.system.events()
     );
 
-    await runToNextChallengePeriodBlock(api, nextChallengeDeadline.toNumber());
+    await runToNextChallengePeriodBlock(api, nextChallengeDeadline.toNumber(), DUMMY_BSP_ID);
 
     let numBlocksPassed = 0;
 
@@ -67,9 +67,10 @@ describe("BSPNet: Slash Provider", () => {
 
     await runToNextChallengePeriodBlock(
       api,
-      (await getNextChallengeDeadlineAfterFirst(api)) - numBlocksPassed
+      (await getNextChallengeDeadlineAfterFirst(api)) - numBlocksPassed,
+        DUMMY_BSP_ID
     );
-    await runToNextChallengePeriodBlock(api, await getNextChallengeDeadlineAfterFirst(api));
+    await runToNextChallengePeriodBlock(api, await getNextChallengeDeadlineAfterFirst(api), DUMMY_BSP_ID);
 
     await checkProviderWasSlashed(api, DUMMY_BSP_ID);
   });
@@ -99,13 +100,14 @@ async function checkProviderWasSlashed(api: BspNetApi, providerId: string) {
  * It will verify that the SlashableProvider event is emitted and check if the provider is slashable with an additional failed challenge deadline.
  * @param api
  * @param nextChallengeDeadline
+ * @param provider
  */
-async function runToNextChallengePeriodBlock(api: BspNetApi, nextChallengeDeadline: number) {
+async function runToNextChallengePeriodBlock(api: BspNetApi, nextChallengeDeadline: number, provider: string) {
   // Assert that challengeTickToChallengedProviders contains an entry for the challenged provider
   const challengeTickToChallengedProviders =
     await api.query.proofsDealer.challengeTickToChallengedProviders(
       nextChallengeDeadline,
-      DUMMY_BSP_ID
+      provider
     );
   strictEqual(challengeTickToChallengedProviders.isSome, true);
 
@@ -114,14 +116,14 @@ async function runToNextChallengePeriodBlock(api: BspNetApi, nextChallengeDeadli
     await api.sealBlock();
   }
 
-  const oldFailedSubmissionsCount = await api.query.proofsDealer.slashableProviders(DUMMY_BSP_ID);
+  const oldFailedSubmissionsCount = await api.query.proofsDealer.slashableProviders(provider);
 
   // Assert that the SlashableProvider event is emitted.
   const blockResult = await api.sealBlock();
   api.assertEvent("proofsDealer", "SlashableProvider", blockResult.events);
 
   // Check provider is slashable for 1 failed challenge deadline.
-  const slashableProviders = await api.query.proofsDealer.slashableProviders(DUMMY_BSP_ID);
+  const slashableProviders = await api.query.proofsDealer.slashableProviders(provider);
   strictEqual(
     slashableProviders.unwrap().toNumber(),
     oldFailedSubmissionsCount.unwrapOrDefault().toNumber() + 1

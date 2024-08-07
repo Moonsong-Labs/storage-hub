@@ -895,6 +895,14 @@ declare module '@polkadot/api-base/types/errors' {
              **/
             InvalidMultiAddress: AugmentedError<ApiType>;
             /**
+             * Error thrown when a user tries to sign up as a BSP but the maximum amount of BSPs has been reached.
+             **/
+            MaxBspsReached: AugmentedError<ApiType>;
+            /**
+             * Error thrown when a user tries to sign up as a MSP but the maximum amount of MSPs has been reached.
+             **/
+            MaxMspsReached: AugmentedError<ApiType>;
+            /**
              * Error thrown when a user tries to change its capacity to zero (there are specific extrinsics to sign off as a SP).
              **/
             NewCapacityCantBeZero: AugmentedError<ApiType>;

@@ -3789,6 +3789,8 @@ export default {
   PalletStorageProvidersError: {
     _enum: [
       "AlreadyRegistered",
+      "MaxBspsReached",
+      "MaxMspsReached",
       "SignUpNotRequested",
       "SignUpRequestPending",
       "NoMultiAddress",
