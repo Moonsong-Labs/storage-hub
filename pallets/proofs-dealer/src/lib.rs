@@ -352,6 +352,13 @@ pub mod pallet {
             provider: ProviderIdFor<T>,
             maybe_provider_account: Option<T::AccountId>,
         },
+
+        /// Updated Provider's challenge tick.
+        UpdatedProviderChallengeTick {
+            provider: ProviderIdFor<T>,
+            current_tick: BlockNumberFor<T>,
+            next_challenge_deadline: BlockNumberFor<T>,
+        },
     }
 
     // Errors inform users that something went wrong.

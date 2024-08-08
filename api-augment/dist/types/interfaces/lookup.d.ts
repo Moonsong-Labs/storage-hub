@@ -1496,6 +1496,11 @@ declare const _default: {
                 provider: string;
                 maybeProviderAccount: string;
             };
+            UpdatedProviderChallengeTick: {
+                provider: string;
+                currentTick: string;
+                nextChallengeDeadline: string;
+            };
         };
     };
     /**

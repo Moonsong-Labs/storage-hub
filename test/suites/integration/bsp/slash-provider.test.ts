@@ -47,34 +47,32 @@ describe("BSPNet: Slash Provider", () => {
       initialiseChallengeCycleResult.events
     );
 
-    const [_currentTick, nextChallengeDeadline, _provider, _maybeProviderAccount] = fetchEventData(
+    const [_currentTick, nextChallengeDeadline1, _provider, _maybeProviderAccount] = fetchEventData(
       api.events.proofsDealer.NewChallengeCycleInitialised,
       await api.query.system.events()
     );
 
-    await runToNextChallengePeriodBlock(api, nextChallengeDeadline.toNumber(), DUMMY_BSP_ID);
-
-    let numBlocksPassed = 0;
+    const nextChallengeDeadline2 = await runToNextChallengePeriodBlock(
+      api,
+      nextChallengeDeadline1.toNumber(),
+      DUMMY_BSP_ID
+    );
 
     await checkProviderWasSlashed(api, DUMMY_BSP_ID);
-
-    numBlocksPassed += 1;
 
     // Check that the provider is no longer slashable.
     const slashableProvidersAfterSlash =
       await api.query.proofsDealer.slashableProviders(DUMMY_BSP_ID);
     strictEqual(slashableProvidersAfterSlash.isNone, true);
 
-    await runToNextChallengePeriodBlock(
+    // Simulate 2 failed challenge periods
+    const nextChallengeDeadline3 = await runToNextChallengePeriodBlock(
       api,
-      (await getNextChallengeDeadlineAfterFirst(api)) - numBlocksPassed,
+      nextChallengeDeadline2,
       DUMMY_BSP_ID
     );
-    await runToNextChallengePeriodBlock(
-      api,
-      await getNextChallengeDeadlineAfterFirst(api),
-      DUMMY_BSP_ID
-    );
+
+    await runToNextChallengePeriodBlock(api, nextChallengeDeadline3, DUMMY_BSP_ID);
 
     await checkProviderWasSlashed(api, DUMMY_BSP_ID);
   });
@@ -103,24 +101,21 @@ async function checkProviderWasSlashed(api: BspNetApi, providerId: string) {
  *
  * It will verify that the SlashableProvider event is emitted and check if the provider is slashable with an additional failed challenge deadline.
  * @param api
- * @param nextChallengeDeadline
+ * @param nextChallengeTick
  * @param provider
  */
 async function runToNextChallengePeriodBlock(
   api: BspNetApi,
-  nextChallengeDeadline: number,
+  nextChallengeTick: number,
   provider: string
-) {
+): Promise<number> {
   // Assert that challengeTickToChallengedProviders contains an entry for the challenged provider
   const challengeTickToChallengedProviders =
-    await api.query.proofsDealer.challengeTickToChallengedProviders(
-      nextChallengeDeadline,
-      provider
-    );
+    await api.query.proofsDealer.challengeTickToChallengedProviders(nextChallengeTick, provider);
   strictEqual(challengeTickToChallengedProviders.isSome, true);
 
   const blockNumber = await api.query.system.number();
-  for (let i = blockNumber.toNumber(); i < nextChallengeDeadline - 1; i++) {
+  for (let i = blockNumber.toNumber(); i < nextChallengeTick - 1; i++) {
     await api.sealBlock();
   }
 
@@ -128,27 +123,20 @@ async function runToNextChallengePeriodBlock(
 
   // Assert that the SlashableProvider event is emitted.
   const blockResult = await api.sealBlock();
+
   api.assertEvent("proofsDealer", "SlashableProvider", blockResult.events);
 
-  // Check provider is slashable for 1 failed challenge deadline.
+  // Check provider is slashable for 1 additional failed submission.
   const slashableProviders = await api.query.proofsDealer.slashableProviders(provider);
   strictEqual(
     slashableProviders.unwrap().toNumber(),
     oldFailedSubmissionsCount.unwrapOrDefault().toNumber() + 1
   );
-}
 
-/**
- * Get the next challenge deadline after the first challenge deadline (taking into account the challenge tick tolerance).
- * @param api
- */
-async function getNextChallengeDeadlineAfterFirst(api: BspNetApi): Promise<number> {
-  const currentTicker = await api.query.proofsDealer.challengesTicker();
+  const [_provider, _currentTick, nextChallengeDeadline] = fetchEventData(
+    api.events.proofsDealer.UpdatedProviderChallengeTick,
+    blockResult.events
+  );
 
-  const spMinDeposit = api.consts.providers.spMinDeposit;
-  const stakeToChallengePeriod = api.consts.proofsDealer.stakeToChallengePeriod;
-
-  const challengePeriod = spMinDeposit.toNumber() / stakeToChallengePeriod.toNumber();
-
-  return currentTicker.toNumber() + challengePeriod;
+  return nextChallengeDeadline.toNumber();
 }

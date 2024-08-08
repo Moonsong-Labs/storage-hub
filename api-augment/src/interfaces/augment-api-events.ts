@@ -1424,6 +1424,14 @@ declare module "@polkadot/api-base/types/events" {
        **/
       SlashableProvider: AugmentedEvent<ApiType, [provider: H256], { provider: H256 }>;
       /**
+       * Updated Provider's challenge tick.
+       **/
+      UpdatedProviderChallengeTick: AugmentedEvent<
+        ApiType,
+        [provider: H256, currentTick: u32, nextChallengeDeadline: u32],
+        { provider: H256; currentTick: u32; nextChallengeDeadline: u32 }
+      >;
+      /**
        * Generic event
        **/
       [key: string]: AugmentedEvent<ApiType>;

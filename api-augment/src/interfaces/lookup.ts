@@ -1511,6 +1511,11 @@ export default {
         nextChallengeDeadline: "u32",
         provider: "H256",
         maybeProviderAccount: "Option<AccountId32>"
+      },
+      UpdatedProviderChallengeTick: {
+        provider: "H256",
+        currentTick: "u32",
+        nextChallengeDeadline: "u32"
       }
     }
   },
@@ -3789,8 +3794,6 @@ export default {
   PalletStorageProvidersError: {
     _enum: [
       "AlreadyRegistered",
-      "MaxBspsReached",
-      "MaxMspsReached",
       "SignUpNotRequested",
       "SignUpRequestPending",
       "NoMultiAddress",
