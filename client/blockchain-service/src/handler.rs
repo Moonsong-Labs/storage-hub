@@ -699,7 +699,7 @@ impl BlockchainService {
                             pallet_file_system::Event::BspConfirmedStoring {
                                 who,
                                 bsp_id,
-                                file_key,
+                                file_keys,
                                 new_root,
                             },
                             // Filter the events by the BSP id.
@@ -711,7 +711,10 @@ impl BlockchainService {
                             {
                                 self.emit(BspConfirmedStoring {
                                     bsp_id,
-                                    file_key: FileKey::from(file_key.as_ref()),
+                                    file_keys: file_keys
+                                        .into_iter()
+                                        .map(|fk| FileKey::from(fk.as_ref()))
+                                        .collect(),
                                     new_root,
                                 })
                             }

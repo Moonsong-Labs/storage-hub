@@ -37,18 +37,15 @@ frame-support = { workspace = true }
 bincode = { workspace = true }
 num-bigint = { workspace = true }
 rand = { workspace = true }
-reference-trie = { workspace = true }
 
 # Substrate
 sp-io = { workspace = true }
 sp-runtime = { workspace = true }
-frame-system = { workspace = true, features = ["std"] }
 
 [features]
 default = ["std"]
 runtime-benchmarks = [
     "frame-support/runtime-benchmarks",
-    "frame-system/runtime-benchmarks",
     "shp-file-metadata/runtime-benchmarks",
     "shp-traits/runtime-benchmarks",
     "sp-runtime/runtime-benchmarks",
@@ -56,7 +53,6 @@ runtime-benchmarks = [
 std = [
     "codec/std",
     "frame-support/std",
-    "frame-system/std",
     "scale-info/std",
     "shp-file-metadata/std",
     "shp-traits/std",
@@ -69,7 +65,6 @@ std = [
 ]
 try-runtime = [
     "frame-support/try-runtime",
-    "frame-system/try-runtime",
     "shp-file-metadata/try-runtime",
     "shp-traits/try-runtime",
     "sp-runtime/try-runtime",

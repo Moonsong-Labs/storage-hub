@@ -9,11 +9,8 @@ repository = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
-frame-support = { workspace = true }
 codec = { workspace = true, features = ["derive"] }
 scale-info = { workspace = true, features = ["derive"] }
-sp-api = { workspace = true }
-sp-consensus-babe = { workspace = true }
 sp-core = { workspace = true }
 sp-inherents = { workspace = true }
 sp-keystore = { workspace = true, optional = true }
@@ -24,11 +21,8 @@ async-trait = { workspace = true }
 [features]
 default = ["std"]
 std = [
-	"frame-support/std",
 	"codec/std",
 	"scale-info/std",
-	"sp-api/std",
-	"sp-consensus-babe/std",
 	"sp-core/std",
 	"sp-inherents/std",
 	"sp-keystore",

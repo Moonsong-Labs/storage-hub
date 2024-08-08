@@ -903,14 +903,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       InvalidMultiAddress: AugmentedError<ApiType>;
       /**
-       * Error thrown when a user tries to sign up as a BSP but the maximum amount of BSPs has been reached.
-       **/
-      MaxBspsReached: AugmentedError<ApiType>;
-      /**
-       * Error thrown when a user tries to sign up as a MSP but the maximum amount of MSPs has been reached.
-       **/
-      MaxMspsReached: AugmentedError<ApiType>;
-      /**
        * Error thrown when a user tries to change its capacity to zero (there are specific extrinsics to sign off as a SP).
        **/
       NewCapacityCantBeZero: AugmentedError<ApiType>;
@@ -946,6 +938,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when trying to get a root from a MSP without passing a User ID.
        **/
       NoUserId: AugmentedError<ApiType>;
+      /**
+       * Error thrown when an attempt was made to slash an unslashable Storage Provider.
+       **/
+      ProviderNotSlashable: AugmentedError<ApiType>;
       /**
        * Error thrown when a user tries to confirm a sign up but the randomness is too fresh to be used yet.
        **/

@@ -1,6 +1,7 @@
 // TODO: Remove this once we don't need the examples in this file
 #![allow(dead_code)]
 
+pub mod bsp_download_file;
 pub mod bsp_submit_proof;
 pub mod bsp_upload_file;
 pub mod mock_bsp_volunteer;

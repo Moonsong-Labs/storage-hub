@@ -1,6 +1,7 @@
 use std::{str::FromStr, time::Duration};
 
 use anyhow::anyhow;
+use frame_support::BoundedVec;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shp_constants::H_LENGTH;
@@ -27,24 +28,24 @@ const LOG_TARGET: &str = "bsp-upload-file-task";
 /// BSP Upload File Task: Handles the whole flow of a file being uploaded to a BSP, from
 /// the BSP's perspective.
 ///
-/// The flow is split into two parts, which are represented here as 3 handlers for 3
+/// The flow is split into three parts, which are represented here as 3 handlers for 3
 /// different events:
-/// - `NewStorageRequest` event: The first part of the flow. It is triggered by an
+/// - [`NewStorageRequest`] event: The first part of the flow. It is triggered by an
 ///   on-chain event of a user submitting a storage request to StorageHub. It responds
 ///   by sending a volunteer transaction and registering the interest of this BSP in
 ///   receiving the file.
-/// - `RemoteUploadRequest` event: The second part of the flow. It is triggered by a
+/// - [`RemoteUploadRequest`] event: The second part of the flow. It is triggered by a
 ///   user sending a chunk of the file to the BSP. It checks the proof for the chunk
 ///   and if it is valid, stores it, until the whole file is stored.
-/// - `BspConfirmedStoring` event: The third part of the flow. It is triggered by the
+/// - [`BspConfirmedStoring`] event: The third part of the flow. It is triggered by the
 ///   runtime confirming that the BSP is now storing the file so that the BSP can update
-///   it's Forest storage.
+///   its Forest storage.
 pub struct BspUploadFileTask<T, FL, FS>
 where
     T: TrieLayout,
     FL: Send + Sync + FileStorage<T>,
     FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     storage_hub_handler: StorageHubHandler<T, FL, FS>,
     file_key_cleanup: Option<HasherOutT<T>>,
@@ -55,7 +56,7 @@ where
     T: TrieLayout,
     FL: Send + Sync + FileStorage<T>,
     FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn clone(&self) -> BspUploadFileTask<T, FL, FS> {
         Self {
@@ -70,7 +71,7 @@ where
     T: TrieLayout,
     FL: Send + Sync + FileStorage<T>,
     FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
         Self {
@@ -92,7 +93,7 @@ where
     T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
@@ -121,7 +122,7 @@ where
     T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync + 'static,
-    <T::Hash as sp_core::Hasher>::Out: TryFrom<[u8; H_LENGTH]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
@@ -240,33 +241,59 @@ where
     T: TrieLayout + Send + Sync + 'static,
     FL: FileStorage<T> + Send + Sync,
     FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     async fn handle_event(&mut self, event: BspConfirmedStoring) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Runtime confirmed BSP storing file: {:?}",
-            event.file_key,
+            "Runtime confirmed BSP storing files: {:?}",
+            event.file_keys,
         );
-
-        let file_key: HasherOutT<T> = TryFrom::<[u8; 32]>::try_from(*event.file_key.as_ref())
-            .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
+        let mut successful_metadatas = Vec::new();
 
         // Get the metadata of the stored file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let file_metadata = read_file_storage
-            .get_metadata(&file_key)
-            .map_err(|e| anyhow!("Failed to get metadata: {:?}", e))?;
+
+        for fk in &event.file_keys {
+            // TODO: use `convert_raw_bytes_to_hasher_out` when moved to shc_common
+            match TryFrom::<[u8; 32]>::try_from(*fk.as_ref()) {
+                Ok(file_key_hash) => match read_file_storage.get_metadata(&file_key_hash) {
+                    Ok(file_metadata) => successful_metadatas.push(file_metadata),
+                    Err(e) => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Failed to get metadata for file key: {:?}, error: {:?}", fk, e
+                        );
+                    }
+                },
+                Err(_) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "File key and HasherOutT mismatch for key: {:?}", fk
+                    );
+                }
+            }
+        }
+
         // Release the file storage lock.
         drop(read_file_storage);
 
-        // Save [`FileMetadata`] of the newly confirmed stored file in the forest storage.
-        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
-        write_forest_storage
-            .insert_metadata(&file_metadata)
-            .map_err(|e| anyhow!("Failed to insert metadata: {:?}", e))?;
-        // Release the forest storage lock.
-        drop(write_forest_storage);
+        if !successful_metadatas.is_empty() {
+            // Save [`FileMetadata`] of the successfully retrieved stored files in the forest storage.
+            let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
+            if let Err(e) = write_forest_storage.insert_files_metadata(&successful_metadatas) {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to insert metadata into forest storage: {:?}", e
+                );
+            }
+        } else {
+            warn!(
+                target: LOG_TARGET,
+                "No valid metadata was retrieved for any of the file keys: {:?}",
+                event.file_keys
+            );
+        }
 
         Ok(())
     }
@@ -277,14 +304,14 @@ where
     T: TrieLayout,
     FL: Send + Sync + FileStorage<T>,
     FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     async fn handle_new_storage_request_event(
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()>
     where
-        HasherOutT<T>: TryFrom<[u8; 32]>,
+        HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
     {
         // Construct file metadata.
         let metadata = FileMetadata {
@@ -450,9 +477,12 @@ where
         // Build extrinsic.
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
             pallet_file_system::Call::bsp_confirm_storing {
-                file_key: H256::from_slice(file_key.as_ref()),
                 non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
-                added_file_key_proof,
+                file_keys_and_proofs: BoundedVec::try_from(vec![(
+                    H256::from_slice(file_key.as_ref()),
+                    added_file_key_proof,
+                )])
+                .expect("Failed to convert file keys and proofs."),
             },
         );
 

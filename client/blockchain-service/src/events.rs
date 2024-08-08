@@ -67,7 +67,7 @@ impl EventBusMessage for AcceptedBspVolunteer {}
 #[derive(Debug, Clone)]
 pub struct BspConfirmedStoring {
     pub bsp_id: H256,
-    pub file_key: FileKey,
+    pub file_keys: Vec<FileKey>,
     pub new_root: H256,
 }
 

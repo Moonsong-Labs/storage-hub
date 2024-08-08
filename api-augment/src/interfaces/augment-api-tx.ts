@@ -404,19 +404,24 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       bspConfirmStoring: AugmentedSubmittable<
         (
-          fileKey: H256 | string | Uint8Array,
           nonInclusionForestProof:
             | SpTrieStorageProofCompactProof
             | { encodedNodes?: any }
             | string
             | Uint8Array,
-          addedFileKeyProof:
-            | ShpFileKeyVerifierFileKeyProof
-            | { fileMetadata?: any; proof?: any }
-            | string
-            | Uint8Array
+          fileKeysAndProofs:
+            | Vec<ITuple<[H256, ShpFileKeyVerifierFileKeyProof]>>
+            | [
+                H256 | string | Uint8Array,
+                (
+                  | ShpFileKeyVerifierFileKeyProof
+                  | { fileMetadata?: any; proof?: any }
+                  | string
+                  | Uint8Array
+                )
+              ][]
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, SpTrieStorageProofCompactProof, ShpFileKeyVerifierFileKeyProof]
+        [SpTrieStorageProofCompactProof, Vec<ITuple<[H256, ShpFileKeyVerifierFileKeyProof]>>]
       >;
       /**
        * Executed by a BSP to stop storing a file.
@@ -2594,10 +2599,9 @@ declare module "@polkadot/api-base/types/submittable" {
        * This extrinsic will perform the following checks and logic:
        * 1. Check that the extrinsic was signed
        * 2. Check that the account received has requested to register as a SP
-       * 3. Check that by registering this SP we would not go over the MaxMsps or MaxBsps limit
-       * 4. Check that the current randomness is sufficiently fresh to be used as a salt for that request
-       * 5. Check that the request has not expired
-       * 6. Register the signer as a MSP or BSP with the data provided in the request
+       * 3. Check that the current randomness is sufficiently fresh to be used as a salt for that request
+       * 4. Check that the request has not expired
+       * 5. Register the signer as a MSP or BSP with the data provided in the request
        *
        * Emits `MspSignUpSuccess` or `BspSignUpSuccess` event when successful, depending on the type of sign up.
        *
@@ -2714,14 +2718,13 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * This extrinsic will perform the following checks and logic:
        * 1. Check that the extrinsic was signed and get the signer.
-       * 2. Check that, by adding this new BSP, we won't exceed the max amount of BSPs allowed
-       * 3. Check that the signer is not already registered as either a MSP or BSP
-       * 4. Check that the multiaddress is valid
-       * 5. Check that the data to be stored is greater than the minimum required by the runtime
-       * 6. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
-       * 7. Check that the signer has enough funds to pay the deposit
-       * 8. Hold the deposit from the signer
-       * 9. Update the Sign Up Requests storage to add the signer as requesting to sign up as a BSP
+       * 2. Check that the signer is not already registered as either a MSP or BSP
+       * 3. Check that the multiaddress is valid
+       * 4. Check that the data to be stored is greater than the minimum required by the runtime
+       * 5. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
+       * 6. Check that the signer has enough funds to pay the deposit
+       * 7. Hold the deposit from the signer
+       * 8. Update the Sign Up Requests storage to add the signer as requesting to sign up as a BSP
        *
        * Emits `BspRequestSignUpSuccess` event when successful.
        **/
@@ -2751,14 +2754,13 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * This extrinsic will perform the following checks and logic:
        * 1. Check that the extrinsic was signed and get the signer.
-       * 2. Check that, by registering this new MSP, we would not go over the MaxMsps limit
-       * 3. Check that the signer is not already registered as either a MSP or BSP
-       * 4. Check that the multiaddress is valid
-       * 5. Check that the data to be stored is greater than the minimum required by the runtime.
-       * 6. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
-       * 7. Check that the signer has enough funds to pay the deposit
-       * 8. Hold the deposit from the signer
-       * 9. Update the Sign Up Requests storage to add the signer as requesting to sign up as a MSP
+       * 2. Check that the signer is not already registered as either a MSP or BSP
+       * 3. Check that the multiaddress is valid
+       * 4. Check that the data to be stored is greater than the minimum required by the runtime.
+       * 5. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
+       * 6. Check that the signer has enough funds to pay the deposit
+       * 7. Hold the deposit from the signer
+       * 8. Update the Sign Up Requests storage to add the signer as requesting to sign up as a MSP
        *
        * Emits `MspRequestSignUpSuccess` event when successful.
        **/
@@ -2774,6 +2776,16 @@ declare module "@polkadot/api-base/types/submittable" {
           paymentAccount: AccountId32 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
         [u32, Vec<Bytes>, PalletStorageProvidersValueProposition, AccountId32]
+      >;
+      /**
+       * Dispatchable extrinsic to slash a _slashable_ Storage Provider.
+       *
+       * A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
+       * In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
+       **/
+      slash: AugmentedSubmittable<
+        (providerAccountId: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [AccountId32]
       >;
       /**
        * Generic tx

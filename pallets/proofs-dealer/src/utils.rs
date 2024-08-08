@@ -12,7 +12,7 @@ use pallet_proofs_dealer_runtime_api::{
     GetNextDeadlineTickError,
 };
 use shp_traits::{
-    CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, ReadProofSubmittersInterface,
+    CommitmentVerifier, ProofSubmittersInterface, ProofsDealerInterface, ProvidersInterface,
     TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use sp_runtime::{
@@ -891,7 +891,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     }
 }
 
-impl<T: pallet::Config> ReadProofSubmittersInterface for Pallet<T> {
+impl<T: pallet::Config> ProofSubmittersInterface for Pallet<T> {
     type ProviderId = ProviderIdFor<T>;
     type TickNumber = BlockNumberFor<T>;
     type MaxProofSubmitters = MaxSubmittersPerTickFor<T>;
@@ -900,6 +900,14 @@ impl<T: pallet::Config> ReadProofSubmittersInterface for Pallet<T> {
         tick_number: &Self::TickNumber,
     ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
         ValidProofSubmittersLastTicks::<T>::get(tick_number)
+    }
+
+    fn get_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) -> Option<u32> {
+        SlashableProviders::<T>::get(provider_id)
+    }
+
+    fn clear_accrued_failed_proof_submissions(provider_id: &Self::ProviderId) {
+        SlashableProviders::<T>::remove(provider_id);
     }
 }
 

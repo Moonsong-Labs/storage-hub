@@ -33,6 +33,9 @@ sp-trie = { workspace = true }
 [dev-dependencies]
 serde = { workspace = true }
 
+#Local
+pallet-proofs-dealer = { workspace = true }
+
 # Substrate
 sp-core = { workspace = true }
 sp-io = { workspace = true }
@@ -55,6 +58,7 @@ std = [
 	"frame-system/std",
 	"pallet-balances/std",
 	"pallet-storage-providers-runtime-api/std",
+	"pallet-proofs-dealer/std",
 	"scale-info/std",
 	"shp-traits/std",
 	"sp-core/std",
