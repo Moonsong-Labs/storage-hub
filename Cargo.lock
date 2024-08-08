@@ -1467,7 +1467,7 @@ dependencies = [
 [[package]]
 name = "common"
 version = "0.1.0"
-source = "git+https://github.com/w3f/ring-proof#626c9598be949aa3dbdd72e8a40531f68b01d6c2"
+source = "git+https://github.com/w3f/ring-proof#665f5f51af5734c7b6d90b985dd6861d4c5b4752"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -10410,7 +10410,7 @@ dependencies = [
 [[package]]
 name = "ring"
 version = "0.1.0"
-source = "git+https://github.com/w3f/ring-proof#626c9598be949aa3dbdd72e8a40531f68b01d6c2"
+source = "git+https://github.com/w3f/ring-proof#665f5f51af5734c7b6d90b985dd6861d4c5b4752"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -13426,7 +13426,7 @@ dependencies = [
 [[package]]
 name = "sp-crypto-ec-utils"
 version = "0.10.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#6dd777ffe62cff936e04a76134ccf07de9dee429"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#12539e7a931e82a040e74c84e413baa712ecd638"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-377-ext",
@@ -13983,7 +13983,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface-proc-macro"
 version = "17.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#6dd777ffe62cff936e04a76134ccf07de9dee429"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#12539e7a931e82a040e74c84e413baa712ecd638"
 dependencies = [
  "Inflector",
  "expander 2.2.1",
@@ -14231,7 +14231,7 @@ dependencies = [
 [[package]]
 name = "sp-tracing"
 version = "16.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#6dd777ffe62cff936e04a76134ccf07de9dee429"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#12539e7a931e82a040e74c84e413baa712ecd638"
 dependencies = [
  "parity-scale-codec",
  "tracing",
@@ -14423,7 +14423,7 @@ dependencies = [
 [[package]]
 name = "sp-wasm-interface"
 version = "20.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk.git#6dd777ffe62cff936e04a76134ccf07de9dee429"
+source = "git+https://github.com/paritytech/polkadot-sdk.git#12539e7a931e82a040e74c84e413baa712ecd638"
 dependencies = [
  "impl-trait-for-tuples",
  "log",
@@ -15675,6 +15675,7 @@ dependencies = [
  "sharded-slab",
  "smallvec",
  "thread_local",
+ "time",
  "tracing",
  "tracing-core",
  "tracing-log 0.2.0",
