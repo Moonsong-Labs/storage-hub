@@ -9,6 +9,7 @@ repository = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
+array-bytes = { workspace =  true }
 serde = { workspace = true }
 log = { workspace = true }
 jsonrpsee = { workspace = true }
