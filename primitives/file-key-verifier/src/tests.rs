@@ -7,6 +7,7 @@ use shp_file_metadata::Fingerprint;
 use shp_traits::AsCompact;
 use shp_traits::CommitmentVerifier;
 use sp_runtime::traits::{BlakeTwo256, Keccak256};
+use sp_runtime::SaturatedConversion;
 use sp_trie::{
     recorder::Recorder, CompactProof, LayoutV1, MemoryDB, TrieDBBuilder, TrieDBMutBuilder,
     TrieLayout, TrieMut,
@@ -140,7 +141,7 @@ pub fn create_random_test_data(size: u64) -> Vec<u8> {
 }
 
 fn generate_challenges<T: TrieLayout>(
-    challenges_count: u64,
+    challenges_count: u32,
     chunks_count: u64,
 ) -> (Vec<HashT<T>>, Vec<Vec<u8>>) {
     let mut challenges = Vec::new();
@@ -749,7 +750,7 @@ fn commitment_verifier_wrong_file_key_vec_fingerprint_failure() {
     if FILE_SIZE % CHUNK_SIZE != 0 {
         chunks_count += 1;
     }
-    let mut challenges_count = FILE_SIZE / SIZE_TO_CHALLENGES;
+    let mut challenges_count = (FILE_SIZE / SIZE_TO_CHALLENGES).saturated_into();
     if FILE_SIZE % SIZE_TO_CHALLENGES != 0 {
         challenges_count += 1;
     }

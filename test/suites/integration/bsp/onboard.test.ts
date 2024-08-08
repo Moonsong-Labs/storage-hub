@@ -8,7 +8,7 @@ import {
   createApiObject,
   DOCKER_IMAGE,
   NODE_INFOS,
-  runBspNet
+  runSimpleBspNet
 } from "../../../util";
 import Docker from "dockerode";
 import { strictEqual } from "node:assert";
@@ -23,7 +23,7 @@ for (const bspNetConfig of bspNetConfigCases) {
     let api: BspNetApi;
 
     before(async () => {
-      await runBspNet(bspNetConfig);
+      await runSimpleBspNet(bspNetConfig);
       api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
     });
 

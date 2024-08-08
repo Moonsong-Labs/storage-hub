@@ -29,11 +29,12 @@ scale-info = { workspace = true }
 pallet-bucket-nfts = { workspace = true }
 pallet-file-system = { workspace = true }
 pallet-file-system-runtime-api = { workspace = true }
-pallet-storage-providers = { workspace = true }
+pallet-payment-streams = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-randomness = { workspace = true }
-pallet-payment-streams = { workspace = true }
+pallet-storage-providers = { workspace = true }
+pallet-storage-providers-runtime-api = { workspace = true }
 
 shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
@@ -122,12 +123,15 @@ std = [
 	"pallet-bucket-nfts/std",
 	"pallet-collator-selection/std",
 	"pallet-file-system/std",
+	"pallet-file-system-runtime-api/std",
 	"pallet-message-queue/std",
 	"pallet-nfts/std",
 	"pallet-proofs-dealer/std",
+	"pallet-proofs-dealer-runtime-api/std",
 	"pallet-randomness/std",
 	"pallet-session/std",
 	"pallet-storage-providers/std",
+	"pallet-storage-providers-runtime-api/std",
 	"pallet-sudo/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",

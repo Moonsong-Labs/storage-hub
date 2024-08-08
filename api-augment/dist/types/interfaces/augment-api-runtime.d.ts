@@ -10,11 +10,12 @@ import type { Extrinsic } from '@polkadot/types/interfaces/extrinsics';
 import type { GenesisBuildErr } from '@polkadot/types/interfaces/genesisBuilder';
 import type { OpaqueMetadata } from '@polkadot/types/interfaces/metadata';
 import type { FeeDetails, RuntimeDispatchInfo } from '@polkadot/types/interfaces/payment';
-import type { AccountId, Balance, Block, Call, ExtrinsicInclusionMode, Header, Index, KeyTypeId, Slot, SlotDuration, Weight } from '@polkadot/types/interfaces/runtime';
+import type { AccountId, Balance, Block, BlockNumber, Call, ExtrinsicInclusionMode, H256, Header, Index, KeyTypeId, Slot, SlotDuration, Weight } from '@polkadot/types/interfaces/runtime';
 import type { RuntimeVersion } from '@polkadot/types/interfaces/state';
-import type { ApplyExtrinsicResult } from '@polkadot/types/interfaces/system';
+import type { ApplyExtrinsicResult, Key } from '@polkadot/types/interfaces/system';
 import type { TransactionSource, TransactionValidity } from '@polkadot/types/interfaces/txqueue';
 import type { IExtrinsic, Observable } from '@polkadot/types/types';
+import type { BackupStorageProvider, BackupStorageProviderId, ChunkId, GetBspInfoError, GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError, GetNextDeadlineTickError, ProviderId, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError, RandomnessOutput, TrieRemoveMutation } from '@storagehub/api-augment/interfaces/storagehubclient';
 export type __AugmentedCall<ApiType extends ApiTypes> = AugmentedCall<ApiType>;
 export type __DecoratedCallBase<ApiType extends ApiTypes> = DecoratedCallBase<ApiType>;
 declare module '@polkadot/api-base/types/calls' {
@@ -131,6 +132,21 @@ declare module '@polkadot/api-base/types/calls' {
              **/
             [key: string]: DecoratedCallBase<ApiType>;
         };
+        /** 0xb9e7717ace5b45cd/1 */
+        fileSystemApi: {
+            /**
+             * Query the chunks that a BSP needs to prove to confirm that it is storing a file.
+             **/
+            queryBspConfirmChunksToProveForFile: AugmentedCall<ApiType, (bspId: BackupStorageProviderId | string | Uint8Array, fileKey: H256 | string | Uint8Array) => Observable<Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>>>;
+            /**
+             * Query the earliest block number that a BSP can volunteer for a file.
+             **/
+            queryEarliestFileVolunteerBlock: AugmentedCall<ApiType, (bspId: BackupStorageProviderId | string | Uint8Array, fileKey: H256 | string | Uint8Array) => Observable<Result<BlockNumber, QueryFileEarliestVolunteerBlockError>>>;
+            /**
+             * Generic call
+             **/
+            [key: string]: DecoratedCallBase<ApiType>;
+        };
         /** 0xfbc577b9d747efd6/1 */
         genesisBuilder: {
             /**
@@ -182,6 +198,49 @@ declare module '@polkadot/api-base/types/calls' {
              **/
             [key: string]: DecoratedCallBase<ApiType>;
         };
+        /** 0x0be7208954c7c6c9/1 */
+        proofsDealerApi: {
+            /**
+             * Get the challenge period for a given Provider.
+             **/
+            getChallengePeriod: AugmentedCall<ApiType, (providerId: ProviderId | string | Uint8Array) => Observable<Result<BlockNumber, GetChallengePeriodError>>>;
+            /**
+             * Get challenges from a seed.
+             **/
+            getChallengesFromSeed: AugmentedCall<ApiType, (seed: RandomnessOutput | string | Uint8Array, providerId: ProviderId | string | Uint8Array, count: u32 | AnyNumber | Uint8Array) => Observable<Vec<Key>>>;
+            /**
+             * Get the checkpoint challenge period.
+             **/
+            getCheckpointChallengePeriod: AugmentedCall<ApiType, () => Observable<BlockNumber>>;
+            /**
+             * Get checkpoint challenges for a given block.
+             **/
+            getCheckpointChallenges: AugmentedCall<ApiType, (tick: BlockNumber | AnyNumber | Uint8Array) => Observable<Result<Vec<ITuple<[Key, Option<TrieRemoveMutation>]>>, GetCheckpointChallengesError>>>;
+            /**
+             * Get the current tick.
+             **/
+            getCurrentTick: AugmentedCall<ApiType, () => Observable<BlockNumber>>;
+            /**
+             * Get forest challenges from a seed.
+             **/
+            getForestChallengesFromSeed: AugmentedCall<ApiType, (seed: RandomnessOutput | string | Uint8Array, providerId: ProviderId | string | Uint8Array) => Observable<Vec<Key>>>;
+            /**
+             * Get the last checkpoint challenge tick.
+             **/
+            getLastCheckpointChallengeTick: AugmentedCall<ApiType, () => Observable<BlockNumber>>;
+            /**
+             * Get the last tick for which the submitter submitted a proof.
+             **/
+            getLastTickProviderSubmittedProof: AugmentedCall<ApiType, (providerId: ProviderId | string | Uint8Array) => Observable<Result<BlockNumber, GetLastTickProviderSubmittedProofError>>>;
+            /**
+             * Get the next deadline tick.
+             **/
+            getNextDeadlineTick: AugmentedCall<ApiType, (providerId: ProviderId | string | Uint8Array) => Observable<Result<BlockNumber, GetNextDeadlineTickError>>>;
+            /**
+             * Generic call
+             **/
+            [key: string]: DecoratedCallBase<ApiType>;
+        };
         /** 0xab3c0572291feb8b/1 */
         sessionKeys: {
             /**
@@ -192,6 +251,17 @@ declare module '@polkadot/api-base/types/calls' {
              * Generate a set of session keys with optionally using the given seed.
              **/
             generateSessionKeys: AugmentedCall<ApiType, (seed: Option<Bytes> | null | Uint8Array | Bytes | string) => Observable<Bytes>>;
+            /**
+             * Generic call
+             **/
+            [key: string]: DecoratedCallBase<ApiType>;
+        };
+        /** 0x966604ffe78eb092/1 */
+        storageProvidersApi: {
+            /**
+             * Get the BSP info for a given BSP ID.
+             **/
+            getBspInfo: AugmentedCall<ApiType, (bspId: BackupStorageProviderId | string | Uint8Array) => Observable<Result<BackupStorageProvider, GetBspInfoError>>>;
             /**
              * Generic call
              **/

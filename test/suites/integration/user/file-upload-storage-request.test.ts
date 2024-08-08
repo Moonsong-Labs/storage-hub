@@ -6,11 +6,11 @@ import {
   NODE_INFOS,
   TEST_ARTEFACTS,
   createApiObject,
-  runBspNet,
+  runSimpleBspNet,
   shUser,
   type BspNetApi,
   type BspNetConfig,
-  closeBspNet,
+  closeSimpleBspNet,
   sleep
 } from "../../../util";
 
@@ -25,7 +25,7 @@ for (const bspNetConfig of bspNetConfigCases) {
     let bsp_api: BspNetApi;
 
     before(async () => {
-      await runBspNet(bspNetConfig);
+      await runSimpleBspNet(bspNetConfig);
       user_api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
       bsp_api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
     });
@@ -33,7 +33,7 @@ for (const bspNetConfig of bspNetConfigCases) {
     after(async () => {
       await user_api.disconnect();
       await bsp_api.disconnect();
-      await closeBspNet();
+      await closeSimpleBspNet();
     });
 
     it("issueStorageRequest fails if file is empty", async () => {
@@ -260,7 +260,7 @@ for (const bspNetConfig of bspNetConfigCases) {
     let bsp_api: BspNetApi;
 
     before(async () => {
-      await runBspNet(bspNetConfig);
+      await runSimpleBspNet(bspNetConfig);
       user_api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
       bsp_api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
     });
@@ -268,7 +268,7 @@ for (const bspNetConfig of bspNetConfigCases) {
     after(async () => {
       await user_api.disconnect();
       await bsp_api.disconnect();
-      await closeBspNet();
+      await closeSimpleBspNet();
     });
 
     it("loadFileInStorage works", async () => {

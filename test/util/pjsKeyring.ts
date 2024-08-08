@@ -21,7 +21,14 @@ export const ferdie = keyring.addFromUri("//Ferdie", {
   name: "Ferdie default"
 });
 
-export const bsp = keyring.addFromUri("//Sh-BSP", { name: "Sh-BSP" });
+export const bspSeed = "//Sh-BSP";
+export const bspKey = keyring.addFromUri(bspSeed, { name: "Sh-BSP" });
+export const bspDownSeed = "//Sh-BSP-Down";
+export const bspDownKey = keyring.addFromUri(bspDownSeed, { name: "Sh-BSP-Down" });
+export const bspTwoSeed = "//Sh-BSP-Two";
+export const bspTwoKey = keyring.addFromUri(bspTwoSeed, { name: "Sh-BSP-Two" });
+export const bspThreeSeed = "//Sh-BSP-Three";
+export const bspThreeKey = keyring.addFromUri(bspThreeSeed, { name: "Sh-BSP-Three" });
 
 export const collator = keyring.addFromUri("//Sh-collator", {
   name: "Sh-collator"

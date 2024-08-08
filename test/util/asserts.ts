@@ -27,6 +27,26 @@ export const assertEventPresent = (
   return { event: event.event, data: event.event.data };
 };
 
+export const assertEventMany = (
+  api: ApiPromise,
+  module: string,
+  method: string,
+  events?: EventRecord[]
+) => {
+  strictEqual(events && events.length > 0, true, "No events emitted in block");
+  if (!events) {
+    throw new Error("No events found, should be caught by assert");
+  }
+
+  const matchingEvents = events.filter((event) => api.events[module][method].is(event.event));
+
+  if (matchingEvents.length === 0) {
+    throw new Error(`No events matching ${module}.${method} found`);
+  }
+
+  return matchingEvents;
+};
+
 type EventData<T extends AugmentedEvent<"promise">> = T extends AugmentedEvent<"promise", infer D>
   ? D
   : never;

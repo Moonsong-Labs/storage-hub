@@ -2,7 +2,7 @@ import { test, describe, after } from "node:test";
 import {
   alice,
   bob,
-  bsp,
+  bspKey,
   charlie,
   collator,
   createSr25519Account,
@@ -80,7 +80,7 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
     });
 
     test("Check test accounts have balance", async () => {
-      const promises = [alice, bob, charlie, dave, eve, ferdie, bsp, collator].map(
+      const promises = [alice, bob, charlie, dave, eve, ferdie, bspKey, collator].map(
         async (signer) => {
           const {
             data: { free }

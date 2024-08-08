@@ -21,12 +21,22 @@ export const createApiObject = async (uri: string): Promise<BspNetApi> => {
     },
     {}
   );
+  const runtime = Object.entries(definitions).reduce(
+    (res: Record<string, any>, [, { runtime }]) => {
+      if (runtime) {
+        Object.assign(res, runtime);
+      }
+      return res;
+    },
+    {}
+  );
 
   const baseApi = await ApiPromise.create({
     provider: new WsProvider(uri),
     noInitWarn: true,
     types,
-    rpc: rpcMethods
+    rpc: rpcMethods,
+    runtime
   });
 
   return Object.assign(baseApi, {
