@@ -546,25 +546,41 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
       throw new Error("Event doesn't match Type");
     }
 
-    const { fingerprint, file_size, location } =
-      await userApi.rpc.storagehubclient.loadFileInStorage(
-        source,
-        destination,
-        NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
+    const {
+      fingerprint,
+      file_size: fileSize,
+      location
+    } = await userApi.rpc.storagehubclient.loadFileInStorage(
+      source,
+      destination,
+      NODE_INFOS.user.AddressId,
+      newBucketEventDataBlob.bucketId
+    );
 
-    await userApi.sealBlock(
+    const issueStorageRequestResult = await userApi.sealBlock(
       userApi.tx.fileSystem.issueStorageRequest(
         newBucketEventDataBlob.bucketId,
         location,
         fingerprint,
-        file_size,
+        fileSize,
         DUMMY_MSP_ID,
         [NODE_INFOS.user.expectedPeerId]
       ),
       shUser
     );
+
+    const newStrorageRequestEvent = userApi.assertEvent(
+      "fileSystem",
+      "NewStorageRequest",
+      issueStorageRequestResult.events
+    );
+    const newStorageRequestEventDataBlob =
+      userApi.events.fileSystem.NewStorageRequest.is(newStrorageRequestEvent.event) &&
+      newStrorageRequestEvent.event.data;
+
+    if (!newStorageRequestEventDataBlob) {
+      throw new Error("Event doesn't match Type");
+    }
 
     /**** BSP VOLUNTEERS ****/
     // Wait for the BSPs to volunteer.
@@ -596,7 +612,18 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
     // Stopping BSP that is supposed to be down.
     await stopBsp(bspDownContainerName);
 
-    return { bspTwoRpcPort, bspThreeRpcPort };
+    return {
+      bspTwoRpcPort,
+      bspThreeRpcPort,
+      fileData: {
+        fileKey: newStorageRequestEventDataBlob.fileKey.toString(),
+        bucketId: newBucketEventDataBlob.bucketId.toString(),
+        location: destination,
+        owner: newBucketEventDataBlob.who,
+        fingerprint,
+        fileSize
+      }
+    };
   } catch (e) {
     console.error("Error ", e);
   } finally {

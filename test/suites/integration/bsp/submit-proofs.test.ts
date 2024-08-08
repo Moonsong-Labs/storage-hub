@@ -13,6 +13,8 @@ import {
   assertEventMany,
   BSP_DOWN_ID
 } from "../../../util";
+import type { AccountId32 } from "@polkadot/types/interfaces";
+import type { u32 } from "@polkadot/types";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false }
@@ -25,13 +27,24 @@ for (const bspNetConfig of bspNetConfigCases) {
     let bspApi: BspNetApi;
     let bspTwoApi: BspNetApi;
     let bspThreeApi: BspNetApi;
+    let fileData: {
+      fileKey: string;
+      bucketId: string;
+      location: string;
+      owner: AccountId32;
+      fingerprint: string;
+      fileSize: u32;
+    };
 
     before(async () => {
-      const bspPorts = await runMultipleInitialisedBspsNet(bspNetConfig);
+      const bspNetInfo = await runMultipleInitialisedBspsNet(bspNetConfig);
       userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
       bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
-      bspTwoApi = await createApiObject(`ws://127.0.0.1:${bspPorts?.bspTwoRpcPort}`);
-      bspThreeApi = await createApiObject(`ws://127.0.0.1:${bspPorts?.bspThreeRpcPort}`);
+      bspTwoApi = await createApiObject(`ws://127.0.0.1:${bspNetInfo?.bspTwoRpcPort}`);
+      bspThreeApi = await createApiObject(`ws://127.0.0.1:${bspNetInfo?.bspThreeRpcPort}`);
+
+      assert(bspNetInfo, "BSPNet failed to initialise");
+      fileData = bspNetInfo?.fileData;
     });
 
     after(async () => {
@@ -156,10 +169,14 @@ for (const bspNetConfig of bspNetConfigCases) {
         "SlashableProvider",
         blockResult?.events
       );
+      const slashableProviderEventDataBlob =
+        bspApi.events.proofsDealer.SlashableProvider.is(slashableProviderEvent.event) &&
+        slashableProviderEvent.event.data;
+      assert(slashableProviderEventDataBlob, "Event doesn't match Type");
       strictEqual(
-        slashableProviderEvent.data.provider.toString(),
+        slashableProviderEventDataBlob.provider.toString(),
         BSP_DOWN_ID,
-        "The BSP should be slashable"
+        "The BSP-Down should be slashable"
       );
 
       // Get the last tick for which the BSP-Down submitted a proof after advancing to the deadline.
@@ -182,82 +199,109 @@ for (const bspNetConfig of bspNetConfigCases) {
     });
 
     it(
+      "BSP stops storing last file",
+      { skip: "Not implemented yet. Needs RPC method to build proofs." },
+      async () => {
+        // TODO: Build inclusion forest proof for file.
+        // TODO: BSP-Three sends transaction to stop storing the only file it has.
+        console.log(fileData);
+        // // Build transaction for BSP-Three to stop storing the only file it has.
+        // const call = bspThreeApi.sealBlock(
+        //   bspThreeApi.tx.fileSystem.bspStopStoring(
+        //     fileData.fileKey,
+        //     fileData.bucketId,
+        //     fileData.location,
+        //     fileData.owner,
+        //     fileData.fingerprint,
+        //     fileData.fileSize,
+        //     false
+        //   ),
+        //   bspThreeKey
+        // );
+        it("BSP is not challenged any more", async () => {
+          // TODO: Check that BSP-Three no longer has a challenge deadline.
+        });
+      }
+    );
+
+    it(
       "BSP submits proof, transaction gets dropped, BSP-resubmits and succeeds",
       { skip: "Dropping transactions is not implemented as testing utility yet." },
       async () => {}
     );
 
-    it("New storage request sent by user", { skip: "Not implemented yet" }, async () => {
-      // TODO: Stop BSP-Two and BSP-Three.
-      // TODO: Send transaction to create new storage request.
+    it(
+      "New storage request sent by user",
+      { skip: "Preventing BSPs from volunteering is not implemented yet" },
+      async () => {
+        // TODO: Stop BSP-Two and BSP-Three.
+        // TODO: Send transaction to create new storage request.
 
-      it("Only one BSP confirms it", { skip: "Not implemented yet" }, async () => {
-        // TODO: Check that BSP volunteers alone.
-        // TODO: Check that BSP confirms storage request.
-      });
+        it("Only one BSP confirms it", async () => {
+          // TODO: Check that BSP volunteers alone.
+          // TODO: Check that BSP confirms storage request.
+        });
 
-      it(
-        "BSP correctly responds to challenge with new forest root",
-        { skip: "Not implemented yet" },
-        async () => {
+        it("BSP correctly responds to challenge with new forest root", async () => {
           // TODO: Advance to next challenge block.
           // TODO: Build block with proof submission.
           // TODO: Check that proof submission was successful.
-        }
-      );
-    });
+        });
+      }
+    );
 
-    it("Custom challenge is added", { skip: "Not implemented yet" }, async () => {
-      it("Custom challenge is included in checkpoint challenge round", async () => {
-        // TODO: Send transaction for custom challenge with new file key.
-        // TODO: Advance until next checkpoint challenge block.
-        // TODO: Check that custom challenge was included in checkpoint challenge round.
-      });
+    it(
+      "Custom challenge is added",
+      { skip: "Not implemented yet. All files have the same files." },
+      async () => {
+        it("Custom challenge is included in checkpoint challenge round", async () => {
+          // TODO: Send transaction for custom challenge with new file key.
+          // TODO: Advance until next checkpoint challenge block.
+          // TODO: Check that custom challenge was included in checkpoint challenge round.
+        });
 
-      it("BSP that has it responds to custom challenge with proof of inclusion", async () => {
-        // TODO: Advance until next challenge for BSP.
-        // TODO: Build block with proof submission.
-        // TODO: Check that proof submission was successful, including the custom challenge.
-      });
+        it("BSP that has it responds to custom challenge with proof of inclusion", async () => {
+          // TODO: Advance until next challenge for BSP.
+          // TODO: Build block with proof submission.
+          // TODO: Check that proof submission was successful, including the custom challenge.
+        });
 
-      it("BSPs who don't have it respond non-inclusion proof", async () => {
-        // TODO: Advance until next challenge for BSP-Two and BSP-Three.
-        // TODO: Build block with proof submission.
-        // TODO: Check that proof submission was successful, with proof of non-inclusion.
-      });
-    });
+        it("BSPs who don't have it respond non-inclusion proof", async () => {
+          // TODO: Advance until next challenge for BSP-Two and BSP-Three.
+          // TODO: Build block with proof submission.
+          // TODO: Check that proof submission was successful, with proof of non-inclusion.
+        });
+      }
+    );
 
-    it("File is deleted by user", { skip: "Not implemented yet" }, async () => {
-      // TODO: Send transaction to delete file.
-      // TODO: Advance until file deletion request makes it into the priority challenge round.
+    it(
+      "File is deleted by user",
+      { skip: "Not implemented yet. All files have the same files." },
+      async () => {
+        // TODO: Send transaction to delete file.
+        // TODO: Advance until file deletion request makes it into the priority challenge round.
 
-      it("Priority challenge is included in checkpoint challenge round", async () => {
-        // TODO: Advance to next checkpoint challenge block.
-        // TODO: Check that priority challenge was included in checkpoint challenge round.
-      });
+        it("Priority challenge is included in checkpoint challenge round", async () => {
+          // TODO: Advance to next checkpoint challenge block.
+          // TODO: Check that priority challenge was included in checkpoint challenge round.
+        });
 
-      it("BSP that has it responds to priority challenge with proof of inclusion", async () => {
-        // TODO: Advance to next challenge block.
-        // TODO: Build block with proof submission.
-        // TODO: Check that proof submission was successful, with proof of inclusion.
-      });
-      it("File is deleted by BSP", async () => {
-        // TODO: Check that file is deleted by BSP, and no longer is in the Forest.
-        // TODO: Check that file is deleted by BSP, and no longer is in the File System.
-      });
+        it("BSP that has it responds to priority challenge with proof of inclusion", async () => {
+          // TODO: Advance to next challenge block.
+          // TODO: Build block with proof submission.
+          // TODO: Check that proof submission was successful, with proof of inclusion.
+        });
+        it("File is deleted by BSP", async () => {
+          // TODO: Check that file is deleted by BSP, and no longer is in the Forest.
+          // TODO: Check that file is deleted by BSP, and no longer is in the File System.
+        });
 
-      it("BSPs who don't have it respond non-inclusion proof", async () => {
-        // TODO: Advance to next challenge block.
-        // TODO: Build block with proof submission.
-        // TODO: Check that proof submission was successful, with proof of non-inclusion.
-      });
-    });
-
-    it("BSP stops storing last file", { skip: "Not implemented yet" }, async () => {
-      // TODO: BSP-Three sends transaction to stop storing the only file it has.
-      it("BSP is not challenged any more", async () => {
-        // TODO: Check that BSP-Three no longer has a challenge deadline.
-      });
-    });
+        it("BSPs who don't have it respond non-inclusion proof", async () => {
+          // TODO: Advance to next challenge block.
+          // TODO: Build block with proof submission.
+          // TODO: Check that proof submission was successful, with proof of non-inclusion.
+        });
+      }
+    );
   });
 }
