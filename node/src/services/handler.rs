@@ -19,11 +19,8 @@ use shc_file_transfer_service::{
 use shc_forest_manager::traits::ForestStorage;
 
 use crate::tasks::{
-    bsp_download_file::BspDownloadFileTask,
-    bsp_submit_proof::BspSubmitProofTask,
-    bsp_upload_file::BspUploadFileTask,
-    sp_react_to_event_mock::{EventToReactTo, SpReactToEventMockTask},
-    user_sends_file::UserSendsFileTask,
+    bsp_download_file::BspDownloadFileTask, bsp_submit_proof::BspSubmitProofTask,
+    bsp_upload_file::BspUploadFileTask, user_sends_file::UserSendsFileTask,
 };
 
 /// Represents the handler for the Storage Hub service.
@@ -129,7 +126,10 @@ where
             bsp_download_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
         remote_download_request_event_bus_listener.start();
 
-        // TODO: Document this task.
+        // BspSubmitProofTask is triggered by a NewChallengeSeed event emitted by the BlockchainService.
+        // It responds by submitting proofs to the challenges derived from the seed, taking also into account
+        // the custom challenges in checkpoint challenge rounds.
+        // Additionally, it handles file deletions as a consequence of inclusion proofs in custom challenges.
         let bsp_submit_proof_task = BspSubmitProofTask::new(self.clone());
         // Subscribing to NewChallengeSeed event from the BlockchainService.
         let new_challenge_seed_event_bus_listener: EventBusListener<NewChallengeSeed, _> =
