@@ -697,7 +697,7 @@ where
             &HoldReason::StorageProviderDeposit.into(),
             &account_id,
             &T::Treasury::get(),
-            slashable_amount,
+            slashable_amount.clone(),
             Precision::BestEffort,
             Restriction::Free,
             Fortitude::Polite,
@@ -705,6 +705,11 @@ where
 
         // Clear the accrued failed proof submissions for the Storage Provider
         <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
+
+        // Provider held funds have been completely depleted.
+        if amount_slashed <= slashable_amount {
+            // TODO: Force sign off the provider.
+        }
 
         Self::deposit_event(Event::<T>::Slashed {
             provider_id: provider_id.clone(),

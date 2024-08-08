@@ -1504,18 +1504,14 @@ export default {
         challenges: "Vec<(H256,Option<ShpTraitsTrieRemoveMutation>)>"
       },
       SlashableProvider: {
-        provider: "H256"
+        provider: "H256",
+        nextChallengeDeadline: "u32"
       },
       NewChallengeCycleInitialised: {
         currentTick: "u32",
         nextChallengeDeadline: "u32",
         provider: "H256",
         maybeProviderAccount: "Option<AccountId32>"
-      },
-      UpdatedProviderChallengeTick: {
-        provider: "H256",
-        currentTick: "u32",
-        nextChallengeDeadline: "u32"
       }
     }
   },

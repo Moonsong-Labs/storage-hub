@@ -1489,17 +1489,13 @@ declare const _default: {
             };
             SlashableProvider: {
                 provider: string;
+                nextChallengeDeadline: string;
             };
             NewChallengeCycleInitialised: {
                 currentTick: string;
                 nextChallengeDeadline: string;
                 provider: string;
                 maybeProviderAccount: string;
-            };
-            UpdatedProviderChallengeTick: {
-                provider: string;
-                currentTick: string;
-                nextChallengeDeadline: string;
             };
         };
     };

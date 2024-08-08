@@ -87,6 +87,7 @@ impl EventBusMessage for StorageRequestRevoked {}
 #[derive(Debug, Clone)]
 pub struct SlashableProvider {
     pub provider: ProviderId,
+    pub next_challenge_deadline: BlockNumber,
 }
 
 impl EventBusMessage for SlashableProvider {}

@@ -462,13 +462,6 @@ where
                 Some(()),
             );
 
-            // TODO: move this to a helper function that updates ChallengeTickToChallengedProviders and emits the event.
-            Self::deposit_event(Event::UpdatedProviderChallengeTick {
-                provider,
-                current_tick: challenges_ticker,
-                next_challenge_deadline,
-            });
-
             weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
             // Calculate the tick for which the Provider should have submitted a proof.
@@ -481,7 +474,7 @@ where
             weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
             // Emit slashable provider event.
-            Self::deposit_event(Event::SlashableProvider { provider });
+            Self::deposit_event(Event::SlashableProvider { provider, next_challenge_deadline });
         }
     }
 

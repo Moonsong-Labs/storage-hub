@@ -66,13 +66,11 @@ describe("BSPNet: Slash Provider", () => {
     strictEqual(slashableProvidersAfterSlash.isNone, true);
 
     // Simulate 2 failed challenge periods
-    const nextChallengeDeadline3 = await runToNextChallengePeriodBlock(
+    await runToNextChallengePeriodBlock(
       api,
       nextChallengeDeadline2,
       DUMMY_BSP_ID
     );
-
-    await runToNextChallengePeriodBlock(api, nextChallengeDeadline3, DUMMY_BSP_ID);
 
     await checkProviderWasSlashed(api, DUMMY_BSP_ID);
   });
@@ -124,18 +122,17 @@ async function runToNextChallengePeriodBlock(
   // Assert that the SlashableProvider event is emitted.
   const blockResult = await api.sealBlock();
 
-  api.assertEvent("proofsDealer", "SlashableProvider", blockResult.events);
+
+  const [_provider, nextChallengeDeadline] = fetchEventData(
+      api.events.proofsDealer.SlashableProvider,
+      blockResult.events
+  );
 
   // Check provider is slashable for 1 additional failed submission.
   const slashableProviders = await api.query.proofsDealer.slashableProviders(provider);
   strictEqual(
     slashableProviders.unwrap().toNumber(),
     oldFailedSubmissionsCount.unwrapOrDefault().toNumber() + 1
-  );
-
-  const [_provider, _currentTick, nextChallengeDeadline] = fetchEventData(
-    api.events.proofsDealer.UpdatedProviderChallengeTick,
-    blockResult.events
   );
 
   return nextChallengeDeadline.toNumber();
