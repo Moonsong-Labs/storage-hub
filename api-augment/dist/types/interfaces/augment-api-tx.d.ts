@@ -2106,7 +2106,7 @@ declare module '@polkadot/api-base/types/submittable' {
              * A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
              * In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
              **/
-            slash: AugmentedSubmittable<(providerAccountId: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [AccountId32]>;
+            slash: AugmentedSubmittable<(providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
             /**
              * Generic tx
              **/

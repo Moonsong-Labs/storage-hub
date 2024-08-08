@@ -1372,12 +1372,22 @@ declare module "@polkadot/api-base/types/events" {
         { who: AccountId32; keyChallenged: H256 }
       >;
       /**
-       * A Provider's challenge cycle was initialised.
+       * A provider's challenge cycle was initialised.
        **/
       NewChallengeCycleInitialised: AugmentedEvent<
         ApiType,
-        [currentTick: u32, provider: H256, maybeProviderAccount: Option<AccountId32>],
-        { currentTick: u32; provider: H256; maybeProviderAccount: Option<AccountId32> }
+        [
+          currentTick: u32,
+          nextChallengeDeadline: u32,
+          provider: H256,
+          maybeProviderAccount: Option<AccountId32>
+        ],
+        {
+          currentTick: u32;
+          nextChallengeDeadline: u32;
+          provider: H256;
+          maybeProviderAccount: Option<AccountId32>;
+        }
       >;
       /**
        * A new challenge seed was generated.
@@ -1410,9 +1420,13 @@ declare module "@polkadot/api-base/types/events" {
         { provider: H256; proof: PalletProofsDealerProof }
       >;
       /**
-       * A slashable provider was found.
+       * A provider was marked as slashable and their challenge deadline was forcefully pushed.
        **/
-      SlashableProvider: AugmentedEvent<ApiType, [provider: H256], { provider: H256 }>;
+      SlashableProvider: AugmentedEvent<
+        ApiType,
+        [provider: H256, nextChallengeDeadline: u32],
+        { provider: H256; nextChallengeDeadline: u32 }
+      >;
       /**
        * Generic event
        **/

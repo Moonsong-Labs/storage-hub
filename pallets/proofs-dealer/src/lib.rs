@@ -342,12 +342,16 @@ pub mod pallet {
             >,
         },
 
-        /// A slashable provider was found.
-        SlashableProvider { provider: ProviderIdFor<T> },
+        /// A provider was marked as slashable and their challenge deadline was forcefully pushed.
+        SlashableProvider {
+            provider: ProviderIdFor<T>,
+            next_challenge_deadline: BlockNumberFor<T>,
+        },
 
-        /// A Provider's challenge cycle was initialised.
+        /// A provider's challenge cycle was initialised.
         NewChallengeCycleInitialised {
             current_tick: BlockNumberFor<T>,
+            next_challenge_deadline: BlockNumberFor<T>,
             provider: ProviderIdFor<T>,
             maybe_provider_account: Option<T::AccountId>,
         },

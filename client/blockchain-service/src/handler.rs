@@ -60,7 +60,7 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmedStoring,
-        NewChallengeSeed, NewStorageRequest,
+        NewChallengeSeed, NewStorageRequest, SlashableProvider,
     },
     transaction::SubmittedTransaction,
     types::{EventsVec, Extrinsic},
@@ -478,6 +478,7 @@ impl BlockchainService {
                         RuntimeEvent::ProofsDealer(
                             pallet_proofs_dealer::Event::NewChallengeCycleInitialised {
                                 current_tick: _,
+                                next_challenge_deadline: _,
                                 provider: provider_id,
                                 maybe_provider_account,
                             },
@@ -519,6 +520,16 @@ impl BlockchainService {
                                 }
                             }
                         }
+                        // A provider has been marked as slashable.
+                        RuntimeEvent::ProofsDealer(
+                            pallet_proofs_dealer::Event::SlashableProvider {
+                                provider,
+                                next_challenge_deadline,
+                            },
+                        ) => self.emit(SlashableProvider {
+                            provider,
+                            next_challenge_deadline,
+                        }),
                         // This event should only be of any use if a node is run by as a user.
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::AcceptedBspVolunteer {

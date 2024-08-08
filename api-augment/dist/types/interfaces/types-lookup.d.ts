@@ -1563,10 +1563,12 @@ declare module '@polkadot/types/lookup' {
         readonly isSlashableProvider: boolean;
         readonly asSlashableProvider: {
             readonly provider: H256;
+            readonly nextChallengeDeadline: u32;
         } & Struct;
         readonly isNewChallengeCycleInitialised: boolean;
         readonly asNewChallengeCycleInitialised: {
             readonly currentTick: u32;
+            readonly nextChallengeDeadline: u32;
             readonly provider: H256;
             readonly maybeProviderAccount: Option<AccountId32>;
         } & Struct;
@@ -3033,7 +3035,7 @@ declare module '@polkadot/types/lookup' {
         } & Struct;
         readonly isSlash: boolean;
         readonly asSlash: {
-            readonly providerAccountId: AccountId32;
+            readonly providerId: H256;
         } & Struct;
         readonly type: 'RequestMspSignUp' | 'RequestBspSignUp' | 'ConfirmSignUp' | 'CancelSignUp' | 'MspSignOff' | 'BspSignOff' | 'ChangeCapacity' | 'AddValueProp' | 'ForceMspSignUp' | 'ForceBspSignUp' | 'Slash';
     }
