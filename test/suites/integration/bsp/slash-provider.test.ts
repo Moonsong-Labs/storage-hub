@@ -87,7 +87,7 @@ describe("BSPNet: Slash Provider", () => {
  */
 async function checkProviderWasSlashed(api: BspNetApi, providerId: string) {
   // Weight for provider to be slashed.
-  await sleep(1000);
+  await sleep(500);
   await api.sealBlock();
 
   const [provider, _amountSlashed] = fetchEventData(
