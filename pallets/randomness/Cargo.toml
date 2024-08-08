@@ -19,12 +19,7 @@ sp-core = { workspace = true }
 sp-io = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
-sp-consensus-babe = { workspace = true }
 codec = { workspace = true }
-
-# Benchmarks
-frame-benchmarking = { workspace = true, optional = true }
-
 
 [dev-dependencies]
 pallet-balances = { workspace = true, features = ["std", "insecure_zero_ed"] }
@@ -32,7 +27,6 @@ pallet-balances = { workspace = true, features = ["std", "insecure_zero_ed"] }
 [features]
 default = ["std"]
 std = [
-	"frame-benchmarking/std",
 	"frame-support/std",
 	"frame-system/std",
 	"codec/std",
@@ -40,13 +34,11 @@ std = [
 	"serde",
 	"shp-session-keys/std",
 	"sp-core/std",
-	"sp-consensus-babe/std",
 	"sp-io/std",
 	"sp-runtime/std",
 	"sp-std/std",
 ]
 runtime-benchmarks = [
-	"frame-benchmarking",
 	"shp-session-keys/runtime-benchmarks",
 ]
 try-runtime = ["frame-support/try-runtime"]

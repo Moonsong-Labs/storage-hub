@@ -121,7 +121,7 @@ pub type KeyProof<T> =
 pub type FileKeyHasher<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHashing;
 
-/// Alias for the `MaxBsps` type used in the FileSystem pallet.
+/// Alias for the `MaxBspsPerStorageRequest` type used in the FileSystem pallet.
 pub type MaxBspsPerStorageRequest<T> = <T as crate::Config>::MaxBspsPerStorageRequest;
 
 /// Alias for the `MaxFilePathSize` type used in the FileSystem pallet.

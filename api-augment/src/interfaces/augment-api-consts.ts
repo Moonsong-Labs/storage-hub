@@ -333,17 +333,9 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxBlocksForRandomness: u32 & AugmentedConst<ApiType>;
       /**
-       * The maximum amount of BSPs that can exist.
-       **/
-      maxBsps: u32 & AugmentedConst<ApiType>;
-      /**
        * The maximum amount of Buckets that a MSP can have.
        **/
       maxBuckets: u32 & AugmentedConst<ApiType>;
-      /**
-       * The maximum amount of MSPs that can exist.
-       **/
-      maxMsps: u32 & AugmentedConst<ApiType>;
       /**
        * The maximum amount of multiaddresses that a Storage Provider can have.
        **/

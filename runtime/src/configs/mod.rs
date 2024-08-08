@@ -466,8 +466,6 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
-    type MaxBsps = ConstU32<100>;
-    type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = BucketDeposit;
     type BucketNameLimit = ConstU32<100>;
@@ -599,6 +597,7 @@ impl pallet_file_system::Config for Runtime {
     type ThresholdType = ThresholdType;
     type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
     type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
+    type HashToThresholdType = HashToThresholdTypeConverter;
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
@@ -650,6 +649,28 @@ pub struct BlockNumberToThresholdTypeConverter;
 impl Convert<BlockNumberFor<Runtime>, ThresholdType> for BlockNumberToThresholdTypeConverter {
     fn convert(block_number: BlockNumberFor<Runtime>) -> ThresholdType {
         FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
+    }
+}
+
+// Converter from the Hash type from the runtime (BlakeTwo256) to the ThresholdType type (FixedU128).
+// Since we can't convert directly a hash to a FixedU128 (since the hash type used in the runtime has
+// 256 bits and FixedU128 has 128 bits), we convert the hash to a BigUint, then map it to a FixedU128
+// by keeping its relative position between zero and the maximum 256-bit number.
+pub struct HashToThresholdTypeConverter;
+impl Convert<<Runtime as frame_system::Config>::Hash, ThresholdType>
+    for HashToThresholdTypeConverter
+{
+    fn convert(hash: <Runtime as frame_system::Config>::Hash) -> ThresholdType {
+        // Get the hash as bytes
+        let hash_bytes = hash.as_ref();
+
+        // Get the 16 least significant bytes of the hash and interpret them as a u128
+        let truncated_hash_bytes: [u8; 16] =
+            hash_bytes[16..].try_into().expect("Hash is 32 bytes; qed");
+        let hash_as_u128 = u128::from_be_bytes(truncated_hash_bytes);
+
+        // Return it as a FixedU128
+        FixedU128::from_inner(hash_as_u128)
     }
 }
 
