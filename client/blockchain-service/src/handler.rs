@@ -522,8 +522,14 @@ impl BlockchainService {
                         }
                         // A provider has been marked as slashable.
                         RuntimeEvent::ProofsDealer(
-                            pallet_proofs_dealer::Event::SlashableProvider { provider, next_challenge_deadline }
-                        ) => self.emit(SlashableProvider { provider, next_challenge_deadline }),
+                            pallet_proofs_dealer::Event::SlashableProvider {
+                                provider,
+                                next_challenge_deadline,
+                            },
+                        ) => self.emit(SlashableProvider {
+                            provider,
+                            next_challenge_deadline,
+                        }),
                         // This event should only be of any use if a node is run by as a user.
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::AcceptedBspVolunteer {

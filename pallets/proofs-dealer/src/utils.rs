@@ -474,7 +474,10 @@ where
             weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
             // Emit slashable provider event.
-            Self::deposit_event(Event::SlashableProvider { provider, next_challenge_deadline });
+            Self::deposit_event(Event::SlashableProvider {
+                provider,
+                next_challenge_deadline,
+            });
         }
     }
 
