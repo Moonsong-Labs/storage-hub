@@ -194,7 +194,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       const [
         _bspConfirmRes_who,
         bspConfirmRes_bspId,
-        bspConfirmRes_fileKey,
+        bspConfirmRes_fileKeys,
         bspConfirmRes_newRoot
       ] = fetchEventData(
         user_api.events.fileSystem.BspConfirmedStoring,
@@ -211,7 +211,7 @@ for (const bspNetConfig of bspNetConfigCases) {
 
       await it("downloaded file passed integrity checks", async () => {
         const saveFileToDisk = await bsp_api.rpc.storagehubclient.saveFileToDisk(
-          bspConfirmRes_fileKey,
+          bspConfirmRes_fileKeys[0],
           "/storage/test/whatsup.jpg"
         );
         assert(saveFileToDisk.isSuccess);

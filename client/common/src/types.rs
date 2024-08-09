@@ -112,11 +112,16 @@ impl FileProof {
     }
 }
 
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub struct DownloadRequestId(u64);
 
 impl DownloadRequestId {
     pub fn new(id: u64) -> Self {
         DownloadRequestId(id)
+    }
+
+    pub fn next(&self) -> Self {
+        let next = self.0 + 1;
+        DownloadRequestId(next)
     }
 }

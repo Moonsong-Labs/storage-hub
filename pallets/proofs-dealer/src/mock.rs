@@ -7,11 +7,12 @@ use frame_support::{
     parameter_types,
     traits::{Everything, Randomness},
     weights::constants::RocksDbWeight,
+    BoundedBTreeSet,
 };
 use frame_system as system;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, SubscribeProvidersInterface, TrieMutation,
-    TrieProofDeltaApplier,
+    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, SubscribeProvidersInterface,
+    TrieMutation, TrieProofDeltaApplier,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
@@ -120,6 +121,15 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
         sp_trie::empty_trie_root::<T>()
     }
 }
+
+// TODO: remove this and replace with pallet treasury
+pub struct TreasuryAccount;
+impl Get<AccountId> for TreasuryAccount {
+    fn get() -> AccountId {
+        0
+    }
+}
+
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
@@ -130,11 +140,11 @@ impl pallet_storage_providers::Config for Test {
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = H256;
     type ReadAccessGroupId = u32;
+    type ProvidersProofSubmitters = MockSubmittingProviders;
+    type Treasury = TreasuryAccount;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
-    type MaxBsps = ConstU32<100>;
-    type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = ConstU128<10>;
     type BucketNameLimit = ConstU32<100>;
@@ -145,7 +155,28 @@ impl pallet_storage_providers::Config for Test {
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
     type ProvidersRandomness = MockRandomness;
+    type SlashFactor = ConstU128<10>;
 }
+
+// Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
+pub struct MockSubmittingProviders;
+impl ProofSubmittersInterface for MockSubmittingProviders {
+    type ProviderId = <Test as frame_system::Config>::Hash;
+    type TickNumber = BlockNumberFor<Test>;
+    type MaxProofSubmitters = ConstU32<1000>;
+    fn get_proof_submitters_for_tick(
+        _block_number: &Self::TickNumber,
+    ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
+        None
+    }
+
+    fn get_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) -> Option<u32> {
+        None
+    }
+
+    fn clear_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) {}
+}
+
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProvidersPallet = Providers;

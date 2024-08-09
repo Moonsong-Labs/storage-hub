@@ -1,11 +1,13 @@
 use crate::types::{Bucket, MainStorageProvider, MultiAddress, StorageProvider};
 use codec::Encode;
+use frame_support::dispatch::{DispatchResultWithPostInfo, Pays};
 use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::sp_runtime::{
     traits::{CheckedAdd, CheckedMul, CheckedSub, One, Saturating, Zero},
     ArithmeticError, DispatchError,
 };
+use frame_support::traits::tokens::Restriction;
 use frame_support::traits::{
     fungible::{Inspect, InspectHold, MutateHold},
     tokens::{Fortitude, Precision, Preservation},
@@ -13,8 +15,8 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
-    MutateProvidersInterface, ProvidersConfig, ProvidersInterface, ReadProvidersInterface,
-    SystemMetricsInterface,
+    MutateProvidersInterface, ProofSubmittersInterface, ProvidersConfig, ProvidersInterface,
+    ReadProvidersInterface, SystemMetricsInterface,
 };
 use sp_runtime::BoundedVec;
 
@@ -65,17 +67,6 @@ where
         ensure!(
             SignUpRequests::<T>::get(&who).is_none(),
             Error::<T>::SignUpRequestPending
-        );
-
-        // Check that, by registering this Main Storage Provider, we are not exceeding the maximum number of Main Storage Providers
-        // (This wont be incremented until the sign up is confirmed, but we check it here to avoid running the rest of the logic
-        // if we know that the sign up will fail)
-        let new_amount_of_msps = MspCount::<T>::get()
-            .checked_add(&T::SpCount::one())
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
-        ensure!(
-            new_amount_of_msps <= T::MaxMsps::get(),
-            Error::<T>::MaxMspsReached
         );
 
         // Check that the account is not already registered either as a Main Storage Provider or a Backup Storage Provider
@@ -156,17 +147,6 @@ where
         ensure!(
             SignUpRequests::<T>::get(&who).is_none(),
             Error::<T>::SignUpRequestPending
-        );
-
-        // Check that, by registering this Backup Storage Provider, we are not exceeding the maximum number of Backup Storage Providers
-        // (This wont be incremented until the sign up is confirmed, but we check it here to avoid running the rest of the logic
-        // if we know that the sign up will fail)
-        let new_amount_of_bsps = BspCount::<T>::get()
-            .checked_add(&T::SpCount::one())
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
-        ensure!(
-            new_amount_of_bsps <= T::MaxBsps::get(),
-            Error::<T>::MaxBspsReached
         );
 
         // Check that the account is not already registered either as a Main Storage Provider or a Backup Storage Provider
@@ -297,15 +277,6 @@ where
         msp_info: &MainStorageProvider<T>,
         request_block: BlockNumberFor<T>,
     ) -> DispatchResult {
-        // Check that, by registering this Main Storage Provider, we are not exceeding the maximum number of Main Storage Providers
-        let new_amount_of_msps = MspCount::<T>::get()
-            .checked_add(&T::SpCount::one())
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
-        ensure!(
-            new_amount_of_msps <= T::MaxMsps::get(),
-            Error::<T>::MaxMspsReached
-        );
-
         // Check that the current block number is not greater than the block number when the request was made plus the maximum amount of
         // blocks that we allow the user to wait for valid randomness (should be at least more than an epoch if using BABE's RandomnessFromOneEpochAgo)
         // We do this to ensure that a user cannot wait indefinitely for randomness that suits them
@@ -322,6 +293,9 @@ where
         MainStorageProviders::<T>::insert(&msp_id, msp_info);
 
         // Increment the counter of Main Storage Providers registered
+        let new_amount_of_msps = MspCount::<T>::get()
+            .checked_add(&T::SpCount::one())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
         MspCount::<T>::set(new_amount_of_msps);
 
         // Remove the sign up request from the SignUpRequests mapping
@@ -348,15 +322,6 @@ where
         bsp_info: &BackupStorageProvider<T>,
         request_block: BlockNumberFor<T>,
     ) -> DispatchResult {
-        // Check that, by registering this Backup Storage Provider, we are not exceeding the maximum number of Backup Storage Providers
-        let new_amount_of_bsps = BspCount::<T>::get()
-            .checked_add(&T::SpCount::one())
-            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
-        ensure!(
-            new_amount_of_bsps <= T::MaxBsps::get(),
-            Error::<T>::MaxBspsReached
-        );
-
         // Check that the current block number is not greater than the block number when the request was made plus the maximum amount of
         // blocks that we allow the user to wait for valid randomness (should be at least more than an epoch if using BABE's RandomnessFromOneEpochAgo)
         // We do this to ensure that a user cannot wait indefinitely for randomness that suits them
@@ -382,6 +347,9 @@ where
         })?;
 
         // Increment the counter of Backup Storage Providers registered
+        let new_amount_of_bsps = BspCount::<T>::get()
+            .checked_add(&T::SpCount::one())
+            .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
         BspCount::<T>::set(new_amount_of_bsps);
 
         // Remove the sign up request from the SignUpRequests mapping
@@ -702,6 +670,44 @@ where
 
         // Return the old capacity
         Ok(old_capacity)
+    }
+
+    /// Slash a Storage Provider.
+    ///
+    /// The amount slashed is calculated as the product of the [`SlashFactor`] and the accrued failed proof submissions.
+    /// The amount is then slashed from the Storage Provider's held deposit and transferred to the treasury.
+    ///
+    /// This will return an error when the Storage Provider is not slashable. In the context of the StorageHub protocol,
+    /// a Storage Provider is slashable when the proofs-dealer pallet has marked them as such.
+    ///
+    /// Successfully slashing a Storage Provider should be a free operation.
+    pub(crate) fn do_slash(account_id: &T::AccountId) -> DispatchResultWithPostInfo {
+        let provider_id = AccountIdToMainStorageProviderId::<T>::get(account_id)
+            .or(AccountIdToBackupStorageProviderId::<T>::get(account_id))
+            .ok_or(Error::<T>::NotRegistered)?;
+
+        // Calculate the amount to be slashed.
+        let slashable_amount = T::SlashFactor::get() * <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id).ok_or(Error::<T>::ProviderNotSlashable)?.into();
+
+        let amount_slashed = T::NativeBalance::transfer_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            account_id,
+            &T::Treasury::get(),
+            slashable_amount,
+            Precision::BestEffort,
+            Restriction::Free,
+            Fortitude::Polite,
+        )?;
+
+        // Clear the accrued failed proof submissions for the Storage Provider
+        <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
+
+        Self::deposit_event(Event::<T>::Slashed {
+            provider_id: provider_id.clone(),
+            amount_slashed,
+        });
+
+        Ok(Pays::No.into())
     }
 
     fn hold_balance(
@@ -1101,12 +1107,19 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
     }
 
     fn get_stake(who: Self::ProviderId) -> Option<BalanceOf<T>> {
-        // TODO: This is not the stake, this logic will be done later down the line
         if let Some(bucket) = Buckets::<T>::get(&who) {
-            let _related_msp = MainStorageProviders::<T>::get(bucket.msp_id);
-            Some(T::SpMinDeposit::get())
-        } else if let Some(_bsp) = BackupStorageProviders::<T>::get(&who) {
-            Some(T::SpMinDeposit::get())
+            match MainStorageProviders::<T>::get(bucket.msp_id) {
+                Some(related_msp) => Some(T::NativeBalance::balance_on_hold(
+                    &HoldReason::BucketDeposit.into(),
+                    &related_msp.owner_account,
+                )),
+                None => None,
+            }
+        } else if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
+            Some(T::NativeBalance::balance_on_hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &bsp.owner_account,
+            ))
         } else {
             None
         }
