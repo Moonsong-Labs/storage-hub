@@ -78,7 +78,7 @@ describe("BSPNet: Slash Provider", () => {
  * @param providerId
  */
 async function checkProviderWasSlashed(api: BspNetApi, providerId: string) {
-  // Weight for provider to be slashed.
+  // Wait for provider to be slashed.
   await sleep(500);
   await api.sealBlock();
 

@@ -131,7 +131,7 @@ where
         remote_download_request_event_bus_listener.start();
 
         // Slash your own kin or potentially commit seppuku on your own stake.
-        // Running this is as BSP is very honourable and shows a great sense of justice.
+        // Running this is as a BSP is very honourable and shows a great sense of justice.
         let bsp_slash_provider_task = SlashProviderTask::new(self.clone());
         // Subscribing to SlashableProvider event from the BlockchainService.
         let slashable_provider_event_bus_listener: EventBusListener<SlashableProvider, _> =
