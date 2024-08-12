@@ -4045,6 +4045,8 @@ mod remove_root_bucket {
 mod slash {
     use super::*;
     mod failure {
+        use sp_core::H256;
+
         use super::*;
 
         #[test]
@@ -4054,8 +4056,8 @@ mod slash {
 
                 // Try to slash a provider that is not registered
                 assert_noop!(
-                    StorageProviders::slash(RuntimeOrigin::signed(caller), caller),
-                    Error::<Test>::NotRegistered
+                    StorageProviders::slash(RuntimeOrigin::signed(caller), H256::default()),
+                    Error::<Test>::ProviderNotSlashable
                 );
             });
         }
@@ -4068,11 +4070,14 @@ mod slash {
                 let storage_amount: StorageData<Test> = 100;
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
+                let provider_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
                 let caller = accounts::BOB.0;
 
                 // Try to slash the provider
                 assert_noop!(
-                    StorageProviders::slash(RuntimeOrigin::signed(caller), alice),
+                    StorageProviders::slash(RuntimeOrigin::signed(caller), provider_id),
                     Error::<Test>::ProviderNotSlashable
                 );
             });
@@ -4107,7 +4112,7 @@ mod slash {
                 // Slash the provider
                 assert_ok!(StorageProviders::slash(
                     RuntimeOrigin::signed(caller),
-                    alice
+                    provider_id
                 ));
 
                 // Check that the provider is no longer slashable
@@ -4174,9 +4179,12 @@ mod slash {
                 // Slash the providers
                 assert_ok!(StorageProviders::slash(
                     RuntimeOrigin::signed(caller),
-                    alice
+                    alice_provider_id
                 ));
-                assert_ok!(StorageProviders::slash(RuntimeOrigin::signed(caller), bob));
+                assert_ok!(StorageProviders::slash(
+                    RuntimeOrigin::signed(caller),
+                    bob_provider_id
+                ));
 
                 // Check that the providers are no longer slashable
                 assert_eq!(

@@ -559,6 +559,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
         System::assert_last_event(
             Event::NewChallengeCycleInitialised {
                 current_tick: 1,
+                next_challenge_deadline: expected_deadline,
                 provider: provider_id,
                 maybe_provider_account: Some(1u64),
             }
@@ -2739,6 +2740,7 @@ fn new_challenges_round_provider_marked_as_slashable() {
         System::assert_has_event(
             Event::SlashableProvider {
                 provider: provider_id,
+                next_challenge_deadline: prev_deadline + challenge_period,
             }
             .into(),
         );
@@ -2832,6 +2834,9 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
         System::assert_has_event(
             Event::SlashableProvider {
                 provider: provider_id,
+                // TODO: This should be prev_deadline + challenge_period, but we do not yet handle the case when the provider runs out of stake.
+                // TODO: Therefore the next deadline is the same as the current one since the stake to challenge period is 0.
+                next_challenge_deadline: prev_deadline,
             }
             .into(),
         );
@@ -2852,6 +2857,9 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
         System::assert_has_event(
             Event::SlashableProvider {
                 provider: provider_id,
+                // TODO: This should be prev_deadline + challenge_period, but we do not yet handle the case when the provider runs out of stake.
+                // TODO: Therefore the next deadline is the same as the current one since the stake to challenge period is 0.
+                next_challenge_deadline: prev_deadline,
             }
             .into(),
         );
@@ -3027,6 +3035,7 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
         System::assert_has_event(
             Event::SlashableProvider {
                 provider: bob_provider_id,
+                next_challenge_deadline: prev_deadline + challenge_period,
             }
             .into(),
         );
