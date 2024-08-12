@@ -685,6 +685,117 @@ mod request_storage {
         }
 
         #[test]
+        fn two_request_storage_in_same_block() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let user = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let file_1_location = FileLocation::<Test>::try_from(b"test1".to_vec()).unwrap();
+                let file_2_location = FileLocation::<Test>::try_from(b"test2".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+
+                // Dispatch a signed extrinsic.
+                assert_ok!(FileSystem::issue_storage_request(
+                    user.clone(),
+                    bucket_id,
+                    file_1_location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    file_1_location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Assert that the storage was updated
+                assert_eq!(
+                    FileSystem::storage_requests(file_key),
+                    Some(StorageRequestMetadata {
+                        requested_at: 1,
+                        owner: owner_account_id.clone(),
+                        bucket_id: bucket_id.clone(),
+                        location: file_1_location.clone(),
+                        fingerprint,
+                        size,
+                        msp: Some(msp_id),
+                        user_peer_ids: peer_ids.clone(),
+                        data_server_sps: BoundedVec::default(),
+                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_confirmed: 0,
+                        bsps_volunteered: 0,
+                    })
+                );
+
+                // Dispatch a signed extrinsic.
+                assert_ok!(FileSystem::issue_storage_request(
+                    user.clone(),
+                    bucket_id,
+                    file_2_location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    file_2_location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Assert that the storage was updated
+                assert_eq!(
+                    FileSystem::storage_requests(file_key),
+                    Some(StorageRequestMetadata {
+                        requested_at: 1,
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: file_2_location.clone(),
+                        fingerprint,
+                        size,
+                        msp: Some(msp_id),
+                        user_peer_ids: peer_ids.clone(),
+                        data_server_sps: BoundedVec::default(),
+                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_confirmed: 0,
+                        bsps_volunteered: 0,
+                    })
+                );
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::NewStorageRequest {
+                        who: owner_account_id,
+                        file_key,
+                        bucket_id,
+                        location: file_2_location.clone(),
+                        fingerprint,
+                        size,
+                        peer_ids,
+                    }
+                    .into(),
+                );
+            });
+        }
+
+        #[test]
         fn request_storage_failure_if_size_is_zero() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
