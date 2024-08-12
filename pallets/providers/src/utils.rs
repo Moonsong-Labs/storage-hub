@@ -14,6 +14,7 @@ use frame_support::traits::{
     Get, Randomness,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
+use pallet_storage_providers_runtime_api::GetBspInfoError;
 use shp_traits::{
     MutateProvidersInterface, ProofSubmittersInterface, ProvidersConfig, ProvidersInterface,
     ReadProvidersInterface, SystemMetricsInterface,
@@ -1171,5 +1172,17 @@ impl<T: pallet::Config> SystemMetricsInterface for pallet::Pallet<T> {
 
     fn get_total_used_capacity() -> Self::ProvidedUnit {
         Self::get_used_bsp_capacity()
+    }
+}
+
+/// Runtime API implementation for the Storage Providers pallet.
+impl<T> Pallet<T>
+where
+    T: pallet::Config,
+{
+    pub fn get_bsp_info(
+        bsp_id: &BackupStorageProviderId<T>,
+    ) -> Result<BackupStorageProvider<T>, GetBspInfoError> {
+        BackupStorageProviders::<T>::get(bsp_id).ok_or(GetBspInfoError::BspNotRegistered)
     }
 }

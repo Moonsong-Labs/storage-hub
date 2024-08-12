@@ -1,8 +1,8 @@
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
-    BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, PeerIds, ProviderId, RandomSeed,
-    StorageData,
+    BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, PeerIds, ProviderId,
+    RandomnessOutput, StorageData,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -16,7 +16,7 @@ use sp_runtime::AccountId32;
 pub struct NewChallengeSeed {
     pub provider_id: ProviderId,
     pub tick: BlockNumber,
-    pub seed: RandomSeed,
+    pub seed: RandomnessOutput,
 }
 
 impl EventBusMessage for NewChallengeSeed {}

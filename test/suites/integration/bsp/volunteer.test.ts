@@ -7,12 +7,12 @@ import {
   TEST_ARTEFACTS,
   createApiObject,
   fetchEventData,
-  runBspNet,
+  runSimpleBspNet,
   shUser,
   checkFileChecksum,
   type BspNetApi,
   type BspNetConfig,
-  closeBspNet,
+  closeSimpleBspNet,
   sleep
 } from "../../../util";
 import { assert } from "node:console";
@@ -23,12 +23,12 @@ const bspNetConfigCases: BspNetConfig[] = [
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
-  describe("BSPNet: BSP Volunteer", () => {
+  describe(`BSPNet: BSP Volunteer (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
     let user_api: BspNetApi;
     let bsp_api: BspNetApi;
 
     before(async () => {
-      await runBspNet(bspNetConfig);
+      await runSimpleBspNet(bspNetConfig);
       user_api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
       bsp_api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
     });
@@ -36,7 +36,7 @@ for (const bspNetConfig of bspNetConfigCases) {
     after(async () => {
       await user_api.disconnect();
       await bsp_api.disconnect();
-      await closeBspNet();
+      await closeSimpleBspNet();
     });
 
     it("Network launches and can be queried", async () => {
