@@ -7,6 +7,7 @@ use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::{EventBusListener, EventHandler},
 };
+use shc_blockchain_service::events::SlashableProvider;
 use shc_blockchain_service::{
     events::{BspConfirmedStoring, NewChallengeSeed, NewStorageRequest},
     BlockchainService,
@@ -18,6 +19,7 @@ use shc_file_transfer_service::{
 };
 use shc_forest_manager::traits::ForestStorage;
 
+use crate::tasks::slash_provider::SlashProviderTask;
 use crate::tasks::{
     bsp_download_file::BspDownloadFileTask, bsp_submit_proof::BspSubmitProofTask,
     bsp_upload_file::BspUploadFileTask, user_sends_file::UserSendsFileTask,
@@ -137,5 +139,15 @@ where
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         new_challenge_seed_event_bus_listener.start();
+
+        // Slash your own kin or potentially commit seppuku on your own stake.
+        // Running this is as a BSP is very honourable and shows a great sense of justice.
+        let bsp_slash_provider_task = SlashProviderTask::new(self.clone());
+        // Subscribing to SlashableProvider event from the BlockchainService.
+        let slashable_provider_event_bus_listener: EventBusListener<SlashableProvider, _> =
+            bsp_slash_provider_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        slashable_provider_event_bus_listener.start();
     }
 }

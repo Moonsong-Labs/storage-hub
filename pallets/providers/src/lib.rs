@@ -960,14 +960,11 @@ pub mod pallet {
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
         #[pallet::call_index(10)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn slash(
-            origin: OriginFor<T>,
-            provider_account_id: T::AccountId,
-        ) -> DispatchResultWithPostInfo {
+        pub fn slash(origin: OriginFor<T>, provider_id: HashId<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was sent with root origin.
             ensure_signed(origin)?;
 
-            Self::do_slash(&provider_account_id)
+            Self::do_slash(&provider_id)
         }
     }
 }

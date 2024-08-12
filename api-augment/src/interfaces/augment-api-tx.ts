@@ -2784,8 +2784,8 @@ declare module "@polkadot/api-base/types/submittable" {
        * In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
        **/
       slash: AugmentedSubmittable<
-        (providerAccountId: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
-        [AccountId32]
+        (providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
       >;
       /**
        * Generic tx
