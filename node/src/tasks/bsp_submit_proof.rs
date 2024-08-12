@@ -108,6 +108,8 @@ where
             .await?;
         trace!(target: LOG_TARGET, "Checkpoint challenges to respond to: {:?}", checkpoint_challenges);
 
+        // TODO: In the near future, from here onwards we should be using the locking mechanism so that only
+        // TODO: one task at a time can be sending Forest-related transactions to the runtime.
         // Get a read lock on the forest storage to generate a proof for the file.
         let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
         let proven_file_keys = read_forest_storage
@@ -307,8 +309,9 @@ where
                 match raw_key.try_into() {
                     Ok(key) => converted_checkpoint_challenges.push((key, challenge.1)),
                     Err(_) => {
-                        error!(target: LOG_TARGET, "Failed to challenge key to hasher output. This should not be possible, as the challenge keys are hasher outputs.");
-                        return Err(anyhow!("Failed to challenge key to hasher output. This should not be possible, as the challenge keys are hasher outputs."));
+                        let error_msg = "Failed to challenge key to hasher output. This should not be possible, as the challenge keys are hasher outputs.";
+                        error!(target: LOG_TARGET, error_msg);
+                        return Err(anyhow!(error_msg));
                     }
                 }
             }

@@ -61,8 +61,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
 
       // Calculate how many blocks to advance until next challenge tick.
-      const currentBlock = await userApi.rpc.chain.getBlock();
-      const currentBlockNumber = currentBlock.block.header.number.toNumber();
+      const currentBlockNumber = (await userApi.query.system.number()).toNumber();
       const blocksToAdvance = nextChallengeTick - currentBlockNumber;
 
       // Advance blocksToAdvance blocks.
