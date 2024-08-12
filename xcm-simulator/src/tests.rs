@@ -4,6 +4,7 @@ use xcm_executor::traits::ConvertLocation;
 use xcm_simulator::TestExt;
 
 use crate::relay_chain::location_converter::LocationConverter;
+use crate::storagehub::configs::MaxBatchConfirmStorageRequests;
 use crate::system_chain;
 use crate::{
     constants::{ALICE, BOB, CENTS, INITIAL_BALANCE},
@@ -14,7 +15,7 @@ use codec::Encode;
 use frame_support::dispatch::GetDispatchInfo;
 use frame_support::BoundedVec;
 use pallet_balances;
-use pallet_storage_providers::types::MultiAddress;
+use pallet_storage_providers::types::{MaxMultiAddressAmount, MultiAddress};
 use shp_traits::ProvidersInterface;
 use sp_core::H256;
 
@@ -423,7 +424,6 @@ mod root {
 }
 mod providers {
     use pallet_randomness::LatestOneEpochAgoRandomness;
-    use pallet_storage_providers::types::MaxMultiAddressAmount;
     use sp_core::H256;
     use sp_runtime::BoundedVec;
     use storagehub::configs::SpMinDeposit;
@@ -1143,7 +1143,6 @@ mod providers {
 mod users {
 
     use crate::sh_sibling_account_account_id;
-    use crate::storagehub::configs::MaxMultiAddressAmount;
     use crate::CHARLIE;
     use crate::SH_PARA_ID;
     use pallet_file_system::types::MaxFilePathSize;
@@ -1182,7 +1181,7 @@ mod users {
             };
             let mut multiaddresses: BoundedVec<
                 MultiAddress<storagehub::Runtime>,
-                MaxMultiAddressAmount,
+                MaxMultiAddressAmount<storagehub::Runtime>,
             > = BoundedVec::new();
             multiaddresses.force_push(
                 "/ip4/127.0.0.1/udp/1234"
@@ -1331,14 +1330,21 @@ mod users {
             ));
 
             // And confirm storing the file
+            let mut vec_of_key_proofs: BoundedVec<
+                (
+                    pallet_file_system::types::MerkleHash<storagehub::Runtime>,
+                    <storagehub::ProofsDealer as shp_traits::ProofsDealerInterface>::KeyProof,
+                ),
+                MaxBatchConfirmStorageRequests,
+            > = BoundedVec::new();
             let simulated_proof: CompactProof = CompactProof {
                 encoded_nodes: vec![[1u8; 32].to_vec()],
             };
+            vec_of_key_proofs.force_push((file_key.clone(), simulated_proof.clone()));
             assert_ok!(storagehub::FileSystem::bsp_confirm_storing(
                 storagehub::RuntimeOrigin::signed(BOB),
-                file_key.clone(),
                 simulated_proof.clone(),
-                simulated_proof.clone()
+                vec_of_key_proofs.clone()
             ));
         });
 
@@ -1428,7 +1434,7 @@ mod users {
             };
             let mut multiaddresses: BoundedVec<
                 MultiAddress<storagehub::Runtime>,
-                MaxMultiAddressAmount,
+                MaxMultiAddressAmount<storagehub::Runtime>,
             > = BoundedVec::new();
             multiaddresses.force_push(
                 "/ip4/127.0.0.1/udp/1234"
@@ -1695,14 +1701,21 @@ mod users {
             ));
 
             // And confirm storing the file
+            let mut vec_of_key_proofs: BoundedVec<
+                (
+                    pallet_file_system::types::MerkleHash<storagehub::Runtime>,
+                    <storagehub::ProofsDealer as shp_traits::ProofsDealerInterface>::KeyProof,
+                ),
+                MaxBatchConfirmStorageRequests,
+            > = BoundedVec::new();
             let simulated_proof: CompactProof = CompactProof {
                 encoded_nodes: vec![[1u8; 32].to_vec()],
             };
+            vec_of_key_proofs.force_push((file_key.clone(), simulated_proof.clone()));
             assert_ok!(storagehub::FileSystem::bsp_confirm_storing(
                 storagehub::RuntimeOrigin::signed(BOB),
-                file_key.clone(),
                 simulated_proof.clone(),
-                simulated_proof.clone()
+                vec_of_key_proofs.clone()
             ));
         });
 

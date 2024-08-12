@@ -428,10 +428,13 @@ impl pallet_randomness::GetBabeData<u64, Option<Hash>> for BabeDataGetter {
 }
 
 parameter_types! {
-    // TODO: If the next line is uncommented (which should be eventually), compilation breaks (most likely because of mismatched dependency issues)
-    // pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * runtime_constants::time::EPOCH_DURATION_IN_SLOTS, 2 * MINUTES);
     pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * HOURS, 2 * MINUTES);
 }
+
+// TODO: If the next line is uncommented (which should be eventually), compilation breaks (most likely because of mismatched dependency issues)
+/* parameter_types! {
+    pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * runtime_constants::time::EPOCH_DURATION_IN_SLOTS, 2 * MINUTES);
+} */
 
 /// Configure the randomness pallet
 impl pallet_randomness::Config for Runtime {
@@ -655,8 +658,8 @@ impl Convert<BlockNumberFor<Runtime>, ThresholdType> for BlockNumberToThresholdT
 
 // Converter from the Hash type from the runtime (BlakeTwo256) to the ThresholdType type (FixedU128).
 // Since we can't convert directly a hash to a FixedU128 (since the hash type used in the runtime has
-// 256 bits and FixedU128 has 128 bits), we convert the hash to a BigUint, then map it to a FixedU128
-// by keeping its relative position between zero and the maximum 256-bit number.
+// 256 bits and FixedU128 has 128 bits), we truncate the hash to 16 bytes and then interpret those bytes
+// as a big-endian fixed-point U128.
 pub struct HashToThresholdTypeConverter;
 impl Convert<<Runtime as frame_system::Config>::Hash, ThresholdType>
     for HashToThresholdTypeConverter

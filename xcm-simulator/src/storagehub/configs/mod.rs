@@ -464,6 +464,7 @@ parameter_types! {
     pub const SpMinCapacity: u32 = 2;
     pub const DepositPerData: Balance = 2;
     pub const MinBlocksBetweenCapacityChanges: u32 = 10;
+    pub const SlashFactor: Balance = 20 * UNIT;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -482,11 +483,11 @@ impl pallet_storage_providers::Config for Runtime {
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
+    type ProvidersProofSubmitters = ProofsDealer;
+    type Treasury = TreasuryAccount;
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = MaxProtocols;
-    type MaxBsps = MaxBsps;
-    type MaxMsps = MaxMsps;
     type MaxBuckets = MaxBuckets;
     type BucketDeposit = BucketDeposit;
     type BucketNameLimit = BucketNameLimit;
@@ -498,6 +499,7 @@ impl pallet_storage_providers::Config for Runtime {
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = MinBlocksBetweenCapacityChanges;
+    type SlashFactor = SlashFactor;
 }
 
 parameter_types! {
@@ -624,6 +626,7 @@ parameter_types! {
     pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
     pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100
     pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(u128::MAX / 100_000_000_000_000_000, 1000); // Takes 1000 blocks to reach maximum threshold
+    pub const MaxBatchConfirmStorageRequests: u32 = 10;
 }
 
 impl pallet_file_system::Config for Runtime {
@@ -633,6 +636,7 @@ impl pallet_file_system::Config for Runtime {
     type ThresholdType = ThresholdType;
     type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
     type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
+    type HashToThresholdType = HashToThresholdTypeConverter;
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
@@ -645,6 +649,7 @@ impl pallet_file_system::Config for Runtime {
     type StorageRequestBspsRequiredType = u32;
     type TargetBspsRequired = ConstU32<1>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
+    type MaxBatchConfirmStorageRequests = MaxBatchConfirmStorageRequests;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = ConstU32<5>;
@@ -683,6 +688,28 @@ pub struct BlockNumberToThresholdTypeConverter;
 impl Convert<BlockNumberFor<Runtime>, ThresholdType> for BlockNumberToThresholdTypeConverter {
     fn convert(block_number: BlockNumberFor<Runtime>) -> ThresholdType {
         FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
+    }
+}
+
+// Converter from the Hash type from the runtime (BlakeTwo256) to the ThresholdType type (FixedU128).
+// Since we can't convert directly a hash to a FixedU128 (since the hash type used in the runtime has
+// 256 bits and FixedU128 has 128 bits), we truncate the hash to 16 bytes and then interpret those bytes
+// as a big-endian fixed-point U128.
+pub struct HashToThresholdTypeConverter;
+impl Convert<<Runtime as frame_system::Config>::Hash, ThresholdType>
+    for HashToThresholdTypeConverter
+{
+    fn convert(hash: <Runtime as frame_system::Config>::Hash) -> ThresholdType {
+        // Get the hash as bytes
+        let hash_bytes = hash.as_ref();
+
+        // Get the 16 least significant bytes of the hash and interpret them as a u128
+        let truncated_hash_bytes: [u8; 16] =
+            hash_bytes[16..].try_into().expect("Hash is 32 bytes; qed");
+        let hash_as_u128 = u128::from_be_bytes(truncated_hash_bytes);
+
+        // Return it as a FixedU128
+        FixedU128::from_inner(hash_as_u128)
     }
 }
 
