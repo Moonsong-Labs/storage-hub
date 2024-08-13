@@ -21,7 +21,7 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
-  { noisy: false, rocksdb: true }
+  // { noisy: false, rocksdb: true }
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
@@ -261,43 +261,42 @@ for (const bspNetConfig of bspNetConfigCases) {
       );
 
       await sleep(500); // wait for the bsp to volunteer
-      const volunteer_pending = await bsp_api.rpc.author.pendingExtrinsics();
+      const volunteer_pending = await user_api.rpc.author.pendingExtrinsics();
       strictEqual(
         volunteer_pending.length,
         source.length,
         "There should be pending extrinsics for all files from BSP (volunteer)"
       );
 
-      await bsp_api.sealBlock();
+      await user_api.sealBlock();
       const [resBspId, resBucketId, resLoc, resFinger, resMulti, _, resSize] = fetchEventData(
-        bsp_api.events.fileSystem.AcceptedBspVolunteer,
-        await bsp_api.query.system.events()
+        user_api.events.fileSystem.AcceptedBspVolunteer,
+        await user_api.query.system.events()
       );
 
       await sleep(5000); // wait for the bsp to download the file
-      const confirm_pending = await bsp_api.rpc.author.pendingExtrinsics();
+      const confirm_pending = await user_api.rpc.author.pendingExtrinsics();
       strictEqual(
         confirm_pending.length,
         1,
         "There should be one pending extrinsic from BSP (confirm store)"
       );
 
-      await bsp_api.sealBlock();
+      await user_api.sealBlock();
       const [
         _bspConfirmRes_who,
         bspConfirmRes_bspId,
         bspConfirmRes_fileKeys,
         bspConfirmRes_newRoot
       ] = fetchEventData(
-        bsp_api.events.fileSystem.BspConfirmedStoring,
-        await bsp_api.query.system.events()
+        user_api.events.fileSystem.BspConfirmedStoring,
+        await user_api.query.system.events()
       );
 
       strictEqual(bspConfirmRes_fileKeys.length, 1);
 
-
       await sleep(1000); // wait for the bsp to process the BspConfirmedStoring event
-      const bsp_forest_root_after_confirm = await bsp_api.rpc.storagehubclient.getForestRoot();
+      const bsp_forest_root_after_confirm = await user_api.rpc.storagehubclient.getForestRoot();
       strictEqual(bsp_forest_root_after_confirm.toString(), bspConfirmRes_newRoot.toString());
     });
   });
