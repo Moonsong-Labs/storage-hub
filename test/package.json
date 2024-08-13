@@ -46,12 +46,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@polkadot/api": "12.1.1",
-    "@polkadot/api-augment": "12.1.1",
-    "@polkadot/keyring": "12.6.2",
-    "@polkadot/types": "12.1.1",
-    "@polkadot/util": "12.6.2",
-    "@polkadot/util-crypto": "12.6.2",
+    "@polkadot/api": "12.3.1",
+    "@polkadot/api-augment": "12.3.1",
+    "@polkadot/keyring": "13.0.2",
+    "@polkadot/types": "12.3.1",
+    "@polkadot/util": "13.0.2",
+    "@polkadot/util-crypto": "13.0.2",
     "@polkadot/wasm-crypto": "7.3.2",
     "@reporters/github": "1.7.0",
     "@storagehub/api-augment": "link:../api-augment",
@@ -60,19 +60,19 @@
     "docker-compose": "0.24.8",
     "dockerode": "4.0.2",
     "dotenv": "16.4.5",
-    "inquirer": "9.3.2",
+    "inquirer": "10.1.8",
     "json-bigint": "^1.0.0",
     "lodash": "4.17.21",
-    "testcontainers": "10.10.0",
-    "tsx": "4.16.2"
+    "testcontainers": "10.11.0",
+    "tsx": "4.17.0"
   },
   "devDependencies": {
     "@biomejs/biome": "1.8.3",
-    "@types/dockerode": "3.3.29",
+    "@types/dockerode": "3.3.31",
     "@types/inquirer": "9.0.7",
     "@types/json-bigint": "1.0.4",
-    "@types/lodash": "4.17.6",
-    "@types/node": "20.14.9",
-    "typescript": "5.5.3"
+    "@types/lodash": "4.17.7",
+    "@types/node": "22.2.0",
+    "typescript": "5.5.4"
   }
 }
