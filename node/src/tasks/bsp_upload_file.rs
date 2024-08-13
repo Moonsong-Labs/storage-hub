@@ -480,7 +480,7 @@ where
         //     .file_transfer
         //     .unregister_file(file_key.as_ref().into())
         //     .await
-        //     .expect("File is not registered. This should not happen!");
+        //     .map_err(|e| anyhow!("File is not registered. This should not happen!: {:?}", e));
 
         // Queue a request to confirm the storing of the file.
         self.storage_hub_handler

@@ -7278,6 +7278,7 @@ dependencies = [
  "frame-system",
  "pallet-balances",
  "pallet-proofs-dealer",
+ "pallet-storage-providers-runtime-api",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -7286,6 +7287,16 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
+]
+
+[[package]]
+name = "pallet-storage-providers-runtime-api"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "sp-api",
+ "sp-runtime",
 ]
 
 [[package]]
@@ -11774,6 +11785,8 @@ dependencies = [
  "pallet-file-system-runtime-api",
  "pallet-proofs-dealer",
  "pallet-proofs-dealer-runtime-api",
+ "pallet-storage-providers",
+ "pallet-storage-providers-runtime-api",
  "pallet-transaction-payment",
  "parity-scale-codec",
  "polkadot-primitives",
@@ -11823,6 +11836,7 @@ dependencies = [
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-io",
  "sp-runtime",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "storage-hub-runtime",
  "trie-db 0.29.1",
@@ -11953,10 +11967,12 @@ dependencies = [
 name = "shp-file-metadata"
 version = "0.1.0"
 dependencies = [
+ "num-bigint",
  "parity-scale-codec",
  "scale-info",
  "serde",
  "shp-traits",
+ "sp-arithmetic",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
 ]
@@ -13532,6 +13548,7 @@ dependencies = [
  "pallet-randomness",
  "pallet-session",
  "pallet-storage-providers",
+ "pallet-storage-providers-runtime-api",
  "pallet-sudo",
  "pallet-timestamp",
  "pallet-transaction-payment",

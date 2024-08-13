@@ -7,8 +7,9 @@ use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::{EventBusListener, EventHandler},
 };
+use shc_blockchain_service::events::SlashableProvider;
 use shc_blockchain_service::{
-    events::{NewStorageRequest, ProcessConfirmStoringRequest},
+    events::{NewChallengeSeed, NewStorageRequest, ProcessConfirmStoringRequest},
     BlockchainService,
 };
 use shc_file_manager::traits::FileStorage;
@@ -18,11 +19,10 @@ use shc_file_transfer_service::{
 };
 use shc_forest_manager::traits::ForestStorage;
 
+use crate::tasks::slash_provider::SlashProviderTask;
 use crate::tasks::{
-    bsp_download_file::BspDownloadFileTask,
-    bsp_upload_file::BspUploadFileTask,
-    sp_react_to_event_mock::{EventToReactTo, SpReactToEventMockTask},
-    user_sends_file::UserSendsFileTask,
+    bsp_download_file::BspDownloadFileTask, bsp_submit_proof::BspSubmitProofTask,
+    bsp_upload_file::BspUploadFileTask, user_sends_file::UserSendsFileTask,
 };
 
 /// Represents the handler for the Storage Hub service.
@@ -132,13 +132,26 @@ where
             bsp_download_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
         remote_download_request_event_bus_listener.start();
 
-        // TODO: Remove this, this is just a mocked task for testing purposes.
-        let sp_react_to_event_mock_task = SpReactToEventMockTask::new(self.clone());
-        // Subscribing to events from the BlockchainService.
-        let bs_event_bus_listener: EventBusListener<EventToReactTo, _> =
-            sp_react_to_event_mock_task
+        // BspSubmitProofTask is triggered by a NewChallengeSeed event emitted by the BlockchainService.
+        // It responds by submitting proofs to the challenges derived from the seed, taking also into account
+        // the custom challenges in checkpoint challenge rounds.
+        // Additionally, it handles file deletions as a consequence of inclusion proofs in custom challenges.
+        let bsp_submit_proof_task = BspSubmitProofTask::new(self.clone());
+        // Subscribing to NewChallengeSeed event from the BlockchainService.
+        let new_challenge_seed_event_bus_listener: EventBusListener<NewChallengeSeed, _> =
+            bsp_submit_proof_task
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain);
-        bs_event_bus_listener.start();
+        new_challenge_seed_event_bus_listener.start();
+
+        // Slash your own kin or potentially commit seppuku on your own stake.
+        // Running this is as a BSP is very honourable and shows a great sense of justice.
+        let bsp_slash_provider_task = SlashProviderTask::new(self.clone());
+        // Subscribing to SlashableProvider event from the BlockchainService.
+        let slashable_provider_event_bus_listener: EventBusListener<SlashableProvider, _> =
+            bsp_slash_provider_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        slashable_provider_event_bus_listener.start();
     }
 }

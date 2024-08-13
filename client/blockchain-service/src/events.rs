@@ -1,8 +1,8 @@
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
-    BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, PeerIds, ProviderId, RandomSeed,
-    StorageData,
+    BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, PeerIds, ProviderId,
+    RandomnessOutput, StorageData,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -18,7 +18,7 @@ use tokio::sync::{oneshot, Mutex};
 pub struct NewChallengeSeed {
     pub provider_id: ProviderId,
     pub tick: BlockNumber,
-    pub seed: RandomSeed,
+    pub seed: RandomnessOutput,
 }
 
 impl EventBusMessage for NewChallengeSeed {}
@@ -83,6 +83,17 @@ pub struct ProcessConfirmStoringRequest {
 
 impl EventBusMessage for StorageRequestRevoked {}
 
+/// Slashable Provider event.
+///
+/// This event is emitted when a provider is marked as slashable by the runtime.
+#[derive(Debug, Clone)]
+pub struct SlashableProvider {
+    pub provider: ProviderId,
+    pub next_challenge_deadline: BlockNumber,
+}
+
+impl EventBusMessage for SlashableProvider {}
+
 #[derive(Clone, Default)]
 pub struct BlockchainServiceEventBusProvider {
     new_challenge_seed_event_bus: EventBus<NewChallengeSeed>,
@@ -91,6 +102,7 @@ pub struct BlockchainServiceEventBusProvider {
     storage_request_revoked_event_bus: EventBus<StorageRequestRevoked>,
     process_submit_proof_request_event_bus: EventBus<ProcessSubmitProofRequest>,
     process_confirm_storage_request_event_bus: EventBus<ProcessConfirmStoringRequest>,
+    slashable_provider_event_bus: EventBus<SlashableProvider>,
 }
 
 impl EventBusMessage for ProcessSubmitProofRequest {}
@@ -104,6 +116,7 @@ impl BlockchainServiceEventBusProvider {
             storage_request_revoked_event_bus: EventBus::new(),
             process_submit_proof_request_event_bus: EventBus::new(),
             process_confirm_storage_request_event_bus: EventBus::new(),
+            slashable_provider_event_bus: EventBus::new(),
         }
     }
 }
@@ -143,5 +156,11 @@ impl ProvidesEventBus<ProcessSubmitProofRequest> for BlockchainServiceEventBusPr
 impl ProvidesEventBus<ProcessConfirmStoringRequest> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<ProcessConfirmStoringRequest> {
         &self.process_confirm_storage_request_event_bus
+    }
+}
+
+impl ProvidesEventBus<SlashableProvider> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<SlashableProvider> {
+        &self.slashable_provider_event_bus
     }
 }

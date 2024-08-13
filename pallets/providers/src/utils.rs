@@ -14,6 +14,7 @@ use frame_support::traits::{
     Get, Randomness,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
+use pallet_storage_providers_runtime_api::GetBspInfoError;
 use shp_traits::{
     MutateProvidersInterface, ProofSubmittersInterface, ProvidersConfig, ProvidersInterface,
     ReadProvidersInterface, SystemMetricsInterface,
@@ -681,19 +682,23 @@ where
     /// a Storage Provider is slashable when the proofs-dealer pallet has marked them as such.
     ///
     /// Successfully slashing a Storage Provider should be a free operation.
-    pub(crate) fn do_slash(account_id: &T::AccountId) -> DispatchResultWithPostInfo {
-        let provider_id = AccountIdToMainStorageProviderId::<T>::get(account_id)
-            .or(AccountIdToBackupStorageProviderId::<T>::get(account_id))
-            .ok_or(Error::<T>::NotRegistered)?;
+    pub(crate) fn do_slash(provider_id: &HashId<T>) -> DispatchResultWithPostInfo {
+        let account_id = if let Some(provider) = MainStorageProviders::<T>::get(provider_id) {
+            provider.owner_account
+        } else if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
+            provider.owner_account
+        } else {
+            return Err(Error::<T>::ProviderNotSlashable.into());
+        };
 
         // Calculate the amount to be slashed.
         let slashable_amount = T::SlashFactor::get() * <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id).ok_or(Error::<T>::ProviderNotSlashable)?.into();
 
         let amount_slashed = T::NativeBalance::transfer_on_hold(
             &HoldReason::StorageProviderDeposit.into(),
-            account_id,
+            &account_id,
             &T::Treasury::get(),
-            slashable_amount,
+            slashable_amount.clone(),
             Precision::BestEffort,
             Restriction::Free,
             Fortitude::Polite,
@@ -701,6 +706,11 @@ where
 
         // Clear the accrued failed proof submissions for the Storage Provider
         <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
+
+        // Provider held funds have been completely depleted.
+        if amount_slashed <= slashable_amount {
+            // TODO: Force sign off the provider.
+        }
 
         Self::deposit_event(Event::<T>::Slashed {
             provider_id: provider_id.clone(),
@@ -1162,5 +1172,17 @@ impl<T: pallet::Config> SystemMetricsInterface for pallet::Pallet<T> {
 
     fn get_total_used_capacity() -> Self::ProvidedUnit {
         Self::get_used_bsp_capacity()
+    }
+}
+
+/// Runtime API implementation for the Storage Providers pallet.
+impl<T> Pallet<T>
+where
+    T: pallet::Config,
+{
+    pub fn get_bsp_info(
+        bsp_id: &BackupStorageProviderId<T>,
+    ) -> Result<BackupStorageProvider<T>, GetBspInfoError> {
+        BackupStorageProviders::<T>::get(bsp_id).ok_or(GetBspInfoError::BspNotRegistered)
     }
 }

@@ -6,7 +6,7 @@ import {
   getContainerPeerId,
   NODE_INFOS,
   registerToxics,
-  runBspNet,
+  runSimpleBspNet,
   shUser,
   type BspNetApi,
   type BspNetConfig,
@@ -26,7 +26,7 @@ const CONFIG = {
 };
 
 async function bootStrapNetwork() {
-  await runBspNet(bspNetConfig);
+  await runSimpleBspNet(bspNetConfig);
 
   if (bspNetConfig.noisy) {
     // For more info on the kind of toxics you can register,
