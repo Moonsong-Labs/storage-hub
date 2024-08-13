@@ -1,8 +1,8 @@
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
-    BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, PeerIds, ProviderId, RandomSeed,
-    StorageData,
+    BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, PeerIds, ProviderId,
+    RandomnessOutput, StorageData,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -16,7 +16,7 @@ use sp_runtime::AccountId32;
 pub struct NewChallengeSeed {
     pub provider_id: ProviderId,
     pub tick: BlockNumber,
-    pub seed: RandomSeed,
+    pub seed: RandomnessOutput,
 }
 
 impl EventBusMessage for NewChallengeSeed {}
@@ -81,6 +81,17 @@ pub struct StorageRequestRevoked {
 
 impl EventBusMessage for StorageRequestRevoked {}
 
+/// Slashable Provider event.
+///
+/// This event is emitted when a provider is marked as slashable by the runtime.
+#[derive(Debug, Clone)]
+pub struct SlashableProvider {
+    pub provider: ProviderId,
+    pub next_challenge_deadline: BlockNumber,
+}
+
+impl EventBusMessage for SlashableProvider {}
+
 #[derive(Clone, Default)]
 pub struct BlockchainServiceEventBusProvider {
     new_challenge_seed_event_bus: EventBus<NewChallengeSeed>,
@@ -88,6 +99,7 @@ pub struct BlockchainServiceEventBusProvider {
     accepted_bsp_volunteer_event_bus: EventBus<AcceptedBspVolunteer>,
     bsp_confirmed_storing_event_bus: EventBus<BspConfirmedStoring>,
     storage_request_revoked_event_bus: EventBus<StorageRequestRevoked>,
+    slashable_provider_event_bus: EventBus<SlashableProvider>,
 }
 
 impl BlockchainServiceEventBusProvider {
@@ -98,6 +110,7 @@ impl BlockchainServiceEventBusProvider {
             accepted_bsp_volunteer_event_bus: EventBus::new(),
             bsp_confirmed_storing_event_bus: EventBus::new(),
             storage_request_revoked_event_bus: EventBus::new(),
+            slashable_provider_event_bus: EventBus::new(),
         }
     }
 }
@@ -129,5 +142,11 @@ impl ProvidesEventBus<BspConfirmedStoring> for BlockchainServiceEventBusProvider
 impl ProvidesEventBus<StorageRequestRevoked> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<StorageRequestRevoked> {
         &self.storage_request_revoked_event_bus
+    }
+}
+
+impl ProvidesEventBus<SlashableProvider> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<SlashableProvider> {
+        &self.slashable_provider_event_bus
     }
 }

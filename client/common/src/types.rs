@@ -9,6 +9,7 @@ pub use shp_file_metadata::{Chunk, ChunkId, Leaf};
 use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
 use sp_runtime::{traits::Block as BlockT, KeyTypeId};
+use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
 use storage_hub_runtime::{opaque::Block, Runtime, RuntimeApi};
 use trie_db::TrieLayout;
@@ -32,9 +33,15 @@ pub type StorageData = pallet_file_system::types::StorageData<Runtime>;
 pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
 pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
 pub type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<Runtime>;
-pub type RandomSeed = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
 pub type ProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
 pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
+pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;
+pub type TrieRemoveMutation = shp_traits::TrieRemoveMutation;
+pub type StorageProofsMerkleTrieLayout = storage_hub_runtime::StorageProofsMerkleTrieLayout;
+pub type StorageProof = pallet_proofs_dealer::types::Proof<Runtime>;
+pub type ForestVerifierProof = pallet_proofs_dealer::types::ForestVerifierProofFor<Runtime>;
+pub type KeyProof = pallet_proofs_dealer::types::KeyProof<Runtime>;
+pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = (

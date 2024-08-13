@@ -1,16 +1,19 @@
 import "@storagehub/api-augment";
-import { strictEqual } from "node:assert";
+import assert, { strictEqual } from "node:assert";
 import { after, before, describe, it } from "node:test";
 import {
   NODE_INFOS,
   createApiObject,
-  runBspNet,
   type BspNetApi,
-  cleardownTest,
   DUMMY_BSP_ID,
-  type BspNetConfig
+  type BspNetConfig,
+  runInitialisedBspsNet,
+  closeSimpleBspNet,
+  sleep,
+  pauseBspContainer,
+  resumeBspContainer,
+  type SealedBlock
 } from "../../../util";
-import { sleep } from "@zombienet/utils";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
@@ -18,61 +21,151 @@ const bspNetConfigCases: BspNetConfig[] = [
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
-  describe("BSPNet: BSP Challenge Cycle", () => {
-    let api: BspNetApi;
+  describe("BSPNet: BSP Challenge Cycle and Proof Submission", () => {
+    let userApi: BspNetApi;
+    let bspApi: BspNetApi;
 
     before(async () => {
-      await runBspNet(bspNetConfig);
-      api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+      await runInitialisedBspsNet(bspNetConfig);
+      userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+      bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
     });
 
     after(async () => {
-      await cleardownTest(api);
+      await userApi.disconnect();
+      await bspApi.disconnect();
+      await closeSimpleBspNet();
     });
 
     it("Network launches and can be queried", async () => {
-      const userNodePeerId = await api.rpc.system.localPeerId();
+      const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), NODE_INFOS.user.expectedPeerId);
 
-      const bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
       const bspNodePeerId = await bspApi.rpc.system.localPeerId();
-      await bspApi.disconnect();
       strictEqual(bspNodePeerId.toString(), NODE_INFOS.bsp.expectedPeerId);
     });
 
-    it("Challenge cycle initialised correctly by root", async () => {
-      // Force initialise challenge cycle of Provider.
-      const initialiseChallengeCycleResult = await api.sealBlock(
-        api.tx.sudo.sudo(api.tx.proofsDealer.forceInitialiseChallengeCycle(DUMMY_BSP_ID))
-      );
+    it("BSP is challenged and correctly submits proof", async () => {
+      // Calculate the next challenge tick for the BSP.
+      // We first get the last tick for which the BSP submitted a proof.
+      const lastTickResult =
+        await bspApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
+      assert(lastTickResult.isOk);
+      const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
+      // Then we get the challenge period for the BSP.
+      const challengePeriodResult =
+        await bspApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
+      assert(challengePeriodResult.isOk);
+      const challengePeriod = challengePeriodResult.asOk.toNumber();
+      // Then we calculate the next challenge tick.
+      const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
 
-      // Assert that event for challenge cycle initialisation is emitted.
-      api.assertEvent(
-        "proofsDealer",
-        "NewChallengeCycleInitialised",
-        initialiseChallengeCycleResult.events
-      );
+      // Calculate how many blocks to advance until next challenge tick.
+      const currentBlockNumber = (await userApi.query.system.number()).toNumber();
+      const blocksToAdvance = nextChallengeTick - currentBlockNumber;
 
-      // Get the challenge period for the Provider.
-      // For now, we are abusing the fact that all BSPs have the same (minimum) challenge period.
-      // But...
-      // TODO: Make this get the challenge period either from a runtime API or an RPC call.
-      const spMinDeposit = api.consts.providers.spMinDeposit;
-      const stakeToChallengePeriod = api.consts.proofsDealer.stakeToChallengePeriod;
-      const challengePeriod = spMinDeposit.toNumber() / stakeToChallengePeriod.toNumber();
-
-      // Advance `challengePeriod + 1` blocks. In `challengePeriod` blocks, the node will detect
-      // a new challenge seed event to which it will respond by sending a remark with event transaction.
-      // That transaction will be included in the next block.
-      for (let i = 0; i < challengePeriod; i++) {
-        await api.sealBlock();
+      // Advance blocksToAdvance blocks.
+      for (let i = 0; i < blocksToAdvance; i++) {
+        await userApi.sealBlock();
       }
-      // Wait for task to execute and seal one more block.
-      await sleep(500);
-      const blockResult = await api.sealBlock();
 
-      // Assert for the remark event as a response to the challenge seed event.
-      api.assertEvent("system", "Remarked", blockResult.events);
+      // Wait for task to execute and seal one more block.
+      // In this block, the BSP should have submitted a proof.
+      await sleep(500);
+      const blockResult = await userApi.sealBlock();
+
+      // Assert for the the event of the proof successfully submitted and verified.
+      bspApi.assertEvent("proofsDealer", "ProofAccepted", blockResult.events);
     });
+
+    it("BSP fails to submit proof and is marked as slashable", async () => {
+      // Stop BSP.
+      await pauseBspContainer(NODE_INFOS.bsp.containerName);
+
+      // Calculate the next deadline tick for the BSP. That is `ChallengeTicksTolerance`
+      // after the next challenge tick for this BSP.
+      // We first get the last tick for which the BSP submitted a proof.
+      // This time we use the user API as the BSP is paused.
+      const lastTickResult =
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
+      assert(lastTickResult.isOk);
+      const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
+      // Then we get the challenge period for the BSP.
+      const challengePeriodResult =
+        await userApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
+      assert(challengePeriodResult.isOk);
+      const challengePeriod = challengePeriodResult.asOk.toNumber();
+      // We get the challenge ticks tolerance.
+      const challengeTicksTolerance = Number(userApi.consts.proofsDealer.challengeTicksTolerance);
+      // And finally we calculate the next deadline tick.
+      const nextDeadlineTick =
+        lastTickBspSubmittedProof + challengePeriod + challengeTicksTolerance;
+
+      // Advance to BSP deadline.
+      const currentBlock = await userApi.rpc.chain.getBlock();
+      const currentBlockNumber = currentBlock.block.header.number.toNumber();
+      const blocksToAdvance = nextDeadlineTick - currentBlockNumber;
+      let blockResult: SealedBlock | undefined;
+      for (let i = 0; i < blocksToAdvance; i++) {
+        blockResult = await userApi.sealBlock();
+      }
+
+      // Check for event of slashable BSP.
+      userApi.assertEvent("proofsDealer", "SlashableProvider", blockResult?.events);
+    });
+
+    it(
+      "BSP resumes and sends pending proofs",
+      {
+        skip: "Sending pending proofs is not yet implemented."
+      },
+      async () => {}
+    );
+
+    it(
+      "BSP is challenged again and correctly submits proof",
+      {
+        skip: "Correctly resuming BSP is not yet implemented."
+      },
+      async () => {
+        // Resume BSP.
+        await resumeBspContainer(NODE_INFOS.bsp.containerName);
+
+        // Advance to the next tick the BSP should submit a proof for, that is after the current block.
+        // We first get the last tick for which the BSP submitted a proof.
+        const lastTickResult =
+          await bspApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
+        assert(lastTickResult.isOk);
+        const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
+        // Then we get the challenge period for the BSP.
+        const challengePeriodResult =
+          await bspApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
+        assert(challengePeriodResult.isOk);
+        const challengePeriod = challengePeriodResult.asOk.toNumber();
+        // Then we calculate the next challenge tick.
+        let nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
+        // Increment challenge periods until we get a number that is greater than the current tick.
+        const currentTick = (await bspApi.call.proofsDealerApi.getCurrentTick()).toNumber();
+        while (currentTick >= nextChallengeTick) {
+          // Go one challenge period forward.
+          nextChallengeTick += challengePeriod;
+        }
+        // Finally, advance to the next challenge tick.
+        const currentBlock = await userApi.rpc.chain.getBlock();
+        const currentBlockNumber = currentBlock.block.header.number.toNumber();
+        const blocksToAdvance = nextChallengeTick - currentBlockNumber;
+        for (let i = 0; i < blocksToAdvance; i++) {
+          await userApi.sealBlock();
+        }
+
+        // Wait for task to execute and seal one more block.
+        // In this block, the BSP should have submitted a proof.
+        await sleep(500);
+        const blockResult = await userApi.sealBlock();
+
+        // Assert for the the event of the proof successfully submitted and verified.
+        bspApi.assertEvent("proofsDealer", "ProofAccepted", blockResult.events);
+      }
+    );
   });
 }

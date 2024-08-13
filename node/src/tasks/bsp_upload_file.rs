@@ -434,7 +434,7 @@ where
         //     .file_transfer
         //     .unregister_file(file_key.as_ref().into())
         //     .await
-        //     .expect("File is not registered. This should not happen!");
+        //     .map_err(|e| anyhow!("File is not registered. This should not happen!: {:?}", e));
 
         // Query runtime for the chunks to prove for the file.
         let chunks_to_prove = self
@@ -459,10 +459,10 @@ where
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let _metadata = read_file_storage
             .get_metadata(file_key)
-            .expect("File metadata not found");
+            .map_err(|e| anyhow!("File metadata not found: {:?}", e))?;
         let added_file_key_proof = read_file_storage
             .generate_proof(file_key, &chunks_to_prove)
-            .expect("File is not in storage, or proof does not exist.");
+            .map_err(|e| anyhow!("File is not in storage, or proof does not exist: {:?}", e))?;
         // Release the file storage read lock as soon as possible.
         drop(read_file_storage);
 
@@ -470,7 +470,7 @@ where
         let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
         let non_inclusion_forest_proof = read_forest_storage
             .generate_proof(vec![*file_key])
-            .expect("Failed to generate forest proof.");
+            .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
         // Release the forest storage read lock.
         drop(read_forest_storage);
 

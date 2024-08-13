@@ -83,7 +83,8 @@ export const addBspContainer = async (options?: {
       PortBindings: {
         "9944/tcp": [{ HostPort: rpcPort.toString() }],
         [`${p2pPort}/tcp`]: [{ HostPort: p2pPort.toString() }]
-      }
+      },
+      Binds: [`${process.cwd()}/../docker/dev-keystores:/keystore:ro`]
     },
     Cmd: [
       "--dev",
@@ -133,4 +134,14 @@ export const addBspContainer = async (options?: {
   );
 
   return { containerName, rpcPort, p2pPort, peerId };
+};
+
+export const pauseBspContainer = async (containerName: string) => {
+  const docker = new Docker();
+  const container = docker.getContainer(containerName);
+  await container.pause();
+};
+
+export const resumeBspContainer = async (_containerName: string) => {
+  throw new Error("This function is not implemented yet.");
 };
