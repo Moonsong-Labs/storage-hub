@@ -9,7 +9,7 @@ use frame_support::{BoundedBTreeSet, Parameter};
 use scale_info::prelude::fmt::Debug;
 use scale_info::TypeInfo;
 use sp_core::Get;
-use sp_runtime::traits::{AtLeast32BitUnsigned, Hash, Saturating};
+use sp_runtime::traits::{AtLeast32BitUnsigned, CheckedAdd, Hash, One, Saturating, Zero};
 use sp_runtime::{BoundedVec, DispatchError};
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec::Vec;
@@ -159,6 +159,24 @@ pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
     type BucketNameLimit: Get<u32>;
     /// Maximum number of multiaddresses a provider can have.
     type MaxNumberOfMultiAddresses: Get<u32>;
+    /// Type that represents the reputation weight of a Storage Provider.
+    type ReputationWeight: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Default
+        + Ord
+        + AtLeast32BitUnsigned
+        + Into<u32>
+        + FullCodec
+        + Copy
+        + Debug
+        + scale_info::TypeInfo
+        + MaxEncodedLen
+        + CheckedAdd
+        + One
+        + Saturating
+        + PartialOrd
+        + Zero;
 
     /// Check if provider is a BSP.
     fn is_bsp(who: &Self::ProviderId) -> bool;
@@ -168,6 +186,14 @@ pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
 
     /// Get the payment account of a registered Provider.
     fn get_provider_payment_account(who: Self::ProviderId) -> Option<Self::AccountId>;
+
+    /// Get the total global reputation weight of all BSPs.
+    fn get_global_bsps_reputation_weight() -> Self::ReputationWeight;
+
+    /// Get the reputation weight of a registered Provider.
+    fn get_bsp_reputation_weight(
+        who: &Self::ProviderId,
+    ) -> Result<Self::ReputationWeight, DispatchError>;
 
     /// Get number of registered BSPs.
     fn get_number_of_bsps() -> Self::SpCount;

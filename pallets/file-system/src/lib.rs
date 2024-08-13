@@ -56,13 +56,12 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use sp_runtime::BoundedVec;
-    use sp_runtime::{
-        traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
-        FixedPointNumber,
-    };
-
     use shp_file_metadata::ChunkId;
+    use sp_runtime::traits::ConvertBack;
+    use sp_runtime::traits::{
+        CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero,
+    };
+    use sp_runtime::BoundedVec;
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -95,16 +94,16 @@ pub mod pallet {
             + MaxEncodedLen;
 
         /// Type representing the storage request bsps size type.
-        type StorageRequestBspsRequiredType: Parameter
+        type ReplicationTargetType: Parameter
             + Member
             + MaybeSerializeDeserialize
             + Default
             + MaybeDisplay
             + Into<u32>
+            + From<u32>
             + Copy
             + MaxEncodedLen
             + HasCompact
-            + Copy
             + Default
             + scale_info::TypeInfo
             + MaybeSerializeDeserialize
@@ -121,6 +120,8 @@ pub mod pallet {
             + Debug
             + Default
             + MaybeDisplay
+            + Into<u32>
+            + From<u32>
             + Copy
             + MaxEncodedLen
             + Decode
@@ -129,14 +130,10 @@ pub mod pallet {
             + CheckedDiv
             + CheckedAdd
             + CheckedSub
-            + PartialOrd
-            + FixedPointNumber;
+            + PartialOrd;
 
         /// The type to convert a threshold to a block number.
-        type ThresholdTypeToBlockNumber: Convert<Self::ThresholdType, BlockNumberFor<Self>>;
-
-        /// The type to convert a block number to a threshold.
-        type BlockNumberToThresholdType: Convert<BlockNumberFor<Self>, Self::ThresholdType>;
+        type ThresholdTypeToBlockNumber: ConvertBack<Self::ThresholdType, BlockNumberFor<Self>>;
 
         /// The type to convert a hash to a threshold.
         type HashToThresholdType: Convert<Self::Hash, Self::ThresholdType>;
@@ -165,24 +162,19 @@ pub mod pallet {
             CollectionId = CollectionIdFor<Self>,
         >;
 
-        /// The multiplier increases the threshold over time (blocks) which increases the
-        /// likelihood of a BSP successfully volunteering to store a file.
-        #[pallet::constant]
-        type AssignmentThresholdMultiplier: Get<Self::ThresholdType>;
-
-        /// Horizontal asymptote which the volunteering threshold approaches as more BSPs are registered in the system.
-        #[pallet::constant]
-        type AssignmentThresholdAsymptote: Get<Self::ThresholdType>;
-
-        /// Asymptotic decay function for the assignment threshold.
-        #[pallet::constant]
-        type AssignmentThresholdDecayFactor: Get<Self::ThresholdType>;
-
-        /// Minimum number of BSPs required to store a file.
+        /// Number of BSPs required to fulfill a storage request,
         ///
         /// This is also used as a default value if the BSPs required are not specified when creating a storage request.
         #[pallet::constant]
-        type TargetBspsRequired: Get<Self::StorageRequestBspsRequiredType>;
+        type ReplicationTarget: Get<Self::ReplicationTargetType>;
+
+        /// Maximum threshold a BSP can attain.
+        #[pallet::constant]
+        type MaximumThreshold: Get<Self::ThresholdType>;
+
+        /// Number of blocks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
+        #[pallet::constant]
+        type BlockRangeToMaximumThreshold: Get<BlockNumberFor<Self>>;
 
         /// Maximum number of BSPs that can store a file.
         ///
@@ -293,45 +285,6 @@ pub mod pallet {
         BoundedVec<(MerkleHash<T>, BucketIdFor<T>), T::MaxUserPendingDeletionRequests>,
         ValueQuery,
     >;
-
-    /// Minimum BSP assignment threshold.
-    ///
-    /// This is the minimum threshold that a BSP must have to be assigned to store a file.
-    /// It is reduced or increased when BSPs sign off or sign up respectively.
-    #[pallet::storage]
-    #[pallet::getter(fn bsps_assignment_threshold)]
-    pub type BspsAssignmentThreshold<T: Config> = StorageValue<_, T::ThresholdType, ValueQuery>;
-
-    #[pallet::genesis_config]
-    pub struct GenesisConfig<T: Config> {
-        pub bsp_assignment_threshold: T::ThresholdType,
-    }
-
-    impl<T: Config> Default for GenesisConfig<T> {
-        fn default() -> Self {
-            let total_bsps =
-                <T::Providers as shp_traits::ReadProvidersInterface>::get_number_of_bsps()
-                    .try_into()
-                    .map_err(|_| Error::<T>::FailedTypeConversion)
-                    .unwrap();
-
-            let bsp_assignment_threshold =
-                Pallet::<T>::compute_asymptotic_threshold_point(total_bsps).unwrap();
-
-            BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
-
-            Self {
-                bsp_assignment_threshold: Default::default(),
-            }
-        }
-    }
-
-    #[pallet::genesis_build]
-    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
-        fn build(&self) {
-            BspsAssignmentThreshold::<T>::put(self.bsp_assignment_threshold);
-        }
-    }
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -506,6 +459,8 @@ pub mod pallet {
         FileKeyNotPendingDeletion,
         /// File size cannot be zero.
         FileSizeCannotBeZero,
+        /// No global reputation weight set.
+        NoGlobalReputationWeightSet,
     }
 
     #[pallet::call]
@@ -813,11 +768,12 @@ pub mod pallet {
             ensure_root(origin)?;
 
             ensure!(
-                bsp_assignment_threshold >= T::AssignmentThresholdAsymptote::get(),
+                bsp_assignment_threshold >= MaximumThreshold::<T>::get(),
                 Error::<T>::ThresholdBelowAsymptote
             );
 
-            BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
+            // TODO: Set BlockRangeToMaximumThreshold to 1 so that after 1 block any BSP can succeed the threshold check.
+            // BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
 
             Ok(().into())
         }

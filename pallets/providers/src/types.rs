@@ -45,6 +45,7 @@ pub struct BackupStorageProvider<T: Config> {
     pub last_capacity_change: BlockNumberFor<T>,
     pub owner_account: T::AccountId,
     pub payment_account: T::AccountId,
+    pub reputation_weight: ReputationWeight<T>,
 }
 
 /// Structure that represents a Bucket. It holds the root of the Merkle Patricia Trie, the User ID that owns the bucket,
@@ -112,3 +113,6 @@ pub type BucketId<T> = <T as frame_system::Config>::Hash;
 pub type MaxBuckets<T> = <T as crate::Config>::MaxBuckets;
 /// Buckets is a vector of the buckets that a Main Storage Provider has.
 pub type Buckets<T> = BoundedVec<Bucket<T>, MaxBuckets<T>>;
+
+/// Type alias for the `ReputationWeight` type used in the Storage Providers pallet.
+pub type ReputationWeight<T> = <T as crate::Config>::ReputationWeightType;

@@ -355,6 +355,11 @@ where
         // Remove the sign up request from the SignUpRequests mapping
         SignUpRequests::<T>::remove(who);
 
+        // Increase global reputation weight
+        GlobalBspsReputationWeight::<T>::mutate(|n| {
+            *n = n.saturating_add(bsp_info.reputation_weight);
+        });
+
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::BspSignUpSuccess {
             who: who.clone(),
@@ -462,6 +467,11 @@ where
                 None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
             }
         })?;
+
+        // Decrease global reputation weight
+        GlobalBspsReputationWeight::<T>::mutate(|n| {
+            *n = n.saturating_sub(bsp.reputation_weight);
+        });
 
         Ok(())
     }
@@ -791,6 +801,7 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
             last_capacity_change: msp.last_capacity_change,
             owner_account: msp.owner_account,
             payment_account: msp.payment_account,
+            reputation_weight: T::StartingReputationWeight::get(),
         }
     }
 }
@@ -983,6 +994,7 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
     type MultiAddress = MultiAddress<T>;
     type MaxNumberOfMultiAddresses = T::MaxMultiAddressAmount;
     type BucketNameLimit = T::BucketNameLimit;
+    type ReputationWeight = T::ReputationWeightType;
 
     fn is_bsp(who: &Self::ProviderId) -> bool {
         BackupStorageProviders::<T>::contains_key(&who)
@@ -999,6 +1011,20 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
             Some(msp.payment_account)
         } else {
             None
+        }
+    }
+
+    fn get_global_bsps_reputation_weight() -> Self::ReputationWeight {
+        GlobalBspsReputationWeight::<T>::get()
+    }
+
+    fn get_bsp_reputation_weight(
+        who: &Self::ProviderId,
+    ) -> Result<Self::ReputationWeight, DispatchError> {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(who) {
+            Ok(bsp.reputation_weight)
+        } else {
+            Err(Error::<T>::NotRegistered.into())
         }
     }
 

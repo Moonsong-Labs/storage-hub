@@ -246,6 +246,8 @@ impl crate::Config for Test {
     type Subscribers = MockedProvidersSubscriber;
     type ProvidersRandomness = MockRandomness;
     type SlashFactor = ConstU128<10>;
+    type ReputationWeightType = u32;
+    type StartingReputationWeight = ConstU32<10>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.

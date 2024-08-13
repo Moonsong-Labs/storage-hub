@@ -139,6 +139,19 @@ pub mod pallet {
             TickNumber = BlockNumberFor<Self>,
         >;
 
+        /// The type representing the reputation weight of a BSP.
+        type ReputationWeightType: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Default
+            + MaybeDisplay
+            + AtLeast32BitUnsigned
+            + Saturating
+            + Copy
+            + MaxEncodedLen
+            + HasCompact
+            + Into<u32>;
+
         /// The Treasury AccountId.
         /// The account to which:
         /// - The fees for submitting a challenge are transferred.
@@ -199,6 +212,10 @@ pub mod pallet {
         /// The slash factor deducted from a Storage Provider's deposit for every single storage proof they fail to provide.
         #[pallet::constant]
         type SlashFactor: Get<BalanceOf<Self>>;
+
+        /// Starting reputation weight for a newly registered BSP.
+        #[pallet::constant]
+        type StartingReputationWeight: Get<Self::ReputationWeightType>;
     }
 
     #[pallet::pallet]
@@ -334,6 +351,10 @@ pub mod pallet {
     /// system metrics and also to calculate the current price of storage.
     #[pallet::storage]
     pub type UsedBspsCapacity<T: Config> = StorageValue<_, StorageData<T>, ValueQuery>;
+
+    /// The total global reputation weight of all BSPs.
+    #[pallet::storage]
+    pub type GlobalBspsReputationWeight<T> = StorageValue<_, ReputationWeight<T>, ValueQuery>;
 
     // Events & Errors:
 
@@ -595,6 +616,7 @@ pub mod pallet {
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 owner_account: who.clone(),
                 payment_account,
+                reputation_weight: T::StartingReputationWeight::get(),
             };
 
             // Sign up the new BSP (if possible), updating storage
@@ -930,6 +952,7 @@ pub mod pallet {
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 owner_account: who.clone(),
                 payment_account,
+                reputation_weight: T::StartingReputationWeight::get(),
             };
 
             // Sign up the new BSP (if possible), updating storage

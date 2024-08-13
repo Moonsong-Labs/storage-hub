@@ -289,6 +289,8 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -516,6 +518,8 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -592,6 +596,8 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -694,6 +700,8 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
         pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
@@ -710,6 +718,8 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
                 last_capacity_change: Default::default(),
                 owner_account: 2u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -842,6 +852,8 @@ fn submit_proof_success() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -977,6 +989,8 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1095,6 +1109,8 @@ fn submit_proof_submitted_by_not_a_provider_success() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1198,6 +1214,8 @@ fn submit_proof_with_checkpoint_challenges_success() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1314,6 +1332,8 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1515,6 +1535,8 @@ fn submit_proof_empty_key_proofs_fail() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1585,6 +1607,8 @@ fn submit_proof_no_record_of_last_proof_fail() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1655,6 +1679,8 @@ fn submit_proof_challenges_block_not_reached_fail() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1739,6 +1765,8 @@ fn submit_proof_challenges_block_too_old_fail() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1823,6 +1851,8 @@ fn submit_proof_seed_not_found_fail() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1910,6 +1940,8 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1992,6 +2024,7 @@ fn submit_proof_forest_proof_verification_fail() {
             &1,
             provider_id,
         );
+
         pallet_storage_providers::BackupStorageProviders::<Test>::insert(
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
@@ -2002,6 +2035,8 @@ fn submit_proof_forest_proof_verification_fail() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2092,6 +2127,8 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2165,6 +2202,8 @@ fn submit_proof_out_checkpoint_challenges_fail() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2285,6 +2324,8 @@ fn submit_proof_key_proof_verification_fail() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2687,6 +2728,8 @@ fn new_challenges_round_provider_marked_as_slashable() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2795,6 +2838,8 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2892,6 +2937,8 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2923,6 +2970,8 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
                 last_capacity_change: Default::default(),
                 owner_account: 2u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -3104,6 +3153,8 @@ mod on_idle_hook_tests {
                     last_capacity_change: Default::default(),
                     owner_account: 1u64,
                     payment_account: Default::default(),
+                    reputation_weight:
+                        <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
                 },
             );
 
@@ -3182,6 +3233,8 @@ mod on_idle_hook_tests {
                     last_capacity_change: Default::default(),
                     owner_account: 1u64,
                     payment_account: Default::default(),
+                    reputation_weight:
+                        <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
                 },
             );
 
@@ -3261,6 +3314,8 @@ mod on_idle_hook_tests {
                     last_capacity_change: Default::default(),
                     owner_account: 1u64,
                     payment_account: Default::default(),
+                    reputation_weight:
+                        <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
                 },
             );
 

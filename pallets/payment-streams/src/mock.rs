@@ -155,6 +155,8 @@ impl pallet_storage_providers::Config for Test {
     type ProvidersRandomness = MockRandomness;
     type BucketNameLimit = ConstU32<100>;
     type SlashFactor = ConstU128<10>;
+    type ReputationWeightType = u32;
+    type StartingReputationWeight = ConstU32<10>;
 }
 
 parameter_types! {

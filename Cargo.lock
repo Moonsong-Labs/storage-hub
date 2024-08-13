@@ -6569,6 +6569,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "log",
  "num-bigint",
  "pallet-balances",
  "pallet-bucket-nfts",
