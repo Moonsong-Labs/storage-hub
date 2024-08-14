@@ -60,15 +60,15 @@ use shp_file_metadata::ChunkId;
 use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{Get, Hasher, H256};
+use sp_runtime::traits::ConvertBack;
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, Verify},
-    AccountId32, DispatchError, FixedPointNumber, FixedU128, Perbill, SaturatedConversion,
+    AccountId32, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
-use std::u128;
 use xcm::latest::prelude::BodyId;
 use xcm_simulator::XcmExecutor;
 
@@ -500,6 +500,8 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = MinBlocksBetweenCapacityChanges;
     type SlashFactor = SlashFactor;
+    type ReputationWeightType = u32;
+    type StartingReputationWeight = ReplicationTarget;
 }
 
 parameter_types! {
@@ -620,43 +622,41 @@ where
     }
 }
 
-type ThresholdType = FixedU128;
+type ThresholdType = u32;
 
 parameter_types! {
-    pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
-    pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100
-    pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(u128::MAX / 100_000_000_000_000_000, 1000); // Takes 1000 blocks to reach maximum threshold
+    pub const ReplicationTarget: u32 = 10;
+    pub const MaximumThreshold: ThresholdType = u32::MAX;
     pub const MaxBatchConfirmStorageRequests: u32 = 10;
 }
 
+/// Configure the pallet template in pallets/template.
 impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
+    type Fingerprint = Hash;
+    type ReplicationTargetType = u32;
     type ThresholdType = ThresholdType;
-    type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
-    type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
+    type ThresholdTypeToBlockNumber = ThresholdTypeToBlockNumberConverter;
     type HashToThresholdType = HashToThresholdTypeConverter;
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
-    type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
-    type AssignmentThresholdAsymptote = ThresholdAsymptote;
-    type AssignmentThresholdMultiplier = ThresholdMultiplier;
-    type Fingerprint = Hash;
-    type StorageRequestBspsRequiredType = u32;
-    type TargetBspsRequired = ConstU32<1>;
+    type ReplicationTarget = ReplicationTarget;
+    type MaximumThreshold = MaximumThreshold;
+    type BlockRangeToMaximumThreshold = ConstU32<50>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxBatchConfirmStorageRequests = MaxBatchConfirmStorageRequests;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = ConstU32<5>;
     type MaxDataServerMultiAddresses = ConstU32<10>;
+    type MaxExpiredItemsInBlock = ConstU32<100>;
     type StorageRequestTtl = ConstU32<40>;
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
-    type MaxExpiredItemsInBlock = ConstU32<100>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
 }
 
@@ -670,31 +670,23 @@ impl Convert<Balance, BlockNumberFor<Runtime>> for SaturatingBalanceToBlockNumbe
     }
 }
 
-// Converter from the ThresholdType type (FixedU128) to the BlockNumber type (u64).
+// Converter from the ThresholdType type (FixedU128) to the BlockNumber type (u64) and vice versa.
 // It performs a saturated conversion, so that the result is always a valid BlockNumber.
-pub struct SaturatingThresholdTypeToBlockNumberConverter;
+pub struct ThresholdTypeToBlockNumberConverter;
 
-impl Convert<ThresholdType, BlockNumberFor<Runtime>>
-    for SaturatingThresholdTypeToBlockNumberConverter
-{
+impl Convert<ThresholdType, BlockNumberFor<Runtime>> for ThresholdTypeToBlockNumberConverter {
     fn convert(threshold: ThresholdType) -> BlockNumberFor<Runtime> {
-        (threshold.into_inner() / FixedU128::accuracy()).saturated_into()
+        threshold.saturated_into()
     }
 }
 
-// Converter from the BlockNumber type (u64) to the ThresholdType type (FixedU128).
-pub struct BlockNumberToThresholdTypeConverter;
-
-impl Convert<BlockNumberFor<Runtime>, ThresholdType> for BlockNumberToThresholdTypeConverter {
-    fn convert(block_number: BlockNumberFor<Runtime>) -> ThresholdType {
-        FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
+impl ConvertBack<ThresholdType, BlockNumberFor<Runtime>> for ThresholdTypeToBlockNumberConverter {
+    fn convert_back(block_number: BlockNumberFor<Runtime>) -> ThresholdType {
+        block_number.into()
     }
 }
 
-// Converter from the Hash type from the runtime (BlakeTwo256) to the ThresholdType type (FixedU128).
-// Since we can't convert directly a hash to a FixedU128 (since the hash type used in the runtime has
-// 256 bits and FixedU128 has 128 bits), we truncate the hash to 16 bytes and then interpret those bytes
-// as a big-endian fixed-point U128.
+/// Converter from the [`Hash`] type to the [`ThresholdType`].
 pub struct HashToThresholdTypeConverter;
 impl Convert<<Runtime as frame_system::Config>::Hash, ThresholdType>
     for HashToThresholdTypeConverter
@@ -703,13 +695,11 @@ impl Convert<<Runtime as frame_system::Config>::Hash, ThresholdType>
         // Get the hash as bytes
         let hash_bytes = hash.as_ref();
 
-        // Get the 16 least significant bytes of the hash and interpret them as a u128
-        let truncated_hash_bytes: [u8; 16] =
-            hash_bytes[16..].try_into().expect("Hash is 32 bytes; qed");
-        let hash_as_u128 = u128::from_be_bytes(truncated_hash_bytes);
+        // Get the 4 least significant bytes of the hash and interpret them as an u32
+        let truncated_hash_bytes: [u8; 4] =
+            hash_bytes[28..].try_into().expect("Hash is 32 bytes; qed");
 
-        // Return it as a FixedU128
-        FixedU128::from_inner(hash_as_u128)
+        ThresholdType::from_be_bytes(truncated_hash_bytes)
     }
 }
 

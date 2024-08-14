@@ -708,7 +708,7 @@ where
             &HoldReason::StorageProviderDeposit.into(),
             &account_id,
             &T::Treasury::get(),
-            slashable_amount.clone(),
+            slashable_amount,
             Precision::BestEffort,
             Restriction::Free,
             Fortitude::Polite,
@@ -723,7 +723,7 @@ where
         }
 
         Self::deposit_event(Event::<T>::Slashed {
-            provider_id: provider_id.clone(),
+            provider_id: *provider_id,
             amount_slashed,
         });
 

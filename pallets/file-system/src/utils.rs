@@ -1131,11 +1131,11 @@ where
 
         // Global threshold starting point from which all BSPs begin their threshold slope. All BSPs start at this point
         // with the starting reputation weight.
-        let threshold_global_starting_point = maximum_threshold.checked_mul(ReplicationTarget::<T>::get().into()
-            / global_weight.into()
-            / 2).unwrap_or_else(|| {
+        let threshold_global_starting_point = maximum_threshold
+            .checked_mul(ReplicationTarget::<T>::get().into() / global_weight.into() / 2)
+            .unwrap_or_else(|| {
                 log::warn!("Global starting point is beyond MaximumThreshold. Setting it to half of the MaximumThreshold.");
-                maximum_threshold/ 2
+                maximum_threshold / 2
             });
 
         // Get the BSP's reputation weight.

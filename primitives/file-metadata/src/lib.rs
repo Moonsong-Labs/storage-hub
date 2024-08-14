@@ -189,7 +189,7 @@ impl ChunkId {
     pub fn from_challenge(challenge: &[u8], chunks_count: u64) -> Self {
         // Calculate the modulo of the challenge with the number of chunks in the file.
         // The challenge is a big endian 32 byte array.
-        let challenged_chunk = BigUint::from_bytes_be(challenge.as_ref()) % chunks_count;
+        let challenged_chunk = BigUint::from_bytes_be(challenge) % chunks_count;
         ChunkId::new(challenged_chunk.try_into().expect(
             "This is impossible. The modulo of a number with a u64 should always fit in a u64.",
         ))
