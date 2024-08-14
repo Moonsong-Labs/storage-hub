@@ -129,14 +129,14 @@ where
         })?;
 
         // Store the new fixed-rate payment stream in the FixedRatePaymentStreams mapping
-        // We initiate the `last_charged_block` and `last_chargeable_block` with the current block number to be able to keep track of the
+        // We initiate the `last_charged_tick` and `last_chargeable_tick` with the current tick number to be able to keep track of the
         // time passed since the payment stream was originally created
         FixedRatePaymentStreams::<T>::insert(
             provider_id,
             user_account,
             FixedRatePaymentStream {
                 rate,
-                last_charged_block: frame_system::Pallet::<T>::block_number(),
+                last_charged_tick: OnPollTicker::<T>::get(),
                 user_deposit: deposit,
             },
         );
@@ -308,8 +308,8 @@ where
         // Check that the user has enough balance to pay the deposit
         // Deposit is: `amount_provided * current_price * NewStreamDeposit` where:
         // - `amount_provided` is the amount of units of something (for example, storage) that are provided by the Provider to the User
-        // - `current_price` is the current price of the units of something (per unit per block)
-        // - `NewStreamDeposit` is a runtime constant that represents the number of blocks that the deposit should cover
+        // - `current_price` is the current price of the units of something (per unit per tick)
+        // - `NewStreamDeposit` is a runtime constant that represents the number of ticks that the deposit should cover
         let user_balance = T::NativeBalance::reducible_balance(
             &user_account,
             Preservation::Preserve,
@@ -357,7 +357,7 @@ where
         })?;
 
         // Store the new dynamic-rate payment stream in the DynamicRatePaymentStreams mapping
-        // We initiate the `price_index_when_last_charged` and `price_index_at_last_chargeable_block` with the current price index to be able to keep track of the
+        // We initiate the `price_index_when_last_charged` with the current price index to be able to keep track of the
         // price changes since the payment stream was originally created.
         DynamicRatePaymentStreams::<T>::insert(
             provider_id,
@@ -510,10 +510,10 @@ where
 
     /// This function holds the logic that checks if any payment stream exists between a Provider and a User and, if so,
     /// charges the payment stream/s from the User's balance.
-    /// For fixed-rate payment streams, the charge is calculated as: `rate * time_passed` where `time_passed` is the time between the last chargeable block and
-    /// the last charged block of this payment stream.  As such, the last charged block can't ever be greater than the last chargeable block, and if they are equal then no charge is made.
-    /// For dynamic-rate payment streams, the charge is calculated as: `amount_provided * (price_index_when_last_charged - price_index_at_last_chargeable_block)`. In this case,
-    /// the price index at the last charged block can't ever be greater than the price index at the last chargeable block, and if they are equal then no charge is made.
+    /// For fixed-rate payment streams, the charge is calculated as: `rate * time_passed` where `time_passed` is the time between the last chargeable tick and
+    /// the last charged tick of this payment stream.  As such, the last charged tick can't ever be greater than the last chargeable tick, and if they are equal then no charge is made.
+    /// For dynamic-rate payment streams, the charge is calculated as: `amount_provided * (price_index_when_last_charged - price_index_at_last_chargeable_tick)`. In this case,
+    /// the price index at the last charged tick can't ever be greater than the price index at the last chargeable tick, and if they are equal then no charge is made.
     /// TODO: Maybe add a way to pass an array of users to charge them all at once?
     pub fn do_charge_payment_streams(
         provider_id: &ProviderIdFor<T>,
@@ -540,7 +540,7 @@ where
         let dynamic_rate_payment_stream =
             DynamicRatePaymentStreams::<T>::get(provider_id, user_account);
 
-        // Note: No need to check if the last chargeable block/price index at last chargeable block has been updated since the last charge,
+        // Note: No need to check if the last chargeable tick/price index at last chargeable tick has been updated since the last charge,
         // as the only consequence of that is charging 0 to the user.
         // Not erroring out in this situation helps to be able to call this function without errors when updating or removing a payment stream.
 
@@ -549,11 +549,11 @@ where
 
         // If the fixed-rate payment stream exists:
         if let Some(fixed_rate_payment_stream) = fixed_rate_payment_stream {
-            // Calculate the time passed between the last chargeable block and the last charged block
-            let last_chargeable_block =
-                LastChargeableInfo::<T>::get(provider_id).last_chargeable_block;
+            // Calculate the time passed between the last chargeable tick and the last charged tick
+            let last_chargeable_tick =
+                LastChargeableInfo::<T>::get(provider_id).last_chargeable_tick;
             if let Some(time_passed) =
-                last_chargeable_block.checked_sub(&fixed_rate_payment_stream.last_charged_block)
+                last_chargeable_tick.checked_sub(&fixed_rate_payment_stream.last_charged_tick)
             {
                 // Convert it to the balance type (for math)
                 let time_passed_balance_typed = T::BlockNumberToBalance::convert(time_passed);
@@ -612,7 +612,7 @@ where
                         Preservation::Preserve,
                     )?;
 
-                    // Set the last charged block to the block number of the last chargeable block
+                    // Set the last charged tick to the tick number of the last chargeable tick
                     FixedRatePaymentStreams::<T>::mutate(
                         provider_id,
                         user_account,
@@ -622,7 +622,7 @@ where
                                 "Payment stream should exist if it was found before.",
                                 Error::<T>::PaymentStreamNotFound
                             );
-                            payment_stream.last_charged_block = last_chargeable_block;
+                            payment_stream.last_charged_tick = last_chargeable_tick;
                             Ok::<(), DispatchError>(())
                         },
                     )?;
@@ -637,12 +637,12 @@ where
 
         // If the dynamic-rate payment stream exists:
         if let Some(dynamic_rate_payment_stream) = dynamic_rate_payment_stream {
-            // Calculate the difference between the last charged price index and the price index at the last chargeable block
+            // Calculate the difference between the last charged price index and the price index at the last chargeable tick
             // Note: If the last chargeable price index is less than the last charged price index, we charge 0 to the user, because that would be an impossible state.
 
-            let price_index_at_last_chargeable_block =
+            let price_index_at_last_chargeable_tick =
                 LastChargeableInfo::<T>::get(provider_id).price_index;
-            if let Some(price_index_difference) = price_index_at_last_chargeable_block
+            if let Some(price_index_difference) = price_index_at_last_chargeable_tick
                 .checked_sub(&dynamic_rate_payment_stream.price_index_when_last_charged)
             {
                 // Calculate the amount to charge
@@ -698,7 +698,7 @@ where
                         Preservation::Preserve,
                     )?;
 
-                    // Set the last charged price index to be the price index of the last chargeable block
+                    // Set the last charged price index to be the price index of the last chargeable tick
                     DynamicRatePaymentStreams::<T>::mutate(
                         provider_id,
                         user_account,
@@ -709,7 +709,7 @@ where
                                 Error::<T>::PaymentStreamNotFound
                             );
                             payment_stream.price_index_when_last_charged =
-                                price_index_at_last_chargeable_block;
+                                price_index_at_last_chargeable_tick;
                             Ok::<(), DispatchError>(())
                         },
                     )?;
@@ -726,12 +726,12 @@ where
     }
 
     /// This function gets the Providers that submitted a valid proof in the last tick using the `ReadProofSubmittersInterface`,
-    /// and updates the last chargeable block and last chargeable price index of those Providers.
+    /// and updates the last chargeable tick and last chargeable price index of those Providers.
     pub fn do_update_last_chargeable_info(
         n: BlockNumberFor<T>,
         weight: &mut frame_support::weights::WeightMeter,
     ) {
-        // Get last block's number
+        // Get last tick's number
         let n = n.saturating_sub(One::one());
         // Get the Providers that submitted a valid proof in the last tick, if there are any
         let proof_submitters =
@@ -741,11 +741,11 @@ where
         // If there are any proof submitters in the last tick
         if let Some(proof_submitters) = proof_submitters {
             // Update all Providers
-            // Iterate through the proof submitters and update their last chargeable block and last chargeable price index
+            // Iterate through the proof submitters and update their last chargeable tick and last chargeable price index
             for provider_id in proof_submitters {
-                // Update the last chargeable block and last chargeable price index of the Provider
+                // Update the last chargeable tick and last chargeable price index of the Provider
                 LastChargeableInfo::<T>::mutate(provider_id, |provider_info| {
-                    provider_info.last_chargeable_block = n;
+                    provider_info.last_chargeable_tick = n;
                     provider_info.price_index = AccumulatedPriceIndex::<T>::get();
                 });
                 weight.consume(T::DbWeight::get().reads_writes(1, 1));
@@ -757,7 +757,7 @@ where
     }
 
     /// This functions calculates the current price of services provided for dynamic-rate streams and updates it in storage.
-    pub fn do_update_current_price_per_unit_per_block(
+    pub fn do_update_current_price_per_unit_per_tick(
         weight: &mut frame_support::weights::WeightMeter,
     ) {
         // Get the total used capacity of the network
@@ -769,19 +769,18 @@ where
         let _total_capacity = <T::ProvidersPallet as SystemMetricsInterface>::get_total_capacity();
         weight.consume(T::DbWeight::get().reads(1));
 
-        // Calculate the current price per unit per block
-        // TODO: Once the curve of price per unit per block is defined, implement it here
-        let current_price_per_unit_per_block: BalanceOf<T> =
-            CurrentPricePerUnitPerBlock::<T>::get();
+        // Calculate the current price per unit per tick
+        // TODO: Once the curve of price per unit per tick is defined, implement it here
+        let current_price_per_unit_per_tick: BalanceOf<T> = CurrentPricePerUnitPerTick::<T>::get();
 
         // Update it in storage
-        CurrentPricePerUnitPerBlock::<T>::put(current_price_per_unit_per_block);
+        CurrentPricePerUnitPerTick::<T>::put(current_price_per_unit_per_tick);
         weight.consume(T::DbWeight::get().writes(1));
     }
 
     pub fn do_update_price_index(weight: &mut frame_support::weights::WeightMeter) {
         // Get the current price
-        let current_price = CurrentPricePerUnitPerBlock::<T>::get();
+        let current_price = CurrentPricePerUnitPerTick::<T>::get();
         weight.consume(T::DbWeight::get().reads(1));
 
         // Add it to the accumulated price index
