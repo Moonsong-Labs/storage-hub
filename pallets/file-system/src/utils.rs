@@ -1080,7 +1080,7 @@ where
         Ok(expiration_block)
     }
 
-    pub(crate) fn compute_file_key(
+    pub fn compute_file_key(
         owner: T::AccountId,
         bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,

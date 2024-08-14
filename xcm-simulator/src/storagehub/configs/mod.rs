@@ -23,9 +23,13 @@
 //
 // For more information, please refer to <http://unlicense.org>
 
-mod xcm_config;
+pub mod xcm_config;
 
 // Substrate and Polkadot dependencies
+use crate::mock_message_queue;
+use crate::storagehub::configs::xcm_config::XcmConfig;
+use crate::storagehub::MessageQueue;
+use crate::storagehub::PolkadotXcm;
 use core::marker::PhantomData;
 use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
 use cumulus_primitives_core::{relay_chain::well_known_keys, AggregateMessageOrigin, ParaId};
@@ -52,38 +56,34 @@ use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
 use polkadot_runtime_common::{
     prod_or_fast, xcm_sender::NoPriceForMessageDelivery, BlockHashCount, SlowAdjustingFeeUpdate,
 };
-use shp_file_key_verifier::FileKeyVerifier;
 use shp_file_metadata::ChunkId;
-use shp_forest_verifier::ForestVerifier;
-use shp_traits::{CommitmentVerifier, MaybeDebug};
+use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{ConstU128, Get, Hasher, H256};
-use sp_runtime::traits::ConvertBack;
+use sp_core::{Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, Verify},
-    AccountId32, DispatchError, Perbill, SaturatedConversion,
+    AccountId32, DispatchError, FixedPointNumber, FixedU128, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec;
-use sp_trie::{CompactProof, LayoutV1, TrieConfiguration, TrieLayout};
+use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
+use std::u128;
 use xcm::latest::prelude::BodyId;
+use xcm_simulator::XcmExecutor;
 
 // Local module imports
 use super::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection,
-    FileSystem, Hash, MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem,
-    ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
-    RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
-    WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS,
-    EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
+    FileSystem, Hash, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, ProofsDealer,
+    Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason,
+    RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System, WeightToFee, XcmpQueue,
+    AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS, EXISTENTIAL_DEPOSIT, HOURS,
+    MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
     RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
 };
-use crate::PolkadotXcm;
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
-
-pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
 
 parameter_types! {
     pub const Version: RuntimeVersion = VERSION;
@@ -202,6 +202,11 @@ impl pallet_sudo::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type RuntimeCall = RuntimeCall;
     type WeightInfo = ();
+}
+
+impl mock_message_queue::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type XcmExecutor = XcmExecutor<XcmConfig>;
 }
 
 parameter_types! {
@@ -447,8 +452,18 @@ impl pallet_randomness::Config for Runtime {
 }
 
 parameter_types! {
-    pub const SpMinDeposit: Balance = 20 * UNIT;
     pub const BucketDeposit: Balance = 20 * UNIT;
+    pub const MaxMultiAddressSize: u32 = 100;
+    pub const MaxMultiAddressAmount: u32 = 5;
+    pub const MaxProtocols: u32 = 100;
+    pub const MaxBsps: u32 = 100;
+    pub const MaxMsps: u32 = 100;
+    pub const MaxBuckets: u32 = 10000;
+    pub const BucketNameLimit: u32 = 100;
+    pub const SpMinDeposit: Balance = 20 * UNIT;
+    pub const SpMinCapacity: u32 = 2;
+    pub const DepositPerData: Balance = 2;
+    pub const MinBlocksBetweenCapacityChanges: u32 = 10;
     pub const SlashFactor: Balance = 20 * UNIT;
 }
 
@@ -465,28 +480,26 @@ impl pallet_storage_providers::Config for Runtime {
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
-    type DefaultMerkleRoot = DefaultMerkleRoot<StorageProofsMerkleTrieLayout>;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
     type Treasury = TreasuryAccount;
-    type MaxMultiAddressSize = ConstU32<100>;
-    type MaxMultiAddressAmount = ConstU32<5>;
-    type MaxProtocols = ConstU32<100>;
-    type MaxBuckets = ConstU32<10000>;
+    type MaxMultiAddressSize = MaxMultiAddressSize;
+    type MaxMultiAddressAmount = MaxMultiAddressAmount;
+    type MaxProtocols = MaxProtocols;
+    type MaxBuckets = MaxBuckets;
     type BucketDeposit = BucketDeposit;
-    type BucketNameLimit = ConstU32<100>;
+    type BucketNameLimit = BucketNameLimit;
     type SpMinDeposit = SpMinDeposit;
-    type SpMinCapacity = ConstU32<2>;
-    type DepositPerData = ConstU128<2>;
+    type SpMinCapacity = SpMinCapacity;
+    type DepositPerData = DepositPerData;
     type RuntimeHoldReason = RuntimeHoldReason;
     type Subscribers = FileSystem;
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
-    type MinBlocksBetweenCapacityChanges = ConstU32<10>;
+    type MinBlocksBetweenCapacityChanges = MinBlocksBetweenCapacityChanges;
     type SlashFactor = SlashFactor;
-    type ReputationWeightType = u32;
-    type StartingReputationWeight = ReplicationTarget;
 }
 
 parameter_types! {
@@ -540,13 +553,8 @@ impl pallet_proofs_dealer::Config for Runtime {
     type NativeBalance = Balances;
     type MerkleTrieHash = Hash;
     type MerkleTrieHashing = BlakeTwo256;
-    type ForestVerifier = ForestVerifier<StorageProofsMerkleTrieLayout, { BlakeTwo256::LENGTH }>;
-    type KeyVerifier = FileKeyVerifier<
-        StorageProofsMerkleTrieLayout,
-        { shp_constants::H_LENGTH },
-        { shp_constants::FILE_CHUNK_SIZE },
-        { shp_constants::FILE_SIZE_TO_CHALLENGES },
-    >;
+    type ForestVerifier = MockVerifier<H256, LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
+    type KeyVerifier = MockVerifier<H256, LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
     type StakeToBlockNumber = SaturatingBalanceToBlockNumber;
     type RandomChallengesPerBlock = RandomChallengesPerBlock;
     type MaxCustomChallengesPerBlock = MaxCustomChallengesPerBlock;
@@ -564,66 +572,91 @@ impl pallet_proofs_dealer::Config for Runtime {
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
 /// and `false` otherwise.
-pub struct MockVerifier<C> {
-    _phantom: core::marker::PhantomData<C>,
+pub struct MockVerifier<C, T: TrieLayout, const H_LENGTH: usize> {
+    _phantom: core::marker::PhantomData<(C, T)>,
 }
 
-/// Implement the `TrieVerifier` trait for the `MockVerifier` struct.
-impl<C> CommitmentVerifier for MockVerifier<C>
+/// Implement the `TrieVerifier` trait for the `MockForestManager` struct.
+impl<C, T: TrieLayout, const H_LENGTH: usize> CommitmentVerifier for MockVerifier<C, T, H_LENGTH>
 where
     C: MaybeDebug + Ord + Default + Copy + AsRef<[u8]> + AsMut<[u8]>,
 {
     type Proof = CompactProof;
     type Commitment = H256;
-    type Challenge = C;
+    type Challenge = H256;
 
     fn verify_proof(
         _root: &Self::Commitment,
-        challenges: &[Self::Challenge],
+        _challenges: &[Self::Challenge],
         proof: &CompactProof,
     ) -> Result<BTreeSet<Self::Challenge>, DispatchError> {
         if proof.encoded_nodes.len() > 0 {
-            Ok(challenges.iter().cloned().collect())
+            Ok(proof
+                .encoded_nodes
+                .iter()
+                .map(|node| H256::from_slice(&node[..]))
+                .collect())
         } else {
             Err("Proof is empty".into())
         }
     }
 }
 
-type ThresholdType = u32;
+impl<C, T: TrieLayout, const H_LENGTH: usize> TrieProofDeltaApplier<T::Hash>
+    for MockVerifier<C, T, H_LENGTH>
+where
+    <T::Hash as sp_core::Hasher>::Out: for<'a> TryFrom<&'a [u8; H_LENGTH]>,
+{
+    type Proof = CompactProof;
+    type Key = <T::Hash as sp_core::Hasher>::Out;
 
-parameter_types! {
-    pub const ReplicationTarget: u32 = 10;
-    pub const MaximumThreshold: ThresholdType = u32::MAX;
+    fn apply_delta(
+        root: &Self::Key,
+        _mutations: &[(Self::Key, TrieMutation)],
+        _proof: &Self::Proof,
+    ) -> Result<(MemoryDB<T::Hash>, Self::Key), DispatchError> {
+        // Just return the root as is with no mutations
+        Ok((MemoryDB::<T::Hash>::default(), *root))
+    }
 }
 
-/// Configure the pallet template in pallets/template.
+type ThresholdType = FixedU128;
+
+parameter_types! {
+    pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
+    pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100
+    pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(u128::MAX / 100_000_000_000_000_000, 1000); // Takes 1000 blocks to reach maximum threshold
+    pub const MaxBatchConfirmStorageRequests: u32 = 10;
+}
+
 impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
-    type Fingerprint = Hash;
-    type ReplicationTargetType = u32;
     type ThresholdType = ThresholdType;
-    type ThresholdTypeToBlockNumber = ThresholdTypeToBlockNumberConverter;
+    type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
+    type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
     type HashToThresholdType = HashToThresholdTypeConverter;
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
-    type ReplicationTarget = ReplicationTarget;
-    type MaximumThreshold = MaximumThreshold;
-    type BlockRangeToMaximumThreshold = ConstU32<50>;
+    type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
+    type AssignmentThresholdAsymptote = ThresholdAsymptote;
+    type AssignmentThresholdMultiplier = ThresholdMultiplier;
+    type Fingerprint = Hash;
+    type StorageRequestBspsRequiredType = u32;
+    type TargetBspsRequired = ConstU32<1>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
-    type MaxBatchConfirmStorageRequests = ConstU32<10>;
+    type MaxBatchConfirmStorageRequests = MaxBatchConfirmStorageRequests;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = ConstU32<5>;
     type MaxDataServerMultiAddresses = ConstU32<10>;
-    type MaxExpiredItemsInBlock = ConstU32<100>;
     type StorageRequestTtl = ConstU32<40>;
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
+    type MaxExpiredItemsInBlock = ConstU32<100>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
 }
 
@@ -637,23 +670,31 @@ impl Convert<Balance, BlockNumberFor<Runtime>> for SaturatingBalanceToBlockNumbe
     }
 }
 
-// Converter from the ThresholdType type (FixedU128) to the BlockNumber type (u64) and vice versa.
+// Converter from the ThresholdType type (FixedU128) to the BlockNumber type (u64).
 // It performs a saturated conversion, so that the result is always a valid BlockNumber.
-pub struct ThresholdTypeToBlockNumberConverter;
+pub struct SaturatingThresholdTypeToBlockNumberConverter;
 
-impl Convert<ThresholdType, BlockNumberFor<Runtime>> for ThresholdTypeToBlockNumberConverter {
+impl Convert<ThresholdType, BlockNumberFor<Runtime>>
+    for SaturatingThresholdTypeToBlockNumberConverter
+{
     fn convert(threshold: ThresholdType) -> BlockNumberFor<Runtime> {
-        threshold.saturated_into()
+        (threshold.into_inner() / FixedU128::accuracy()).saturated_into()
     }
 }
 
-impl ConvertBack<ThresholdType, BlockNumberFor<Runtime>> for ThresholdTypeToBlockNumberConverter {
-    fn convert_back(block_number: BlockNumberFor<Runtime>) -> ThresholdType {
-        block_number.into()
+// Converter from the BlockNumber type (u64) to the ThresholdType type (FixedU128).
+pub struct BlockNumberToThresholdTypeConverter;
+
+impl Convert<BlockNumberFor<Runtime>, ThresholdType> for BlockNumberToThresholdTypeConverter {
+    fn convert(block_number: BlockNumberFor<Runtime>) -> ThresholdType {
+        FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
     }
 }
 
-/// Converter from the [`Hash`] type to the [`ThresholdType`].
+// Converter from the Hash type from the runtime (BlakeTwo256) to the ThresholdType type (FixedU128).
+// Since we can't convert directly a hash to a FixedU128 (since the hash type used in the runtime has
+// 256 bits and FixedU128 has 128 bits), we truncate the hash to 16 bytes and then interpret those bytes
+// as a big-endian fixed-point U128.
 pub struct HashToThresholdTypeConverter;
 impl Convert<<Runtime as frame_system::Config>::Hash, ThresholdType>
     for HashToThresholdTypeConverter
@@ -662,11 +703,13 @@ impl Convert<<Runtime as frame_system::Config>::Hash, ThresholdType>
         // Get the hash as bytes
         let hash_bytes = hash.as_ref();
 
-        // Get the 4 least significant bytes of the hash and interpret them as an u32
-        let truncated_hash_bytes: [u8; 4] =
-            hash_bytes[28..].try_into().expect("Hash is 32 bytes; qed");
+        // Get the 16 least significant bytes of the hash and interpret them as a u128
+        let truncated_hash_bytes: [u8; 16] =
+            hash_bytes[16..].try_into().expect("Hash is 32 bytes; qed");
+        let hash_as_u128 = u128::from_be_bytes(truncated_hash_bytes);
 
-        ThresholdType::from_be_bytes(truncated_hash_bytes)
+        // Return it as a FixedU128
+        FixedU128::from_inner(hash_as_u128)
     }
 }
 
