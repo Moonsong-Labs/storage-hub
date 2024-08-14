@@ -861,12 +861,12 @@ declare module '@polkadot/api-base/types/events' {
                 newRate: u128;
             }>;
             /**
-             * Event emitted when a Provider's last chargeable block and price index are updated. Provides information about the Provider of the stream,
-             * the block number of the last chargeable block and the price index at that block.
+             * Event emitted when a Provider's last chargeable tick and price index are updated. Provides information about the Provider of the stream,
+             * the tick number of the last chargeable tick and the price index at that tick.
              **/
-            LastChargeableInfoUpdated: AugmentedEvent<ApiType, [providerId: H256, lastChargeableBlock: u32, lastChargeablePriceIndex: u128], {
+            LastChargeableInfoUpdated: AugmentedEvent<ApiType, [providerId: H256, lastChargeableTick: u32, lastChargeablePriceIndex: u128], {
                 providerId: H256;
-                lastChargeableBlock: u32;
+                lastChargeableTick: u32;
                 lastChargeablePriceIndex: u128;
             }>;
             /**
