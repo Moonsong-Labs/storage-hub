@@ -644,10 +644,11 @@ export interface SealedBlock {
 
 export const sealBlock = async (
   api: ApiPromise,
-  calls?: SubmittableExtrinsic<"promise", ISubmittableResult> | SubmittableExtrinsic<"promise", ISubmittableResult>[],
+  calls?:
+    | SubmittableExtrinsic<"promise", ISubmittableResult>
+    | SubmittableExtrinsic<"promise", ISubmittableResult>[],
   signer?: KeyringPair
 ): Promise<SealedBlock> => {
-
   const initialHeight = (await api.rpc.chain.getHeader()).number.toNumber();
 
   const results: {
@@ -666,7 +667,7 @@ export const sealBlock = async (
 
   if (callArray.length > 0) {
     const nonce = await api.rpc.system.accountNextIndex((signer || alice).address);
-    
+
     // Send all transactions in sequence
     for (let i = 0; i < callArray.length; i++) {
       const call = callArray[i];
@@ -684,7 +685,7 @@ export const sealBlock = async (
 
   const sealedResults = {
     blockReceipt: await api.rpc.engine.createBlock(true, true),
-    txHashes: results.hashes.map(hash => hash.toString())
+    txHashes: results.hashes.map((hash) => hash.toString())
   };
 
   const blockHash = sealedResults.blockReceipt.blockHash;

@@ -17,7 +17,9 @@ export type BspNetApi = ApiPromise & {
    * @returns A promise that resolves to a sealed block.
    */
   sealBlock: (
-    calls?: SubmittableExtrinsic<"promise", ISubmittableResult> | SubmittableExtrinsic<"promise", ISubmittableResult>[],
+    calls?:
+      | SubmittableExtrinsic<"promise", ISubmittableResult>
+      | SubmittableExtrinsic<"promise", ISubmittableResult>[],
     signer?: KeyringPair
   ) => Promise<SealedBlock>;
 

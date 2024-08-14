@@ -41,7 +41,9 @@ export const createApiObject = async (uri: string): Promise<BspNetApi> => {
 
   return Object.assign(baseApi, {
     sealBlock: async (
-      calls?: SubmittableExtrinsic<"promise", ISubmittableResult> | SubmittableExtrinsic<"promise", ISubmittableResult>[],
+      calls?:
+        | SubmittableExtrinsic<"promise", ISubmittableResult>
+        | SubmittableExtrinsic<"promise", ISubmittableResult>[],
       signer?: KeyringPair
     ) => sealBlock(baseApi, calls, signer),
 

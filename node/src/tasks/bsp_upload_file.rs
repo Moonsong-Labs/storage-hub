@@ -326,7 +326,6 @@ where
         let file_metadata = read_file_storage
             .get_metadata(&file_key)
             .expect("File metadata not found.");
-
         // Release the file storage lock.
         drop(read_file_storage);
 
@@ -335,7 +334,7 @@ where
         write_forest_storage
             .insert_files_metadata(&vec![file_metadata])
             .expect("Failed to insert files metadata into forest storage.");
-
+        // Release the forest storage write lock.
         drop(write_forest_storage);
 
         // Release the forest root write "lock".
