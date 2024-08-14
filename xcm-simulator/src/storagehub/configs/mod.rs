@@ -625,7 +625,7 @@ where
 type ThresholdType = u32;
 
 parameter_types! {
-    pub const ReplicationTarget: u32 = 10;
+    pub const ReplicationTarget: u32 = 1;
     pub const MaximumThreshold: ThresholdType = u32::MAX;
     pub const MaxBatchConfirmStorageRequests: u32 = 10;
 }
