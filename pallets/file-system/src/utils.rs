@@ -171,7 +171,7 @@ where
         storage_request_metadata: &StorageRequestMetadata<T>,
     ) -> Vec<<<T as pallet::Config>::Providers as ProvidersInterface>::MerkleHash> {
         let file_metadata = storage_request_metadata.clone().to_file_metadata();
-        let chunks_to_check = file_metadata.chunks_to_check() as u32;
+        let chunks_to_check = file_metadata.chunks_to_check();
 
         let mut challenges =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::generate_challenges_from_seed(

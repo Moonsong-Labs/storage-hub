@@ -4,11 +4,11 @@ import { after, before, describe, it } from "node:test";
 import {
   NODE_INFOS,
   createApiObject,
-  runBspNet,
   type BspNetApi,
   cleardownTest,
   DUMMY_BSP_ID,
-  fetchEventData
+  fetchEventData,
+  runSimpleBspNet
 } from "../../../util";
 import { sleep } from "@zombienet/utils";
 
@@ -16,7 +16,7 @@ describe("BSPNet: Slash Provider", () => {
   let api: BspNetApi;
 
   before(async () => {
-    await runBspNet({ noisy: false, rocksdb: false });
+    await runSimpleBspNet({ noisy: false, rocksdb: false });
     api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
   });
 

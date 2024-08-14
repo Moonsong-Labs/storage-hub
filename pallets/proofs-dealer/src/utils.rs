@@ -9,6 +9,7 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+    GetNextDeadlineTickError,
 };
 use shp_traits::{
     CommitmentVerifier, ProofSubmittersInterface, ProofsDealerInterface, ProvidersInterface,
@@ -911,14 +912,14 @@ where
     T: pallet::Config,
 {
     pub fn get_last_tick_provider_submitted_proof(
-        who: &ProviderIdFor<T>,
+        provider_id: &ProviderIdFor<T>,
     ) -> Result<BlockNumberFor<T>, GetLastTickProviderSubmittedProofError> {
         // Check if submitter is a registered Provider.
-        if !ProvidersPalletFor::<T>::is_provider(*who) {
+        if !ProvidersPalletFor::<T>::is_provider(*provider_id) {
             return Err(GetLastTickProviderSubmittedProofError::ProviderNotRegistered);
         }
 
-        LastTickProviderSubmittedAProofFor::<T>::get(who)
+        LastTickProviderSubmittedAProofFor::<T>::get(provider_id)
             .ok_or(GetLastTickProviderSubmittedProofError::ProviderNeverSubmittedProof)
     }
 
@@ -951,5 +952,53 @@ where
 
     pub fn get_checkpoint_challenge_period() -> BlockNumberFor<T> {
         CheckpointChallengePeriodFor::<T>::get()
+    }
+
+    pub fn get_challenges_from_seed(
+        seed: &RandomnessOutputFor<T>,
+        provider_id: &ProviderIdFor<T>,
+        count: u32,
+    ) -> Vec<KeyFor<T>> {
+        Self::generate_challenges_from_seed(*seed, provider_id, count)
+    }
+
+    pub fn get_forest_challenges_from_seed(
+        seed: &RandomnessOutputFor<T>,
+        provider_id: &ProviderIdFor<T>,
+    ) -> Vec<KeyFor<T>> {
+        Self::generate_challenges_from_seed(
+            *seed,
+            provider_id,
+            RandomChallengesPerBlockFor::<T>::get(),
+        )
+    }
+
+    pub fn get_current_tick() -> BlockNumberFor<T> {
+        ChallengesTicker::<T>::get()
+    }
+
+    pub fn get_next_deadline_tick(
+        provider_id: &ProviderIdFor<T>,
+    ) -> Result<BlockNumberFor<T>, GetNextDeadlineTickError> {
+        // Check if the provider is indeed a registered Provider.
+        if !ProvidersPalletFor::<T>::is_provider(*provider_id) {
+            return Err(GetNextDeadlineTickError::ProviderNotRegistered);
+        }
+
+        // Get the last tick for which the submitter submitted a proof.
+        let last_tick_provider_submitted_proof =
+            LastTickProviderSubmittedAProofFor::<T>::get(provider_id)
+                .ok_or(GetNextDeadlineTickError::ProviderNotInitialised)?;
+
+        // The next deadline tick is the last tick + the challenge period + the challenge tolerance.
+        let challenge_period = Self::get_challenge_period(provider_id)
+            .map_err(|_| GetNextDeadlineTickError::ProviderNotRegistered)?;
+        let next_deadline_tick = last_tick_provider_submitted_proof
+            .checked_add(&challenge_period)
+            .ok_or(GetNextDeadlineTickError::ArithmeticOverflow)?
+            .checked_add(&ChallengeTicksToleranceFor::<T>::get())
+            .ok_or(GetNextDeadlineTickError::ArithmeticOverflow)?;
+
+        Ok(next_deadline_tick)
     }
 }

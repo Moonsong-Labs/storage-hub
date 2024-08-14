@@ -2,9 +2,11 @@
 
 use codec::{Compact, Decode, Encode};
 use core::fmt::Debug;
+use num_bigint::BigUint;
 use scale_info::TypeInfo;
 use serde::{Deserialize, Serialize};
 use shp_traits::AsCompact;
+use sp_arithmetic::traits::SaturatedConversion;
 use sp_std::vec::Vec;
 
 /// A struct containing all the information about a file in StorageHub.
@@ -45,8 +47,11 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         T::hash(self.encode().as_slice())
     }
 
-    pub fn chunks_to_check(&self) -> u64 {
-        self.file_size / SIZE_TO_CHALLENGES + (self.file_size % SIZE_TO_CHALLENGES != 0) as u64
+    pub fn chunks_to_check(&self) -> u32 {
+        // In here we downcast and saturate to u32, as we consider u32::MAX to be an already large
+        // enough number of challenges to be generated.
+        (self.file_size / SIZE_TO_CHALLENGES + (self.file_size % SIZE_TO_CHALLENGES != 0) as u64)
+            .saturated_into::<u32>()
     }
 
     pub fn chunks_count(&self) -> u64 {
@@ -179,6 +184,15 @@ pub enum ChunkIdError {
 impl ChunkId {
     pub fn new(id: u64) -> Self {
         Self(id)
+    }
+
+    pub fn from_challenge(challenge: &[u8], chunks_count: u64) -> Self {
+        // Calculate the modulo of the challenge with the number of chunks in the file.
+        // The challenge is a big endian 32 byte array.
+        let challenged_chunk = BigUint::from_bytes_be(challenge.as_ref()) % chunks_count;
+        ChunkId::new(challenged_chunk.try_into().expect(
+            "This is impossible. The modulo of a number with a u64 should always fit in a u64.",
+        ))
     }
 
     pub fn as_u64(&self) -> u64 {
