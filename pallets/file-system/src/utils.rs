@@ -1139,17 +1139,16 @@ where
             });
 
         // Get the BSP's reputation weight.
-        let bsp_weight: u32 = T::Providers::get_bsp_reputation_weight(&bsp_id)?.into();
+        let bsp_weight = T::Providers::get_bsp_reputation_weight(&bsp_id)?.into();
 
         // Actual BSP's threshold starting point, taking into account their reputation weight.
-        let threshold_weighted_starting_point: T::ThresholdType = bsp_weight
+        let threshold_weighted_starting_point = bsp_weight
             .saturating_mul(threshold_global_starting_point)
             .into();
 
-        // Rate of increase from the global threshold starting point up to the maximum threshold within a block range.
-        let threshold_slope = <u32 as Into<T::ThresholdType>>::into(
-            maximum_threshold - threshold_global_starting_point,
-        ) / T::ThresholdTypeToBlockNumber::convert_back(
+        // Rate of increase from the weighted threshold starting point up to the maximum threshold within a block range.
+        let threshold_slope = (<u32 as Into<T::ThresholdType>>::into(maximum_threshold)
+            .saturating_sub(threshold_weighted_starting_point)) / T::ThresholdTypeToBlockNumber::convert_back(
             BlockRangeToMaximumThreshold::<T>::get(),
         );
 
