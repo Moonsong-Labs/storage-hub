@@ -26,7 +26,7 @@ pub struct DynamicRatePaymentStream<T: Config> {
     pub user_deposit: BalanceOf<T>,
 }
 
-/// Structure that holds the information of the last chargeable block and price index for a Provider
+/// Structure that holds the information of the last chargeable tick and price index for a Provider
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct ProviderLastChargeableInfo<T: Config> {
