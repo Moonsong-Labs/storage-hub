@@ -269,7 +269,10 @@ impl ExtBuilder {
         .unwrap();
 
         let mut ext = sp_io::TestExternalities::new(t);
-        ext.execute_with(|| System::set_block_number(1));
+        ext.execute_with(|| {
+            System::set_block_number(1);
+            pallet_payment_streams::OnPollTicker::<Test>::set(1);
+        });
         ext
     }
 }
