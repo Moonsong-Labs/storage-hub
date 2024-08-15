@@ -73,7 +73,7 @@
     "@types/inquirer": "9.0.7",
     "@types/json-bigint": "1.0.4",
     "@types/lodash": "4.17.7",
-    "@types/node": "22.2.0",
+    "@types/node": "22.3.0",
     "typescript": "5.5.4"
   }
 }

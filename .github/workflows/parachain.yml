@@ -190,6 +190,8 @@ jobs:
           chmod +x target/release/storage-hub-node
           cd test
           pnpm  install
+          # Until https://github.com/paritytech/zombienet/issues/1846 is fixed
+          pnpm add @polkadot/keyring@12.6.2 @polkadot/util@12.6.2 @polkadot/util-crypto@12.6.2
           pnpm  zombie:run:full:native &
 
           sleep 60
