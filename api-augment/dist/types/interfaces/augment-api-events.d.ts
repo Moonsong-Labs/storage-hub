@@ -1,31 +1,40 @@
-import '@polkadot/api-base/types/events';
-import type { ApiTypes, AugmentedEvent } from '@polkadot/api-base/types';
-import type { Bytes, Null, Option, Result, U8aFixed, Vec, bool, u128, u32, u64, u8 } from '@polkadot/types-codec';
-import type { ITuple } from '@polkadot/types-codec/types';
-import type { AccountId32, H256 } from '@polkadot/types/interfaces/runtime';
-import type { CumulusPrimitivesCoreAggregateMessageOrigin, FrameSupportDispatchDispatchInfo, FrameSupportMessagesProcessMessageError, FrameSupportTokensMiscBalanceStatus, PalletNftsAttributeNamespace, PalletNftsPalletAttributes, PalletNftsPriceWithDirection, PalletProofsDealerProof, PalletStorageProvidersValueProposition, ShpTraitsTrieRemoveMutation, SpRuntimeDispatchError, SpWeightsWeightV2Weight, StagingXcmV4AssetAssets, StagingXcmV4Location, StagingXcmV4Response, StagingXcmV4TraitsOutcome, StagingXcmV4Xcm, XcmV3TraitsError, XcmVersionedAssets, XcmVersionedLocation } from '@polkadot/types/lookup';
+import "@polkadot/api-base/types/events";
+import type { ApiTypes, AugmentedEvent } from "@polkadot/api-base/types";
+import type { Bytes, Null, Option, Result, U8aFixed, Vec, bool, u128, u32, u64, u8 } from "@polkadot/types-codec";
+import type { ITuple } from "@polkadot/types-codec/types";
+import type { AccountId32, H256 } from "@polkadot/types/interfaces/runtime";
+import type { CumulusPrimitivesCoreAggregateMessageOrigin, FrameSupportDispatchDispatchInfo, FrameSupportMessagesProcessMessageError, FrameSupportTokensMiscBalanceStatus, PalletNftsAttributeNamespace, PalletNftsPalletAttributes, PalletNftsPriceWithDirection, PalletProofsDealerProof, PalletStorageProvidersValueProposition, ShpTraitsTrieRemoveMutation, SpRuntimeDispatchError, SpWeightsWeightV2Weight, StagingXcmV4AssetAssets, StagingXcmV4Location, StagingXcmV4Response, StagingXcmV4TraitsOutcome, StagingXcmV4Xcm, XcmV3TraitsError, XcmVersionedAssets, XcmVersionedLocation } from "@polkadot/types/lookup";
 export type __AugmentedEvent<ApiType extends ApiTypes> = AugmentedEvent<ApiType>;
-declare module '@polkadot/api-base/types/events' {
+declare module "@polkadot/api-base/types/events" {
     interface AugmentedEvents<ApiType extends ApiTypes> {
         balances: {
             /**
              * A balance was set by root.
              **/
-            BalanceSet: AugmentedEvent<ApiType, [who: AccountId32, free: u128], {
+            BalanceSet: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                free: u128
+            ], {
                 who: AccountId32;
                 free: u128;
             }>;
             /**
              * Some amount was burned from an account.
              **/
-            Burned: AugmentedEvent<ApiType, [who: AccountId32, amount: u128], {
+            Burned: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                amount: u128
+            ], {
                 who: AccountId32;
                 amount: u128;
             }>;
             /**
              * Some amount was deposited (e.g. for transaction fees).
              **/
-            Deposit: AugmentedEvent<ApiType, [who: AccountId32, amount: u128], {
+            Deposit: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                amount: u128
+            ], {
                 who: AccountId32;
                 amount: u128;
             }>;
@@ -33,21 +42,30 @@ declare module '@polkadot/api-base/types/events' {
              * An account was removed whose balance was non-zero but below ExistentialDeposit,
              * resulting in an outright loss.
              **/
-            DustLost: AugmentedEvent<ApiType, [account: AccountId32, amount: u128], {
+            DustLost: AugmentedEvent<ApiType, [
+                account: AccountId32,
+                amount: u128
+            ], {
                 account: AccountId32;
                 amount: u128;
             }>;
             /**
              * An account was created with some free balance.
              **/
-            Endowed: AugmentedEvent<ApiType, [account: AccountId32, freeBalance: u128], {
+            Endowed: AugmentedEvent<ApiType, [
+                account: AccountId32,
+                freeBalance: u128
+            ], {
                 account: AccountId32;
                 freeBalance: u128;
             }>;
             /**
              * Some balance was frozen.
              **/
-            Frozen: AugmentedEvent<ApiType, [who: AccountId32, amount: u128], {
+            Frozen: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                amount: u128
+            ], {
                 who: AccountId32;
                 amount: u128;
             }>;
@@ -60,14 +78,20 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Some balance was locked.
              **/
-            Locked: AugmentedEvent<ApiType, [who: AccountId32, amount: u128], {
+            Locked: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                amount: u128
+            ], {
                 who: AccountId32;
                 amount: u128;
             }>;
             /**
              * Some amount was minted into an account.
              **/
-            Minted: AugmentedEvent<ApiType, [who: AccountId32, amount: u128], {
+            Minted: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                amount: u128
+            ], {
                 who: AccountId32;
                 amount: u128;
             }>;
@@ -80,7 +104,10 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Some balance was reserved (moved from free to reserved).
              **/
-            Reserved: AugmentedEvent<ApiType, [who: AccountId32, amount: u128], {
+            Reserved: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                amount: u128
+            ], {
                 who: AccountId32;
                 amount: u128;
             }>;
@@ -88,7 +115,12 @@ declare module '@polkadot/api-base/types/events' {
              * Some balance was moved from the reserve of the first account to the second account.
              * Final argument indicates the destination balance type.
              **/
-            ReserveRepatriated: AugmentedEvent<ApiType, [from: AccountId32, to: AccountId32, amount: u128, destinationStatus: FrameSupportTokensMiscBalanceStatus], {
+            ReserveRepatriated: AugmentedEvent<ApiType, [
+                from: AccountId32,
+                to: AccountId32,
+                amount: u128,
+                destinationStatus: FrameSupportTokensMiscBalanceStatus
+            ], {
                 from: AccountId32;
                 to: AccountId32;
                 amount: u128;
@@ -97,42 +129,61 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Some amount was restored into an account.
              **/
-            Restored: AugmentedEvent<ApiType, [who: AccountId32, amount: u128], {
+            Restored: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                amount: u128
+            ], {
                 who: AccountId32;
                 amount: u128;
             }>;
             /**
              * Some amount was removed from the account (e.g. for misbehavior).
              **/
-            Slashed: AugmentedEvent<ApiType, [who: AccountId32, amount: u128], {
+            Slashed: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                amount: u128
+            ], {
                 who: AccountId32;
                 amount: u128;
             }>;
             /**
              * Some amount was suspended from an account (it can be restored later).
              **/
-            Suspended: AugmentedEvent<ApiType, [who: AccountId32, amount: u128], {
+            Suspended: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                amount: u128
+            ], {
                 who: AccountId32;
                 amount: u128;
             }>;
             /**
              * Some balance was thawed.
              **/
-            Thawed: AugmentedEvent<ApiType, [who: AccountId32, amount: u128], {
+            Thawed: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                amount: u128
+            ], {
                 who: AccountId32;
                 amount: u128;
             }>;
             /**
              * The `TotalIssuance` was forcefully changed.
              **/
-            TotalIssuanceForced: AugmentedEvent<ApiType, [old: u128, new_: u128], {
+            TotalIssuanceForced: AugmentedEvent<ApiType, [
+                old: u128,
+                new_: u128
+            ], {
                 old: u128;
                 new_: u128;
             }>;
             /**
              * Transfer succeeded.
              **/
-            Transfer: AugmentedEvent<ApiType, [from: AccountId32, to: AccountId32, amount: u128], {
+            Transfer: AugmentedEvent<ApiType, [
+                from: AccountId32,
+                to: AccountId32,
+                amount: u128
+            ], {
                 from: AccountId32;
                 to: AccountId32;
                 amount: u128;
@@ -140,14 +191,20 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Some balance was unlocked.
              **/
-            Unlocked: AugmentedEvent<ApiType, [who: AccountId32, amount: u128], {
+            Unlocked: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                amount: u128
+            ], {
                 who: AccountId32;
                 amount: u128;
             }>;
             /**
              * Some balance was unreserved (moved from reserved to free).
              **/
-            Unreserved: AugmentedEvent<ApiType, [who: AccountId32, amount: u128], {
+            Unreserved: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                amount: u128
+            ], {
                 who: AccountId32;
                 amount: u128;
             }>;
@@ -160,7 +217,10 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Some amount was withdrawn from the account (e.g. for transaction fees).
              **/
-            Withdraw: AugmentedEvent<ApiType, [who: AccountId32, amount: u128], {
+            Withdraw: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                amount: u128
+            ], {
                 who: AccountId32;
                 amount: u128;
             }>;
@@ -173,14 +233,21 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that access to a bucket has been shared with another account.
              **/
-            AccessShared: AugmentedEvent<ApiType, [issuer: AccountId32, recipient: AccountId32], {
+            AccessShared: AugmentedEvent<ApiType, [
+                issuer: AccountId32,
+                recipient: AccountId32
+            ], {
                 issuer: AccountId32;
                 recipient: AccountId32;
             }>;
             /**
              * Notifies that an item has been burned.
              **/
-            ItemBurned: AugmentedEvent<ApiType, [account: AccountId32, bucket: H256, itemId: u32], {
+            ItemBurned: AugmentedEvent<ApiType, [
+                account: AccountId32,
+                bucket: H256,
+                itemId: u32
+            ], {
                 account: AccountId32;
                 bucket: H256;
                 itemId: u32;
@@ -188,7 +255,11 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that the read access for an item has been updated.
              **/
-            ItemReadAccessUpdated: AugmentedEvent<ApiType, [admin: AccountId32, bucket: H256, itemId: u32], {
+            ItemReadAccessUpdated: AugmentedEvent<ApiType, [
+                admin: AccountId32,
+                bucket: H256,
+                itemId: u32
+            ], {
                 admin: AccountId32;
                 bucket: H256;
                 itemId: u32;
@@ -202,27 +273,39 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * A new candidate joined.
              **/
-            CandidateAdded: AugmentedEvent<ApiType, [accountId: AccountId32, deposit: u128], {
+            CandidateAdded: AugmentedEvent<ApiType, [
+                accountId: AccountId32,
+                deposit: u128
+            ], {
                 accountId: AccountId32;
                 deposit: u128;
             }>;
             /**
              * Bond of a candidate updated.
              **/
-            CandidateBondUpdated: AugmentedEvent<ApiType, [accountId: AccountId32, deposit: u128], {
+            CandidateBondUpdated: AugmentedEvent<ApiType, [
+                accountId: AccountId32,
+                deposit: u128
+            ], {
                 accountId: AccountId32;
                 deposit: u128;
             }>;
             /**
              * A candidate was removed.
              **/
-            CandidateRemoved: AugmentedEvent<ApiType, [accountId: AccountId32], {
+            CandidateRemoved: AugmentedEvent<ApiType, [
+                accountId: AccountId32
+            ], {
                 accountId: AccountId32;
             }>;
             /**
              * An account was replaced in the candidate list by another one.
              **/
-            CandidateReplaced: AugmentedEvent<ApiType, [old: AccountId32, new_: AccountId32, deposit: u128], {
+            CandidateReplaced: AugmentedEvent<ApiType, [
+                old: AccountId32,
+                new_: AccountId32,
+                deposit: u128
+            ], {
                 old: AccountId32;
                 new_: AccountId32;
                 deposit: u128;
@@ -231,19 +314,25 @@ declare module '@polkadot/api-base/types/events' {
              * An account was unable to be added to the Invulnerables because they did not have keys
              * registered. Other Invulnerables may have been set.
              **/
-            InvalidInvulnerableSkipped: AugmentedEvent<ApiType, [accountId: AccountId32], {
+            InvalidInvulnerableSkipped: AugmentedEvent<ApiType, [
+                accountId: AccountId32
+            ], {
                 accountId: AccountId32;
             }>;
             /**
              * A new Invulnerable was added.
              **/
-            InvulnerableAdded: AugmentedEvent<ApiType, [accountId: AccountId32], {
+            InvulnerableAdded: AugmentedEvent<ApiType, [
+                accountId: AccountId32
+            ], {
                 accountId: AccountId32;
             }>;
             /**
              * An Invulnerable was removed.
              **/
-            InvulnerableRemoved: AugmentedEvent<ApiType, [accountId: AccountId32], {
+            InvulnerableRemoved: AugmentedEvent<ApiType, [
+                accountId: AccountId32
+            ], {
                 accountId: AccountId32;
             }>;
             /**
@@ -255,13 +344,17 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * The number of desired candidates was set.
              **/
-            NewDesiredCandidates: AugmentedEvent<ApiType, [desiredCandidates: u32], {
+            NewDesiredCandidates: AugmentedEvent<ApiType, [
+                desiredCandidates: u32
+            ], {
                 desiredCandidates: u32;
             }>;
             /**
              * New Invulnerables were set.
              **/
-            NewInvulnerables: AugmentedEvent<ApiType, [invulnerables: Vec<AccountId32>], {
+            NewInvulnerables: AugmentedEvent<ApiType, [
+                invulnerables: Vec<AccountId32>
+            ], {
                 invulnerables: Vec<AccountId32>;
             }>;
             /**
@@ -294,7 +387,15 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a BSP has been accepted to store a given file.
              **/
-            AcceptedBspVolunteer: AugmentedEvent<ApiType, [bspId: H256, bucketId: H256, location: Bytes, fingerprint: H256, multiaddresses: Vec<Bytes>, owner: AccountId32, size_: u32], {
+            AcceptedBspVolunteer: AugmentedEvent<ApiType, [
+                bspId: H256,
+                bucketId: H256,
+                location: Bytes,
+                fingerprint: H256,
+                multiaddresses: Vec<Bytes>,
+                owner: AccountId32,
+                size_: u32
+            ], {
                 bspId: H256;
                 bucketId: H256;
                 location: Bytes;
@@ -307,14 +408,22 @@ declare module '@polkadot/api-base/types/events' {
              * Notifies that a BSP's challenge cycle has been initialised, adding the first file
              * key(s) to the BSP's Merkle Patricia Forest.
              **/
-            BspChallengeCycleInitialised: AugmentedEvent<ApiType, [who: AccountId32, bspId: H256], {
+            BspChallengeCycleInitialised: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                bspId: H256
+            ], {
                 who: AccountId32;
                 bspId: H256;
             }>;
             /**
              * Notifies that a BSP confirmed storing a file(s).
              **/
-            BspConfirmedStoring: AugmentedEvent<ApiType, [who: AccountId32, bspId: H256, fileKeys: Vec<H256>, newRoot: H256], {
+            BspConfirmedStoring: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                bspId: H256,
+                fileKeys: Vec<H256>,
+                newRoot: H256
+            ], {
                 who: AccountId32;
                 bspId: H256;
                 fileKeys: Vec<H256>;
@@ -323,7 +432,13 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a BSP has stopped storing a file.
              **/
-            BspStoppedStoring: AugmentedEvent<ApiType, [bspId: H256, fileKey: H256, newRoot: H256, owner: AccountId32, location: Bytes], {
+            BspStoppedStoring: AugmentedEvent<ApiType, [
+                bspId: H256,
+                fileKey: H256,
+                newRoot: H256,
+                owner: AccountId32,
+                location: Bytes
+            ], {
                 bspId: H256;
                 fileKey: H256;
                 newRoot: H256;
@@ -333,7 +448,12 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a bucket's privacy has been updated.
              **/
-            BucketPrivacyUpdated: AugmentedEvent<ApiType, [who: AccountId32, bucketId: H256, collectionId: Option<u32>, private: bool], {
+            BucketPrivacyUpdated: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                bucketId: H256,
+                collectionId: Option<u32>,
+                private: bool
+            ], {
                 who: AccountId32;
                 bucketId: H256;
                 collectionId: Option<u32>;
@@ -342,14 +462,23 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a priority challenge failed to be queued for pending file deletion.
              **/
-            FailedToQueuePriorityChallenge: AugmentedEvent<ApiType, [user: AccountId32, fileKey: H256], {
+            FailedToQueuePriorityChallenge: AugmentedEvent<ApiType, [
+                user: AccountId32,
+                fileKey: H256
+            ], {
                 user: AccountId32;
                 fileKey: H256;
             }>;
             /**
              * Notifies that a file will be deleted.
              **/
-            FileDeletionRequest: AugmentedEvent<ApiType, [user: AccountId32, fileKey: H256, bucketId: H256, mspId: H256, proofOfInclusion: bool], {
+            FileDeletionRequest: AugmentedEvent<ApiType, [
+                user: AccountId32,
+                fileKey: H256,
+                bucketId: H256,
+                mspId: H256,
+                proofOfInclusion: bool
+            ], {
                 user: AccountId32;
                 fileKey: H256;
                 bucketId: H256;
@@ -359,7 +488,14 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a new bucket has been created.
              **/
-            NewBucket: AugmentedEvent<ApiType, [who: AccountId32, mspId: H256, bucketId: H256, name: Bytes, collectionId: Option<u32>, private: bool], {
+            NewBucket: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                mspId: H256,
+                bucketId: H256,
+                name: Bytes,
+                collectionId: Option<u32>,
+                private: bool
+            ], {
                 who: AccountId32;
                 mspId: H256;
                 bucketId: H256;
@@ -370,7 +506,11 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a new collection has been created and associated with a bucket.
              **/
-            NewCollectionAndAssociation: AugmentedEvent<ApiType, [who: AccountId32, bucketId: H256, collectionId: u32], {
+            NewCollectionAndAssociation: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                bucketId: H256,
+                collectionId: u32
+            ], {
                 who: AccountId32;
                 bucketId: H256;
                 collectionId: u32;
@@ -378,7 +518,15 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a new file has been requested to be stored.
              **/
-            NewStorageRequest: AugmentedEvent<ApiType, [who: AccountId32, fileKey: H256, bucketId: H256, location: Bytes, fingerprint: H256, size_: u32, peerIds: Vec<Bytes>], {
+            NewStorageRequest: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                fileKey: H256,
+                bucketId: H256,
+                location: Bytes,
+                fingerprint: H256,
+                size_: u32,
+                peerIds: Vec<Bytes>
+            ], {
                 who: AccountId32;
                 fileKey: H256;
                 bucketId: H256;
@@ -390,7 +538,13 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a proof has been submitted for a pending file deletion request.
              **/
-            ProofSubmittedForPendingFileDeletionRequest: AugmentedEvent<ApiType, [mspId: H256, user: AccountId32, fileKey: H256, bucketId: H256, proofOfInclusion: bool], {
+            ProofSubmittedForPendingFileDeletionRequest: AugmentedEvent<ApiType, [
+                mspId: H256,
+                user: AccountId32,
+                fileKey: H256,
+                bucketId: H256,
+                proofOfInclusion: bool
+            ], {
                 mspId: H256;
                 user: AccountId32;
                 fileKey: H256;
@@ -418,7 +572,12 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Message placed in overweight queue.
              **/
-            OverweightEnqueued: AugmentedEvent<ApiType, [id: U8aFixed, origin: CumulusPrimitivesCoreAggregateMessageOrigin, pageIndex: u32, messageIndex: u32], {
+            OverweightEnqueued: AugmentedEvent<ApiType, [
+                id: U8aFixed,
+                origin: CumulusPrimitivesCoreAggregateMessageOrigin,
+                pageIndex: u32,
+                messageIndex: u32
+            ], {
                 id: U8aFixed;
                 origin: CumulusPrimitivesCoreAggregateMessageOrigin;
                 pageIndex: u32;
@@ -427,14 +586,22 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * This page was reaped.
              **/
-            PageReaped: AugmentedEvent<ApiType, [origin: CumulusPrimitivesCoreAggregateMessageOrigin, index: u32], {
+            PageReaped: AugmentedEvent<ApiType, [
+                origin: CumulusPrimitivesCoreAggregateMessageOrigin,
+                index: u32
+            ], {
                 origin: CumulusPrimitivesCoreAggregateMessageOrigin;
                 index: u32;
             }>;
             /**
              * Message is processed.
              **/
-            Processed: AugmentedEvent<ApiType, [id: H256, origin: CumulusPrimitivesCoreAggregateMessageOrigin, weightUsed: SpWeightsWeightV2Weight, success: bool], {
+            Processed: AugmentedEvent<ApiType, [
+                id: H256,
+                origin: CumulusPrimitivesCoreAggregateMessageOrigin,
+                weightUsed: SpWeightsWeightV2Weight,
+                success: bool
+            ], {
                 id: H256;
                 origin: CumulusPrimitivesCoreAggregateMessageOrigin;
                 weightUsed: SpWeightsWeightV2Weight;
@@ -443,7 +610,11 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Message discarded due to an error in the `MessageProcessor` (usually a format error).
              **/
-            ProcessingFailed: AugmentedEvent<ApiType, [id: H256, origin: CumulusPrimitivesCoreAggregateMessageOrigin, error: FrameSupportMessagesProcessMessageError], {
+            ProcessingFailed: AugmentedEvent<ApiType, [
+                id: H256,
+                origin: CumulusPrimitivesCoreAggregateMessageOrigin,
+                error: FrameSupportMessagesProcessMessageError
+            ], {
                 id: H256;
                 origin: CumulusPrimitivesCoreAggregateMessageOrigin;
                 error: FrameSupportMessagesProcessMessageError;
@@ -457,7 +628,11 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * All approvals of an item got cancelled.
              **/
-            AllApprovalsCancelled: AugmentedEvent<ApiType, [collection: u32, item: u32, owner: AccountId32], {
+            AllApprovalsCancelled: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32,
+                owner: AccountId32
+            ], {
                 collection: u32;
                 item: u32;
                 owner: AccountId32;
@@ -466,7 +641,12 @@ declare module '@polkadot/api-base/types/events' {
              * An approval for a `delegate` account to transfer the `item` of an item
              * `collection` was cancelled by its `owner`.
              **/
-            ApprovalCancelled: AugmentedEvent<ApiType, [collection: u32, item: u32, owner: AccountId32, delegate: AccountId32], {
+            ApprovalCancelled: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32,
+                owner: AccountId32,
+                delegate: AccountId32
+            ], {
                 collection: u32;
                 item: u32;
                 owner: AccountId32;
@@ -475,7 +655,12 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Attribute metadata has been cleared for a `collection` or `item`.
              **/
-            AttributeCleared: AugmentedEvent<ApiType, [collection: u32, maybeItem: Option<u32>, key: Bytes, namespace: PalletNftsAttributeNamespace], {
+            AttributeCleared: AugmentedEvent<ApiType, [
+                collection: u32,
+                maybeItem: Option<u32>,
+                key: Bytes,
+                namespace: PalletNftsAttributeNamespace
+            ], {
                 collection: u32;
                 maybeItem: Option<u32>;
                 key: Bytes;
@@ -484,7 +669,13 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * New attribute metadata has been set for a `collection` or `item`.
              **/
-            AttributeSet: AugmentedEvent<ApiType, [collection: u32, maybeItem: Option<u32>, key: Bytes, value: Bytes, namespace: PalletNftsAttributeNamespace], {
+            AttributeSet: AugmentedEvent<ApiType, [
+                collection: u32,
+                maybeItem: Option<u32>,
+                key: Bytes,
+                value: Bytes,
+                namespace: PalletNftsAttributeNamespace
+            ], {
                 collection: u32;
                 maybeItem: Option<u32>;
                 key: Bytes;
@@ -494,7 +685,11 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * An `item` was destroyed.
              **/
-            Burned: AugmentedEvent<ApiType, [collection: u32, item: u32, owner: AccountId32], {
+            Burned: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32,
+                owner: AccountId32
+            ], {
                 collection: u32;
                 item: u32;
                 owner: AccountId32;
@@ -514,7 +709,10 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Max supply has been set for a collection.
              **/
-            CollectionMaxSupplySet: AugmentedEvent<ApiType, [collection: u32, maxSupply: u32], {
+            CollectionMaxSupplySet: AugmentedEvent<ApiType, [
+                collection: u32,
+                maxSupply: u32
+            ], {
                 collection: u32;
                 maxSupply: u32;
             }>;
@@ -527,20 +725,29 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * New metadata has been set for a `collection`.
              **/
-            CollectionMetadataSet: AugmentedEvent<ApiType, [collection: u32, data: Bytes], {
+            CollectionMetadataSet: AugmentedEvent<ApiType, [
+                collection: u32,
+                data: Bytes
+            ], {
                 collection: u32;
                 data: Bytes;
             }>;
             /**
              * Mint settings for a collection had changed.
              **/
-            CollectionMintSettingsUpdated: AugmentedEvent<ApiType, [collection: u32], {
+            CollectionMintSettingsUpdated: AugmentedEvent<ApiType, [
+                collection: u32
+            ], {
                 collection: u32;
             }>;
             /**
              * A `collection` was created.
              **/
-            Created: AugmentedEvent<ApiType, [collection: u32, creator: AccountId32, owner: AccountId32], {
+            Created: AugmentedEvent<ApiType, [
+                collection: u32,
+                creator: AccountId32,
+                owner: AccountId32
+            ], {
                 collection: u32;
                 creator: AccountId32;
                 owner: AccountId32;
@@ -554,14 +761,21 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * A `collection` was force-created.
              **/
-            ForceCreated: AugmentedEvent<ApiType, [collection: u32, owner: AccountId32], {
+            ForceCreated: AugmentedEvent<ApiType, [
+                collection: u32,
+                owner: AccountId32
+            ], {
                 collection: u32;
                 owner: AccountId32;
             }>;
             /**
              * An `item` was issued.
              **/
-            Issued: AugmentedEvent<ApiType, [collection: u32, item: u32, owner: AccountId32], {
+            Issued: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32,
+                owner: AccountId32
+            ], {
                 collection: u32;
                 item: u32;
                 owner: AccountId32;
@@ -569,7 +783,11 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * A new approval to modify item attributes was added.
              **/
-            ItemAttributesApprovalAdded: AugmentedEvent<ApiType, [collection: u32, item: u32, delegate: AccountId32], {
+            ItemAttributesApprovalAdded: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32,
+                delegate: AccountId32
+            ], {
                 collection: u32;
                 item: u32;
                 delegate: AccountId32;
@@ -577,7 +795,11 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * A new approval to modify item attributes was removed.
              **/
-            ItemAttributesApprovalRemoved: AugmentedEvent<ApiType, [collection: u32, item: u32, delegate: AccountId32], {
+            ItemAttributesApprovalRemoved: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32,
+                delegate: AccountId32
+            ], {
                 collection: u32;
                 item: u32;
                 delegate: AccountId32;
@@ -585,7 +807,13 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * An item was bought.
              **/
-            ItemBought: AugmentedEvent<ApiType, [collection: u32, item: u32, price: u128, seller: AccountId32, buyer: AccountId32], {
+            ItemBought: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32,
+                price: u128,
+                seller: AccountId32,
+                buyer: AccountId32
+            ], {
                 collection: u32;
                 item: u32;
                 price: u128;
@@ -595,14 +823,21 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Metadata has been cleared for an item.
              **/
-            ItemMetadataCleared: AugmentedEvent<ApiType, [collection: u32, item: u32], {
+            ItemMetadataCleared: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32
+            ], {
                 collection: u32;
                 item: u32;
             }>;
             /**
              * New metadata has been set for an item.
              **/
-            ItemMetadataSet: AugmentedEvent<ApiType, [collection: u32, item: u32, data: Bytes], {
+            ItemMetadataSet: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32,
+                data: Bytes
+            ], {
                 collection: u32;
                 item: u32;
                 data: Bytes;
@@ -610,14 +845,22 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * The price for the item was removed.
              **/
-            ItemPriceRemoved: AugmentedEvent<ApiType, [collection: u32, item: u32], {
+            ItemPriceRemoved: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32
+            ], {
                 collection: u32;
                 item: u32;
             }>;
             /**
              * The price was set for the item.
              **/
-            ItemPriceSet: AugmentedEvent<ApiType, [collection: u32, item: u32, price: u128, whitelistedBuyer: Option<AccountId32>], {
+            ItemPriceSet: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32,
+                price: u128,
+                whitelistedBuyer: Option<AccountId32>
+            ], {
                 collection: u32;
                 item: u32;
                 price: u128;
@@ -626,7 +869,12 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * `item` metadata or attributes were locked.
              **/
-            ItemPropertiesLocked: AugmentedEvent<ApiType, [collection: u32, item: u32, lockMetadata: bool, lockAttributes: bool], {
+            ItemPropertiesLocked: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32,
+                lockMetadata: bool,
+                lockAttributes: bool
+            ], {
                 collection: u32;
                 item: u32;
                 lockMetadata: bool;
@@ -635,34 +883,48 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * An `item` became non-transferable.
              **/
-            ItemTransferLocked: AugmentedEvent<ApiType, [collection: u32, item: u32], {
+            ItemTransferLocked: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32
+            ], {
                 collection: u32;
                 item: u32;
             }>;
             /**
              * An `item` became transferable.
              **/
-            ItemTransferUnlocked: AugmentedEvent<ApiType, [collection: u32, item: u32], {
+            ItemTransferUnlocked: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32
+            ], {
                 collection: u32;
                 item: u32;
             }>;
             /**
              * Event gets emitted when the `NextCollectionId` gets incremented.
              **/
-            NextCollectionIdIncremented: AugmentedEvent<ApiType, [nextId: Option<u32>], {
+            NextCollectionIdIncremented: AugmentedEvent<ApiType, [
+                nextId: Option<u32>
+            ], {
                 nextId: Option<u32>;
             }>;
             /**
              * The owner changed.
              **/
-            OwnerChanged: AugmentedEvent<ApiType, [collection: u32, newOwner: AccountId32], {
+            OwnerChanged: AugmentedEvent<ApiType, [
+                collection: u32,
+                newOwner: AccountId32
+            ], {
                 collection: u32;
                 newOwner: AccountId32;
             }>;
             /**
              * Ownership acceptance has changed for an account.
              **/
-            OwnershipAcceptanceChanged: AugmentedEvent<ApiType, [who: AccountId32, maybeCollection: Option<u32>], {
+            OwnershipAcceptanceChanged: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                maybeCollection: Option<u32>
+            ], {
                 who: AccountId32;
                 maybeCollection: Option<u32>;
             }>;
@@ -670,7 +932,12 @@ declare module '@polkadot/api-base/types/events' {
              * A new attribute in the `Pallet` namespace was set for the `collection` or an `item`
              * within that `collection`.
              **/
-            PalletAttributeSet: AugmentedEvent<ApiType, [collection: u32, item: Option<u32>, attribute: PalletNftsPalletAttributes, value: Bytes], {
+            PalletAttributeSet: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: Option<u32>,
+                attribute: PalletNftsPalletAttributes,
+                value: Bytes
+            ], {
                 collection: u32;
                 item: Option<u32>;
                 attribute: PalletNftsPalletAttributes;
@@ -679,7 +946,11 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * New attributes have been set for an `item` of the `collection`.
              **/
-            PreSignedAttributesSet: AugmentedEvent<ApiType, [collection: u32, item: u32, namespace: PalletNftsAttributeNamespace], {
+            PreSignedAttributesSet: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32,
+                namespace: PalletNftsAttributeNamespace
+            ], {
                 collection: u32;
                 item: u32;
                 namespace: PalletNftsAttributeNamespace;
@@ -687,14 +958,24 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * The deposit for a set of `item`s within a `collection` has been updated.
              **/
-            Redeposited: AugmentedEvent<ApiType, [collection: u32, successfulItems: Vec<u32>], {
+            Redeposited: AugmentedEvent<ApiType, [
+                collection: u32,
+                successfulItems: Vec<u32>
+            ], {
                 collection: u32;
                 successfulItems: Vec<u32>;
             }>;
             /**
              * The swap was cancelled.
              **/
-            SwapCancelled: AugmentedEvent<ApiType, [offeredCollection: u32, offeredItem: u32, desiredCollection: u32, desiredItem: Option<u32>, price: Option<PalletNftsPriceWithDirection>, deadline: u32], {
+            SwapCancelled: AugmentedEvent<ApiType, [
+                offeredCollection: u32,
+                offeredItem: u32,
+                desiredCollection: u32,
+                desiredItem: Option<u32>,
+                price: Option<PalletNftsPriceWithDirection>,
+                deadline: u32
+            ], {
                 offeredCollection: u32;
                 offeredItem: u32;
                 desiredCollection: u32;
@@ -705,7 +986,16 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * The swap has been claimed.
              **/
-            SwapClaimed: AugmentedEvent<ApiType, [sentCollection: u32, sentItem: u32, sentItemOwner: AccountId32, receivedCollection: u32, receivedItem: u32, receivedItemOwner: AccountId32, price: Option<PalletNftsPriceWithDirection>, deadline: u32], {
+            SwapClaimed: AugmentedEvent<ApiType, [
+                sentCollection: u32,
+                sentItem: u32,
+                sentItemOwner: AccountId32,
+                receivedCollection: u32,
+                receivedItem: u32,
+                receivedItemOwner: AccountId32,
+                price: Option<PalletNftsPriceWithDirection>,
+                deadline: u32
+            ], {
                 sentCollection: u32;
                 sentItem: u32;
                 sentItemOwner: AccountId32;
@@ -718,7 +1008,14 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * An `item` swap intent was created.
              **/
-            SwapCreated: AugmentedEvent<ApiType, [offeredCollection: u32, offeredItem: u32, desiredCollection: u32, desiredItem: Option<u32>, price: Option<PalletNftsPriceWithDirection>, deadline: u32], {
+            SwapCreated: AugmentedEvent<ApiType, [
+                offeredCollection: u32,
+                offeredItem: u32,
+                desiredCollection: u32,
+                desiredItem: Option<u32>,
+                price: Option<PalletNftsPriceWithDirection>,
+                deadline: u32
+            ], {
                 offeredCollection: u32;
                 offeredItem: u32;
                 desiredCollection: u32;
@@ -729,7 +1026,12 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * The management team changed.
              **/
-            TeamChanged: AugmentedEvent<ApiType, [collection: u32, issuer: Option<AccountId32>, admin: Option<AccountId32>, freezer: Option<AccountId32>], {
+            TeamChanged: AugmentedEvent<ApiType, [
+                collection: u32,
+                issuer: Option<AccountId32>,
+                admin: Option<AccountId32>,
+                freezer: Option<AccountId32>
+            ], {
                 collection: u32;
                 issuer: Option<AccountId32>;
                 admin: Option<AccountId32>;
@@ -738,7 +1040,13 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * A tip was sent.
              **/
-            TipSent: AugmentedEvent<ApiType, [collection: u32, item: u32, sender: AccountId32, receiver: AccountId32, amount: u128], {
+            TipSent: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32,
+                sender: AccountId32,
+                receiver: AccountId32,
+                amount: u128
+            ], {
                 collection: u32;
                 item: u32;
                 sender: AccountId32;
@@ -749,7 +1057,13 @@ declare module '@polkadot/api-base/types/events' {
              * An `item` of a `collection` has been approved by the `owner` for transfer by
              * a `delegate`.
              **/
-            TransferApproved: AugmentedEvent<ApiType, [collection: u32, item: u32, owner: AccountId32, delegate: AccountId32, deadline: Option<u32>], {
+            TransferApproved: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32,
+                owner: AccountId32,
+                delegate: AccountId32,
+                deadline: Option<u32>
+            ], {
                 collection: u32;
                 item: u32;
                 owner: AccountId32;
@@ -759,7 +1073,12 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * An `item` was transferred.
              **/
-            Transferred: AugmentedEvent<ApiType, [collection: u32, item: u32, from: AccountId32, to: AccountId32], {
+            Transferred: AugmentedEvent<ApiType, [
+                collection: u32,
+                item: u32,
+                from: AccountId32,
+                to: AccountId32
+            ], {
                 collection: u32;
                 item: u32;
                 from: AccountId32;
@@ -774,7 +1093,10 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Downward messages were processed using the given weight.
              **/
-            DownwardMessagesProcessed: AugmentedEvent<ApiType, [weightUsed: SpWeightsWeightV2Weight, dmqHead: H256], {
+            DownwardMessagesProcessed: AugmentedEvent<ApiType, [
+                weightUsed: SpWeightsWeightV2Weight,
+                dmqHead: H256
+            ], {
                 weightUsed: SpWeightsWeightV2Weight;
                 dmqHead: H256;
             }>;
@@ -787,13 +1109,17 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * An upward message was sent to the relay chain.
              **/
-            UpwardMessageSent: AugmentedEvent<ApiType, [messageHash: Option<U8aFixed>], {
+            UpwardMessageSent: AugmentedEvent<ApiType, [
+                messageHash: Option<U8aFixed>
+            ], {
                 messageHash: Option<U8aFixed>;
             }>;
             /**
              * The validation function was applied as of the contained relay chain block number.
              **/
-            ValidationFunctionApplied: AugmentedEvent<ApiType, [relayChainBlockNum: u32], {
+            ValidationFunctionApplied: AugmentedEvent<ApiType, [
+                relayChainBlockNum: u32
+            ], {
                 relayChainBlockNum: u32;
             }>;
             /**
@@ -814,7 +1140,11 @@ declare module '@polkadot/api-base/types/events' {
              * Event emitted when a dynamic-rate payment stream is created. Provides information about the User and Provider of the stream
              * and the initial amount provided.
              **/
-            DynamicRatePaymentStreamCreated: AugmentedEvent<ApiType, [userAccount: AccountId32, providerId: H256, amountProvided: u32], {
+            DynamicRatePaymentStreamCreated: AugmentedEvent<ApiType, [
+                userAccount: AccountId32,
+                providerId: H256,
+                amountProvided: u32
+            ], {
                 userAccount: AccountId32;
                 providerId: H256;
                 amountProvided: u32;
@@ -822,7 +1152,10 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Event emitted when a dynamic-rate payment stream is removed. Provides information about the User and Provider of the stream.
              **/
-            DynamicRatePaymentStreamDeleted: AugmentedEvent<ApiType, [userAccount: AccountId32, providerId: H256], {
+            DynamicRatePaymentStreamDeleted: AugmentedEvent<ApiType, [
+                userAccount: AccountId32,
+                providerId: H256
+            ], {
                 userAccount: AccountId32;
                 providerId: H256;
             }>;
@@ -830,7 +1163,11 @@ declare module '@polkadot/api-base/types/events' {
              * Event emitted when a dynamic-rate payment stream is updated. Provides information about the User and Provider of the stream
              * and the new amount provided.
              **/
-            DynamicRatePaymentStreamUpdated: AugmentedEvent<ApiType, [userAccount: AccountId32, providerId: H256, newAmountProvided: u32], {
+            DynamicRatePaymentStreamUpdated: AugmentedEvent<ApiType, [
+                userAccount: AccountId32,
+                providerId: H256,
+                newAmountProvided: u32
+            ], {
                 userAccount: AccountId32;
                 providerId: H256;
                 newAmountProvided: u32;
@@ -839,7 +1176,11 @@ declare module '@polkadot/api-base/types/events' {
              * Event emitted when a fixed-rate payment stream is created. Provides information about the Provider and User of the stream
              * and its initial rate.
              **/
-            FixedRatePaymentStreamCreated: AugmentedEvent<ApiType, [userAccount: AccountId32, providerId: H256, rate: u128], {
+            FixedRatePaymentStreamCreated: AugmentedEvent<ApiType, [
+                userAccount: AccountId32,
+                providerId: H256,
+                rate: u128
+            ], {
                 userAccount: AccountId32;
                 providerId: H256;
                 rate: u128;
@@ -847,7 +1188,10 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Event emitted when a fixed-rate payment stream is removed. Provides information about the User and Provider of the stream.
              **/
-            FixedRatePaymentStreamDeleted: AugmentedEvent<ApiType, [userAccount: AccountId32, providerId: H256], {
+            FixedRatePaymentStreamDeleted: AugmentedEvent<ApiType, [
+                userAccount: AccountId32,
+                providerId: H256
+            ], {
                 userAccount: AccountId32;
                 providerId: H256;
             }>;
@@ -855,7 +1199,11 @@ declare module '@polkadot/api-base/types/events' {
              * Event emitted when a fixed-rate payment stream is updated. Provides information about the User and Provider of the stream
              * and the new rate of the stream.
              **/
-            FixedRatePaymentStreamUpdated: AugmentedEvent<ApiType, [userAccount: AccountId32, providerId: H256, newRate: u128], {
+            FixedRatePaymentStreamUpdated: AugmentedEvent<ApiType, [
+                userAccount: AccountId32,
+                providerId: H256,
+                newRate: u128
+            ], {
                 userAccount: AccountId32;
                 providerId: H256;
                 newRate: u128;
@@ -864,7 +1212,11 @@ declare module '@polkadot/api-base/types/events' {
              * Event emitted when a Provider's last chargeable tick and price index are updated. Provides information about the Provider of the stream,
              * the tick number of the last chargeable tick and the price index at that tick.
              **/
-            LastChargeableInfoUpdated: AugmentedEvent<ApiType, [providerId: H256, lastChargeableTick: u32, lastChargeablePriceIndex: u128], {
+            LastChargeableInfoUpdated: AugmentedEvent<ApiType, [
+                providerId: H256,
+                lastChargeableTick: u32,
+                lastChargeablePriceIndex: u128
+            ], {
                 providerId: H256;
                 lastChargeableTick: u32;
                 lastChargeablePriceIndex: u128;
@@ -873,7 +1225,11 @@ declare module '@polkadot/api-base/types/events' {
              * Event emitted when a payment is charged. Provides information about the user that was charged,
              * the Provider that received the funds, and the amount that was charged.
              **/
-            PaymentStreamCharged: AugmentedEvent<ApiType, [userAccount: AccountId32, providerId: H256, amount: u128], {
+            PaymentStreamCharged: AugmentedEvent<ApiType, [
+                userAccount: AccountId32,
+                providerId: H256,
+                amount: u128
+            ], {
                 userAccount: AccountId32;
                 providerId: H256;
                 amount: u128;
@@ -895,7 +1251,11 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Some assets have been claimed from an asset trap
              **/
-            AssetsClaimed: AugmentedEvent<ApiType, [hash_: H256, origin: StagingXcmV4Location, assets: XcmVersionedAssets], {
+            AssetsClaimed: AugmentedEvent<ApiType, [
+                hash_: H256,
+                origin: StagingXcmV4Location,
+                assets: XcmVersionedAssets
+            ], {
                 hash_: H256;
                 origin: StagingXcmV4Location;
                 assets: XcmVersionedAssets;
@@ -903,7 +1263,11 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Some assets have been placed in an asset trap.
              **/
-            AssetsTrapped: AugmentedEvent<ApiType, [hash_: H256, origin: StagingXcmV4Location, assets: XcmVersionedAssets], {
+            AssetsTrapped: AugmentedEvent<ApiType, [
+                hash_: H256,
+                origin: StagingXcmV4Location,
+                assets: XcmVersionedAssets
+            ], {
                 hash_: H256;
                 origin: StagingXcmV4Location;
                 assets: XcmVersionedAssets;
@@ -911,13 +1275,18 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Execution of an XCM message was attempted.
              **/
-            Attempted: AugmentedEvent<ApiType, [outcome: StagingXcmV4TraitsOutcome], {
+            Attempted: AugmentedEvent<ApiType, [
+                outcome: StagingXcmV4TraitsOutcome
+            ], {
                 outcome: StagingXcmV4TraitsOutcome;
             }>;
             /**
              * Fees were paid from a location for an operation (often for using `SendXcm`).
              **/
-            FeesPaid: AugmentedEvent<ApiType, [paying: StagingXcmV4Location, fees: StagingXcmV4AssetAssets], {
+            FeesPaid: AugmentedEvent<ApiType, [
+                paying: StagingXcmV4Location,
+                fees: StagingXcmV4AssetAssets
+            ], {
                 paying: StagingXcmV4Location;
                 fees: StagingXcmV4AssetAssets;
             }>;
@@ -926,7 +1295,12 @@ declare module '@polkadot/api-base/types/events' {
              * not match the expected. The query remains registered for a later, valid, response to
              * be received and acted upon.
              **/
-            InvalidQuerier: AugmentedEvent<ApiType, [origin: StagingXcmV4Location, queryId: u64, expectedQuerier: StagingXcmV4Location, maybeActualQuerier: Option<StagingXcmV4Location>], {
+            InvalidQuerier: AugmentedEvent<ApiType, [
+                origin: StagingXcmV4Location,
+                queryId: u64,
+                expectedQuerier: StagingXcmV4Location,
+                maybeActualQuerier: Option<StagingXcmV4Location>
+            ], {
                 origin: StagingXcmV4Location;
                 queryId: u64;
                 expectedQuerier: StagingXcmV4Location;
@@ -941,7 +1315,10 @@ declare module '@polkadot/api-base/types/events' {
              * valid response will be dropped. Manual governance intervention is probably going to be
              * needed.
              **/
-            InvalidQuerierVersion: AugmentedEvent<ApiType, [origin: StagingXcmV4Location, queryId: u64], {
+            InvalidQuerierVersion: AugmentedEvent<ApiType, [
+                origin: StagingXcmV4Location,
+                queryId: u64
+            ], {
                 origin: StagingXcmV4Location;
                 queryId: u64;
             }>;
@@ -950,7 +1327,11 @@ declare module '@polkadot/api-base/types/events' {
              * not match that expected. The query remains registered for a later, valid, response to
              * be received and acted upon.
              **/
-            InvalidResponder: AugmentedEvent<ApiType, [origin: StagingXcmV4Location, queryId: u64, expectedLocation: Option<StagingXcmV4Location>], {
+            InvalidResponder: AugmentedEvent<ApiType, [
+                origin: StagingXcmV4Location,
+                queryId: u64,
+                expectedLocation: Option<StagingXcmV4Location>
+            ], {
                 origin: StagingXcmV4Location;
                 queryId: u64;
                 expectedLocation: Option<StagingXcmV4Location>;
@@ -964,7 +1345,10 @@ declare module '@polkadot/api-base/types/events' {
              * valid response will be dropped. Manual governance intervention is probably going to be
              * needed.
              **/
-            InvalidResponderVersion: AugmentedEvent<ApiType, [origin: StagingXcmV4Location, queryId: u64], {
+            InvalidResponderVersion: AugmentedEvent<ApiType, [
+                origin: StagingXcmV4Location,
+                queryId: u64
+            ], {
                 origin: StagingXcmV4Location;
                 queryId: u64;
             }>;
@@ -972,7 +1356,11 @@ declare module '@polkadot/api-base/types/events' {
              * Query response has been received and query is removed. The registered notification has
              * been dispatched and executed successfully.
              **/
-            Notified: AugmentedEvent<ApiType, [queryId: u64, palletIndex: u8, callIndex: u8], {
+            Notified: AugmentedEvent<ApiType, [
+                queryId: u64,
+                palletIndex: u8,
+                callIndex: u8
+            ], {
                 queryId: u64;
                 palletIndex: u8;
                 callIndex: u8;
@@ -982,7 +1370,11 @@ declare module '@polkadot/api-base/types/events' {
              * decoded into a `Call`; this might be due to dispatch function having a signature which
              * is not `(origin, QueryId, Response)`.
              **/
-            NotifyDecodeFailed: AugmentedEvent<ApiType, [queryId: u64, palletIndex: u8, callIndex: u8], {
+            NotifyDecodeFailed: AugmentedEvent<ApiType, [
+                queryId: u64,
+                palletIndex: u8,
+                callIndex: u8
+            ], {
                 queryId: u64;
                 palletIndex: u8;
                 callIndex: u8;
@@ -991,7 +1383,11 @@ declare module '@polkadot/api-base/types/events' {
              * Query response has been received and query is removed. There was a general error with
              * dispatching the notification call.
              **/
-            NotifyDispatchError: AugmentedEvent<ApiType, [queryId: u64, palletIndex: u8, callIndex: u8], {
+            NotifyDispatchError: AugmentedEvent<ApiType, [
+                queryId: u64,
+                palletIndex: u8,
+                callIndex: u8
+            ], {
                 queryId: u64;
                 palletIndex: u8;
                 callIndex: u8;
@@ -1001,7 +1397,13 @@ declare module '@polkadot/api-base/types/events' {
              * could not be dispatched because the dispatch weight is greater than the maximum weight
              * originally budgeted by this runtime for the query result.
              **/
-            NotifyOverweight: AugmentedEvent<ApiType, [queryId: u64, palletIndex: u8, callIndex: u8, actualWeight: SpWeightsWeightV2Weight, maxBudgetedWeight: SpWeightsWeightV2Weight], {
+            NotifyOverweight: AugmentedEvent<ApiType, [
+                queryId: u64,
+                palletIndex: u8,
+                callIndex: u8,
+                actualWeight: SpWeightsWeightV2Weight,
+                maxBudgetedWeight: SpWeightsWeightV2Weight
+            ], {
                 queryId: u64;
                 palletIndex: u8;
                 callIndex: u8;
@@ -1012,7 +1414,10 @@ declare module '@polkadot/api-base/types/events' {
              * A given location which had a version change subscription was dropped owing to an error
              * migrating the location to our new XCM format.
              **/
-            NotifyTargetMigrationFail: AugmentedEvent<ApiType, [location: XcmVersionedLocation, queryId: u64], {
+            NotifyTargetMigrationFail: AugmentedEvent<ApiType, [
+                location: XcmVersionedLocation,
+                queryId: u64
+            ], {
                 location: XcmVersionedLocation;
                 queryId: u64;
             }>;
@@ -1020,7 +1425,11 @@ declare module '@polkadot/api-base/types/events' {
              * A given location which had a version change subscription was dropped owing to an error
              * sending the notification to it.
              **/
-            NotifyTargetSendFail: AugmentedEvent<ApiType, [location: StagingXcmV4Location, queryId: u64, error: XcmV3TraitsError], {
+            NotifyTargetSendFail: AugmentedEvent<ApiType, [
+                location: StagingXcmV4Location,
+                queryId: u64,
+                error: XcmV3TraitsError
+            ], {
                 location: StagingXcmV4Location;
                 queryId: u64;
                 error: XcmV3TraitsError;
@@ -1029,7 +1438,10 @@ declare module '@polkadot/api-base/types/events' {
              * Query response has been received and is ready for taking with `take_response`. There is
              * no registered notification call.
              **/
-            ResponseReady: AugmentedEvent<ApiType, [queryId: u64, response: StagingXcmV4Response], {
+            ResponseReady: AugmentedEvent<ApiType, [
+                queryId: u64,
+                response: StagingXcmV4Response
+            ], {
                 queryId: u64;
                 response: StagingXcmV4Response;
             }>;
@@ -1042,7 +1454,12 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * A XCM message was sent.
              **/
-            Sent: AugmentedEvent<ApiType, [origin: StagingXcmV4Location, destination: StagingXcmV4Location, message: StagingXcmV4Xcm, messageId: U8aFixed], {
+            Sent: AugmentedEvent<ApiType, [
+                origin: StagingXcmV4Location,
+                destination: StagingXcmV4Location,
+                message: StagingXcmV4Xcm,
+                messageId: U8aFixed
+            ], {
                 origin: StagingXcmV4Location;
                 destination: StagingXcmV4Location;
                 message: StagingXcmV4Xcm;
@@ -1052,7 +1469,10 @@ declare module '@polkadot/api-base/types/events' {
              * The supported version of a location has been changed. This might be through an
              * automatic notification or a manual intervention.
              **/
-            SupportedVersionChanged: AugmentedEvent<ApiType, [location: StagingXcmV4Location, version: u32], {
+            SupportedVersionChanged: AugmentedEvent<ApiType, [
+                location: StagingXcmV4Location,
+                version: u32
+            ], {
                 location: StagingXcmV4Location;
                 version: u32;
             }>;
@@ -1061,7 +1481,10 @@ declare module '@polkadot/api-base/types/events' {
              * matching query was never registered, it may be because it is a duplicate response, or
              * because the query timed out.
              **/
-            UnexpectedResponse: AugmentedEvent<ApiType, [origin: StagingXcmV4Location, queryId: u64], {
+            UnexpectedResponse: AugmentedEvent<ApiType, [
+                origin: StagingXcmV4Location,
+                queryId: u64
+            ], {
                 origin: StagingXcmV4Location;
                 queryId: u64;
             }>;
@@ -1070,7 +1493,12 @@ declare module '@polkadot/api-base/types/events' {
              *
              * The cost of sending it (borne by the chain) is included.
              **/
-            VersionChangeNotified: AugmentedEvent<ApiType, [destination: StagingXcmV4Location, result: u32, cost: StagingXcmV4AssetAssets, messageId: U8aFixed], {
+            VersionChangeNotified: AugmentedEvent<ApiType, [
+                destination: StagingXcmV4Location,
+                result: u32,
+                cost: StagingXcmV4AssetAssets,
+                messageId: U8aFixed
+            ], {
                 destination: StagingXcmV4Location;
                 result: u32;
                 cost: StagingXcmV4AssetAssets;
@@ -1085,7 +1513,11 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * We have requested that a remote chain send us XCM version change notifications.
              **/
-            VersionNotifyRequested: AugmentedEvent<ApiType, [destination: StagingXcmV4Location, cost: StagingXcmV4AssetAssets, messageId: U8aFixed], {
+            VersionNotifyRequested: AugmentedEvent<ApiType, [
+                destination: StagingXcmV4Location,
+                cost: StagingXcmV4AssetAssets,
+                messageId: U8aFixed
+            ], {
                 destination: StagingXcmV4Location;
                 cost: StagingXcmV4AssetAssets;
                 messageId: U8aFixed;
@@ -1094,7 +1526,11 @@ declare module '@polkadot/api-base/types/events' {
              * A remote has requested XCM version change notification from us and we have honored it.
              * A version information message is sent to them and its cost is included.
              **/
-            VersionNotifyStarted: AugmentedEvent<ApiType, [destination: StagingXcmV4Location, cost: StagingXcmV4AssetAssets, messageId: U8aFixed], {
+            VersionNotifyStarted: AugmentedEvent<ApiType, [
+                destination: StagingXcmV4Location,
+                cost: StagingXcmV4AssetAssets,
+                messageId: U8aFixed
+            ], {
                 destination: StagingXcmV4Location;
                 cost: StagingXcmV4AssetAssets;
                 messageId: U8aFixed;
@@ -1103,7 +1539,11 @@ declare module '@polkadot/api-base/types/events' {
              * We have requested that a remote chain stops sending us XCM version change
              * notifications.
              **/
-            VersionNotifyUnrequested: AugmentedEvent<ApiType, [destination: StagingXcmV4Location, cost: StagingXcmV4AssetAssets, messageId: U8aFixed], {
+            VersionNotifyUnrequested: AugmentedEvent<ApiType, [
+                destination: StagingXcmV4Location,
+                cost: StagingXcmV4AssetAssets,
+                messageId: U8aFixed
+            ], {
                 destination: StagingXcmV4Location;
                 cost: StagingXcmV4AssetAssets;
                 messageId: U8aFixed;
@@ -1117,14 +1557,22 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * A manual challenge was submitted.
              **/
-            NewChallenge: AugmentedEvent<ApiType, [who: AccountId32, keyChallenged: H256], {
+            NewChallenge: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                keyChallenged: H256
+            ], {
                 who: AccountId32;
                 keyChallenged: H256;
             }>;
             /**
              * A provider's challenge cycle was initialised.
              **/
-            NewChallengeCycleInitialised: AugmentedEvent<ApiType, [currentTick: u32, nextChallengeDeadline: u32, provider: H256, maybeProviderAccount: Option<AccountId32>], {
+            NewChallengeCycleInitialised: AugmentedEvent<ApiType, [
+                currentTick: u32,
+                nextChallengeDeadline: u32,
+                provider: H256,
+                maybeProviderAccount: Option<AccountId32>
+            ], {
                 currentTick: u32;
                 nextChallengeDeadline: u32;
                 provider: H256;
@@ -1133,28 +1581,40 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * A new challenge seed was generated.
              **/
-            NewChallengeSeed: AugmentedEvent<ApiType, [challengesTicker: u32, seed: H256], {
+            NewChallengeSeed: AugmentedEvent<ApiType, [
+                challengesTicker: u32,
+                seed: H256
+            ], {
                 challengesTicker: u32;
                 seed: H256;
             }>;
             /**
              * A new checkpoint challenge was generated.
              **/
-            NewCheckpointChallenge: AugmentedEvent<ApiType, [challengesTicker: u32, challenges: Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>], {
+            NewCheckpointChallenge: AugmentedEvent<ApiType, [
+                challengesTicker: u32,
+                challenges: Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>
+            ], {
                 challengesTicker: u32;
                 challenges: Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>;
             }>;
             /**
              * A proof was accepted.
              **/
-            ProofAccepted: AugmentedEvent<ApiType, [provider: H256, proof: PalletProofsDealerProof], {
+            ProofAccepted: AugmentedEvent<ApiType, [
+                provider: H256,
+                proof: PalletProofsDealerProof
+            ], {
                 provider: H256;
                 proof: PalletProofsDealerProof;
             }>;
             /**
              * A provider was marked as slashable and their challenge deadline was forcefully pushed.
              **/
-            SlashableProvider: AugmentedEvent<ApiType, [provider: H256, nextChallengeDeadline: u32], {
+            SlashableProvider: AugmentedEvent<ApiType, [
+                provider: H256,
+                nextChallengeDeadline: u32
+            ], {
                 provider: H256;
                 nextChallengeDeadline: u32;
             }>;
@@ -1168,7 +1628,11 @@ declare module '@polkadot/api-base/types/events' {
              * Event emitted when a Backup Storage Provider has requested to sign up successfully. Provides information about
              * that BSP's account id, its multiaddresses, and the total data it can store according to its stake.
              **/
-            BspRequestSignUpSuccess: AugmentedEvent<ApiType, [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u32], {
+            BspRequestSignUpSuccess: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                multiaddresses: Vec<Bytes>,
+                capacity: u32
+            ], {
                 who: AccountId32;
                 multiaddresses: Vec<Bytes>;
                 capacity: u32;
@@ -1184,7 +1648,11 @@ declare module '@polkadot/api-base/types/events' {
              * Event emitted when a Backup Storage Provider has confirmed its sign up successfully. Provides information about
              * that BSP's account id, the total data it can store according to its stake, and its multiaddress.
              **/
-            BspSignUpSuccess: AugmentedEvent<ApiType, [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u32], {
+            BspSignUpSuccess: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                multiaddresses: Vec<Bytes>,
+                capacity: u32
+            ], {
                 who: AccountId32;
                 multiaddresses: Vec<Bytes>;
                 capacity: u32;
@@ -1193,7 +1661,12 @@ declare module '@polkadot/api-base/types/events' {
              * Event emitted when a SP has changed its capacity successfully. Provides information about
              * that SP's account id, its old total data that could store, and the new total data.
              **/
-            CapacityChanged: AugmentedEvent<ApiType, [who: AccountId32, oldCapacity: u32, newCapacity: u32, nextBlockWhenChangeAllowed: u32], {
+            CapacityChanged: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                oldCapacity: u32,
+                newCapacity: u32,
+                nextBlockWhenChangeAllowed: u32
+            ], {
                 who: AccountId32;
                 oldCapacity: u32;
                 newCapacity: u32;
@@ -1203,7 +1676,12 @@ declare module '@polkadot/api-base/types/events' {
              * Event emitted when a Main Storage Provider has requested to sign up successfully. Provides information about
              * that MSP's account id, its multiaddresses, the total data it can store according to its stake, and its value proposition.
              **/
-            MspRequestSignUpSuccess: AugmentedEvent<ApiType, [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u32, valueProp: PalletStorageProvidersValueProposition], {
+            MspRequestSignUpSuccess: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                multiaddresses: Vec<Bytes>,
+                capacity: u32,
+                valueProp: PalletStorageProvidersValueProposition
+            ], {
                 who: AccountId32;
                 multiaddresses: Vec<Bytes>;
                 capacity: u32;
@@ -1220,7 +1698,12 @@ declare module '@polkadot/api-base/types/events' {
              * Event emitted when a Main Storage Provider has confirmed its sign up successfully. Provides information about
              * that MSP's account id, the total data it can store according to its stake, its multiaddress, and its value proposition.
              **/
-            MspSignUpSuccess: AugmentedEvent<ApiType, [who: AccountId32, multiaddresses: Vec<Bytes>, capacity: u32, valueProp: PalletStorageProvidersValueProposition], {
+            MspSignUpSuccess: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                multiaddresses: Vec<Bytes>,
+                capacity: u32,
+                valueProp: PalletStorageProvidersValueProposition
+            ], {
                 who: AccountId32;
                 multiaddresses: Vec<Bytes>;
                 capacity: u32;
@@ -1236,7 +1719,10 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Event emitted when an SP has been slashed.
              **/
-            Slashed: AugmentedEvent<ApiType, [providerId: H256, amountSlashed: u128], {
+            Slashed: AugmentedEvent<ApiType, [
+                providerId: H256,
+                amountSlashed: u128
+            ], {
                 providerId: H256;
                 amountSlashed: u128;
             }>;
@@ -1249,7 +1735,11 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Event emitted when a new random seed is available from the relay chain
              **/
-            NewOneEpochAgoRandomnessAvailable: AugmentedEvent<ApiType, [randomnessSeed: H256, fromEpoch: u64, validUntilBlock: u32], {
+            NewOneEpochAgoRandomnessAvailable: AugmentedEvent<ApiType, [
+                randomnessSeed: H256,
+                fromEpoch: u64,
+                validUntilBlock: u32
+            ], {
                 randomnessSeed: H256;
                 fromEpoch: u64;
                 validUntilBlock: u32;
@@ -1276,7 +1766,10 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * The sudo key has been updated.
              **/
-            KeyChanged: AugmentedEvent<ApiType, [old: Option<AccountId32>, new_: AccountId32], {
+            KeyChanged: AugmentedEvent<ApiType, [
+                old: Option<AccountId32>,
+                new_: AccountId32
+            ], {
                 old: Option<AccountId32>;
                 new_: AccountId32;
             }>;
@@ -1287,13 +1780,17 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * A sudo call just took place.
              **/
-            Sudid: AugmentedEvent<ApiType, [sudoResult: Result<Null, SpRuntimeDispatchError>], {
+            Sudid: AugmentedEvent<ApiType, [
+                sudoResult: Result<Null, SpRuntimeDispatchError>
+            ], {
                 sudoResult: Result<Null, SpRuntimeDispatchError>;
             }>;
             /**
              * A [sudo_as](Pallet::sudo_as) call just took place.
              **/
-            SudoAsDone: AugmentedEvent<ApiType, [sudoResult: Result<Null, SpRuntimeDispatchError>], {
+            SudoAsDone: AugmentedEvent<ApiType, [
+                sudoResult: Result<Null, SpRuntimeDispatchError>
+            ], {
                 sudoResult: Result<Null, SpRuntimeDispatchError>;
             }>;
             /**
@@ -1309,14 +1806,19 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * An extrinsic failed.
              **/
-            ExtrinsicFailed: AugmentedEvent<ApiType, [dispatchError: SpRuntimeDispatchError, dispatchInfo: FrameSupportDispatchDispatchInfo], {
+            ExtrinsicFailed: AugmentedEvent<ApiType, [
+                dispatchError: SpRuntimeDispatchError,
+                dispatchInfo: FrameSupportDispatchDispatchInfo
+            ], {
                 dispatchError: SpRuntimeDispatchError;
                 dispatchInfo: FrameSupportDispatchDispatchInfo;
             }>;
             /**
              * An extrinsic completed successfully.
              **/
-            ExtrinsicSuccess: AugmentedEvent<ApiType, [dispatchInfo: FrameSupportDispatchDispatchInfo], {
+            ExtrinsicSuccess: AugmentedEvent<ApiType, [
+                dispatchInfo: FrameSupportDispatchDispatchInfo
+            ], {
                 dispatchInfo: FrameSupportDispatchDispatchInfo;
             }>;
             /**
@@ -1334,14 +1836,20 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * On on-chain remark happened.
              **/
-            Remarked: AugmentedEvent<ApiType, [sender: AccountId32, hash_: H256], {
+            Remarked: AugmentedEvent<ApiType, [
+                sender: AccountId32,
+                hash_: H256
+            ], {
                 sender: AccountId32;
                 hash_: H256;
             }>;
             /**
              * An upgrade was authorized.
              **/
-            UpgradeAuthorized: AugmentedEvent<ApiType, [codeHash: H256, checkVersion: bool], {
+            UpgradeAuthorized: AugmentedEvent<ApiType, [
+                codeHash: H256,
+                checkVersion: bool
+            ], {
                 codeHash: H256;
                 checkVersion: bool;
             }>;
@@ -1355,7 +1863,11 @@ declare module '@polkadot/api-base/types/events' {
              * A transaction fee `actual_fee`, of which `tip` was added to the minimum inclusion fee,
              * has been paid by `who`.
              **/
-            TransactionFeePaid: AugmentedEvent<ApiType, [who: AccountId32, actualFee: u128, tip: u128], {
+            TransactionFeePaid: AugmentedEvent<ApiType, [
+                who: AccountId32,
+                actualFee: u128,
+                tip: u128
+            ], {
                 who: AccountId32;
                 actualFee: u128;
                 tip: u128;

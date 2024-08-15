@@ -1,24 +1,24 @@
-import '@polkadot/api-base/types/calls';
-import type { ApiTypes, AugmentedCall, DecoratedCallBase } from '@polkadot/api-base/types';
-import type { Bytes, Null, Option, Result, Vec, bool, u32 } from '@polkadot/types-codec';
-import type { AnyNumber, IMethod, ITuple } from '@polkadot/types-codec/types';
-import type { CheckInherentsResult, InherentData } from '@polkadot/types/interfaces/blockbuilder';
-import type { BlockHash } from '@polkadot/types/interfaces/chain';
-import type { AuthorityId } from '@polkadot/types/interfaces/consensus';
-import type { CollationInfo } from '@polkadot/types/interfaces/cumulus';
-import type { Extrinsic } from '@polkadot/types/interfaces/extrinsics';
-import type { GenesisBuildErr } from '@polkadot/types/interfaces/genesisBuilder';
-import type { OpaqueMetadata } from '@polkadot/types/interfaces/metadata';
-import type { FeeDetails, RuntimeDispatchInfo } from '@polkadot/types/interfaces/payment';
-import type { AccountId, Balance, Block, BlockNumber, Call, ExtrinsicInclusionMode, H256, Header, Index, KeyTypeId, Slot, SlotDuration, Weight } from '@polkadot/types/interfaces/runtime';
-import type { RuntimeVersion } from '@polkadot/types/interfaces/state';
-import type { ApplyExtrinsicResult, Key } from '@polkadot/types/interfaces/system';
-import type { TransactionSource, TransactionValidity } from '@polkadot/types/interfaces/txqueue';
-import type { IExtrinsic, Observable } from '@polkadot/types/types';
-import type { BackupStorageProvider, BackupStorageProviderId, ChunkId, GetBspInfoError, GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError, GetNextDeadlineTickError, ProviderId, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError, RandomnessOutput, TrieRemoveMutation } from '@storagehub/api-augment/interfaces/storagehubclient';
+import "@polkadot/api-base/types/calls";
+import type { ApiTypes, AugmentedCall, DecoratedCallBase } from "@polkadot/api-base/types";
+import type { Bytes, Null, Option, Result, Vec, bool, u32 } from "@polkadot/types-codec";
+import type { AnyNumber, IMethod, ITuple } from "@polkadot/types-codec/types";
+import type { CheckInherentsResult, InherentData } from "@polkadot/types/interfaces/blockbuilder";
+import type { BlockHash } from "@polkadot/types/interfaces/chain";
+import type { AuthorityId } from "@polkadot/types/interfaces/consensus";
+import type { CollationInfo } from "@polkadot/types/interfaces/cumulus";
+import type { Extrinsic } from "@polkadot/types/interfaces/extrinsics";
+import type { GenesisBuildErr } from "@polkadot/types/interfaces/genesisBuilder";
+import type { OpaqueMetadata } from "@polkadot/types/interfaces/metadata";
+import type { FeeDetails, RuntimeDispatchInfo } from "@polkadot/types/interfaces/payment";
+import type { AccountId, Balance, Block, BlockNumber, Call, ExtrinsicInclusionMode, H256, Header, Index, KeyTypeId, Slot, SlotDuration, Weight } from "@polkadot/types/interfaces/runtime";
+import type { RuntimeVersion } from "@polkadot/types/interfaces/state";
+import type { ApplyExtrinsicResult, Key } from "@polkadot/types/interfaces/system";
+import type { TransactionSource, TransactionValidity } from "@polkadot/types/interfaces/txqueue";
+import type { IExtrinsic, Observable } from "@polkadot/types/types";
+import type { BackupStorageProvider, BackupStorageProviderId, ChunkId, GetBspInfoError, GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError, GetNextDeadlineTickError, ProviderId, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError, RandomnessOutput, TrieRemoveMutation } from "@storagehub/api-augment/interfaces/storagehubclient";
 export type __AugmentedCall<ApiType extends ApiTypes> = AugmentedCall<ApiType>;
 export type __DecoratedCallBase<ApiType extends ApiTypes> = DecoratedCallBase<ApiType>;
-declare module '@polkadot/api-base/types/calls' {
+declare module "@polkadot/api-base/types/calls" {
     interface AugmentedCalls<ApiType extends ApiTypes> {
         /** 0xbc9d89904f5b923f/1 */
         accountNonceApi: {
@@ -272,7 +272,7 @@ declare module '@polkadot/api-base/types/calls' {
             /**
              * Validate the transaction.
              **/
-            validateTransaction: AugmentedCall<ApiType, (source: TransactionSource | 'InBlock' | 'Local' | 'External' | number | Uint8Array, tx: Extrinsic | IExtrinsic | string | Uint8Array, blockHash: BlockHash | string | Uint8Array) => Observable<TransactionValidity>>;
+            validateTransaction: AugmentedCall<ApiType, (source: TransactionSource | "InBlock" | "Local" | "External" | number | Uint8Array, tx: Extrinsic | IExtrinsic | string | Uint8Array, blockHash: BlockHash | string | Uint8Array) => Observable<TransactionValidity>>;
             /**
              * Generic call
              **/

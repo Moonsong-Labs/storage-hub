@@ -1,0 +1,41 @@
+name: Publish API Augment with pnpm
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full SHA to build the pnpm package from
+        required: true
+
+jobs:
+  publish-api-augment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.sha }}
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Build API Augment
+        run: |
+          cd api-augment
+          pnpm install
+          pnpm run build
+
+      - name: Publish API Augment
+        uses: JS-DevTools/npm-publish@v3
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          package: api-augment/package.json
+          registry: https://registry.npmjs.org/
+          access: public
+          command: pnpm publish
