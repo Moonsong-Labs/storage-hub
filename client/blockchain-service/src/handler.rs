@@ -103,7 +103,9 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
                     self.actor.handle_message(command).await;
                 }
                 MergedEventLoopMessage::BlockNotification(notification) => {
-                    self.actor.handle_block_notification(notification).await;
+                    self.actor
+                        .handle_block_import_notification(notification)
+                        .await;
                 }
             };
         }
@@ -464,7 +466,7 @@ impl BlockchainService {
     }
 
     /// Handle a block import notification.
-    async fn handle_block_notification<Block>(
+    async fn handle_block_import_notification<Block>(
         &mut self,
         notification: BlockImportNotification<Block>,
     ) where
