@@ -12,8 +12,9 @@ use pallet_proofs_dealer_runtime_api::{
     GetNextDeadlineTickError,
 };
 use shp_traits::{
-    CommitmentVerifier, ProofSubmittersInterface, ProofsDealerInterface, ProvidersInterface,
-    TrieMutation, TrieProofDeltaApplier, TrieRemoveMutation,
+    CommitmentVerifier, MutateChallengeableProvidersInterface, ProofSubmittersInterface,
+    ProofsDealerInterface, ReadChallengeableProvidersInterface, TrieMutation,
+    TrieProofDeltaApplier, TrieRemoveMutation,
 };
 use sp_runtime::{
     traits::{CheckedAdd, CheckedDiv, CheckedSub, Convert, Hash, One, Zero},
@@ -276,7 +277,9 @@ where
                 })?;
 
                 // Update root of Provider after all mutations have been applied to the Forest.
-                <T::ProvidersPallet as ProvidersInterface>::update_root(*submitter, new_root)?;
+                <T::ProvidersPallet as MutateChallengeableProvidersInterface>::update_root(
+                    *submitter, new_root,
+                )?;
             }
         };
 

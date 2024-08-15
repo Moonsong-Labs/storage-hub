@@ -10,7 +10,7 @@ use frame_support::{
 use frame_system as system;
 use pallet_proofs_dealer::SlashableProviders;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ProvidersInterface,
+    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadChallengeableProvidersInterface,
     SubscribeProvidersInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
@@ -224,7 +224,7 @@ impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageData = u32;
+    type StorageDataUnit = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
@@ -259,8 +259,10 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
     ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
         let mut set = BoundedBTreeSet::<Self::ProviderId, Self::MaxProofSubmitters>::new();
         // We convert the block number + 1 to the corresponding Provider ID, to simulate that the Provider submitted a proof
-        <StorageProviders as ProvidersInterface>::get_provider_id(*block_number + 1)
-            .map(|id| set.try_insert(id));
+        <StorageProviders as ReadChallengeableProvidersInterface>::get_provider_id(
+            *block_number + 1,
+        )
+        .map(|id| set.try_insert(id));
         Some(set)
     }
 

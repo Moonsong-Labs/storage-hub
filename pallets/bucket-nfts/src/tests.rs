@@ -32,7 +32,7 @@ mod share_access_tests {
             ));
 
             let bucket_id =
-                <<Test as crate::Config>::Providers as ReadProvidersInterface>::derive_bucket_id(
+                <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
                     &issuer,
                     bucket_name,
                 );
@@ -82,7 +82,7 @@ mod share_access_tests {
             ));
 
             let bucket_id =
-                <<Test as crate::Config>::Providers as ReadProvidersInterface>::derive_bucket_id(
+                <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
                     &issuer,
                     bucket_name,
                 );
@@ -110,7 +110,7 @@ mod share_access_tests {
             let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
             let bucket_id =
-                <<Test as crate::Config>::Providers as ReadProvidersInterface>::derive_bucket_id(
+                <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
                     &issuer,
                     bucket_name,
                 );
@@ -149,7 +149,7 @@ mod share_access_tests {
             ));
 
             let bucket_id =
-                <<Test as crate::Config>::Providers as ReadProvidersInterface>::derive_bucket_id(
+                <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
                     &issuer,
                     bucket_name,
                 );
@@ -187,7 +187,7 @@ mod share_access_tests {
             ));
 
             let bucket_id =
-                <<Test as crate::Config>::Providers as ReadProvidersInterface>::derive_bucket_id(
+                <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
                     &issuer,
                     bucket_name,
                 );
@@ -236,7 +236,7 @@ mod update_read_access_tests {
             ));
 
             let bucket_id =
-                <<Test as crate::Config>::Providers as ReadProvidersInterface>::derive_bucket_id(
+                <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
                     &issuer,
                     bucket_name,
                 );
@@ -296,7 +296,7 @@ mod update_read_access_tests {
             ));
 
             let bucket_id =
-                <<Test as crate::Config>::Providers as ReadProvidersInterface>::derive_bucket_id(
+                <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
                     &issuer,
                     bucket_name,
                 );
@@ -331,7 +331,7 @@ mod update_read_access_tests {
             let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
             let bucket_id =
-                <<Test as crate::Config>::Providers as ReadProvidersInterface>::derive_bucket_id(
+                <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
                     &issuer,
                     bucket_name,
                 );
@@ -367,7 +367,7 @@ mod update_read_access_tests {
             ));
 
             let bucket_id =
-                <<Test as crate::Config>::Providers as ReadProvidersInterface>::derive_bucket_id(
+                <<Test as crate::Config>::Buckets as ReadBucketsInterface>::derive_bucket_id(
                     &issuer,
                     bucket_name,
                 );
@@ -396,7 +396,7 @@ fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<T
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
         buckets: BoundedVec::default(),
         capacity: 100,
-        data_used: 0,
+        capacity_used: 0,
         multiaddresses: BoundedVec::default(),
         value_prop: pallet_storage_providers::types::ValueProposition {
             identifier: pallet_storage_providers::types::ValuePropId::<Test>::default(),

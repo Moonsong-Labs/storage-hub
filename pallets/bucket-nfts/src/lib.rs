@@ -42,8 +42,8 @@ pub mod pallet {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// The trait for reading storage provider data.
-        type Providers: shp_traits::ReadProvidersInterface<
+        /// The trait for reading storage bucket data.
+        type Buckets: shp_traits::ReadBucketsInterface<
             AccountId = Self::AccountId,
             ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId,
         >;

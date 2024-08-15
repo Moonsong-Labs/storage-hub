@@ -16,7 +16,7 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::{LastTickProviderSubmittedAProofFor, PriorityChallengesQueue};
 use pallet_storage_providers::types::Bucket;
-use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface, TrieRemoveMutation};
+use shp_traits::{ReadBucketsInterface, SubscribeProvidersInterface, TrieRemoveMutation};
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
@@ -1234,7 +1234,7 @@ mod revoke_storage_request {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -1570,7 +1570,7 @@ mod bsp_volunteer {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -1894,7 +1894,7 @@ mod bsp_confirm {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id.clone(),
                     )
                         .unwrap();
@@ -1957,7 +1957,7 @@ mod bsp_confirm {
                 );
 
                 let new_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
                         bsp_id,
                     )
                         .unwrap();
@@ -2101,7 +2101,7 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2196,7 +2196,7 @@ mod bsp_stop_storing {
                 );
 
                 let new_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
                         bsp_id,
                     )
                         .unwrap();
@@ -2256,7 +2256,7 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2322,7 +2322,7 @@ mod bsp_stop_storing {
                 );
 
                 let new_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
                         bsp_id,
                     )
                         .unwrap();
@@ -2374,7 +2374,7 @@ mod bsp_stop_storing {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2388,7 +2388,7 @@ mod bsp_stop_storing {
                 );
 
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
-                assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
+                assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateStorageProvidersInterface>::increase_capacity_used(
             &bsp_id, size,
         ));
 
@@ -2430,7 +2430,7 @@ mod bsp_stop_storing {
                 );
 
                 let new_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
                         bsp_id,
                     )
                         .unwrap();
@@ -2471,7 +2471,7 @@ mod bsp_stop_storing {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2485,7 +2485,7 @@ mod bsp_stop_storing {
                 );
 
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
-                assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
+                assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateStorageProvidersInterface>::increase_capacity_used(
             &bsp_id, size,
         ));
 
@@ -2524,7 +2524,7 @@ mod bsp_stop_storing {
                 );
 
                 let new_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
                         bsp_id,
                     )
                         .unwrap();
@@ -3288,7 +3288,7 @@ fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<T
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
         buckets: BoundedVec::default(),
         capacity: 100,
-        data_used: 0,
+        capacity_used: 0,
         multiaddresses: BoundedVec::default(),
         value_prop: pallet_storage_providers::types::ValueProposition {
             identifier: pallet_storage_providers::types::ValuePropId::<Test>::default(),

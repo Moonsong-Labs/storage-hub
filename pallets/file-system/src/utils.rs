@@ -18,8 +18,8 @@ use pallet_file_system_runtime_api::{
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    MutateProvidersInterface, ProvidersInterface, ReadProvidersInterface, TrieAddMutation,
-    TrieRemoveMutation,
+    MutateBucketsInterface, MutateStorageProvidersInterface, ReadBucketsInterface,
+    ReadProvidersInterface, ReadStorageProvidersInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
 use crate::types::{BucketNameFor, ExpiredItems};
@@ -166,7 +166,7 @@ where
         bsp_id: ProviderIdFor<T>,
         file_key: MerkleHash<T>,
         storage_request_metadata: &StorageRequestMetadata<T>,
-    ) -> Vec<<<T as pallet::Config>::Providers as ProvidersInterface>::MerkleHash> {
+    ) -> Vec<<<T as pallet::Config>::Providers as ReadProvidersInterface>::MerkleHash> {
         let file_metadata = storage_request_metadata.clone().to_file_metadata();
         let chunks_to_check = file_metadata.chunks_to_check();
 
@@ -195,7 +195,7 @@ where
 
         // Check if the MSP is indeed an MSP.
         ensure!(
-            <T::Providers as ReadProvidersInterface>::is_msp(&msp_id),
+            <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
             Error::<T>::NotAMsp
         );
 
@@ -209,7 +209,7 @@ where
 
         let bucket_id = <T as crate::Config>::Providers::derive_bucket_id(&sender, name);
 
-        <T::Providers as MutateProvidersInterface>::add_bucket(
+        <T::Providers as MutateBucketsInterface>::add_bucket(
             msp_id,
             sender,
             bucket_id,
@@ -279,13 +279,13 @@ where
     ) -> Result<CollectionIdFor<T>, DispatchError> {
         // Check if sender is the owner of the bucket.
         ensure!(
-            <T::Providers as ReadProvidersInterface>::is_bucket_owner(&sender, &bucket_id)?,
+            <T::Providers as ReadBucketsInterface>::is_bucket_owner(&sender, &bucket_id)?,
             Error::<T>::NotBucketOwner
         );
 
         let collection_id = Self::create_collection(sender)?;
 
-        <T::Providers as MutateProvidersInterface>::update_bucket_read_access_group_id(
+        <T::Providers as MutateBucketsInterface>::update_bucket_read_access_group_id(
             bucket_id,
             Some(collection_id.clone()),
         )?;
@@ -318,14 +318,14 @@ where
 
         if let Some(ref msp) = msp {
             ensure!(
-                <T::Providers as ReadProvidersInterface>::is_msp(msp),
+                <T::Providers as ReadStorageProvidersInterface>::is_msp(msp),
                 Error::<T>::NotAMsp
             );
         }
 
         // Check that bucket exists and that the sender is the owner of the bucket.
         ensure!(
-            <T::Providers as ReadProvidersInterface>::is_bucket_owner(&sender, &bucket_id)?,
+            <T::Providers as ReadBucketsInterface>::is_bucket_owner(&sender, &bucket_id)?,
             Error::<T>::NotBucketOwner
         );
 
@@ -402,11 +402,11 @@ where
         DispatchError,
     > {
         let bsp_id =
-            <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
         // Check that the provider is indeed a BSP.
         ensure!(
-            <T::Providers as ReadProvidersInterface>::is_bsp(&bsp_id),
+            <T::Providers as ReadStorageProvidersInterface>::is_bsp(&bsp_id),
             Error::<T>::NotABsp
         );
 
@@ -500,12 +500,12 @@ where
         >,
     ) -> DispatchResult {
         let bsp_id =
-            <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
-            <T::Providers as ReadProvidersInterface>::is_bsp(&bsp_id),
+            <T::Providers as ReadStorageProvidersInterface>::is_bsp(&bsp_id),
             Error::<T>::NotABsp
         );
 
@@ -597,7 +597,7 @@ where
             )?;
 
             // Add data to storage provider.
-            <T::Providers as MutateProvidersInterface>::increase_data_used(
+            <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
                 &bsp_id,
                 storage_request_metadata.size,
             )?;
@@ -640,12 +640,12 @@ where
 
         // Check if this is the first file added to the BSP's Forest. If so, initialise last block proven by this BSP.
         let old_root = expect_or_err!(
-            <T::Providers as shp_traits::ProvidersInterface>::get_root(bsp_id),
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_root(bsp_id),
             "Failed to get root for BSP, when it was already checked to be a BSP",
             Error::<T>::NotABsp
         );
 
-        if old_root == <T::Providers as shp_traits::ProvidersInterface>::get_default_root() {
+        if old_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
             // This means that this is the first file added to the BSP's Forest.
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::initialise_challenge_cycle(
                 &bsp_id,
@@ -670,7 +670,7 @@ where
         )?;
 
         // Update root of BSP.
-        <T::Providers as shp_traits::ProvidersInterface>::update_root(bsp_id, new_root)?;
+        <T::Providers as shp_traits::MutateProvidersInterface>::update_root(bsp_id, new_root)?;
 
         // Emit event.
         Self::deposit_event(Event::BspConfirmedStoring {
@@ -790,12 +790,12 @@ where
         inclusion_forest_proof: ForestProof<T>,
     ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
         let bsp_id =
-            <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
-            <T::Providers as ReadProvidersInterface>::is_bsp(&bsp_id),
+            <T::Providers as ReadStorageProvidersInterface>::is_bsp(&bsp_id),
             Error::<T>::NotABsp
         );
 
@@ -895,17 +895,17 @@ where
         )?;
 
         // Update root of BSP.
-        <T::Providers as shp_traits::ProvidersInterface>::update_root(bsp_id, new_root)?;
+        <T::Providers as shp_traits::MutateProvidersInterface>::update_root(bsp_id, new_root)?;
 
         // Decrease data used by the BSP.
-        <T::Providers as MutateProvidersInterface>::decrease_data_used(&bsp_id, size)?;
+        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&bsp_id, size)?;
 
         Ok((bsp_id, new_root))
     }
 
     pub(crate) fn do_delete_file(
         sender: T::AccountId,
-        bucket_id: ProviderIdFor<T>,
+        bucket_id: BucketIdFor<T>,
         file_key: MerkleHash<T>,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
@@ -929,11 +929,11 @@ where
 
         // Check if sender is the owner of the bucket.
         ensure!(
-            <T::Providers as ReadProvidersInterface>::is_bucket_owner(&sender, &bucket_id)?,
+            <T::Providers as ReadBucketsInterface>::is_bucket_owner(&sender, &bucket_id)?,
             Error::<T>::NotBucketOwner
         );
 
-        let msp_id = <T::Providers as ReadProvidersInterface>::get_msp_of_bucket(&bucket_id)
+        let msp_id = <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)
             .ok_or(Error::<T>::BucketNotFound)?;
 
         let file_key_included = match maybe_inclusion_forest_proof {
@@ -998,17 +998,17 @@ where
         forest_proof: ForestProof<T>,
     ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
         let msp_id =
-            <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotAMsp)?;
 
         // Check that the provider is indeed an MSP.
         ensure!(
-            <T::Providers as ReadProvidersInterface>::is_msp(&msp_id),
+            <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
             Error::<T>::NotAMsp
         );
 
         ensure!(
-            <T::Providers as ReadProvidersInterface>::is_bucket_stored_by_msp(&msp_id, &bucket_id),
+            <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_id, &bucket_id),
             Error::<T>::MspNotStoringBucket
         );
 
@@ -1020,7 +1020,7 @@ where
             Error::<T>::FileKeyNotPendingDeletion
         );
 
-        // Verify the proof of inclusion.let proven_keys =
+        // Verify the proof of inclusion.
         let proven_keys =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
                 &bucket_id,
