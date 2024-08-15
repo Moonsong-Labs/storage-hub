@@ -599,15 +599,15 @@ declare module "@polkadot/api-base/types/errors" {
              **/
             ChargeOverflow: AugmentedError<ApiType>;
             /**
-             * Error thrown when the new last chargeable tick number that is trying to be set is greater than the current tick number or smaller than the previous last chargeable tick number
+             * Error thrown when the new last chargeable block number that is trying to be set by the PaymentManager is greater than the current block number or smaller than the previous last chargeable block number
              **/
             InvalidLastChargeableBlockNumber: AugmentedError<ApiType>;
             /**
-             * Error thrown when the new last chargeable price index that is trying to be set is greater than the current price index or smaller than the previous last chargeable price index
+             * Error thrown when the new last chargeable price index that is trying to be set by the PaymentManager is greater than the current price index or smaller than the previous last chargeable price index
              **/
             InvalidLastChargeablePriceIndex: AugmentedError<ApiType>;
             /**
-             * Error thrown when the tick number of when the payment stream was last charged is greater than the tick number of the last chargeable tick
+             * Error thrown when the block number of when the payment stream was last charged is greater than the block number of the last chargeable block
              **/
             LastChargedGreaterThanLastChargeable: AugmentedError<ApiType>;
             /**

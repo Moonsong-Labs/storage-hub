@@ -1,4 +1,15 @@
 {
     "$schema": "https://biomejs.dev/schemas/1.7.3/schema.json",
-    "extends": ["../biome.json"]
+    "extends": ["../biome.json"],
+    "files": {
+      "include": ["*.js", "*.ts", "*.json", "*.yml", "*.md"],
+      "ignore": [
+        "./node_modules/*",
+        "./target/*",
+        "**/tmp/*",
+        "**/typegen/*",
+        "*.spec.json",
+        "**/augment-types.ts"
+      ]
+    }
   }

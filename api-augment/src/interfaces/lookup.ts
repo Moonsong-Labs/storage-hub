@@ -1612,7 +1612,7 @@ export default {
       },
       LastChargeableInfoUpdated: {
         providerId: "H256",
-        lastChargeableTick: "u32",
+        lastChargeableBlock: "u32",
         lastChargeablePriceIndex: "u128"
       },
       UserWithoutFunds: {
@@ -3927,7 +3927,7 @@ export default {
    **/
   PalletPaymentStreamsFixedRatePaymentStream: {
     rate: "u128",
-    lastChargedTick: "u32",
+    lastChargedBlock: "u32",
     userDeposit: "u128"
   },
   /**
@@ -3939,10 +3939,10 @@ export default {
     userDeposit: "u128"
   },
   /**
-   * Lookup417: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
+   * Lookup417: pallet_payment_streams::types::ProviderLastChargeable<T>
    **/
-  PalletPaymentStreamsProviderLastChargeableInfo: {
-    lastChargeableTick: "u32",
+  PalletPaymentStreamsProviderLastChargeable: {
+    lastChargeableBlock: "u32",
     priceIndex: "u128"
   },
   /**

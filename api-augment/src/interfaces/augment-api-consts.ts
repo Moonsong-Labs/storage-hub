@@ -218,7 +218,7 @@ declare module "@polkadot/api-base/types/consts" {
     };
     paymentStreams: {
       /**
-       * The number of ticks that correspond to the deposit that a User has to pay to open a payment stream.
+       * The number of blocks that correspond to the deposit that a User has to pay to open a payment stream.
        * This means that, from the balance of the User for which the payment stream is being created, the amount
        * `NewStreamDeposit * rate` will be held as a deposit.
        * In the case of dynamic-rate payment streams, `rate` will be `amount_provided * current_service_price`, where `current_service_price` has

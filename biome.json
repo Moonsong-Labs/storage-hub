@@ -29,7 +29,8 @@
       "trailingCommas": "none",
       "semicolons": "always",
       "indentStyle": "space",
-      "lineWidth": 100
+      "lineWidth": 100,
+      "quoteStyle": "double"
     }
   },
   "linter": {

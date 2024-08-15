@@ -1576,13 +1576,13 @@ declare module "@polkadot/api-base/types/submittable" {
              * 2. Check that a payment stream between the signer (Provider) and the User exists
              * 3. If there is a fixed-rate payment stream:
              * 1. Get the rate of the payment stream
-             * 2. Get the difference between the last charged tick number and the last chargeable tick number of the stream
+             * 2. Get the difference between the last charged block number and the last chargeable block number of the stream
              * 3. Calculate the amount to charge doing `rate * difference`
              * 4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
-             * 5. Update the last charged tick number of the payment stream
+             * 5. Update the last charged block number of the payment stream
              * 4. If there is a dynamic-rate payment stream:
              * 1. Get the amount provided by the Provider
-             * 2. Get the difference between price index when the stream was last charged and the price index at the last chargeable tick
+             * 2. Get the difference between price index when the stream was last charged and the price index at the last chargeable block
              * 3. Calculate the amount to charge doing `amount_provided * difference`
              * 4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
              * 5. Update the price index when the stream was last charged of the payment stream

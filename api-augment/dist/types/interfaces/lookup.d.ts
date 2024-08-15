@@ -1596,7 +1596,7 @@ declare const _default: {
             };
             LastChargeableInfoUpdated: {
                 providerId: string;
-                lastChargeableTick: string;
+                lastChargeableBlock: string;
                 lastChargeablePriceIndex: string;
             };
             UserWithoutFunds: {
@@ -3721,7 +3721,7 @@ declare const _default: {
      **/
     PalletPaymentStreamsFixedRatePaymentStream: {
         rate: string;
-        lastChargedTick: string;
+        lastChargedBlock: string;
         userDeposit: string;
     };
     /**
@@ -3733,10 +3733,10 @@ declare const _default: {
         userDeposit: string;
     };
     /**
-     * Lookup417: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
+     * Lookup417: pallet_payment_streams::types::ProviderLastChargeable<T>
      **/
-    PalletPaymentStreamsProviderLastChargeableInfo: {
-        lastChargeableTick: string;
+    PalletPaymentStreamsProviderLastChargeable: {
+        lastChargeableBlock: string;
         priceIndex: string;
     };
     /**
