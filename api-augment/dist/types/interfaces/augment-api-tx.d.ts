@@ -281,6 +281,16 @@ declare module '@polkadot/api-base/types/submittable' {
         };
         fileSystem: {
             /**
+             * Executed by a BSP to confirm to stop storing a file.
+             *
+             * It has to have previously opened a pending stop storing request using the `bsp_request_stop_storing` extrinsic.
+             * The minimum amount of blocks between the request and the confirmation is defined by the runtime, such that the
+             * BSP can't immediately stop storing a file it has previously lost when receiving a challenge for it.
+             **/
+            bspConfirmStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, inclusionForestProof: SpTrieStorageProofCompactProof | {
+                encodedNodes?: any;
+            } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, SpTrieStorageProofCompactProof]>;
+            /**
              * Used by a BSP to confirm they are storing data of a storage request.
              **/
             bspConfirmStoring: AugmentedSubmittable<(nonInclusionForestProof: SpTrieStorageProofCompactProof | {
@@ -290,16 +300,16 @@ declare module '@polkadot/api-base/types/submittable' {
                 proof?: any;
             } | string | Uint8Array])[]) => SubmittableExtrinsic<ApiType>, [SpTrieStorageProofCompactProof, Vec<ITuple<[H256, ShpFileKeyVerifierFileKeyProof]>>]>;
             /**
-             * Executed by a BSP to stop storing a file.
+             * Executed by a BSP to request to stop storing a file.
              *
              * In the event when a storage request no longer exists for the data the BSP no longer stores,
              * it is required that the BSP still has access to the metadata of the initial storage request.
-             * If they do not, they will at least need that metadata to reconstruct the File ID and. Wherever
-             * the BSP gets the data it needs is up to it, but one example could be the assigned MSP.
+             * If they do not, they will at least need that metadata to reconstruct the File ID and from wherever
+             * the BSP gets that data is up to it. One example could be from the assigned MSP.
              * This metadata is necessary since it is needed to reconstruct the leaf node key in the storage
              * provider's Merkle Forest.
              **/
-            bspStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId32 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u32 | AnyNumber | Uint8Array, canServe: bool | boolean | Uint8Array, inclusionForestProof: SpTrieStorageProofCompactProof | {
+            bspRequestStopStoring: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array, bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, owner: AccountId32 | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u32 | AnyNumber | Uint8Array, canServe: bool | boolean | Uint8Array, inclusionForestProof: SpTrieStorageProofCompactProof | {
                 encodedNodes?: any;
             } | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, H256, Bytes, AccountId32, H256, u32, bool, SpTrieStorageProofCompactProof]>;
             /**
