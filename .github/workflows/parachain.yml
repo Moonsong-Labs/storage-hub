@@ -1,4 +1,4 @@
-# Storage Hub: Parachain CI/CD Workflow
+ob# Storage Hub: Parachain CI/CD Workflow
 #
 # Overview:
 # 1. Setup: This attempts to determine two things:
@@ -190,14 +190,20 @@ jobs:
           chmod +x target/release/storage-hub-node
           cd test
           pnpm  install
+          
           # Until https://github.com/paritytech/zombienet/issues/1846 is fixed
           pnpm add @polkadot/keyring@12.6.2 @polkadot/util@12.6.2 @polkadot/util-crypto@12.6.2
+          
           pnpm  zombie:run:full:native &
 
           sleep 60
       - name: Setup
         run: |
           cd test
+          
+          # Until https://github.com/paritytech/zombienet/issues/1846 is fixed
+          pnpm add @polkadot/keyring@13.0.2 @polkadot/util@13.0.2 @polkadot/util-crypto@13.0.2
+          
           pnpm zombie:setup:native
       - name: Run Zombienet Test!
         run: |
