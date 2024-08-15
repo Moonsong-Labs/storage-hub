@@ -593,6 +593,7 @@ parameter_types! {
     pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
     pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100
     pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100
+    pub const MinWaitForStopStoring: BlockNumber = 10;
 }
 
 /// Configure the pallet template in pallets/template.
@@ -625,6 +626,7 @@ impl pallet_file_system::Config for Runtime {
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MaxExpiredItemsInBlock = ConstU32<100>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
+    type MinWaitForStopStoring = MinWaitForStopStoring;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.
