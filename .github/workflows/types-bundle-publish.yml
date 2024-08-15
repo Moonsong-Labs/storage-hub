@@ -1,13 +1,18 @@
-name: Publish api-augment to npm.js
+name: Publish types-bundle to npm.js
 on:
   workflow_dispatch:
     inputs:
       sha:
         description: Full SHA to build the pnpm package from
         required: true
+      dry_run:
+        description: Perform a dry run (no actual publish)
+        type: boolean
+        required: false
+        default: false
 
 jobs:
-  publish-api-augment:
+  publish-types-bundle:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -25,17 +30,18 @@ jobs:
         with:
           version: 9
 
-      - name: Build API Augment
+      - name: Build types-bundle
         run: |
-          cd api-augment
+          cd types-bundle
           pnpm install
           pnpm run build
 
-      - name: Publish API Augment
+      - name: Publish types-bundle
         uses: JS-DevTools/npm-publish@v3
         with:
           token: ${{ secrets.NPM_TOKEN }}
-          package: api-augment/package.json
+          package: types-bundle/package.json
           registry: https://registry.npmjs.org/
           access: public
           command: pnpm publish
+          dry-run: ${{ github.event.inputs.dry_run }}
