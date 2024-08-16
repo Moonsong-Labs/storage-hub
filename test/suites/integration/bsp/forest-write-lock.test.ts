@@ -13,8 +13,6 @@ import {
   closeSimpleBspNet,
   sleep
 } from "../../../util";
-import type { SubmittableExtrinsic } from "@polkadot/api/types";
-import type { ISubmittableResult } from "@polkadot/types/types";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
@@ -61,7 +59,7 @@ for (const bspNetConfig of bspNetConfigCases) {
         throw new Error("Event doesn't match Type");
       }
 
-      let txs: SubmittableExtrinsic<"promise", ISubmittableResult>[] = [];
+      const txs = [];
       for (let i = 0; i < source.length; i++) {
         const { fingerprint, file_size, location } =
           await user_api.rpc.storagehubclient.loadFileInStorage(
