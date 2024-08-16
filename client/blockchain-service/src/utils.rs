@@ -5,10 +5,12 @@ use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
 use frame_support::{StorageHasher, Twox128};
 use lazy_static::lazy_static;
-use log::{debug, error};
+use log::{debug, error, warn};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetLastTickProviderSubmittedProofError, ProofsDealerApi,
 };
+use pallet_storage_providers::types::StorageProviderId;
+use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, HeaderBackend, StorageKey, StorageProvider};
 use serde_json::Number;
@@ -21,6 +23,7 @@ use sp_runtime::{
     SaturatedConversion,
 };
 use storage_hub_runtime::{SignedExtra, UncheckedExtrinsic};
+use substrate_frame_rpc_system::AccountNonceApi;
 
 use crate::{
     handler::LOG_TARGET,
@@ -44,6 +47,72 @@ lazy_static! {
 }
 
 impl BlockchainService {
+    /// Notify tasks waiting for a block number.
+    pub(crate) fn notify_block_number(&mut self, block_number: BlockNumber) {
+        let mut keys_to_remove = Vec::new();
+
+        for (block_number, waiters) in self
+            .wait_for_block_request_by_number
+            .range_mut(..=block_number)
+        {
+            keys_to_remove.push(*block_number);
+            for waiter in waiters.drain(..) {
+                match waiter.send(()) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        error!(target: LOG_TARGET, "Failed to notify task about block number.");
+                    }
+                }
+            }
+        }
+
+        for key in keys_to_remove {
+            self.wait_for_block_request_by_number.remove(&key);
+        }
+    }
+
+    /// Checks if the account nonce on-chain is higher than the nonce in the [`BlockchainService`].
+    ///
+    /// If the nonce is higher, the account nonce is updated in the [`BlockchainService`].
+    pub(crate) fn check_nonce(&mut self, block_hash: H256) {
+        let pub_key = Self::caller_pub_key(self.keystore.clone());
+        let latest_nonce = self
+            .client
+            .runtime_api()
+            .account_nonce(block_hash, pub_key.into())
+            .expect("Fetching account nonce works; qed");
+        if latest_nonce > self.nonce_counter {
+            self.nonce_counter = latest_nonce
+        }
+    }
+
+    /// Get all the provider IDs linked to keys in this node's keystore.
+    ///
+    /// The provider IDs found are added to the [`BlockchainService`]'s list of provider IDs.
+    pub(crate) fn get_provider_ids(&mut self, block_hash: H256) {
+        for key in self.keystore.sr25519_public_keys(BCSV_KEY_TYPE) {
+            self.client
+                .runtime_api()
+                .get_provider_id(block_hash, &key.into())
+                .map(|provider_id| {
+                    if let Some(provider_id) = provider_id {
+                        match provider_id {
+                            StorageProviderId::BackupStorageProvider(bsp_id) => {
+                                self.provider_ids.insert(bsp_id);
+                            }
+                            // TODO: For now, we only care about BSPs.
+                            StorageProviderId::MainStorageProvider(_msp_id) => {}
+                        }
+                    } else {
+                        warn!(target: LOG_TARGET, "There is no provider ID for key: {:?}. This means that the node has a BCSV key in the keystore for which there is no provider ID.", key);
+                    }
+                })
+                .unwrap_or_else(|_| {
+                    warn!(target: LOG_TARGET, "Failed to get provider ID for key: {:?}.", key);
+                });
+        }
+    }
+
     /// Send an extrinsic to this node using an RPC call.
     pub(crate) async fn send_extrinsic(
         &mut self,

@@ -1,4 +1,9 @@
-use std::{collections::BTreeMap, str::FromStr, sync::Arc, vec};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    str::FromStr,
+    sync::Arc,
+    vec,
+};
 
 use futures::prelude::*;
 use log::{debug, trace, warn};
@@ -17,7 +22,6 @@ use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{traits::Header, AccountId32, SaturatedConversion};
 use storage_hub_runtime::RuntimeEvent;
-use substrate_frame_rpc_system::AccountNonceApi;
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
@@ -59,7 +63,7 @@ pub struct BlockchainService {
         BTreeMap<BlockNumber, Vec<tokio::sync::oneshot::Sender<()>>>,
     /// A list of Provider IDs that this node has to pay attention to submit proofs for.
     /// This could be a BSP or a list of buckets that an MSP has.
-    pub(crate) provider_ids: Vec<ProviderId>,
+    pub(crate) provider_ids: BTreeSet<ProviderId>,
 }
 
 /// Event loop for the BlockchainService actor.
@@ -476,7 +480,7 @@ impl BlockchainService {
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
-            provider_ids: Vec::new(),
+            provider_ids: BTreeSet::new(),
         }
     }
 
@@ -493,38 +497,14 @@ impl BlockchainService {
         debug!(target: LOG_TARGET, "Import notification #{}: {}", block_number, block_hash);
 
         // Notify all tasks waiting for this block number (or lower).
-        let mut keys_to_remove = Vec::new();
-
-        for (block_number, waiters) in self
-            .wait_for_block_request_by_number
-            .range_mut(..=block_number)
-        {
-            keys_to_remove.push(*block_number);
-            for waiter in waiters.drain(..) {
-                match waiter.send(()) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        error!(target: LOG_TARGET, "Failed to notify task about block number.");
-                    }
-                }
-            }
-        }
-
-        for key in keys_to_remove {
-            self.wait_for_block_request_by_number.remove(&key);
-        }
+        self.notify_block_number(block_number);
 
         // We query the [`BlockchainService`] account nonce at this height
         // and update our internal counter if it's smaller than the result.
-        let pub_key = Self::caller_pub_key(self.keystore.clone());
-        let latest_nonce = self
-            .client
-            .runtime_api()
-            .account_nonce(block_hash, pub_key.into())
-            .expect("Fetching account nonce works; qed");
-        if latest_nonce > self.nonce_counter {
-            self.nonce_counter = latest_nonce
-        }
+        self.check_nonce(block_hash);
+
+        // Get provider IDs linked to keys in this node's keystore.
+        self.get_provider_ids(block_hash);
 
         // Get events from storage.
         match self.get_events_storage_element(block_hash) {
@@ -569,7 +549,7 @@ impl BlockchainService {
                                 if self.keystore.has_keys(&[(account.clone(), BCSV_KEY_TYPE)]) {
                                     // If so, add the Provider ID to the list of Providers that this node is monitoring.
                                     info!(target: LOG_TARGET, "New Provider ID to monitor [{:?}] for account [{:?}]", provider_id, account);
-                                    self.provider_ids.push(provider_id);
+                                    self.provider_ids.insert(provider_id);
                                 }
                             }
                         }
