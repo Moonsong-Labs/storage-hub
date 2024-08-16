@@ -2,7 +2,7 @@ use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
     BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, PeerIds, ProviderId,
-    RandomnessOutput, StorageData,
+    RandomnessOutput, StorageData, TrieRemoveMutation,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -68,10 +68,13 @@ pub struct StorageRequestRevoked {
     pub location: String,
 }
 
-// TODO: use proper types
 #[derive(Debug, Clone)]
 pub struct ProcessSubmitProofRequest {
-    pub seed: H256,
+    pub provider_id: ProviderId,
+    pub tick: BlockNumber,
+    pub seed: RandomnessOutput,
+    pub forest_challenges: Vec<H256>,
+    pub checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 

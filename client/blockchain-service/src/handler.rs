@@ -36,7 +36,7 @@ use sc_service::RpcHandlers;
 use sc_tracing::tracing::{error, info};
 use serde_json::Number;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::{Fingerprint, BCSV_KEY_TYPE};
+use shc_common::types::{Fingerprint, RandomnessOutput, TrieRemoveMutation, BCSV_KEY_TYPE};
 use shp_file_metadata::FileKey;
 use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Hasher, H256};
@@ -87,14 +87,27 @@ lazy_static! {
     };
 }
 
-// TODO: update this after implemented
 pub struct SubmitProofRequest {
-    pub seed: H256,
+    pub provider_id: ProviderId,
+    pub tick: BlockNumber,
+    pub seed: RandomnessOutput,
+    pub forest_challenges: Vec<H256>,
+    pub checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
 }
 
 impl SubmitProofRequest {
-    pub fn new(seed: H256) -> Self {
-        Self { seed }
+    pub fn new(
+        new_challenge_seed_event: NewChallengeSeed,
+        forest_challenges: Vec<H256>,
+        checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
+    ) -> Self {
+        Self {
+            provider_id: new_challenge_seed_event.provider_id,
+            tick: new_challenge_seed_event.tick,
+            seed: new_challenge_seed_event.seed,
+            forest_challenges,
+            checkpoint_challenges,
+        }
     }
 }
 
@@ -1102,9 +1115,13 @@ impl BlockchainService {
 
         // If we have a submit proof request, prioritize it.
         if self.pending_submit_proof.len() > 0 {
-            let request: SubmitProofRequest = self.pending_submit_proof.remove(0);
+            let request = self.pending_submit_proof.remove(0);
             self.emit(ProcessSubmitProofRequest {
                 seed: request.seed,
+                provider_id: request.provider_id,
+                tick: request.tick,
+                forest_challenges: request.forest_challenges,
+                checkpoint_challenges: request.checkpoint_challenges,
                 forest_root_write_tx,
             });
             return;

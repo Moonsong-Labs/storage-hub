@@ -5,7 +5,7 @@ use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::{EventBusListener, EventHandler},
 };
-use shc_blockchain_service::events::SlashableProvider;
+use shc_blockchain_service::events::{ProcessSubmitProofRequest, SlashableProvider};
 use shc_blockchain_service::{
     events::{NewChallengeSeed, NewStorageRequest, ProcessConfirmStoringRequest},
     BlockchainService,
@@ -124,8 +124,10 @@ where
         remote_download_request_event_bus_listener.start();
 
         // BspSubmitProofTask is triggered by a NewChallengeSeed event emitted by the BlockchainService.
-        // It responds by submitting proofs to the challenges derived from the seed, taking also into account
-        // the custom challenges in checkpoint challenge rounds.
+        // It responds by computing challenges derived from the seed, taking also into account
+        // the custom challenges in checkpoint challenge rounds and enqueuing them in blockchain service.
+        // BspSubmitProofTask also listens to ProcessSubmitProofRequest events, which are emitted by the
+        // BlockchainService when it is time to actually submit the proof of storage.
         // Additionally, it handles file deletions as a consequence of inclusion proofs in custom challenges.
         let bsp_submit_proof_task = BspSubmitProofTask::new(self.clone());
         // Subscribing to NewChallengeSeed event from the BlockchainService.
@@ -134,6 +136,14 @@ where
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         new_challenge_seed_event_bus_listener.start();
+        // Subscribing to NewChallengeSeed event from the BlockchainService.
+        let process_submit_proof_request_event_bus_listener: EventBusListener<
+            ProcessSubmitProofRequest,
+            _,
+        > = bsp_submit_proof_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        process_submit_proof_request_event_bus_listener.start();
 
         // Slash your own kin or potentially commit seppuku on your own stake.
         // Running this is as a BSP is very honourable and shows a great sense of justice.
