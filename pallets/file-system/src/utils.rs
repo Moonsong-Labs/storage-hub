@@ -30,8 +30,8 @@ use crate::{
         PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
     },
     BlockRangeToMaximumThreshold, Error, Event, ItemExpirations, MaximumThreshold,
-    NextAvailableExpirationInsertionBlock, Pallet, PendingFileDeletionRequests, ReplicationTarget,
-    StorageRequestBsps, StorageRequests,
+    NextAvailableExpirationInsertionBlock, Pallet, PendingFileDeletionRequests,
+    PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -771,7 +771,7 @@ where
     ///
     /// `can_serve`: A flag that indicates if the BSP can serve the file to other BSPs. If the BSP can serve the file, then
     /// they are added to the storage request as a data server.
-    pub(crate) fn do_bsp_stop_storing(
+    pub(crate) fn do_bsp_request_stop_storing(
         sender: T::AccountId,
         file_key: MerkleHash<T>,
         bucket_id: BucketIdFor<T>,
@@ -781,7 +781,7 @@ where
         size: StorageData<T>,
         can_serve: bool,
         inclusion_forest_proof: ForestProof<T>,
-    ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
         let bsp_id =
             <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
@@ -807,6 +807,26 @@ where
         ensure!(
             file_key == computed_file_key,
             Error::<T>::InvalidFileKeyMetadata
+        );
+
+        // Check that a pending stop storing request for that BSP and file does not exist yet.
+        ensure!(
+            !<PendingStopStoringRequests<T>>::contains_key(&bsp_id, &file_key),
+            Error::<T>::PendingStopStoringRequestAlreadyExists
+        );
+
+        // Verify the proof of inclusion.
+        let proven_keys =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+                &bsp_id,
+                &[file_key],
+                &inclusion_forest_proof,
+            )?;
+
+        // Ensure that the file key IS part of the BSP's forest.
+        ensure!(
+            proven_keys.contains(&file_key),
+            Error::<T>::ExpectedInclusionProof
         );
 
         match <StorageRequests<T>>::get(&file_key) {
@@ -865,6 +885,38 @@ where
             }
         };
 
+        // Add the pending stop storing request to storage.
+        <PendingStopStoringRequests<T>>::insert(
+            &bsp_id,
+            &file_key,
+            (frame_system::Pallet::<T>::block_number(), size),
+        );
+
+        Ok(bsp_id)
+    }
+
+    pub(crate) fn do_bsp_confirm_stop_storing(
+        sender: T::AccountId,
+        file_key: MerkleHash<T>,
+        inclusion_forest_proof: ForestProof<T>,
+    ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
+        // Get the BSP ID of the sender
+        let bsp_id =
+            <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
+                .ok_or(Error::<T>::NotABsp)?;
+
+        // Get the block when the pending stop storing request of the BSP for the file key was opened.
+        let (block_when_opened, file_size) =
+            <PendingStopStoringRequests<T>>::get(&bsp_id, &file_key)
+                .ok_or(Error::<T>::PendingStopStoringRequestNotFound)?;
+
+        // Check that enough time has passed since the pending stop storing request was opened.
+        ensure!(
+            frame_system::Pallet::<T>::block_number()
+                >= block_when_opened + T::MinWaitForStopStoring::get(),
+            Error::<T>::MinWaitForStopStoringNotReached
+        );
+
         // Verify the proof of inclusion.
         let proven_keys =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
@@ -891,7 +943,10 @@ where
         <T::Providers as shp_traits::ProvidersInterface>::update_root(bsp_id, new_root)?;
 
         // Decrease data used by the BSP.
-        <T::Providers as MutateProvidersInterface>::decrease_data_used(&bsp_id, size)?;
+        <T::Providers as MutateProvidersInterface>::decrease_data_used(&bsp_id, file_size)?;
+
+        // Remove the pending stop storing request from storage.
+        <PendingStopStoringRequests<T>>::remove(&bsp_id, &file_key);
 
         Ok((bsp_id, new_root))
     }

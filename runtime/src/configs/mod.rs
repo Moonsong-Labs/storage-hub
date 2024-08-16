@@ -384,7 +384,7 @@ fn relay_chain_state_proof() -> RelayChainStateProof {
 }
 
 pub struct BabeDataGetter;
-impl pallet_randomness::GetBabeData<u64, Option<Hash>> for BabeDataGetter {
+impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
     // Tolerate panic here because this is only ever called in an inherent (so can be omitted)
     fn get_epoch_index() -> u64 {
         if cfg!(feature = "runtime-benchmarks") {
@@ -400,26 +400,27 @@ impl pallet_randomness::GetBabeData<u64, Option<Hash>> for BabeDataGetter {
             .flatten()
             .expect("expected to be able to read epoch index from relay chain state proof")
     }
-    fn get_epoch_randomness() -> Option<Hash> {
+    fn get_epoch_randomness() -> Hash {
         if cfg!(feature = "runtime-benchmarks") {
             // storage reads as per actual reads
             let _relay_storage_root = ParachainSystem::validation_data();
             let _relay_chain_state = ParachainSystem::relay_state_proof();
             let benchmarking_babe_output = Hash::default();
-            return Some(benchmarking_babe_output);
+            return benchmarking_babe_output;
         }
         relay_chain_state_proof()
             .read_optional_entry(well_known_keys::ONE_EPOCH_AGO_RANDOMNESS)
             .ok()
             .flatten()
+            .expect("expected to be able to read epoch randomness from relay chain state proof")
     }
-    fn get_parent_randomness() -> Option<Hash> {
+    fn get_parent_randomness() -> Hash {
         if cfg!(feature = "runtime-benchmarks") {
             // storage reads as per actual reads
             let _relay_storage_root = ParachainSystem::validation_data();
             let _relay_chain_state = ParachainSystem::relay_state_proof();
             let benchmarking_babe_output = Hash::default();
-            return Some(benchmarking_babe_output);
+            return benchmarking_babe_output;
         }
         // Note: we use the `CURRENT_BLOCK_RANDOMNESS` key here as it also represents the parent randomness, the only difference
         // is the block since this randomness is valid, but we don't care about that because we are setting that directly in the `randomness` pallet.
@@ -427,6 +428,7 @@ impl pallet_randomness::GetBabeData<u64, Option<Hash>> for BabeDataGetter {
             .read_optional_entry(well_known_keys::CURRENT_BLOCK_RANDOMNESS)
             .ok()
             .flatten()
+            .expect("expected to be able to read parent randomness from relay chain state proof")
     }
 }
 
@@ -592,6 +594,10 @@ where
 
 type ThresholdType = u32;
 
+parameter_types! {
+    pub const MinWaitForStopStoring: BlockNumber = 10;
+}
+
 /// Configure the pallet template in pallets/template.
 impl pallet_file_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
@@ -617,6 +623,7 @@ impl pallet_file_system::Config for Runtime {
     type StorageRequestTtl = ConstU32<40>;
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
+    type MinWaitForStopStoring = MinWaitForStopStoring;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.

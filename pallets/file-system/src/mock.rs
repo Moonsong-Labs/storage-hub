@@ -326,6 +326,10 @@ impl pallet_bucket_nfts::Config for Test {
 
 pub(crate) type ThresholdType = u32;
 
+parameter_types! {
+    pub const MinWaitForStopStoring: BlockNumber = 1;
+}
+
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
@@ -351,6 +355,7 @@ impl crate::Config for Test {
     type StorageRequestTtl = ConstU32<40u32>;
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
+    type MinWaitForStopStoring = MinWaitForStopStoring;
 }
 
 // Build genesis storage according to the mock runtime.

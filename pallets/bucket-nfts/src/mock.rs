@@ -121,6 +121,10 @@ impl pallet_balances::Config for Test {
 
 pub(crate) type ThresholdType = u32;
 
+parameter_types! {
+    pub const MinWaitForStopStoring: BlockNumber = 1;
+}
+
 pub struct MockProofsDealer;
 impl ProofsDealerInterface for MockProofsDealer {
     type ProviderId = H256;
@@ -205,6 +209,7 @@ impl pallet_file_system::Config for Test {
     type StorageRequestTtl = ConstU32<40u32>;
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<5u32>;
+    type MinWaitForStopStoring = MinWaitForStopStoring;
 }
 
 parameter_types! {

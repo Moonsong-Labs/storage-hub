@@ -7,6 +7,7 @@ use scale_info::TypeInfo;
 use serde::{Deserialize, Serialize};
 use shp_traits::AsCompact;
 use sp_arithmetic::traits::SaturatedConversion;
+use sp_core::H256;
 use sp_std::vec::Vec;
 
 /// A struct containing all the information about a file in StorageHub.
@@ -77,6 +78,20 @@ impl<const H_LENGTH: usize> From<Hash<H_LENGTH>> for FileKey<H_LENGTH> {
 impl<const H_LENGTH: usize> Into<Hash<H_LENGTH>> for FileKey<H_LENGTH> {
     fn into(self) -> Hash<H_LENGTH> {
         self.0
+    }
+}
+
+impl From<H256> for FileKey<32> {
+    fn from(hash: H256) -> Self {
+        let mut file_key = [0u8; 32];
+        file_key.copy_from_slice(hash.as_bytes());
+        Self(file_key)
+    }
+}
+
+impl Into<H256> for FileKey<32> {
+    fn into(self) -> H256 {
+        H256::from_slice(&self.0)
     }
 }
 
