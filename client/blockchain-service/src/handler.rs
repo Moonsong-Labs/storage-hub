@@ -637,18 +637,14 @@ impl BlockchainService {
                         }
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::BspConfirmedStoring {
-                                who,
+                                who: _,
                                 bsp_id,
                                 file_keys,
                                 new_root,
                             },
                             // Filter the events by the BSP id.
                         ) => {
-                            // TODO: Ideally we would be filtering by BSP ID here, but since we don't have a
-                            // TODO: way to properly initialise the BSP ID yet, we are just going to filter by the
-                            // TODO: caller's public key.
-                            if who == AccountId32::from(Self::caller_pub_key(self.keystore.clone()))
-                            {
+                            if self.provider_ids.contains(&bsp_id) {
                                 self.emit(BspConfirmedStoring {
                                     bsp_id,
                                     file_keys: file_keys
