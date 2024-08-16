@@ -1,6 +1,4 @@
-use shc_common::types::HasherOutT;
-use sp_trie::TrieLayout;
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use shc_actors_framework::{
@@ -18,6 +16,7 @@ use shc_file_transfer_service::{
     FileTransferService,
 };
 use shc_forest_manager::traits::ForestStorage;
+use storage_hub_runtime::StorageProofsMerkleTrieLayout;
 
 use crate::tasks::slash_provider::SlashProviderTask;
 use crate::tasks::{
@@ -26,11 +25,10 @@ use crate::tasks::{
 };
 
 /// Represents the handler for the Storage Hub service.
-pub struct StorageHubHandler<T, FL, FS>
+pub struct StorageHubHandler<FL, FS>
 where
-    T: TrieLayout,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
 {
     /// The task spawner for spawning asynchronous tasks.
     pub task_spawner: TaskSpawner,
@@ -42,34 +40,28 @@ where
     pub file_storage: Arc<RwLock<FL>>,
     /// The forest storage layer which tracks all complete files stored in the file storage layer.
     pub forest_storage: Arc<RwLock<FS>>,
-
-    _marker: PhantomData<T>,
 }
 
-impl<T, FL, FS> Clone for StorageHubHandler<T, FL, FS>
+impl<FL, FS> Clone for StorageHubHandler<FL, FS>
 where
-    T: TrieLayout,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
 {
-    fn clone(&self) -> StorageHubHandler<T, FL, FS> {
+    fn clone(&self) -> StorageHubHandler<FL, FS> {
         Self {
             task_spawner: self.task_spawner.clone(),
             file_transfer: self.file_transfer.clone(),
             blockchain: self.blockchain.clone(),
             file_storage: self.file_storage.clone(),
             forest_storage: self.forest_storage.clone(),
-            _marker: self._marker,
         }
     }
 }
 
-impl<T, FL, FS> StorageHubHandler<T, FL, FS>
+impl<FL, FS> StorageHubHandler<FL, FS>
 where
-    T: TrieLayout + Send + Sync + 'static,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
     pub fn new(
         task_spawner: TaskSpawner,
@@ -84,7 +76,6 @@ where
             blockchain,
             file_storage,
             forest_storage,
-            _marker: Default::default(),
         }
     }
 

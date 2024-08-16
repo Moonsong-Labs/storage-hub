@@ -3,13 +3,12 @@ use log::{debug, error, info};
 use sc_network::PeerId;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::AcceptedBspVolunteer;
-use shc_common::types::FileMetadata;
+use shc_common::types::{FileMetadata, HashT, StorageProofsMerkleTrieLayout};
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::ForestStorage;
 use shp_file_metadata::ChunkId;
 use sp_runtime::AccountId32;
-use sp_trie::TrieLayout;
 
 const LOG_TARGET: &str = "user-sends-file-task";
 
@@ -17,20 +16,18 @@ const LOG_TARGET: &str = "user-sends-file-task";
 /// volunteering for that file.
 /// It can serve multiple BSPs volunteering to store each file, since
 /// it reacts to every `AcceptedBspVolunteer` from the runtime.
-pub struct UserSendsFileTask<T, FL, FS>
+pub struct UserSendsFileTask<FL, FS>
 where
-    T: Send + Sync + TrieLayout + 'static,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T> + 'static,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
 {
-    storage_hub_handler: StorageHubHandler<T, FL, FS>,
+    storage_hub_handler: StorageHubHandler<FL, FS>,
 }
 
-impl<T, FL, FS> Clone for UserSendsFileTask<T, FL, FS>
+impl<FL, FS> Clone for UserSendsFileTask<FL, FS>
 where
-    T: Send + Sync + TrieLayout + 'static,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T> + 'static,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
 {
     fn clone(&self) -> Self {
         Self {
@@ -39,24 +36,22 @@ where
     }
 }
 
-impl<T, FL, FS> UserSendsFileTask<T, FL, FS>
+impl<FL, FS> UserSendsFileTask<FL, FS>
 where
-    T: Send + Sync + TrieLayout + 'static,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T> + 'static,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<T, FL, FS> EventHandler<AcceptedBspVolunteer> for UserSendsFileTask<T, FL, FS>
+impl<FL, FS> EventHandler<AcceptedBspVolunteer> for UserSendsFileTask<FL, FS>
 where
-    T: Send + Sync + TrieLayout + 'static,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T> + 'static,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
 {
     /// Reacts to BSPs volunteering (`AcceptedBspVolunteer` from the runtime) to store the user's file,
     /// establishes a connection to each BSPs through the p2p network and sends the file.
@@ -79,7 +74,7 @@ where
         };
 
         let chunk_count = file_metadata.chunks_count();
-        let file_key = file_metadata.file_key::<T::Hash>();
+        let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
 
         // Adds the multiaddresses of the BSP volunteering to store the file to the known addresses of the file transfer service.
         // This is required to establish a connection to the BSP.

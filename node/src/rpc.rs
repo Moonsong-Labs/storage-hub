@@ -11,14 +11,13 @@ use sc_consensus_manual_seal::{
     rpc::{ManualSeal, ManualSealApiServer},
     EngineCommand,
 };
-use shc_common::types::HasherOutT;
+use shc_common::types::StorageProofsMerkleTrieLayout;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
 use shc_rpc::StorageHubClientApiServer;
 use shc_rpc::StorageHubClientRpc;
 use shc_rpc::StorageHubClientRpcConfig;
 use sp_core::H256;
-use sp_trie::TrieLayout;
 use storage_hub_runtime::{opaque::Block, AccountId, Balance, Nonce};
 
 pub use sc_rpc::DenyUnsafe;
@@ -31,13 +30,13 @@ use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 pub type RpcExtension = jsonrpsee::RpcModule<()>;
 
 /// Full client dependencies
-pub struct FullDeps<C, P, T, FL, FS> {
+pub struct FullDeps<C, P, FL, FS> {
     /// The client instance to use.
     pub client: Arc<C>,
     /// Transaction pool instance.
     pub pool: Arc<P>,
     /// File Storage instance.
-    pub maybe_storage_hub_client_config: Option<StorageHubClientRpcConfig<T, FL, FS>>,
+    pub maybe_storage_hub_client_config: Option<StorageHubClientRpcConfig<FL, FS>>,
     /// Manual seal command sink
     pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<H256>>>,
     /// Whether to deny unsafe calls
@@ -45,8 +44,8 @@ pub struct FullDeps<C, P, T, FL, FS> {
 }
 
 /// Instantiate all RPC extensions.
-pub fn create_full<C, P, T, FL, FS>(
-    deps: FullDeps<C, P, T, FL, FS>,
+pub fn create_full<C, P, FL, FS>(
+    deps: FullDeps<C, P, FL, FS>,
 ) -> Result<RpcExtension, Box<dyn std::error::Error + Send + Sync>>
 where
     C: ProvideRuntimeApi<Block>
@@ -59,10 +58,8 @@ where
     C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
     C::Api: BlockBuilder<Block>,
     P: TransactionPool + Send + Sync + 'static,
-    T: TrieLayout + Send + Sync + 'static,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
 {
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
     use substrate_frame_rpc_system::{System, SystemApiServer};

@@ -1,10 +1,9 @@
 use async_channel::Receiver;
 use sc_network::{config::IncomingRequest, ProtocolName};
 use sc_service::RpcHandlers;
-use shc_common::types::{HasherOutT, H_LENGTH};
+use shc_common::types::StorageProofsMerkleTrieLayout;
 use sp_keystore::KeystorePtr;
-use sp_trie::TrieLayout;
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
@@ -23,22 +22,19 @@ use super::handler::StorageHubHandler;
 
 /// Builds the [`StorageHubHandler`] by adding each component separately.
 /// Provides setters and getters for each component.
-pub struct StorageHubBuilder<T, FL, FS> {
+pub struct StorageHubBuilder<FL, FS> {
     task_spawner: Option<TaskSpawner>,
     file_transfer: Option<ActorHandle<FileTransferService>>,
     blockchain: Option<ActorHandle<BlockchainService>>,
     file_storage: Option<Arc<RwLock<FL>>>,
     forest_storage: Option<Arc<RwLock<FS>>>,
     provider_pub_key: Option<[u8; 32]>,
-    _marker: PhantomData<T>,
 }
 
-impl<T, FL, FS> StorageHubBuilder<T, FL, FS>
+impl<FL, FS> StorageHubBuilder<FL, FS>
 where
-    T: TrieLayout + Send + Sync + 'static,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
     pub fn new(task_spawner: TaskSpawner) -> Self {
         Self {
@@ -48,7 +44,6 @@ where
             file_storage: None,
             forest_storage: None,
             provider_pub_key: None,
-            _marker: Default::default(),
         }
     }
 
@@ -129,7 +124,7 @@ where
     }
 
     /// Creates a new [`StorageHubClientRpcConfig`] to be used when setting up the RPCs.
-    pub fn rpc_config(&self, keystore: KeystorePtr) -> StorageHubClientRpcConfig<T, FL, FS> {
+    pub fn rpc_config(&self, keystore: KeystorePtr) -> StorageHubClientRpcConfig<FL, FS> {
         StorageHubClientRpcConfig::new(
             self.file_storage
                 .clone()
@@ -142,8 +137,8 @@ where
     }
 
     /// Build the [`StorageHubHandler`] with the configuration set in the builder.
-    pub fn build(self) -> StorageHubHandler<T, FL, FS> {
-        StorageHubHandler::<T, FL, FS>::new(
+    pub fn build(self) -> StorageHubHandler<FL, FS> {
+        StorageHubHandler::<FL, FS>::new(
             self.task_spawner.expect("Task Spawner not set"),
             self.file_transfer.expect("File Transfer not set."),
             self.blockchain.expect("Blockchain Service not set."),
@@ -159,27 +154,23 @@ pub trait StorageLayerBuilder {
     fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self;
 }
 
-impl<T> StorageLayerBuilder
-    for StorageHubBuilder<T, InMemoryFileStorage<T>, InMemoryForestStorage<T>>
-where
-    T: TrieLayout + Send + Sync,
-    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
+impl StorageLayerBuilder
+    for StorageHubBuilder<
+        InMemoryFileStorage<StorageProofsMerkleTrieLayout>,
+        InMemoryForestStorage<StorageProofsMerkleTrieLayout>,
+    >
 {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
-        self.with_file_storage(Arc::new(RwLock::new(InMemoryFileStorage::<T>::new())))
-            .with_forest_storage(Arc::new(RwLock::new(InMemoryForestStorage::<T>::new())))
+        self.with_file_storage(Arc::new(RwLock::new(InMemoryFileStorage::new())))
+            .with_forest_storage(Arc::new(RwLock::new(InMemoryForestStorage::new())))
     }
 }
 
-impl<T> StorageLayerBuilder
+impl StorageLayerBuilder
     for StorageHubBuilder<
-        T,
-        RocksDbFileStorage<T, kvdb_rocksdb::Database>,
-        RocksDBForestStorage<T, kvdb_rocksdb::Database>,
+        RocksDbFileStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
+        RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
     >
-where
-    T: TrieLayout + Send + Sync,
-    HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
     fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
         let rocksdb_path = if let Some(path) = storage_path {
@@ -191,20 +182,20 @@ where
             hex::encode(provider_pub_key)
         };
 
-        let forest_storage = RocksDBForestStorage::<T, kvdb_rocksdb::Database>::rocksdb_storage(
+        let forest_storage = RocksDBForestStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(
             rocksdb_path.clone(),
         )
         .expect("Failed to create RocksDB");
         let file_storage =
-            RocksDbFileStorage::<T, kvdb_rocksdb::Database>::rocksdb_storage(rocksdb_path)
+            RocksDbFileStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(rocksdb_path)
                 .expect("Failed to create RocksDB");
 
         self.with_file_storage(Arc::new(RwLock::new(RocksDbFileStorage::<
-            T,
+            _,
             kvdb_rocksdb::Database,
         >::new(file_storage))))
             .with_forest_storage(Arc::new(RwLock::new(
-                RocksDBForestStorage::<T, kvdb_rocksdb::Database>::new(forest_storage)
+                RocksDBForestStorage::<_, kvdb_rocksdb::Database>::new(forest_storage)
                     .expect("Failed to create RocksDB"),
             )))
     }

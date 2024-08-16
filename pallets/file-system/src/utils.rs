@@ -1105,7 +1105,7 @@ where
         Ok(T::AssignmentThresholdAsymptote::get().saturating_add(asymptotic_decay_factor))
     }
 
-    pub(crate) fn compute_file_key(
+    pub fn compute_file_key(
         owner: T::AccountId,
         bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,

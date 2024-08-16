@@ -1661,7 +1661,7 @@ declare module '@polkadot/types/lookup' {
         readonly isLastChargeableInfoUpdated: boolean;
         readonly asLastChargeableInfoUpdated: {
             readonly providerId: H256;
-            readonly lastChargeableBlock: u32;
+            readonly lastChargeableTick: u32;
             readonly lastChargeablePriceIndex: u128;
         } & Struct;
         readonly isUserWithoutFunds: boolean;
@@ -3880,7 +3880,7 @@ declare module '@polkadot/types/lookup' {
     /** @name PalletPaymentStreamsFixedRatePaymentStream (415) */
     interface PalletPaymentStreamsFixedRatePaymentStream extends Struct {
         readonly rate: u128;
-        readonly lastChargedBlock: u32;
+        readonly lastChargedTick: u32;
         readonly userDeposit: u128;
     }
     /** @name PalletPaymentStreamsDynamicRatePaymentStream (416) */
@@ -3889,9 +3889,9 @@ declare module '@polkadot/types/lookup' {
         readonly priceIndexWhenLastCharged: u128;
         readonly userDeposit: u128;
     }
-    /** @name PalletPaymentStreamsProviderLastChargeable (417) */
-    interface PalletPaymentStreamsProviderLastChargeable extends Struct {
-        readonly lastChargeableBlock: u32;
+    /** @name PalletPaymentStreamsProviderLastChargeableInfo (417) */
+    interface PalletPaymentStreamsProviderLastChargeableInfo extends Struct {
+        readonly lastChargeableTick: u32;
         readonly priceIndex: u128;
     }
     /** @name PalletPaymentStreamsError (418) */
