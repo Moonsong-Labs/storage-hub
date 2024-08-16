@@ -1,9 +1,11 @@
-use std::{collections::BTreeMap, str::FromStr, sync::Arc};
+use std::{collections::BTreeMap, str::FromStr, sync::Arc, vec};
 
-use futures::{prelude::*, stream::select};
+use futures::prelude::*;
 use log::{debug, trace, warn};
 use pallet_storage_providers_runtime_api::{GetBspInfoError, StorageProvidersApi};
-use sc_client_api::{BlockImportNotification, BlockchainEvents, HeaderBackend};
+use sc_client_api::{
+    BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
+};
 use sc_network::Multiaddr;
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{error, info};
@@ -29,7 +31,7 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmedStoring,
-        NewChallengeSeed, NewStorageRequest, SlashableProvider,
+        FinalisedMutationsApplied, NewChallengeSeed, NewStorageRequest, SlashableProvider,
     },
     transaction::SubmittedTransaction,
 };
@@ -72,7 +74,8 @@ where
     Block: cumulus_primitives_core::BlockT,
 {
     Command(BlockchainServiceCommand),
-    BlockNotification(BlockImportNotification<Block>),
+    BlockImportNotification(BlockImportNotification<Block>),
+    FinalityNotification(FinalityNotification<Block>),
 }
 
 /// Implement the ActorEventLoop trait for the BlockchainServiceEventLoop.
@@ -88,13 +91,22 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
         info!(target: LOG_TARGET, "BlockchainService starting up!");
 
         // Import notification stream to be notified of new blocks.
-        let notification_stream = self.actor.client.import_notification_stream();
+        // This will notify us when sync to the latest block, or if there is a re-org.
+        let block_import_notification_stream = self.actor.client.import_notification_stream();
 
-        // Merging notification stream with command stream.
-        let mut merged_stream = select(
-            self.receiver.map(MergedEventLoopMessage::Command),
-            notification_stream.map(MergedEventLoopMessage::BlockNotification),
-        );
+        // Finality notification stream to be notified of blocks being finalised.
+        let finality_notification_stream = self.actor.client.finality_notification_stream();
+
+        // Merging notification streams with command stream.
+        let mut merged_stream = stream::select_all(vec![
+            self.receiver.map(MergedEventLoopMessage::Command).boxed(),
+            block_import_notification_stream
+                .map(MergedEventLoopMessage::BlockImportNotification)
+                .boxed(),
+            finality_notification_stream
+                .map(MergedEventLoopMessage::FinalityNotification)
+                .boxed(),
+        ]);
 
         // Process incoming messages.
         while let Some(notification) = merged_stream.next().await {
@@ -102,10 +114,13 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
                 MergedEventLoopMessage::Command(command) => {
                     self.actor.handle_message(command).await;
                 }
-                MergedEventLoopMessage::BlockNotification(notification) => {
+                MergedEventLoopMessage::BlockImportNotification(notification) => {
                     self.actor
                         .handle_block_import_notification(notification)
                         .await;
+                }
+                MergedEventLoopMessage::FinalityNotification(notification) => {
+                    self.actor.handle_finality_notification(notification).await;
                 }
             };
         }
@@ -662,6 +677,58 @@ impl BlockchainService {
                                         .collect(),
                                     new_root,
                                 })
+                            }
+                        }
+                        // Ignore all other events.
+                        _ => {}
+                    }
+                }
+            }
+            Err(e) => {
+                // TODO: Handle case where the storage cannot be decoded.
+                // TODO: This would happen if we're parsing a block authored with an older version of the runtime, using
+                // TODO: a node that has a newer version of the runtime, therefore the EventsVec type is different.
+                // TODO: Consider using runtime APIs for getting old data of previous blocks, and this just for current blocks.
+                error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
+            }
+        }
+    }
+
+    /// Handle a finality notification.
+    async fn handle_finality_notification<Block>(
+        &mut self,
+        notification: FinalityNotification<Block>,
+    ) where
+        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+    {
+        let block_hash: H256 = notification.hash;
+        let block_number: BlockNumber = (*notification.header.number()).saturated_into();
+
+        debug!(target: LOG_TARGET, "Finality notification #{}: {}", block_number, block_hash);
+
+        // Get events from storage.
+        match self.get_events_storage_element(block_hash) {
+            Ok(block_events) => {
+                // Process the events.
+                for ev in block_events {
+                    match ev.event.clone() {
+                        // New storage request event coming from pallet-file-system.
+                        RuntimeEvent::ProofsDealer(
+                            pallet_proofs_dealer::Event::MutationsApplied {
+                                provider,
+                                mutations,
+                                new_root,
+                            },
+                        ) => {
+                            // Check if the provider ID is one of the provider IDs this node is tracking.
+                            for provider_id in self.provider_ids.iter() {
+                                if provider_id == &provider {
+                                    self.emit(FinalisedMutationsApplied {
+                                        provider_id: provider.clone(),
+                                        mutations: mutations.clone(),
+                                        new_root: new_root.clone(),
+                                    })
+                                }
                             }
                         }
                         // Ignore all other events.
