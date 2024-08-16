@@ -501,7 +501,7 @@ impl pallet_storage_providers::Config for Runtime {
     type MinBlocksBetweenCapacityChanges = MinBlocksBetweenCapacityChanges;
     type SlashFactor = SlashFactor;
     type ReputationWeightType = u32;
-    type StartingReputationWeight = ReplicationTarget;
+    type StartingReputationWeight = ConstU32<10>;
 }
 
 parameter_types! {
@@ -625,8 +625,6 @@ where
 type ThresholdType = u32;
 
 parameter_types! {
-    pub const ReplicationTarget: u32 = 1;
-    pub const MaximumThreshold: ThresholdType = u32::MAX;
     pub const MaxBatchConfirmStorageRequests: u32 = 10;
 }
 
@@ -645,9 +643,6 @@ impl pallet_file_system::Config for Runtime {
     type Currency = Balances;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
-    type ReplicationTarget = ReplicationTarget;
-    type MaximumThreshold = MaximumThreshold;
-    type BlockRangeToMaximumThreshold = ConstU32<50>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxBatchConfirmStorageRequests = MaxBatchConfirmStorageRequests;
     type MaxFilePathSize = ConstU32<512u32>;

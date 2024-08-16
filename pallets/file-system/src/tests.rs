@@ -2,10 +2,10 @@ use crate::types::{BucketIdFor, BucketNameFor, ExpiredItems};
 use crate::{
     mock::*,
     types::{
-        FileLocation, PeerIds, PendingFileDeletionRequestTtl, ProviderIdFor, ReplicationTarget,
-        StorageData, StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestTtl,
+        FileLocation, PeerIds, PendingFileDeletionRequestTtl, ProviderIdFor, StorageData,
+        StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestTtl,
     },
-    Config, Error, Event, ItemExpirations,
+    Config, Error, Event, ItemExpirations, MaximumThreshold, ReplicationTarget, BlockRangeToMaximumThreshold
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -21,7 +21,7 @@ use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     traits::{BlakeTwo256, Get},
-    BoundedVec,
+    BoundedVec, DispatchError,
 };
 use sp_trie::CompactProof;
 
@@ -1470,7 +1470,6 @@ mod bsp_volunteer {
         }
 
         #[test]
-        #[ignore]
         fn bsp_volunteer_above_threshold_high_fail() {
             new_test_ext().execute_with(|| {
                 // TODO: Fix
@@ -1515,8 +1514,8 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                // TODO: Fix this
-                // crate::BspsAssignmentThreshold::<Test>::put(FixedU128::zero());
+                // Set MaximumThreshold to zero
+                MaximumThreshold::<Test>::put(1);
 
                 // Dispatch BSP volunteer.
                 assert_noop!(
@@ -1772,12 +1771,14 @@ mod bsp_confirm {
         }
 
         #[test]
-        fn bsp_already_confirmed_fail() {
+        fn bsp_confirming_for_non_existent_storage_request() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
-                let bsp_account_id = Keyring::Bob.to_account_id();
-                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let bsp_bob_account_id = Keyring::Bob.to_account_id();
+                let bsp_bob_signed = RuntimeOrigin::signed(bsp_bob_account_id.clone());
+                let bsp_charlie_account_id = Keyring::Dave.to_account_id();
+                let bsp_charlie_signed = RuntimeOrigin::signed(bsp_charlie_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
@@ -1804,7 +1805,8 @@ mod bsp_confirm {
                 ));
 
                 // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+                assert_ok!(bsp_sign_up(bsp_bob_signed.clone(), storage_amount,));
+                assert_ok!(bsp_sign_up(bsp_charlie_signed.clone(), storage_amount,));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -1815,11 +1817,29 @@ mod bsp_confirm {
                 );
 
                 // Dispatch BSP volunteer.
-                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+                assert_ok!(FileSystem::bsp_volunteer(bsp_bob_signed.clone(), file_key,));
 
-                // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
-                    bsp_signed.clone(),
+                    bsp_bob_signed.clone(),
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
+                ));
+
+                assert_ok!(FileSystem::bsp_volunteer(
+                    bsp_charlie_signed.clone(),
+                    file_key,
+                ));
+
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_charlie_signed.clone(),
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
@@ -1834,7 +1854,7 @@ mod bsp_confirm {
 
                 assert_noop!(
                     FileSystem::bsp_confirm_storing(
-                        bsp_signed.clone(),
+                        bsp_bob_signed.clone(),
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
@@ -1846,7 +1866,7 @@ mod bsp_confirm {
                         )])
                         .unwrap(),
                     ),
-                    Error::<Test>::BspAlreadyConfirmed
+                    Error::<Test>::StorageRequestNotFound
                 );
             });
         }
@@ -2549,133 +2569,57 @@ mod bsp_stop_storing {
     }
 }
 
-#[test]
-#[ignore]
-fn compute_asymptotic_threshold_point_success() {
-    new_test_ext().execute_with(|| {
-        // TODO: Fix
-        // // Test the computation of the asymptotic threshold
-        // let threshold = FileSystem::compute_asymptotic_threshold_point(1)
-        //     .expect("Threshold should be computable");
-        //
-        // // Assert that the computed threshold is as expected
-        // assert!(
-        //     threshold > FixedU128::zero()
-        //         && threshold >= <Test as Config>::AssignmentThresholdAsymptote::get(),
-        //     "Threshold should be positive"
-        // );
-    });
-}
-
-mod bsp_subscribe_asymptotic_threshold_computation {
-    use super::*;
-    mod success {
-        use super::*;
-
-        #[test]
-        #[ignore]
-        fn threshold_does_not_exceed_asymptote_success() {
-            new_test_ext().execute_with(|| {
-                // TODO: Fix
-                // crate::BspsAssignmentThreshold::<Test>::put(
-                //     <Test as Config>::AssignmentThresholdAsymptote::get(),
-                // );
-                //
-                // // Simulate the threshold decrease due to a new BSP sign up
-                // FileSystem::subscribe_bsp_sign_up(&H256::from_slice(&[1; 32]))
-                //     .expect("BSP sign up should be successful");
-                //
-                // // Verify that the threshold does is equal to the asymptote
-                // assert!(
-                //     FileSystem::bsps_assignment_threshold()
-                //         == <Test as Config>::AssignmentThresholdAsymptote::get(),
-                //     "Threshold should not go below the asymptote"
-                // );
-            });
-        }
-
-        #[test]
-        #[ignore]
-        fn subscribe_bsp_sign_up_decreases_threshold_success() {
-            new_test_ext().execute_with(|| {
-                // TODO: Fix
-                // let initial_threshold = compute_set_get_initial_threshold();
-                //
-                // // Simulate the threshold decrease due to a new BSP sign up
-                // FileSystem::subscribe_bsp_sign_up(&H256::from_slice(&[1; 32]))
-                //     .expect("BSP sign up should be successful");
-                //
-                // let updated_threshold = FileSystem::bsps_assignment_threshold();
-                // // Verify that the threshold decreased
-                // assert!(
-                //     updated_threshold < initial_threshold
-                //         && updated_threshold
-                //             >= <Test as Config>::AssignmentThresholdAsymptote::get(),
-                //     "Threshold should decrease after BSP sign up"
-                // );
-            });
-        }
-
-        #[test]
-        #[ignore]
-        fn subscribe_bsp_sign_off_increases_threshold_success() {
-            new_test_ext().execute_with(|| {
-                // TODO: Fix
-                // let initial_threshold = compute_set_get_initial_threshold();
-                //
-                // // Simulate the threshold increase due to a new BSP sign off
-                // FileSystem::subscribe_bsp_sign_off(&H256::from_slice(&[1; 32]))
-                //     .expect("BSP sign off should be successful");
-                //
-                // let updated_threshold = FileSystem::bsps_assignment_threshold();
-                // // Verify that the threshold increased
-                // assert!(
-                //     updated_threshold > initial_threshold
-                //         && updated_threshold
-                //             >= <Test as Config>::AssignmentThresholdAsymptote::get(),
-                //     "Threshold should increase after BSP sign off"
-                // );
-            });
-        }
-    }
-}
-
-mod force_bsps_assignment_threshold_tests {
+mod set_global_parameters_tests {
     use super::*;
 
     mod failure {
         use super::*;
         #[test]
-        #[ignore]
-        fn force_bsps_assignment_threshold_non_root_signer_fail() {
+        fn set_global_parameters_non_root_signer_fail() {
             new_test_ext().execute_with(|| {
-                // TODO: Fix
-                // let non_root = Keyring::Bob.to_account_id();
-                // let non_root_signed = RuntimeOrigin::signed(non_root.clone());
-                //
-                // // Assert BadOrigin error when non-root account tries to set the threshold
-                // assert_noop!(
-                //     FileSystem::force_update_bsps_assignment_threshold(
-                //         non_root_signed,
-                //         FixedU128::zero()
-                //     ),
-                //     DispatchError::BadOrigin
-                // );
+                let non_root = Keyring::Bob.to_account_id();
+                let non_root_signed = RuntimeOrigin::signed(non_root.clone());
+
+                // Assert BadOrigin error when non-root account tries to set the threshold
+                assert_noop!(
+                    FileSystem::set_global_parameters(non_root_signed, None, None, None),
+                    DispatchError::BadOrigin
+                );
             });
         }
 
         #[test]
-        #[ignore]
-        fn force_bsps_assignment_threshold_below_asymptote_fail() {
+        fn set_global_parameters_0_value() {
             new_test_ext().execute_with(|| {
-                // TODO: Fix
-                // assert_noop!(
-                //     FileSystem::force_update_bsps_assignment_threshold(
-                //         RuntimeOrigin::root(),
-                //         <Test as Config>::AssignmentThresholdAsymptote::get() - FixedU128::one()
-                //     ),
-                //     Error::<Test>::ThresholdBelowAsymptote
-                // );
+                assert_noop!(
+                    FileSystem::set_global_parameters(
+                        RuntimeOrigin::root(),
+                        Some(0),
+                        None,
+                        None
+                    ),
+                    Error::<Test>::ReplicationTargetCannotBeZero
+                );
+
+                assert_noop!(
+                    FileSystem::set_global_parameters(
+                        RuntimeOrigin::root(),
+                        None,
+                        Some(0),
+                        None
+                    ),
+                    Error::<Test>::MaximumThresholdCannotBeZero
+                );
+
+                assert_noop!(
+                    FileSystem::set_global_parameters(
+                        RuntimeOrigin::root(),
+                        None,
+                        None,
+                        Some(0)
+                    ),
+                    Error::<Test>::BlockRangeToMaximumThresholdCannotBeZero
+                );
             });
         }
     }
@@ -2684,23 +2628,17 @@ mod force_bsps_assignment_threshold_tests {
         use super::*;
 
         #[test]
-        #[ignore]
-        fn force_bsps_assignment_threshold_above_asymptote_success() {
+        fn set_global_parameters() {
             new_test_ext().execute_with(|| {
-                // TODO: Fix
-                // let new_threshold = <Test as crate::Config>::AssignmentThresholdAsymptote::get();
-                //
-                // FileSystem::force_update_bsps_assignment_threshold(
-                //     RuntimeOrigin::root(),
-                //     new_threshold,
-                // )
-                // .expect("Threshold should be set successfully");
-                //
-                // // Verify that the threshold increased
-                // assert!(
-                //     FileSystem::bsps_assignment_threshold() == new_threshold,
-                //     "Threshold should be set to one"
-                // );
+                let root = RuntimeOrigin::root();
+
+                // Set the global parameters
+                assert_ok!(FileSystem::set_global_parameters(root.clone(), Some(3), Some(5), Some(10)));
+
+                // Assert that the global parameters were set correctly
+                assert_eq!(ReplicationTarget::<Test>::get(), 3);
+                assert_eq!(MaximumThreshold::<Test>::get(), 5);
+                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 10);
             });
         }
     }

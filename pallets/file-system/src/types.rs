@@ -137,15 +137,6 @@ pub type StorageData<T> =
 /// Alias for the `ReplicationTargetType` type used in the FileSystem pallet.
 pub type ReplicationTargetType<T> = <T as crate::Config>::ReplicationTargetType;
 
-/// Alias for the `ReplicationTarget` type used in the FileSystem pallet.
-pub type ReplicationTarget<T> = <T as crate::Config>::ReplicationTarget;
-
-/// Alias for the `MaximumThreshold` type used in the FileSystem pallet.
-pub type MaximumThreshold<T> = <T as crate::Config>::MaximumThreshold;
-
-/// Alias for the `BlockRangeToMaximumThreshold` type used in the FileSystem pallet.
-pub type BlockRangeToMaximumThreshold<T> = <T as crate::Config>::BlockRangeToMaximumThreshold;
-
 /// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
 pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;
 

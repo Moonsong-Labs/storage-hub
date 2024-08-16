@@ -130,7 +130,8 @@ pub mod pallet {
             + CheckedDiv
             + CheckedAdd
             + CheckedSub
-            + PartialOrd;
+            + PartialOrd
+            + Zero;
 
         /// The type to convert a threshold to a block number.
         type ThresholdTypeToBlockNumber: ConvertBack<Self::ThresholdType, BlockNumberFor<Self>>;
@@ -161,20 +162,6 @@ pub mod pallet {
         type CollectionInspector: shp_traits::InspectCollections<
             CollectionId = CollectionIdFor<Self>,
         >;
-
-        /// Number of BSPs required to fulfill a storage request,
-        ///
-        /// This is also used as a default value if the BSPs required are not specified when creating a storage request.
-        #[pallet::constant]
-        type ReplicationTarget: Get<Self::ReplicationTargetType>;
-
-        /// Maximum threshold a BSP can attain.
-        #[pallet::constant]
-        type MaximumThreshold: Get<Self::ThresholdType>;
-
-        /// Number of blocks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
-        #[pallet::constant]
-        type BlockRangeToMaximumThreshold: Get<BlockNumberFor<Self>>;
 
         /// Maximum number of BSPs that can store a file.
         ///
@@ -286,6 +273,55 @@ pub mod pallet {
         ValueQuery,
     >;
 
+    /// Number of BSPs required to fulfill a storage request,
+    ///
+    /// This is also used as a default value if the BSPs required are not specified when creating a storage request.
+    #[pallet::storage]
+    pub type ReplicationTarget<T: Config> = StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
+
+    /// Maximum threshold a BSP can attain.
+    #[pallet::storage]
+    pub type MaximumThreshold<T: Config> = StorageValue<_, T::ThresholdType, ValueQuery>;
+
+    /// Number of blocks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
+    #[pallet::storage]
+    pub type BlockRangeToMaximumThreshold<T: Config> =
+        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+
+    #[pallet::genesis_config]
+    pub struct GenesisConfig<T: Config> {
+        pub replication_target: ReplicationTargetType<T>,
+        pub maximum_threshold: T::ThresholdType,
+        pub block_range_to_maximum_threshold: BlockNumberFor<T>,
+    }
+
+    impl<T: Config> Default for GenesisConfig<T> {
+        fn default() -> Self {
+            let replication_target = 1u32.into();
+            let maximum_threshold = u32::MAX.into();
+            let block_range_to_maximum_threshold = 10u32.into();
+
+            ReplicationTarget::<T>::put(replication_target);
+            MaximumThreshold::<T>::put(maximum_threshold);
+            BlockRangeToMaximumThreshold::<T>::put(block_range_to_maximum_threshold);
+
+            Self {
+                replication_target,
+                maximum_threshold,
+                block_range_to_maximum_threshold,
+            }
+        }
+    }
+
+    #[pallet::genesis_build]
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+        fn build(&self) {
+            ReplicationTarget::<T>::put(self.replication_target);
+            MaximumThreshold::<T>::put(self.maximum_threshold);
+            BlockRangeToMaximumThreshold::<T>::put(self.block_range_to_maximum_threshold);
+        }
+    }
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -338,6 +374,8 @@ pub mod pallet {
             file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
             new_root: MerkleHash<T>,
         },
+        /// Notifies that a storage request for a file key has been fulfilled.
+        StorageRequestFulfilled { file_key: MerkleHash<T> },
         /// Notifies the expiration of a storage request.
         StorageRequestExpired { file_key: MerkleHash<T> },
         /// Notifies that a storage request has been revoked by the user who initiated it.
@@ -386,8 +424,8 @@ pub mod pallet {
         StorageRequestAlreadyRegistered,
         /// Storage request not registered for the given file.
         StorageRequestNotFound,
-        /// BSPs required for storage request cannot be 0.
-        BspsRequiredCannotBeZero,
+        /// Replication target cannot be zero.
+        ReplicationTargetCannotBeZero,
         /// BSPs required for storage request cannot exceed the maximum allowed.
         BspsRequiredExceedsMax,
         /// Account is not a BSP.
@@ -461,6 +499,10 @@ pub mod pallet {
         FileSizeCannotBeZero,
         /// No global reputation weight set.
         NoGlobalReputationWeightSet,
+        /// Maximum threshold cannot be zero.
+        MaximumThresholdCannotBeZero,
+        /// Block range to maximum threshold cannot be zero.
+        BlockRangeToMaximumThresholdCannotBeZero,
     }
 
     #[pallet::call]
@@ -760,20 +802,41 @@ pub mod pallet {
 
         #[pallet::call_index(10)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn force_update_bsps_assignment_threshold(
+        pub fn set_global_parameters(
             origin: OriginFor<T>,
-            bsp_assignment_threshold: T::ThresholdType,
+            replication_target: Option<T::ReplicationTargetType>,
+            maximum_threshold: Option<T::ThresholdType>,
+            block_range_to_maximum_threshold: Option<BlockNumberFor<T>>,
         ) -> DispatchResult {
             // Check that the extrinsic was sent with root origin.
             ensure_root(origin)?;
 
-            ensure!(
-                bsp_assignment_threshold >= MaximumThreshold::<T>::get(),
-                Error::<T>::ThresholdBelowAsymptote
-            );
+            if let Some(replication_target) = replication_target {
+                ensure!(
+                    replication_target > T::ReplicationTargetType::zero(),
+                    Error::<T>::ReplicationTargetCannotBeZero
+                );
 
-            // TODO: Set BlockRangeToMaximumThreshold to 1 so that after 1 block any BSP can succeed the threshold check.
-            // BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
+                ReplicationTarget::<T>::put(replication_target);
+            }
+
+            if let Some(maximum_threshold) = maximum_threshold {
+                ensure!(
+                    maximum_threshold > T::ThresholdType::zero(),
+                    Error::<T>::MaximumThresholdCannotBeZero
+                );
+
+                MaximumThreshold::<T>::put(maximum_threshold);
+            }
+
+            if let Some(block_range_to_maximum_threshold) = block_range_to_maximum_threshold {
+                ensure!(
+                    block_range_to_maximum_threshold > BlockNumberFor::<T>::zero(),
+                    Error::<T>::BlockRangeToMaximumThresholdCannotBeZero
+                );
+
+                BlockRangeToMaximumThreshold::<T>::put(block_range_to_maximum_threshold);
+            }
 
             Ok(().into())
         }

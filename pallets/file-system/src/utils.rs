@@ -21,20 +21,17 @@ use shp_traits::{
 };
 use sp_runtime::traits::{ConvertBack, One};
 
-use crate::types::{
-    BlockRangeToMaximumThreshold, BucketNameFor, ExpiredItems, MaximumThreshold,
-    ReplicationTargetType,
-};
+use crate::types::{BucketNameFor, ExpiredItems, ReplicationTargetType};
 use crate::{
     pallet,
     types::{
         BucketIdFor, CollectionConfigFor, CollectionIdFor, FileKeyHasher, FileLocation,
         Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest, MerkleHash, MultiAddresses,
-        PeerIds, ProviderIdFor, ReplicationTarget, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata,
+        PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
     },
-    Error, Event, ItemExpirations, NextAvailableExpirationInsertionBlock, Pallet,
-    PendingFileDeletionRequests, StorageRequestBsps, StorageRequests,
+    BlockRangeToMaximumThreshold, Error, Event, ItemExpirations, MaximumThreshold,
+    NextAvailableExpirationInsertionBlock, Pallet, PendingFileDeletionRequests, ReplicationTarget,
+    StorageRequestBsps, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -335,7 +332,7 @@ where
         let bsps_required = bsps_required.unwrap_or(ReplicationTarget::<T>::get());
 
         if bsps_required.is_zero() {
-            return Err(Error::<T>::BspsRequiredCannotBeZero)?;
+            return Err(Error::<T>::ReplicationTargetCannotBeZero)?;
         }
 
         if bsps_required > MaxBspsPerStorageRequest::<T>::get().into() {
@@ -441,7 +438,7 @@ where
             Self::get_threshold_to_succeed(&bsp_id, storage_request_metadata.requested_at)?;
 
         // Check that the BSP's threshold is under the threshold required to volunteer for the storage request.
-        ensure!(bsp_threshold <= (to_succeed), Error::<T>::AboveThreshold);
+        ensure!(bsp_threshold <= to_succeed, Error::<T>::AboveThreshold);
 
         // Add BSP to storage request metadata.
         <StorageRequestBsps<T>>::insert(
@@ -618,6 +615,11 @@ where
                     Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
                     bool
                 );
+
+                // Notify that the storage request has been fulfilled.
+                Self::deposit_event(Event::StorageRequestFulfilled {
+                    file_key: file_key.0,
+                });
             } else {
                 // Update storage request metadata.
                 <StorageRequests<T>>::set(&file_key.0, Some(storage_request_metadata.clone()));
@@ -1148,9 +1150,8 @@ where
 
         // Rate of increase from the weighted threshold starting point up to the maximum threshold within a block range.
         let threshold_slope = (<u32 as Into<T::ThresholdType>>::into(maximum_threshold)
-            .saturating_sub(threshold_weighted_starting_point)) / T::ThresholdTypeToBlockNumber::convert_back(
-            BlockRangeToMaximumThreshold::<T>::get(),
-        );
+            .saturating_sub(threshold_weighted_starting_point))
+            / T::ThresholdTypeToBlockNumber::convert_back(BlockRangeToMaximumThreshold::<T>::get());
 
         let current_block_number = <frame_system::Pallet<T>>::block_number();
 
@@ -1183,7 +1184,7 @@ mod hooks {
     use crate::types::{ExpiredItems, MerkleHash};
     use crate::{
         pallet, Event, ItemExpirations, NextStartingBlockToCleanUp, Pallet,
-        PendingFileDeletionRequests, StorageRequestBsps, StorageRequests,
+        PendingFileDeletionRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
     };
     use frame_support::weights::Weight;
     use frame_system::pallet_prelude::BlockNumberFor;
@@ -1258,7 +1259,7 @@ mod hooks {
             // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `ReplicationTarget`.
             // We could increase this potential weight to account for potentially more volunteers.
             let potential_weight = db_weight.writes(
-                Into::<u32>::into(T::ReplicationTarget::get())
+                Into::<u32>::into(ReplicationTarget::<T>::get())
                     .saturating_add(1)
                     .into(),
             );

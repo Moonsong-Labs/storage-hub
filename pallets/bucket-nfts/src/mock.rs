@@ -121,11 +121,6 @@ impl pallet_balances::Config for Test {
 
 pub(crate) type ThresholdType = u32;
 
-parameter_types! {
-    pub const ReplicationTarget: u32 = 10;
-    pub const MaximumThreshold: ThresholdType = u32::MAX;
-}
-
 pub struct MockProofsDealer;
 impl ProofsDealerInterface for MockProofsDealer {
     type ProviderId = H256;
@@ -199,9 +194,6 @@ impl pallet_file_system::Config for Test {
     type Currency = Balances;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
-    type ReplicationTarget = ReplicationTarget;
-    type MaximumThreshold = MaximumThreshold;
-    type BlockRangeToMaximumThreshold = ConstU64<50>;
     type MaxBspsPerStorageRequest = ConstU32<5>;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
     // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
@@ -289,7 +281,7 @@ impl pallet_storage_providers::Config for Test {
     type ProvidersRandomness = MockRandomness;
     type SlashFactor = ConstU128<10>;
     type ReputationWeightType = u32;
-    type StartingReputationWeight = ReplicationTarget;
+    type StartingReputationWeight = ConstU32<10>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.

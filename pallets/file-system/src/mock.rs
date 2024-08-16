@@ -214,7 +214,7 @@ impl pallet_storage_providers::Config for Test {
     type ProvidersRandomness = MockRandomness;
     type SlashFactor = ConstU128<10>;
     type ReputationWeightType = u32;
-    type StartingReputationWeight = ReplicationTarget;
+    type StartingReputationWeight = ConstU32<10>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
@@ -326,11 +326,6 @@ impl pallet_bucket_nfts::Config for Test {
 
 pub(crate) type ThresholdType = u32;
 
-parameter_types! {
-    pub const ReplicationTarget: u32 = 10;
-    pub const MaximumThreshold: ThresholdType = u32::MAX;
-}
-
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
@@ -345,9 +340,6 @@ impl crate::Config for Test {
     type Currency = Balances;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
-    type ReplicationTarget = ReplicationTarget;
-    type MaximumThreshold = MaximumThreshold;
-    type BlockRangeToMaximumThreshold = ConstU64<1>;
     type MaxBspsPerStorageRequest = ConstU32<10>;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
     // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
@@ -367,18 +359,20 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         .build_storage()
         .unwrap();
 
-    // TODO: Fix
-    // crate::GenesisConfig::<Test> {
-    //     bsp_assignment_threshold: FixedU128::max_value(),
-    // }
-    // .assimilate_storage(&mut t)
-    // .unwrap();
+    crate::GenesisConfig::<Test> {
+        replication_target: 2,
+        maximum_threshold: u32::MAX,
+        block_range_to_maximum_threshold: 1,
+    }
+    .assimilate_storage(&mut t)
+    .unwrap();
 
     pallet_balances::GenesisConfig::<Test> {
         balances: vec![
             (Keyring::Alice.to_account_id(), 1_000_000_000_000_000),
             (Keyring::Bob.to_account_id(), 1_000_000_000_000_000),
             (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Dave.to_account_id(), 1_000_000_000_000_000),
         ],
     }
     .assimilate_storage(&mut t)
