@@ -22,7 +22,7 @@ const bspNetConfigCases: BspNetConfig[] = [
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
-  describe(`BSPNet: Many BSPs Submit Proofs (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
+  describe.only(`BSPNet: Many BSPs Submit Proofs (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
     let userApi: BspNetApi;
     let bspApi: BspNetApi;
     let bspTwoApi: BspNetApi;
@@ -71,12 +71,12 @@ for (const bspNetConfig of bspNetConfigCases) {
       // the same time.
       // We first get the last tick for which the BSP submitted a proof.
       const lastTickResult =
-        await bspApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
       assert(lastTickResult.isOk);
       const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
       // Then we get the challenge period for the BSP.
       const challengePeriodResult =
-        await bspApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
+        await userApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
       assert(challengePeriodResult.isOk);
       const challengePeriod = challengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
@@ -117,7 +117,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       // Get the new last tick for which the BSP submitted a proof.
       // It should be the previous last tick plus one BSP period.
       const lastTickResultAfterProof =
-        await bspApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
       assert(lastTickResultAfterProof.isOk);
       const lastTickBspSubmittedProofAfterProof = lastTickResultAfterProof.asOk.toNumber();
       strictEqual(
@@ -128,10 +128,11 @@ for (const bspNetConfig of bspNetConfigCases) {
 
       // Get the new deadline for the BSP.
       // It should be the current last tick, plus one BSP period, plus the challenges tick tolerance.
-      const challengesTickTolerance = Number(bspApi.consts.proofsDealer.challengeTicksTolerance);
+      const challengesTickTolerance = Number(userApi.consts.proofsDealer.challengeTicksTolerance);
       const newDeadline =
         lastTickBspSubmittedProofAfterProof + challengePeriod + challengesTickTolerance;
-      const newDeadlineResult = await bspApi.call.proofsDealerApi.getNextDeadlineTick(DUMMY_BSP_ID);
+      const newDeadlineResult =
+        await userApi.call.proofsDealerApi.getNextDeadlineTick(DUMMY_BSP_ID);
       assert(newDeadlineResult.isOk);
       const newDeadlineOnChain = newDeadlineResult.asOk.toNumber();
       strictEqual(
@@ -144,13 +145,13 @@ for (const bspNetConfig of bspNetConfigCases) {
     it("BSP fails to submit proof and is marked as slashable", async () => {
       // Get BSP-Down's deadline.
       const bspDownDeadlineResult =
-        await bspApi.call.proofsDealerApi.getNextDeadlineTick(BSP_DOWN_ID);
+        await userApi.call.proofsDealerApi.getNextDeadlineTick(BSP_DOWN_ID);
       assert(bspDownDeadlineResult.isOk);
       const bspDownDeadline = bspDownDeadlineResult.asOk.toNumber();
 
       // Get the last tick for which the BSP-Down submitted a proof before advancing to the deadline.
       const lastTickResult =
-        await bspApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_DOWN_ID);
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_DOWN_ID);
       assert(lastTickResult.isOk);
       const lastTickBspDownSubmittedProof = lastTickResult.asOk.toNumber();
 
@@ -164,13 +165,13 @@ for (const bspNetConfig of bspNetConfigCases) {
       }
 
       // Expect to see a `SlashableProvider` event in the last block.
-      const slashableProviderEvent = bspApi.assertEvent(
+      const slashableProviderEvent = userApi.assertEvent(
         "proofsDealer",
         "SlashableProvider",
         blockResult?.events
       );
       const slashableProviderEventDataBlob =
-        bspApi.events.proofsDealer.SlashableProvider.is(slashableProviderEvent.event) &&
+        userApi.events.proofsDealer.SlashableProvider.is(slashableProviderEvent.event) &&
         slashableProviderEvent.event.data;
       assert(slashableProviderEventDataBlob, "Event doesn't match Type");
       strictEqual(
@@ -181,14 +182,14 @@ for (const bspNetConfig of bspNetConfigCases) {
 
       // Get the last tick for which the BSP-Down submitted a proof after advancing to the deadline.
       const lastTickResultAfterSlashable =
-        await bspApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_DOWN_ID);
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_DOWN_ID);
       assert(lastTickResultAfterSlashable.isOk);
       const lastTickBspDownSubmittedProofAfterSlashable =
         lastTickResultAfterSlashable.asOk.toNumber();
 
       // The new last tick should be equal to the last tick before BSP-Down was marked as slashable plus one challenge period.
       const challengePeriodResult =
-        await bspApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
+        await userApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
       assert(challengePeriodResult.isOk);
       const challengePeriod = challengePeriodResult.asOk.toNumber();
       strictEqual(

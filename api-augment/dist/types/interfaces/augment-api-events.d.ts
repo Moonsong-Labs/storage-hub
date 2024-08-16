@@ -1115,6 +1115,14 @@ declare module '@polkadot/api-base/types/events' {
         };
         proofsDealer: {
             /**
+             * A set of mutations has been applied to the Forest.
+             **/
+            MutationsApplied: AugmentedEvent<ApiType, [provider: H256, mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>, newRoot: H256], {
+                provider: H256;
+                mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>;
+                newRoot: H256;
+            }>;
+            /**
              * A manual challenge was submitted.
              **/
             NewChallenge: AugmentedEvent<ApiType, [who: AccountId32, keyChallenged: H256], {
