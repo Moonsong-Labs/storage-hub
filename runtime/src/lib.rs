@@ -587,8 +587,8 @@ impl_runtime_apis! {
             Providers::get_bsp_info(bsp_id)
         }
 
-        fn get_provider_id(who: &AccountId) -> Option<StorageProviderId<Runtime>> {
-            Providers::get_provider_id(who)
+        fn get_storage_provider_id(who: &AccountId) -> Option<StorageProviderId<Runtime>> {
+            Providers::get_storage_provider_id(who)
         }
     }
 }

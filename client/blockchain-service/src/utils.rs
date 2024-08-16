@@ -93,7 +93,7 @@ impl BlockchainService {
         for key in self.keystore.sr25519_public_keys(BCSV_KEY_TYPE) {
             self.client
                 .runtime_api()
-                .get_provider_id(block_hash, &key.into())
+                .get_storage_provider_id(block_hash, &key.into())
                 .map(|provider_id| {
                     if let Some(provider_id) = provider_id {
                         match provider_id {

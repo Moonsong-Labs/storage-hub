@@ -14,7 +14,7 @@ sp_api::decl_runtime_apis! {
         ProviderId: codec::Codec,
     {
         fn get_bsp_info(bsp_id: &BspId) -> Result<BspInfo, GetBspInfoError>;
-        fn get_provider_id(who: &AccountId) -> Option<ProviderId>;
+        fn get_storage_provider_id(who: &AccountId) -> Option<ProviderId>;
     }
 }
 
