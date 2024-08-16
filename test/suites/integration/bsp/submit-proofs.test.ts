@@ -22,7 +22,7 @@ const bspNetConfigCases: BspNetConfig[] = [
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
-  describe.only(`BSPNet: Many BSPs Submit Proofs (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
+  describe(`BSPNet: Many BSPs Submit Proofs (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
     let userApi: BspNetApi;
     let bspApi: BspNetApi;
     let bspTwoApi: BspNetApi;
