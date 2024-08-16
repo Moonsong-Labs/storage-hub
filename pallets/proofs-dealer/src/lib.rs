@@ -29,6 +29,7 @@ pub mod pallet {
         TrieRemoveMutation,
     };
     use sp_runtime::traits::Convert;
+    use sp_std::vec::Vec;
     use types::{KeyFor, ProviderIdFor};
 
     use crate::types::*;
@@ -354,6 +355,13 @@ pub mod pallet {
             next_challenge_deadline: BlockNumberFor<T>,
             provider: ProviderIdFor<T>,
             maybe_provider_account: Option<T::AccountId>,
+        },
+
+        /// A set of mutations has been applied to the Forest.
+        MutationsApplied {
+            provider: ProviderIdFor<T>,
+            mutations: Vec<(KeyFor<T>, TrieRemoveMutation)>,
+            new_root: KeyFor<T>,
         },
     }
 
