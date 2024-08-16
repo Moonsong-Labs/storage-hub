@@ -323,10 +323,17 @@ declare module '@polkadot/api-base/types/events' {
             /**
              * Notifies that a BSP has stopped storing a file.
              **/
-            BspStoppedStoring: AugmentedEvent<ApiType, [bspId: H256, fileKey: H256, newRoot: H256, owner: AccountId32, location: Bytes], {
+            BspConfirmStoppedStoring: AugmentedEvent<ApiType, [bspId: H256, fileKey: H256, newRoot: H256], {
                 bspId: H256;
                 fileKey: H256;
                 newRoot: H256;
+            }>;
+            /**
+             * Notifies that a BSP has opened a request to stop storing a file.
+             **/
+            BspRequestedToStopStoring: AugmentedEvent<ApiType, [bspId: H256, fileKey: H256, owner: AccountId32, location: Bytes], {
+                bspId: H256;
+                fileKey: H256;
                 owner: AccountId32;
                 location: Bytes;
             }>;

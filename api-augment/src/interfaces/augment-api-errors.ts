@@ -260,6 +260,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       MaxUserPendingDeletionRequestsReached: AugmentedError<ApiType>;
       /**
+       * Minimum amount of blocks between the request opening and being able to confirm it not reached.
+       **/
+      MinWaitForStopStoringNotReached: AugmentedError<ApiType>;
+      /**
        * Unauthorized operation, signer is not an MSP of the bucket id.
        **/
       MspNotStoringBucket: AugmentedError<ApiType>;
@@ -279,6 +283,14 @@ declare module "@polkadot/api-base/types/errors" {
        * Unauthorized operation, signer does not own the file.
        **/
       NotFileOwner: AugmentedError<ApiType>;
+      /**
+       * Pending stop storing request already exists.
+       **/
+      PendingStopStoringRequestAlreadyExists: AugmentedError<ApiType>;
+      /**
+       * Pending stop storing request not found.
+       **/
+      PendingStopStoringRequestNotFound: AugmentedError<ApiType>;
       /**
        * Root of the provider not found.
        **/

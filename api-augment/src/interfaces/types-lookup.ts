@@ -1918,13 +1918,18 @@ declare module "@polkadot/types/lookup" {
     readonly asStorageRequestRevoked: {
       readonly fileKey: H256;
     } & Struct;
-    readonly isBspStoppedStoring: boolean;
-    readonly asBspStoppedStoring: {
+    readonly isBspRequestedToStopStoring: boolean;
+    readonly asBspRequestedToStopStoring: {
+      readonly bspId: H256;
+      readonly fileKey: H256;
+      readonly owner: AccountId32;
+      readonly location: Bytes;
+    } & Struct;
+    readonly isBspConfirmStoppedStoring: boolean;
+    readonly asBspConfirmStoppedStoring: {
       readonly bspId: H256;
       readonly fileKey: H256;
       readonly newRoot: H256;
-      readonly owner: AccountId32;
-      readonly location: Bytes;
     } & Struct;
     readonly isFailedToQueuePriorityChallenge: boolean;
     readonly asFailedToQueuePriorityChallenge: {
@@ -1961,7 +1966,8 @@ declare module "@polkadot/types/lookup" {
       | "BspConfirmedStoring"
       | "StorageRequestExpired"
       | "StorageRequestRevoked"
-      | "BspStoppedStoring"
+      | "BspRequestedToStopStoring"
+      | "BspConfirmStoppedStoring"
       | "FailedToQueuePriorityChallenge"
       | "FileDeletionRequest"
       | "ProofSubmittedForPendingFileDeletionRequest"
@@ -3853,8 +3859,8 @@ declare module "@polkadot/types/lookup" {
       readonly nonInclusionForestProof: SpTrieStorageProofCompactProof;
       readonly fileKeysAndProofs: Vec<ITuple<[H256, ShpFileKeyVerifierFileKeyProof]>>;
     } & Struct;
-    readonly isBspStopStoring: boolean;
-    readonly asBspStopStoring: {
+    readonly isBspRequestStopStoring: boolean;
+    readonly asBspRequestStopStoring: {
       readonly fileKey: H256;
       readonly bucketId: H256;
       readonly location: Bytes;
@@ -3862,6 +3868,11 @@ declare module "@polkadot/types/lookup" {
       readonly fingerprint: H256;
       readonly size_: u32;
       readonly canServe: bool;
+      readonly inclusionForestProof: SpTrieStorageProofCompactProof;
+    } & Struct;
+    readonly isBspConfirmStopStoring: boolean;
+    readonly asBspConfirmStopStoring: {
+      readonly fileKey: H256;
       readonly inclusionForestProof: SpTrieStorageProofCompactProof;
     } & Struct;
     readonly isDeleteFile: boolean;
@@ -3892,7 +3903,8 @@ declare module "@polkadot/types/lookup" {
       | "RevokeStorageRequest"
       | "BspVolunteer"
       | "BspConfirmStoring"
-      | "BspStopStoring"
+      | "BspRequestStopStoring"
+      | "BspConfirmStopStoring"
       | "DeleteFile"
       | "PendingFileDeletionRequestSubmitProof"
       | "ForceUpdateBspsAssignmentThreshold";
@@ -4815,6 +4827,9 @@ declare module "@polkadot/types/lookup" {
     readonly isMspNotStoringBucket: boolean;
     readonly isFileKeyNotPendingDeletion: boolean;
     readonly isFileSizeCannotBeZero: boolean;
+    readonly isPendingStopStoringRequestNotFound: boolean;
+    readonly isMinWaitForStopStoringNotReached: boolean;
+    readonly isPendingStopStoringRequestAlreadyExists: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -4853,7 +4868,10 @@ declare module "@polkadot/types/lookup" {
       | "MaxUserPendingDeletionRequestsReached"
       | "MspNotStoringBucket"
       | "FileKeyNotPendingDeletion"
-      | "FileSizeCannotBeZero";
+      | "FileSizeCannotBeZero"
+      | "PendingStopStoringRequestNotFound"
+      | "MinWaitForStopStoringNotReached"
+      | "PendingStopStoringRequestAlreadyExists";
   }
 
   /** @name PalletProofsDealerError (414) */

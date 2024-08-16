@@ -1502,13 +1502,18 @@ declare module '@polkadot/types/lookup' {
         readonly asStorageRequestRevoked: {
             readonly fileKey: H256;
         } & Struct;
-        readonly isBspStoppedStoring: boolean;
-        readonly asBspStoppedStoring: {
+        readonly isBspRequestedToStopStoring: boolean;
+        readonly asBspRequestedToStopStoring: {
+            readonly bspId: H256;
+            readonly fileKey: H256;
+            readonly owner: AccountId32;
+            readonly location: Bytes;
+        } & Struct;
+        readonly isBspConfirmStoppedStoring: boolean;
+        readonly asBspConfirmStoppedStoring: {
             readonly bspId: H256;
             readonly fileKey: H256;
             readonly newRoot: H256;
-            readonly owner: AccountId32;
-            readonly location: Bytes;
         } & Struct;
         readonly isFailedToQueuePriorityChallenge: boolean;
         readonly asFailedToQueuePriorityChallenge: {
@@ -1536,7 +1541,7 @@ declare module '@polkadot/types/lookup' {
             readonly who: AccountId32;
             readonly bspId: H256;
         } & Struct;
-        readonly type: 'NewBucket' | 'BucketPrivacyUpdated' | 'NewCollectionAndAssociation' | 'NewStorageRequest' | 'AcceptedBspVolunteer' | 'BspConfirmedStoring' | 'StorageRequestExpired' | 'StorageRequestRevoked' | 'BspStoppedStoring' | 'FailedToQueuePriorityChallenge' | 'FileDeletionRequest' | 'ProofSubmittedForPendingFileDeletionRequest' | 'BspChallengeCycleInitialised';
+        readonly type: 'NewBucket' | 'BucketPrivacyUpdated' | 'NewCollectionAndAssociation' | 'NewStorageRequest' | 'AcceptedBspVolunteer' | 'BspConfirmedStoring' | 'StorageRequestExpired' | 'StorageRequestRevoked' | 'BspRequestedToStopStoring' | 'BspConfirmStoppedStoring' | 'FailedToQueuePriorityChallenge' | 'FileDeletionRequest' | 'ProofSubmittedForPendingFileDeletionRequest' | 'BspChallengeCycleInitialised';
     }
     /** @name PalletProofsDealerEvent (135) */
     interface PalletProofsDealerEvent extends Enum {
@@ -3084,8 +3089,8 @@ declare module '@polkadot/types/lookup' {
             readonly nonInclusionForestProof: SpTrieStorageProofCompactProof;
             readonly fileKeysAndProofs: Vec<ITuple<[H256, ShpFileKeyVerifierFileKeyProof]>>;
         } & Struct;
-        readonly isBspStopStoring: boolean;
-        readonly asBspStopStoring: {
+        readonly isBspRequestStopStoring: boolean;
+        readonly asBspRequestStopStoring: {
             readonly fileKey: H256;
             readonly bucketId: H256;
             readonly location: Bytes;
@@ -3093,6 +3098,11 @@ declare module '@polkadot/types/lookup' {
             readonly fingerprint: H256;
             readonly size_: u32;
             readonly canServe: bool;
+            readonly inclusionForestProof: SpTrieStorageProofCompactProof;
+        } & Struct;
+        readonly isBspConfirmStopStoring: boolean;
+        readonly asBspConfirmStopStoring: {
+            readonly fileKey: H256;
             readonly inclusionForestProof: SpTrieStorageProofCompactProof;
         } & Struct;
         readonly isDeleteFile: boolean;
@@ -3115,7 +3125,7 @@ declare module '@polkadot/types/lookup' {
         readonly asForceUpdateBspsAssignmentThreshold: {
             readonly bspAssignmentThreshold: u128;
         } & Struct;
-        readonly type: 'CreateBucket' | 'UpdateBucketPrivacy' | 'CreateAndAssociateCollectionWithBucket' | 'IssueStorageRequest' | 'RevokeStorageRequest' | 'BspVolunteer' | 'BspConfirmStoring' | 'BspStopStoring' | 'DeleteFile' | 'PendingFileDeletionRequestSubmitProof' | 'ForceUpdateBspsAssignmentThreshold';
+        readonly type: 'CreateBucket' | 'UpdateBucketPrivacy' | 'CreateAndAssociateCollectionWithBucket' | 'IssueStorageRequest' | 'RevokeStorageRequest' | 'BspVolunteer' | 'BspConfirmStoring' | 'BspRequestStopStoring' | 'BspConfirmStopStoring' | 'DeleteFile' | 'PendingFileDeletionRequestSubmitProof' | 'ForceUpdateBspsAssignmentThreshold';
     }
     /** @name PalletProofsDealerCall (305) */
     interface PalletProofsDealerCall extends Enum {
@@ -3856,7 +3866,10 @@ declare module '@polkadot/types/lookup' {
         readonly isMspNotStoringBucket: boolean;
         readonly isFileKeyNotPendingDeletion: boolean;
         readonly isFileSizeCannotBeZero: boolean;
-        readonly type: 'StorageRequestAlreadyRegistered' | 'StorageRequestNotFound' | 'BspsRequiredCannotBeZero' | 'BspsRequiredExceedsMax' | 'NotABsp' | 'NotAMsp' | 'BspNotVolunteered' | 'BspNotConfirmed' | 'BspAlreadyConfirmed' | 'StorageRequestBspsRequiredFulfilled' | 'BspAlreadyVolunteered' | 'UnexpectedNumberOfRemovedVolunteeredBsps' | 'StorageRequestExpiredNoSlotAvailable' | 'StorageRequestNotAuthorized' | 'MaxBlockNumberReached' | 'FailedToEncodeBsp' | 'FailedToEncodeFingerprint' | 'FailedToDecodeThreshold' | 'AboveThreshold' | 'FailedToConvertBlockNumber' | 'ThresholdArithmeticError' | 'FailedTypeConversion' | 'DividedByZero' | 'ImpossibleFailedToGetValue' | 'BucketIsNotPrivate' | 'BucketNotFound' | 'NotBucketOwner' | 'ProviderRootNotFound' | 'ExpectedNonInclusionProof' | 'ExpectedInclusionProof' | 'InvalidFileKeyMetadata' | 'ThresholdBelowAsymptote' | 'NotFileOwner' | 'FileKeyAlreadyPendingDeletion' | 'MaxUserPendingDeletionRequestsReached' | 'MspNotStoringBucket' | 'FileKeyNotPendingDeletion' | 'FileSizeCannotBeZero';
+        readonly isPendingStopStoringRequestNotFound: boolean;
+        readonly isMinWaitForStopStoringNotReached: boolean;
+        readonly isPendingStopStoringRequestAlreadyExists: boolean;
+        readonly type: 'StorageRequestAlreadyRegistered' | 'StorageRequestNotFound' | 'BspsRequiredCannotBeZero' | 'BspsRequiredExceedsMax' | 'NotABsp' | 'NotAMsp' | 'BspNotVolunteered' | 'BspNotConfirmed' | 'BspAlreadyConfirmed' | 'StorageRequestBspsRequiredFulfilled' | 'BspAlreadyVolunteered' | 'UnexpectedNumberOfRemovedVolunteeredBsps' | 'StorageRequestExpiredNoSlotAvailable' | 'StorageRequestNotAuthorized' | 'MaxBlockNumberReached' | 'FailedToEncodeBsp' | 'FailedToEncodeFingerprint' | 'FailedToDecodeThreshold' | 'AboveThreshold' | 'FailedToConvertBlockNumber' | 'ThresholdArithmeticError' | 'FailedTypeConversion' | 'DividedByZero' | 'ImpossibleFailedToGetValue' | 'BucketIsNotPrivate' | 'BucketNotFound' | 'NotBucketOwner' | 'ProviderRootNotFound' | 'ExpectedNonInclusionProof' | 'ExpectedInclusionProof' | 'InvalidFileKeyMetadata' | 'ThresholdBelowAsymptote' | 'NotFileOwner' | 'FileKeyAlreadyPendingDeletion' | 'MaxUserPendingDeletionRequestsReached' | 'MspNotStoringBucket' | 'FileKeyNotPendingDeletion' | 'FileSizeCannotBeZero' | 'PendingStopStoringRequestNotFound' | 'MinWaitForStopStoringNotReached' | 'PendingStopStoringRequestAlreadyExists';
     }
     /** @name PalletProofsDealerError (414) */
     interface PalletProofsDealerError extends Enum {

@@ -1435,12 +1435,16 @@ declare const _default: {
             StorageRequestRevoked: {
                 fileKey: string;
             };
-            BspStoppedStoring: {
+            BspRequestedToStopStoring: {
+                bspId: string;
+                fileKey: string;
+                owner: string;
+                location: string;
+            };
+            BspConfirmStoppedStoring: {
                 bspId: string;
                 fileKey: string;
                 newRoot: string;
-                owner: string;
-                location: string;
             };
             FailedToQueuePriorityChallenge: {
                 user: string;
@@ -3022,7 +3026,7 @@ declare const _default: {
                 nonInclusionForestProof: string;
                 fileKeysAndProofs: string;
             };
-            bsp_stop_storing: {
+            bsp_request_stop_storing: {
                 _alias: {
                     size_: string;
                 };
@@ -3033,6 +3037,10 @@ declare const _default: {
                 fingerprint: string;
                 size_: string;
                 canServe: string;
+                inclusionForestProof: string;
+            };
+            bsp_confirm_stop_storing: {
+                fileKey: string;
                 inclusionForestProof: string;
             };
             delete_file: {
