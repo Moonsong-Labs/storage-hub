@@ -8,7 +8,8 @@
     "node": "22.x.x"
   },
   "scripts": {
-    "typegen": "cd ../api-augment && pnpm scrape && pnpm generate:all && pnpm build && pnpm fmt:fix; cd ../test",
+    "bundle-types":"cd ../types-bundle && pnpm i && pnpm build && pnpm fmt:fix && cd ../test",
+    "typegen": "pnpm bundle-types && cd ../api-augment && pnpm scrape && pnpm generate:all && pnpm build && pnpm fmt:fix; cd ../test",
     "fmt": "biome format .",
     "fmt:fix": "biome format . --write",
     "lint": "biome lint .",
@@ -56,7 +57,7 @@
     "@reporters/github": "1.7.0",
     "@storagehub/api-augment": "workspace:*",
     "@storagehub/types-bundle": "workspace:*",
-    "@zombienet/cli": "1.3.106",
+    "@zombienet/cli": "1.3.107",
     "@zombienet/utils": "0.0.25",
     "docker-compose": "0.24.8",
     "dockerode": "4.0.2",

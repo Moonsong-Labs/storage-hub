@@ -69,15 +69,7 @@ Navigate to the `/types-bundle` package and make your changes to `/src/rpc.ts` a
 
 Any new Structs or ErrorEnums can be defined at `/src/types.ts` , using existing examples for guidance, and any new branded types as well.
 
-Afterwards in the directory, run:
-
-```sh
-pnpm i 
-pnpm build
-pnpm fmt:fix
-```
-
-Next, to verify this in a test, navigate to the `/test` directory and run:
+Now, navigate to the `/test` directory and run:
 
 ```sh
 pnpm typegen
@@ -85,5 +77,5 @@ pnpm typegen
 
 From there you should be able to see the new RPC in your tests for the `BspNetApi` object.
 
->[!TIP]  
+> [!TIP]
 > If the TS is still yelling at you with red squiggles, use command pallete to restart language server.

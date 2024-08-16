@@ -3,13 +3,10 @@
   "files": {
     "include": ["*.js", "*.ts", "*.json", "*.yml", "*.md"],
     "ignore": [
-      "./dist/*",
       "./node_modules/*",
       "./target/*",
       "**/tmp/*",
-      "**/typegen/*",
-      "*.spec.json",
-      "**/augment-types.ts"
+      "*.spec.json"
     ]
   },
   "organizeImports": {

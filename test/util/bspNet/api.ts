@@ -14,9 +14,6 @@ export const createApiObject = async (uri: string): Promise<BspNetApi> => {
     provider: new WsProvider(uri),
     noInitWarn: true,
     typesBundle: BundledTypes
-    // types,
-    // rpc: rpcMethods,
-    // runtime
   });
 
   return Object.assign(baseApi, {

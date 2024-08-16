@@ -4,12 +4,7 @@
     "files": {
       "include": ["*.js", "*.ts", "*.json", "*.yml", "*.md"],
       "ignore": [
-        "./node_modules/*",
-        "./target/*",
-        "**/tmp/*",
-        "**/typegen/*",
-        "*.spec.json",
-        "**/augment-types.ts"
+        "./node_modules/*"
       ]
     }
   }

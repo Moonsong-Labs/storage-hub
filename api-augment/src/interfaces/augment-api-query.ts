@@ -57,7 +57,7 @@ import type {
   PalletNftsPendingSwap,
   PalletPaymentStreamsDynamicRatePaymentStream,
   PalletPaymentStreamsFixedRatePaymentStream,
-  PalletPaymentStreamsProviderLastChargeable,
+  PalletPaymentStreamsProviderLastChargeableInfo,
   PalletStorageProvidersBackupStorageProvider,
   PalletStorageProvidersBucket,
   PalletStorageProvidersMainStorageProvider,
@@ -840,7 +840,7 @@ declare module "@polkadot/api-base/types/storage" {
        *
        * This is equivalent to what it would have cost to store one unit of the provided service since the beginning of the network.
        * We use this to calculate the amount to charge for dynamic-rate payment streams, by checking out the difference between the index
-       * when the payment stream was last charged, and the index at the last chargeable block.
+       * when the payment stream was last charged, and the index at the last chargeable tick.
        *
        * This storage is updated in:
        * - [do_update_price_index](crate::utils::do_update_price_index), which updates the accumulated price index, adding to it the current price.
@@ -848,14 +848,14 @@ declare module "@polkadot/api-base/types/storage" {
       accumulatedPriceIndex: AugmentedQuery<ApiType, () => Observable<u128>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * The current price per unit per block of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
+       * The current price per unit per tick of the provided service, used to calculate the amount to charge for dynamic-rate payment streams.
        *
-       * This is updated each block using the formula that considers current system capacity (total storage of the system) and system availability (total storage available).
+       * This is updated each tick using the formula that considers current system capacity (total storage of the system) and system availability (total storage available).
        *
        * This storage is updated in:
-       * - [do_update_current_price_per_unit_per_block](crate::utils::do_update_current_price_per_unit_per_block), which updates the current price per unit per block.
+       * - [do_update_current_price_per_unit_per_tick](crate::utils::do_update_current_price_per_unit_per_tick), which updates the current price per unit per tick.
        **/
-      currentPricePerUnitPerBlock: AugmentedQuery<ApiType, () => Observable<u128>, []> &
+      currentPricePerUnitPerTick: AugmentedQuery<ApiType, () => Observable<u128>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * The double mapping from a Provider, to its provided Users, to their dynamic-rate payment streams.
@@ -867,7 +867,6 @@ declare module "@polkadot/api-base/types/storage" {
        * - [delete_dynamic_rate_payment_stream](crate::dispatchables::delete_dynamic_rate_payment_stream), which removes the corresponding entry from the map.
        * - [update_dynamic_rate_payment_stream](crate::dispatchables::update_dynamic_rate_payment_stream), which updates the entry's `amount_provided`.
        * - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which updates the entry's `price_index_when_last_charged`.
-       * - [update_last_chargeable_block](crate::dispatchables::update_last_chargeable_block), which updates the entry's `price_index_at_last_chargeable_block`.
        **/
       dynamicRatePaymentStreams: AugmentedQuery<
         ApiType,
@@ -887,8 +886,7 @@ declare module "@polkadot/api-base/types/storage" {
        * - [add_fixed_rate_payment_stream](crate::dispatchables::add_fixed_rate_payment_stream), which adds a new entry to the map.
        * - [delete_fixed_rate_payment_stream](crate::dispatchables::delete_fixed_rate_payment_stream), which removes the corresponding entry from the map.
        * - [update_fixed_rate_payment_stream](crate::dispatchables::update_fixed_rate_payment_stream), which updates the entry's `rate`.
-       * - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which updates the entry's `last_charged_block`.
-       * - [update_last_chargeable_block](crate::dispatchables::update_last_chargeable_block), which updates the entry's `last_chargeable_block`.
+       * - [charge_payment_streams](crate::dispatchables::charge_payment_streams), which updates the entry's `last_charged_tick`.
        **/
       fixedRatePaymentStreams: AugmentedQuery<
         ApiType,
@@ -900,20 +898,31 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, AccountId32]>;
       /**
-       * The mapping from a Provider to its last chargeable price index (for dynamic-rate payment streams) and last chargeable block (for fixed-rate payment streams).
+       * The mapping from a Provider to its last chargeable price index (for dynamic-rate payment streams) and last chargeable tick (for fixed-rate payment streams).
        *
-       * This is used to keep track of the last chargeable price index and block number for each Provider, updated by the PaymentManager, so this pallet can charge the payment streams correctly.
+       * This is used to keep track of the last chargeable price index and tick number for each Provider, so this pallet can charge the payment streams correctly.
        *
        * This storage is updated in:
-       * - [update_last_chargeable_block](crate::PaymentManager::update_last_chargeable_block), which updates the entry's `last_chargeable_block`.
-       * - [update_last_chargeable_price_index](crate::PaymentManager::update_last_chargeable_price_index), which updates the entry's `last_chargeable_price_index`.
+       * - [update_last_chargeable_info](crate::PaymentManager::update_last_chargeable_info), which updates the entry's `last_chargeable_tick` and `price_index`.
        **/
       lastChargeableInfo: AugmentedQuery<
         ApiType,
-        (arg: H256 | string | Uint8Array) => Observable<PalletPaymentStreamsProviderLastChargeable>,
+        (
+          arg: H256 | string | Uint8Array
+        ) => Observable<PalletPaymentStreamsProviderLastChargeableInfo>,
         [H256]
       > &
         QueryableStorageEntry<ApiType, [H256]>;
+      /**
+       * A counter of blocks for which Providers can charge their streams.
+       *
+       * This counter is not necessarily the same as the block number, as the last chargeable info of Providers
+       * (and the global price index) are updated in the `on_poll` hook, which happens at the beginning of every block,
+       * so long as the block is not part of a [Multi-Block-Migration](https://github.com/paritytech/polkadot-sdk/pull/1781) (MBM).
+       * During MBMs, the block number increases, but `OnPollTicker` does not.
+       **/
+      onPollTicker: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
       /**
        * The mapping from a user to if it has been registered to the network and the amount of payment streams it has.
        *
