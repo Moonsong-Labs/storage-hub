@@ -1,165 +1,165 @@
-import '@polkadot/api-base/types/errors';
-import type { ApiTypes, AugmentedError } from '@polkadot/api-base/types';
+import "@polkadot/api-base/types/errors";
+import type { ApiTypes, AugmentedError } from "@polkadot/api-base/types";
 export type __AugmentedError<ApiType extends ApiTypes> = AugmentedError<ApiType>;
-declare module '@polkadot/api-base/types/errors' {
-    interface AugmentedErrors<ApiType extends ApiTypes> {
-        balances: {
-            /**
-             * Beneficiary account must pre-exist.
-             **/
-            DeadAccount: AugmentedError<ApiType>;
-            /**
-             * The delta cannot be zero.
-             **/
-            DeltaZero: AugmentedError<ApiType>;
-            /**
-             * Value too low to create account due to existential deposit.
-             **/
-            ExistentialDeposit: AugmentedError<ApiType>;
-            /**
-             * A vesting schedule already exists for this account.
-             **/
-            ExistingVestingSchedule: AugmentedError<ApiType>;
-            /**
-             * Transfer/payment would kill account.
-             **/
-            Expendability: AugmentedError<ApiType>;
-            /**
-             * Balance too low to send value.
-             **/
-            InsufficientBalance: AugmentedError<ApiType>;
-            /**
-             * The issuance cannot be modified since it is already deactivated.
-             **/
-            IssuanceDeactivated: AugmentedError<ApiType>;
-            /**
-             * Account liquidity restrictions prevent withdrawal.
-             **/
-            LiquidityRestrictions: AugmentedError<ApiType>;
-            /**
-             * Number of freezes exceed `MaxFreezes`.
-             **/
-            TooManyFreezes: AugmentedError<ApiType>;
-            /**
-             * Number of holds exceed `VariantCountOf<T::RuntimeHoldReason>`.
-             **/
-            TooManyHolds: AugmentedError<ApiType>;
-            /**
-             * Number of named reserves exceed `MaxReserves`.
-             **/
-            TooManyReserves: AugmentedError<ApiType>;
-            /**
-             * Vesting balance too high to send value.
-             **/
-            VestingBalance: AugmentedError<ApiType>;
-            /**
-             * Generic error
-             **/
-            [key: string]: AugmentedError<ApiType>;
-        };
-        bucketNfts: {
-            /**
-             * Bucket is not private. Call `update_bucket_privacy` from the file system pallet to make it private.
-             **/
-            BucketIsNotPrivate: AugmentedError<ApiType>;
-            /**
-             * Failed to convert bytes to `BoundedVec`
-             **/
-            ConvertBytesToBoundedVec: AugmentedError<ApiType>;
-            /**
-             * No collection corresponding to the bucket. Call `update_bucket_privacy` from the file system pallet to make it private.
-             **/
-            NoCorrespondingCollection: AugmentedError<ApiType>;
-            /**
-             * Account is not the owner of the bucket.
-             **/
-            NotBucketOwner: AugmentedError<ApiType>;
-            /**
-             * Generic error
-             **/
-            [key: string]: AugmentedError<ApiType>;
-        };
-        collatorSelection: {
-            /**
-             * Account is already a candidate.
-             **/
-            AlreadyCandidate: AugmentedError<ApiType>;
-            /**
-             * Account is already an Invulnerable.
-             **/
-            AlreadyInvulnerable: AugmentedError<ApiType>;
-            /**
-             * New deposit amount would be below the minimum candidacy bond.
-             **/
-            DepositTooLow: AugmentedError<ApiType>;
-            /**
-             * The updated deposit amount is equal to the amount already reserved.
-             **/
-            IdenticalDeposit: AugmentedError<ApiType>;
-            /**
-             * Could not insert in the candidate list.
-             **/
-            InsertToCandidateListFailed: AugmentedError<ApiType>;
-            /**
-             * Deposit amount is too low to take the target's slot in the candidate list.
-             **/
-            InsufficientBond: AugmentedError<ApiType>;
-            /**
-             * Cannot lower candidacy bond while occupying a future collator slot in the list.
-             **/
-            InvalidUnreserve: AugmentedError<ApiType>;
-            /**
-             * Account has no associated validator ID.
-             **/
-            NoAssociatedValidatorId: AugmentedError<ApiType>;
-            /**
-             * Account is not a candidate.
-             **/
-            NotCandidate: AugmentedError<ApiType>;
-            /**
-             * Account is not an Invulnerable.
-             **/
-            NotInvulnerable: AugmentedError<ApiType>;
-            /**
-             * Could not remove from the candidate list.
-             **/
-            RemoveFromCandidateListFailed: AugmentedError<ApiType>;
-            /**
-             * The target account to be replaced in the candidate list is not a candidate.
-             **/
-            TargetIsNotCandidate: AugmentedError<ApiType>;
-            /**
-             * Leaving would result in too few candidates.
-             **/
-            TooFewEligibleCollators: AugmentedError<ApiType>;
-            /**
-             * The pallet has too many candidates.
-             **/
-            TooManyCandidates: AugmentedError<ApiType>;
-            /**
-             * There are too many Invulnerables.
-             **/
-            TooManyInvulnerables: AugmentedError<ApiType>;
-            /**
-             * Could not update the candidate list.
-             **/
-            UpdateCandidateListFailed: AugmentedError<ApiType>;
-            /**
-             * Validator ID is not yet registered.
-             **/
-            ValidatorNotRegistered: AugmentedError<ApiType>;
-            /**
-             * Generic error
-             **/
-            [key: string]: AugmentedError<ApiType>;
-        };
-        fileSystem: {
-            /**
-             * BSP did not succeed threshold check.
-             **/
-            AboveThreshold: AugmentedError<ApiType>;
-            /**
-             * Block range to maximum threshold cannot be zero.
+declare module "@polkadot/api-base/types/errors" {
+  interface AugmentedErrors<ApiType extends ApiTypes> {
+    balances: {
+      /**
+       * Beneficiary account must pre-exist.
+       **/
+      DeadAccount: AugmentedError<ApiType>;
+      /**
+       * The delta cannot be zero.
+       **/
+      DeltaZero: AugmentedError<ApiType>;
+      /**
+       * Value too low to create account due to existential deposit.
+       **/
+      ExistentialDeposit: AugmentedError<ApiType>;
+      /**
+       * A vesting schedule already exists for this account.
+       **/
+      ExistingVestingSchedule: AugmentedError<ApiType>;
+      /**
+       * Transfer/payment would kill account.
+       **/
+      Expendability: AugmentedError<ApiType>;
+      /**
+       * Balance too low to send value.
+       **/
+      InsufficientBalance: AugmentedError<ApiType>;
+      /**
+       * The issuance cannot be modified since it is already deactivated.
+       **/
+      IssuanceDeactivated: AugmentedError<ApiType>;
+      /**
+       * Account liquidity restrictions prevent withdrawal.
+       **/
+      LiquidityRestrictions: AugmentedError<ApiType>;
+      /**
+       * Number of freezes exceed `MaxFreezes`.
+       **/
+      TooManyFreezes: AugmentedError<ApiType>;
+      /**
+       * Number of holds exceed `VariantCountOf<T::RuntimeHoldReason>`.
+       **/
+      TooManyHolds: AugmentedError<ApiType>;
+      /**
+       * Number of named reserves exceed `MaxReserves`.
+       **/
+      TooManyReserves: AugmentedError<ApiType>;
+      /**
+       * Vesting balance too high to send value.
+       **/
+      VestingBalance: AugmentedError<ApiType>;
+      /**
+       * Generic error
+       **/
+      [key: string]: AugmentedError<ApiType>;
+    };
+    bucketNfts: {
+      /**
+       * Bucket is not private. Call `update_bucket_privacy` from the file system pallet to make it private.
+       **/
+      BucketIsNotPrivate: AugmentedError<ApiType>;
+      /**
+       * Failed to convert bytes to `BoundedVec`
+       **/
+      ConvertBytesToBoundedVec: AugmentedError<ApiType>;
+      /**
+       * No collection corresponding to the bucket. Call `update_bucket_privacy` from the file system pallet to make it private.
+       **/
+      NoCorrespondingCollection: AugmentedError<ApiType>;
+      /**
+       * Account is not the owner of the bucket.
+       **/
+      NotBucketOwner: AugmentedError<ApiType>;
+      /**
+       * Generic error
+       **/
+      [key: string]: AugmentedError<ApiType>;
+    };
+    collatorSelection: {
+      /**
+       * Account is already a candidate.
+       **/
+      AlreadyCandidate: AugmentedError<ApiType>;
+      /**
+       * Account is already an Invulnerable.
+       **/
+      AlreadyInvulnerable: AugmentedError<ApiType>;
+      /**
+       * New deposit amount would be below the minimum candidacy bond.
+       **/
+      DepositTooLow: AugmentedError<ApiType>;
+      /**
+       * The updated deposit amount is equal to the amount already reserved.
+       **/
+      IdenticalDeposit: AugmentedError<ApiType>;
+      /**
+       * Could not insert in the candidate list.
+       **/
+      InsertToCandidateListFailed: AugmentedError<ApiType>;
+      /**
+       * Deposit amount is too low to take the target's slot in the candidate list.
+       **/
+      InsufficientBond: AugmentedError<ApiType>;
+      /**
+       * Cannot lower candidacy bond while occupying a future collator slot in the list.
+       **/
+      InvalidUnreserve: AugmentedError<ApiType>;
+      /**
+       * Account has no associated validator ID.
+       **/
+      NoAssociatedValidatorId: AugmentedError<ApiType>;
+      /**
+       * Account is not a candidate.
+       **/
+      NotCandidate: AugmentedError<ApiType>;
+      /**
+       * Account is not an Invulnerable.
+       **/
+      NotInvulnerable: AugmentedError<ApiType>;
+      /**
+       * Could not remove from the candidate list.
+       **/
+      RemoveFromCandidateListFailed: AugmentedError<ApiType>;
+      /**
+       * The target account to be replaced in the candidate list is not a candidate.
+       **/
+      TargetIsNotCandidate: AugmentedError<ApiType>;
+      /**
+       * Leaving would result in too few candidates.
+       **/
+      TooFewEligibleCollators: AugmentedError<ApiType>;
+      /**
+       * The pallet has too many candidates.
+       **/
+      TooManyCandidates: AugmentedError<ApiType>;
+      /**
+       * There are too many Invulnerables.
+       **/
+      TooManyInvulnerables: AugmentedError<ApiType>;
+      /**
+       * Could not update the candidate list.
+       **/
+      UpdateCandidateListFailed: AugmentedError<ApiType>;
+      /**
+       * Validator ID is not yet registered.
+       **/
+      ValidatorNotRegistered: AugmentedError<ApiType>;
+      /**
+       * Generic error
+       **/
+      [key: string]: AugmentedError<ApiType>;
+    };
+    fileSystem: {
+      /**
+       * BSP did not succeed threshold check.
+       **/
+      AboveThreshold: AugmentedError<ApiType>;
+      /**
+       * Block range to maximum threshold cannot be zero.
              **/
             BlockRangeToMaximumThresholdCannotBeZero: AugmentedError<ApiType>;
             /**
