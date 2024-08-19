@@ -57,7 +57,7 @@
     "@reporters/github": "1.7.0",
     "@storagehub/api-augment": "workspace:*",
     "@storagehub/types-bundle": "workspace:*",
-    "@zombienet/cli": "1.3.108",
+    "@zombienet/cli": "1.3.109",
     "@zombienet/utils": "0.0.25",
     "docker-compose": "0.24.8",
     "dockerode": "4.0.2",

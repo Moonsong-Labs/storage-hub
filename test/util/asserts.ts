@@ -2,6 +2,82 @@ import type { EventRecord } from "@polkadot/types/interfaces";
 import { strictEqual } from "node:assert";
 import type { ApiPromise } from "@polkadot/api";
 import type { AugmentedEvent } from "@polkadot/api/types";
+import type { BspNetApi } from "./bspNet";
+
+//TODO: add ability to search nested extrinsics e.g. sudo.sudo(balance.forceTransfer(...))
+/**
+ * Asserts that an extrinsic is present in a block or transaction pool.
+ * 
+ * @param api - The connected API instance for interacting with a running BspNet.
+ * @param options - Configuration options for the extrinsic assertion.
+ * @param options.blockHeight - The block height to check. If not provided, checks the latest block.
+ * @param options.enforceSuccess - If true, also checks for a successful extrinsic execution.
+ * @param options.checkTxPool - If true, checks the transaction pool instead of a specific block.
+ * @param options.module - The module name of the extrinsic to search for.
+ * @param options.method - The method name of the extrinsic to search for.
+ * @param options.ignoreParamCheck - If true, skips the check for module and method existence in the API metadata.
+ * @returns A promise that resolves to an array of matching extrinsics, each containing module, method, and index.
+ * @throws Throws an error if the specified extrinsic is not found or if the metadata check fails.
+ * 
+ * @example
+ * const matches = await assertExtrinsicPresent(api, {
+ *   module: 'balances',
+ *   method: 'transfer',
+ *   blockHeight: '1000000',
+ *   enforceSuccess: true
+ * });
+ */
+export const assertExtrinsicPresent = async (
+  api: BspNetApi,
+  options: {
+    blockHeight?: string;
+    enforceSuccess?: boolean;
+    checkTxPool?: boolean;
+    module: string;
+    method: string;
+    ignoreParamCheck?: boolean;
+  }
+): Promise<
+  {
+    module: string;
+    method: string;
+    extIndex: number;
+  }[]
+> => {
+  
+  if (options.ignoreParamCheck !== true){
+    strictEqual(options.module in api.tx, true, `Module ${options.module} not found in API metadata. Turn off this check with "ignoreParamCheck: true" if you are sure this exists`)
+    strictEqual(options.method in api.tx[options.module], true, `Method ${options.module}.${options.method} not found in metadata. Turn off this check with "ignoreParamCheck: true" if you are sure this exists`)
+  }
+  
+  const blockHash = await api.rpc.chain.getBlockHash(options?.blockHeight);
+  const extrinsics = !options.checkTxPool
+    ? await (async () => {
+        const response = await api.rpc.chain.getBlock(blockHash);
+        return response.block.extrinsics;
+      })()
+    : await api.rpc.author.pendingExtrinsics();
+  const transformed = extrinsics.map(({ method: { method, section } }, index) => {
+    return { module: section, method, extIndex: index };
+  });
+
+  const matches = transformed.filter(
+    ({ method, module }) => method === options?.method && module === options?.module
+  );
+
+  strictEqual(
+    matches.length > 0,
+    true,
+    `No extrinsics matching ${options?.module}.${options?.method} found. \n Extrinsics in block ${options.blockHeight || blockHash}: ${(extrinsics.map(({ method: { method, section } }) => `${section}.${method}`).join(" | "))}`
+  );
+
+  if (options?.enforceSuccess) {
+    const events = await (await api.at(blockHash)).query.system.events();
+    assertEventPresent(api, "system", "ExtrinsicSuccess", events);
+  }
+
+  return matches;
+};
 
 export const assertEventPresent = (
   api: ApiPromise,
