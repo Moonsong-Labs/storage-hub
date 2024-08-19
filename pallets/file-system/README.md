@@ -37,7 +37,7 @@ Formulas:
 
 The goal here is to have half of the replication target $R_{t}$ be probabilistically volunteered for by eligible BSPs after the first block from initiating the storage request., while taking into account the cumulative weight $W_{g}$ of the entire set of BSPs which reduces the starting point.
 
-$$\T_{gsp} = \frac{1}{2} \cdot \frac{R_{t}}{W_{g}} \cdot M$$
+$$T_{gsp} = \frac{1}{2} \cdot \frac{R_{t}}{W_{g}} \cdot M$$
 
 $T_{gsp}$: *Threshold global starting point*
 $R_{t}$: *Replication target* (number of BSPs required to fulfill a storage request, otherwise known as `MaxBspsPerStorageRequest`)
