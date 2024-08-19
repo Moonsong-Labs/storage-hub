@@ -1449,12 +1449,16 @@ export default {
       StorageRequestRevoked: {
         fileKey: "H256"
       },
-      BspStoppedStoring: {
+      BspRequestedToStopStoring: {
         bspId: "H256",
         fileKey: "H256",
-        newRoot: "H256",
         owner: "AccountId32",
         location: "Bytes"
+      },
+      BspConfirmStoppedStoring: {
+        bspId: "H256",
+        fileKey: "H256",
+        newRoot: "H256"
       },
       FailedToQueuePriorityChallenge: {
         user: "AccountId32",
@@ -3064,7 +3068,7 @@ export default {
         nonInclusionForestProof: "SpTrieStorageProofCompactProof",
         fileKeysAndProofs: "Vec<(H256,ShpFileKeyVerifierFileKeyProof)>"
       },
-      bsp_stop_storing: {
+      bsp_request_stop_storing: {
         _alias: {
           size_: "size"
         },
@@ -3075,6 +3079,10 @@ export default {
         fingerprint: "H256",
         size_: "u32",
         canServe: "bool",
+        inclusionForestProof: "SpTrieStorageProofCompactProof"
+      },
+      bsp_confirm_stop_storing: {
+        fileKey: "H256",
         inclusionForestProof: "SpTrieStorageProofCompactProof"
       },
       delete_file: {
@@ -3889,7 +3897,10 @@ export default {
       "MaxUserPendingDeletionRequestsReached",
       "MspNotStoringBucket",
       "FileKeyNotPendingDeletion",
-      "FileSizeCannotBeZero"
+      "FileSizeCannotBeZero",
+      "PendingStopStoringRequestNotFound",
+      "MinWaitForStopStoringNotReached",
+      "PendingStopStoringRequestAlreadyExists"
     ]
   },
   /**

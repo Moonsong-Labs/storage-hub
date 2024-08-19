@@ -81,19 +81,17 @@ impl pallet_balances::Config for Test {
 }
 
 pub struct BabeDataGetter;
-impl crate::GetBabeData<u64, Option<H256>> for BabeDataGetter {
+impl crate::GetBabeData<u64, H256> for BabeDataGetter {
     fn get_epoch_index() -> u64 {
         frame_system::Pallet::<Test>::block_number()
     }
-    fn get_epoch_randomness() -> Option<H256> {
-        Some(H256::from_slice(&blake2_256(
-            &Self::get_epoch_index().to_le_bytes(),
-        )))
+    fn get_epoch_randomness() -> H256 {
+        H256::from_slice(&blake2_256(&Self::get_epoch_index().to_le_bytes()))
     }
-    fn get_parent_randomness() -> Option<H256> {
-        Some(H256::from_slice(&blake2_256(
+    fn get_parent_randomness() -> H256 {
+        H256::from_slice(&blake2_256(
             &Self::get_epoch_index().saturating_sub(1).to_le_bytes(),
-        )))
+        ))
     }
 }
 

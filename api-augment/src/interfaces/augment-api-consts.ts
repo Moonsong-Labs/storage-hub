@@ -101,6 +101,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxUserPendingDeletionRequests: u32 & AugmentedConst<ApiType>;
       /**
+       * Number of blocks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
+       **/
+      minWaitForStopStoring: u32 & AugmentedConst<ApiType>;
+      /**
        * Time-to-live for a storage request.
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;

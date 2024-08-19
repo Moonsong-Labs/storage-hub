@@ -325,6 +325,23 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
       /**
+       * Pending file stop storing requests.
+       *
+       * A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened
+       * and the proven size of the file.
+       * The block number is used to avoid BSPs being able to stop storing files immediately which would allow them to avoid challenges
+       * of missing files. The size is to be able to decrease their used capacity when they confirm to stop storing the file.
+       **/
+      pendingStopStoringRequests: AugmentedQuery<
+        ApiType,
+        (
+          arg1: H256 | string | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<ITuple<[u32, u32]>>>,
+        [H256, H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256, H256]>;
+      /**
        * A double map from storage request to BSP `AccountId`s that volunteered to store the file.
        *
        * Any BSP under a storage request prefix is considered to be a volunteer and can be removed at any time.
