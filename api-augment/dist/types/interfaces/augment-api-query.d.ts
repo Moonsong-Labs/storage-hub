@@ -296,43 +296,60 @@ declare module "@polkadot/api-base/types/storage" {
         QueryableStorageEntry<ApiType, [u32]>;
       /**
        * Maximum threshold a BSP can attain.
-             **/
-            maximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
-            /**
-             * A pointer to the earliest available block to insert a new storage request expiration.
-             *
-             * This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
-             **/
-            nextAvailableExpirationInsertionBlock: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
-            /**
-             * A pointer to the starting block to clean up expired storage requests.
-             *
-             * If this block is behind the current block number, the cleanup algorithm in `on_idle` will
-             * attempt to accelerate this block pointer as close to or up to the current block number. This
-             * will execute provided that there is enough remaining weight to do so.
-             **/
-            nextStartingBlockToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
-            /**
-             * Pending file deletion requests.
-             *
-             * A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key and bucket id.
-             **/
-            pendingFileDeletionRequests: AugmentedQuery<ApiType, (arg: AccountId32 | string | Uint8Array) => Observable<Vec<ITuple<[H256, H256]>>>, [AccountId32]> & QueryableStorageEntry<ApiType, [AccountId32]>;
-            /**
-             * Number of BSPs required to fulfill a storage request
-             * Pending file stop storing requests.
-             *
-             * A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened
-             * and the proven size of the file.
-             * The block number is used to avoid BSPs being able to stop storing files immediately which would allow them to avoid challenges
-             * of missing files. The size is to be able to decrease their used capacity when they confirm to stop storing the file.
-             **/
-            pendingStopStoringRequests: AugmentedQuery<ApiType, (arg1: H256 | string | Uint8Array, arg2: H256 | string | Uint8Array) => Observable<Option<ITuple<[u32, u32]>>>, [H256, H256]> & QueryableStorageEntry<ApiType, [H256, H256]>;
-            /**
-             *
-             * This is also used as a default value if the BSPs required are not specified when creating a storage request.
-             **/
-            replicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
+       **/
+      maximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * A pointer to the earliest available block to insert a new storage request expiration.
+       *
+       * This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
+       **/
+      nextAvailableExpirationInsertionBlock: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * A pointer to the starting block to clean up expired storage requests.
+       *
+       * If this block is behind the current block number, the cleanup algorithm in `on_idle` will
+       * attempt to accelerate this block pointer as close to or up to the current block number. This
+       * will execute provided that there is enough remaining weight to do so.
+       **/
+      nextStartingBlockToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * Pending file deletion requests.
+       *
+       * A mapping from a user account id to a list of pending file deletion requests, holding a tuple of the file key and bucket id.
+       **/
+      pendingFileDeletionRequests: AugmentedQuery<
+        ApiType,
+        (arg: AccountId32 | string | Uint8Array) => Observable<Vec<ITuple<[H256, H256]>>>,
+        [AccountId32]
+      > &
+        QueryableStorageEntry<ApiType, [AccountId32]>;
+      /**
+       * Number of BSPs required to fulfill a storage request
+       * Pending file stop storing requests.
+       *
+       * A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened
+       * and the proven size of the file.
+       * The block number is used to avoid BSPs being able to stop storing files immediately which would allow them to avoid challenges
+       * of missing files. The size is to be able to decrease their used capacity when they confirm to stop storing the file.
+       **/
+      pendingStopStoringRequests: AugmentedQuery<
+        ApiType,
+        (
+          arg1: H256 | string | Uint8Array,
+          arg2: H256 | string | Uint8Array
+        ) => Observable<Option<ITuple<[u32, u32]>>>,
+        [H256, H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256, H256]>;
+      /**
+       *
+       * This is also used as a default value if the BSPs required are not specified when creating a storage request.
+       **/
+      replicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
       /**
        * A double map from storage request to BSP `AccountId`s that volunteered to store the file.
        *
@@ -1378,10 +1395,11 @@ declare module "@polkadot/api-base/types/storage" {
         QueryableStorageEntry<ApiType, [H256]>;
       /**
        * The total global reputation weight of all BSPs.
-             **/
-            globalBspsReputationWeight: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
-            /**
-             * The mapping from a MainStorageProviderId to a vector of BucketIds.
+       **/
+      globalBspsReputationWeight: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
+      /**
+       * The mapping from a MainStorageProviderId to a vector of BucketIds.
        *
        * This is used to efficiently retrieve the list of buckets that a Main Storage Provider is currently storing.
        *

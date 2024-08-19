@@ -1430,1638 +1430,1638 @@ declare const _default: {
         newRoot: string;
       };
       StorageRequestFulfilled: {
-                fileKey: string;
-            };
-            StorageRequestExpired: {
-                fileKey: string;
-            };
-            StorageRequestRevoked: {
-                fileKey: string;
-            };
-            BspRequestedToStopStoring: {
-                bspId: string;
-                fileKey: string;
-                owner: string;
-                location: string;
-            };
-            BspConfirmStoppedStoring: {
-                bspId: string;
-                fileKey: string;
-                newRoot: string;
-            };
-            FailedToQueuePriorityChallenge: {
-                user: string;
-                fileKey: string;
-            };
-            FileDeletionRequest: {
-                user: string;
-                fileKey: string;
-                bucketId: string;
-                mspId: string;
-                proofOfInclusion: string;
-            };
-            ProofSubmittedForPendingFileDeletionRequest: {
-                mspId: string;
-                user: string;
-                fileKey: string;
-                bucketId: string;
-                proofOfInclusion: string;
-            };
-            BspChallengeCycleInitialised: {
-                who: string;
-                bspId: string;
-            };
-        };
-    };
-    /**
-     * Lookup135: pallet_proofs_dealer::pallet::Event<T>
-     **/
-    PalletProofsDealerEvent: {
-        _enum: {
-            NewChallenge: {
-                who: string;
-                keyChallenged: string;
-            };
-            ProofAccepted: {
-                provider: string;
-                proof: string;
-            };
-            NewChallengeSeed: {
-                challengesTicker: string;
-                seed: string;
-            };
-            NewCheckpointChallenge: {
-                challengesTicker: string;
-                challenges: string;
-            };
-            SlashableProvider: {
-                provider: string;
-                nextChallengeDeadline: string;
-            };
-            NewChallengeCycleInitialised: {
-                currentTick: string;
-                nextChallengeDeadline: string;
-                provider: string;
-                maybeProviderAccount: string;
-            };
-        };
-    };
-    /**
-     * Lookup136: pallet_proofs_dealer::types::Proof<T>
-     **/
-    PalletProofsDealerProof: {
-        forestProof: string;
-        keyProofs: string;
-    };
-    /**
-     * Lookup137: sp_trie::storage_proof::CompactProof
-     **/
-    SpTrieStorageProofCompactProof: {
-        encodedNodes: string;
-    };
-    /**
-     * Lookup140: pallet_proofs_dealer::types::KeyProof<T>
-     **/
-    PalletProofsDealerKeyProof: {
-        proof: string;
-        challengeCount: string;
-    };
-    /**
-     * Lookup141: shp_file_key_verifier::types::FileKeyProof
-     **/
-    ShpFileKeyVerifierFileKeyProof: {
-        fileMetadata: string;
-        proof: string;
-    };
-    /**
-     * Lookup142: shp_file_metadata::FileMetadata
-     **/
-    ShpFileMetadataFileMetadata: {
+        fileKey: string;
+      };
+      StorageRequestExpired: {
+        fileKey: string;
+      };
+      StorageRequestRevoked: {
+        fileKey: string;
+      };
+      BspRequestedToStopStoring: {
+        bspId: string;
+        fileKey: string;
         owner: string;
-        bucketId: string;
         location: string;
-        fileSize: string;
-        fingerprint: string;
+      };
+      BspConfirmStoppedStoring: {
+        bspId: string;
+        fileKey: string;
+        newRoot: string;
+      };
+      FailedToQueuePriorityChallenge: {
+        user: string;
+        fileKey: string;
+      };
+      FileDeletionRequest: {
+        user: string;
+        fileKey: string;
+        bucketId: string;
+        mspId: string;
+        proofOfInclusion: string;
+      };
+      ProofSubmittedForPendingFileDeletionRequest: {
+        mspId: string;
+        user: string;
+        fileKey: string;
+        bucketId: string;
+        proofOfInclusion: string;
+      };
+      BspChallengeCycleInitialised: {
+        who: string;
+        bspId: string;
+      };
     };
-    /**
-     * Lookup143: shp_file_metadata::Fingerprint
-     **/
-    ShpFileMetadataFingerprint: string;
-    /**
-     * Lookup149: shp_traits::TrieRemoveMutation
-     **/
-    ShpTraitsTrieRemoveMutation: string;
-    /**
-     * Lookup151: pallet_randomness::pallet::Event<T>
-     **/
-    PalletRandomnessEvent: {
-        _enum: {
-            NewOneEpochAgoRandomnessAvailable: {
-                randomnessSeed: string;
-                fromEpoch: string;
-                validUntilBlock: string;
-            };
-        };
+  };
+  /**
+   * Lookup135: pallet_proofs_dealer::pallet::Event<T>
+   **/
+  PalletProofsDealerEvent: {
+    _enum: {
+      NewChallenge: {
+        who: string;
+        keyChallenged: string;
+      };
+      ProofAccepted: {
+        provider: string;
+        proof: string;
+      };
+      NewChallengeSeed: {
+        challengesTicker: string;
+        seed: string;
+      };
+      NewCheckpointChallenge: {
+        challengesTicker: string;
+        challenges: string;
+      };
+      SlashableProvider: {
+        provider: string;
+        nextChallengeDeadline: string;
+      };
+      NewChallengeCycleInitialised: {
+        currentTick: string;
+        nextChallengeDeadline: string;
+        provider: string;
+        maybeProviderAccount: string;
+      };
     };
-    /**
-     * Lookup152: pallet_payment_streams::pallet::Event<T>
-     **/
-    PalletPaymentStreamsEvent: {
-        _enum: {
-            FixedRatePaymentStreamCreated: {
-                userAccount: string;
-                providerId: string;
-                rate: string;
-            };
-            FixedRatePaymentStreamUpdated: {
-                userAccount: string;
-                providerId: string;
-                newRate: string;
-            };
-            FixedRatePaymentStreamDeleted: {
-                userAccount: string;
-                providerId: string;
-            };
-            DynamicRatePaymentStreamCreated: {
-                userAccount: string;
-                providerId: string;
-                amountProvided: string;
-            };
-            DynamicRatePaymentStreamUpdated: {
-                userAccount: string;
-                providerId: string;
-                newAmountProvided: string;
-            };
-            DynamicRatePaymentStreamDeleted: {
-                userAccount: string;
-                providerId: string;
-            };
-            PaymentStreamCharged: {
-                userAccount: string;
-                providerId: string;
-                amount: string;
-            };
-            LastChargeableInfoUpdated: {
-                providerId: string;
-                lastChargeableTick: string;
-                lastChargeablePriceIndex: string;
-            };
-            UserWithoutFunds: {
-                who: string;
-            };
-        };
+  };
+  /**
+   * Lookup136: pallet_proofs_dealer::types::Proof<T>
+   **/
+  PalletProofsDealerProof: {
+    forestProof: string;
+    keyProofs: string;
+  };
+  /**
+   * Lookup137: sp_trie::storage_proof::CompactProof
+   **/
+  SpTrieStorageProofCompactProof: {
+    encodedNodes: string;
+  };
+  /**
+   * Lookup140: pallet_proofs_dealer::types::KeyProof<T>
+   **/
+  PalletProofsDealerKeyProof: {
+    proof: string;
+    challengeCount: string;
+  };
+  /**
+   * Lookup141: shp_file_key_verifier::types::FileKeyProof
+   **/
+  ShpFileKeyVerifierFileKeyProof: {
+    fileMetadata: string;
+    proof: string;
+  };
+  /**
+   * Lookup142: shp_file_metadata::FileMetadata
+   **/
+  ShpFileMetadataFileMetadata: {
+    owner: string;
+    bucketId: string;
+    location: string;
+    fileSize: string;
+    fingerprint: string;
+  };
+  /**
+   * Lookup143: shp_file_metadata::Fingerprint
+   **/
+  ShpFileMetadataFingerprint: string;
+  /**
+   * Lookup149: shp_traits::TrieRemoveMutation
+   **/
+  ShpTraitsTrieRemoveMutation: string;
+  /**
+   * Lookup151: pallet_randomness::pallet::Event<T>
+   **/
+  PalletRandomnessEvent: {
+    _enum: {
+      NewOneEpochAgoRandomnessAvailable: {
+        randomnessSeed: string;
+        fromEpoch: string;
+        validUntilBlock: string;
+      };
     };
-    /**
-     * Lookup153: pallet_bucket_nfts::pallet::Event<T>
-     **/
-    PalletBucketNftsEvent: {
-        _enum: {
-            AccessShared: {
-                issuer: string;
-                recipient: string;
-            };
-            ItemReadAccessUpdated: {
-                admin: string;
-                bucket: string;
-                itemId: string;
-            };
-            ItemBurned: {
-                account: string;
-                bucket: string;
-                itemId: string;
-            };
-        };
-    };
-    /**
-     * Lookup154: pallet_nfts::pallet::Event<T, I>
-     **/
-    PalletNftsEvent: {
-        _enum: {
-            Created: {
-                collection: string;
-                creator: string;
-                owner: string;
-            };
-            ForceCreated: {
-                collection: string;
-                owner: string;
-            };
-            Destroyed: {
-                collection: string;
-            };
-            Issued: {
-                collection: string;
-                item: string;
-                owner: string;
-            };
-            Transferred: {
-                collection: string;
-                item: string;
-                from: string;
-                to: string;
-            };
-            Burned: {
-                collection: string;
-                item: string;
-                owner: string;
-            };
-            ItemTransferLocked: {
-                collection: string;
-                item: string;
-            };
-            ItemTransferUnlocked: {
-                collection: string;
-                item: string;
-            };
-            ItemPropertiesLocked: {
-                collection: string;
-                item: string;
-                lockMetadata: string;
-                lockAttributes: string;
-            };
-            CollectionLocked: {
-                collection: string;
-            };
-            OwnerChanged: {
-                collection: string;
-                newOwner: string;
-            };
-            TeamChanged: {
-                collection: string;
-                issuer: string;
-                admin: string;
-                freezer: string;
-            };
-            TransferApproved: {
-                collection: string;
-                item: string;
-                owner: string;
-                delegate: string;
-                deadline: string;
-            };
-            ApprovalCancelled: {
-                collection: string;
-                item: string;
-                owner: string;
-                delegate: string;
-            };
-            AllApprovalsCancelled: {
-                collection: string;
-                item: string;
-                owner: string;
-            };
-            CollectionConfigChanged: {
-                collection: string;
-            };
-            CollectionMetadataSet: {
-                collection: string;
-                data: string;
-            };
-            CollectionMetadataCleared: {
-                collection: string;
-            };
-            ItemMetadataSet: {
-                collection: string;
-                item: string;
-                data: string;
-            };
-            ItemMetadataCleared: {
-                collection: string;
-                item: string;
-            };
-            Redeposited: {
-                collection: string;
-                successfulItems: string;
-            };
-            AttributeSet: {
-                collection: string;
-                maybeItem: string;
-                key: string;
-                value: string;
-                namespace: string;
-            };
-            AttributeCleared: {
-                collection: string;
-                maybeItem: string;
-                key: string;
-                namespace: string;
-            };
-            ItemAttributesApprovalAdded: {
-                collection: string;
-                item: string;
-                delegate: string;
-            };
-            ItemAttributesApprovalRemoved: {
-                collection: string;
-                item: string;
-                delegate: string;
-            };
-            OwnershipAcceptanceChanged: {
-                who: string;
-                maybeCollection: string;
-            };
-            CollectionMaxSupplySet: {
-                collection: string;
-                maxSupply: string;
-            };
-            CollectionMintSettingsUpdated: {
-                collection: string;
-            };
-            NextCollectionIdIncremented: {
-                nextId: string;
-            };
-            ItemPriceSet: {
-                collection: string;
-                item: string;
-                price: string;
-                whitelistedBuyer: string;
-            };
-            ItemPriceRemoved: {
-                collection: string;
-                item: string;
-            };
-            ItemBought: {
-                collection: string;
-                item: string;
-                price: string;
-                seller: string;
-                buyer: string;
-            };
-            TipSent: {
-                collection: string;
-                item: string;
-                sender: string;
-                receiver: string;
-                amount: string;
-            };
-            SwapCreated: {
-                offeredCollection: string;
-                offeredItem: string;
-                desiredCollection: string;
-                desiredItem: string;
-                price: string;
-                deadline: string;
-            };
-            SwapCancelled: {
-                offeredCollection: string;
-                offeredItem: string;
-                desiredCollection: string;
-                desiredItem: string;
-                price: string;
-                deadline: string;
-            };
-            SwapClaimed: {
-                sentCollection: string;
-                sentItem: string;
-                sentItemOwner: string;
-                receivedCollection: string;
-                receivedItem: string;
-                receivedItemOwner: string;
-                price: string;
-                deadline: string;
-            };
-            PreSignedAttributesSet: {
-                collection: string;
-                item: string;
-                namespace: string;
-            };
-            PalletAttributeSet: {
-                collection: string;
-                item: string;
-                attribute: string;
-                value: string;
-            };
-        };
-    };
-    /**
-     * Lookup158: pallet_nfts::types::AttributeNamespace<sp_core::crypto::AccountId32>
-     **/
-    PalletNftsAttributeNamespace: {
-        _enum: {
-            Pallet: string;
-            CollectionOwner: string;
-            ItemOwner: string;
-            Account: string;
-        };
-    };
-    /**
-     * Lookup160: pallet_nfts::types::PriceWithDirection<Amount>
-     **/
-    PalletNftsPriceWithDirection: {
+  };
+  /**
+   * Lookup152: pallet_payment_streams::pallet::Event<T>
+   **/
+  PalletPaymentStreamsEvent: {
+    _enum: {
+      FixedRatePaymentStreamCreated: {
+        userAccount: string;
+        providerId: string;
+        rate: string;
+      };
+      FixedRatePaymentStreamUpdated: {
+        userAccount: string;
+        providerId: string;
+        newRate: string;
+      };
+      FixedRatePaymentStreamDeleted: {
+        userAccount: string;
+        providerId: string;
+      };
+      DynamicRatePaymentStreamCreated: {
+        userAccount: string;
+        providerId: string;
+        amountProvided: string;
+      };
+      DynamicRatePaymentStreamUpdated: {
+        userAccount: string;
+        providerId: string;
+        newAmountProvided: string;
+      };
+      DynamicRatePaymentStreamDeleted: {
+        userAccount: string;
+        providerId: string;
+      };
+      PaymentStreamCharged: {
+        userAccount: string;
+        providerId: string;
         amount: string;
-        direction: string;
+      };
+      LastChargeableInfoUpdated: {
+        providerId: string;
+        lastChargeableTick: string;
+        lastChargeablePriceIndex: string;
+      };
+      UserWithoutFunds: {
+        who: string;
+      };
     };
-    /**
-     * Lookup161: pallet_nfts::types::PriceDirection
-     **/
-    PalletNftsPriceDirection: {
-        _enum: string[];
+  };
+  /**
+   * Lookup153: pallet_bucket_nfts::pallet::Event<T>
+   **/
+  PalletBucketNftsEvent: {
+    _enum: {
+      AccessShared: {
+        issuer: string;
+        recipient: string;
+      };
+      ItemReadAccessUpdated: {
+        admin: string;
+        bucket: string;
+        itemId: string;
+      };
+      ItemBurned: {
+        account: string;
+        bucket: string;
+        itemId: string;
+      };
     };
-    /**
-     * Lookup162: pallet_nfts::types::PalletAttributes<CollectionId>
-     **/
-    PalletNftsPalletAttributes: {
-        _enum: {
-            UsedToClaim: string;
-            TransferDisabled: string;
+  };
+  /**
+   * Lookup154: pallet_nfts::pallet::Event<T, I>
+   **/
+  PalletNftsEvent: {
+    _enum: {
+      Created: {
+        collection: string;
+        creator: string;
+        owner: string;
+      };
+      ForceCreated: {
+        collection: string;
+        owner: string;
+      };
+      Destroyed: {
+        collection: string;
+      };
+      Issued: {
+        collection: string;
+        item: string;
+        owner: string;
+      };
+      Transferred: {
+        collection: string;
+        item: string;
+        from: string;
+        to: string;
+      };
+      Burned: {
+        collection: string;
+        item: string;
+        owner: string;
+      };
+      ItemTransferLocked: {
+        collection: string;
+        item: string;
+      };
+      ItemTransferUnlocked: {
+        collection: string;
+        item: string;
+      };
+      ItemPropertiesLocked: {
+        collection: string;
+        item: string;
+        lockMetadata: string;
+        lockAttributes: string;
+      };
+      CollectionLocked: {
+        collection: string;
+      };
+      OwnerChanged: {
+        collection: string;
+        newOwner: string;
+      };
+      TeamChanged: {
+        collection: string;
+        issuer: string;
+        admin: string;
+        freezer: string;
+      };
+      TransferApproved: {
+        collection: string;
+        item: string;
+        owner: string;
+        delegate: string;
+        deadline: string;
+      };
+      ApprovalCancelled: {
+        collection: string;
+        item: string;
+        owner: string;
+        delegate: string;
+      };
+      AllApprovalsCancelled: {
+        collection: string;
+        item: string;
+        owner: string;
+      };
+      CollectionConfigChanged: {
+        collection: string;
+      };
+      CollectionMetadataSet: {
+        collection: string;
+        data: string;
+      };
+      CollectionMetadataCleared: {
+        collection: string;
+      };
+      ItemMetadataSet: {
+        collection: string;
+        item: string;
+        data: string;
+      };
+      ItemMetadataCleared: {
+        collection: string;
+        item: string;
+      };
+      Redeposited: {
+        collection: string;
+        successfulItems: string;
+      };
+      AttributeSet: {
+        collection: string;
+        maybeItem: string;
+        key: string;
+        value: string;
+        namespace: string;
+      };
+      AttributeCleared: {
+        collection: string;
+        maybeItem: string;
+        key: string;
+        namespace: string;
+      };
+      ItemAttributesApprovalAdded: {
+        collection: string;
+        item: string;
+        delegate: string;
+      };
+      ItemAttributesApprovalRemoved: {
+        collection: string;
+        item: string;
+        delegate: string;
+      };
+      OwnershipAcceptanceChanged: {
+        who: string;
+        maybeCollection: string;
+      };
+      CollectionMaxSupplySet: {
+        collection: string;
+        maxSupply: string;
+      };
+      CollectionMintSettingsUpdated: {
+        collection: string;
+      };
+      NextCollectionIdIncremented: {
+        nextId: string;
+      };
+      ItemPriceSet: {
+        collection: string;
+        item: string;
+        price: string;
+        whitelistedBuyer: string;
+      };
+      ItemPriceRemoved: {
+        collection: string;
+        item: string;
+      };
+      ItemBought: {
+        collection: string;
+        item: string;
+        price: string;
+        seller: string;
+        buyer: string;
+      };
+      TipSent: {
+        collection: string;
+        item: string;
+        sender: string;
+        receiver: string;
+        amount: string;
+      };
+      SwapCreated: {
+        offeredCollection: string;
+        offeredItem: string;
+        desiredCollection: string;
+        desiredItem: string;
+        price: string;
+        deadline: string;
+      };
+      SwapCancelled: {
+        offeredCollection: string;
+        offeredItem: string;
+        desiredCollection: string;
+        desiredItem: string;
+        price: string;
+        deadline: string;
+      };
+      SwapClaimed: {
+        sentCollection: string;
+        sentItem: string;
+        sentItemOwner: string;
+        receivedCollection: string;
+        receivedItem: string;
+        receivedItemOwner: string;
+        price: string;
+        deadline: string;
+      };
+      PreSignedAttributesSet: {
+        collection: string;
+        item: string;
+        namespace: string;
+      };
+      PalletAttributeSet: {
+        collection: string;
+        item: string;
+        attribute: string;
+        value: string;
+      };
+    };
+  };
+  /**
+   * Lookup158: pallet_nfts::types::AttributeNamespace<sp_core::crypto::AccountId32>
+   **/
+  PalletNftsAttributeNamespace: {
+    _enum: {
+      Pallet: string;
+      CollectionOwner: string;
+      ItemOwner: string;
+      Account: string;
+    };
+  };
+  /**
+   * Lookup160: pallet_nfts::types::PriceWithDirection<Amount>
+   **/
+  PalletNftsPriceWithDirection: {
+    amount: string;
+    direction: string;
+  };
+  /**
+   * Lookup161: pallet_nfts::types::PriceDirection
+   **/
+  PalletNftsPriceDirection: {
+    _enum: string[];
+  };
+  /**
+   * Lookup162: pallet_nfts::types::PalletAttributes<CollectionId>
+   **/
+  PalletNftsPalletAttributes: {
+    _enum: {
+      UsedToClaim: string;
+      TransferDisabled: string;
+    };
+  };
+  /**
+   * Lookup163: frame_system::Phase
+   **/
+  FrameSystemPhase: {
+    _enum: {
+      ApplyExtrinsic: string;
+      Finalization: string;
+      Initialization: string;
+    };
+  };
+  /**
+   * Lookup166: frame_system::LastRuntimeUpgradeInfo
+   **/
+  FrameSystemLastRuntimeUpgradeInfo: {
+    specVersion: string;
+    specName: string;
+  };
+  /**
+   * Lookup168: frame_system::CodeUpgradeAuthorization<T>
+   **/
+  FrameSystemCodeUpgradeAuthorization: {
+    codeHash: string;
+    checkVersion: string;
+  };
+  /**
+   * Lookup169: frame_system::pallet::Call<T>
+   **/
+  FrameSystemCall: {
+    _enum: {
+      remark: {
+        remark: string;
+      };
+      set_heap_pages: {
+        pages: string;
+      };
+      set_code: {
+        code: string;
+      };
+      set_code_without_checks: {
+        code: string;
+      };
+      set_storage: {
+        items: string;
+      };
+      kill_storage: {
+        _alias: {
+          keys_: string;
         };
+        keys_: string;
+      };
+      kill_prefix: {
+        prefix: string;
+        subkeys: string;
+      };
+      remark_with_event: {
+        remark: string;
+      };
+      __Unused8: string;
+      authorize_upgrade: {
+        codeHash: string;
+      };
+      authorize_upgrade_without_checks: {
+        codeHash: string;
+      };
+      apply_authorized_upgrade: {
+        code: string;
+      };
     };
-    /**
-     * Lookup163: frame_system::Phase
-     **/
-    FrameSystemPhase: {
-        _enum: {
-            ApplyExtrinsic: string;
-            Finalization: string;
-            Initialization: string;
-        };
-    };
-    /**
-     * Lookup166: frame_system::LastRuntimeUpgradeInfo
-     **/
-    FrameSystemLastRuntimeUpgradeInfo: {
-        specVersion: string;
-        specName: string;
-    };
-    /**
-     * Lookup168: frame_system::CodeUpgradeAuthorization<T>
-     **/
-    FrameSystemCodeUpgradeAuthorization: {
+  };
+  /**
+   * Lookup172: frame_system::limits::BlockWeights
+   **/
+  FrameSystemLimitsBlockWeights: {
+    baseBlock: string;
+    maxBlock: string;
+    perClass: string;
+  };
+  /**
+   * Lookup173: frame_support::dispatch::PerDispatchClass<frame_system::limits::WeightsPerClass>
+   **/
+  FrameSupportDispatchPerDispatchClassWeightsPerClass: {
+    normal: string;
+    operational: string;
+    mandatory: string;
+  };
+  /**
+   * Lookup174: frame_system::limits::WeightsPerClass
+   **/
+  FrameSystemLimitsWeightsPerClass: {
+    baseExtrinsic: string;
+    maxExtrinsic: string;
+    maxTotal: string;
+    reserved: string;
+  };
+  /**
+   * Lookup176: frame_system::limits::BlockLength
+   **/
+  FrameSystemLimitsBlockLength: {
+    max: string;
+  };
+  /**
+   * Lookup177: frame_support::dispatch::PerDispatchClass<T>
+   **/
+  FrameSupportDispatchPerDispatchClassU32: {
+    normal: string;
+    operational: string;
+    mandatory: string;
+  };
+  /**
+   * Lookup178: sp_weights::RuntimeDbWeight
+   **/
+  SpWeightsRuntimeDbWeight: {
+    read: string;
+    write: string;
+  };
+  /**
+   * Lookup179: sp_version::RuntimeVersion
+   **/
+  SpVersionRuntimeVersion: {
+    specName: string;
+    implName: string;
+    authoringVersion: string;
+    specVersion: string;
+    implVersion: string;
+    apis: string;
+    transactionVersion: string;
+    stateVersion: string;
+  };
+  /**
+   * Lookup184: frame_system::pallet::Error<T>
+   **/
+  FrameSystemError: {
+    _enum: string[];
+  };
+  /**
+   * Lookup186: cumulus_pallet_parachain_system::unincluded_segment::Ancestor<primitive_types::H256>
+   **/
+  CumulusPalletParachainSystemUnincludedSegmentAncestor: {
+    usedBandwidth: string;
+    paraHeadHash: string;
+    consumedGoAheadSignal: string;
+  };
+  /**
+   * Lookup187: cumulus_pallet_parachain_system::unincluded_segment::UsedBandwidth
+   **/
+  CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth: {
+    umpMsgCount: string;
+    umpTotalBytes: string;
+    hrmpOutgoing: string;
+  };
+  /**
+   * Lookup189: cumulus_pallet_parachain_system::unincluded_segment::HrmpChannelUpdate
+   **/
+  CumulusPalletParachainSystemUnincludedSegmentHrmpChannelUpdate: {
+    msgCount: string;
+    totalBytes: string;
+  };
+  /**
+   * Lookup194: polkadot_primitives::v6::UpgradeGoAhead
+   **/
+  PolkadotPrimitivesV6UpgradeGoAhead: {
+    _enum: string[];
+  };
+  /**
+   * Lookup195: cumulus_pallet_parachain_system::unincluded_segment::SegmentTracker<primitive_types::H256>
+   **/
+  CumulusPalletParachainSystemUnincludedSegmentSegmentTracker: {
+    usedBandwidth: string;
+    hrmpWatermark: string;
+    consumedGoAheadSignal: string;
+  };
+  /**
+   * Lookup196: polkadot_primitives::v6::PersistedValidationData<primitive_types::H256, N>
+   **/
+  PolkadotPrimitivesV6PersistedValidationData: {
+    parentHead: string;
+    relayParentNumber: string;
+    relayParentStorageRoot: string;
+    maxPovSize: string;
+  };
+  /**
+   * Lookup199: polkadot_primitives::v6::UpgradeRestriction
+   **/
+  PolkadotPrimitivesV6UpgradeRestriction: {
+    _enum: string[];
+  };
+  /**
+   * Lookup200: sp_trie::storage_proof::StorageProof
+   **/
+  SpTrieStorageProof: {
+    trieNodes: string;
+  };
+  /**
+   * Lookup202: cumulus_pallet_parachain_system::relay_state_snapshot::MessagingStateSnapshot
+   **/
+  CumulusPalletParachainSystemRelayStateSnapshotMessagingStateSnapshot: {
+    dmqMqcHead: string;
+    relayDispatchQueueRemainingCapacity: string;
+    ingressChannels: string;
+    egressChannels: string;
+  };
+  /**
+   * Lookup203: cumulus_pallet_parachain_system::relay_state_snapshot::RelayDispatchQueueRemainingCapacity
+   **/
+  CumulusPalletParachainSystemRelayStateSnapshotRelayDispatchQueueRemainingCapacity: {
+    remainingCount: string;
+    remainingSize: string;
+  };
+  /**
+   * Lookup206: polkadot_primitives::v6::AbridgedHrmpChannel
+   **/
+  PolkadotPrimitivesV6AbridgedHrmpChannel: {
+    maxCapacity: string;
+    maxTotalSize: string;
+    maxMessageSize: string;
+    msgCount: string;
+    totalSize: string;
+    mqcHead: string;
+  };
+  /**
+   * Lookup207: polkadot_primitives::v6::AbridgedHostConfiguration
+   **/
+  PolkadotPrimitivesV6AbridgedHostConfiguration: {
+    maxCodeSize: string;
+    maxHeadDataSize: string;
+    maxUpwardQueueCount: string;
+    maxUpwardQueueSize: string;
+    maxUpwardMessageSize: string;
+    maxUpwardMessageNumPerCandidate: string;
+    hrmpMaxMessageNumPerCandidate: string;
+    validationUpgradeCooldown: string;
+    validationUpgradeDelay: string;
+    asyncBackingParams: string;
+  };
+  /**
+   * Lookup208: polkadot_primitives::v6::async_backing::AsyncBackingParams
+   **/
+  PolkadotPrimitivesV6AsyncBackingAsyncBackingParams: {
+    maxCandidateDepth: string;
+    allowedAncestryLen: string;
+  };
+  /**
+   * Lookup214: polkadot_core_primitives::OutboundHrmpMessage<polkadot_parachain_primitives::primitives::Id>
+   **/
+  PolkadotCorePrimitivesOutboundHrmpMessage: {
+    recipient: string;
+    data: string;
+  };
+  /**
+   * Lookup216: cumulus_pallet_parachain_system::pallet::Call<T>
+   **/
+  CumulusPalletParachainSystemCall: {
+    _enum: {
+      set_validation_data: {
+        data: string;
+      };
+      sudo_send_upward_message: {
+        message: string;
+      };
+      authorize_upgrade: {
         codeHash: string;
         checkVersion: string;
+      };
+      enact_authorized_upgrade: {
+        code: string;
+      };
     };
-    /**
-     * Lookup169: frame_system::pallet::Call<T>
-     **/
-    FrameSystemCall: {
-        _enum: {
-            remark: {
-                remark: string;
-            };
-            set_heap_pages: {
-                pages: string;
-            };
-            set_code: {
-                code: string;
-            };
-            set_code_without_checks: {
-                code: string;
-            };
-            set_storage: {
-                items: string;
-            };
-            kill_storage: {
-                _alias: {
-                    keys_: string;
-                };
-                keys_: string;
-            };
-            kill_prefix: {
-                prefix: string;
-                subkeys: string;
-            };
-            remark_with_event: {
-                remark: string;
-            };
-            __Unused8: string;
-            authorize_upgrade: {
-                codeHash: string;
-            };
-            authorize_upgrade_without_checks: {
-                codeHash: string;
-            };
-            apply_authorized_upgrade: {
-                code: string;
-            };
+  };
+  /**
+   * Lookup217: cumulus_primitives_parachain_inherent::ParachainInherentData
+   **/
+  CumulusPrimitivesParachainInherentParachainInherentData: {
+    validationData: string;
+    relayChainState: string;
+    downwardMessages: string;
+    horizontalMessages: string;
+  };
+  /**
+   * Lookup219: polkadot_core_primitives::InboundDownwardMessage<BlockNumber>
+   **/
+  PolkadotCorePrimitivesInboundDownwardMessage: {
+    sentAt: string;
+    msg: string;
+  };
+  /**
+   * Lookup222: polkadot_core_primitives::InboundHrmpMessage<BlockNumber>
+   **/
+  PolkadotCorePrimitivesInboundHrmpMessage: {
+    sentAt: string;
+    data: string;
+  };
+  /**
+   * Lookup225: cumulus_pallet_parachain_system::pallet::Error<T>
+   **/
+  CumulusPalletParachainSystemError: {
+    _enum: string[];
+  };
+  /**
+   * Lookup226: pallet_timestamp::pallet::Call<T>
+   **/
+  PalletTimestampCall: {
+    _enum: {
+      set: {
+        now: string;
+      };
+    };
+  };
+  /**
+   * Lookup227: staging_parachain_info::pallet::Call<T>
+   **/
+  StagingParachainInfoCall: string;
+  /**
+   * Lookup229: pallet_balances::types::BalanceLock<Balance>
+   **/
+  PalletBalancesBalanceLock: {
+    id: string;
+    amount: string;
+    reasons: string;
+  };
+  /**
+   * Lookup230: pallet_balances::types::Reasons
+   **/
+  PalletBalancesReasons: {
+    _enum: string[];
+  };
+  /**
+   * Lookup233: pallet_balances::types::ReserveData<ReserveIdentifier, Balance>
+   **/
+  PalletBalancesReserveData: {
+    id: string;
+    amount: string;
+  };
+  /**
+   * Lookup237: storage_hub_runtime::RuntimeHoldReason
+   **/
+  StorageHubRuntimeRuntimeHoldReason: {
+    _enum: {
+      __Unused0: string;
+      __Unused1: string;
+      __Unused2: string;
+      __Unused3: string;
+      __Unused4: string;
+      __Unused5: string;
+      __Unused6: string;
+      __Unused7: string;
+      __Unused8: string;
+      __Unused9: string;
+      __Unused10: string;
+      __Unused11: string;
+      __Unused12: string;
+      __Unused13: string;
+      __Unused14: string;
+      __Unused15: string;
+      __Unused16: string;
+      __Unused17: string;
+      __Unused18: string;
+      __Unused19: string;
+      __Unused20: string;
+      __Unused21: string;
+      __Unused22: string;
+      __Unused23: string;
+      __Unused24: string;
+      __Unused25: string;
+      __Unused26: string;
+      __Unused27: string;
+      __Unused28: string;
+      __Unused29: string;
+      __Unused30: string;
+      __Unused31: string;
+      __Unused32: string;
+      __Unused33: string;
+      __Unused34: string;
+      __Unused35: string;
+      __Unused36: string;
+      __Unused37: string;
+      __Unused38: string;
+      __Unused39: string;
+      Providers: string;
+      __Unused41: string;
+      __Unused42: string;
+      __Unused43: string;
+      PaymentStreams: string;
+    };
+  };
+  /**
+   * Lookup238: pallet_storage_providers::pallet::HoldReason
+   **/
+  PalletStorageProvidersHoldReason: {
+    _enum: string[];
+  };
+  /**
+   * Lookup239: pallet_payment_streams::pallet::HoldReason
+   **/
+  PalletPaymentStreamsHoldReason: {
+    _enum: string[];
+  };
+  /**
+   * Lookup242: pallet_balances::types::IdAmount<Id, Balance>
+   **/
+  PalletBalancesIdAmount: {
+    id: string;
+    amount: string;
+  };
+  /**
+   * Lookup244: pallet_balances::pallet::Call<T, I>
+   **/
+  PalletBalancesCall: {
+    _enum: {
+      transfer_allow_death: {
+        dest: string;
+        value: string;
+      };
+      __Unused1: string;
+      force_transfer: {
+        source: string;
+        dest: string;
+        value: string;
+      };
+      transfer_keep_alive: {
+        dest: string;
+        value: string;
+      };
+      transfer_all: {
+        dest: string;
+        keepAlive: string;
+      };
+      force_unreserve: {
+        who: string;
+        amount: string;
+      };
+      upgrade_accounts: {
+        who: string;
+      };
+      __Unused7: string;
+      force_set_balance: {
+        who: string;
+        newFree: string;
+      };
+      force_adjust_total_issuance: {
+        direction: string;
+        delta: string;
+      };
+    };
+  };
+  /**
+   * Lookup247: pallet_balances::types::AdjustmentDirection
+   **/
+  PalletBalancesAdjustmentDirection: {
+    _enum: string[];
+  };
+  /**
+   * Lookup248: pallet_balances::pallet::Error<T, I>
+   **/
+  PalletBalancesError: {
+    _enum: string[];
+  };
+  /**
+   * Lookup249: pallet_transaction_payment::Releases
+   **/
+  PalletTransactionPaymentReleases: {
+    _enum: string[];
+  };
+  /**
+   * Lookup250: pallet_sudo::pallet::Call<T>
+   **/
+  PalletSudoCall: {
+    _enum: {
+      sudo: {
+        call: string;
+      };
+      sudo_unchecked_weight: {
+        call: string;
+        weight: string;
+      };
+      set_key: {
+        _alias: {
+          new_: string;
         };
+        new_: string;
+      };
+      sudo_as: {
+        who: string;
+        call: string;
+      };
+      remove_key: string;
     };
-    /**
-     * Lookup172: frame_system::limits::BlockWeights
-     **/
-    FrameSystemLimitsBlockWeights: {
-        baseBlock: string;
-        maxBlock: string;
-        perClass: string;
-    };
-    /**
-     * Lookup173: frame_support::dispatch::PerDispatchClass<frame_system::limits::WeightsPerClass>
-     **/
-    FrameSupportDispatchPerDispatchClassWeightsPerClass: {
-        normal: string;
-        operational: string;
-        mandatory: string;
-    };
-    /**
-     * Lookup174: frame_system::limits::WeightsPerClass
-     **/
-    FrameSystemLimitsWeightsPerClass: {
-        baseExtrinsic: string;
-        maxExtrinsic: string;
-        maxTotal: string;
-        reserved: string;
-    };
-    /**
-     * Lookup176: frame_system::limits::BlockLength
-     **/
-    FrameSystemLimitsBlockLength: {
+  };
+  /**
+   * Lookup252: pallet_collator_selection::pallet::Call<T>
+   **/
+  PalletCollatorSelectionCall: {
+    _enum: {
+      set_invulnerables: {
+        _alias: {
+          new_: string;
+        };
+        new_: string;
+      };
+      set_desired_candidates: {
         max: string;
+      };
+      set_candidacy_bond: {
+        bond: string;
+      };
+      register_as_candidate: string;
+      leave_intent: string;
+      add_invulnerable: {
+        who: string;
+      };
+      remove_invulnerable: {
+        who: string;
+      };
+      update_bond: {
+        newDeposit: string;
+      };
+      take_candidate_slot: {
+        deposit: string;
+        target: string;
+      };
     };
-    /**
-     * Lookup177: frame_support::dispatch::PerDispatchClass<T>
-     **/
-    FrameSupportDispatchPerDispatchClassU32: {
-        normal: string;
-        operational: string;
-        mandatory: string;
+  };
+  /**
+   * Lookup253: pallet_session::pallet::Call<T>
+   **/
+  PalletSessionCall: {
+    _enum: {
+      set_keys: {
+        _alias: {
+          keys_: string;
+        };
+        keys_: string;
+        proof: string;
+      };
+      purge_keys: string;
     };
-    /**
-     * Lookup178: sp_weights::RuntimeDbWeight
-     **/
-    SpWeightsRuntimeDbWeight: {
-        read: string;
-        write: string;
+  };
+  /**
+   * Lookup254: storage_hub_runtime::SessionKeys
+   **/
+  StorageHubRuntimeSessionKeys: {
+    aura: string;
+  };
+  /**
+   * Lookup255: sp_consensus_aura::sr25519::app_sr25519::Public
+   **/
+  SpConsensusAuraSr25519AppSr25519Public: string;
+  /**
+   * Lookup256: sp_core::sr25519::Public
+   **/
+  SpCoreSr25519Public: string;
+  /**
+   * Lookup257: cumulus_pallet_xcmp_queue::pallet::Call<T>
+   **/
+  CumulusPalletXcmpQueueCall: {
+    _enum: {
+      __Unused0: string;
+      suspend_xcm_execution: string;
+      resume_xcm_execution: string;
+      update_suspend_threshold: {
+        _alias: {
+          new_: string;
+        };
+        new_: string;
+      };
+      update_drop_threshold: {
+        _alias: {
+          new_: string;
+        };
+        new_: string;
+      };
+      update_resume_threshold: {
+        _alias: {
+          new_: string;
+        };
+        new_: string;
+      };
     };
-    /**
-     * Lookup179: sp_version::RuntimeVersion
-     **/
-    SpVersionRuntimeVersion: {
-        specName: string;
-        implName: string;
-        authoringVersion: string;
-        specVersion: string;
-        implVersion: string;
-        apis: string;
-        transactionVersion: string;
-        stateVersion: string;
+  };
+  /**
+   * Lookup258: pallet_xcm::pallet::Call<T>
+   **/
+  PalletXcmCall: {
+    _enum: {
+      send: {
+        dest: string;
+        message: string;
+      };
+      teleport_assets: {
+        dest: string;
+        beneficiary: string;
+        assets: string;
+        feeAssetItem: string;
+      };
+      reserve_transfer_assets: {
+        dest: string;
+        beneficiary: string;
+        assets: string;
+        feeAssetItem: string;
+      };
+      execute: {
+        message: string;
+        maxWeight: string;
+      };
+      force_xcm_version: {
+        location: string;
+        version: string;
+      };
+      force_default_xcm_version: {
+        maybeXcmVersion: string;
+      };
+      force_subscribe_version_notify: {
+        location: string;
+      };
+      force_unsubscribe_version_notify: {
+        location: string;
+      };
+      limited_reserve_transfer_assets: {
+        dest: string;
+        beneficiary: string;
+        assets: string;
+        feeAssetItem: string;
+        weightLimit: string;
+      };
+      limited_teleport_assets: {
+        dest: string;
+        beneficiary: string;
+        assets: string;
+        feeAssetItem: string;
+        weightLimit: string;
+      };
+      force_suspension: {
+        suspended: string;
+      };
+      transfer_assets: {
+        dest: string;
+        beneficiary: string;
+        assets: string;
+        feeAssetItem: string;
+        weightLimit: string;
+      };
+      claim_assets: {
+        assets: string;
+        beneficiary: string;
+      };
     };
-    /**
-     * Lookup184: frame_system::pallet::Error<T>
-     **/
-    FrameSystemError: {
-        _enum: string[];
+  };
+  /**
+   * Lookup259: xcm::VersionedXcm<RuntimeCall>
+   **/
+  XcmVersionedXcm: {
+    _enum: {
+      __Unused0: string;
+      __Unused1: string;
+      V2: string;
+      V3: string;
+      V4: string;
     };
-    /**
-     * Lookup186: cumulus_pallet_parachain_system::unincluded_segment::Ancestor<primitive_types::H256>
-     **/
-    CumulusPalletParachainSystemUnincludedSegmentAncestor: {
-        usedBandwidth: string;
-        paraHeadHash: string;
-        consumedGoAheadSignal: string;
-    };
-    /**
-     * Lookup187: cumulus_pallet_parachain_system::unincluded_segment::UsedBandwidth
-     **/
-    CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth: {
-        umpMsgCount: string;
-        umpTotalBytes: string;
-        hrmpOutgoing: string;
-    };
-    /**
-     * Lookup189: cumulus_pallet_parachain_system::unincluded_segment::HrmpChannelUpdate
-     **/
-    CumulusPalletParachainSystemUnincludedSegmentHrmpChannelUpdate: {
-        msgCount: string;
-        totalBytes: string;
-    };
-    /**
-     * Lookup194: polkadot_primitives::v6::UpgradeGoAhead
-     **/
-    PolkadotPrimitivesV6UpgradeGoAhead: {
-        _enum: string[];
-    };
-    /**
-     * Lookup195: cumulus_pallet_parachain_system::unincluded_segment::SegmentTracker<primitive_types::H256>
-     **/
-    CumulusPalletParachainSystemUnincludedSegmentSegmentTracker: {
-        usedBandwidth: string;
-        hrmpWatermark: string;
-        consumedGoAheadSignal: string;
-    };
-    /**
-     * Lookup196: polkadot_primitives::v6::PersistedValidationData<primitive_types::H256, N>
-     **/
-    PolkadotPrimitivesV6PersistedValidationData: {
-        parentHead: string;
-        relayParentNumber: string;
-        relayParentStorageRoot: string;
-        maxPovSize: string;
-    };
-    /**
-     * Lookup199: polkadot_primitives::v6::UpgradeRestriction
-     **/
-    PolkadotPrimitivesV6UpgradeRestriction: {
-        _enum: string[];
-    };
-    /**
-     * Lookup200: sp_trie::storage_proof::StorageProof
-     **/
-    SpTrieStorageProof: {
-        trieNodes: string;
-    };
-    /**
-     * Lookup202: cumulus_pallet_parachain_system::relay_state_snapshot::MessagingStateSnapshot
-     **/
-    CumulusPalletParachainSystemRelayStateSnapshotMessagingStateSnapshot: {
-        dmqMqcHead: string;
-        relayDispatchQueueRemainingCapacity: string;
-        ingressChannels: string;
-        egressChannels: string;
-    };
-    /**
-     * Lookup203: cumulus_pallet_parachain_system::relay_state_snapshot::RelayDispatchQueueRemainingCapacity
-     **/
-    CumulusPalletParachainSystemRelayStateSnapshotRelayDispatchQueueRemainingCapacity: {
-        remainingCount: string;
-        remainingSize: string;
-    };
-    /**
-     * Lookup206: polkadot_primitives::v6::AbridgedHrmpChannel
-     **/
-    PolkadotPrimitivesV6AbridgedHrmpChannel: {
-        maxCapacity: string;
-        maxTotalSize: string;
+  };
+  /**
+   * Lookup260: xcm::v2::Xcm<RuntimeCall>
+   **/
+  XcmV2Xcm: string;
+  /**
+   * Lookup262: xcm::v2::Instruction<RuntimeCall>
+   **/
+  XcmV2Instruction: {
+    _enum: {
+      WithdrawAsset: string;
+      ReserveAssetDeposited: string;
+      ReceiveTeleportedAsset: string;
+      QueryResponse: {
+        queryId: string;
+        response: string;
+        maxWeight: string;
+      };
+      TransferAsset: {
+        assets: string;
+        beneficiary: string;
+      };
+      TransferReserveAsset: {
+        assets: string;
+        dest: string;
+        xcm: string;
+      };
+      Transact: {
+        originType: string;
+        requireWeightAtMost: string;
+        call: string;
+      };
+      HrmpNewChannelOpenRequest: {
+        sender: string;
         maxMessageSize: string;
-        msgCount: string;
-        totalSize: string;
-        mqcHead: string;
-    };
-    /**
-     * Lookup207: polkadot_primitives::v6::AbridgedHostConfiguration
-     **/
-    PolkadotPrimitivesV6AbridgedHostConfiguration: {
-        maxCodeSize: string;
-        maxHeadDataSize: string;
-        maxUpwardQueueCount: string;
-        maxUpwardQueueSize: string;
-        maxUpwardMessageSize: string;
-        maxUpwardMessageNumPerCandidate: string;
-        hrmpMaxMessageNumPerCandidate: string;
-        validationUpgradeCooldown: string;
-        validationUpgradeDelay: string;
-        asyncBackingParams: string;
-    };
-    /**
-     * Lookup208: polkadot_primitives::v6::async_backing::AsyncBackingParams
-     **/
-    PolkadotPrimitivesV6AsyncBackingAsyncBackingParams: {
-        maxCandidateDepth: string;
-        allowedAncestryLen: string;
-    };
-    /**
-     * Lookup214: polkadot_core_primitives::OutboundHrmpMessage<polkadot_parachain_primitives::primitives::Id>
-     **/
-    PolkadotCorePrimitivesOutboundHrmpMessage: {
+        maxCapacity: string;
+      };
+      HrmpChannelAccepted: {
         recipient: string;
-        data: string;
+      };
+      HrmpChannelClosing: {
+        initiator: string;
+        sender: string;
+        recipient: string;
+      };
+      ClearOrigin: string;
+      DescendOrigin: string;
+      ReportError: {
+        queryId: string;
+        dest: string;
+        maxResponseWeight: string;
+      };
+      DepositAsset: {
+        assets: string;
+        maxAssets: string;
+        beneficiary: string;
+      };
+      DepositReserveAsset: {
+        assets: string;
+        maxAssets: string;
+        dest: string;
+        xcm: string;
+      };
+      ExchangeAsset: {
+        give: string;
+        receive: string;
+      };
+      InitiateReserveWithdraw: {
+        assets: string;
+        reserve: string;
+        xcm: string;
+      };
+      InitiateTeleport: {
+        assets: string;
+        dest: string;
+        xcm: string;
+      };
+      QueryHolding: {
+        queryId: string;
+        dest: string;
+        assets: string;
+        maxResponseWeight: string;
+      };
+      BuyExecution: {
+        fees: string;
+        weightLimit: string;
+      };
+      RefundSurplus: string;
+      SetErrorHandler: string;
+      SetAppendix: string;
+      ClearError: string;
+      ClaimAsset: {
+        assets: string;
+        ticket: string;
+      };
+      Trap: string;
+      SubscribeVersion: {
+        queryId: string;
+        maxResponseWeight: string;
+      };
+      UnsubscribeVersion: string;
     };
-    /**
-     * Lookup216: cumulus_pallet_parachain_system::pallet::Call<T>
-     **/
-    CumulusPalletParachainSystemCall: {
-        _enum: {
-            set_validation_data: {
-                data: string;
-            };
-            sudo_send_upward_message: {
-                message: string;
-            };
-            authorize_upgrade: {
-                codeHash: string;
-                checkVersion: string;
-            };
-            enact_authorized_upgrade: {
-                code: string;
-            };
-        };
+  };
+  /**
+   * Lookup263: xcm::v2::Response
+   **/
+  XcmV2Response: {
+    _enum: {
+      Null: string;
+      Assets: string;
+      ExecutionResult: string;
+      Version: string;
     };
-    /**
-     * Lookup217: cumulus_primitives_parachain_inherent::ParachainInherentData
-     **/
-    CumulusPrimitivesParachainInherentParachainInherentData: {
-        validationData: string;
-        relayChainState: string;
-        downwardMessages: string;
-        horizontalMessages: string;
+  };
+  /**
+   * Lookup266: xcm::v2::traits::Error
+   **/
+  XcmV2TraitsError: {
+    _enum: {
+      Overflow: string;
+      Unimplemented: string;
+      UntrustedReserveLocation: string;
+      UntrustedTeleportLocation: string;
+      MultiLocationFull: string;
+      MultiLocationNotInvertible: string;
+      BadOrigin: string;
+      InvalidLocation: string;
+      AssetNotFound: string;
+      FailedToTransactAsset: string;
+      NotWithdrawable: string;
+      LocationCannotHold: string;
+      ExceedsMaxMessageSize: string;
+      DestinationUnsupported: string;
+      Transport: string;
+      Unroutable: string;
+      UnknownClaim: string;
+      FailedToDecode: string;
+      MaxWeightInvalid: string;
+      NotHoldingFees: string;
+      TooExpensive: string;
+      Trap: string;
+      UnhandledXcmVersion: string;
+      WeightLimitReached: string;
+      Barrier: string;
+      WeightNotComputable: string;
     };
-    /**
-     * Lookup219: polkadot_core_primitives::InboundDownwardMessage<BlockNumber>
-     **/
-    PolkadotCorePrimitivesInboundDownwardMessage: {
-        sentAt: string;
-        msg: string;
+  };
+  /**
+   * Lookup267: xcm::v2::multiasset::MultiAssetFilter
+   **/
+  XcmV2MultiassetMultiAssetFilter: {
+    _enum: {
+      Definite: string;
+      Wild: string;
     };
-    /**
-     * Lookup222: polkadot_core_primitives::InboundHrmpMessage<BlockNumber>
-     **/
-    PolkadotCorePrimitivesInboundHrmpMessage: {
-        sentAt: string;
-        data: string;
-    };
-    /**
-     * Lookup225: cumulus_pallet_parachain_system::pallet::Error<T>
-     **/
-    CumulusPalletParachainSystemError: {
-        _enum: string[];
-    };
-    /**
-     * Lookup226: pallet_timestamp::pallet::Call<T>
-     **/
-    PalletTimestampCall: {
-        _enum: {
-            set: {
-                now: string;
-            };
-        };
-    };
-    /**
-     * Lookup227: staging_parachain_info::pallet::Call<T>
-     **/
-    StagingParachainInfoCall: string;
-    /**
-     * Lookup229: pallet_balances::types::BalanceLock<Balance>
-     **/
-    PalletBalancesBalanceLock: {
+  };
+  /**
+   * Lookup268: xcm::v2::multiasset::WildMultiAsset
+   **/
+  XcmV2MultiassetWildMultiAsset: {
+    _enum: {
+      All: string;
+      AllOf: {
         id: string;
-        amount: string;
-        reasons: string;
+        fun: string;
+      };
     };
-    /**
-     * Lookup230: pallet_balances::types::Reasons
-     **/
-    PalletBalancesReasons: {
-        _enum: string[];
+  };
+  /**
+   * Lookup269: xcm::v2::multiasset::WildFungibility
+   **/
+  XcmV2MultiassetWildFungibility: {
+    _enum: string[];
+  };
+  /**
+   * Lookup270: xcm::v2::WeightLimit
+   **/
+  XcmV2WeightLimit: {
+    _enum: {
+      Unlimited: string;
+      Limited: string;
     };
-    /**
-     * Lookup233: pallet_balances::types::ReserveData<ReserveIdentifier, Balance>
-     **/
-    PalletBalancesReserveData: {
-        id: string;
-        amount: string;
-    };
-    /**
-     * Lookup237: storage_hub_runtime::RuntimeHoldReason
-     **/
-    StorageHubRuntimeRuntimeHoldReason: {
-        _enum: {
-            __Unused0: string;
-            __Unused1: string;
-            __Unused2: string;
-            __Unused3: string;
-            __Unused4: string;
-            __Unused5: string;
-            __Unused6: string;
-            __Unused7: string;
-            __Unused8: string;
-            __Unused9: string;
-            __Unused10: string;
-            __Unused11: string;
-            __Unused12: string;
-            __Unused13: string;
-            __Unused14: string;
-            __Unused15: string;
-            __Unused16: string;
-            __Unused17: string;
-            __Unused18: string;
-            __Unused19: string;
-            __Unused20: string;
-            __Unused21: string;
-            __Unused22: string;
-            __Unused23: string;
-            __Unused24: string;
-            __Unused25: string;
-            __Unused26: string;
-            __Unused27: string;
-            __Unused28: string;
-            __Unused29: string;
-            __Unused30: string;
-            __Unused31: string;
-            __Unused32: string;
-            __Unused33: string;
-            __Unused34: string;
-            __Unused35: string;
-            __Unused36: string;
-            __Unused37: string;
-            __Unused38: string;
-            __Unused39: string;
-            Providers: string;
-            __Unused41: string;
-            __Unused42: string;
-            __Unused43: string;
-            PaymentStreams: string;
-        };
-    };
-    /**
-     * Lookup238: pallet_storage_providers::pallet::HoldReason
-     **/
-    PalletStorageProvidersHoldReason: {
-        _enum: string[];
-    };
-    /**
-     * Lookup239: pallet_payment_streams::pallet::HoldReason
-     **/
-    PalletPaymentStreamsHoldReason: {
-        _enum: string[];
-    };
-    /**
-     * Lookup242: pallet_balances::types::IdAmount<Id, Balance>
-     **/
-    PalletBalancesIdAmount: {
-        id: string;
-        amount: string;
-    };
-    /**
-     * Lookup244: pallet_balances::pallet::Call<T, I>
-     **/
-    PalletBalancesCall: {
-        _enum: {
-            transfer_allow_death: {
-                dest: string;
-                value: string;
-            };
-            __Unused1: string;
-            force_transfer: {
-                source: string;
-                dest: string;
-                value: string;
-            };
-            transfer_keep_alive: {
-                dest: string;
-                value: string;
-            };
-            transfer_all: {
-                dest: string;
-                keepAlive: string;
-            };
-            force_unreserve: {
-                who: string;
-                amount: string;
-            };
-            upgrade_accounts: {
-                who: string;
-            };
-            __Unused7: string;
-            force_set_balance: {
-                who: string;
-                newFree: string;
-            };
-            force_adjust_total_issuance: {
-                direction: string;
-                delta: string;
-            };
-        };
-    };
-    /**
-     * Lookup247: pallet_balances::types::AdjustmentDirection
-     **/
-    PalletBalancesAdjustmentDirection: {
-        _enum: string[];
-    };
-    /**
-     * Lookup248: pallet_balances::pallet::Error<T, I>
-     **/
-    PalletBalancesError: {
-        _enum: string[];
-    };
-    /**
-     * Lookup249: pallet_transaction_payment::Releases
-     **/
-    PalletTransactionPaymentReleases: {
-        _enum: string[];
-    };
-    /**
-     * Lookup250: pallet_sudo::pallet::Call<T>
-     **/
-    PalletSudoCall: {
-        _enum: {
-            sudo: {
-                call: string;
-            };
-            sudo_unchecked_weight: {
-                call: string;
-                weight: string;
-            };
-            set_key: {
-                _alias: {
-                    new_: string;
-                };
-                new_: string;
-            };
-            sudo_as: {
-                who: string;
-                call: string;
-            };
-            remove_key: string;
-        };
-    };
-    /**
-     * Lookup252: pallet_collator_selection::pallet::Call<T>
-     **/
-    PalletCollatorSelectionCall: {
-        _enum: {
-            set_invulnerables: {
-                _alias: {
-                    new_: string;
-                };
-                new_: string;
-            };
-            set_desired_candidates: {
-                max: string;
-            };
-            set_candidacy_bond: {
-                bond: string;
-            };
-            register_as_candidate: string;
-            leave_intent: string;
-            add_invulnerable: {
-                who: string;
-            };
-            remove_invulnerable: {
-                who: string;
-            };
-            update_bond: {
-                newDeposit: string;
-            };
-            take_candidate_slot: {
-                deposit: string;
-                target: string;
-            };
-        };
-    };
-    /**
-     * Lookup253: pallet_session::pallet::Call<T>
-     **/
-    PalletSessionCall: {
-        _enum: {
-            set_keys: {
-                _alias: {
-                    keys_: string;
-                };
-                keys_: string;
-                proof: string;
-            };
-            purge_keys: string;
-        };
-    };
-    /**
-     * Lookup254: storage_hub_runtime::SessionKeys
-     **/
-    StorageHubRuntimeSessionKeys: {
-        aura: string;
-    };
-    /**
-     * Lookup255: sp_consensus_aura::sr25519::app_sr25519::Public
-     **/
-    SpConsensusAuraSr25519AppSr25519Public: string;
-    /**
-     * Lookup256: sp_core::sr25519::Public
-     **/
-    SpCoreSr25519Public: string;
-    /**
-     * Lookup257: cumulus_pallet_xcmp_queue::pallet::Call<T>
-     **/
-    CumulusPalletXcmpQueueCall: {
-        _enum: {
-            __Unused0: string;
-            suspend_xcm_execution: string;
-            resume_xcm_execution: string;
-            update_suspend_threshold: {
-                _alias: {
-                    new_: string;
-                };
-                new_: string;
-            };
-            update_drop_threshold: {
-                _alias: {
-                    new_: string;
-                };
-                new_: string;
-            };
-            update_resume_threshold: {
-                _alias: {
-                    new_: string;
-                };
-                new_: string;
-            };
-        };
-    };
-    /**
-     * Lookup258: pallet_xcm::pallet::Call<T>
-     **/
-    PalletXcmCall: {
-        _enum: {
-            send: {
-                dest: string;
-                message: string;
-            };
-            teleport_assets: {
-                dest: string;
-                beneficiary: string;
-                assets: string;
-                feeAssetItem: string;
-            };
-            reserve_transfer_assets: {
-                dest: string;
-                beneficiary: string;
-                assets: string;
-                feeAssetItem: string;
-            };
-            execute: {
-                message: string;
-                maxWeight: string;
-            };
-            force_xcm_version: {
-                location: string;
-                version: string;
-            };
-            force_default_xcm_version: {
-                maybeXcmVersion: string;
-            };
-            force_subscribe_version_notify: {
-                location: string;
-            };
-            force_unsubscribe_version_notify: {
-                location: string;
-            };
-            limited_reserve_transfer_assets: {
-                dest: string;
-                beneficiary: string;
-                assets: string;
-                feeAssetItem: string;
-                weightLimit: string;
-            };
-            limited_teleport_assets: {
-                dest: string;
-                beneficiary: string;
-                assets: string;
-                feeAssetItem: string;
-                weightLimit: string;
-            };
-            force_suspension: {
-                suspended: string;
-            };
-            transfer_assets: {
-                dest: string;
-                beneficiary: string;
-                assets: string;
-                feeAssetItem: string;
-                weightLimit: string;
-            };
-            claim_assets: {
-                assets: string;
-                beneficiary: string;
-            };
-        };
-    };
-    /**
-     * Lookup259: xcm::VersionedXcm<RuntimeCall>
-     **/
-    XcmVersionedXcm: {
-        _enum: {
-            __Unused0: string;
-            __Unused1: string;
-            V2: string;
-            V3: string;
-            V4: string;
-        };
-    };
-    /**
-     * Lookup260: xcm::v2::Xcm<RuntimeCall>
-     **/
-    XcmV2Xcm: string;
-    /**
-     * Lookup262: xcm::v2::Instruction<RuntimeCall>
-     **/
-    XcmV2Instruction: {
-        _enum: {
-            WithdrawAsset: string;
-            ReserveAssetDeposited: string;
-            ReceiveTeleportedAsset: string;
-            QueryResponse: {
-                queryId: string;
-                response: string;
-                maxWeight: string;
-            };
-            TransferAsset: {
-                assets: string;
-                beneficiary: string;
-            };
-            TransferReserveAsset: {
-                assets: string;
-                dest: string;
-                xcm: string;
-            };
-            Transact: {
-                originType: string;
-                requireWeightAtMost: string;
-                call: string;
-            };
-            HrmpNewChannelOpenRequest: {
-                sender: string;
-                maxMessageSize: string;
-                maxCapacity: string;
-            };
-            HrmpChannelAccepted: {
-                recipient: string;
-            };
-            HrmpChannelClosing: {
-                initiator: string;
-                sender: string;
-                recipient: string;
-            };
-            ClearOrigin: string;
-            DescendOrigin: string;
-            ReportError: {
-                queryId: string;
-                dest: string;
-                maxResponseWeight: string;
-            };
-            DepositAsset: {
-                assets: string;
-                maxAssets: string;
-                beneficiary: string;
-            };
-            DepositReserveAsset: {
-                assets: string;
-                maxAssets: string;
-                dest: string;
-                xcm: string;
-            };
-            ExchangeAsset: {
-                give: string;
-                receive: string;
-            };
-            InitiateReserveWithdraw: {
-                assets: string;
-                reserve: string;
-                xcm: string;
-            };
-            InitiateTeleport: {
-                assets: string;
-                dest: string;
-                xcm: string;
-            };
-            QueryHolding: {
-                queryId: string;
-                dest: string;
-                assets: string;
-                maxResponseWeight: string;
-            };
-            BuyExecution: {
-                fees: string;
-                weightLimit: string;
-            };
-            RefundSurplus: string;
-            SetErrorHandler: string;
-            SetAppendix: string;
-            ClearError: string;
-            ClaimAsset: {
-                assets: string;
-                ticket: string;
-            };
-            Trap: string;
-            SubscribeVersion: {
-                queryId: string;
-                maxResponseWeight: string;
-            };
-            UnsubscribeVersion: string;
-        };
-    };
-    /**
-     * Lookup263: xcm::v2::Response
-     **/
-    XcmV2Response: {
-        _enum: {
-            Null: string;
-            Assets: string;
-            ExecutionResult: string;
-            Version: string;
-        };
-    };
-    /**
-     * Lookup266: xcm::v2::traits::Error
-     **/
-    XcmV2TraitsError: {
-        _enum: {
-            Overflow: string;
-            Unimplemented: string;
-            UntrustedReserveLocation: string;
-            UntrustedTeleportLocation: string;
-            MultiLocationFull: string;
-            MultiLocationNotInvertible: string;
-            BadOrigin: string;
-            InvalidLocation: string;
-            AssetNotFound: string;
-            FailedToTransactAsset: string;
-            NotWithdrawable: string;
-            LocationCannotHold: string;
-            ExceedsMaxMessageSize: string;
-            DestinationUnsupported: string;
-            Transport: string;
-            Unroutable: string;
-            UnknownClaim: string;
-            FailedToDecode: string;
-            MaxWeightInvalid: string;
-            NotHoldingFees: string;
-            TooExpensive: string;
-            Trap: string;
-            UnhandledXcmVersion: string;
-            WeightLimitReached: string;
-            Barrier: string;
-            WeightNotComputable: string;
-        };
-    };
-    /**
-     * Lookup267: xcm::v2::multiasset::MultiAssetFilter
-     **/
-    XcmV2MultiassetMultiAssetFilter: {
-        _enum: {
-            Definite: string;
-            Wild: string;
-        };
-    };
-    /**
-     * Lookup268: xcm::v2::multiasset::WildMultiAsset
-     **/
-    XcmV2MultiassetWildMultiAsset: {
-        _enum: {
-            All: string;
-            AllOf: {
-                id: string;
-                fun: string;
-            };
-        };
-    };
-    /**
-     * Lookup269: xcm::v2::multiasset::WildFungibility
-     **/
-    XcmV2MultiassetWildFungibility: {
-        _enum: string[];
-    };
-    /**
-     * Lookup270: xcm::v2::WeightLimit
-     **/
-    XcmV2WeightLimit: {
-        _enum: {
-            Unlimited: string;
-            Limited: string;
-        };
-    };
-    /**
-     * Lookup271: xcm::v3::Xcm<Call>
-     **/
-    XcmV3Xcm: string;
-    /**
-     * Lookup273: xcm::v3::Instruction<Call>
-     **/
-    XcmV3Instruction: {
-        _enum: {
-            WithdrawAsset: string;
-            ReserveAssetDeposited: string;
-            ReceiveTeleportedAsset: string;
-            QueryResponse: {
-                queryId: string;
-                response: string;
-                maxWeight: string;
-                querier: string;
-            };
-            TransferAsset: {
-                assets: string;
-                beneficiary: string;
-            };
-            TransferReserveAsset: {
-                assets: string;
-                dest: string;
-                xcm: string;
-            };
-            Transact: {
-                originKind: string;
-                requireWeightAtMost: string;
-                call: string;
-            };
-            HrmpNewChannelOpenRequest: {
-                sender: string;
-                maxMessageSize: string;
-                maxCapacity: string;
-            };
-            HrmpChannelAccepted: {
-                recipient: string;
-            };
-            HrmpChannelClosing: {
-                initiator: string;
-                sender: string;
-                recipient: string;
-            };
-            ClearOrigin: string;
-            DescendOrigin: string;
-            ReportError: string;
-            DepositAsset: {
-                assets: string;
-                beneficiary: string;
-            };
-            DepositReserveAsset: {
-                assets: string;
-                dest: string;
-                xcm: string;
-            };
-            ExchangeAsset: {
-                give: string;
-                want: string;
-                maximal: string;
-            };
-            InitiateReserveWithdraw: {
-                assets: string;
-                reserve: string;
-                xcm: string;
-            };
-            InitiateTeleport: {
-                assets: string;
-                dest: string;
-                xcm: string;
-            };
-            ReportHolding: {
-                responseInfo: string;
-                assets: string;
-            };
-            BuyExecution: {
-                fees: string;
-                weightLimit: string;
-            };
-            RefundSurplus: string;
-            SetErrorHandler: string;
-            SetAppendix: string;
-            ClearError: string;
-            ClaimAsset: {
-                assets: string;
-                ticket: string;
-            };
-            Trap: string;
-            SubscribeVersion: {
-                queryId: string;
-                maxResponseWeight: string;
-            };
-            UnsubscribeVersion: string;
-            BurnAsset: string;
-            ExpectAsset: string;
-            ExpectOrigin: string;
-            ExpectError: string;
-            ExpectTransactStatus: string;
-            QueryPallet: {
-                moduleName: string;
-                responseInfo: string;
-            };
-            ExpectPallet: {
-                index: string;
-                name: string;
-                moduleName: string;
-                crateMajor: string;
-                minCrateMinor: string;
-            };
-            ReportTransactStatus: string;
-            ClearTransactStatus: string;
-            UniversalOrigin: string;
-            ExportMessage: {
-                network: string;
-                destination: string;
-                xcm: string;
-            };
-            LockAsset: {
-                asset: string;
-                unlocker: string;
-            };
-            UnlockAsset: {
-                asset: string;
-                target: string;
-            };
-            NoteUnlockable: {
-                asset: string;
-                owner: string;
-            };
-            RequestUnlock: {
-                asset: string;
-                locker: string;
-            };
-            SetFeesMode: {
-                jitWithdraw: string;
-            };
-            SetTopic: string;
-            ClearTopic: string;
-            AliasOrigin: string;
-            UnpaidExecution: {
-                weightLimit: string;
-                checkOrigin: string;
-            };
-        };
-    };
-    /**
-     * Lookup274: xcm::v3::Response
-     **/
-    XcmV3Response: {
-        _enum: {
-            Null: string;
-            Assets: string;
-            ExecutionResult: string;
-            Version: string;
-            PalletsInfo: string;
-            DispatchResult: string;
-        };
-    };
-    /**
-     * Lookup276: xcm::v3::PalletInfo
-     **/
-    XcmV3PalletInfo: {
+  };
+  /**
+   * Lookup271: xcm::v3::Xcm<Call>
+   **/
+  XcmV3Xcm: string;
+  /**
+   * Lookup273: xcm::v3::Instruction<Call>
+   **/
+  XcmV3Instruction: {
+    _enum: {
+      WithdrawAsset: string;
+      ReserveAssetDeposited: string;
+      ReceiveTeleportedAsset: string;
+      QueryResponse: {
+        queryId: string;
+        response: string;
+        maxWeight: string;
+        querier: string;
+      };
+      TransferAsset: {
+        assets: string;
+        beneficiary: string;
+      };
+      TransferReserveAsset: {
+        assets: string;
+        dest: string;
+        xcm: string;
+      };
+      Transact: {
+        originKind: string;
+        requireWeightAtMost: string;
+        call: string;
+      };
+      HrmpNewChannelOpenRequest: {
+        sender: string;
+        maxMessageSize: string;
+        maxCapacity: string;
+      };
+      HrmpChannelAccepted: {
+        recipient: string;
+      };
+      HrmpChannelClosing: {
+        initiator: string;
+        sender: string;
+        recipient: string;
+      };
+      ClearOrigin: string;
+      DescendOrigin: string;
+      ReportError: string;
+      DepositAsset: {
+        assets: string;
+        beneficiary: string;
+      };
+      DepositReserveAsset: {
+        assets: string;
+        dest: string;
+        xcm: string;
+      };
+      ExchangeAsset: {
+        give: string;
+        want: string;
+        maximal: string;
+      };
+      InitiateReserveWithdraw: {
+        assets: string;
+        reserve: string;
+        xcm: string;
+      };
+      InitiateTeleport: {
+        assets: string;
+        dest: string;
+        xcm: string;
+      };
+      ReportHolding: {
+        responseInfo: string;
+        assets: string;
+      };
+      BuyExecution: {
+        fees: string;
+        weightLimit: string;
+      };
+      RefundSurplus: string;
+      SetErrorHandler: string;
+      SetAppendix: string;
+      ClearError: string;
+      ClaimAsset: {
+        assets: string;
+        ticket: string;
+      };
+      Trap: string;
+      SubscribeVersion: {
+        queryId: string;
+        maxResponseWeight: string;
+      };
+      UnsubscribeVersion: string;
+      BurnAsset: string;
+      ExpectAsset: string;
+      ExpectOrigin: string;
+      ExpectError: string;
+      ExpectTransactStatus: string;
+      QueryPallet: {
+        moduleName: string;
+        responseInfo: string;
+      };
+      ExpectPallet: {
         index: string;
         name: string;
         moduleName: string;
-        major: string;
-        minor: string;
-        patch: string;
-    };
-    /**
-     * Lookup280: xcm::v3::QueryResponseInfo
-     **/
-    XcmV3QueryResponseInfo: {
+        crateMajor: string;
+        minCrateMinor: string;
+      };
+      ReportTransactStatus: string;
+      ClearTransactStatus: string;
+      UniversalOrigin: string;
+      ExportMessage: {
+        network: string;
         destination: string;
-        queryId: string;
-        maxWeight: string;
+        xcm: string;
+      };
+      LockAsset: {
+        asset: string;
+        unlocker: string;
+      };
+      UnlockAsset: {
+        asset: string;
+        target: string;
+      };
+      NoteUnlockable: {
+        asset: string;
+        owner: string;
+      };
+      RequestUnlock: {
+        asset: string;
+        locker: string;
+      };
+      SetFeesMode: {
+        jitWithdraw: string;
+      };
+      SetTopic: string;
+      ClearTopic: string;
+      AliasOrigin: string;
+      UnpaidExecution: {
+        weightLimit: string;
+        checkOrigin: string;
+      };
     };
-    /**
-     * Lookup281: xcm::v3::multiasset::MultiAssetFilter
-     **/
-    XcmV3MultiassetMultiAssetFilter: {
-        _enum: {
-            Definite: string;
-            Wild: string;
+  };
+  /**
+   * Lookup274: xcm::v3::Response
+   **/
+  XcmV3Response: {
+    _enum: {
+      Null: string;
+      Assets: string;
+      ExecutionResult: string;
+      Version: string;
+      PalletsInfo: string;
+      DispatchResult: string;
+    };
+  };
+  /**
+   * Lookup276: xcm::v3::PalletInfo
+   **/
+  XcmV3PalletInfo: {
+    index: string;
+    name: string;
+    moduleName: string;
+    major: string;
+    minor: string;
+    patch: string;
+  };
+  /**
+   * Lookup280: xcm::v3::QueryResponseInfo
+   **/
+  XcmV3QueryResponseInfo: {
+    destination: string;
+    queryId: string;
+    maxWeight: string;
+  };
+  /**
+   * Lookup281: xcm::v3::multiasset::MultiAssetFilter
+   **/
+  XcmV3MultiassetMultiAssetFilter: {
+    _enum: {
+      Definite: string;
+      Wild: string;
+    };
+  };
+  /**
+   * Lookup282: xcm::v3::multiasset::WildMultiAsset
+   **/
+  XcmV3MultiassetWildMultiAsset: {
+    _enum: {
+      All: string;
+      AllOf: {
+        id: string;
+        fun: string;
+      };
+      AllCounted: string;
+      AllOfCounted: {
+        id: string;
+        fun: string;
+        count: string;
+      };
+    };
+  };
+  /**
+   * Lookup283: xcm::v3::multiasset::WildFungibility
+   **/
+  XcmV3MultiassetWildFungibility: {
+    _enum: string[];
+  };
+  /**
+   * Lookup295: cumulus_pallet_xcm::pallet::Call<T>
+   **/
+  CumulusPalletXcmCall: string;
+  /**
+   * Lookup296: pallet_message_queue::pallet::Call<T>
+   **/
+  PalletMessageQueueCall: {
+    _enum: {
+      reap_page: {
+        messageOrigin: string;
+        pageIndex: string;
+      };
+      execute_overweight: {
+        messageOrigin: string;
+        page: string;
+        index: string;
+        weightLimit: string;
+      };
+    };
+  };
+  /**
+   * Lookup297: pallet_storage_providers::pallet::Call<T>
+   **/
+  PalletStorageProvidersCall: {
+    _enum: {
+      request_msp_sign_up: {
+        capacity: string;
+        multiaddresses: string;
+        valueProp: string;
+        paymentAccount: string;
+      };
+      request_bsp_sign_up: {
+        capacity: string;
+        multiaddresses: string;
+        paymentAccount: string;
+      };
+      confirm_sign_up: {
+        providerAccount: string;
+      };
+      cancel_sign_up: string;
+      msp_sign_off: string;
+      bsp_sign_off: string;
+      change_capacity: {
+        newCapacity: string;
+      };
+      add_value_prop: {
+        newValueProp: string;
+      };
+      force_msp_sign_up: {
+        who: string;
+        mspId: string;
+        capacity: string;
+        multiaddresses: string;
+        valueProp: string;
+        paymentAccount: string;
+      };
+      force_bsp_sign_up: {
+        who: string;
+        bspId: string;
+        capacity: string;
+        multiaddresses: string;
+        paymentAccount: string;
+      };
+      slash: {
+        providerId: string;
+      };
+    };
+  };
+  /**
+   * Lookup298: pallet_file_system::pallet::Call<T>
+   **/
+  PalletFileSystemCall: {
+    _enum: {
+      create_bucket: {
+        mspId: string;
+        name: string;
+        private: string;
+      };
+      update_bucket_privacy: {
+        bucketId: string;
+        private: string;
+      };
+      create_and_associate_collection_with_bucket: {
+        bucketId: string;
+      };
+      issue_storage_request: {
+        _alias: {
+          size_: string;
         };
-    };
-    /**
-     * Lookup282: xcm::v3::multiasset::WildMultiAsset
-     **/
-    XcmV3MultiassetWildMultiAsset: {
-        _enum: {
-            All: string;
-            AllOf: {
-                id: string;
-                fun: string;
-            };
-            AllCounted: string;
-            AllOfCounted: {
-                id: string;
-                fun: string;
-                count: string;
-            };
+        bucketId: string;
+        location: string;
+        fingerprint: string;
+        size_: string;
+        mspId: string;
+        peerIds: string;
+      };
+      revoke_storage_request: {
+        fileKey: string;
+      };
+      bsp_volunteer: {
+        fileKey: string;
+      };
+      bsp_confirm_storing: {
+        nonInclusionForestProof: string;
+        fileKeysAndProofs: string;
+      };
+      bsp_request_stop_storing: {
+        _alias: {
+          size_: string;
         };
-    };
-    /**
-     * Lookup283: xcm::v3::multiasset::WildFungibility
-     **/
-    XcmV3MultiassetWildFungibility: {
-        _enum: string[];
-    };
-    /**
-     * Lookup295: cumulus_pallet_xcm::pallet::Call<T>
-     **/
-    CumulusPalletXcmCall: string;
-    /**
-     * Lookup296: pallet_message_queue::pallet::Call<T>
-     **/
-    PalletMessageQueueCall: {
-        _enum: {
-            reap_page: {
-                messageOrigin: string;
-                pageIndex: string;
-            };
-            execute_overweight: {
-                messageOrigin: string;
-                page: string;
-                index: string;
-                weightLimit: string;
-            };
+        fileKey: string;
+        bucketId: string;
+        location: string;
+        owner: string;
+        fingerprint: string;
+        size_: string;
+        canServe: string;
+        inclusionForestProof: string;
+      };
+      bsp_confirm_stop_storing: {
+        fileKey: string;
+        inclusionForestProof: string;
+      };
+      delete_file: {
+        _alias: {
+          size_: string;
         };
-    };
-    /**
-     * Lookup297: pallet_storage_providers::pallet::Call<T>
-     **/
-    PalletStorageProvidersCall: {
-        _enum: {
-            request_msp_sign_up: {
-                capacity: string;
-                multiaddresses: string;
-                valueProp: string;
-                paymentAccount: string;
-            };
-            request_bsp_sign_up: {
-                capacity: string;
-                multiaddresses: string;
-                paymentAccount: string;
-            };
-            confirm_sign_up: {
-                providerAccount: string;
-            };
-            cancel_sign_up: string;
-            msp_sign_off: string;
-            bsp_sign_off: string;
-            change_capacity: {
-                newCapacity: string;
-            };
-            add_value_prop: {
-                newValueProp: string;
-            };
-            force_msp_sign_up: {
-                who: string;
-                mspId: string;
-                capacity: string;
-                multiaddresses: string;
-                valueProp: string;
-                paymentAccount: string;
-            };
-            force_bsp_sign_up: {
-                who: string;
-                bspId: string;
-                capacity: string;
-                multiaddresses: string;
-                paymentAccount: string;
-            };
-            slash: {
-                providerId: string;
-            };
-        };
-    };
-    /**
-     * Lookup298: pallet_file_system::pallet::Call<T>
-     **/
-    PalletFileSystemCall: {
-        _enum: {
-            create_bucket: {
-                mspId: string;
-                name: string;
-                private: string;
-            };
-            update_bucket_privacy: {
-                bucketId: string;
-                private: string;
-            };
-            create_and_associate_collection_with_bucket: {
-                bucketId: string;
-            };
-            issue_storage_request: {
-                _alias: {
-                    size_: string;
-                };
-                bucketId: string;
-                location: string;
-                fingerprint: string;
-                size_: string;
-                mspId: string;
-                peerIds: string;
-            };
-            revoke_storage_request: {
-                fileKey: string;
-            };
-            bsp_volunteer: {
-                fileKey: string;
-            };
-            bsp_confirm_storing: {
-                nonInclusionForestProof: string;
-                fileKeysAndProofs: string;
-            };
-            bsp_request_stop_storing: {
-                _alias: {
-                    size_: string;
-                };
-                fileKey: string;
-                bucketId: string;
-                location: string;
-                owner: string;
-                fingerprint: string;
-                size_: string;
-                canServe: string;
-                inclusionForestProof: string;
-            };
-            bsp_confirm_stop_storing: {
-                fileKey: string;
-                inclusionForestProof: string;
-            };
-            delete_file: {
-                _alias: {
-                    size_: string;
-                };
-                bucketId: string;
-                fileKey: string;
-                location: string;
-                size_: string;
-                fingerprint: string;
-                maybeInclusionForestProof: string;
-            };
-            pending_file_deletion_request_submit_proof: {
-                user: string;
-                fileKey: string;
-                bucketId: string;
-                forestProof: string;
-            };
-            set_global_parameters: {
+        bucketId: string;
+        fileKey: string;
+        location: string;
+        size_: string;
+        fingerprint: string;
+        maybeInclusionForestProof: string;
+      };
+      pending_file_deletion_request_submit_proof: {
+        user: string;
+        fileKey: string;
+        bucketId: string;
+        forestProof: string;
+      };
+      set_global_parameters: {
         replicationTarget: string;
-                maximumThreshold: string;
-                blockRangeToMaximumThreshold: string;
+        maximumThreshold: string;
+        blockRangeToMaximumThreshold: string;
       };
     };
   };
@@ -3652,235 +3652,235 @@ declare const _default: {
     lastCapacityChange: string;
     ownerAccount: string;
     paymentAccount: string;
-        reputationWeight: string;
+    reputationWeight: string;
+  };
+  /**
+   * Lookup390: pallet_storage_providers::types::MainStorageProvider<T>
+   **/
+  PalletStorageProvidersMainStorageProvider: {
+    buckets: string;
+    capacity: string;
+    dataUsed: string;
+    multiaddresses: string;
+    valueProp: string;
+    lastCapacityChange: string;
+    ownerAccount: string;
+    paymentAccount: string;
+  };
+  /**
+   * Lookup392: pallet_storage_providers::types::Bucket<T>
+   **/
+  PalletStorageProvidersBucket: {
+    root: string;
+    userId: string;
+    mspId: string;
+    private: string;
+    readAccessGroupId: string;
+  };
+  /**
+   * Lookup395: pallet_storage_providers::pallet::Error<T>
+   **/
+  PalletStorageProvidersError: {
+    _enum: string[];
+  };
+  /**
+   * Lookup396: pallet_file_system::types::StorageRequestMetadata<T>
+   **/
+  PalletFileSystemStorageRequestMetadata: {
+    _alias: {
+      size_: string;
     };
-    /**
-     * Lookup390: pallet_storage_providers::types::MainStorageProvider<T>
-     **/
-    PalletStorageProvidersMainStorageProvider: {
-        buckets: string;
-        capacity: string;
-        dataUsed: string;
-        multiaddresses: string;
-        valueProp: string;
-        lastCapacityChange: string;
-        ownerAccount: string;
-        paymentAccount: string;
+    requestedAt: string;
+    owner: string;
+    bucketId: string;
+    location: string;
+    fingerprint: string;
+    size_: string;
+    msp: string;
+    userPeerIds: string;
+    dataServerSps: string;
+    bspsRequired: string;
+    bspsConfirmed: string;
+    bspsVolunteered: string;
+  };
+  /**
+   * Lookup399: pallet_file_system::types::StorageRequestBspsMetadata<T>
+   **/
+  PalletFileSystemStorageRequestBspsMetadata: {
+    confirmed: string;
+  };
+  /**
+   * Lookup401: pallet_file_system::types::ExpiredItems<T>
+   **/
+  PalletFileSystemExpiredItems: {
+    _enum: {
+      StorageRequest: string;
+      PendingFileDeletionRequests: string;
     };
-    /**
-     * Lookup392: pallet_storage_providers::types::Bucket<T>
-     **/
-    PalletStorageProvidersBucket: {
-        root: string;
-        userId: string;
-        mspId: string;
-        private: string;
-        readAccessGroupId: string;
-    };
-    /**
-     * Lookup395: pallet_storage_providers::pallet::Error<T>
-     **/
-    PalletStorageProvidersError: {
-        _enum: string[];
-    };
-    /**
-     * Lookup396: pallet_file_system::types::StorageRequestMetadata<T>
-     **/
-    PalletFileSystemStorageRequestMetadata: {
-        _alias: {
-            size_: string;
-        };
-        requestedAt: string;
-        owner: string;
-        bucketId: string;
-        location: string;
-        fingerprint: string;
-        size_: string;
-        msp: string;
-        userPeerIds: string;
-        dataServerSps: string;
-        bspsRequired: string;
-        bspsConfirmed: string;
-        bspsVolunteered: string;
-    };
-    /**
-     * Lookup399: pallet_file_system::types::StorageRequestBspsMetadata<T>
-     **/
-    PalletFileSystemStorageRequestBspsMetadata: {
-        confirmed: string;
-    };
-    /**
-     * Lookup401: pallet_file_system::types::ExpiredItems<T>
-     **/
-    PalletFileSystemExpiredItems: {
-        _enum: {
-            StorageRequest: string;
-            PendingFileDeletionRequests: string;
-        };
-    };
-    /**
-     * Lookup406: pallet_file_system::pallet::Error<T>
-     **/
-    PalletFileSystemError: {
-        _enum: string[];
-    };
-    /**
-     * Lookup412: pallet_proofs_dealer::pallet::Error<T>
-     **/
-    PalletProofsDealerError: {
-        _enum: string[];
-    };
-    /**
-     * Lookup415: pallet_payment_streams::types::FixedRatePaymentStream<T>
-     **/
-    PalletPaymentStreamsFixedRatePaymentStream: {
-        rate: string;
-        lastChargedTick: string;
-        userDeposit: string;
-    };
-    /**
-     * Lookup416: pallet_payment_streams::types::DynamicRatePaymentStream<T>
-     **/
-    PalletPaymentStreamsDynamicRatePaymentStream: {
-        amountProvided: string;
-        priceIndexWhenLastCharged: string;
-        userDeposit: string;
-    };
-    /**
-     * Lookup417: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
-     **/
-    PalletPaymentStreamsProviderLastChargeableInfo: {
-        lastChargeableTick: string;
-        priceIndex: string;
-    };
-    /**
-     * Lookup418: pallet_payment_streams::pallet::Error<T>
-     **/
-    PalletPaymentStreamsError: {
-        _enum: string[];
-    };
-    /**
-     * Lookup419: pallet_bucket_nfts::pallet::Error<T>
-     **/
-    PalletBucketNftsError: {
-        _enum: string[];
-    };
-    /**
-     * Lookup420: pallet_nfts::types::CollectionDetails<sp_core::crypto::AccountId32, DepositBalance>
-     **/
-    PalletNftsCollectionDetails: {
-        owner: string;
-        ownerDeposit: string;
-        items: string;
-        itemMetadatas: string;
-        itemConfigs: string;
-        attributes: string;
-    };
-    /**
-     * Lookup425: pallet_nfts::types::CollectionRole
-     **/
-    PalletNftsCollectionRole: {
-        _enum: string[];
-    };
-    /**
-     * Lookup426: pallet_nfts::types::ItemDetails<sp_core::crypto::AccountId32, pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>, bounded_collections::bounded_btree_map::BoundedBTreeMap<sp_core::crypto::AccountId32, Option<T>, S>>
-     **/
-    PalletNftsItemDetails: {
-        owner: string;
-        approvals: string;
-        deposit: string;
-    };
-    /**
-     * Lookup427: pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>
-     **/
-    PalletNftsItemDeposit: {
-        account: string;
-        amount: string;
-    };
-    /**
-     * Lookup432: pallet_nfts::types::CollectionMetadata<Deposit, StringLimit>
-     **/
-    PalletNftsCollectionMetadata: {
-        deposit: string;
-        data: string;
-    };
-    /**
-     * Lookup433: pallet_nfts::types::ItemMetadata<pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>, StringLimit>
-     **/
-    PalletNftsItemMetadata: {
-        deposit: string;
-        data: string;
-    };
-    /**
-     * Lookup434: pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>
-     **/
-    PalletNftsItemMetadataDeposit: {
-        account: string;
-        amount: string;
-    };
-    /**
-     * Lookup437: pallet_nfts::types::AttributeDeposit<DepositBalance, sp_core::crypto::AccountId32>
-     **/
-    PalletNftsAttributeDeposit: {
-        account: string;
-        amount: string;
-    };
-    /**
-     * Lookup441: pallet_nfts::types::PendingSwap<CollectionId, ItemId, pallet_nfts::types::PriceWithDirection<Amount>, Deadline>
-     **/
-    PalletNftsPendingSwap: {
-        desiredCollection: string;
-        desiredItem: string;
-        price: string;
-        deadline: string;
-    };
-    /**
-     * Lookup443: pallet_nfts::types::PalletFeature
-     **/
-    PalletNftsPalletFeature: {
-        _enum: string[];
-    };
-    /**
-     * Lookup444: pallet_nfts::pallet::Error<T, I>
-     **/
-    PalletNftsError: {
-        _enum: string[];
-    };
-    /**
-     * Lookup447: frame_system::extensions::check_non_zero_sender::CheckNonZeroSender<T>
-     **/
-    FrameSystemExtensionsCheckNonZeroSender: string;
-    /**
-     * Lookup448: frame_system::extensions::check_spec_version::CheckSpecVersion<T>
-     **/
-    FrameSystemExtensionsCheckSpecVersion: string;
-    /**
-     * Lookup449: frame_system::extensions::check_tx_version::CheckTxVersion<T>
-     **/
-    FrameSystemExtensionsCheckTxVersion: string;
-    /**
-     * Lookup450: frame_system::extensions::check_genesis::CheckGenesis<T>
-     **/
-    FrameSystemExtensionsCheckGenesis: string;
-    /**
-     * Lookup453: frame_system::extensions::check_nonce::CheckNonce<T>
-     **/
-    FrameSystemExtensionsCheckNonce: string;
-    /**
-     * Lookup454: frame_system::extensions::check_weight::CheckWeight<T>
-     **/
-    FrameSystemExtensionsCheckWeight: string;
-    /**
-     * Lookup455: pallet_transaction_payment::ChargeTransactionPayment<T>
-     **/
-    PalletTransactionPaymentChargeTransactionPayment: string;
-    /**
-     * Lookup456: cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim<T>
-     **/
-    CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim: string;
-    /**
-     * Lookup457: storage_hub_runtime::Runtime
-     **/
-    StorageHubRuntimeRuntime: string;
+  };
+  /**
+   * Lookup406: pallet_file_system::pallet::Error<T>
+   **/
+  PalletFileSystemError: {
+    _enum: string[];
+  };
+  /**
+   * Lookup412: pallet_proofs_dealer::pallet::Error<T>
+   **/
+  PalletProofsDealerError: {
+    _enum: string[];
+  };
+  /**
+   * Lookup415: pallet_payment_streams::types::FixedRatePaymentStream<T>
+   **/
+  PalletPaymentStreamsFixedRatePaymentStream: {
+    rate: string;
+    lastChargedTick: string;
+    userDeposit: string;
+  };
+  /**
+   * Lookup416: pallet_payment_streams::types::DynamicRatePaymentStream<T>
+   **/
+  PalletPaymentStreamsDynamicRatePaymentStream: {
+    amountProvided: string;
+    priceIndexWhenLastCharged: string;
+    userDeposit: string;
+  };
+  /**
+   * Lookup417: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
+   **/
+  PalletPaymentStreamsProviderLastChargeableInfo: {
+    lastChargeableTick: string;
+    priceIndex: string;
+  };
+  /**
+   * Lookup418: pallet_payment_streams::pallet::Error<T>
+   **/
+  PalletPaymentStreamsError: {
+    _enum: string[];
+  };
+  /**
+   * Lookup419: pallet_bucket_nfts::pallet::Error<T>
+   **/
+  PalletBucketNftsError: {
+    _enum: string[];
+  };
+  /**
+   * Lookup420: pallet_nfts::types::CollectionDetails<sp_core::crypto::AccountId32, DepositBalance>
+   **/
+  PalletNftsCollectionDetails: {
+    owner: string;
+    ownerDeposit: string;
+    items: string;
+    itemMetadatas: string;
+    itemConfigs: string;
+    attributes: string;
+  };
+  /**
+   * Lookup425: pallet_nfts::types::CollectionRole
+   **/
+  PalletNftsCollectionRole: {
+    _enum: string[];
+  };
+  /**
+   * Lookup426: pallet_nfts::types::ItemDetails<sp_core::crypto::AccountId32, pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>, bounded_collections::bounded_btree_map::BoundedBTreeMap<sp_core::crypto::AccountId32, Option<T>, S>>
+   **/
+  PalletNftsItemDetails: {
+    owner: string;
+    approvals: string;
+    deposit: string;
+  };
+  /**
+   * Lookup427: pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   **/
+  PalletNftsItemDeposit: {
+    account: string;
+    amount: string;
+  };
+  /**
+   * Lookup432: pallet_nfts::types::CollectionMetadata<Deposit, StringLimit>
+   **/
+  PalletNftsCollectionMetadata: {
+    deposit: string;
+    data: string;
+  };
+  /**
+   * Lookup433: pallet_nfts::types::ItemMetadata<pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>, StringLimit>
+   **/
+  PalletNftsItemMetadata: {
+    deposit: string;
+    data: string;
+  };
+  /**
+   * Lookup434: pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   **/
+  PalletNftsItemMetadataDeposit: {
+    account: string;
+    amount: string;
+  };
+  /**
+   * Lookup437: pallet_nfts::types::AttributeDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   **/
+  PalletNftsAttributeDeposit: {
+    account: string;
+    amount: string;
+  };
+  /**
+   * Lookup441: pallet_nfts::types::PendingSwap<CollectionId, ItemId, pallet_nfts::types::PriceWithDirection<Amount>, Deadline>
+   **/
+  PalletNftsPendingSwap: {
+    desiredCollection: string;
+    desiredItem: string;
+    price: string;
+    deadline: string;
+  };
+  /**
+   * Lookup443: pallet_nfts::types::PalletFeature
+   **/
+  PalletNftsPalletFeature: {
+    _enum: string[];
+  };
+  /**
+   * Lookup444: pallet_nfts::pallet::Error<T, I>
+   **/
+  PalletNftsError: {
+    _enum: string[];
+  };
+  /**
+   * Lookup447: frame_system::extensions::check_non_zero_sender::CheckNonZeroSender<T>
+   **/
+  FrameSystemExtensionsCheckNonZeroSender: string;
+  /**
+   * Lookup448: frame_system::extensions::check_spec_version::CheckSpecVersion<T>
+   **/
+  FrameSystemExtensionsCheckSpecVersion: string;
+  /**
+   * Lookup449: frame_system::extensions::check_tx_version::CheckTxVersion<T>
+   **/
+  FrameSystemExtensionsCheckTxVersion: string;
+  /**
+   * Lookup450: frame_system::extensions::check_genesis::CheckGenesis<T>
+   **/
+  FrameSystemExtensionsCheckGenesis: string;
+  /**
+   * Lookup453: frame_system::extensions::check_nonce::CheckNonce<T>
+   **/
+  FrameSystemExtensionsCheckNonce: string;
+  /**
+   * Lookup454: frame_system::extensions::check_weight::CheckWeight<T>
+   **/
+  FrameSystemExtensionsCheckWeight: string;
+  /**
+   * Lookup455: pallet_transaction_payment::ChargeTransactionPayment<T>
+   **/
+  PalletTransactionPaymentChargeTransactionPayment: string;
+  /**
+   * Lookup456: cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim<T>
+   **/
+  CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim: string;
+  /**
+   * Lookup457: storage_hub_runtime::Runtime
+   **/
+  StorageHubRuntimeRuntime: string;
 };
 export default _default;

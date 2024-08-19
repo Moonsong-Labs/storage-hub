@@ -590,11 +590,24 @@ declare module "@polkadot/api-base/types/submittable" {
             | SpTrieStorageProofCompactProof
             | {
                 encodedNodes?: any;
-            } | string) => SubmittableExtrinsic<ApiType>, [H256, H256, Bytes, u32, H256, Option<SpTrieStorageProofCompactProof>]>;
-            /**
-             * Issue a new storage request for a file
-             **/
-            issueStorageRequest: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, fingerprint: H256 | string | Uint8Array, size: u32 | AnyNumber | Uint8Array, mspId: H256 | string | Uint8Array, peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[]) => SubmittableExtrinsic<ApiType>, [H256, Bytes, H256, u32, H256, Vec<Bytes>]
+              }
+            | string
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, H256, Bytes, u32, H256, Option<SpTrieStorageProofCompactProof>]
+      >;
+      /**
+       * Issue a new storage request for a file
+       **/
+      issueStorageRequest: AugmentedSubmittable<
+        (
+          bucketId: H256 | string | Uint8Array,
+          location: Bytes | string | Uint8Array,
+          fingerprint: H256 | string | Uint8Array,
+          size: u32 | AnyNumber | Uint8Array,
+          mspId: H256 | string | Uint8Array,
+          peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[]
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, Bytes, H256, u32, H256, Vec<Bytes>]
       >;
       pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
         (
@@ -618,8 +631,20 @@ declare module "@polkadot/api-base/types/submittable" {
         (fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
       >;
-      setGlobalParameters: AugmentedSubmittable<(replicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber, maximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber, blockRangeToMaximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber) => SubmittableExtrinsic<ApiType>, [Option<u32>, Option<u32>, Option<u32>]>;
-            updateBucketPrivacy: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, private: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, bool]
+      setGlobalParameters: AugmentedSubmittable<
+        (
+          replicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber,
+          maximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber,
+          blockRangeToMaximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber
+        ) => SubmittableExtrinsic<ApiType>,
+        [Option<u32>, Option<u32>, Option<u32>]
+      >;
+      updateBucketPrivacy: AugmentedSubmittable<
+        (
+          bucketId: H256 | string | Uint8Array,
+          private: bool | boolean | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, bool]
       >;
       /**
        * Generic tx
