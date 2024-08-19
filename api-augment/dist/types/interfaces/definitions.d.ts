@@ -1,1 +1,1 @@
-export { default as storagehubclient } from "./storagehubclient/definitions";
+export { default as storagehubclient } from "./storagehubclient/definitions.js";

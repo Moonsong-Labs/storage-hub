@@ -1,0 +1,53 @@
+name: Upgrade TypeScript API
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full SHA to build the pnpm package from
+        required: true
+
+# TODO: When we start publishing runtimes, change steps to fetch from docker instead
+jobs:
+  upgrading-typescript-api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.sha }}
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Use pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+         cache: false
+      - uses: rui314/setup-mold@v1
+      - uses: ./.github/workflow-templates/setup-pnpm
+      - uses: arduino/setup-protoc@v3
+      - name: Build All
+        run: cargo build --release
+      - name: Check Built By Mold
+        run: readelf -p .comment target/release/storage-hub-node
+      - name: Regenerate TypeScript API with new runtime metadata
+        run: |
+          pnpm i 
+          cd test
+          pnpm typegen
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          base: master
+          branch: "typescript-api-${{ github.event.inputs.sha }}"
+          commit-message: typescript API v0.${{ github.event.inputs.sha }}.0
+          draft: true
+          title: "Upgrade TypeScript API for runtime-${{ github.event.inputs.sha }}"
+          reviewers: "moonsong-coredev"
+          labels: "B0-silent,D2-notlive"

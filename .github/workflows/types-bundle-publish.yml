@@ -1,0 +1,47 @@
+name: Publish types-bundle to npm.js
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full SHA to build the pnpm package from
+        required: true
+      dry_run:
+        description: Perform a dry run (no actual publish)
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  publish-types-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.sha }}
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Build types-bundle
+        run: |
+          cd types-bundle
+          pnpm install
+          pnpm run build
+
+      - name: Publish types-bundle
+        uses: JS-DevTools/npm-publish@v3
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          package: types-bundle/package.json
+          registry: https://registry.npmjs.org/
+          access: public
+          command: pnpm publish
+          dry-run: ${{ github.event.inputs.dry_run }}

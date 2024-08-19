@@ -196,7 +196,6 @@ jobs:
       - name: Setup
         run: |
           cd test
-          pnpm typegen
           pnpm zombie:setup:native
       - name: Run Zombienet Test!
         run: |
