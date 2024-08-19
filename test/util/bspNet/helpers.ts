@@ -723,7 +723,7 @@ export const cleardownTest = async (cleardownOptions: {
   keepNetworkAlive?: boolean;
 }) => {
   await cleardownOptions.api.disconnect();
-  !cleardownOptions.keepNetworkAlive && (await closeSimpleBspNet());
+  cleardownOptions.keepNetworkAlive === true ? null : await closeSimpleBspNet();
 };
 
 export const createCheckBucket = async (api: BspNetApi, bucketName: string) => {

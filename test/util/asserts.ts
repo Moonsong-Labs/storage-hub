@@ -9,7 +9,8 @@ export const assertExtrinsicPresent = async (
   api: BspNetApi,
   options: {
     blockHeight?: string;
-    enforceSuccess?: boolean;
+    blockHash?: string;
+    skipSuccessCheck?: boolean;
     checkTxPool?: boolean;
     module: string;
     method: string;
@@ -35,10 +36,21 @@ export const assertExtrinsicPresent = async (
     );
   }
 
-  const blockHash = await api.rpc.chain.getBlockHash(options?.blockHeight);
+  const blockHash = options?.blockHash
+    ? options.blockHash
+    : options?.blockHeight
+      ? await api.rpc.chain.getBlockHash(options?.blockHeight)
+      : await api.rpc.chain.getBlockHash();
+
   const extrinsics = !options.checkTxPool
     ? await (async () => {
         const response = await api.rpc.chain.getBlock(blockHash);
+
+        if (!options.blockHeight && !options.blockHash) {
+          console.log(
+            `No block height provided, using latest at ${response.block.header.number.toNumber()}`
+          );
+        }
         return response.block.extrinsics;
       })()
     : await api.rpc.author.pendingExtrinsics();
@@ -56,7 +68,7 @@ export const assertExtrinsicPresent = async (
     `No extrinsics matching ${options?.module}.${options?.method} found. \n Extrinsics in block ${options.blockHeight || blockHash}: ${extrinsics.map(({ method: { method, section } }) => `${section}.${method}`).join(" | ")}`
   );
 
-  if (options?.enforceSuccess) {
+  if (options?.skipSuccessCheck !== true && options.checkTxPool !== true) {
     const events = await (await api.at(blockHash)).query.system.events();
     assertEventPresent(api, "system", "ExtrinsicSuccess", events);
   }
