@@ -19,19 +19,19 @@ Once a pending file deletion request reaches its expiration time and it has not 
 BSPs are required to volunteer to store data for storage requests. To ensure data is probabilistically stored evenly across all BSPs, a threshold must be succeeded by each volunteering BSP.
 The threshold to succeed is different for every BSP since it is based on their reputation weight. Gaining more reputation will increase the probability of succeeding the threshold check. 
 
-The computed threshold result of a BSP is formalized as $\H(C(P, F))$ where $\H$ is the hashing function, $C$ is the concatenation function, $P$ is the provider id and $F$ is the file key.
-The $\n$ least significant bits of the hash result are converted into the configured runtime's threshold type, where $\n$ is the number of bits required to represent the threshold type. 
+The computed threshold result of a BSP is formalized as $H(C(P, F))$ where $H$ is the hashing function, $C$ is the concatenation function, $P$ is the provider id and $F$ is the file key.
+The $n$ least significant bits of the hash result are converted into the configured runtime's threshold type, where $n$ is the number of bits required to represent the threshold type. 
 The BSP is considered eligible to volunteer if the threshold result is less than or equal to the threshold to succeed.
 
 Formulas:
 
-1. **Threshold Global Starting Point ($\T_{gsp}$)**: Establishes a baseline threshold for all BSPs to meet based on replication targets, global weight, and maximum threshold.
+1. **Threshold Global Starting Point ($T_{gsp}$)**: Establishes a baseline threshold for all BSPs to meet based on replication targets, global weight, and maximum threshold.
 
-2. **Threshold Weighted Starting Point ($\T_{wsp}$)**: Increases the threshold starting point of a BSP based on their weight, giving higher-weight BSPs a head start.
+2. **Threshold Weighted Starting Point ($T_{wsp}$)**: Increases the threshold starting point of a BSP based on their weight, giving higher-weight BSPs a head start.
 
-3. **Threshold Slope ($\T_{s}$)**: Defines the rate at which the threshold increases from the starting point up to the maximum threshold over a specified number of blocks.
+3. **Threshold Slope ($T_{s}$)**: Defines the rate at which the threshold increases from the starting point up to the maximum threshold over a specified number of blocks.
 
-4. **Threshold ($\T$)**: Calculates the current threshold to succeed for a BSP at a given block, combining the weighted starting point and the slope over elapsed blocks from the initiated storage request.
+4. **Threshold ($T$)**: Calculates the current threshold to succeed for a BSP at a given block, combining the weighted starting point and the slope over elapsed blocks from the initiated storage request.
 
 #### Threshold Global Starting Point
 
@@ -39,33 +39,33 @@ The goal here is to have half of the replication target $R_{t}$ be probabilistic
 
 $$\T_{gsp} = \frac{1}{2} \cdot \frac{R_{t}}{W_{g}} \cdot M$$
 
-$\T_{gsp}$: *Threshold global starting point*
-$\R_{t}$: *Replication target* (number of BSPs required to fulfill a storage request, otherwise known as `MaxBspsPerStorageRequest`)
-$\W_{g}$: *Global weight* (cumulative weight of all BSPs)
-$\M$: *Maximum threshold* (all BSPs would be eligible to volunteer, for example `u32::MAX`)
+$T_{gsp}$: *Threshold global starting point*
+$R_{t}$: *Replication target* (number of BSPs required to fulfill a storage request, otherwise known as `MaxBspsPerStorageRequest`)
+$W_{g}$: *Global weight* (cumulative weight of all BSPs)
+$M$: *Maximum threshold* (all BSPs would be eligible to volunteer, for example `u32::MAX`)
 
 #### Threshold Weighted Starting Point
 
 Assuming the implemented reputation system sets all BSPs to have a starting weight of 1. Any increase in reputation (i.e. increase in weight) would give an advantage over other BSPs by multiplying their own weight to the global starting point $T_{gsp}$. This will increase their own starting point and increase the probably of succeeding the threshold check.
 
-$$\T_{wsp} = w \cdot T_{gsp}$$
+$$T_{wsp} = w \cdot T_{gsp}$$
 
-$\w$: *BSP weight* (current weight of the BSP)
+$w$: *BSP weight* (current weight of the BSP)
 
 #### Threshold Slope
 
 The rate of increase of the threshold from the weighted starting point to the maximum threshold over a period of blocks $\B_{t}$ required to reach the maximum threshold $\M$. 
 
-$$\T_{s} = \frac{M - T_{wsp}}{B_{t}}$$
+$$T_{s} = \frac{M - T_{wsp}}{B_{t}}$$
 
-$\B_{t}$: *Block time* (number of blocks to pass to reach $M$)
+$B_{t}$: *Block time* (number of blocks to pass to reach $M$)
 
 #### Threshold
 
-The threshold to succeed will be different for each BSP. By calculating their own starting point $\T_{wsp}$ and increasing at a rate based on the global weight of all BSPs over a period of blocks $\B_{t}$ required to reach the maximum threshold $\M$.
+The threshold to succeed will be different for each BSP. By calculating their own starting point $T_{wsp}$ and increasing at a rate based on the global weight of all BSPs over a period of blocks $B_{t}$ required to reach the maximum threshold $M$.
 
-$$\T = T_{wsp} + T_{s} \cdot b$$
+$$T = T_{wsp} + T_{s} \cdot b$$
 
-$\T_{wsp}$: *Threshold weighted starting point* (taking into account the BSP's weight)
-$\T_{s}$: *Threshold slope* (rate of increase reaching constant within target block time)
-$\b$: *Blocks passed* (number of blocks passed since initiated storage request)
+$T_{wsp}$: *Threshold weighted starting point* (taking into account the BSP's weight)
+$T_{s}$: *Threshold slope* (rate of increase reaching constant within target block time)
+$b$: *Blocks passed* (number of blocks passed since initiated storage request)
