@@ -1,4 +1,4 @@
-# StorageHub
+P# StorageHub
 
 > [!IMPORTANT]
 > 🏗️ This repo is very much work in progress!
@@ -60,3 +60,22 @@ Full instructions can be found [here](test/README.md#local-usage).
 ### Testing
 
 For details on how to conduct tests on StorageHub, please see the testing [README.md](test/README.md).
+
+## FAQ
+
+### I've just updated a RuntimeApi or RPC call, how do I update the fn signatures in polkadot{.js} API/App?
+
+Navigate to the `/types-bundle` package and make your changes to `/src/rpc.ts` and `/src/runtime.ts`.
+
+Any new Structs or ErrorEnums can be defined at `/src/types.ts` , using existing examples for guidance, and any new branded types as well.
+
+Now, navigate to the `/test` directory and run:
+
+```sh
+pnpm typegen
+```
+
+From there you should be able to see the new RPC in your tests for the `BspNetApi` object.
+
+> [!TIP]
+> If the TS is still yelling at you with red squiggles, use command pallete to restart language server.
