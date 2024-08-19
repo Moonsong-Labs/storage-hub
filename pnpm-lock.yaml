@@ -81,8 +81,8 @@ importers:
         specifier: workspace:*
         version: link:../types-bundle
       '@zombienet/cli':
-        specifier: 1.3.109
-        version: 1.3.109(@polkadot/util@13.0.2)(@types/node@22.4.1)(chokidar@3.6.0)
+        specifier: 1.3.108
+        version: 1.3.108(@polkadot/util@13.0.2)(@types/node@22.4.1)(chokidar@3.6.0)
       '@zombienet/utils':
         specifier: 0.0.25
         version: 0.0.25(@types/node@22.4.1)(chokidar@3.6.0)(typescript@5.5.4)
@@ -752,16 +752,16 @@ packages:
   '@types/wrap-ansi@3.0.0':
     resolution: {integrity: sha512-ltIpx+kM7g/MLRZfkbL7EsCEjfzCcScLpkg37eXEtx5kmrAKBkTJwd1GIAjDSL8wTpM6Hzn5YO4pSb91BEwu1g==}
 
-  '@zombienet/cli@1.3.109':
-    resolution: {integrity: sha512-JxvXP4zpfMgbWLFn4gDohsSsGtlCLQfjxq91UAwEqth0mL81cg2qplT+exjvG4FQnCuWWM6JxfNWkrVWGlJkMQ==}
+  '@zombienet/cli@1.3.108':
+    resolution: {integrity: sha512-c5pUb8P3vl3k1/HUE1b4GHgGoOjcC8e27zFwRV9zHSpl3kKUQrL922R1BxGkz7E5WhLubCm9RCpKaS1/66doWQ==}
     engines: {node: '>=18'}
     hasBin: true
 
   '@zombienet/dsl-parser-wrapper@0.1.10':
     resolution: {integrity: sha512-2r2SjanMcNTQiiwTtj/TRO89ek4KoIKGKhgcdHm8+uXPVWuU3tIh/unN8+m51Jnm2jhCLkQQwa5aidvSC02wOg==}
 
-  '@zombienet/orchestrator@0.0.90':
-    resolution: {integrity: sha512-2LPrg0+zSwznaPkKfY6u76/88LWmSUen7R13tLNUoagGRIPZVdQ72bRduYTW/oFBI9S9ei906OkRP2OzyxWz/Q==}
+  '@zombienet/orchestrator@0.0.89':
+    resolution: {integrity: sha512-E9KftxZPrLH0+ULTqFRxpxLvO+snmkBJZGb35AZmL8wqRjwz3V6/ZU/hv6LMKi1Id9vylyu6K4aeYlE7moqQIA==}
     engines: {node: '>=18'}
 
   '@zombienet/utils@0.0.25':
@@ -2747,10 +2747,10 @@ snapshots:
 
   '@types/wrap-ansi@3.0.0': {}
 
-  '@zombienet/cli@1.3.109(@polkadot/util@13.0.2)(@types/node@22.4.1)(chokidar@3.6.0)':
+  '@zombienet/cli@1.3.108(@polkadot/util@13.0.2)(@types/node@22.4.1)(chokidar@3.6.0)':
     dependencies:
       '@zombienet/dsl-parser-wrapper': 0.1.10
-      '@zombienet/orchestrator': 0.0.90(@polkadot/util@13.0.2)(@types/node@22.4.1)(chokidar@3.6.0)
+      '@zombienet/orchestrator': 0.0.89(@polkadot/util@13.0.2)(@types/node@22.4.1)(chokidar@3.6.0)
       '@zombienet/utils': 0.0.25(@types/node@22.4.1)(chokidar@3.6.0)(typescript@5.5.4)
       cli-progress: 3.12.0
       commander: 11.1.0
@@ -2770,7 +2770,7 @@ snapshots:
 
   '@zombienet/dsl-parser-wrapper@0.1.10': {}
 
-  '@zombienet/orchestrator@0.0.90(@polkadot/util@13.0.2)(@types/node@22.4.1)(chokidar@3.6.0)':
+  '@zombienet/orchestrator@0.0.89(@polkadot/util@13.0.2)(@types/node@22.4.1)(chokidar@3.6.0)':
     dependencies:
       '@polkadot/api': 12.3.1
       '@polkadot/keyring': 13.0.2(@polkadot/util-crypto@13.0.2(@polkadot/util@13.0.2))(@polkadot/util@13.0.2)
