@@ -129,7 +129,10 @@ pub trait BlockchainServiceInterface {
     async fn get_node_public_key(&self) -> sp_core::sr25519::Public;
 
     /// Get the Provider ID.
-    async fn get_provider_id(&self, maybe_node_pub_key: Option<sp_core::sr25519::Public>) -> Option<ProviderId>;
+    async fn get_provider_id(
+        &self,
+        maybe_node_pub_key: Option<sp_core::sr25519::Public>,
+    ) -> Option<ProviderId>;
 
     /// Query the chunks that a BSP needs to confirm for a file.
     async fn query_bsp_confirm_chunks_to_prove_for_file(
@@ -288,9 +291,15 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 
-    async fn get_provider_id(&self, maybe_node_pub_key: Option<sp_core::sr25519::Public>) -> Option<ProviderId> {
+    async fn get_provider_id(
+        &self,
+        maybe_node_pub_key: Option<sp_core::sr25519::Public>,
+    ) -> Option<ProviderId> {
         let (callback, rx) = tokio::sync::oneshot::channel();
-        let message = BlockchainServiceCommand::GetProviderId { maybe_node_pub_key, callback };
+        let message = BlockchainServiceCommand::GetProviderId {
+            maybe_node_pub_key,
+            callback,
+        };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }

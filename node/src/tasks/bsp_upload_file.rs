@@ -318,7 +318,8 @@ where
             .storage_hub_handler
             .blockchain
             .get_provider_id(None)
-            .await.ok_or_else(|| anyhow!("Failed to get BSP provider ID."))?;
+            .await
+            .ok_or_else(|| anyhow!("Failed to get BSP provider ID."))?;
 
         // Query runtime for the earliest block where the BSP can volunteer for the file.
         let earliest_volunteer_block = self

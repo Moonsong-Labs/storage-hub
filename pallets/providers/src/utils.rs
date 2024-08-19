@@ -1209,7 +1209,7 @@ where
     pub fn get_bsp_provider_id(account_id: &T::AccountId) -> Option<BackupStorageProviderId<T>> {
         AccountIdToBackupStorageProviderId::<T>::get(account_id)
     }
-    
+
     pub fn get_bsp_info(
         bsp_id: &BackupStorageProviderId<T>,
     ) -> Result<BackupStorageProvider<T>, GetBspInfoError> {

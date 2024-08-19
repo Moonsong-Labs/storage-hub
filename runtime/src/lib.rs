@@ -584,7 +584,7 @@ impl_runtime_apis! {
         fn get_bsp_provider_id(account_id: &AccountId) -> Option<BackupStorageProviderId<Runtime>> {
             Providers::get_bsp_provider_id(account_id)
         }
-        
+
         fn get_bsp_info(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<BackupStorageProvider<Runtime>, GetBspInfoError> {
             Providers::get_bsp_info(bsp_id)
         }
