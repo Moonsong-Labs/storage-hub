@@ -1271,12 +1271,14 @@ import type {
   GetLastTickProviderSubmittedProofError,
   GetNextDeadlineTickError,
   IncompleteFileStatus,
+  MainStorageProviderId,
   MerklePatriciaRoot,
   ProviderId,
   QueryBspConfirmChunksToProveForFileError,
   QueryFileEarliestVolunteerBlockError,
   RandomnessOutput,
   SaveFileToDisk,
+  StorageProviderId,
   TrieRemoveMutation
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 
@@ -1870,6 +1872,7 @@ declare module "@polkadot/types/types/registry" {
     LookupSource: LookupSource;
     LookupTarget: LookupTarget;
     LotteryConfig: LotteryConfig;
+    MainStorageProviderId: MainStorageProviderId;
     MaybeRandomness: MaybeRandomness;
     MaybeVrf: MaybeVrf;
     MemberCount: MemberCount;
@@ -2326,6 +2329,7 @@ declare module "@polkadot/types/types/registry" {
     StorageMetadataV13: StorageMetadataV13;
     StorageMetadataV9: StorageMetadataV9;
     StorageProof: StorageProof;
+    StorageProviderId: StorageProviderId;
     StoredPendingChange: StoredPendingChange;
     StoredState: StoredState;
     StrikeCount: StrikeCount;
