@@ -10,15 +10,14 @@ use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    ProofSubmittersInterface, ProofsDealerInterface, SubscribeProvidersInterface, TrieMutation,
-    TrieRemoveMutation,
+    ProofSubmittersInterface, ProofsDealerInterface, TrieMutation, TrieRemoveMutation,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256, U256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::traits::ConvertBack;
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, IdentifyAccount, IdentityLookup, Verify},
-    BuildStorage, DispatchResult, MultiSignature, SaturatedConversion,
+    BuildStorage, MultiSignature, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
@@ -279,7 +278,6 @@ impl pallet_storage_providers::Config for Test {
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
-    type Subscribers = MockedProvidersSubscriber;
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
     type BucketNameLimit = ConstU32<100>;
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
@@ -306,18 +304,6 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
     }
 
     fn clear_accrued_failed_proof_submissions(_provider_id: &Self::ProviderId) {}
-}
-
-pub struct MockedProvidersSubscriber;
-impl SubscribeProvidersInterface for MockedProvidersSubscriber {
-    type ProviderId = u64;
-
-    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
-        Ok(())
-    }
-    fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
-        Ok(())
-    }
 }
 
 // TODO: remove this and replace with pallet treasury

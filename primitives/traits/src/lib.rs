@@ -293,18 +293,6 @@ pub trait MutateProvidersInterface: ProvidersConfig + ProvidersInterface {
     fn remove_root_bucket(bucket_id: Self::BucketId) -> DispatchResult;
 }
 
-/// The interface to subscribe to updates on the Storage Providers pallet.
-pub trait SubscribeProvidersInterface {
-    /// The type which represents a registered Provider.
-    type ProviderId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-
-    /// Subscribe to the sign off of a BSP.
-    fn subscribe_bsp_sign_off(who: &Self::ProviderId) -> DispatchResult;
-
-    /// Subscribe to the sign up of a BSP.
-    fn subscribe_bsp_sign_up(who: &Self::ProviderId) -> DispatchResult;
-}
-
 /// The interface for the ProofsDealer pallet.
 ///
 /// It is abstracted over the `Provider` type, `Proof` type, `ForestProof` type and `MerkleHash` type.

@@ -152,16 +152,17 @@ declare module '@polkadot/api-base/types/storage' {
         };
         fileSystem: {
             /**
-             * Minimum BSP assignment threshold.
-             *
-             * This is the minimum threshold that a BSP must have to be assigned to store a file.
-             * It is reduced or increased when BSPs sign off or sign up respectively.
+             * Number of blocks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
              **/
-            bspsAssignmentThreshold: AugmentedQuery<ApiType, () => Observable<u128>, []> & QueryableStorageEntry<ApiType, []>;
+            blockRangeToMaximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
             /**
              * A map of blocks to expired storage requests.
              **/
             itemExpirations: AugmentedQuery<ApiType, (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<PalletFileSystemExpiredItems>>, [u32]> & QueryableStorageEntry<ApiType, [u32]>;
+            /**
+             * Maximum threshold a BSP can attain.
+             **/
+            maximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
             /**
              * A pointer to the earliest available block to insert a new storage request expiration.
              *
@@ -183,6 +184,7 @@ declare module '@polkadot/api-base/types/storage' {
              **/
             pendingFileDeletionRequests: AugmentedQuery<ApiType, (arg: AccountId32 | string | Uint8Array) => Observable<Vec<ITuple<[H256, H256]>>>, [AccountId32]> & QueryableStorageEntry<ApiType, [AccountId32]>;
             /**
+             * Number of BSPs required to fulfill a storage request
              * Pending file stop storing requests.
              *
              * A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened
@@ -191,6 +193,11 @@ declare module '@polkadot/api-base/types/storage' {
              * of missing files. The size is to be able to decrease their used capacity when they confirm to stop storing the file.
              **/
             pendingStopStoringRequests: AugmentedQuery<ApiType, (arg1: H256 | string | Uint8Array, arg2: H256 | string | Uint8Array) => Observable<Option<ITuple<[u32, u32]>>>, [H256, H256]> & QueryableStorageEntry<ApiType, [H256, H256]>;
+            /**
+             *
+             * This is also used as a default value if the BSPs required are not specified when creating a storage request.
+             **/
+            replicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
             /**
              * A double map from storage request to BSP `AccountId`s that volunteered to store the file.
              *
@@ -820,6 +827,10 @@ declare module '@polkadot/api-base/types/storage' {
              * - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket), which removes the entry of the corresponding bucket.
              **/
             buckets: AugmentedQuery<ApiType, (arg: H256 | string | Uint8Array) => Observable<Option<PalletStorageProvidersBucket>>, [H256]> & QueryableStorageEntry<ApiType, [H256]>;
+            /**
+             * The total global reputation weight of all BSPs.
+             **/
+            globalBspsReputationWeight: AugmentedQuery<ApiType, () => Observable<u32>, []> & QueryableStorageEntry<ApiType, []>;
             /**
              * The mapping from a MainStorageProviderId to a vector of BucketIds.
              *

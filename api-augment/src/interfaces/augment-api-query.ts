@@ -289,12 +289,9 @@ declare module "@polkadot/api-base/types/storage" {
     };
     fileSystem: {
       /**
-       * Minimum BSP assignment threshold.
-       *
-       * This is the minimum threshold that a BSP must have to be assigned to store a file.
-       * It is reduced or increased when BSPs sign off or sign up respectively.
+       * Number of blocks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
        **/
-      bspsAssignmentThreshold: AugmentedQuery<ApiType, () => Observable<u128>, []> &
+      blockRangeToMaximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * A map of blocks to expired storage requests.
@@ -305,6 +302,11 @@ declare module "@polkadot/api-base/types/storage" {
         [u32]
       > &
         QueryableStorageEntry<ApiType, [u32]>;
+      /**
+       * Maximum threshold a BSP can attain.
+       **/
+      maximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
       /**
        * A pointer to the earliest available block to insert a new storage request expiration.
        *
@@ -333,6 +335,7 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
       /**
+       * Number of BSPs required to fulfill a storage request
        * Pending file stop storing requests.
        *
        * A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened
@@ -349,6 +352,12 @@ declare module "@polkadot/api-base/types/storage" {
         [H256, H256]
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
+      /**
+       *
+       * This is also used as a default value if the BSPs required are not specified when creating a storage request.
+       **/
+      replicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
       /**
        * A double map from storage request to BSP `AccountId`s that volunteered to store the file.
        *
@@ -1327,6 +1336,11 @@ declare module "@polkadot/api-base/types/storage" {
         [H256]
       > &
         QueryableStorageEntry<ApiType, [H256]>;
+      /**
+       * The total global reputation weight of all BSPs.
+       **/
+      globalBspsReputationWeight: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+        QueryableStorageEntry<ApiType, []>;
       /**
        * The mapping from a MainStorageProviderId to a vector of BucketIds.
        *

@@ -279,6 +279,30 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::GetProviderId { maybe_node_pub_key, callback } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let node_pub_key = maybe_node_pub_key.unwrap_or_else(|| {
+                        Self::caller_pub_key(self.keystore.clone())
+                    });
+
+                    let provider_id = self
+                        .client
+                        .runtime_api()
+                        .get_bsp_provider_id(current_block_hash, &node_pub_key.into())
+                        .unwrap_or_else(|_| {
+                            None
+                        });
+
+                    match callback.send(provider_id) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Provider ID sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send provider ID: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::QueryBspConfirmChunksToProveForFile {
                     bsp_id,
                     file_key,

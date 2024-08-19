@@ -100,7 +100,9 @@ where
         T: frame_system::Config,
     {
         // Calculate the difference between BSP's XOR and the starting threshold value.
-        let (to_succeed, slope) = Self::get_threshold_to_succeed(&bsp_id, storage_request_block)?;
+        let (to_succeed, slope) =
+            Self::compute_threshold_to_succeed(&bsp_id, storage_request_block)?;
+
         let threshold_diff = match bsp_threshold.checked_sub(&to_succeed) {
             Some(diff) => diff,
             None => {
@@ -435,7 +437,7 @@ where
 
         // Compute threshold for BSP to succeed.
         let (to_succeed, _slope) =
-            Self::get_threshold_to_succeed(&bsp_id, storage_request_metadata.requested_at)?;
+            Self::compute_threshold_to_succeed(&bsp_id, storage_request_metadata.requested_at)?;
 
         // Check that the BSP's threshold is under the threshold required to volunteer for the storage request.
         ensure!(bsp_threshold <= to_succeed, Error::<T>::AboveThreshold);
@@ -1173,7 +1175,7 @@ where
         T::HashToThresholdType::convert(volunteering_hash)
     }
 
-    pub fn get_threshold_to_succeed(
+    pub fn compute_threshold_to_succeed(
         bsp_id: &ProviderIdFor<T>,
         requested_at: BlockNumberFor<T>,
     ) -> Result<(T::ThresholdType, T::ThresholdType), DispatchError> {
@@ -1220,18 +1222,6 @@ where
                 .saturating_add(threshold_slope.saturating_mul(blocks_since_requested)),
             threshold_slope,
         ))
-    }
-}
-
-impl<T: crate::Config> shp_traits::SubscribeProvidersInterface for Pallet<T> {
-    type ProviderId = ProviderIdFor<T>;
-
-    fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
-        todo!("remove this")
-    }
-
-    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
-        todo!("remove this")
     }
 }
 

@@ -42,13 +42,17 @@ pub enum BlockchainServiceCommand {
         callback: tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<()>>,
     },
     QueryFileEarliestVolunteerBlock {
-        bsp_id: sp_core::sr25519::Public,
+        bsp_id: ProviderId,
         file_key: H256,
         callback:
             tokio::sync::oneshot::Sender<Result<BlockNumber, QueryFileEarliestVolunteerBlockError>>,
     },
     GetNodePublicKey {
         callback: tokio::sync::oneshot::Sender<sp_core::sr25519::Public>,
+    },
+    GetProviderId {
+        maybe_node_pub_key: Option<sp_core::sr25519::Public>,
+        callback: tokio::sync::oneshot::Sender<Option<ProviderId>>,
     },
     QueryBspConfirmChunksToProveForFile {
         bsp_id: sp_core::sr25519::Public,
@@ -117,12 +121,15 @@ pub trait BlockchainServiceInterface {
     /// Query the earliest block number that a file was volunteered for storage.
     async fn query_file_earliest_volunteer_block(
         &self,
-        bsp_id: sp_core::sr25519::Public,
+        bsp_id: ProviderId,
         file_key: H256,
     ) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError>;
 
     /// Get the node's public key.
     async fn get_node_public_key(&self) -> sp_core::sr25519::Public;
+
+    /// Get the Provider ID.
+    async fn get_provider_id(&self, maybe_node_pub_key: Option<sp_core::sr25519::Public>) -> Option<ProviderId>;
 
     /// Query the chunks that a BSP needs to confirm for a file.
     async fn query_bsp_confirm_chunks_to_prove_for_file(
@@ -258,7 +265,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_file_earliest_volunteer_block(
         &self,
-        bsp_id: sp_core::sr25519::Public,
+        bsp_id: ProviderId,
         file_key: H256,
     ) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -277,6 +284,13 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         // Build command to send to blockchain service.
         let message = BlockchainServiceCommand::GetNodePublicKey { callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn get_provider_id(&self, maybe_node_pub_key: Option<sp_core::sr25519::Public>) -> Option<ProviderId> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::GetProviderId { maybe_node_pub_key, callback };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }

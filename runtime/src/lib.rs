@@ -580,7 +580,11 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>> for Runtime {
+    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId> for Runtime {
+        fn get_bsp_provider_id(account_id: &AccountId) -> Option<BackupStorageProviderId<Runtime>> {
+            Providers::get_bsp_provider_id(account_id)
+        }
+        
         fn get_bsp_info(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<BackupStorageProvider<Runtime>, GetBspInfoError> {
             Providers::get_bsp_info(bsp_id)
         }

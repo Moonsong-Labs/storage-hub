@@ -1494,6 +1494,10 @@ declare module '@polkadot/types/lookup' {
             readonly fileKeys: Vec<H256>;
             readonly newRoot: H256;
         } & Struct;
+        readonly isStorageRequestFulfilled: boolean;
+        readonly asStorageRequestFulfilled: {
+            readonly fileKey: H256;
+        } & Struct;
         readonly isStorageRequestExpired: boolean;
         readonly asStorageRequestExpired: {
             readonly fileKey: H256;
@@ -1541,7 +1545,7 @@ declare module '@polkadot/types/lookup' {
             readonly who: AccountId32;
             readonly bspId: H256;
         } & Struct;
-        readonly type: 'NewBucket' | 'BucketPrivacyUpdated' | 'NewCollectionAndAssociation' | 'NewStorageRequest' | 'AcceptedBspVolunteer' | 'BspConfirmedStoring' | 'StorageRequestExpired' | 'StorageRequestRevoked' | 'BspRequestedToStopStoring' | 'BspConfirmStoppedStoring' | 'FailedToQueuePriorityChallenge' | 'FileDeletionRequest' | 'ProofSubmittedForPendingFileDeletionRequest' | 'BspChallengeCycleInitialised';
+        readonly type: 'NewBucket' | 'BucketPrivacyUpdated' | 'NewCollectionAndAssociation' | 'NewStorageRequest' | 'AcceptedBspVolunteer' | 'BspConfirmedStoring' | 'StorageRequestFulfilled' | 'StorageRequestExpired' | 'StorageRequestRevoked' | 'BspRequestedToStopStoring' | 'BspConfirmStoppedStoring' | 'FailedToQueuePriorityChallenge' | 'FileDeletionRequest' | 'ProofSubmittedForPendingFileDeletionRequest' | 'BspChallengeCycleInitialised';
     }
     /** @name PalletProofsDealerEvent (135) */
     interface PalletProofsDealerEvent extends Enum {
@@ -3115,11 +3119,13 @@ declare module '@polkadot/types/lookup' {
             readonly bucketId: H256;
             readonly forestProof: SpTrieStorageProofCompactProof;
         } & Struct;
-        readonly isForceUpdateBspsAssignmentThreshold: boolean;
-        readonly asForceUpdateBspsAssignmentThreshold: {
-            readonly bspAssignmentThreshold: u128;
+        readonly isSetGlobalParameters: boolean;
+        readonly asSetGlobalParameters: {
+            readonly replicationTarget: Option<u32>;
+            readonly maximumThreshold: Option<u32>;
+            readonly blockRangeToMaximumThreshold: Option<u32>;
         } & Struct;
-        readonly type: 'CreateBucket' | 'UpdateBucketPrivacy' | 'CreateAndAssociateCollectionWithBucket' | 'IssueStorageRequest' | 'RevokeStorageRequest' | 'BspVolunteer' | 'BspConfirmStoring' | 'BspRequestStopStoring' | 'BspConfirmStopStoring' | 'DeleteFile' | 'PendingFileDeletionRequestSubmitProof' | 'ForceUpdateBspsAssignmentThreshold';
+        readonly type: 'CreateBucket' | 'UpdateBucketPrivacy' | 'CreateAndAssociateCollectionWithBucket' | 'IssueStorageRequest' | 'RevokeStorageRequest' | 'BspVolunteer' | 'BspConfirmStoring' | 'BspRequestStopStoring' | 'BspConfirmStopStoring' | 'DeleteFile' | 'PendingFileDeletionRequestSubmitProof' | 'SetGlobalParameters';
     }
     /** @name PalletProofsDealerCall (303) */
     interface PalletProofsDealerCall extends Enum {
@@ -3746,6 +3752,7 @@ declare module '@polkadot/types/lookup' {
         readonly lastCapacityChange: u32;
         readonly ownerAccount: AccountId32;
         readonly paymentAccount: AccountId32;
+        readonly reputationWeight: u32;
     }
     /** @name PalletStorageProvidersMainStorageProvider (390) */
     interface PalletStorageProvidersMainStorageProvider extends Struct {
@@ -3824,7 +3831,7 @@ declare module '@polkadot/types/lookup' {
     interface PalletFileSystemError extends Enum {
         readonly isStorageRequestAlreadyRegistered: boolean;
         readonly isStorageRequestNotFound: boolean;
-        readonly isBspsRequiredCannotBeZero: boolean;
+        readonly isReplicationTargetCannotBeZero: boolean;
         readonly isBspsRequiredExceedsMax: boolean;
         readonly isNotABsp: boolean;
         readonly isNotAMsp: boolean;
@@ -3860,10 +3867,13 @@ declare module '@polkadot/types/lookup' {
         readonly isMspNotStoringBucket: boolean;
         readonly isFileKeyNotPendingDeletion: boolean;
         readonly isFileSizeCannotBeZero: boolean;
+        readonly isNoGlobalReputationWeightSet: boolean;
+        readonly isMaximumThresholdCannotBeZero: boolean;
+        readonly isBlockRangeToMaximumThresholdCannotBeZero: boolean;
         readonly isPendingStopStoringRequestNotFound: boolean;
         readonly isMinWaitForStopStoringNotReached: boolean;
         readonly isPendingStopStoringRequestAlreadyExists: boolean;
-        readonly type: 'StorageRequestAlreadyRegistered' | 'StorageRequestNotFound' | 'BspsRequiredCannotBeZero' | 'BspsRequiredExceedsMax' | 'NotABsp' | 'NotAMsp' | 'BspNotVolunteered' | 'BspNotConfirmed' | 'BspAlreadyConfirmed' | 'StorageRequestBspsRequiredFulfilled' | 'BspAlreadyVolunteered' | 'UnexpectedNumberOfRemovedVolunteeredBsps' | 'StorageRequestExpiredNoSlotAvailable' | 'StorageRequestNotAuthorized' | 'MaxBlockNumberReached' | 'FailedToEncodeBsp' | 'FailedToEncodeFingerprint' | 'FailedToDecodeThreshold' | 'AboveThreshold' | 'FailedToConvertBlockNumber' | 'ThresholdArithmeticError' | 'FailedTypeConversion' | 'DividedByZero' | 'ImpossibleFailedToGetValue' | 'BucketIsNotPrivate' | 'BucketNotFound' | 'NotBucketOwner' | 'ProviderRootNotFound' | 'ExpectedNonInclusionProof' | 'ExpectedInclusionProof' | 'InvalidFileKeyMetadata' | 'ThresholdBelowAsymptote' | 'NotFileOwner' | 'FileKeyAlreadyPendingDeletion' | 'MaxUserPendingDeletionRequestsReached' | 'MspNotStoringBucket' | 'FileKeyNotPendingDeletion' | 'FileSizeCannotBeZero' | 'PendingStopStoringRequestNotFound' | 'MinWaitForStopStoringNotReached' | 'PendingStopStoringRequestAlreadyExists';
+        readonly type: 'StorageRequestAlreadyRegistered' | 'StorageRequestNotFound' | 'ReplicationTargetCannotBeZero' | 'BspsRequiredExceedsMax' | 'NotABsp' | 'NotAMsp' | 'BspNotVolunteered' | 'BspNotConfirmed' | 'BspAlreadyConfirmed' | 'StorageRequestBspsRequiredFulfilled' | 'BspAlreadyVolunteered' | 'UnexpectedNumberOfRemovedVolunteeredBsps' | 'StorageRequestExpiredNoSlotAvailable' | 'StorageRequestNotAuthorized' | 'MaxBlockNumberReached' | 'FailedToEncodeBsp' | 'FailedToEncodeFingerprint' | 'FailedToDecodeThreshold' | 'AboveThreshold' | 'FailedToConvertBlockNumber' | 'ThresholdArithmeticError' | 'FailedTypeConversion' | 'DividedByZero' | 'ImpossibleFailedToGetValue' | 'BucketIsNotPrivate' | 'BucketNotFound' | 'NotBucketOwner' | 'ProviderRootNotFound' | 'ExpectedNonInclusionProof' | 'ExpectedInclusionProof' | 'InvalidFileKeyMetadata' | 'ThresholdBelowAsymptote' | 'NotFileOwner' | 'FileKeyAlreadyPendingDeletion' | 'MaxUserPendingDeletionRequestsReached' | 'MspNotStoringBucket' | 'FileKeyNotPendingDeletion' | 'FileSizeCannotBeZero' | 'NoGlobalReputationWeightSet' | 'MaximumThresholdCannotBeZero' | 'BlockRangeToMaximumThresholdCannotBeZero' | 'PendingStopStoringRequestNotFound' | 'MinWaitForStopStoringNotReached' | 'PendingStopStoringRequestAlreadyExists';
     }
     /** @name PalletProofsDealerError (412) */
     interface PalletProofsDealerError extends Enum {

@@ -44,7 +44,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use shp_traits::{ProofSubmittersInterface, SubscribeProvidersInterface};
+    use shp_traits::ProofSubmittersInterface;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -126,9 +126,6 @@ pub mod pallet {
             + AsMut<[u8]>
             + MaxEncodedLen
             + FullCodec;
-
-        /// Subscribers to important updates
-        type Subscribers: SubscribeProvidersInterface;
 
         /// The type of the Bucket NFT Collection ID.
         type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;

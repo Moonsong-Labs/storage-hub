@@ -1432,6 +1432,9 @@ export default {
                 fileKeys: 'Vec<H256>',
                 newRoot: 'H256',
             },
+            StorageRequestFulfilled: {
+                fileKey: 'H256',
+            },
             StorageRequestExpired: {
                 fileKey: 'H256',
             },
@@ -3058,8 +3061,10 @@ export default {
                 bucketId: 'H256',
                 forestProof: 'SpTrieStorageProofCompactProof',
             },
-            force_update_bsps_assignment_threshold: {
-                bspAssignmentThreshold: 'u128'
+            set_global_parameters: {
+                replicationTarget: 'Option<u32>',
+                maximumThreshold: 'Option<u32>',
+                blockRangeToMaximumThreshold: 'Option<u32>'
             }
         }
     },
@@ -3649,7 +3654,8 @@ export default {
         root: 'H256',
         lastCapacityChange: 'u32',
         ownerAccount: 'AccountId32',
-        paymentAccount: 'AccountId32'
+        paymentAccount: 'AccountId32',
+        reputationWeight: 'u32'
     },
     /**
      * Lookup390: pallet_storage_providers::types::MainStorageProvider<T>
@@ -3719,7 +3725,7 @@ export default {
      * Lookup406: pallet_file_system::pallet::Error<T>
      **/
     PalletFileSystemError: {
-        _enum: ['StorageRequestAlreadyRegistered', 'StorageRequestNotFound', 'BspsRequiredCannotBeZero', 'BspsRequiredExceedsMax', 'NotABsp', 'NotAMsp', 'BspNotVolunteered', 'BspNotConfirmed', 'BspAlreadyConfirmed', 'StorageRequestBspsRequiredFulfilled', 'BspAlreadyVolunteered', 'UnexpectedNumberOfRemovedVolunteeredBsps', 'StorageRequestExpiredNoSlotAvailable', 'StorageRequestNotAuthorized', 'MaxBlockNumberReached', 'FailedToEncodeBsp', 'FailedToEncodeFingerprint', 'FailedToDecodeThreshold', 'AboveThreshold', 'FailedToConvertBlockNumber', 'ThresholdArithmeticError', 'FailedTypeConversion', 'DividedByZero', 'ImpossibleFailedToGetValue', 'BucketIsNotPrivate', 'BucketNotFound', 'NotBucketOwner', 'ProviderRootNotFound', 'ExpectedNonInclusionProof', 'ExpectedInclusionProof', 'InvalidFileKeyMetadata', 'ThresholdBelowAsymptote', 'NotFileOwner', 'FileKeyAlreadyPendingDeletion', 'MaxUserPendingDeletionRequestsReached', 'MspNotStoringBucket', 'FileKeyNotPendingDeletion', 'FileSizeCannotBeZero', 'PendingStopStoringRequestNotFound', 'MinWaitForStopStoringNotReached', 'PendingStopStoringRequestAlreadyExists']
+        _enum: ['StorageRequestAlreadyRegistered', 'StorageRequestNotFound', 'ReplicationTargetCannotBeZero', 'BspsRequiredExceedsMax', 'NotABsp', 'NotAMsp', 'BspNotVolunteered', 'BspNotConfirmed', 'BspAlreadyConfirmed', 'StorageRequestBspsRequiredFulfilled', 'BspAlreadyVolunteered', 'UnexpectedNumberOfRemovedVolunteeredBsps', 'StorageRequestExpiredNoSlotAvailable', 'StorageRequestNotAuthorized', 'MaxBlockNumberReached', 'FailedToEncodeBsp', 'FailedToEncodeFingerprint', 'FailedToDecodeThreshold', 'AboveThreshold', 'FailedToConvertBlockNumber', 'ThresholdArithmeticError', 'FailedTypeConversion', 'DividedByZero', 'ImpossibleFailedToGetValue', 'BucketIsNotPrivate', 'BucketNotFound', 'NotBucketOwner', 'ProviderRootNotFound', 'ExpectedNonInclusionProof', 'ExpectedInclusionProof', 'InvalidFileKeyMetadata', 'ThresholdBelowAsymptote', 'NotFileOwner', 'FileKeyAlreadyPendingDeletion', 'MaxUserPendingDeletionRequestsReached', 'MspNotStoringBucket', 'FileKeyNotPendingDeletion', 'FileSizeCannotBeZero', 'NoGlobalReputationWeightSet', 'MaximumThresholdCannotBeZero', 'BlockRangeToMaximumThresholdCannotBeZero', 'PendingStopStoringRequestNotFound', 'MinWaitForStopStoringNotReached', 'PendingStopStoringRequestAlreadyExists']
     },
     /**
      * Lookup412: pallet_proofs_dealer::pallet::Error<T>

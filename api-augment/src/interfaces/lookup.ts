@@ -1445,6 +1445,9 @@ export default {
         fileKeys: "Vec<H256>",
         newRoot: "H256"
       },
+      StorageRequestFulfilled: {
+        fileKey: "H256"
+      },
       StorageRequestExpired: {
         fileKey: "H256"
       },
@@ -3104,8 +3107,10 @@ export default {
         bucketId: "H256",
         forestProof: "SpTrieStorageProofCompactProof"
       },
-      force_update_bsps_assignment_threshold: {
-        bspAssignmentThreshold: "u128"
+      set_global_parameters: {
+        replicationTarget: "Option<u32>",
+        maximumThreshold: "Option<u32>",
+        blockRangeToMaximumThreshold: "Option<u32>"
       }
     }
   },
@@ -3767,7 +3772,8 @@ export default {
     root: "H256",
     lastCapacityChange: "u32",
     ownerAccount: "AccountId32",
-    paymentAccount: "AccountId32"
+    paymentAccount: "AccountId32",
+    reputationWeight: "u32"
   },
   /**
    * Lookup390: pallet_storage_providers::types::MainStorageProvider<T>
@@ -3864,7 +3870,7 @@ export default {
     _enum: [
       "StorageRequestAlreadyRegistered",
       "StorageRequestNotFound",
-      "BspsRequiredCannotBeZero",
+      "ReplicationTargetCannotBeZero",
       "BspsRequiredExceedsMax",
       "NotABsp",
       "NotAMsp",
@@ -3900,6 +3906,9 @@ export default {
       "MspNotStoringBucket",
       "FileKeyNotPendingDeletion",
       "FileSizeCannotBeZero",
+      "NoGlobalReputationWeightSet",
+      "MaximumThresholdCannotBeZero",
+      "BlockRangeToMaximumThresholdCannotBeZero",
       "PendingStopStoringRequestNotFound",
       "MinWaitForStopStoringNotReached",
       "PendingStopStoringRequestAlreadyExists"

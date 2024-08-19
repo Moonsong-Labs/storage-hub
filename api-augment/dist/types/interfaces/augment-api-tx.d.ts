@@ -329,7 +329,6 @@ declare module '@polkadot/api-base/types/submittable' {
             deleteFile: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, fileKey: H256 | string | Uint8Array, location: Bytes | string | Uint8Array, size: u32 | AnyNumber | Uint8Array, fingerprint: H256 | string | Uint8Array, maybeInclusionForestProof: Option<SpTrieStorageProofCompactProof> | null | Uint8Array | SpTrieStorageProofCompactProof | {
                 encodedNodes?: any;
             } | string) => SubmittableExtrinsic<ApiType>, [H256, H256, Bytes, u32, H256, Option<SpTrieStorageProofCompactProof>]>;
-            forceUpdateBspsAssignmentThreshold: AugmentedSubmittable<(bspAssignmentThreshold: u128 | AnyNumber | Uint8Array) => SubmittableExtrinsic<ApiType>, [u128]>;
             /**
              * Issue a new storage request for a file
              **/
@@ -341,6 +340,7 @@ declare module '@polkadot/api-base/types/submittable' {
              * Revoke storage request
              **/
             revokeStorageRequest: AugmentedSubmittable<(fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256]>;
+            setGlobalParameters: AugmentedSubmittable<(replicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber, maximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber, blockRangeToMaximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber) => SubmittableExtrinsic<ApiType>, [Option<u32>, Option<u32>, Option<u32>]>;
             updateBucketPrivacy: AugmentedSubmittable<(bucketId: H256 | string | Uint8Array, private: bool | boolean | Uint8Array) => SubmittableExtrinsic<ApiType>, [H256, bool]>;
             /**
              * Generic tx
