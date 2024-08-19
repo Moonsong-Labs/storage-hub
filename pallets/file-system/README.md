@@ -54,7 +54,7 @@ $w$: *BSP weight* (current weight of the BSP)
 
 #### Threshold Slope
 
-The rate of increase of the threshold from the weighted starting point to the maximum threshold over a period of blocks $\B_{t}$ required to reach the maximum threshold $\M$. 
+The rate of increase of the threshold from the weighted starting point to the maximum threshold over a period of blocks $B_{t}$ required to reach the maximum threshold $M$. 
 
 $$T_{s} = \frac{M - T_{wsp}}{B_{t}}$$
 
