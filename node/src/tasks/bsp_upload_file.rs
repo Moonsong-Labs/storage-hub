@@ -37,7 +37,7 @@ const LOG_TARGET: &str = "bsp-upload-file-task";
 ///   user sending a chunk of the file to the BSP. It checks the proof for the chunk
 ///   and if it is valid, stores it, until the whole file is stored.
 /// - [`ProcessConfirmStoringRequest`] event: The third part of the flow. It is triggered by the
-///   runtime when the BSP should constuct a proof for the new file(s) and submit a confirm storing
+///   runtime when the BSP should construct a proof for the new file(s) and submit a confirm storing
 ///   before updating it's local Forest storage root.
 pub struct BspUploadFileTask<FL, FS>
 where
