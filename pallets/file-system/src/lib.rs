@@ -58,9 +58,8 @@ pub mod pallet {
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
     use shp_file_metadata::ChunkId;
-    use sp_runtime::traits::ConvertBack;
     use sp_runtime::traits::{
-        CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero,
+        CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, ConvertBack, One, Saturating, Zero,
     };
     use sp_runtime::BoundedVec;
 

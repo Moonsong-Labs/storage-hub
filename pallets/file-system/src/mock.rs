@@ -14,9 +14,8 @@ use shp_traits::{
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
-use sp_runtime::traits::ConvertBack;
 use sp_runtime::{
-    traits::{BlakeTwo256, Convert, IdentifyAccount, IdentityLookup, Verify},
+    traits::{BlakeTwo256, Convert, ConvertBack, IdentifyAccount, IdentityLookup, Verify},
     BuildStorage, DispatchError, MultiSignature, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;

@@ -60,9 +60,8 @@ use shp_file_metadata::ChunkId;
 use shp_traits::{CommitmentVerifier, MaybeDebug, TrieMutation, TrieProofDeltaApplier};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{Get, Hasher, H256};
-use sp_runtime::traits::ConvertBack;
 use sp_runtime::{
-    traits::{BlakeTwo256, Convert, Verify},
+    traits::{BlakeTwo256, Convert, ConvertBack, Verify},
     AccountId32, DispatchError, Perbill, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
