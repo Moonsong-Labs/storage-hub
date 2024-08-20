@@ -43,19 +43,10 @@ pub type ForestVerifierProof = pallet_proofs_dealer::types::ForestVerifierProofF
 pub type KeyProof = pallet_proofs_dealer::types::KeyProof<Runtime>;
 pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
 
-#[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = (
     // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
     sp_io::SubstrateHostFunctions,
     cumulus_client_service::storage_proof_size::HostFunctions,
-);
-
-#[cfg(feature = "runtime-benchmarks")]
-type HostFunctions = (
-    // TODO: change this to `cumulus_client_service::ParachainHostFunctions` once it is part of the next release
-    sp_io::SubstrateHostFunctions,
-    cumulus_client_service::storage_proof_size::HostFunctions,
-    frame_benchmarking::benchmarking::HostFunctions,
 );
 
 pub type ParachainExecutor = WasmExecutor<HostFunctions>;
