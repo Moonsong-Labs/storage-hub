@@ -5,7 +5,7 @@ use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
 use frame_support::{StorageHasher, Twox128};
 use lazy_static::lazy_static;
-use log::{debug, error, warn};
+use log::{debug, error, trace, warn};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetLastTickProviderSubmittedProofError, ProofsDealerApi,
 };
@@ -14,6 +14,7 @@ use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, HeaderBackend, StorageKey, StorageProvider};
 use serde_json::Number;
+use shc_actors_framework::actor::Actor;
 use shc_common::types::{BlockNumber, ParachainClient, ProviderId, BCSV_KEY_TYPE};
 use sp_api::ProvideRuntimeApi;
 use sp_core::{Blake2Hasher, Hasher, H256};
@@ -24,8 +25,10 @@ use sp_runtime::{
 };
 use storage_hub_runtime::{SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
+use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use crate::{
+    events::{ProcessConfirmStoringRequest, ProcessSubmitProofRequest},
     handler::LOG_TARGET,
     types::{EventsVec, Extrinsic},
     BlockchainService,
@@ -413,6 +416,58 @@ impl BlockchainService {
             }
         };
         current_tick == &last_tick_provided.saturating_add(provider_challenge_period)
+    }
+
+    /// Check if there are any pending requests to update the forest root on the runtime, and process them.
+    /// Takes care of prioritizing requests, favouring `SubmitProofRequest` over `ConfirmStoringRequest`.
+    /// This function is called every time a new block is imported and after each request is queued.
+    pub(crate) fn check_pending_forest_root_writes(&mut self) {
+        if let Some(mut rx) = self.forest_root_write_lock.take() {
+            // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
+            match rx.try_recv() {
+                // If the channel is empty, means we still need to wait for the current task to finish.
+                Err(TryRecvError::Empty) => {
+                    // If we have a task writing to the runtime, we don't want to start another one.
+                    self.forest_root_write_lock = Some(rx);
+                    trace!(target: LOG_TARGET, "Waiting for current forest root write task to finish");
+                    return;
+                }
+                Ok(_) => {
+                    trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
+                }
+                Err(TryRecvError::Closed) => {
+                    error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
+                }
+            }
+        }
+
+        // At this point we know that the lock is released and we can start processing new requests.
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.forest_root_write_lock = Some(rx);
+
+        let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
+
+        // If we have a submit proof request, prioritize it.
+        if let Some(request) = self.pending_submit_proof.pop_front() {
+            self.emit(ProcessSubmitProofRequest {
+                seed: request.seed,
+                provider_id: request.provider_id,
+                tick: request.tick,
+                forest_challenges: request.forest_challenges,
+                checkpoint_challenges: request.checkpoint_challenges,
+                forest_root_write_tx,
+            });
+            return;
+        }
+
+        // If we have a confirm storing request, start processing it.
+        if let Some(request) = self.pending_confirm_storing.pop_front() {
+            self.emit(ProcessConfirmStoringRequest {
+                file_key: request.file_key,
+                forest_root_write_tx,
+            });
+            return;
+        }
     }
 }
 
