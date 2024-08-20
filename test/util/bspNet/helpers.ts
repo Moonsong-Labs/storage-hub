@@ -211,9 +211,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
     // u32 max value
     const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
 
-    await api.sealBlock(
-        api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(1, u32Max, 1))
-    );
+    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(1, u32Max, 1)));
   } catch (e) {
     console.error("Error ", e);
   } finally {
