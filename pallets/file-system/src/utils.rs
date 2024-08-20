@@ -910,7 +910,7 @@ where
     ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
         // Get the BSP ID of the sender
         let bsp_id =
-            <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
 
         // Get the block when the pending stop storing request of the BSP for the file key was opened.

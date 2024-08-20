@@ -2097,7 +2097,7 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2216,7 +2216,7 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2353,7 +2353,7 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2677,7 +2677,7 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2802,7 +2802,7 @@ mod bsp_stop_storing {
 
 				// Assert that the correct event was deposited.
 				let new_root =
-					<<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+					<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
 						bsp_id,
 					)
 						.unwrap();
