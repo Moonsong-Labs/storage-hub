@@ -99,7 +99,7 @@ where
     where
         T: frame_system::Config,
     {
-        // Calculate the difference between BSP's XOR and the starting threshold value.
+        // Compute the threshold to succeed and the slope of the bsp.
         let (to_succeed, slope) =
             Self::compute_threshold_to_succeed(&bsp_id, storage_request_block)?;
 
