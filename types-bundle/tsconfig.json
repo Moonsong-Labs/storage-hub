@@ -1,0 +1,22 @@
+{
+	"extends": "../tsconfig.json",
+	"compilerOptions": {
+		"incremental": false,
+		"rootDir": "src",
+		"outDir": "dist",
+		"baseUrl": "./",
+		"noEmit": false,
+		"declaration": true,
+		"declarationDir": "dist/types",
+		"allowImportingTsExtensions": false,
+		"typeRoots": [
+			"dist/types",
+			"node_modules/@types"
+		],
+	},
+	"exclude": [
+		"node_modules",
+		"dist",
+		"scripts"
+	]
+}

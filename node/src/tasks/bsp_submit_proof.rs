@@ -4,13 +4,16 @@ use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shp_file_metadata::ChunkId;
 use sp_core::H256;
-use sp_trie::TrieLayout;
 
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewChallengeSeed};
+use shc_blockchain_service::{
+    commands::BlockchainServiceInterface,
+    events::{NewChallengeSeed, ProcessSubmitProofRequest},
+    handler::SubmitProofRequest,
+};
 use shc_common::types::{
-    HasherOutT, KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
-    TrieRemoveMutation,
+    KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
+    StorageProofsMerkleTrieLayout, TrieRemoveMutation,
 };
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
@@ -30,38 +33,32 @@ const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
 ///     - Generate key proofs for each file key.
 ///     - Submit the proof to the runtime.
 ///     - Apply mutations if necessary and ensure the new Forest root matches the one on-chain.
-pub struct BspSubmitProofTask<T, FL, FS>
+pub struct BspSubmitProofTask<FL, FS>
 where
-    T: TrieLayout,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
 {
-    storage_hub_handler: StorageHubHandler<T, FL, FS>,
+    storage_hub_handler: StorageHubHandler<FL, FS>,
 }
 
-impl<T, FL, FS> Clone for BspSubmitProofTask<T, FL, FS>
+impl<FL, FS> Clone for BspSubmitProofTask<FL, FS>
 where
-    T: TrieLayout,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
 {
-    fn clone(&self) -> BspSubmitProofTask<T, FL, FS> {
+    fn clone(&self) -> BspSubmitProofTask<FL, FS> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<T, FL, FS> BspSubmitProofTask<T, FL, FS>
+impl<FL, FS> BspSubmitProofTask<FL, FS>
 where
-    T: TrieLayout,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -77,12 +74,10 @@ where
 /// - Constructs key proofs and submits the proof to the runtime.
 /// - Applies any necessary mutations.
 /// - Ensures the new Forest root matches the one on-chain.
-impl<T, FL, FS> EventHandler<NewChallengeSeed> for BspSubmitProofTask<T, FL, FS>
+impl<FL, FS> EventHandler<NewChallengeSeed> for BspSubmitProofTask<FL, FS>
 where
-    T: TrieLayout + Send + Sync + 'static,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
     async fn handle_event(&mut self, event: NewChallengeSeed) -> anyhow::Result<()> {
         info!(
@@ -108,18 +103,50 @@ where
             .await?;
         trace!(target: LOG_TARGET, "Checkpoint challenges to respond to: {:?}", checkpoint_challenges);
 
-        // TODO: In the near future, from here onwards we should be using the locking mechanism so that only
-        // TODO: one task at a time can be sending Forest-related transactions to the runtime.
-        // Get a read lock on the forest storage to generate a proof for the file.
+        self.storage_hub_handler
+            .blockchain
+            .queue_submit_proof_request(SubmitProofRequest::new(
+                event,
+                forest_challenges,
+                checkpoint_challenges,
+            ))
+            .await?;
+
+        Ok(())
+    }
+}
+
+impl<FL, FS> EventHandler<ProcessSubmitProofRequest> for BspSubmitProofTask<FL, FS>
+where
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+{
+    async fn handle_event(&mut self, event: ProcessSubmitProofRequest) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET,
+            "Processing SubmitProofRequest {:?}",
+            event.forest_challenges
+        );
+
+        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
+            Some(tx) => tx,
+            None => {
+                error!(target: LOG_TARGET, "This is a bug! Forest root write tx already taken.");
+                return Err(anyhow!(
+                    "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken!"
+                ));
+            }
+        };
+
         let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
         let proven_file_keys = read_forest_storage
-            .generate_proof(forest_challenges)
+            .generate_proof(event.forest_challenges)
             .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
         // Release the forest storage read lock.
         drop(read_forest_storage);
 
         // Get the keys that were proven.
-        let mut proven_keys: Vec<HasherOutT<T>> = Vec::new();
+        let mut proven_keys = Vec::new();
         for key in proven_file_keys.proven {
             match key {
                 Proven::ExactKey(leaf) => proven_keys.push(leaf.key),
@@ -146,14 +173,10 @@ where
         for file_key in &proven_keys {
             // Generate the key proof for each file key.
             let key_proof = self
-                .generate_key_proof(*file_key, seed, provider_id)
+                .generate_key_proof(*file_key, event.seed, event.provider_id)
                 .await?;
 
-            // Convert the file key to the runtime's hasher output type.
-            // Although redundant in reality, this is done because technically the type of `file_key` is
-            // a `HasherOutT<T>` and not a `H256`, which is what the runtime expects.
-            let file_key = H256::from_slice(file_key.as_ref());
-            key_proofs.insert(file_key, key_proof);
+            key_proofs.insert(*file_key, key_proof);
         }
 
         // Construct full proof.
@@ -208,7 +231,7 @@ where
 
         // Apply mutations, if any.
         let mut mutations_applied = false;
-        for (file_key, maybe_mutation) in &checkpoint_challenges {
+        for (file_key, maybe_mutation) in &event.checkpoint_challenges {
             if proven_keys.contains(file_key) {
                 // If the file key is proven, it means that this provider had an exact match for a checkpoint challenge.
                 trace!(target: LOG_TARGET, "Checkpoint challenge proven with exact match for file key: {:?}", file_key);
@@ -228,51 +251,38 @@ where
             trace!(target: LOG_TARGET, "Mutations applied successfully");
 
             // Check that the new Forest root matches the one on-chain.
-            self.check_provider_root(provider_id).await?;
+            self.check_provider_root(event.provider_id).await?;
         }
+
+        // Release the forest root write "lock".
+        let _ = forest_root_write_tx.send(());
 
         Ok(())
     }
 }
 
-impl<T, FL, FS> BspSubmitProofTask<T, FL, FS>
+impl<FL, FS> BspSubmitProofTask<FL, FS>
 where
-    T: TrieLayout + Send + Sync + 'static,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
     async fn derive_forest_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
         provider_id: ProviderId,
-    ) -> anyhow::Result<Vec<HasherOutT<T>>> {
-        let forest_challenges = self
+    ) -> anyhow::Result<Vec<H256>> {
+        Ok(self
             .storage_hub_handler
             .blockchain
             .query_forest_challenges_from_seed(seed, provider_id)
-            .await?;
-
-        let mut converted_forest_challenges: Vec<HasherOutT<T>> = Vec::new();
-        for challenge in forest_challenges {
-            let raw_key: [u8; 32] = challenge.into();
-            match raw_key.try_into() {
-                Ok(key) => converted_forest_challenges.push(key),
-                Err(_) => {
-                    error!(target: LOG_TARGET, "Failed to challenge key to hasher output. This should not be possible, as the challenge keys are hasher outputs.");
-                    return Err(anyhow!("Failed to challenge key to hasher output. This should not be possible, as the challenge keys are hasher outputs."));
-                }
-            }
-        }
-
-        Ok(converted_forest_challenges)
+            .await?)
     }
 
     async fn add_checkpoint_challenges_to_forest_challenges(
         &self,
         provider_id: ProviderId,
-        forest_challenges: &mut Vec<HasherOutT<T>>,
-    ) -> anyhow::Result<Vec<(HasherOutT<T>, Option<TrieRemoveMutation>)>> {
+        forest_challenges: &mut Vec<H256>,
+    ) -> anyhow::Result<Vec<(H256, Option<TrieRemoveMutation>)>> {
         let last_tick_provided_submitted_proof = self
             .storage_hub_handler
             .blockchain
@@ -300,27 +310,11 @@ where
                 .await
                 .map_err(|e| anyhow!("Failed to query last checkpoint challenges: {:?}", e))?;
 
-            let mut converted_checkpoint_challenges: Vec<(
-                HasherOutT<T>,
-                Option<TrieRemoveMutation>,
-            )> = Vec::new();
-            for challenge in checkpoint_challenges {
-                let raw_key: [u8; 32] = challenge.0.into();
-                match raw_key.try_into() {
-                    Ok(key) => converted_checkpoint_challenges.push((key, challenge.1)),
-                    Err(_) => {
-                        let error_msg = "Failed to challenge key to hasher output. This should not be possible, as the challenge keys are hasher outputs.";
-                        error!(target: LOG_TARGET, error_msg);
-                        return Err(anyhow!(error_msg));
-                    }
-                }
-            }
-
             // Add the checkpoint challenges to the forest challenges.
-            forest_challenges.extend(converted_checkpoint_challenges.iter().map(|(key, _)| *key));
+            forest_challenges.extend(checkpoint_challenges.iter().map(|(key, _)| *key));
 
             // Return the checkpoint challenges.
-            return Ok(converted_checkpoint_challenges);
+            return Ok(checkpoint_challenges);
         } else {
             // Else, return an empty checkpoint challenges vector.
             return Ok(Vec::new());
@@ -329,7 +323,7 @@ where
 
     async fn generate_key_proof(
         &self,
-        file_key: HasherOutT<T>,
+        file_key: H256,
         seed: RandomnessOutput,
         provider_id: ProviderId,
     ) -> anyhow::Result<KeyProof> {
@@ -373,7 +367,7 @@ where
         })
     }
 
-    async fn remove_file(&self, file_key: &HasherOutT<T>) -> anyhow::Result<()> {
+    async fn remove_file(&self, file_key: &H256) -> anyhow::Result<()> {
         // Remove the file key from the Forest.
         let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
         write_forest_storage.delete_file_key(file_key).map_err(|e| {
@@ -424,9 +418,6 @@ where
         let root = read_forest_storage.root();
         // Release the forest storage read lock.
         drop(read_forest_storage);
-
-        // Convert the root to H256 for comparison.
-        let root = H256::from_slice(root.as_ref());
 
         trace!(target: LOG_TARGET, "Provider root according to Forest Storage: {:?}", root);
 

@@ -53,6 +53,7 @@ pub mod pallet {
             nonfungibles_v2::{Create, Inspect as NonFungiblesInspect},
             Currency,
         },
+        Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
@@ -243,6 +244,10 @@ pub mod pallet {
         /// Maximum number of file deletion requests a user can have pending.
         #[pallet::constant]
         type MaxUserPendingDeletionRequests: Get<u32>;
+
+        /// Number of blocks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
+        #[pallet::constant]
+        type MinWaitForStopStoring: Get<BlockNumberFor<Self>>;
     }
 
     #[pallet::pallet]
@@ -310,6 +315,23 @@ pub mod pallet {
         T::AccountId,
         BoundedVec<(MerkleHash<T>, BucketIdFor<T>), T::MaxUserPendingDeletionRequests>,
         ValueQuery,
+    >;
+
+    /// Pending file stop storing requests.
+    ///
+    /// A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened
+    /// and the proven size of the file.
+    /// The block number is used to avoid BSPs being able to stop storing files immediately which would allow them to avoid challenges
+    /// of missing files. The size is to be able to decrease their used capacity when they confirm to stop storing the file.
+    #[pallet::storage]
+    #[pallet::getter(fn pending_stop_storing_requests)]
+    pub type PendingStopStoringRequests<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        ProviderIdFor<T>,
+        Blake2_128Concat,
+        MerkleHash<T>,
+        (BlockNumberFor<T>, StorageData<T>),
     >;
 
     /// Minimum BSP assignment threshold.
@@ -407,13 +429,18 @@ pub mod pallet {
         StorageRequestExpired { file_key: MerkleHash<T> },
         /// Notifies that a storage request has been revoked by the user who initiated it.
         StorageRequestRevoked { file_key: MerkleHash<T> },
+        /// Notifies that a BSP has opened a request to stop storing a file.
+        BspRequestedToStopStoring {
+            bsp_id: ProviderIdFor<T>,
+            file_key: MerkleHash<T>,
+            owner: T::AccountId,
+            location: FileLocation<T>,
+        },
         /// Notifies that a BSP has stopped storing a file.
-        BspStoppedStoring {
+        BspConfirmStoppedStoring {
             bsp_id: ProviderIdFor<T>,
             file_key: MerkleHash<T>,
             new_root: MerkleHash<T>,
-            owner: T::AccountId,
-            location: FileLocation<T>,
         },
         /// Notifies that a priority challenge failed to be queued for pending file deletion.
         FailedToQueuePriorityChallenge {
@@ -524,6 +551,12 @@ pub mod pallet {
         FileKeyNotPendingDeletion,
         /// File size cannot be zero.
         FileSizeCannotBeZero,
+        /// Pending stop storing request not found.
+        PendingStopStoringRequestNotFound,
+        /// Minimum amount of blocks between the request opening and being able to confirm it not reached.
+        MinWaitForStopStoringNotReached,
+        /// Pending stop storing request already exists.
+        PendingStopStoringRequestAlreadyExists,
     }
 
     #[pallet::call]
@@ -709,17 +742,17 @@ pub mod pallet {
             )
         }
 
-        /// Executed by a BSP to stop storing a file.
+        /// Executed by a BSP to request to stop storing a file.
         ///
         /// In the event when a storage request no longer exists for the data the BSP no longer stores,
         /// it is required that the BSP still has access to the metadata of the initial storage request.
-        /// If they do not, they will at least need that metadata to reconstruct the File ID and. Wherever
-        /// the BSP gets the data it needs is up to it, but one example could be the assigned MSP.
+        /// If they do not, they will at least need that metadata to reconstruct the File ID and from wherever
+        /// the BSP gets that data is up to it. One example could be from the assigned MSP.
         /// This metadata is necessary since it is needed to reconstruct the leaf node key in the storage
         /// provider's Merkle Forest.
         #[pallet::call_index(7)]
         #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
-        pub fn bsp_stop_storing(
+        pub fn bsp_request_stop_storing(
             origin: OriginFor<T>,
             file_key: MerkleHash<T>,
             bucket_id: BucketIdFor<T>,
@@ -732,8 +765,8 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            // Perform validations and stop storing the file.
-            let (bsp_id, new_root) = Self::do_bsp_stop_storing(
+            // Perform validations and open the request to stop storing the file.
+            let bsp_id = Self::do_bsp_request_stop_storing(
                 who.clone(),
                 file_key,
                 bucket_id,
@@ -746,10 +779,9 @@ pub mod pallet {
             )?;
 
             // Emit event.
-            Self::deposit_event(Event::BspStoppedStoring {
+            Self::deposit_event(Event::BspRequestedToStopStoring {
                 bsp_id,
                 file_key,
-                new_root,
                 owner,
                 location,
             });
@@ -757,7 +789,35 @@ pub mod pallet {
             Ok(())
         }
 
+        /// Executed by a BSP to confirm to stop storing a file.
+        ///
+        /// It has to have previously opened a pending stop storing request using the `bsp_request_stop_storing` extrinsic.
+        /// The minimum amount of blocks between the request and the confirmation is defined by the runtime, such that the
+        /// BSP can't immediately stop storing a file it has previously lost when receiving a challenge for it.
         #[pallet::call_index(8)]
+        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        pub fn bsp_confirm_stop_storing(
+            origin: OriginFor<T>,
+            file_key: MerkleHash<T>,
+            inclusion_forest_proof: ForestProof<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            // Perform validations and stop storing the file.
+            let (bsp_id, new_root) =
+                Self::do_bsp_confirm_stop_storing(who.clone(), file_key, inclusion_forest_proof)?;
+
+            // Emit event.
+            Self::deposit_event(Event::BspConfirmStoppedStoring {
+                bsp_id,
+                file_key,
+                new_root,
+            });
+
+            Ok(())
+        }
+
+        #[pallet::call_index(9)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn delete_file(
             origin: OriginFor<T>,
@@ -791,7 +851,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(9)]
+        #[pallet::call_index(10)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn pending_file_deletion_request_submit_proof(
             origin: OriginFor<T>,
@@ -821,7 +881,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(10)]
+        #[pallet::call_index(11)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn force_update_bsps_assignment_threshold(
             origin: OriginFor<T>,

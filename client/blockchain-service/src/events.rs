@@ -2,10 +2,12 @@ use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
     BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, PeerIds, ProviderId,
-    RandomnessOutput, StorageData,
+    RandomnessOutput, StorageData, TrieRemoveMutation,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
+use std::sync::Arc;
+use tokio::sync::{oneshot, Mutex};
 
 /// New random challenge emitted by the StorageHub runtime.
 ///
@@ -60,23 +62,26 @@ pub struct AcceptedBspVolunteer {
 
 impl EventBusMessage for AcceptedBspVolunteer {}
 
-/// BSP confirmed storing event.
-///
-/// This event is emitted when a BSP confirms storing a file and the Runtime updates it's Forest
-/// trie root.
-#[derive(Debug, Clone)]
-pub struct BspConfirmedStoring {
-    pub bsp_id: H256,
-    pub file_keys: Vec<FileKey>,
-    pub new_root: H256,
-}
-
-impl EventBusMessage for BspConfirmedStoring {}
-
 // TODO: use proper types
 #[derive(Debug, Clone)]
 pub struct StorageRequestRevoked {
     pub location: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProcessSubmitProofRequest {
+    pub provider_id: ProviderId,
+    pub tick: BlockNumber,
+    pub seed: RandomnessOutput,
+    pub forest_challenges: Vec<H256>,
+    pub checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
+    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProcessConfirmStoringRequest {
+    pub file_key: H256,
+    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
 impl EventBusMessage for StorageRequestRevoked {}
@@ -97,10 +102,13 @@ pub struct BlockchainServiceEventBusProvider {
     new_challenge_seed_event_bus: EventBus<NewChallengeSeed>,
     new_storage_request_event_bus: EventBus<NewStorageRequest>,
     accepted_bsp_volunteer_event_bus: EventBus<AcceptedBspVolunteer>,
-    bsp_confirmed_storing_event_bus: EventBus<BspConfirmedStoring>,
     storage_request_revoked_event_bus: EventBus<StorageRequestRevoked>,
+    process_submit_proof_request_event_bus: EventBus<ProcessSubmitProofRequest>,
+    process_confirm_storage_request_event_bus: EventBus<ProcessConfirmStoringRequest>,
     slashable_provider_event_bus: EventBus<SlashableProvider>,
 }
+
+impl EventBusMessage for ProcessSubmitProofRequest {}
 
 impl BlockchainServiceEventBusProvider {
     pub fn new() -> Self {
@@ -108,12 +116,15 @@ impl BlockchainServiceEventBusProvider {
             new_challenge_seed_event_bus: EventBus::new(),
             new_storage_request_event_bus: EventBus::new(),
             accepted_bsp_volunteer_event_bus: EventBus::new(),
-            bsp_confirmed_storing_event_bus: EventBus::new(),
             storage_request_revoked_event_bus: EventBus::new(),
+            process_submit_proof_request_event_bus: EventBus::new(),
+            process_confirm_storage_request_event_bus: EventBus::new(),
             slashable_provider_event_bus: EventBus::new(),
         }
     }
 }
+
+impl EventBusMessage for ProcessConfirmStoringRequest {}
 
 impl ProvidesEventBus<NewChallengeSeed> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<NewChallengeSeed> {
@@ -133,15 +144,21 @@ impl ProvidesEventBus<AcceptedBspVolunteer> for BlockchainServiceEventBusProvide
     }
 }
 
-impl ProvidesEventBus<BspConfirmedStoring> for BlockchainServiceEventBusProvider {
-    fn event_bus(&self) -> &EventBus<BspConfirmedStoring> {
-        &self.bsp_confirmed_storing_event_bus
-    }
-}
-
 impl ProvidesEventBus<StorageRequestRevoked> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<StorageRequestRevoked> {
         &self.storage_request_revoked_event_bus
+    }
+}
+
+impl ProvidesEventBus<ProcessSubmitProofRequest> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<ProcessSubmitProofRequest> {
+        &self.process_submit_proof_request_event_bus
+    }
+}
+
+impl ProvidesEventBus<ProcessConfirmStoringRequest> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<ProcessConfirmStoringRequest> {
+        &self.process_confirm_storage_request_event_bus
     }
 }
 

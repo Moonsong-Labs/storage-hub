@@ -124,6 +124,7 @@ parameter_types! {
     pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
     pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
     pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
+    pub const MinWaitForStopStoring: BlockNumber = 1;
 }
 
 pub struct MockProofsDealer;
@@ -222,6 +223,7 @@ impl pallet_file_system::Config for Test {
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MaxExpiredItemsInBlock = ConstU32<100u32>;
     type MaxUserPendingDeletionRequests = ConstU32<5u32>;
+    type MinWaitForStopStoring = MinWaitForStopStoring;
 }
 
 parameter_types! {

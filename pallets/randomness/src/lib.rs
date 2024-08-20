@@ -51,7 +51,7 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         /// Get the BABE data from the runtime
-        type BabeDataGetter: GetBabeData<u64, Option<Self::Hash>>;
+        type BabeDataGetter: GetBabeData<u64, Self::Hash>;
 
         /// Weight info
         type WeightInfo: WeightInfo;
@@ -99,14 +99,13 @@ pub mod pallet {
             ensure_none(origin)?;
 
             // Update the randomness from the parent block
-            if let Some(parent_randomness) = T::BabeDataGetter::get_parent_randomness() {
-                let two_blocks: BlockNumberFor<T> = BlockNumberFor::<T>::default()
-                    + sp_runtime::traits::One::one()
-                    + sp_runtime::traits::One::one();
-                let latest_valid_block =
-                    frame_system::Pallet::<T>::block_number().saturating_sub(two_blocks);
-                LatestParentBlockRandomness::<T>::put((parent_randomness, latest_valid_block));
-            }
+            let parent_randomness = T::BabeDataGetter::get_parent_randomness();
+            let two_blocks: BlockNumberFor<T> = BlockNumberFor::<T>::default()
+                + sp_runtime::traits::One::one()
+                + sp_runtime::traits::One::one();
+            let latest_valid_block =
+                frame_system::Pallet::<T>::block_number().saturating_sub(two_blocks);
+            LatestParentBlockRandomness::<T>::put((parent_randomness, latest_valid_block));
 
             // Get the last relay epoch index for which the randomness has been processed
             let last_relay_epoch_index = <RelayEpoch<T>>::get();
@@ -117,33 +116,26 @@ pub mod pallet {
             // If the current epoch is greater than the one for which the randomness was last processed for
             if relay_epoch_index > last_relay_epoch_index {
                 // Get the new randomness of this new epoch
-                if let Some(randomness) = T::BabeDataGetter::get_epoch_randomness() {
-                    // The latest BABE randomness is predictable during the current epoch and this inherent
-                    // must be executed and included in every block, which means that iff this logic is being
-                    // executed, the epoch JUST changed, so the obtained randomness is valid for every previous block.
-                    // TODO: add logic to check parent relay block (ideally, we make it valid for `curr_relay_block - 2`)
-                    let latest_valid_block = frame_system::Pallet::<T>::block_number()
-                        .saturating_sub(sp_runtime::traits::One::one());
+                let epoch_randomness = T::BabeDataGetter::get_epoch_randomness();
+                // The latest BABE randomness is predictable during the current epoch and this inherent
+                // must be executed and included in every block, which means that iff this logic is being
+                // executed, the epoch JUST changed, so the obtained randomness is valid for every previous block.
+                // TODO: add logic to check parent relay block (ideally, we make it valid for `curr_relay_block - 2`)
+                let latest_valid_block = frame_system::Pallet::<T>::block_number()
+                    .saturating_sub(sp_runtime::traits::One::one());
 
-                    // Save it to be readily available for use
-                    LatestOneEpochAgoRandomness::<T>::put((randomness, latest_valid_block));
+                // Save it to be readily available for use
+                LatestOneEpochAgoRandomness::<T>::put((epoch_randomness, latest_valid_block));
 
-                    // Update storage with the latest epoch for which randomness was processed for
-                    <RelayEpoch<T>>::put(relay_epoch_index);
+                // Update storage with the latest epoch for which randomness was processed for
+                <RelayEpoch<T>>::put(relay_epoch_index);
 
-                    // Emit an event detailing that a new randomness is available
-                    Self::deposit_event(Event::NewOneEpochAgoRandomnessAvailable {
-                        randomness_seed: randomness,
-                        from_epoch: relay_epoch_index,
-                        valid_until_block: latest_valid_block,
-                    });
-                } else {
-                    log::warn!(
-                        "Failed to fill BABE epoch randomness \
-							REQUIRE HOTFIX TO FILL EPOCH RANDOMNESS FOR EPOCH {:?}",
-                        relay_epoch_index
-                    );
-                }
+                // Emit an event detailing that a new randomness is available
+                Self::deposit_event(Event::NewOneEpochAgoRandomnessAvailable {
+                    randomness_seed: epoch_randomness,
+                    from_epoch: relay_epoch_index,
+                    valid_until_block: latest_valid_block,
+                });
             }
 
             // Update storage to reflect that this inherent was included in the block (so the block is valid)

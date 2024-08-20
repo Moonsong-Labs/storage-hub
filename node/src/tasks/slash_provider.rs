@@ -1,11 +1,10 @@
 use std::time::Duration;
 
 use sc_tracing::tracing::*;
-use sp_trie::TrieLayout;
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::SlashableProvider};
-use shc_common::types::HasherOutT;
+use shc_common::types::StorageProofsMerkleTrieLayout;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
 
@@ -17,38 +16,32 @@ const LOG_TARGET: &str = "slash-provider-task";
 ///
 /// This task is responsible for slashing a provider. It listens for the `SlashableProvider` event and sends an extrinsic
 /// to StorageHub runtime to slash the provider.
-pub struct SlashProviderTask<T, FL, FS>
+pub struct SlashProviderTask<FL, FS>
 where
-    T: TrieLayout,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
 {
-    storage_hub_handler: StorageHubHandler<T, FL, FS>,
+    storage_hub_handler: StorageHubHandler<FL, FS>,
 }
 
-impl<T, FL, FS> Clone for SlashProviderTask<T, FL, FS>
+impl<FL, FS> Clone for SlashProviderTask<FL, FS>
 where
-    T: TrieLayout,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
 {
-    fn clone(&self) -> SlashProviderTask<T, FL, FS> {
+    fn clone(&self) -> SlashProviderTask<FL, FS> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<T, FL, FS> SlashProviderTask<T, FL, FS>
+impl<FL, FS> SlashProviderTask<FL, FS>
 where
-    T: TrieLayout,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -58,12 +51,10 @@ where
 /// Handles the `SlashaProvider` event.
 ///
 /// This event is triggered by the runtime when a provider is marked as slashable.
-impl<T, FL, FS> EventHandler<SlashableProvider> for SlashProviderTask<T, FL, FS>
+impl<FL, FS> EventHandler<SlashableProvider> for SlashProviderTask<FL, FS>
 where
-    T: TrieLayout + Send + Sync + 'static,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
     async fn handle_event(&mut self, event: SlashableProvider) -> anyhow::Result<()> {
         info!(
@@ -76,20 +67,15 @@ where
     }
 }
 
-impl<T, FL, FS> SlashProviderTask<T, FL, FS>
+impl<FL, FS> SlashProviderTask<FL, FS>
 where
-    T: TrieLayout,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
 {
     async fn handle_slashable_provider_event(
         &mut self,
         event: SlashableProvider,
-    ) -> anyhow::Result<()>
-    where
-        HasherOutT<T>: TryFrom<[u8; 32]>,
-    {
+    ) -> anyhow::Result<()> {
         // Build extrinsic.
         let call =
             storage_hub_runtime::RuntimeCall::Providers(pallet_storage_providers::Call::slash {

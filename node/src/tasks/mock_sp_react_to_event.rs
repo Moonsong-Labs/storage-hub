@@ -3,9 +3,9 @@ use std::time::Duration;
 use log::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewChallengeSeed};
+use shc_common::types::StorageProofsMerkleTrieLayout;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
-use sp_trie::TrieLayout;
 
 use crate::services::handler::StorageHubHandler;
 
@@ -18,46 +18,42 @@ pub type EventToReactTo = NewChallengeSeed;
 ///
 /// This can be used for debugging purposes.
 /// The event to react to can be configured by setting the [`EventToReactTo`] type.
-pub struct SpReactToEventMockTask<T, FL, FS>
+pub struct SpReactToEventMockTask<FL, FS>
 where
-    T: Send + Sync + TrieLayout + 'static,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T> + 'static,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
 {
-    storage_hub_handler: StorageHubHandler<T, FL, FS>,
+    storage_hub_handler: StorageHubHandler<FL, FS>,
 }
 
-impl<T, FL, FS> Clone for SpReactToEventMockTask<T, FL, FS>
+impl<FL, FS> Clone for SpReactToEventMockTask<FL, FS>
 where
-    T: Send + Sync + TrieLayout + 'static,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T> + 'static,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
 {
-    fn clone(&self) -> SpReactToEventMockTask<T, FL, FS> {
+    fn clone(&self) -> SpReactToEventMockTask<FL, FS> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<T, FL, FS> SpReactToEventMockTask<T, FL, FS>
+impl<FL, FS> SpReactToEventMockTask<FL, FS>
 where
-    T: Send + Sync + TrieLayout + 'static,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T> + 'static,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<T, FL, FS> EventHandler<EventToReactTo> for SpReactToEventMockTask<T, FL, FS>
+impl<FL, FS> EventHandler<EventToReactTo> for SpReactToEventMockTask<FL, FS>
 where
-    T: Send + Sync + TrieLayout + 'static,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T> + 'static,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
 {
     async fn handle_event(&mut self, event: EventToReactTo) -> anyhow::Result<()> {
         info!(
