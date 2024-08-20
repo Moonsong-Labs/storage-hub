@@ -49,10 +49,14 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     }
 
     pub fn chunks_to_check(&self) -> u32 {
-        // In here we downcast and saturate to u32, as we consider u32::MAX to be an already large
-        // enough number of challenges to be generated.
-        (self.file_size / SIZE_TO_CHALLENGES + (self.file_size % SIZE_TO_CHALLENGES != 0) as u64)
-            .saturated_into::<u32>()
+        // Calculate the number of chunks as before
+        let chunks = (self.file_size / SIZE_TO_CHALLENGES
+            + (self.file_size % SIZE_TO_CHALLENGES != 0) as u64)
+            .saturated_into::<u32>();
+
+        // Any file size above ~5MB will cap to 10 chunks.
+        // This maximum number of chunks is based on the issue raised in the audit https://github.com/Moonsong-Labs/internal-storage-hub-design-audit/issues/11.
+        chunks.min(10)
     }
 
     pub fn chunks_count(&self) -> u64 {
