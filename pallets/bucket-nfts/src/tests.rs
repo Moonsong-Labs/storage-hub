@@ -1,5 +1,5 @@
 use frame_support::{assert_noop, assert_ok};
-use shp_traits::ReadProvidersInterface;
+use shp_traits::ReadBucketsInterface;
 use sp_core::{ByteArray, Hasher};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::BoundedVec;
@@ -11,6 +11,7 @@ use crate::{
 };
 
 mod share_access_tests {
+
     use super::*;
 
     #[test]

@@ -805,6 +805,7 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
     type BucketNameLimit = T::BucketNameLimit;
     type ProviderId = HashId<T>;
     type ReadAccessGroupId = T::ReadAccessGroupId;
+    type MerkleHash = MerklePatriciaRoot<T>;
 
     fn derive_bucket_id(
         owner: &Self::AccountId,
@@ -849,6 +850,10 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
         } else {
             false
         }
+    }
+
+    fn get_root_bucket(bucket_id: &Self::BucketId) -> Option<Self::MerkleHash> {
+        Buckets::<T>::get(bucket_id).map(|bucket| bucket.root)
     }
 }
 
@@ -1101,6 +1106,16 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
             } else {
                 None
             }
+        } else {
+            None
+        }
+    }
+
+    fn get_payment_account(who: Self::ProviderId) -> Option<Self::AccountId> {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
+            Some(bsp.payment_account)
+        } else if let Some(msp) = MainStorageProviders::<T>::get(&who) {
+            Some(msp.payment_account)
         } else {
             None
         }

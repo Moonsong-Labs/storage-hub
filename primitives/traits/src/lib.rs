@@ -64,6 +64,22 @@ pub trait ReadBucketsInterface {
         + MaxEncodedLen
         + FullCodec;
 
+    /// Type of the root of the buckets.
+    type MerkleHash: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+
     /// Type of a bucket's read-access group's ID (which is the read-access NFT collection's ID).
     type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
 
@@ -95,6 +111,9 @@ pub trait ReadBucketsInterface {
         owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
     ) -> Self::BucketId;
+
+    /// Get the root of a bucket.
+    fn get_root_bucket(bucket_id: &Self::BucketId) -> Option<Self::MerkleHash>;
 }
 
 /// A trait to change the state of buckets registered in the system, such as updating their privacy
@@ -459,6 +478,9 @@ pub trait ReadProvidersInterface {
     /// Get the Account Id of the owner of a registered Provider.
     fn get_owner_account(who: Self::ProviderId) -> Option<Self::AccountId>;
 
+    /// Get the Account Id of the payment account of a registered Provider.
+    fn get_payment_account(who: Self::ProviderId) -> Option<Self::AccountId>;
+
     /// Get the root for a registered Provider.
     fn get_root(who: Self::ProviderId) -> Option<Self::MerkleHash>;
 
@@ -583,6 +605,16 @@ pub trait ProofsDealerInterface {
     /// proof of the Provider's data.
     fn verify_forest_proof(
         provider_id: &Self::ProviderId,
+        challenges: &[Self::MerkleHash],
+        proof: &Self::ForestProof,
+    ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError>;
+
+    /// Verify a proof for a Merkle Patricia Forest, without requiring it to be associated with a Provider.
+    ///
+    /// This only verifies that something is included in the forest that has the given root. It is not a full
+    /// proof of its data.
+    fn verify_generic_forest_proof(
+        root: &Self::MerkleHash,
         challenges: &[Self::MerkleHash],
         proof: &Self::ForestProof,
     ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError>;

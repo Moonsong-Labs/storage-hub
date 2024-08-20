@@ -80,6 +80,8 @@ pub mod pallet {
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
             > + shp_traits::ReadBucketsInterface<
                 AccountId = Self::AccountId,
+                BucketId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+                MerkleHash = <Self::Providers as shp_traits::ReadProvidersInterface>::MerkleHash,
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
                 ReadAccessGroupId = CollectionIdFor<Self>,
             > + shp_traits::MutateBucketsInterface<

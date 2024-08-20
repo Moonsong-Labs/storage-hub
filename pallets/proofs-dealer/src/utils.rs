@@ -768,6 +768,16 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             .map_err(|_| Error::<T>::ForestProofVerificationFailed.into())
     }
 
+    fn verify_generic_forest_proof(
+        root: &Self::MerkleHash,
+        challenges: &[Self::MerkleHash],
+        proof: &Self::ForestProof,
+    ) -> Result<BTreeSet<Self::MerkleHash>, DispatchError> {
+        // Verify forest proof.
+        ForestVerifierFor::<T>::verify_proof(&root, challenges, proof)
+            .map_err(|_| Error::<T>::ForestProofVerificationFailed.into())
+    }
+
     fn verify_key_proof(
         key: &Self::MerkleHash,
         challenges: &[Self::MerkleHash],

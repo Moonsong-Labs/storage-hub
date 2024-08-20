@@ -963,10 +963,15 @@ where
             }
             // If the user supplied a proof of inclusion, verify the proof and queue a priority challenge to remove the file key from all the providers.
             Some(inclusion_forest_proof) => {
+                // Get the root of the bucket.
+                let bucket_root =
+                    <T::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
+                        .ok_or(Error::<T>::BucketNotFound)?;
+
                 // Verify the proof of inclusion.
                 let proven_keys =
-                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
-                        &bucket_id,
+                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
+                        &bucket_root,
                         &[file_key],
                         &inclusion_forest_proof,
                     )?;
@@ -1020,10 +1025,15 @@ where
             Error::<T>::FileKeyNotPendingDeletion
         );
 
+        // Get the root of the bucket.
+        let bucket_root =
+            <T::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
+                .ok_or(Error::<T>::BucketNotFound)?;
+
         // Verify the proof of inclusion.
         let proven_keys =
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
-                &bucket_id,
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
+                &bucket_root,
                 &[file_key],
                 &forest_proof,
             )?;
