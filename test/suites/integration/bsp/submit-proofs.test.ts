@@ -131,7 +131,8 @@ for (const bspNetConfig of bspNetConfigCases) {
       const challengesTickTolerance = Number(userApi.consts.proofsDealer.challengeTicksTolerance);
       const newDeadline =
         lastTickBspSubmittedProofAfterProof + challengePeriod + challengesTickTolerance;
-      const newDeadlineResult = await userApi.call.proofsDealerApi.getNextDeadlineTick(DUMMY_BSP_ID);
+      const newDeadlineResult =
+        await userApi.call.proofsDealerApi.getNextDeadlineTick(DUMMY_BSP_ID);
       assert(newDeadlineResult.isOk);
       const newDeadlineOnChain = newDeadlineResult.asOk.toNumber();
       strictEqual(
@@ -170,7 +171,7 @@ for (const bspNetConfig of bspNetConfigCases) {
         blockResult?.events
       );
       const slashableProviderEventDataBlob =
-      userApi.events.proofsDealer.SlashableProvider.is(slashableProviderEvent.event) &&
+        userApi.events.proofsDealer.SlashableProvider.is(slashableProviderEvent.event) &&
         slashableProviderEvent.event.data;
       assert(slashableProviderEventDataBlob, "Event doesn't match Type");
       strictEqual(
