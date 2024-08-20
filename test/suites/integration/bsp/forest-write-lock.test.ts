@@ -20,7 +20,7 @@ const bspNetConfigCases: BspNetConfig[] = [
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
-  describe(`BSPNet: BSP Volunteer (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
+  describe(`BSPNet: Multiple BSPs volunteer (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
     let user_api: BspNetApi;
     let bsp_api: BspNetApi;
 
