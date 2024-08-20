@@ -668,7 +668,7 @@ impl Convert<Balance, BlockNumberFor<Runtime>> for SaturatingBalanceToBlockNumbe
     }
 }
 
-// Converter from the ThresholdType type (FixedU128) to the BlockNumber type (u64) and vice versa.
+// Converter from the ThresholdType to the BlockNumber type and vice versa.
 // It performs a saturated conversion, so that the result is always a valid BlockNumber.
 pub struct ThresholdTypeToBlockNumberConverter;
 

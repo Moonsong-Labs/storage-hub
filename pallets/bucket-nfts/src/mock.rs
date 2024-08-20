@@ -12,7 +12,7 @@ use shp_file_metadata::ChunkId;
 use shp_traits::{
     ProofSubmittersInterface, ProofsDealerInterface, TrieMutation, TrieRemoveMutation,
 };
-use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256, U256};
+use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::traits::ConvertBack;
 use sp_runtime::{
@@ -352,7 +352,7 @@ impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
     }
 }
 
-// Converter from the ThresholdType type (FixedU128) to the BlockNumber type (u64) and vice versa.
+// Converter from the ThresholdType to the BlockNumber type and vice versa.
 // It performs a saturated conversion, so that the result is always a valid BlockNumber.
 pub struct ThresholdTypeToBlockNumberConverter;
 
@@ -364,8 +364,7 @@ impl Convert<ThresholdType, BlockNumberFor<Test>> for ThresholdTypeToBlockNumber
 
 impl ConvertBack<ThresholdType, BlockNumberFor<Test>> for ThresholdTypeToBlockNumberConverter {
     fn convert_back(block_number: BlockNumberFor<Test>) -> ThresholdType {
-        let block_number: U256 = block_number.into();
-        block_number.try_into().expect("BlockNumber is u64; qed")
+        block_number.saturated_into()
     }
 }
 
