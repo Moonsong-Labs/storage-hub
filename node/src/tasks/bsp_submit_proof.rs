@@ -132,7 +132,9 @@ where
             Some(tx) => tx,
             None => {
                 error!(target: LOG_TARGET, "This is a bug! Forest root write tx already taken.");
-                return Ok(());
+                return Err(anyhow!(
+                    "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken!"
+                ));
             }
         };
 

@@ -8,10 +8,10 @@ use sp_core::H256;
 use sp_runtime::AccountId32;
 
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::handler::ConfirmStoringRequest;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
+    handler::ConfirmStoringRequest,
 };
 use shc_common::types::{FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout};
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
@@ -243,8 +243,10 @@ where
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
-                error!(target: LOG_TARGET, "This is a bug! Forest root write tx already taken.");
-                return Ok(());
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken.\nThis is a critical bug. Please report it to the StorageHub team.");
+                return Err(anyhow!(
+                    "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. Please report it to the StorageHub team."
+                ));
             }
         };
 
@@ -271,15 +273,16 @@ where
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let added_file_key_proof = read_file_storage
             .generate_proof(&event.file_key, &chunks_to_prove)
-            .expect("File is not in storage, or proof does not exist.");
+            .map_err(|_| anyhow!("File is not in storage, or proof does not exist."))?;
         // Release the file storage read lock as soon as possible.
         drop(read_file_storage);
 
         // Get a read lock on the forest storage to generate a proof for the file.
         let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
-        let non_inclusion_forest_proof = read_forest_storage
-            .generate_proof(vec![event.file_key])
-            .expect("Failed to generate forest proof.");
+        let non_inclusion_forest_proof =
+            read_forest_storage
+                .generate_proof(vec![event.file_key])
+                .map_err(|_| anyhow!("Failed to generate forest proof."))?;
         // Release the forest storage read lock.
         drop(read_forest_storage);
 
@@ -291,12 +294,15 @@ where
                     event.file_key,
                     added_file_key_proof,
                 )])
-                .expect("Failed to convert file keys and proofs to BoundedVec."),
+                .map_err(|_| {
+                    error!("CRITICAL❗️❗️ This is a bug! Failed to convert file keys and proofs to BoundedVec. Please report it to the StorageHub team.");
+                    anyhow!("Failed to convert file keys and proofs to BoundedVec.")
+                })?,
             },
         );
 
         // Send the confirmation transaction and wait for it to be included in the block and
-        // continue only if it is successfull.
+        // continue only if it is successful.
         self.storage_hub_handler
             .blockchain
             .send_extrinsic(call)
@@ -309,7 +315,7 @@ where
 
         let file_metadata = read_file_storage
             .get_metadata(&event.file_key)
-            .expect("File metadata not found.");
+            .map_err(|_| anyhow!("File metadata not found."))?;
         // Release the file storage lock.
         drop(read_file_storage);
 
@@ -317,7 +323,7 @@ where
         let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
         write_forest_storage
             .insert_files_metadata(&vec![file_metadata])
-            .expect("Failed to insert files metadata into forest storage.");
+            .map_err(|_| anyhow!("Failed to insert files metadata into forest storage."))?;
         // Release the forest storage write lock.
         drop(write_forest_storage);
 
@@ -456,7 +462,7 @@ where
         //     .file_transfer
         //     .unregister_file(file_key.as_ref().into())
         //     .await
-        //     .map_err(|e| anyhow!("File is not registered. This should not happen!: {:?}", e));
+        //     .map_err(|e| anyhow!("File is not registered. This should not happen!: {:?}", e))?;
 
         // Queue a request to confirm the storing of the file.
         self.storage_hub_handler

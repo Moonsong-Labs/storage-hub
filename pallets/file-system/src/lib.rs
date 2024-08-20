@@ -48,7 +48,6 @@ pub mod pallet {
     use frame_support::{
         dispatch::DispatchResult,
         pallet_prelude::{ValueQuery, *},
-        runtime_print,
         sp_runtime::traits::{CheckEqual, Convert, MaybeDisplay, SimpleBitOps},
         traits::{
             nonfungibles_v2::{Create, Inspect as NonFungiblesInspect},
@@ -591,7 +590,6 @@ pub mod pallet {
             msp_id: ProviderIdFor<T>,
             peer_ids: PeerIds<T>,
         ) -> DispatchResult {
-            runtime_print!("issue_storage_request 1");
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
 

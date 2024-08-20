@@ -21,23 +21,23 @@ const bspNetConfigCases: BspNetConfig[] = [
 
 for (const bspNetConfig of bspNetConfigCases) {
   describe(`BSPNet: Multiple BSPs volunteer (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
-    let user_api: BspNetApi;
-    let bsp_api: BspNetApi;
+    let userApi: BspNetApi;
+    let bspApi: BspNetApi;
 
     before(async () => {
       await runSimpleBspNet(bspNetConfig);
-      user_api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
-      bsp_api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
+      userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+      bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
     });
 
     after(async () => {
-      await user_api.disconnect();
-      await bsp_api.disconnect();
+      await userApi.disconnect();
+      await bspApi.disconnect();
       await closeSimpleBspNet();
     });
 
     it("Network launches and can be queried", async () => {
-      const userNodePeerId = await user_api.rpc.system.localPeerId();
+      const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), NODE_INFOS.user.expectedPeerId);
 
       const bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
@@ -51,9 +51,9 @@ for (const bspNetConfig of bspNetConfigCases) {
       const destination = ["test/whatsup.jpg", "test/adolphus.jpg"];
       const bucketName = "nothingmuch-3";
 
-      const newBucketEventEvent = await user_api.createBucket(bucketName);
+      const newBucketEventEvent = await userApi.createBucket(bucketName);
       const newBucketEventDataBlob =
-        user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+        userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
       if (!newBucketEventDataBlob) {
         throw new Error("Event doesn't match Type");
@@ -62,7 +62,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       const txs = [];
       for (let i = 0; i < source.length; i++) {
         const { fingerprint, file_size, location } =
-          await user_api.rpc.storagehubclient.loadFileInStorage(
+          await userApi.rpc.storagehubclient.loadFileInStorage(
             source[i],
             destination[i],
             NODE_INFOS.user.AddressId,
@@ -70,7 +70,7 @@ for (const bspNetConfig of bspNetConfigCases) {
           );
 
         txs.push(
-          user_api.tx.fileSystem.issueStorageRequest(
+          userApi.tx.fileSystem.issueStorageRequest(
             newBucketEventDataBlob.bucketId,
             location,
             fingerprint,
@@ -81,57 +81,57 @@ for (const bspNetConfig of bspNetConfigCases) {
         );
       }
 
-      await user_api.sealBlock(txs, shUser);
+      await userApi.sealBlock(txs, shUser);
 
       await sleep(500); // wait for the bsp to volunteer
-      const volunteer_pending = await user_api.rpc.author.pendingExtrinsics();
+      const volunteer_pending = await userApi.rpc.author.pendingExtrinsics();
       strictEqual(
         volunteer_pending.length,
         source.length,
         "There should be pending extrinsics for all files from BSP (volunteer)"
       );
 
-      await user_api.sealBlock();
+      await userApi.sealBlock();
 
       await sleep(5000); // wait for the bsp to download the files
-      const confirm_pending_1 = await user_api.rpc.author.pendingExtrinsics();
+      const confirm_pending_1 = await userApi.rpc.author.pendingExtrinsics();
       strictEqual(
         confirm_pending_1.length,
         1,
         "There should be one pending extrinsic from BSP (confirm store) for the first file"
       );
 
-      await user_api.sealBlock();
+      await userApi.sealBlock();
       const [
         _bspConfirmRes_who,
         _bspConfirmRes_bspId,
         bspConfirmRes_fileKeys,
         bspConfirmRes_newRoot
       ] = fetchEventData(
-        user_api.events.fileSystem.BspConfirmedStoring,
-        await user_api.query.system.events()
+        userApi.events.fileSystem.BspConfirmedStoring,
+        await userApi.query.system.events()
       );
 
       strictEqual(bspConfirmRes_fileKeys.length, 1);
 
       await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
-      const bsp_forest_root_after_confirm = await bsp_api.rpc.storagehubclient.getForestRoot();
+      const bsp_forest_root_after_confirm = await bspApi.rpc.storagehubclient.getForestRoot();
       strictEqual(bsp_forest_root_after_confirm.toString(), bspConfirmRes_newRoot.toString());
 
       // This block should trigger the next file to be confirmed.
-      await user_api.sealBlock();
+      await userApi.sealBlock();
 
       // Even though we didn't sent a new file, the BSP client should process the rest of the files.
       // We wait for the BSP to send the confirm transaction.
       await sleep(500);
-      const confirm_pending_2 = await user_api.rpc.author.pendingExtrinsics();
+      const confirm_pending_2 = await userApi.rpc.author.pendingExtrinsics();
       strictEqual(
         confirm_pending_2.length,
         1,
         "There should be one pending extrinsic from BSP (confirm store) for the second file"
       );
 
-      await user_api.sealBlock();
+      await userApi.sealBlock();
 
       const [
         _bspConfirm2Res_who,
@@ -139,14 +139,14 @@ for (const bspNetConfig of bspNetConfigCases) {
         bspConfirm2Res_fileKeys,
         bspConfirm2Res_newRoot
       ] = fetchEventData(
-        user_api.events.fileSystem.BspConfirmedStoring,
-        await user_api.query.system.events()
+        userApi.events.fileSystem.BspConfirmedStoring,
+        await userApi.query.system.events()
       );
 
       strictEqual(bspConfirm2Res_fileKeys.length, 1);
 
       await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
-      const bsp_forest_root_after_confirm2 = await bsp_api.rpc.storagehubclient.getForestRoot();
+      const bsp_forest_root_after_confirm2 = await bspApi.rpc.storagehubclient.getForestRoot();
       strictEqual(bsp_forest_root_after_confirm2.toString(), bspConfirm2Res_newRoot.toString());
     });
   });

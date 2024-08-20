@@ -125,7 +125,7 @@ where
 
         // BspSubmitProofTask is triggered by a NewChallengeSeed event emitted by the BlockchainService.
         // It responds by computing challenges derived from the seed, taking also into account
-        // the custom challenges in checkpoint challenge rounds and enqueuing them in blockchain service.
+        // the custom challenges in checkpoint challenge rounds and enqueuing them in BlockchainService.
         // BspSubmitProofTask also listens to ProcessSubmitProofRequest events, which are emitted by the
         // BlockchainService when it is time to actually submit the proof of storage.
         // Additionally, it handles file deletions as a consequence of inclusion proofs in custom challenges.
@@ -136,7 +136,7 @@ where
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         new_challenge_seed_event_bus_listener.start();
-        // Subscribing to NewChallengeSeed event from the BlockchainService.
+        // Subscribing to ProcessSubmitProofRequest event from the BlockchainService.
         let process_submit_proof_request_event_bus_listener: EventBusListener<
             ProcessSubmitProofRequest,
             _,

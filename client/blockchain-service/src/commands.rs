@@ -16,11 +16,8 @@ use shc_common::types::{
     BlockNumber, ChunkId, ForestLeaf, ProviderId, RandomnessOutput, TrieRemoveMutation,
 };
 
-use crate::handler::ConfirmStoringRequest;
-use crate::handler::SubmitProofRequest;
-
 use super::{
-    handler::BlockchainService,
+    handler::{BlockchainService, ConfirmStoringRequest, SubmitProofRequest},
     transaction::SubmittedTransaction,
     types::{Extrinsic, ExtrinsicResult},
 };
@@ -60,7 +57,6 @@ pub enum BlockchainServiceCommand {
             Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>,
         >,
     },
-    // TODO: update this with proper types
     QueueSubmitProofRequest {
         request: SubmitProofRequest,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
