@@ -48,7 +48,7 @@ lazy_static! {
 
 impl BlockchainService {
     /// Notify tasks waiting for a block number.
-    pub(crate) fn notify_block_number(&mut self, block_number: BlockNumber) {
+    pub(crate) fn notify_import_block_number(&mut self, block_number: BlockNumber) {
         let mut keys_to_remove = Vec::new();
 
         for (block_number, waiters) in self

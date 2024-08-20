@@ -497,7 +497,7 @@ impl BlockchainService {
         debug!(target: LOG_TARGET, "Import notification #{}: {}", block_number, block_hash);
 
         // Notify all tasks waiting for this block number (or lower).
-        self.notify_block_number(block_number);
+        self.notify_import_block_number(block_number);
 
         // We query the [`BlockchainService`] account nonce at this height
         // and update our internal counter if it's smaller than the result.
@@ -697,14 +697,12 @@ impl BlockchainService {
                             },
                         ) => {
                             // Check if the provider ID is one of the provider IDs this node is tracking.
-                            for provider_id in self.provider_ids.iter() {
-                                if provider_id == &provider {
-                                    self.emit(FinalisedMutationsApplied {
-                                        provider_id: provider.clone(),
-                                        mutations: mutations.clone(),
-                                        new_root: new_root.clone(),
-                                    })
-                                }
+                            if self.provider_ids.contains(&provider) {
+                                self.emit(FinalisedMutationsApplied {
+                                    provider_id: provider.clone(),
+                                    mutations: mutations.clone(),
+                                    new_root: new_root.clone(),
+                                })
                             }
                         }
                         // Ignore all other events.
