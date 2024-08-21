@@ -443,13 +443,13 @@ where
             .unregister_file(file_key.as_ref().into())
             .await;
 
+        // TODO: Send transaction to runtime to unvolunteer the file.
+
         // Delete the file from the file storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
         // TODO: Handle error
         let _ = write_file_storage.delete_file(&file_key);
-
-        // TODO: Send transaction to runtime to unvolunteer the file.
 
         Ok(())
     }
@@ -457,12 +457,12 @@ where
     async fn on_file_complete(&self, file_key: &H256) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "File upload complete ({:?})", file_key);
 
-        // // Unregister the file from the file transfer service.
-        // self.storage_hub_handler
-        //     .file_transfer
-        //     .unregister_file(file_key.as_ref().into())
-        //     .await
-        //     .map_err(|e| anyhow!("File is not registered. This should not happen!: {:?}", e))?;
+        // Unregister the file from the file transfer service.
+        self.storage_hub_handler
+            .file_transfer
+            .unregister_file((*file_key).into())
+            .await
+            .map_err(|e| anyhow!("File is not registered. This should not happen!: {:?}", e))?;
 
         // Queue a request to confirm the storing of the file.
         self.storage_hub_handler
