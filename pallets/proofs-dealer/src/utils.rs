@@ -260,11 +260,15 @@ where
                 .collect();
 
             if !mutations.is_empty() {
+                let mut mutations_applied = Vec::new();
                 let new_root = mutations.iter().try_fold(root, |acc_root, mutation| {
                     // Remove the key from the list of `forest_keys_proven` to avoid having to verify the key proof.
                     forest_keys_proven.remove(&mutation.0);
 
                     // TODO: Reduce the storage used by the Provider with some interface exposed by the Providers pallet.
+
+                    // Add mutation to list of mutations applied.
+                    mutations_applied.push((mutation.0, mutation.1.clone()));
 
                     <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
                         &acc_root,
@@ -274,6 +278,13 @@ where
                     .map(|(_, new_root)| new_root)
                     .map_err(|_| Error::<T>::FailedToApplyDelta)
                 })?;
+
+                // Emit event of mutation applied.
+                Self::deposit_event(Event::<T>::MutationsApplied {
+                    provider: *submitter,
+                    mutations: mutations_applied,
+                    new_root,
+                });
 
                 // Update root of Provider after all mutations have been applied to the Forest.
                 <T::ProvidersPallet as ProvidersInterface>::update_root(*submitter, new_root)?;

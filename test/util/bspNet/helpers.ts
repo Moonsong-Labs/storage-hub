@@ -640,52 +640,77 @@ export interface SealedBlock {
   extSuccess?: boolean;
 }
 
-// TODO: extend to take multiple exts in one block
-// TODO: Accept ext hash strings as well
 export const sealBlock = async (
   api: ApiPromise,
-  call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
+  calls?:
+    | SubmittableExtrinsic<"promise", ISubmittableResult>
+    | SubmittableExtrinsic<"promise", ISubmittableResult>[],
   signer?: KeyringPair
 ): Promise<SealedBlock> => {
   const initialHeight = (await api.rpc.chain.getHeader()).number.toNumber();
 
   const results: {
-    hash?: Hash;
-    events?: EventRecord[];
+    hashes: Hash[];
+    events: EventRecord[];
     blockData?: SignedBlock;
-    success?: boolean;
-  } = {};
+    success: boolean[];
+  } = {
+    hashes: [],
+    events: [],
+    success: []
+  };
 
-  if (call?.isSigned) {
-    results.hash = await call.send();
-  } else if (call) {
-    results.hash = await call.signAndSend(signer || alice);
+  // Normalize to array
+  const callArray = Array.isArray(calls) ? calls : calls ? [calls] : [];
+
+  if (callArray.length > 0) {
+    const nonce = await api.rpc.system.accountNextIndex((signer || alice).address);
+
+    // Send all transactions in sequence
+    for (let i = 0; i < callArray.length; i++) {
+      const call = callArray[i];
+      let hash: Hash;
+
+      if (call.isSigned) {
+        hash = await call.send();
+      } else {
+        hash = await call.signAndSend(signer || alice, { nonce: nonce.addn(i) });
+      }
+
+      results.hashes.push(hash);
+    }
   }
 
   const sealedResults = {
     blockReceipt: await api.rpc.engine.createBlock(true, true),
-    txHash: results.hash?.toString()
+    txHashes: results.hashes.map((hash) => hash.toString())
   };
 
   const blockHash = sealedResults.blockReceipt.blockHash;
   const allEvents = await (await api.at(blockHash)).query.system.events();
 
-  if (results.hash) {
+  if (results.hashes.length > 0) {
     const blockData = await api.rpc.chain.getBlock(blockHash);
+    results.blockData = blockData;
+
     const getExtIndex = (txHash: Hash) => {
       return blockData.block.extrinsics.findIndex((ext) => ext.hash.toHex() === txHash.toString());
     };
-    const extIndex = getExtIndex(results.hash);
-    const extEvents = allEvents.filter(
-      ({ phase }) =>
-        phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex
-    );
-    results.blockData = blockData;
-    results.events = extEvents;
-    results.success = isExtSuccess(extEvents);
+
+    for (const hash of results.hashes) {
+      const extIndex = getExtIndex(hash);
+      const extEvents = allEvents.filter(
+        ({ phase }) =>
+          phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex
+      );
+      results.events.push(...extEvents);
+      results.success.push(isExtSuccess(extEvents) ?? false);
+    }
   } else {
-    results.events = allEvents;
+    results.events.push(...allEvents);
   }
+
+  const extSuccess = results.success.every((success) => success);
 
   // Allow time for chain to settle
   for (let i = 0; i < 20; i++) {
@@ -693,14 +718,12 @@ export const sealBlock = async (
     if (currentHeight > initialHeight) {
       break;
     }
-    console.log("Waiting for block to be finalized...");
-    console.log("You shouldn't see this message often, if you do, something is wrong");
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   return Object.assign(sealedResults, {
     events: results.events,
-    extSuccess: results.success
+    extSuccess: extSuccess
   }) satisfies SealedBlock;
 };
 

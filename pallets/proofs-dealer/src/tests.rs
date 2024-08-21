@@ -1424,6 +1424,19 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         // Dispatch challenge extrinsic.
         assert_ok!(ProofsDealer::submit_proof(user, proof, None));
 
+        // Check that the event for mutations applied is emitted.
+        System::assert_has_event(
+            Event::MutationsApplied {
+                provider: provider_id,
+                mutations: custom_challenges
+                    .iter()
+                    .map(|(key, mutation)| (*key, mutation.clone().unwrap()))
+                    .collect(),
+                new_root: challenges.last().unwrap().clone(),
+            }
+            .into(),
+        );
+
         // Check if root of the provider was updated the last challenge key
         // Note: The apply_delta method is applying the mutation the root of the provider for every challenge key.
         // This is to avoid having to construct valid tries and proofs.
