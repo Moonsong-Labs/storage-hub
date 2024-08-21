@@ -329,7 +329,7 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       defaultMerkleRoot: H256 & AugmentedConst<ApiType>;
       /**
-       * The slope of the collateral vs storage capacity curve. In other terms, how many tokens a Storage Provider should add as collateral to increase its storage capacity in one unit of StorageData.
+       * The slope of the collateral vs storage capacity curve. In other terms, how many tokens a Storage Provider should add as collateral to increase its storage capacity in one unit of StorageDataUnit.
        **/
       depositPerData: u128 & AugmentedConst<ApiType>;
       /**
