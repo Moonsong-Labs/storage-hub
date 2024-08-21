@@ -360,7 +360,7 @@ impl Actor for BlockchainService {
                     let provider_id = self
                         .client
                         .runtime_api()
-                        .get_bsp_provider_id(current_block_hash, &node_pub_key.into())
+                        .get_storage_provider_id(current_block_hash, &node_pub_key.into())
                         .unwrap_or_else(|_| None);
 
                     match callback.send(provider_id) {
