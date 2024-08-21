@@ -85,6 +85,9 @@ export interface IncompleteFileStatus extends Struct {
 /** @name Key */
 export interface Key extends H256 {}
 
+/** @name MainStorageProviderId */
+export interface MainStorageProviderId extends H256 {}
+
 /** @name MerklePatriciaRoot */
 export interface MerklePatriciaRoot extends H256 {}
 
@@ -128,6 +131,15 @@ export interface SaveFileToDisk extends Enum {
 
 /** @name StorageData */
 export interface StorageData extends u32 {}
+
+/** @name StorageProviderId */
+export interface StorageProviderId extends Enum {
+  readonly isBackupStorageProvider: boolean;
+  readonly asBackupStorageProvider: BackupStorageProviderId;
+  readonly isMainStorageProvider: boolean;
+  readonly asMainStorageProvider: MainStorageProviderId;
+  readonly type: "BackupStorageProvider" | "MainStorageProvider";
+}
 
 /** @name TrieRemoveMutation */
 export interface TrieRemoveMutation extends Struct {}

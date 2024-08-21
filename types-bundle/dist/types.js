@@ -23,6 +23,7 @@ export const ALL_TYPES = {
   RandomnessOutput: "H256",
   TrieRemoveMutation: {},
   BackupStorageProviderId: "H256",
+  MainStorageProviderId: "H256",
   StorageData: "u32",
   MerklePatriciaRoot: "H256",
   ChunkId: "u64",
@@ -34,6 +35,12 @@ export const ALL_TYPES = {
     last_capacity_change: "BlockNumber",
     owner_account: "AccountId",
     payment_account: "AccountId"
+  },
+  StorageProviderId: {
+    _enum: {
+      BackupStorageProvider: "BackupStorageProviderId",
+      MainStorageProvider: "MainStorageProviderId"
+    }
   },
   GetLastTickProviderSubmittedProofError: {
     _enum: {
