@@ -20,6 +20,7 @@ use shp_traits::{
     ReadProvidersInterface, SystemMetricsInterface,
 };
 use sp_runtime::BoundedVec;
+use types::StorageProviderId;
 
 use crate::*;
 
@@ -1184,5 +1185,15 @@ where
         bsp_id: &BackupStorageProviderId<T>,
     ) -> Result<BackupStorageProvider<T>, GetBspInfoError> {
         BackupStorageProviders::<T>::get(bsp_id).ok_or(GetBspInfoError::BspNotRegistered)
+    }
+
+    pub fn get_storage_provider_id(who: &T::AccountId) -> Option<StorageProviderId<T>> {
+        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
+            Some(StorageProviderId::BackupStorageProvider(bsp_id))
+        } else if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
+            Some(StorageProviderId::MainStorageProvider(msp_id))
+        } else {
+            None
+        }
     }
 }

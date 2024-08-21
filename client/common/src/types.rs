@@ -36,6 +36,7 @@ pub type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<Runtime>
 pub type ProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
 pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
 pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;
+pub type ForestRoot = pallet_proofs_dealer::types::ForestRootFor<Runtime>;
 pub type TrieRemoveMutation = shp_traits::TrieRemoveMutation;
 pub type StorageProofsMerkleTrieLayout = storage_hub_runtime::StorageProofsMerkleTrieLayout;
 pub type StorageProof = pallet_proofs_dealer::types::Proof<Runtime>;

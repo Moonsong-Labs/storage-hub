@@ -6,12 +6,15 @@ use sp_runtime::RuntimeDebug;
 
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait StorageProvidersApi<BspId, BspInfo>
+    pub trait StorageProvidersApi<BspId, BspInfo, AccountId, ProviderId>
     where
         BspId: codec::Codec,
         BspInfo: codec::Codec,
+        AccountId: codec::Codec,
+        ProviderId: codec::Codec,
     {
         fn get_bsp_info(bsp_id: &BspId) -> Result<BspInfo, GetBspInfoError>;
+        fn get_storage_provider_id(who: &AccountId) -> Option<ProviderId>;
     }
 }
 
