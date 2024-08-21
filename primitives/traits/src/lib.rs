@@ -611,6 +611,10 @@ pub trait ProofsDealerInterface {
 
     /// Verify a proof for a Merkle Patricia Forest, without requiring it to be associated with a Provider.
     ///
+    /// WARNING: This function should be used with caution, as it does not verify the root against a specific Provider.
+    /// This means this function should only be used when the root is previously known to be correct, and in NO case should
+    /// it be used to verify proofs associated with a challengeable Provider. That is what `verify_forest_proof` is for.
+    ///
     /// This only verifies that something is included in the forest that has the given root. It is not a full
     /// proof of its data.
     fn verify_generic_forest_proof(
