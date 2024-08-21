@@ -238,6 +238,11 @@ impl Actor for FileTransferService {
                         false => Err(RequestError::FileAlreadyRegisteredForPeer),
                     };
 
+                    self.peers_by_file
+                        .entry(file_key)
+                        .or_insert_with(Vec::new)
+                        .push(peer_id);
+
                     match callback.send(result) {
                         Ok(()) => {}
                         Err(_) => error!(
