@@ -409,10 +409,18 @@ declare module "@polkadot/api-base/types/events" {
       /**
        * Notifies that a BSP has stopped storing a file.
        **/
-      BspStoppedStoring: AugmentedEvent<
+      BspConfirmStoppedStoring: AugmentedEvent<
         ApiType,
-        [bspId: H256, fileKey: H256, newRoot: H256, owner: AccountId32, location: Bytes],
-        { bspId: H256; fileKey: H256; newRoot: H256; owner: AccountId32; location: Bytes }
+        [bspId: H256, fileKey: H256, newRoot: H256],
+        { bspId: H256; fileKey: H256; newRoot: H256 }
+      >;
+      /**
+       * Notifies that a BSP has opened a request to stop storing a file.
+       **/
+      BspRequestedToStopStoring: AugmentedEvent<
+        ApiType,
+        [bspId: H256, fileKey: H256, owner: AccountId32, location: Bytes],
+        { bspId: H256; fileKey: H256; owner: AccountId32; location: Bytes }
       >;
       /**
        * Notifies that a bucket's privacy has been updated.
@@ -1062,13 +1070,13 @@ declare module "@polkadot/api-base/types/events" {
         { userAccount: AccountId32; providerId: H256; newRate: u128 }
       >;
       /**
-       * Event emitted when a Provider's last chargeable block and price index are updated. Provides information about the Provider of the stream,
-       * the block number of the last chargeable block and the price index at that block.
+       * Event emitted when a Provider's last chargeable tick and price index are updated. Provides information about the Provider of the stream,
+       * the tick number of the last chargeable tick and the price index at that tick.
        **/
       LastChargeableInfoUpdated: AugmentedEvent<
         ApiType,
-        [providerId: H256, lastChargeableBlock: u32, lastChargeablePriceIndex: u128],
-        { providerId: H256; lastChargeableBlock: u32; lastChargeablePriceIndex: u128 }
+        [providerId: H256, lastChargeableTick: u32, lastChargeablePriceIndex: u128],
+        { providerId: H256; lastChargeableTick: u32; lastChargeablePriceIndex: u128 }
       >;
       /**
        * Event emitted when a payment is charged. Provides information about the user that was charged,
@@ -1364,6 +1372,22 @@ declare module "@polkadot/api-base/types/events" {
     };
     proofsDealer: {
       /**
+       * A set of mutations has been applied to the Forest.
+       **/
+      MutationsApplied: AugmentedEvent<
+        ApiType,
+        [
+          provider: H256,
+          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>,
+          newRoot: H256
+        ],
+        {
+          provider: H256;
+          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>;
+          newRoot: H256;
+        }
+      >;
+      /**
        * A manual challenge was submitted.
        **/
       NewChallenge: AugmentedEvent<
@@ -1372,12 +1396,22 @@ declare module "@polkadot/api-base/types/events" {
         { who: AccountId32; keyChallenged: H256 }
       >;
       /**
-       * A Provider's challenge cycle was initialised.
+       * A provider's challenge cycle was initialised.
        **/
       NewChallengeCycleInitialised: AugmentedEvent<
         ApiType,
-        [currentTick: u32, provider: H256, maybeProviderAccount: Option<AccountId32>],
-        { currentTick: u32; provider: H256; maybeProviderAccount: Option<AccountId32> }
+        [
+          currentTick: u32,
+          nextChallengeDeadline: u32,
+          provider: H256,
+          maybeProviderAccount: Option<AccountId32>
+        ],
+        {
+          currentTick: u32;
+          nextChallengeDeadline: u32;
+          provider: H256;
+          maybeProviderAccount: Option<AccountId32>;
+        }
       >;
       /**
        * A new challenge seed was generated.
@@ -1410,9 +1444,13 @@ declare module "@polkadot/api-base/types/events" {
         { provider: H256; proof: PalletProofsDealerProof }
       >;
       /**
-       * A slashable provider was found.
+       * A provider was marked as slashable and their challenge deadline was forcefully pushed.
        **/
-      SlashableProvider: AugmentedEvent<ApiType, [provider: H256], { provider: H256 }>;
+      SlashableProvider: AugmentedEvent<
+        ApiType,
+        [provider: H256, nextChallengeDeadline: u32],
+        { provider: H256; nextChallengeDeadline: u32 }
+      >;
       /**
        * Generic event
        **/

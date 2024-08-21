@@ -4,17 +4,16 @@ use anyhow::anyhow;
 use frame_support::BoundedVec;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use shp_constants::H_LENGTH;
 use sp_core::H256;
 use sp_runtime::AccountId32;
-use sp_trie::TrieLayout;
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
-    events::{BspConfirmedStoring, NewStorageRequest},
+    events::{NewStorageRequest, ProcessConfirmStoringRequest},
+    handler::ConfirmStoringRequest,
 };
-use shc_common::types::{FileKey, FileMetadata, HasherOutT};
+use shc_common::types::{FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout};
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
@@ -28,37 +27,33 @@ const LOG_TARGET: &str = "bsp-upload-file-task";
 /// BSP Upload File Task: Handles the whole flow of a file being uploaded to a BSP, from
 /// the BSP's perspective.
 ///
-/// The flow is split into two parts, which are represented here as 3 handlers for 3
+/// The flow is split into three parts, which are represented here as 3 handlers for 3
 /// different events:
-/// - `NewStorageRequest` event: The first part of the flow. It is triggered by an
+/// - [`NewStorageRequest`] event: The first part of the flow. It is triggered by an
 ///   on-chain event of a user submitting a storage request to StorageHub. It responds
 ///   by sending a volunteer transaction and registering the interest of this BSP in
 ///   receiving the file.
-/// - `RemoteUploadRequest` event: The second part of the flow. It is triggered by a
+/// - [`RemoteUploadRequest`] event: The second part of the flow. It is triggered by a
 ///   user sending a chunk of the file to the BSP. It checks the proof for the chunk
 ///   and if it is valid, stores it, until the whole file is stored.
-/// - `BspConfirmedStoring` event: The third part of the flow. It is triggered by the
-///   runtime confirming that the BSP is now storing the file so that the BSP can update
-///   it's Forest storage.
-pub struct BspUploadFileTask<T, FL, FS>
+/// - [`ProcessConfirmStoringRequest`] event: The third part of the flow. It is triggered by the
+///   runtime when the BSP should construct a proof for the new file(s) and submit a confirm storing
+///   before updating it's local Forest storage root.
+pub struct BspUploadFileTask<FL, FS>
 where
-    T: TrieLayout,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
 {
-    storage_hub_handler: StorageHubHandler<T, FL, FS>,
-    file_key_cleanup: Option<HasherOutT<T>>,
+    storage_hub_handler: StorageHubHandler<FL, FS>,
+    file_key_cleanup: Option<H256>,
 }
 
-impl<T, FL, FS> Clone for BspUploadFileTask<T, FL, FS>
+impl<FL, FS> Clone for BspUploadFileTask<FL, FS>
 where
-    T: TrieLayout,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
 {
-    fn clone(&self) -> BspUploadFileTask<T, FL, FS> {
+    fn clone(&self) -> BspUploadFileTask<FL, FS> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_key_cleanup: self.file_key_cleanup,
@@ -66,14 +61,12 @@ where
     }
 }
 
-impl<T, FL, FS> BspUploadFileTask<T, FL, FS>
+impl<FL, FS> BspUploadFileTask<FL, FS>
 where
-    T: TrieLayout,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<T, FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
         Self {
             storage_hub_handler,
             file_key_cleanup: None,
@@ -88,12 +81,10 @@ where
 /// receiving the file. This task optimistically assumes the transaction will succeed, and registers
 /// the user and file key in the registry of the File Transfer Service, which handles incoming p2p
 /// upload requests.
-impl<T, FL, FS> EventHandler<NewStorageRequest> for BspUploadFileTask<T, FL, FS>
+impl<FL, FS> EventHandler<NewStorageRequest> for BspUploadFileTask<FL, FS>
 where
-    T: TrieLayout + Send + Sync + 'static,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
@@ -117,20 +108,18 @@ where
 ///
 /// This event is triggered by a user sending a chunk of the file to the BSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
-impl<T, FL, FS> EventHandler<RemoteUploadRequest> for BspUploadFileTask<T, FL, FS>
+impl<FL, FS> EventHandler<RemoteUploadRequest> for BspUploadFileTask<FL, FS>
 where
-    T: TrieLayout + Send + Sync + 'static,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync + 'static,
-    <T::Hash as sp_core::Hasher>::Out: TryFrom<[u8; H_LENGTH]>,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
-        let file_key: HasherOutT<T> = TryFrom::try_from(*event.file_key.as_ref())
-            .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
-
-        let proven = match event.file_key_proof.proven::<T>() {
+        let proven = match event
+            .file_key_proof
+            .proven::<StorageProofsMerkleTrieLayout>()
+        {
             Ok(proven) => {
                 if proven.len() != 1 {
                     Err(anyhow::anyhow!("Expected exactly one proven chunk."))
@@ -150,20 +139,22 @@ where
                 warn!(target: LOG_TARGET, "{}", e);
 
                 // Unvolunteer the file.
-                self.unvolunteer_file(file_key).await?;
+                self.unvolunteer_file(event.file_key.into()).await?;
                 return Err(e);
             }
         };
 
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
         let write_chunk_result =
-            write_file_storage.write_chunk(&file_key, &proven.key, &proven.data);
+            write_file_storage.write_chunk(&event.file_key.into(), &proven.key, &proven.data);
         // Release the file storage write lock as soon as possible.
         drop(write_file_storage);
 
         match write_chunk_result {
             Ok(outcome) => match outcome {
-                FileStorageWriteOutcome::FileComplete => self.on_file_complete(&file_key).await?,
+                FileStorageWriteOutcome::FileComplete => {
+                    self.on_file_complete(&event.file_key.into()).await?
+                }
                 FileStorageWriteOutcome::FileIncomplete => {}
             },
             Err(error) => match error {
@@ -178,7 +169,7 @@ where
                 }
                 FileStorageWriteError::FileDoesNotExist => {
                     // Unvolunteer the file.
-                    self.unvolunteer_file(file_key).await?;
+                    self.unvolunteer_file(event.file_key.into()).await?;
 
                     return Err(anyhow::anyhow!(format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key)));
                 }
@@ -195,7 +186,7 @@ where
                     // This internal error should not happen.
 
                     // Unvolunteer the file.
-                    self.unvolunteer_file(file_key).await?;
+                    self.unvolunteer_file(event.file_key.into()).await?;
 
                     return Err(anyhow::anyhow!(format!(
                         "Internal trie read/write error {:?}:{:?}",
@@ -207,7 +198,7 @@ where
                     // This means that something is seriously wrong, so we error out the whole task.
 
                     // Unvolunteer the file.
-                    self.unvolunteer_file(file_key).await?;
+                    self.unvolunteer_file(event.file_key.into()).await?;
 
                     return Err(anyhow::anyhow!(format!(
                         "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
@@ -219,7 +210,7 @@ where
                     // This means that something is seriously wrong, so we error out the whole task.
 
                     // Unvolunteer the file.
-                    self.unvolunteer_file(file_key).await?;
+                    self.unvolunteer_file(event.file_key.into()).await?;
 
                     return Err(anyhow::anyhow!(format!(
                         "This is a bug! Failed to construct trie iter for key {:?}.",
@@ -233,86 +224,125 @@ where
     }
 }
 
-/// Handles the `BspConfirmedStoring` event.
+/// Handles the `ProcessConfirmStoringRequest` event.
 ///
-/// This event is triggered by the runtime confirming that the BSP is now storing the file.
-impl<T, FL, FS> EventHandler<BspConfirmedStoring> for BspUploadFileTask<T, FL, FS>
+/// This event is triggered by the runtime when it decides it is the right time to submit a confirm
+/// storing extrinsic (and update the local forest root).
+impl<FL, FS> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<FL, FS>
 where
-    T: TrieLayout + Send + Sync + 'static,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
-    async fn handle_event(&mut self, event: BspConfirmedStoring) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: ProcessConfirmStoringRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Runtime confirmed BSP storing files: {:?}",
-            event.file_keys,
+            "Processing ConfirmStoringRequest: {:?}",
+            event.file_key,
         );
-        let mut successful_metadatas = Vec::new();
 
-        // Get the metadata of the stored file.
+        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
+            Some(tx) => tx,
+            None => {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken.\nThis is a critical bug. Please report it to the StorageHub team.");
+                return Err(anyhow!(
+                    "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. Please report it to the StorageHub team."
+                ));
+            }
+        };
+
+        // Query runtime for the chunks to prove for the file.
+        let chunks_to_prove = self
+            .storage_hub_handler
+            .blockchain
+            .query_bsp_confirm_chunks_to_prove_for_file(
+                self.storage_hub_handler
+                    .blockchain
+                    .get_node_public_key()
+                    .await,
+                event.file_key,
+            )
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to query BSP confirm chunks to prove for file: {:?}",
+                    e
+                )
+            })?;
+
+        // Generate the proof for the file.
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let added_file_key_proof = read_file_storage
+            .generate_proof(&event.file_key, &chunks_to_prove)
+            .map_err(|_| anyhow!("File is not in storage, or proof does not exist."))?;
+        // Release the file storage read lock as soon as possible.
+        drop(read_file_storage);
+
+        // Get a read lock on the forest storage to generate a proof for the file.
+        let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
+        let non_inclusion_forest_proof =
+            read_forest_storage
+                .generate_proof(vec![event.file_key])
+                .map_err(|_| anyhow!("Failed to generate forest proof."))?;
+        // Release the forest storage read lock.
+        drop(read_forest_storage);
+
+        // Build extrinsic.
+        let call = storage_hub_runtime::RuntimeCall::FileSystem(
+            pallet_file_system::Call::bsp_confirm_storing {
+                non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
+                file_keys_and_proofs: BoundedVec::try_from(vec![(
+                    event.file_key,
+                    added_file_key_proof,
+                )])
+                .map_err(|_| {
+                    error!("CRITICAL❗️❗️ This is a bug! Failed to convert file keys and proofs to BoundedVec. Please report it to the StorageHub team.");
+                    anyhow!("Failed to convert file keys and proofs to BoundedVec.")
+                })?,
+            },
+        );
+
+        // Send the confirmation transaction and wait for it to be included in the block and
+        // continue only if it is successful.
+        self.storage_hub_handler
+            .blockchain
+            .send_extrinsic(call)
+            .await?
+            .with_timeout(Duration::from_secs(60))
+            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .await?;
+
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
 
-        for fk in &event.file_keys {
-            // TODO: use `convert_raw_bytes_to_hasher_out` when moved to shc_common
-            match TryFrom::<[u8; 32]>::try_from(*fk.as_ref()) {
-                Ok(file_key_hash) => match read_file_storage.get_metadata(&file_key_hash) {
-                    Ok(file_metadata) => successful_metadatas.push(file_metadata),
-                    Err(e) => {
-                        warn!(
-                            target: LOG_TARGET,
-                            "Failed to get metadata for file key: {:?}, error: {:?}", fk, e
-                        );
-                    }
-                },
-                Err(_) => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "File key and HasherOutT mismatch for key: {:?}", fk
-                    );
-                }
-            }
-        }
-
+        let file_metadata = read_file_storage
+            .get_metadata(&event.file_key)
+            .map_err(|_| anyhow!("File metadata not found."))?;
         // Release the file storage lock.
         drop(read_file_storage);
 
-        if !successful_metadatas.is_empty() {
-            // Save [`FileMetadata`] of the successfully retrieved stored files in the forest storage.
-            let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
-            if let Err(e) = write_forest_storage.insert_files_metadata(&successful_metadatas) {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to insert metadata into forest storage: {:?}", e
-                );
-            }
-        } else {
-            warn!(
-                target: LOG_TARGET,
-                "No valid metadata was retrieved for any of the file keys: {:?}",
-                event.file_keys
-            );
-        }
+        // Save [`FileMetadata`] of the successfully retrieved stored files in the forest storage.
+        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
+        write_forest_storage
+            .insert_files_metadata(&vec![file_metadata])
+            .map_err(|_| anyhow!("Failed to insert files metadata into forest storage."))?;
+        // Release the forest storage write lock.
+        drop(write_forest_storage);
+
+        // Release the forest root write "lock".
+        let _ = forest_root_write_tx.send(());
 
         Ok(())
     }
 }
 
-impl<T, FL, FS> BspUploadFileTask<T, FL, FS>
+impl<FL, FS> BspUploadFileTask<FL, FS>
 where
-    T: TrieLayout,
-    FL: Send + Sync + FileStorage<T>,
-    FS: Send + Sync + ForestStorage<T>,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
+    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
 {
     async fn handle_new_storage_request_event(
         &mut self,
         event: NewStorageRequest,
-    ) -> anyhow::Result<()>
-    where
-        HasherOutT<T>: TryFrom<[u8; 32]>,
-    {
+    ) -> anyhow::Result<()> {
         // Construct file metadata.
         let metadata = FileMetadata {
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
@@ -324,13 +354,11 @@ where
 
         // Get the file key.
         let file_key: FileKey = metadata
-            .file_key::<<T as TrieLayout>::Hash>()
+            .file_key::<HashT<StorageProofsMerkleTrieLayout>>()
             .as_ref()
             .try_into()?;
 
-        let file_key_hash: HasherOutT<T> = TryFrom::<[u8; 32]>::try_from(*file_key.as_ref())
-            .map_err(|_| anyhow::anyhow!("File key and HasherOutT mismatch!"))?;
-        self.file_key_cleanup = Some(file_key_hash);
+        self.file_key_cleanup = Some(file_key.into());
 
         // Get the node's public key needed for threshold calculation.
         let node_public_key = self
@@ -343,10 +371,7 @@ where
         let earliest_volunteer_block = self
             .storage_hub_handler
             .blockchain
-            .query_file_earliest_volunteer_block(
-                node_public_key,
-                H256::from_slice(file_key.as_ref()),
-            )
+            .query_file_earliest_volunteer_block(node_public_key, file_key.into())
             .await
             .map_err(|e| anyhow!("Failed to query file earliest volunteer block: {:?}", e))?;
 
@@ -382,7 +407,10 @@ where
         // Also optimistically create file in file storage so we can write uploaded chunks as soon as possible.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
         write_file_storage
-            .insert_file(metadata.file_key::<<T as TrieLayout>::Hash>(), metadata)
+            .insert_file(
+                metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>(),
+                metadata,
+            )
             .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
         drop(write_file_storage);
 
@@ -404,7 +432,7 @@ where
         Ok(())
     }
 
-    async fn unvolunteer_file(&self, file_key: HasherOutT<T>) -> anyhow::Result<()> {
+    async fn unvolunteer_file(&self, file_key: H256) -> anyhow::Result<()> {
         warn!(target: LOG_TARGET, "Unvolunteering file {:?}", file_key);
 
         // Unregister the file from the file transfer service.
@@ -415,83 +443,33 @@ where
             .unregister_file(file_key.as_ref().into())
             .await;
 
+        // TODO: Send transaction to runtime to unvolunteer the file.
+
         // Delete the file from the file storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
         // TODO: Handle error
         let _ = write_file_storage.delete_file(&file_key);
 
-        // TODO: Send transaction to runtime to unvolunteer the file.
-
         Ok(())
     }
 
-    async fn on_file_complete(&self, file_key: &HasherOutT<T>) -> anyhow::Result<()> {
+    async fn on_file_complete(&self, file_key: &H256) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "File upload complete ({:?})", file_key);
 
-        // // Unregister the file from the file transfer service.
-        // self.storage_hub_handler
-        //     .file_transfer
-        //     .unregister_file(file_key.as_ref().into())
-        //     .await
-        //     .expect("File is not registered. This should not happen!");
-
-        // Query runtime for the chunks to prove for the file.
-        let chunks_to_prove = self
-            .storage_hub_handler
-            .blockchain
-            .query_bsp_confirm_chunks_to_prove_for_file(
-                self.storage_hub_handler
-                    .blockchain
-                    .get_node_public_key()
-                    .await,
-                H256::from_slice(file_key.as_ref()),
-            )
+        // Unregister the file from the file transfer service.
+        self.storage_hub_handler
+            .file_transfer
+            .unregister_file((*file_key).into())
             .await
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to query BSP confirm chunks to prove for file: {:?}",
-                    e
-                )
-            })?;
+            .map_err(|e| anyhow!("File is not registered. This should not happen!: {:?}", e))?;
 
-        // Get the metadata for the file.
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let _metadata = read_file_storage
-            .get_metadata(file_key)
-            .expect("File metadata not found");
-        let added_file_key_proof = read_file_storage
-            .generate_proof(file_key, &chunks_to_prove)
-            .expect("File is not in storage, or proof does not exist.");
-        // Release the file storage read lock as soon as possible.
-        drop(read_file_storage);
-
-        // Get a read lock on the forest storage to generate a proof for the file.
-        let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
-        let non_inclusion_forest_proof = read_forest_storage
-            .generate_proof(vec![*file_key])
-            .expect("Failed to generate forest proof.");
-        // Release the forest storage read lock.
-        drop(read_forest_storage);
-
-        // Build extrinsic.
-        let call = storage_hub_runtime::RuntimeCall::FileSystem(
-            pallet_file_system::Call::bsp_confirm_storing {
-                non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
-                file_keys_and_proofs: BoundedVec::try_from(vec![(
-                    H256::from_slice(file_key.as_ref()),
-                    added_file_key_proof,
-                )])
-                .expect("Failed to convert file keys and proofs."),
-            },
-        );
-
+        // Queue a request to confirm the storing of the file.
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call)
-            .await?
-            .with_timeout(Duration::from_secs(60))
-            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .queue_confirm_bsp_request(ConfirmStoringRequest {
+                file_key: H256::from_slice(file_key.as_ref()),
+            })
             .await?;
 
         Ok(())

@@ -1,16 +1,23 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use pallet_proofs_dealer_runtime_api::{
+    GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+};
+use pallet_storage_providers_runtime_api::GetBspInfoError;
 use serde_json::Number;
+use sp_api::ApiError;
 use sp_core::H256;
 
 use pallet_file_system_runtime_api::{
     QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
 };
 use shc_actors_framework::actor::ActorHandle;
-use shc_common::types::{BlockNumber, ChunkId};
+use shc_common::types::{
+    BlockNumber, ChunkId, ForestLeaf, ProviderId, RandomnessOutput, TrieRemoveMutation,
+};
 
 use super::{
-    handler::BlockchainService,
+    handler::{BlockchainService, ConfirmStoringRequest, SubmitProofRequest},
     transaction::SubmittedTransaction,
     types::{Extrinsic, ExtrinsicResult},
 };
@@ -49,6 +56,44 @@ pub enum BlockchainServiceCommand {
         callback: tokio::sync::oneshot::Sender<
             Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>,
         >,
+    },
+    QueueSubmitProofRequest {
+        request: SubmitProofRequest,
+        callback: tokio::sync::oneshot::Sender<Result<()>>,
+    },
+    QueueConfirmBspRequest {
+        request: ConfirmStoringRequest,
+        callback: tokio::sync::oneshot::Sender<Result<()>>,
+    },
+    QueryChallengesFromSeed {
+        seed: RandomnessOutput,
+        provider_id: ProviderId,
+        count: u32,
+        callback: tokio::sync::oneshot::Sender<Result<Vec<ForestLeaf>, ApiError>>,
+    },
+    QueryForestChallengesFromSeed {
+        seed: RandomnessOutput,
+        provider_id: ProviderId,
+        callback: tokio::sync::oneshot::Sender<Result<Vec<ForestLeaf>, ApiError>>,
+    },
+    QueryLastTickProviderSubmittedProof {
+        provider_id: ProviderId,
+        callback: tokio::sync::oneshot::Sender<
+            Result<BlockNumber, GetLastTickProviderSubmittedProofError>,
+        >,
+    },
+    QueryLastCheckpointChallengeTick {
+        callback: tokio::sync::oneshot::Sender<Result<BlockNumber, ApiError>>,
+    },
+    QueryLastCheckpointChallenges {
+        tick: BlockNumber,
+        callback: tokio::sync::oneshot::Sender<
+            Result<Vec<(ForestLeaf, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError>,
+        >,
+    },
+    QueryProviderForestRoot {
+        provider_id: ProviderId,
+        callback: tokio::sync::oneshot::Sender<Result<H256, GetBspInfoError>>,
     },
 }
 
@@ -93,6 +138,51 @@ pub trait BlockchainServiceInterface {
         bsp_id: sp_core::sr25519::Public,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
+
+    // Queue a SubmitProofRequest to be processed.
+    async fn queue_submit_proof_request(&self, request: SubmitProofRequest) -> Result<()>;
+
+    // Queue a ConfirmBspRequest to be processed.
+    async fn queue_confirm_bsp_request(&self, request: ConfirmStoringRequest) -> Result<()>;
+
+    /// Query the challenges that a Provider needs to submit for a given seed.
+    async fn query_challenges_from_seed(
+        &self,
+        seed: RandomnessOutput,
+        provider_id: ProviderId,
+        count: u32,
+    ) -> Result<Vec<ForestLeaf>, ApiError>;
+
+    /// Query the forest challenges that a Provider needs to submit for a given seed.
+    /// This is the same as the `query_challenges_from_seed` method, but it does not
+    /// require specifying the `count`, as the runtime will know how many challenges
+    /// to generate.
+    async fn query_forest_challenges_from_seed(
+        &self,
+        seed: RandomnessOutput,
+        provider_id: ProviderId,
+    ) -> Result<Vec<ForestLeaf>, ApiError>;
+
+    /// Query the last tick that a Provider submitted a proof for.
+    async fn query_last_tick_provider_submitted_proof(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError>;
+
+    /// Query the last checkpoint tick.
+    async fn query_last_checkpoint_challenge_tick(&self) -> Result<BlockNumber, ApiError>;
+
+    /// Query the checkpoint challenges for a given tick.
+    async fn query_last_checkpoint_challenges(
+        &self,
+        tick: BlockNumber,
+    ) -> Result<Vec<(ForestLeaf, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError>;
+
+    /// Query the Merkle Patricia Forest root for a given Provider.
+    async fn query_provider_forest_root(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<H256, GetBspInfoError>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -215,6 +305,96 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         let message = BlockchainServiceCommand::QueryBspConfirmChunksToProveForFile {
             bsp_id,
             file_key,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn queue_submit_proof_request(&self, request: SubmitProofRequest) -> Result<()> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueueSubmitProofRequest { request, callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn queue_confirm_bsp_request(&self, request: ConfirmStoringRequest) -> Result<()> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueueConfirmBspRequest { request, callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_challenges_from_seed(
+        &self,
+        seed: RandomnessOutput,
+        provider_id: ProviderId,
+        count: u32,
+    ) -> Result<Vec<ForestLeaf>, ApiError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::QueryChallengesFromSeed {
+            seed,
+            provider_id,
+            count,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_forest_challenges_from_seed(
+        &self,
+        seed: RandomnessOutput,
+        provider_id: ProviderId,
+    ) -> Result<Vec<ForestLeaf>, ApiError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryForestChallengesFromSeed {
+            seed,
+            provider_id,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_last_tick_provider_submitted_proof(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryLastTickProviderSubmittedProof {
+            provider_id,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_last_checkpoint_challenge_tick(&self) -> Result<BlockNumber, ApiError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryLastCheckpointChallengeTick { callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_last_checkpoint_challenges(
+        &self,
+        tick: BlockNumber,
+    ) -> Result<Vec<(ForestLeaf, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryLastCheckpointChallenges { tick, callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_provider_forest_root(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<H256, GetBspInfoError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryProviderForestRoot {
+            provider_id,
             callback,
         };
         self.send(message).await;

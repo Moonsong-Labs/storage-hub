@@ -14,10 +14,9 @@ use shp_traits::{
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
-use sp_runtime::FixedPointNumber;
 use sp_runtime::{
     traits::{BlakeTwo256, Bounded, Convert, IdentifyAccount, IdentityLookup, Verify},
-    BuildStorage, DispatchError, FixedU128, MultiSignature, SaturatedConversion,
+    BuildStorage, DispatchError, FixedPointNumber, FixedU128, MultiSignature, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
@@ -202,8 +201,6 @@ impl pallet_storage_providers::Config for Test {
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = ConstU32<100>;
-    type MaxBsps = ConstU32<100>;
-    type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = ConstU128<10>;
     type BucketNameLimit = ConstU32<100>;
@@ -330,6 +327,7 @@ parameter_types! {
     pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
     pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
     pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
+    pub const MinWaitForStopStoring: BlockNumber = 1;
 }
 
 impl crate::Config for Test {
@@ -341,6 +339,7 @@ impl crate::Config for Test {
     type ThresholdType = ThresholdType;
     type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
     type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
+    type HashToThresholdType = HashToThresholdTypeConverter;
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
@@ -360,6 +359,7 @@ impl crate::Config for Test {
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MaxExpiredItemsInBlock = ConstU32<100u32>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
+    type MinWaitForStopStoring = MinWaitForStopStoring;
 }
 
 // Build genesis storage according to the mock runtime.
@@ -424,6 +424,26 @@ pub struct BlockNumberToThresholdTypeConverter;
 impl Convert<BlockNumberFor<Test>, ThresholdType> for BlockNumberToThresholdTypeConverter {
     fn convert(block_number: BlockNumberFor<Test>) -> ThresholdType {
         FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
+    }
+}
+
+// Converter from the Hash type from the runtime (BlakeTwo256) to the ThresholdType type (FixedU128).
+// Since we can't convert directly a hash to a FixedU128 (since the hash type used in the runtime has
+// 256 bits and FixedU128 has 128 bits), we convert the hash to a BigUint, then map it to a FixedU128
+// by keeping its relative position between zero and the maximum 256-bit number.
+pub struct HashToThresholdTypeConverter;
+impl Convert<<Test as frame_system::Config>::Hash, ThresholdType> for HashToThresholdTypeConverter {
+    fn convert(hash: <Test as frame_system::Config>::Hash) -> ThresholdType {
+        // Get the hash as bytes
+        let hash_bytes = hash.as_ref();
+
+        // Get the 16 least significant bytes of the hash and interpret them as a u128
+        let truncated_hash_bytes: [u8; 16] =
+            hash_bytes[16..].try_into().expect("Hash is 32 bytes; qed");
+        let hash_as_u128 = u128::from_be_bytes(truncated_hash_bytes);
+
+        // Return it as a FixedU128
+        FixedU128::from_inner(hash_as_u128)
     }
 }
 

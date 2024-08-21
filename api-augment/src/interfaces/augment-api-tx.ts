@@ -400,6 +400,24 @@ declare module "@polkadot/api-base/types/submittable" {
     };
     fileSystem: {
       /**
+       * Executed by a BSP to confirm to stop storing a file.
+       *
+       * It has to have previously opened a pending stop storing request using the `bsp_request_stop_storing` extrinsic.
+       * The minimum amount of blocks between the request and the confirmation is defined by the runtime, such that the
+       * BSP can't immediately stop storing a file it has previously lost when receiving a challenge for it.
+       **/
+      bspConfirmStopStoring: AugmentedSubmittable<
+        (
+          fileKey: H256 | string | Uint8Array,
+          inclusionForestProof:
+            | SpTrieStorageProofCompactProof
+            | { encodedNodes?: any }
+            | string
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, SpTrieStorageProofCompactProof]
+      >;
+      /**
        * Used by a BSP to confirm they are storing data of a storage request.
        **/
       bspConfirmStoring: AugmentedSubmittable<
@@ -424,16 +442,16 @@ declare module "@polkadot/api-base/types/submittable" {
         [SpTrieStorageProofCompactProof, Vec<ITuple<[H256, ShpFileKeyVerifierFileKeyProof]>>]
       >;
       /**
-       * Executed by a BSP to stop storing a file.
+       * Executed by a BSP to request to stop storing a file.
        *
        * In the event when a storage request no longer exists for the data the BSP no longer stores,
        * it is required that the BSP still has access to the metadata of the initial storage request.
-       * If they do not, they will at least need that metadata to reconstruct the File ID and. Wherever
-       * the BSP gets the data it needs is up to it, but one example could be the assigned MSP.
+       * If they do not, they will at least need that metadata to reconstruct the File ID and from wherever
+       * the BSP gets that data is up to it. One example could be from the assigned MSP.
        * This metadata is necessary since it is needed to reconstruct the leaf node key in the storage
        * provider's Merkle Forest.
        **/
-      bspStopStoring: AugmentedSubmittable<
+      bspRequestStopStoring: AugmentedSubmittable<
         (
           fileKey: H256 | string | Uint8Array,
           bucketId: H256 | string | Uint8Array,
@@ -1808,13 +1826,13 @@ declare module "@polkadot/api-base/types/submittable" {
        * 2. Check that a payment stream between the signer (Provider) and the User exists
        * 3. If there is a fixed-rate payment stream:
        * 1. Get the rate of the payment stream
-       * 2. Get the difference between the last charged block number and the last chargeable block number of the stream
+       * 2. Get the difference between the last charged tick number and the last chargeable tick number of the stream
        * 3. Calculate the amount to charge doing `rate * difference`
        * 4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
-       * 5. Update the last charged block number of the payment stream
+       * 5. Update the last charged tick number of the payment stream
        * 4. If there is a dynamic-rate payment stream:
        * 1. Get the amount provided by the Provider
-       * 2. Get the difference between price index when the stream was last charged and the price index at the last chargeable block
+       * 2. Get the difference between price index when the stream was last charged and the price index at the last chargeable tick
        * 3. Calculate the amount to charge doing `amount_provided * difference`
        * 4. Charge the user (if the user does not have enough funds, it gets flagged and a `UserWithoutFunds` event is emitted)
        * 5. Update the price index when the stream was last charged of the payment stream
@@ -2599,10 +2617,9 @@ declare module "@polkadot/api-base/types/submittable" {
        * This extrinsic will perform the following checks and logic:
        * 1. Check that the extrinsic was signed
        * 2. Check that the account received has requested to register as a SP
-       * 3. Check that by registering this SP we would not go over the MaxMsps or MaxBsps limit
-       * 4. Check that the current randomness is sufficiently fresh to be used as a salt for that request
-       * 5. Check that the request has not expired
-       * 6. Register the signer as a MSP or BSP with the data provided in the request
+       * 3. Check that the current randomness is sufficiently fresh to be used as a salt for that request
+       * 4. Check that the request has not expired
+       * 5. Register the signer as a MSP or BSP with the data provided in the request
        *
        * Emits `MspSignUpSuccess` or `BspSignUpSuccess` event when successful, depending on the type of sign up.
        *
@@ -2719,14 +2736,13 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * This extrinsic will perform the following checks and logic:
        * 1. Check that the extrinsic was signed and get the signer.
-       * 2. Check that, by adding this new BSP, we won't exceed the max amount of BSPs allowed
-       * 3. Check that the signer is not already registered as either a MSP or BSP
-       * 4. Check that the multiaddress is valid
-       * 5. Check that the data to be stored is greater than the minimum required by the runtime
-       * 6. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
-       * 7. Check that the signer has enough funds to pay the deposit
-       * 8. Hold the deposit from the signer
-       * 9. Update the Sign Up Requests storage to add the signer as requesting to sign up as a BSP
+       * 2. Check that the signer is not already registered as either a MSP or BSP
+       * 3. Check that the multiaddress is valid
+       * 4. Check that the data to be stored is greater than the minimum required by the runtime
+       * 5. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
+       * 6. Check that the signer has enough funds to pay the deposit
+       * 7. Hold the deposit from the signer
+       * 8. Update the Sign Up Requests storage to add the signer as requesting to sign up as a BSP
        *
        * Emits `BspRequestSignUpSuccess` event when successful.
        **/
@@ -2756,14 +2772,13 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * This extrinsic will perform the following checks and logic:
        * 1. Check that the extrinsic was signed and get the signer.
-       * 2. Check that, by registering this new MSP, we would not go over the MaxMsps limit
-       * 3. Check that the signer is not already registered as either a MSP or BSP
-       * 4. Check that the multiaddress is valid
-       * 5. Check that the data to be stored is greater than the minimum required by the runtime.
-       * 6. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
-       * 7. Check that the signer has enough funds to pay the deposit
-       * 8. Hold the deposit from the signer
-       * 9. Update the Sign Up Requests storage to add the signer as requesting to sign up as a MSP
+       * 2. Check that the signer is not already registered as either a MSP or BSP
+       * 3. Check that the multiaddress is valid
+       * 4. Check that the data to be stored is greater than the minimum required by the runtime.
+       * 5. Calculate how much deposit will the signer have to pay using the amount of data it wants to store
+       * 6. Check that the signer has enough funds to pay the deposit
+       * 7. Hold the deposit from the signer
+       * 8. Update the Sign Up Requests storage to add the signer as requesting to sign up as a MSP
        *
        * Emits `MspRequestSignUpSuccess` event when successful.
        **/
@@ -2787,8 +2802,8 @@ declare module "@polkadot/api-base/types/submittable" {
        * In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
        **/
       slash: AugmentedSubmittable<
-        (providerAccountId: AccountId32 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
-        [AccountId32]
+        (providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
       >;
       /**
        * Generic tx

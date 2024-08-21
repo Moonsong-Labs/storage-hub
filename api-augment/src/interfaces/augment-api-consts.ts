@@ -101,6 +101,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxUserPendingDeletionRequests: u32 & AugmentedConst<ApiType>;
       /**
+       * Number of blocks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
+       **/
+      minWaitForStopStoring: u32 & AugmentedConst<ApiType>;
+      /**
        * Time-to-live for a storage request.
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
@@ -218,7 +222,7 @@ declare module "@polkadot/api-base/types/consts" {
     };
     paymentStreams: {
       /**
-       * The number of blocks that correspond to the deposit that a User has to pay to open a payment stream.
+       * The number of ticks that correspond to the deposit that a User has to pay to open a payment stream.
        * This means that, from the balance of the User for which the payment stream is being created, the amount
        * `NewStreamDeposit * rate` will be held as a deposit.
        * In the case of dynamic-rate payment streams, `rate` will be `amount_provided * current_service_price`, where `current_service_price` has
@@ -333,17 +337,9 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxBlocksForRandomness: u32 & AugmentedConst<ApiType>;
       /**
-       * The maximum amount of BSPs that can exist.
-       **/
-      maxBsps: u32 & AugmentedConst<ApiType>;
-      /**
        * The maximum amount of Buckets that a MSP can have.
        **/
       maxBuckets: u32 & AugmentedConst<ApiType>;
-      /**
-       * The maximum amount of MSPs that can exist.
-       **/
-      maxMsps: u32 & AugmentedConst<ApiType>;
       /**
        * The maximum amount of multiaddresses that a Storage Provider can have.
        **/

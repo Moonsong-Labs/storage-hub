@@ -260,6 +260,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       MaxUserPendingDeletionRequestsReached: AugmentedError<ApiType>;
       /**
+       * Minimum amount of blocks between the request opening and being able to confirm it not reached.
+       **/
+      MinWaitForStopStoringNotReached: AugmentedError<ApiType>;
+      /**
        * Unauthorized operation, signer is not an MSP of the bucket id.
        **/
       MspNotStoringBucket: AugmentedError<ApiType>;
@@ -279,6 +283,14 @@ declare module "@polkadot/api-base/types/errors" {
        * Unauthorized operation, signer does not own the file.
        **/
       NotFileOwner: AugmentedError<ApiType>;
+      /**
+       * Pending stop storing request already exists.
+       **/
+      PendingStopStoringRequestAlreadyExists: AugmentedError<ApiType>;
+      /**
+       * Pending stop storing request not found.
+       **/
+      PendingStopStoringRequestNotFound: AugmentedError<ApiType>;
       /**
        * Root of the provider not found.
        **/
@@ -607,15 +619,15 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ChargeOverflow: AugmentedError<ApiType>;
       /**
-       * Error thrown when the new last chargeable block number that is trying to be set by the PaymentManager is greater than the current block number or smaller than the previous last chargeable block number
+       * Error thrown when the new last chargeable tick number that is trying to be set is greater than the current tick number or smaller than the previous last chargeable tick number
        **/
       InvalidLastChargeableBlockNumber: AugmentedError<ApiType>;
       /**
-       * Error thrown when the new last chargeable price index that is trying to be set by the PaymentManager is greater than the current price index or smaller than the previous last chargeable price index
+       * Error thrown when the new last chargeable price index that is trying to be set is greater than the current price index or smaller than the previous last chargeable price index
        **/
       InvalidLastChargeablePriceIndex: AugmentedError<ApiType>;
       /**
-       * Error thrown when the block number of when the payment stream was last charged is greater than the block number of the last chargeable block
+       * Error thrown when the tick number of when the payment stream was last charged is greater than the tick number of the last chargeable tick
        **/
       LastChargedGreaterThanLastChargeable: AugmentedError<ApiType>;
       /**
@@ -902,14 +914,6 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when a user tries to sign up as a SP but any of the provided multiaddresses is invalid.
        **/
       InvalidMultiAddress: AugmentedError<ApiType>;
-      /**
-       * Error thrown when a user tries to sign up as a BSP but the maximum amount of BSPs has been reached.
-       **/
-      MaxBspsReached: AugmentedError<ApiType>;
-      /**
-       * Error thrown when a user tries to sign up as a MSP but the maximum amount of MSPs has been reached.
-       **/
-      MaxMspsReached: AugmentedError<ApiType>;
       /**
        * Error thrown when a user tries to change its capacity to zero (there are specific extrinsics to sign off as a SP).
        **/

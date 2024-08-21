@@ -79,7 +79,10 @@ use super::{
     EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
     RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
 };
+use crate::PolkadotXcm;
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
+
+pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
 
 parameter_types! {
     pub const Version: RuntimeVersion = VERSION;
@@ -259,7 +262,7 @@ impl cumulus_pallet_aura_ext::Config for Runtime {}
 impl cumulus_pallet_xcmp_queue::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ChannelInfo = ParachainSystem;
-    type VersionWrapper = ();
+    type VersionWrapper = PolkadotXcm;
     // Enqueue XCMP messages from siblings for later processing.
     type XcmpQueue = TransformOrigin<MessageQueue, AggregateMessageOrigin, ParaId, ParaIdToSibling>;
     type MaxInboundSuspended = sp_core::ConstU32<1_000>;
@@ -380,7 +383,7 @@ fn relay_chain_state_proof() -> RelayChainStateProof {
 }
 
 pub struct BabeDataGetter;
-impl pallet_randomness::GetBabeData<u64, Option<Hash>> for BabeDataGetter {
+impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
     // Tolerate panic here because this is only ever called in an inherent (so can be omitted)
     fn get_epoch_index() -> u64 {
         if cfg!(feature = "runtime-benchmarks") {
@@ -396,26 +399,27 @@ impl pallet_randomness::GetBabeData<u64, Option<Hash>> for BabeDataGetter {
             .flatten()
             .expect("expected to be able to read epoch index from relay chain state proof")
     }
-    fn get_epoch_randomness() -> Option<Hash> {
+    fn get_epoch_randomness() -> Hash {
         if cfg!(feature = "runtime-benchmarks") {
             // storage reads as per actual reads
             let _relay_storage_root = ParachainSystem::validation_data();
             let _relay_chain_state = ParachainSystem::relay_state_proof();
             let benchmarking_babe_output = Hash::default();
-            return Some(benchmarking_babe_output);
+            return benchmarking_babe_output;
         }
         relay_chain_state_proof()
             .read_optional_entry(well_known_keys::ONE_EPOCH_AGO_RANDOMNESS)
             .ok()
             .flatten()
+            .expect("expected to be able to read epoch randomness from relay chain state proof")
     }
-    fn get_parent_randomness() -> Option<Hash> {
+    fn get_parent_randomness() -> Hash {
         if cfg!(feature = "runtime-benchmarks") {
             // storage reads as per actual reads
             let _relay_storage_root = ParachainSystem::validation_data();
             let _relay_chain_state = ParachainSystem::relay_state_proof();
             let benchmarking_babe_output = Hash::default();
-            return Some(benchmarking_babe_output);
+            return benchmarking_babe_output;
         }
         // Note: we use the `CURRENT_BLOCK_RANDOMNESS` key here as it also represents the parent randomness, the only difference
         // is the block since this randomness is valid, but we don't care about that because we are setting that directly in the `randomness` pallet.
@@ -423,14 +427,18 @@ impl pallet_randomness::GetBabeData<u64, Option<Hash>> for BabeDataGetter {
             .read_optional_entry(well_known_keys::CURRENT_BLOCK_RANDOMNESS)
             .ok()
             .flatten()
+            .expect("expected to be able to read parent randomness from relay chain state proof")
     }
 }
 
 parameter_types! {
-    // TODO: If the next line is uncommented (which should be eventually), compilation breaks (most likely because of mismatched dependency issues)
-    // pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * runtime_constants::time::EPOCH_DURATION_IN_SLOTS, 2 * MINUTES);
     pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * HOURS, 2 * MINUTES);
 }
+
+// TODO: If the next line is uncommented (which should be eventually), compilation breaks (most likely because of mismatched dependency issues)
+/* parameter_types! {
+    pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * runtime_constants::time::EPOCH_DURATION_IN_SLOTS, 2 * MINUTES);
+} */
 
 /// Configure the randomness pallet
 impl pallet_randomness::Config for Runtime {
@@ -458,7 +466,7 @@ impl pallet_storage_providers::Config for Runtime {
     type StorageData = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
-    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
+    type DefaultMerkleRoot = DefaultMerkleRoot<StorageProofsMerkleTrieLayout>;
     type ValuePropId = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
@@ -466,8 +474,6 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
-    type MaxBsps = ConstU32<100>;
-    type MaxMsps = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = BucketDeposit;
     type BucketNameLimit = ConstU32<100>;
@@ -533,9 +539,9 @@ impl pallet_proofs_dealer::Config for Runtime {
     type NativeBalance = Balances;
     type MerkleTrieHash = Hash;
     type MerkleTrieHashing = BlakeTwo256;
-    type ForestVerifier = ForestVerifier<LayoutV1<BlakeTwo256>, { BlakeTwo256::LENGTH }>;
+    type ForestVerifier = ForestVerifier<StorageProofsMerkleTrieLayout, { BlakeTwo256::LENGTH }>;
     type KeyVerifier = FileKeyVerifier<
-        LayoutV1<BlakeTwo256>,
+        StorageProofsMerkleTrieLayout,
         { shp_constants::H_LENGTH },
         { shp_constants::FILE_CHUNK_SIZE },
         { shp_constants::FILE_SIZE_TO_CHALLENGES },
@@ -589,6 +595,7 @@ parameter_types! {
     pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
     pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100
     pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100
+    pub const MinWaitForStopStoring: BlockNumber = 10;
 }
 
 /// Configure the pallet template in pallets/template.
@@ -599,6 +606,7 @@ impl pallet_file_system::Config for Runtime {
     type ThresholdType = ThresholdType;
     type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
     type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
+    type HashToThresholdType = HashToThresholdTypeConverter;
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
@@ -609,8 +617,8 @@ impl pallet_file_system::Config for Runtime {
     type AssignmentThresholdMultiplier = ThresholdMultiplier;
     type Fingerprint = Hash;
     type StorageRequestBspsRequiredType = u32;
-    type TargetBspsRequired = ConstU32<1>;
-    type MaxBspsPerStorageRequest = ConstU32<5>;
+    type TargetBspsRequired = ConstU32<5>;
+    type MaxBspsPerStorageRequest = ConstU32<500>;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
     type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
@@ -620,6 +628,7 @@ impl pallet_file_system::Config for Runtime {
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MaxExpiredItemsInBlock = ConstU32<100>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
+    type MinWaitForStopStoring = MinWaitForStopStoring;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.
@@ -650,6 +659,28 @@ pub struct BlockNumberToThresholdTypeConverter;
 impl Convert<BlockNumberFor<Runtime>, ThresholdType> for BlockNumberToThresholdTypeConverter {
     fn convert(block_number: BlockNumberFor<Runtime>) -> ThresholdType {
         FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
+    }
+}
+
+// Converter from the Hash type from the runtime (BlakeTwo256) to the ThresholdType type (FixedU128).
+// Since we can't convert directly a hash to a FixedU128 (since the hash type used in the runtime has
+// 256 bits and FixedU128 has 128 bits), we truncate the hash to 16 bytes and then interpret those bytes
+// as a big-endian fixed-point U128.
+pub struct HashToThresholdTypeConverter;
+impl Convert<<Runtime as frame_system::Config>::Hash, ThresholdType>
+    for HashToThresholdTypeConverter
+{
+    fn convert(hash: <Runtime as frame_system::Config>::Hash) -> ThresholdType {
+        // Get the hash as bytes
+        let hash_bytes = hash.as_ref();
+
+        // Get the 16 least significant bytes of the hash and interpret them as a u128
+        let truncated_hash_bytes: [u8; 16] =
+            hash_bytes[16..].try_into().expect("Hash is 32 bytes; qed");
+        let hash_as_u128 = u128::from_be_bytes(truncated_hash_bytes);
+
+        // Return it as a FixedU128
+        FixedU128::from_inner(hash_as_u128)
     }
 }
 

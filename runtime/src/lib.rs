@@ -46,16 +46,23 @@ use sp_std::prelude::Vec;
 use pallet_file_system_runtime_api::{
     QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
 };
-use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor};
+use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor, RandomnessOutputFor};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+    GetNextDeadlineTickError,
 };
+use pallet_storage_providers::types::{
+    BackupStorageProvider, BackupStorageProviderId, StorageProviderId,
+};
+use pallet_storage_providers_runtime_api::GetBspInfoError;
 use shp_traits::TrieRemoveMutation;
 
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 
 use weights::ExtrinsicBaseWeight;
+
+pub use crate::configs::StorageProofsMerkleTrieLayout;
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
@@ -390,16 +397,6 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_file_system_runtime_api::FileSystemApi<Block, Hash, H256, BlockNumber, ChunkId> for Runtime {
-        fn query_earliest_file_volunteer_block(bsp_id: Hash, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
-            FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key)
-        }
-
-        fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: Hash, file_key: H256) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
-            FileSystem::query_bsp_confirm_chunks_to_prove_for_file(bsp_id, file_key)
-        }
-    }
-
     impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Nonce> for Runtime {
         fn account_nonce(account: AccountId) -> Nonce {
             System::account_nonce(account)
@@ -535,7 +532,17 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, TrieRemoveMutation> for Runtime {
+    impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, H256, BlockNumber, ChunkId> for Runtime {
+        fn query_earliest_file_volunteer_block(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<BlockNumber, QueryFileEarliestVolunteerBlockError> {
+            FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key)
+        }
+
+        fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: BackupStorageProviderId<Runtime>, file_key: H256) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
+            FileSystem::query_bsp_confirm_chunks_to_prove_for_file(bsp_id, file_key)
+        }
+    }
+
+    impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, RandomnessOutputFor<Runtime>, TrieRemoveMutation> for Runtime {
         fn get_last_tick_provider_submitted_proof(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
             ProofsDealer::get_last_tick_provider_submitted_proof(provider_id)
         }
@@ -556,6 +563,32 @@ impl_runtime_apis! {
 
         fn get_checkpoint_challenge_period() -> BlockNumber {
             ProofsDealer::get_checkpoint_challenge_period()
+        }
+
+        fn get_challenges_from_seed(seed: &RandomnessOutputFor<Runtime>, provider_id: &ProviderIdFor<Runtime>, count: u32) -> Vec<KeyFor<Runtime>> {
+            ProofsDealer::get_challenges_from_seed(seed, provider_id, count)
+        }
+
+        fn get_forest_challenges_from_seed(seed: &RandomnessOutputFor<Runtime>, provider_id: &ProviderIdFor<Runtime>) -> Vec<KeyFor<Runtime>> {
+            ProofsDealer::get_forest_challenges_from_seed(seed, provider_id)
+        }
+
+        fn get_current_tick() -> BlockNumber {
+            ProofsDealer::get_current_tick()
+        }
+
+        fn get_next_deadline_tick(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetNextDeadlineTickError> {
+            ProofsDealer::get_next_deadline_tick(provider_id)
+        }
+    }
+
+    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, StorageProviderId<Runtime>> for Runtime {
+        fn get_bsp_info(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<BackupStorageProvider<Runtime>, GetBspInfoError> {
+            Providers::get_bsp_info(bsp_id)
+        }
+
+        fn get_storage_provider_id(who: &AccountId) -> Option<StorageProviderId<Runtime>> {
+            Providers::get_storage_provider_id(who)
         }
     }
 }

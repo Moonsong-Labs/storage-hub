@@ -21,7 +21,7 @@ use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
 use shc_blockchain_service::BlockchainService;
-use shc_common::types::{HasherOutT, BCSV_KEY_TYPE};
+use shc_common::types::{StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE};
 use sp_consensus_aura::Slot;
 use sp_core::H256;
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
@@ -194,19 +194,17 @@ pub fn new_partial(
     })
 }
 
-async fn init_sh_builder<T, FL, FS>(
+async fn init_sh_builder<FL, FS>(
     provider_options: &Option<ProviderOptions>,
     task_manager: &TaskManager,
     file_transfer_request_protocol: Option<(ProtocolName, Receiver<IncomingRequest>)>,
     network: Arc<ParachainNetworkService>,
     keystore: KeystorePtr,
-) -> Option<StorageHubBuilder<T, FL, FS>>
+) -> Option<StorageHubBuilder<FL, FS>>
 where
-    StorageHubBuilder<T, FL, FS>: StorageLayerBuilder,
-    T: TrieLayout + Send + Sync + 'static,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    StorageHubBuilder<FL, FS>: StorageLayerBuilder,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
     match provider_options {
         Some(ProviderOptions { storage_path, .. }) => {
@@ -214,7 +212,7 @@ where
             let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
             // Create builder for the StorageHubHandler.
-            let mut storage_hub_builder = StorageHubBuilder::<T, FL, FS>::new(task_spawner);
+            let mut storage_hub_builder = StorageHubBuilder::new(task_spawner);
 
             // Add FileTransfer Service to the StorageHubHandler.
             let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
@@ -240,18 +238,16 @@ where
     }
 }
 
-async fn finish_sh_builder_and_build<T, FL, FS>(
-    mut sh_builder: StorageHubBuilder<T, FL, FS>,
+async fn finish_sh_builder_and_build<FL, FS>(
+    mut sh_builder: StorageHubBuilder<FL, FS>,
     client: Arc<ParachainClient>,
     rpc_handlers: RpcHandlers,
     keystore: KeystorePtr,
     provider_options: ProviderOptions,
 ) where
-    StorageHubBuilder<T, FL, FS>: StorageLayerBuilder,
-    T: TrieLayout + Send + Sync + 'static,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    StorageHubBuilder<FL, FS>: StorageLayerBuilder,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
     // Spawn the Blockchain Service if node is running as a Storage Provider, now that
     // the rpc handlers has been created.
@@ -264,14 +260,12 @@ async fn finish_sh_builder_and_build<T, FL, FS>(
     start_provider_tasks(provider_options, sh_handler);
 }
 
-fn start_provider_tasks<T, FL, FS>(
+fn start_provider_tasks<FL, FS>(
     provider_options: ProviderOptions,
-    sh_handler: StorageHubHandler<T, FL, FS>,
+    sh_handler: StorageHubHandler<FL, FS>,
 ) where
-    T: TrieLayout + Send + Sync + 'static,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
     // Starting the tasks according to the provider type.
     match provider_options.provider_type {
@@ -283,7 +277,7 @@ fn start_provider_tasks<T, FL, FS>(
 
 /// Start a development node with the given solo chain `Configuration`.
 #[sc_tracing::logging::prefix_logs_with("Solo chain 💾")]
-async fn start_dev_impl<T, FL, FS>(
+async fn start_dev_impl<FL, FS>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
@@ -291,11 +285,9 @@ async fn start_dev_impl<T, FL, FS>(
     sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager>
 where
-    T: TrieLayout + Send + Sync + 'static,
-    StorageHubBuilder<T, FL, FS>: StorageLayerBuilder,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    StorageHubBuilder<FL, FS>: StorageLayerBuilder,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
     use async_io::Timer;
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
@@ -643,7 +635,7 @@ where
 ///
 /// This is the actual implementation that is abstract over the executor and the runtime api.
 #[sc_tracing::logging::prefix_logs_with("StorageHub 💾")]
-async fn start_node_impl<T, FL, FS>(
+async fn start_node_impl<FL, FS>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
@@ -652,11 +644,9 @@ async fn start_node_impl<T, FL, FS>(
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
 where
-    StorageHubBuilder<T, FL, FS>: StorageLayerBuilder,
-    T: TrieLayout + Send + Sync + 'static,
-    FL: FileStorage<T> + Send + Sync,
-    FS: ForestStorage<T> + Send + Sync + 'static,
-    HasherOutT<T>: TryFrom<[u8; 32]>,
+    StorageHubBuilder<FL, FS>: StorageLayerBuilder,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
     let parachain_config = prepare_node_config(parachain_config);
 
@@ -994,16 +984,17 @@ pub async fn start_dev_node(
     match provider_options {
         Some(provider_options) => match provider_options.storage_layer {
             StorageLayer::Memory => {
-                start_dev_impl::<
-                    LayoutV1<BlakeTwo256>,
-                    InMemoryFileStorage<_>,
-                    InMemoryForestStorage<_>,
-                >(config, Some(provider_options), hwbench, para_id, sealing)
+                start_dev_impl::<InMemoryFileStorage<_>, InMemoryForestStorage<_>>(
+                    config,
+                    Some(provider_options),
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
                 .await
             }
             StorageLayer::RocksDB => {
                 start_dev_impl::<
-                    LayoutV1<BlakeTwo256>,
                     RocksDbFileStorage<_, kvdb_rocksdb::Database>,
                     RocksDBForestStorage<_, kvdb_rocksdb::Database>,
                 >(config, Some(provider_options), hwbench, para_id, sealing)
@@ -1012,12 +1003,12 @@ pub async fn start_dev_node(
         },
         // In this case, it is not really important the types used for the storage layer, as
         // the node will not run as a provider.
-        None => start_dev_impl::<
-            LayoutV1<BlakeTwo256>,
-            InMemoryFileStorage<_>,
-            InMemoryForestStorage<_>,
-        >(config, None, hwbench, para_id, sealing)
-        .await,
+        None => {
+            start_dev_impl::<InMemoryFileStorage<_>, InMemoryForestStorage<_>>(
+                config, None, hwbench, para_id, sealing,
+            )
+            .await
+        }
     }
 }
 
@@ -1033,11 +1024,7 @@ pub async fn start_parachain_node(
     match provider_options {
         Some(provider_options) => match provider_options.storage_layer {
             StorageLayer::Memory => {
-                start_node_impl::<
-                    LayoutV1<BlakeTwo256>,
-                    InMemoryFileStorage<_>,
-                    InMemoryForestStorage<_>,
-                >(
+                start_node_impl::<InMemoryFileStorage<_>, InMemoryForestStorage<_>>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -1049,7 +1036,6 @@ pub async fn start_parachain_node(
             }
             StorageLayer::RocksDB => {
                 start_node_impl::<
-                    LayoutV1<BlakeTwo256>,
                     RocksDbFileStorage<_, kvdb_rocksdb::Database>,
                     RocksDBForestStorage<_, kvdb_rocksdb::Database>,
                 >(
@@ -1066,11 +1052,7 @@ pub async fn start_parachain_node(
         None => {
             // In this case, it is not really important the types used for the storage layer, as
             // the node will not run as a provider.
-            start_node_impl::<
-                LayoutV1<BlakeTwo256>,
-                InMemoryFileStorage<_>,
-                InMemoryForestStorage<_>,
-            >(
+            start_node_impl::<InMemoryFileStorage<_>, InMemoryForestStorage<_>>(
                 parachain_config,
                 polkadot_config,
                 collator_options,

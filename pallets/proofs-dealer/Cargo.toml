@@ -19,6 +19,7 @@ codec = { workspace = true }
 scale-info = { workspace = true }
 
 # Local
+pallet-proofs-dealer-runtime-api = { workspace = true }
 shp-traits = { workspace = true }
 
 # Substrate
@@ -29,15 +30,11 @@ frame-system = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 
-# Local
-pallet-proofs-dealer-runtime-api = { workspace = true }
-
 [dev-dependencies]
 serde = { workspace = true }
 
 # Local
 pallet-storage-providers = { workspace = true }
-shp-forest-verifier = { workspace = true }
 
 # Substrate
 sp-core = { workspace = true }
@@ -63,6 +60,7 @@ std = [
 	"frame-system/std",
 	"pallet-balances/std",
 	"pallet-proofs-dealer-runtime-api/std",
+	"pallet-storage-providers/std",
 	"scale-info/std",
 	"sp-core/std",
 	"sp-io/std",

@@ -18,7 +18,6 @@ workspace = true
 anyhow = { workspace = true }
 bincode = { workspace = true }
 codec = { workspace = true }
-reference-trie = { workspace = true }
 serde = { workspace = true, default-features = true }
 trie-db = { workspace = true }
 
@@ -31,6 +30,7 @@ sp-core = { workspace = true }
 sp-trie = { workspace = true, default-features = true }
 sp-io = { workspace = true, default-features = true }
 sp-runtime = { workspace = true, default-features = true }
+sp-std = { workspace = true }
 
 # Polkadot
 polkadot-primitives = { workspace = true }
@@ -45,7 +45,6 @@ shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-forest-verifier = { workspace = true }
 shp-traits = { workspace = true }
-shc-actors-framework = { workspace = true }
 
 # Local pallets
 pallet-file-system = { workspace = true }

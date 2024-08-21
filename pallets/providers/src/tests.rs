@@ -11,10 +11,7 @@ use crate::{
 use frame_support::{assert_err, assert_noop, assert_ok, dispatch::Pays, BoundedVec};
 use frame_support::{
     pallet_prelude::Weight,
-    traits::{
-        fungible::{InspectHold, Mutate},
-        Get, OnFinalize, OnIdle, OnInitialize,
-    },
+    traits::{fungible::InspectHold, Get, OnFinalize, OnIdle, OnInitialize},
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{MutateProvidersInterface, ProvidersInterface, ReadProvidersInterface};
@@ -26,8 +23,6 @@ type AccountId = <Test as frame_system::Config>::AccountId;
 type SpMinDeposit = <Test as crate::Config>::SpMinDeposit;
 type SpMinCapacity = <Test as crate::Config>::SpMinCapacity;
 type DepositPerData = <Test as crate::Config>::DepositPerData;
-type MaxMsps = <Test as crate::Config>::MaxMsps;
-type MaxBsps = <Test as crate::Config>::MaxBsps;
 type MinBlocksBetweenCapacityChanges = <Test as crate::Config>::MinBlocksBetweenCapacityChanges;
 type DefaultMerkleRoot = <Test as crate::Config>::DefaultMerkleRoot;
 type BucketDeposit = <Test as crate::Config>::BucketDeposit;
@@ -1850,154 +1845,6 @@ mod sign_up {
                     );
                 });
             }
-
-            #[test]
-            fn msp_request_sign_up_fails_when_max_amount_of_msps_reached() {
-                ExtBuilder::build().execute_with(|| {
-                    // Initialize variables:
-                    let mut multiaddresses: BoundedVec<
-                        MultiAddress<Test>,
-                        MaxMultiAddressAmount<Test>,
-                    > = BoundedVec::new();
-                    multiaddresses.force_push(
-                        "/ip4/127.0.0.1/udp/1234"
-                            .as_bytes()
-                            .to_vec()
-                            .try_into()
-                            .unwrap(),
-                    );
-                    let value_prop: ValueProposition<Test> = ValueProposition {
-                        identifier: ValuePropId::<Test>::default(),
-                        data_limit: 10,
-                        protocols: BoundedVec::new(),
-                    };
-                    let storage_amount: StorageData<Test> = 100;
-
-                    // Get the Account Id of Alice
-                    let alice: AccountId = accounts::ALICE.0;
-
-                    // Request to sign up the maximum amount of Main Storage Providers
-                    for i in 1..<MaxMsps as Get<u32>>::get() + 1 {
-                        let account_id = i as AccountId;
-                        let account_new_balance = 1_000_000_000_000_000;
-                        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-                            &account_id,
-                            account_new_balance
-                        ));
-                        assert_ok!(StorageProviders::request_msp_sign_up(
-                            RuntimeOrigin::signed(account_id),
-                            storage_amount,
-                            multiaddresses.clone(),
-                            value_prop.clone(),
-                            account_id
-                        ));
-                    }
-
-                    // Advance enough blocks for randomness to be valid
-                    run_to_block(
-                        frame_system::Pallet::<Test>::block_number()
-                            + BLOCKS_BEFORE_RANDOMNESS_VALID,
-                    );
-
-                    // Confirm the sign up of the maximum amount of Main Storage Providers
-                    for i in 1..<MaxMsps as Get<u32>>::get() + 1 {
-                        let account_id = i as AccountId;
-                        assert_ok!(StorageProviders::confirm_sign_up(
-                            RuntimeOrigin::signed(account_id),
-                            Some(account_id)
-                        ));
-                    }
-
-                    // Try to request to sign up Alice as a Main Storage Provider
-                    assert_noop!(
-                        StorageProviders::request_msp_sign_up(
-                            RuntimeOrigin::signed(alice),
-                            storage_amount,
-                            multiaddresses.clone(),
-                            value_prop.clone(),
-                            alice
-                        ),
-                        Error::<Test>::MaxMspsReached
-                    );
-                });
-            }
-
-            #[test]
-            fn msp_confirm_sign_up_fails_when_max_amount_of_msps_reached() {
-                ExtBuilder::build().execute_with(|| {
-                    // Initialize variables:
-                    let mut multiaddresses: BoundedVec<
-                        MultiAddress<Test>,
-                        MaxMultiAddressAmount<Test>,
-                    > = BoundedVec::new();
-                    multiaddresses.force_push(
-                        "/ip4/127.0.0.1/udp/1234"
-                            .as_bytes()
-                            .to_vec()
-                            .try_into()
-                            .unwrap(),
-                    );
-                    let value_prop: ValueProposition<Test> = ValueProposition {
-                        identifier: ValuePropId::<Test>::default(),
-                        data_limit: 10,
-                        protocols: BoundedVec::new(),
-                    };
-                    let storage_amount: StorageData<Test> = 100;
-
-                    // Get the Account Id of Alice
-                    let alice: AccountId = accounts::ALICE.0;
-
-                    // Request to sign up Alice
-                    assert_ok!(StorageProviders::request_msp_sign_up(
-                        RuntimeOrigin::signed(alice),
-                        storage_amount,
-                        multiaddresses.clone(),
-                        value_prop.clone(),
-                        alice
-                    ));
-
-                    // Request to sign up the maximum amount of Main Storage Providers
-                    for i in 1..<MaxMsps as Get<u32>>::get() + 1 {
-                        let account_id = i as AccountId;
-                        let account_new_balance = 1_000_000_000_000_000;
-                        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-                            &account_id,
-                            account_new_balance
-                        ));
-                        assert_ok!(StorageProviders::request_msp_sign_up(
-                            RuntimeOrigin::signed(account_id),
-                            storage_amount,
-                            multiaddresses.clone(),
-                            value_prop.clone(),
-                            account_id
-                        ));
-                    }
-
-                    // Advance enough blocks for randomness to be valid
-                    run_to_block(
-                        frame_system::Pallet::<Test>::block_number()
-                            + BLOCKS_BEFORE_RANDOMNESS_VALID,
-                    );
-
-                    // Confirm the sign up of the maximum amount of Main Storage Providers
-                    for i in 1..<MaxMsps as Get<u32>>::get() + 1 {
-                        let account_id = i as AccountId;
-                        assert_ok!(StorageProviders::confirm_sign_up(
-                            RuntimeOrigin::signed(account_id),
-                            Some(account_id)
-                        ));
-                    }
-
-                    // Try to confirm the sign up of Alice as a Main Storage Provider
-                    assert_noop!(
-                        StorageProviders::confirm_sign_up(
-                            RuntimeOrigin::signed(alice),
-                            Some(alice)
-                        ),
-                        Error::<Test>::MaxMspsReached
-                    );
-                });
-            }
         }
 
         /// This module holds the failure cases for Backup Storage Providers
@@ -2148,140 +1995,6 @@ mod sign_up {
                             alice
                         ),
                         Error::<Test>::SignUpRequestPending
-                    );
-                });
-            }
-
-            #[test]
-            fn bsp_request_sign_up_fails_when_max_amount_of_bsps_reached() {
-                ExtBuilder::build().execute_with(|| {
-                    // Initialize variables:
-                    let mut multiaddresses: BoundedVec<
-                        MultiAddress<Test>,
-                        MaxMultiAddressAmount<Test>,
-                    > = BoundedVec::new();
-                    multiaddresses.force_push(
-                        "/ip4/127.0.0.1/udp/1234"
-                            .as_bytes()
-                            .to_vec()
-                            .try_into()
-                            .unwrap(),
-                    );
-                    let storage_amount: StorageData<Test> = 100;
-
-                    // Get the Account Id of Alice
-                    let alice: AccountId = accounts::ALICE.0;
-
-                    // Request to sign up the maximum amount of Backup Storage Providers
-                    for i in 1..<MaxBsps as Get<u32>>::get() + 1 {
-                        let account_id = i as AccountId;
-                        let account_new_balance = 1_000_000_000_000_000;
-                        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-                            &account_id,
-                            account_new_balance
-                        ));
-                        assert_ok!(StorageProviders::request_bsp_sign_up(
-                            RuntimeOrigin::signed(account_id),
-                            storage_amount,
-                            multiaddresses.clone(),
-                            account_id
-                        ));
-                    }
-
-                    // Advance enough blocks for randomness to be valid
-                    run_to_block(
-                        frame_system::Pallet::<Test>::block_number()
-                            + BLOCKS_BEFORE_RANDOMNESS_VALID,
-                    );
-
-                    // Confirm the sign up of the maximum amount of Backup Storage Providers
-                    for i in 1..<MaxBsps as Get<u32>>::get() + 1 {
-                        let account_id = i as AccountId;
-                        assert_ok!(StorageProviders::confirm_sign_up(
-                            RuntimeOrigin::signed(account_id),
-                            Some(account_id)
-                        ));
-                    }
-
-                    // Try to request to sign up Alice as a Backup Storage Provider
-                    assert_noop!(
-                        StorageProviders::request_bsp_sign_up(
-                            RuntimeOrigin::signed(alice),
-                            storage_amount,
-                            multiaddresses.clone(),
-                            alice
-                        ),
-                        Error::<Test>::MaxBspsReached
-                    );
-                });
-            }
-
-            #[test]
-            fn bsp_confirm_sign_up_fails_when_max_amount_of_bsps_reached() {
-                ExtBuilder::build().execute_with(|| {
-                    // Initialize variables:
-                    let mut multiaddresses: BoundedVec<
-                        MultiAddress<Test>,
-                        MaxMultiAddressAmount<Test>,
-                    > = BoundedVec::new();
-                    multiaddresses.force_push(
-                        "/ip4/127.0.0.1/udp/1234"
-                            .as_bytes()
-                            .to_vec()
-                            .try_into()
-                            .unwrap(),
-                    );
-                    let storage_amount: StorageData<Test> = 100;
-
-                    // Get the Account Id of Alice
-                    let alice: AccountId = accounts::ALICE.0;
-
-                    // Request to sign up Alice as a Backup Storage Provider
-                    assert_ok!(StorageProviders::request_bsp_sign_up(
-                        RuntimeOrigin::signed(alice),
-                        storage_amount,
-                        multiaddresses.clone(),
-                        alice
-                    ));
-
-                    // Request to sign up the maximum amount of Backup Storage Providers
-                    for i in 1..<MaxBsps as Get<u32>>::get() + 1 {
-                        let account_id = i as AccountId;
-                        let account_new_balance = 1_000_000_000_000_000;
-                        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
-                            &account_id,
-                            account_new_balance
-                        ));
-                        assert_ok!(StorageProviders::request_bsp_sign_up(
-                            RuntimeOrigin::signed(account_id),
-                            storage_amount,
-                            multiaddresses.clone(),
-                            account_id
-                        ));
-                    }
-
-                    // Advance enough blocks for randomness to be valid
-                    run_to_block(
-                        frame_system::Pallet::<Test>::block_number()
-                            + BLOCKS_BEFORE_RANDOMNESS_VALID,
-                    );
-
-                    // Confirm the sign up of the maximum amount of Backup Storage Providers
-                    for i in 1..<MaxBsps as Get<u32>>::get() + 1 {
-                        let account_id = i as AccountId;
-                        assert_ok!(StorageProviders::confirm_sign_up(
-                            RuntimeOrigin::signed(account_id),
-                            Some(account_id)
-                        ));
-                    }
-
-                    // Try to confirm to sign up Alice as a Backup Storage Provider
-                    assert_noop!(
-                        StorageProviders::confirm_sign_up(
-                            RuntimeOrigin::signed(alice),
-                            Some(alice)
-                        ),
-                        Error::<Test>::MaxBspsReached
                     );
                 });
             }
@@ -4332,6 +4045,8 @@ mod remove_root_bucket {
 mod slash {
     use super::*;
     mod failure {
+        use sp_core::H256;
+
         use super::*;
 
         #[test]
@@ -4341,8 +4056,8 @@ mod slash {
 
                 // Try to slash a provider that is not registered
                 assert_noop!(
-                    StorageProviders::slash(RuntimeOrigin::signed(caller), caller),
-                    Error::<Test>::NotRegistered
+                    StorageProviders::slash(RuntimeOrigin::signed(caller), H256::default()),
+                    Error::<Test>::ProviderNotSlashable
                 );
             });
         }
@@ -4355,11 +4070,14 @@ mod slash {
                 let storage_amount: StorageData<Test> = 100;
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
+                let provider_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
                 let caller = accounts::BOB.0;
 
                 // Try to slash the provider
                 assert_noop!(
-                    StorageProviders::slash(RuntimeOrigin::signed(caller), alice),
+                    StorageProviders::slash(RuntimeOrigin::signed(caller), provider_id),
                     Error::<Test>::ProviderNotSlashable
                 );
             });
@@ -4394,7 +4112,7 @@ mod slash {
                 // Slash the provider
                 assert_ok!(StorageProviders::slash(
                     RuntimeOrigin::signed(caller),
-                    alice
+                    provider_id
                 ));
 
                 // Check that the provider is no longer slashable
@@ -4461,9 +4179,12 @@ mod slash {
                 // Slash the providers
                 assert_ok!(StorageProviders::slash(
                     RuntimeOrigin::signed(caller),
-                    alice
+                    alice_provider_id
                 ));
-                assert_ok!(StorageProviders::slash(RuntimeOrigin::signed(caller), bob));
+                assert_ok!(StorageProviders::slash(
+                    RuntimeOrigin::signed(caller),
+                    bob_provider_id
+                ));
 
                 // Check that the providers are no longer slashable
                 assert_eq!(

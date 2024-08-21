@@ -1,11 +1,13 @@
-use codec::{Decode, Encode};
+use codec::Encode;
 use frame_support::{
     ensure, pallet_prelude::DispatchResult, traits::nonfungibles_v2::Create, traits::Get,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use num_bigint::BigUint;
 use sp_runtime::{
-    traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, One, Saturating, Zero},
+    traits::{
+        CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, Hash, One, Saturating, Zero,
+    },
     ArithmeticError, BoundedVec, DispatchError,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
@@ -30,7 +32,8 @@ use crate::{
         TargetBspsRequired,
     },
     BspsAssignmentThreshold, Error, Event, ItemExpirations, NextAvailableExpirationInsertionBlock,
-    Pallet, PendingFileDeletionRequests, StorageRequestBsps, StorageRequests,
+    Pallet, PendingFileDeletionRequests, PendingStopStoringRequests, StorageRequestBsps,
+    StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -82,20 +85,11 @@ where
             }
         };
 
-        let bsp_xor = Self::compute_bsp_xor(
-            fingerprint
-                .as_ref()
-                .try_into()
-                .map_err(|_| QueryFileEarliestVolunteerBlockError::FailedToEncodeFingerprint)?,
-            &bsp_id
-                .encode()
-                .try_into()
-                .map_err(|_| QueryFileEarliestVolunteerBlockError::FailedToEncodeBsp)?,
-        )
-        .map_err(|_| QueryFileEarliestVolunteerBlockError::ThresholdArithmeticError)?;
+        // Get the threshold needed for the BSP to be able to volunteer for the storage request.
+        let bsp_threshold = Self::get_threshold_for_bsp_request(&bsp_id, &fingerprint);
 
         // Compute the block number at which the BSP should send the volunteer request.
-        Self::compute_volunteer_block_number(bsp_xor, storage_request_block)
+        Self::compute_volunteer_block_number(bsp_threshold, storage_request_block)
             .map_err(|_| QueryFileEarliestVolunteerBlockError::ThresholdArithmeticError)
     }
 
@@ -175,7 +169,7 @@ where
         storage_request_metadata: &StorageRequestMetadata<T>,
     ) -> Vec<<<T as pallet::Config>::Providers as ProvidersInterface>::MerkleHash> {
         let file_metadata = storage_request_metadata.clone().to_file_metadata();
-        let chunks_to_check = file_metadata.chunks_to_check() as u32;
+        let chunks_to_check = file_metadata.chunks_to_check();
 
         let mut challenges =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::generate_challenges_from_seed(
@@ -436,27 +430,15 @@ where
             Error::<T>::BspAlreadyVolunteered
         );
 
-        // Compute BSP's xor
-        let bsp_xor: T::ThresholdType = Self::compute_bsp_xor(
-            storage_request_metadata
-                .fingerprint
-                .as_ref()
-                .try_into()
-                .map_err(|_| Error::<T>::FailedToEncodeFingerprint)?,
-            &bsp_id
-                .encode()
-                .try_into()
-                .map_err(|_| Error::<T>::FailedToEncodeBsp)?,
-        )?;
+        // Get the threshold needed for the BSP to be able to volunteer for the storage request.
+        let bsp_threshold =
+            Self::get_threshold_for_bsp_request(&bsp_id, &storage_request_metadata.fingerprint);
 
         let current_block_number = <frame_system::Pallet<T>>::block_number();
 
         // Get number of blocks since the storage request was issued.
         let blocks_since_requested =
             current_block_number.saturating_sub(storage_request_metadata.requested_at);
-
-        // Note. This should never fail since the storage request expiration would never reach such a high number.
-        // Storage requests are cleared after reaching `StorageRequestTtl` blocks which is defined in the pallet Config.
         let blocks_since_requested = T::BlockNumberToThresholdType::convert(blocks_since_requested);
 
         // Compute the threshold increasing rate.
@@ -467,7 +449,7 @@ where
         let threshold = rate_increase.saturating_add(BspsAssignmentThreshold::<T>::get());
 
         // Check that the BSP's threshold is under the threshold required to qualify as BSP for the storage request.
-        ensure!(bsp_xor <= (threshold), Error::<T>::AboveThreshold);
+        ensure!(bsp_threshold <= (threshold), Error::<T>::AboveThreshold);
 
         // Add BSP to storage request metadata.
         <StorageRequestBsps<T>>::insert(
@@ -797,7 +779,7 @@ where
     ///
     /// `can_serve`: A flag that indicates if the BSP can serve the file to other BSPs. If the BSP can serve the file, then
     /// they are added to the storage request as a data server.
-    pub(crate) fn do_bsp_stop_storing(
+    pub(crate) fn do_bsp_request_stop_storing(
         sender: T::AccountId,
         file_key: MerkleHash<T>,
         bucket_id: BucketIdFor<T>,
@@ -807,7 +789,7 @@ where
         size: StorageData<T>,
         can_serve: bool,
         inclusion_forest_proof: ForestProof<T>,
-    ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
+    ) -> Result<ProviderIdFor<T>, DispatchError> {
         let bsp_id =
             <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
@@ -833,6 +815,26 @@ where
         ensure!(
             file_key == computed_file_key,
             Error::<T>::InvalidFileKeyMetadata
+        );
+
+        // Check that a pending stop storing request for that BSP and file does not exist yet.
+        ensure!(
+            !<PendingStopStoringRequests<T>>::contains_key(&bsp_id, &file_key),
+            Error::<T>::PendingStopStoringRequestAlreadyExists
+        );
+
+        // Verify the proof of inclusion.
+        let proven_keys =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+                &bsp_id,
+                &[file_key],
+                &inclusion_forest_proof,
+            )?;
+
+        // Ensure that the file key IS part of the BSP's forest.
+        ensure!(
+            proven_keys.contains(&file_key),
+            Error::<T>::ExpectedInclusionProof
         );
 
         match <StorageRequests<T>>::get(&file_key) {
@@ -891,6 +893,38 @@ where
             }
         };
 
+        // Add the pending stop storing request to storage.
+        <PendingStopStoringRequests<T>>::insert(
+            &bsp_id,
+            &file_key,
+            (frame_system::Pallet::<T>::block_number(), size),
+        );
+
+        Ok(bsp_id)
+    }
+
+    pub(crate) fn do_bsp_confirm_stop_storing(
+        sender: T::AccountId,
+        file_key: MerkleHash<T>,
+        inclusion_forest_proof: ForestProof<T>,
+    ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
+        // Get the BSP ID of the sender
+        let bsp_id =
+            <T::Providers as shp_traits::ProvidersInterface>::get_provider_id(sender.clone())
+                .ok_or(Error::<T>::NotABsp)?;
+
+        // Get the block when the pending stop storing request of the BSP for the file key was opened.
+        let (block_when_opened, file_size) =
+            <PendingStopStoringRequests<T>>::get(&bsp_id, &file_key)
+                .ok_or(Error::<T>::PendingStopStoringRequestNotFound)?;
+
+        // Check that enough time has passed since the pending stop storing request was opened.
+        ensure!(
+            frame_system::Pallet::<T>::block_number()
+                >= block_when_opened + T::MinWaitForStopStoring::get(),
+            Error::<T>::MinWaitForStopStoringNotReached
+        );
+
         // Verify the proof of inclusion.
         let proven_keys =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
@@ -917,7 +951,10 @@ where
         <T::Providers as shp_traits::ProvidersInterface>::update_root(bsp_id, new_root)?;
 
         // Decrease data used by the BSP.
-        <T::Providers as MutateProvidersInterface>::decrease_data_used(&bsp_id, size)?;
+        <T::Providers as MutateProvidersInterface>::decrease_data_used(&bsp_id, file_size)?;
+
+        // Remove the pending stop storing request from storage.
+        <PendingStopStoringRequests<T>>::remove(&bsp_id, &file_key);
 
         Ok((bsp_id, new_root))
     }
@@ -1124,22 +1161,7 @@ where
         Ok(T::AssignmentThresholdAsymptote::get().saturating_add(asymptotic_decay_factor))
     }
 
-    /// Calculate the XOR of the fingerprint and the BSP.
-    fn compute_bsp_xor(
-        fingerprint: &[u8; 32],
-        bsp: &[u8; 32],
-    ) -> Result<T::ThresholdType, Error<T>> {
-        let xor_result = fingerprint
-            .iter()
-            .zip(bsp.iter())
-            .map(|(&x1, &x2)| x1 ^ x2)
-            .collect::<Vec<_>>();
-
-        T::ThresholdType::decode(&mut &xor_result[..])
-            .map_err(|_| Error::<T>::FailedToDecodeThreshold)
-    }
-
-    pub(crate) fn compute_file_key(
+    pub fn compute_file_key(
         owner: T::AccountId,
         bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,
@@ -1160,6 +1182,19 @@ where
             fingerprint: fingerprint.as_ref().into(),
         }
         .file_key::<FileKeyHasher<T>>()
+    }
+
+    pub fn get_threshold_for_bsp_request(
+        bsp_id: &ProviderIdFor<T>,
+        fingerprint: &Fingerprint<T>,
+    ) -> T::ThresholdType {
+        // Concatenate the BSP ID and the fingerprint and hash them to get the volunteering hash.
+        let concatenated = sp_std::vec![bsp_id.encode(), fingerprint.encode()].concat();
+        let volunteering_hash =
+            <<T as frame_system::Config>::Hashing as Hash>::hash(concatenated.as_ref());
+
+        // Return the threshold needed for the BSP to be able to volunteer for the storage request.
+        T::HashToThresholdType::convert(volunteering_hash)
     }
 }
 
