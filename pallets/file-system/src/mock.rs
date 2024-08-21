@@ -211,7 +211,7 @@ impl pallet_storage_providers::Config for Test {
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
     type ProvidersRandomness = MockRandomness;
-    type SlashFactor = ConstU128<10>;
+    type SlashAmountPerChunkOfStorageData = ConstU128<10>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.

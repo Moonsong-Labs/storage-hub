@@ -466,7 +466,7 @@ parameter_types! {
     pub const SpMinCapacity: u32 = 2;
     pub const DepositPerData: Balance = 2;
     pub const MinBlocksBetweenCapacityChanges: u32 = 10;
-    pub const SlashFactor: Balance = 20 * UNIT;
+    pub const SlashAmountPerChunkOfStorageData: Balance = 20 * UNIT;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -501,7 +501,7 @@ impl pallet_storage_providers::Config for Runtime {
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = MinBlocksBetweenCapacityChanges;
-    type SlashFactor = SlashFactor;
+    type SlashAmountPerChunkOfStorageData = SlashAmountPerChunkOfStorageData;
 }
 
 parameter_types! {

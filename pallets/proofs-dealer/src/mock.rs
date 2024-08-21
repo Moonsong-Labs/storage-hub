@@ -155,7 +155,7 @@ impl pallet_storage_providers::Config for Test {
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
     type ProvidersRandomness = MockRandomness;
-    type SlashFactor = ConstU128<10>;
+    type SlashAmountPerChunkOfStorageData = ConstU128<10>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
@@ -192,7 +192,7 @@ impl crate::Config for Test {
     type TargetTicksStorageOfSubmitters = ConstU32<3>;
     type ChallengeHistoryLength = ConstU64<30>;
     type ChallengesQueueLength = ConstU32<25>;
-    type CheckpointChallengePeriod = ConstU64<10>;
+    type CheckpointChallengePeriod = ConstU64<20>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = ConstU64<181222>;
     type RandomnessProvider = MockRandomness;

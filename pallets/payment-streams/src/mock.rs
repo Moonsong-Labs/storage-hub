@@ -154,7 +154,7 @@ impl pallet_storage_providers::Config for Test {
     type Subscribers = MockedProvidersSubscriber;
     type ProvidersRandomness = MockRandomness;
     type BucketNameLimit = ConstU32<100>;
-    type SlashFactor = ConstU128<10>;
+    type SlashAmountPerChunkOfStorageData = ConstU128<10>;
 }
 
 parameter_types! {

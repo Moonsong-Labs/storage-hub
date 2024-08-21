@@ -675,7 +675,7 @@ where
 
     /// Slash a Storage Provider.
     ///
-    /// The amount slashed is calculated as the product of the [`SlashFactor`] and the accrued failed proof submissions.
+    /// The amount slashed is calculated as the product of the [`SlashAmountPerChunkOfStorageData`] and the accrued failed proof submissions.
     /// The amount is then slashed from the Storage Provider's held deposit and transferred to the treasury.
     ///
     /// This will return an error when the Storage Provider is not slashable. In the context of the StorageHub protocol,
@@ -691,8 +691,10 @@ where
             return Err(Error::<T>::ProviderNotSlashable.into());
         };
 
-        // Calculate the amount to be slashed.
-        let slashable_amount = T::SlashFactor::get() * <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id).ok_or(Error::<T>::ProviderNotSlashable)?.into();
+        // Calculate slashable amount.
+        // Doubling the slash for each failed proof submission is necessary since it is more probablistic for a Storage Provider to have
+        // responded with two file key proofs given a random or custom challenge.
+        let slashable_amount = Self::compute_worst_case_scenario_slashable_amount(provider_id)?;
 
         let amount_slashed = T::NativeBalance::transfer_on_hold(
             &HoldReason::StorageProviderDeposit.into(),
@@ -779,6 +781,25 @@ where
         )?;
 
         Ok(())
+    }
+
+    /// Compute the worst case scenario slashable amount for a Storage Provider.
+    ///
+    /// Every failed proof submission counts as for two files which should have been proven due to the low probability of a challenge
+    /// being an exact match to a file key stored by the Storage Provider. The StorageHub protocol requires the Storage Provider to
+    /// submit a proof of storage for the neighboring file keys of the missing challenged file key.
+    ///
+    /// Every file is assumed to be 4 GB in size.
+    pub fn compute_worst_case_scenario_slashable_amount(
+        provider_id: &HashId<T>,
+    ) -> Result<BalanceOf<T>, DispatchError> {
+        // The slashable amount for a single file of 4 GB in size with a chunk size of 1 KB.
+        let slashable_amount_per_failed_proof_submission =
+            T::SlashAmountPerChunkOfStorageData::get()
+                .saturating_mul((u32::MAX / shp_constants::FILE_CHUNK_SIZE as u32).into());
+
+        Ok(slashable_amount_per_failed_proof_submission *
+                <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id).ok_or(Error::<T>::ProviderNotSlashable)?.into() * 2u32.into())
     }
 }
 

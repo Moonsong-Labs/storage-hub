@@ -198,7 +198,7 @@ pub mod pallet {
 
         /// The slash factor deducted from a Storage Provider's deposit for every single storage proof they fail to provide.
         #[pallet::constant]
-        type SlashFactor: Get<BalanceOf<Self>>;
+        type SlashAmountPerChunkOfStorageData: Get<BalanceOf<Self>>;
     }
 
     #[pallet::pallet]

@@ -2798,6 +2798,18 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
             },
         );
 
+        // Add balance to that Provider and hold some so it has a stake.
+        let provider_balance = 1_000_000_000_000_000;
+        assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
+            &1,
+            provider_balance
+        ));
+        assert_ok!(<Test as crate::Config>::NativeBalance::hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &1,
+            provider_balance / 100
+        ));
+
         // Set Provider's root to be an arbitrary value, different than the default root,
         // to simulate that it is actually providing a service.
         let root = BlakeTwo256::hash(b"1234");
@@ -2827,23 +2839,39 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
         // Check that Provider is not in the SlashableProviders storage map.
         assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
 
+        // Set last checkpoint challenge block.
+        let checkpoint_challenge_block = 2;
+        LastCheckpointTick::<Test>::set(checkpoint_challenge_block);
+
+        // Make up custom challenges.
+        let custom_challenges = BoundedVec::try_from(vec![
+            (BlakeTwo256::hash(b"custom_challenge_1"), None),
+            (BlakeTwo256::hash(b"custom_challenge_2"), None),
+        ])
+        .unwrap();
+
+        // Set custom challenges in checkpoint block.
+        TickToCheckpointChallenges::<Test>::insert(
+            checkpoint_challenge_block,
+            custom_challenges.clone(),
+        );
+
         // Advance to the deadline block for this Provider.
         run_to_block(prev_deadline);
 
+        let next_challenge_deadline = prev_deadline + challenge_period;
         // Check event of provider being marked as slashable.
         System::assert_has_event(
             Event::SlashableProvider {
                 provider: provider_id,
-                // TODO: This should be prev_deadline + challenge_period, but we do not yet handle the case when the provider runs out of stake.
-                // TODO: Therefore the next deadline is the same as the current one since the stake to challenge period is 0.
-                next_challenge_deadline: prev_deadline,
+                next_challenge_deadline,
             }
             .into(),
         );
 
         // Check that Provider is in the SlashableProviders storage map.
         assert!(SlashableProviders::<Test>::contains_key(&provider_id));
-        assert_eq!(SlashableProviders::<Test>::get(&provider_id), Some(1));
+        assert_eq!(SlashableProviders::<Test>::get(&provider_id), Some(3));
 
         // New challenges round
         let current_tick = ChallengesTicker::<Test>::get();
@@ -2851,22 +2879,20 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
         ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
 
         // Advance to the deadline block for this Provider.
-        run_to_block(prev_deadline);
+        run_to_block(next_challenge_deadline);
 
         // Check event of provider being marked as slashable.
         System::assert_has_event(
             Event::SlashableProvider {
                 provider: provider_id,
-                // TODO: This should be prev_deadline + challenge_period, but we do not yet handle the case when the provider runs out of stake.
-                // TODO: Therefore the next deadline is the same as the current one since the stake to challenge period is 0.
-                next_challenge_deadline: prev_deadline,
+                next_challenge_deadline: prev_deadline + challenge_period,
             }
             .into(),
         );
 
         // Check that Provider is in the SlashableProviders storage map.
         assert!(SlashableProviders::<Test>::contains_key(&provider_id));
-        assert_eq!(SlashableProviders::<Test>::get(&provider_id), Some(2));
+        assert_eq!(SlashableProviders::<Test>::get(&provider_id), Some(4));
     });
 }
 
