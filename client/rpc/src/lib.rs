@@ -6,12 +6,7 @@ use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
 use jsonrpsee::types::ErrorObjectOwned;
 
-use shc_common::types::ChunkId;
-use shc_common::types::FileMetadata;
 use shc_common::types::HashT;
-use shc_common::types::HasherOutT;
-use shc_common::types::BCSV_KEY_TYPE;
-use shc_common::types::FILE_CHUNK_SIZE;
 use shc_common::types::{
     ChunkId, FileMetadata, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
 };
