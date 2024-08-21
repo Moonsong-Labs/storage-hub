@@ -16,7 +16,7 @@ import type {
   u32,
   u64
 } from "@polkadot/types-codec";
-import type { AnyNumber, Codec } from "@polkadot/types-codec/types";
+import type { AnyNumber, Codec, ITuple } from "@polkadot/types-codec/types";
 import type { ExtrinsicOrHash, ExtrinsicStatus } from "@polkadot/types/interfaces/author";
 import type { EpochAuthorship } from "@polkadot/types/interfaces/babe";
 import type { BeefyVersionedFinalityProof } from "@polkadot/types/interfaces/beefy";
@@ -131,16 +131,16 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           bytesOrHash:
             | Vec<ExtrinsicOrHash>
             | (
-              | ExtrinsicOrHash
-              | {
-                Hash: any;
-              }
-              | {
-                Extrinsic: any;
-              }
-              | string
-              | Uint8Array
-            )[]
+                | ExtrinsicOrHash
+                | {
+                    Hash: any;
+                  }
+                | {
+                    Extrinsic: any;
+                  }
+                | string
+                | Uint8Array
+              )[]
         ) => Observable<Vec<Hash>>
       >;
       /**
@@ -282,13 +282,13 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           callRequest:
             | ContractCallRequest
             | {
-              origin?: any;
-              dest?: any;
-              value?: any;
-              gasLimit?: any;
-              storageDepositLimit?: any;
-              inputData?: any;
-            }
+                origin?: any;
+                dest?: any;
+                value?: any;
+                gasLimit?: any;
+                storageDepositLimit?: any;
+                inputData?: any;
+              }
             | string
             | Uint8Array,
           at?: BlockHash | string | Uint8Array
@@ -314,13 +314,13 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           request:
             | InstantiateRequestV1
             | {
-              origin?: any;
-              value?: any;
-              gasLimit?: any;
-              code?: any;
-              data?: any;
-              salt?: any;
-            }
+                origin?: any;
+                value?: any;
+                gasLimit?: any;
+                code?: any;
+                data?: any;
+                salt?: any;
+              }
             | string
             | Uint8Array,
           at?: BlockHash | string | Uint8Array
@@ -345,10 +345,10 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           uploadRequest:
             | CodeUploadRequest
             | {
-              origin?: any;
-              code?: any;
-              storageDepositLimit?: any;
-            }
+                origin?: any;
+                code?: any;
+                storageDepositLimit?: any;
+              }
             | string
             | Uint8Array,
           at?: BlockHash | string | Uint8Array
@@ -398,14 +398,14 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           request:
             | EthCallRequest
             | {
-              from?: any;
-              to?: any;
-              gasPrice?: any;
-              gas?: any;
-              value?: any;
-              data?: any;
-              nonce?: any;
-            }
+                from?: any;
+                to?: any;
+                gasPrice?: any;
+                gas?: any;
+                value?: any;
+                data?: any;
+                nonce?: any;
+              }
             | string
             | Uint8Array,
           number?: BlockNumber | AnyNumber | Uint8Array
@@ -427,14 +427,14 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           request:
             | EthCallRequest
             | {
-              from?: any;
-              to?: any;
-              gasPrice?: any;
-              gas?: any;
-              value?: any;
-              data?: any;
-              nonce?: any;
-            }
+                from?: any;
+                to?: any;
+                gasPrice?: any;
+                gas?: any;
+                value?: any;
+                data?: any;
+                nonce?: any;
+              }
             | string
             | Uint8Array,
           number?: BlockNumber | AnyNumber | Uint8Array
@@ -522,12 +522,12 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           filter:
             | EthFilter
             | {
-              fromBlock?: any;
-              toBlock?: any;
-              blockHash?: any;
-              address?: any;
-              topics?: any;
-            }
+                fromBlock?: any;
+                toBlock?: any;
+                blockHash?: any;
+                address?: any;
+                topics?: any;
+              }
             | string
             | Uint8Array
         ) => Observable<Vec<EthLog>>
@@ -649,12 +649,12 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           filter:
             | EthFilter
             | {
-              fromBlock?: any;
-              toBlock?: any;
-              blockHash?: any;
-              address?: any;
-              topics?: any;
-            }
+                fromBlock?: any;
+                toBlock?: any;
+                blockHash?: any;
+                address?: any;
+                topics?: any;
+              }
             | string
             | Uint8Array
         ) => Observable<U256>
@@ -679,14 +679,14 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           tx:
             | EthTransactionRequest
             | {
-              from?: any;
-              to?: any;
-              gasPrice?: any;
-              gas?: any;
-              value?: any;
-              data?: any;
-              nonce?: any;
-            }
+                from?: any;
+                to?: any;
+                gasPrice?: any;
+                gas?: any;
+                value?: any;
+                data?: any;
+                nonce?: any;
+              }
             | string
             | Uint8Array
         ) => Observable<H256>
@@ -723,11 +723,11 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           params?:
             | EthSubParams
             | {
-              None: any;
-            }
+                None: any;
+              }
             | {
-              Logs: any;
-            }
+                Logs: any;
+              }
             | string
             | Uint8Array
         ) => Observable<Null>
@@ -782,10 +782,10 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           proof:
             | MmrLeafBatchProof
             | {
-              blockHash?: any;
-              leaves?: any;
-              proof?: any;
-            }
+                blockHash?: any;
+                leaves?: any;
+                proof?: any;
+              }
             | string
             | Uint8Array
         ) => Observable<bool>
@@ -799,10 +799,10 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           proof:
             | MmrLeafBatchProof
             | {
-              blockHash?: any;
-              leaves?: any;
-              proof?: any;
-            }
+                blockHash?: any;
+                leaves?: any;
+                proof?: any;
+              }
             | string
             | Uint8Array
         ) => Observable<bool>
@@ -1072,6 +1072,12 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        **/
       getForestRoot: AugmentedRpc<() => Observable<H256>>;
       /**
+       * Generate and insert new keys of type BCSV into the keystore.
+       **/
+      insertBcsvKeys: AugmentedRpc<
+        (seed: Option<Text> | null | Uint8Array | Text | string) => Observable<Text>
+      >;
+      /**
        * Load a file in the local storage. This is the first step when uploading a file.
        **/
       loadFileInStorage: AugmentedRpc<
@@ -1083,9 +1089,9 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         ) => Observable<FileMetadata>
       >;
       /**
-       * Rotate (generate and insert) new keys of BCSV type for the Blockchain Service.
+       * Remove keys of BCSV type for the Blockchain Service.
        **/
-      rotateBcsvKeys: AugmentedRpc<(seed: Text | string) => Observable<Text>>;
+      removeBcsvKeys: AugmentedRpc<(keystore_path: Text | string) => Observable<ITuple<[]>>>;
       /**
        * Save a file from the local storage to the disk.
        **/
