@@ -25,7 +25,7 @@ use shc_common::types::{StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE};
 use sp_consensus_aura::Slot;
 use sp_core::H256;
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
-use sp_trie::{LayoutV1, TrieLayout};
+
 // Local Runtime Types
 use storage_hub_runtime::{
     opaque::{Block, Hash},
