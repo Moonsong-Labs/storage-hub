@@ -335,7 +335,7 @@ for (const bspNetConfig of bspNetConfigCases) {
         await userApi.query.system.events()
       );
 
-      // Here we expect 2 batched files to be confirmed. 
+      // Here we expect 2 batched files to be confirmed.
       strictEqual(bspConfirm2Res_fileKeys.length, 2);
 
       await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
