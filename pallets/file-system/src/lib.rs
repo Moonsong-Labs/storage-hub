@@ -58,10 +58,12 @@ pub mod pallet {
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
     use shp_file_metadata::ChunkId;
-    use sp_runtime::traits::{
-        CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, ConvertBack, One, Saturating, Zero,
+    use sp_runtime::{
+        traits::{
+            CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, ConvertBack, One, Saturating, Zero,
+        },
+        BoundedVec,
     };
-    use sp_runtime::BoundedVec;
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -69,9 +71,8 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         /// The trait for reading and mutating storage provider data.
-        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId, BucketId = <Self::Providers as shp_traits::ProvidersInterface>::ProviderId>
-            + shp_traits::MutateProvidersInterface<AccountId = Self::AccountId, ReadAccessGroupId = CollectionIdFor<Self>,
-            MerklePatriciaRoot = <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash>;
+        type Providers: shp_traits::ReadProvidersInterface<AccountId=Self::AccountId, BucketId=<Self::Providers as shp_traits::ProvidersInterface>::ProviderId>
+        + shp_traits::MutateProvidersInterface<AccountId=Self::AccountId, ReadAccessGroupId=CollectionIdFor<Self>, MerklePatriciaRoot=<Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash>;
 
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: shp_traits::ProofsDealerInterface<
@@ -99,8 +100,9 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + Default
             + MaybeDisplay
-            + Into<u32>
             + From<u32>
+            + Into<u64>
+            + Into<Self::ThresholdType>
             + Copy
             + MaxEncodedLen
             + HasCompact
@@ -120,8 +122,9 @@ pub mod pallet {
             + Debug
             + Default
             + MaybeDisplay
-            + Into<u32>
             + From<u32>
+            + From<<Self::Providers as shp_traits::ReadProvidersInterface>::ReputationWeight>
+            + From<Self::ReplicationTargetType>
             + Copy
             + MaxEncodedLen
             + Decode

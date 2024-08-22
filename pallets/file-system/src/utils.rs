@@ -19,7 +19,7 @@ use shp_traits::{
     MutateProvidersInterface, ProvidersInterface, ReadProvidersInterface, TrieAddMutation,
     TrieRemoveMutation,
 };
-use sp_runtime::traits::{ConvertBack, One};
+use sp_runtime::traits::{CheckedMul, ConvertBack, One};
 
 use crate::types::{BucketNameFor, ExpiredItems, ReplicationTargetType};
 use crate::{
@@ -251,10 +251,10 @@ where
             }
             // Handle case where the bucket has an existing collection.
             (_, Some(current_collection_id))
-                if !<T::CollectionInspector as shp_traits::InspectCollections>::collection_exists(&current_collection_id) =>
-            {
-                Some(Self::do_create_and_associate_collection_with_bucket(sender.clone(), bucket_id)?)
-            }
+            if !<T::CollectionInspector as shp_traits::InspectCollections>::collection_exists(&current_collection_id) =>
+                {
+                    Some(Self::do_create_and_associate_collection_with_bucket(sender.clone(), bucket_id)?)
+                }
             // Use the existing collection ID if it exists.
             (_, Some(current_collection_id)) => Some(current_collection_id),
             // No collection needed if the bucket is public and no collection exists.
@@ -600,19 +600,13 @@ where
                 // Remove storage request metadata.
                 <StorageRequests<T>>::remove(&file_key.0);
 
-                // There should only be the number of bsps volunteered under the storage request prefix.
-                let remove_limit: u32 = storage_request_metadata
-                    .bsps_volunteered
-                    .try_into()
-                    .map_err(|_| Error::<T>::FailedTypeConversion)?;
-
                 // Remove storage request bsps
                 let removed =
                     <StorageRequestBsps<T>>::drain_prefix(&file_key.0).fold(0, |acc, _| acc + 1);
 
                 // Make sure that the expected number of bsps were removed.
                 expect_or_err!(
-                    removed == remove_limit,
+                    storage_request_metadata.bsps_volunteered == removed.into(),
                     "Number of volunteered bsps for storage request should have been removed",
                     Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
                     bool
@@ -720,18 +714,12 @@ where
             )?;
         }
 
-        // There should only be the number of bsps volunteered under the storage request prefix.
-        let remove_limit: u32 = storage_request_metadata
-            .bsps_volunteered
-            .try_into()
-            .map_err(|_| Error::<T>::FailedTypeConversion)?;
-
         // Remove storage request bsps
         let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key).fold(0, |acc, _| acc + 1);
 
         // Make sure that the expected number of bsps were removed.
         expect_or_err!(
-            removed == remove_limit,
+            storage_request_metadata.bsps_volunteered == removed.into(),
             "Number of volunteered bsps for storage request should have been removed",
             Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
             bool
@@ -1179,35 +1167,35 @@ where
         bsp_id: &ProviderIdFor<T>,
         requested_at: BlockNumberFor<T>,
     ) -> Result<(T::ThresholdType, T::ThresholdType), DispatchError> {
-        let maximum_threshold: u32 = MaximumThreshold::<T>::get().into();
-        let global_weight = T::Providers::get_global_bsps_reputation_weight();
+        let maximum_threshold = MaximumThreshold::<T>::get();
 
-        if global_weight
-            == <T::Providers as shp_traits::ReadProvidersInterface>::ReputationWeight::zero()
-        {
+        let global_weight =
+            T::ThresholdType::from(T::Providers::get_global_bsps_reputation_weight());
+
+        if global_weight == T::ThresholdType::zero() {
             return Err(Error::<T>::NoGlobalReputationWeightSet.into());
         }
+
+        let replication_target = T::ThresholdType::from(ReplicationTarget::<T>::get());
 
         // Global threshold starting point from which all BSPs begin their threshold slope. All BSPs start at this point
         // with the starting reputation weight.
         let threshold_global_starting_point = maximum_threshold
-            .checked_mul(ReplicationTarget::<T>::get().into() / global_weight.into() / 2)
+            .checked_mul(&(replication_target / global_weight / 2.into()))
             .unwrap_or_else(|| {
                 log::warn!("Global starting point is beyond MaximumThreshold. Setting it to half of the MaximumThreshold.");
-                maximum_threshold / 2
+                maximum_threshold / 2.into()
             });
 
         // Get the BSP's reputation weight.
-        let bsp_weight = T::Providers::get_bsp_reputation_weight(&bsp_id)?.into();
+        let bsp_weight = T::ThresholdType::from(T::Providers::get_bsp_reputation_weight(&bsp_id)?);
 
         // Actual BSP's threshold starting point, taking into account their reputation weight.
-        let threshold_weighted_starting_point = bsp_weight
-            .saturating_mul(threshold_global_starting_point)
-            .into();
+        let threshold_weighted_starting_point =
+            bsp_weight.saturating_mul(threshold_global_starting_point);
 
         // Rate of increase from the weighted threshold starting point up to the maximum threshold within a block range.
-        let threshold_slope = (<u32 as Into<T::ThresholdType>>::into(maximum_threshold)
-            .saturating_sub(threshold_weighted_starting_point))
+        let threshold_slope = maximum_threshold.saturating_sub(threshold_weighted_starting_point)
             / T::ThresholdTypeToBlockNumber::convert_back(BlockRangeToMaximumThreshold::<T>::get());
 
         let current_block_number = <frame_system::Pallet<T>>::block_number();
@@ -1303,11 +1291,8 @@ mod hooks {
 
             // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `ReplicationTarget`.
             // We could increase this potential weight to account for potentially more volunteers.
-            let potential_weight = db_weight.writes(
-                Into::<u32>::into(ReplicationTarget::<T>::get())
-                    .saturating_add(1)
-                    .into(),
-            );
+            let potential_weight =
+                db_weight.writes(ReplicationTarget::<T>::get().saturating_plus_one().into());
 
             if !remaining_weight.all_gte(potential_weight) {
                 return;
