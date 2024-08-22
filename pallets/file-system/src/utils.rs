@@ -70,6 +70,7 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
+    /// Compute the block number at which the BSP is eligible to volunteer for a storage request.
     pub fn query_earliest_file_volunteer_block(
         bsp_id: ProviderIdFor<T>,
         file_key: MerkleHash<T>,
@@ -1177,6 +1178,13 @@ where
         T::HashToThresholdType::convert(volunteering_hash)
     }
 
+    /// Compute the threshold for a BSP to succeed.
+    ///
+    /// Succeeding this threshold is required for the BSP to be eligible to volunteer for a storage request.
+    /// The threshold is computed based on the global reputation weight and the BSP's reputation weight, giving
+    /// an advantage to BSPs with higher reputation weights.
+    ///
+    /// The formalized formulas are documented in the [README](https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/file-system/README.md#volunteering-succeeding-threshold-checks).
     pub fn compute_threshold_to_succeed(
         bsp_id: &ProviderIdFor<T>,
         requested_at: BlockNumberFor<T>,
@@ -1217,6 +1225,13 @@ where
             ))
             .unwrap_or(T::ThresholdType::one());
 
+        // Since checked div only returns None on a result of zero, there is the case when the result is between 0 and 1 and rounds down to 0.
+        let threshold_slope = if threshold_slope.is_zero() {
+            T::ThresholdType::one()
+        } else {
+            threshold_slope
+        };
+
         let current_block_number = <frame_system::Pallet<T>>::block_number();
 
         // Get number of blocks since the storage request was issued.
@@ -1224,11 +1239,10 @@ where
         let blocks_since_requested =
             T::ThresholdTypeToBlockNumber::convert_back(blocks_since_requested);
 
-        Ok((
-            threshold_weighted_starting_point
-                .saturating_add(threshold_slope.saturating_mul(blocks_since_requested)),
-            threshold_slope,
-        ))
+        let to_succeed = threshold_weighted_starting_point
+            .saturating_add(threshold_slope.saturating_mul(blocks_since_requested));
+
+        Ok((to_succeed, threshold_slope))
     }
 }
 

@@ -3883,10 +3883,60 @@ mod compute_threshold {
 
                 let storage_request = FileSystem::storage_requests(file_key).unwrap();
 
-                let (bsp_threshold, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
+                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, None, Some(1)).unwrap();
 
-                assert!(bsp_threshold > 0 && bsp_threshold <= MaximumThreshold::<Test>::get());
+                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1);
+
+                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
+
+                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= MaximumThreshold::<Test>::get());
                 assert!(slope > 0);
+
+                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+
+                // BSP should be able to volunteer immediately for the storage request since the BlockRangeToMaximumThreshold is 1
+                assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
+
+                let starting_bsp_weight: pallet_storage_providers::types::ReputationWeightType<Test> = <Test as pallet_storage_providers::Config>::StartingReputationWeight::get();
+
+                // Simulate there being many BSPs in the network with high reputation weight
+                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1000u32.saturating_mul(starting_bsp_weight.into()));
+
+                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, None, Some(1000000000)).unwrap();
+
+                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1000000000);
+
+                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
+
+                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= MaximumThreshold::<Test>::get());
+                assert!(slope > 0);
+
+                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+
+                // BSP can only volunteer after some number of blocks have passed.
+                assert!(block_number > frame_system::Pallet::<Test>::block_number());
+
+                // Set reputation weight of BSP to max
+                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
+                    match bsp {
+                        Some(bsp) => {
+                            bsp.reputation_weight = u32::MAX;
+                        }
+                        None => {
+                            panic!("BSP should exits");
+                        }
+                    }
+                });
+
+                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
+
+                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= MaximumThreshold::<Test>::get());
+                assert!(slope > 0);
+
+                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+
+                // BSP should be able to volunteer immediately for the storage request since the reputation weight is so high.
+                assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
             });
         }
     }

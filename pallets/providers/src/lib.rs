@@ -351,7 +351,7 @@ pub mod pallet {
 
     /// The total global reputation weight of all BSPs.
     #[pallet::storage]
-    pub type GlobalBspsReputationWeight<T> = StorageValue<_, ReputationWeight<T>, ValueQuery>;
+    pub type GlobalBspsReputationWeight<T> = StorageValue<_, ReputationWeightType<T>, ValueQuery>;
 
     // Events & Errors:
 
