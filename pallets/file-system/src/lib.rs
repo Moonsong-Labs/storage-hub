@@ -70,15 +70,33 @@ pub mod pallet {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// The trait for reading and mutating storage provider data.
-        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId, BucketId = <Self::Providers as shp_traits::ProvidersInterface>::ProviderId>
-            + shp_traits::MutateProvidersInterface<AccountId = Self::AccountId, ReadAccessGroupId = CollectionIdFor<Self>,
-            MerklePatriciaRoot = <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash>;
+        /// The trait for reading and mutating Storage Provider and Bucket data.
+        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId>
+            + shp_traits::MutateProvidersInterface<
+                MerkleHash = <Self::Providers as shp_traits::ReadProvidersInterface>::MerkleHash,
+                ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+            > + shp_traits::ReadStorageProvidersInterface<
+                ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+            > + shp_traits::MutateStorageProvidersInterface<
+                ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+            > + shp_traits::ReadBucketsInterface<
+                AccountId = Self::AccountId,
+                BucketId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+                MerkleHash = <Self::Providers as shp_traits::ReadProvidersInterface>::MerkleHash,
+                ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+                ReadAccessGroupId = CollectionIdFor<Self>,
+            > + shp_traits::MutateBucketsInterface<
+                AccountId = Self::AccountId,
+                BucketId = <Self::Providers as shp_traits::ReadBucketsInterface>::BucketId,
+                MerkleHash = <Self::Providers as shp_traits::ReadProvidersInterface>::MerkleHash,
+                ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+                ReadAccessGroupId = CollectionIdFor<Self>,
+            >;
 
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: shp_traits::ProofsDealerInterface<
-            ProviderId = <Self::Providers as shp_traits::ProvidersInterface>::ProviderId,
-            MerkleHash = <Self::Providers as shp_traits::ProvidersInterface>::MerkleHash,
+            ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+            MerkleHash = <Self::Providers as shp_traits::ReadProvidersInterface>::MerkleHash,
         >;
 
         /// Type for identifying a file, generally a hash.
@@ -332,7 +350,7 @@ pub mod pallet {
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
             let total_bsps =
-                <T::Providers as shp_traits::ReadProvidersInterface>::get_number_of_bsps()
+                <T::Providers as shp_traits::ReadStorageProvidersInterface>::get_number_of_bsps()
                     .try_into()
                     .map_err(|_| Error::<T>::FailedTypeConversion)
                     .unwrap();
@@ -433,7 +451,7 @@ pub mod pallet {
         FileDeletionRequest {
             user: T::AccountId,
             file_key: MerkleHash<T>,
-            bucket_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
             msp_id: ProviderIdFor<T>,
             proof_of_inclusion: bool,
         },
@@ -442,7 +460,7 @@ pub mod pallet {
             msp_id: ProviderIdFor<T>,
             user: T::AccountId,
             file_key: MerkleHash<T>,
-            bucket_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
             proof_of_inclusion: bool,
         },
         /// Notifies that a BSP's challenge cycle has been initialised, adding the first file
@@ -803,7 +821,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn delete_file(
             origin: OriginFor<T>,
-            bucket_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
             file_key: MerkleHash<T>,
             location: FileLocation<T>,
             size: StorageData<T>,
@@ -839,7 +857,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             user: T::AccountId,
             file_key: MerkleHash<T>,
-            bucket_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;

@@ -7,7 +7,7 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::CollectionConfig;
 use scale_info::TypeInfo;
 use shp_file_metadata::FileMetadata;
-use shp_traits::ProvidersInterface;
+use shp_traits::ReadProvidersInterface;
 
 use crate::Config;
 
@@ -132,7 +132,7 @@ pub type Fingerprint<T> = <T as crate::Config>::Fingerprint;
 
 /// Alias for the `StorageData` type used in the MutateProvidersInterface.
 pub type StorageData<T> =
-    <<T as crate::Config>::Providers as shp_traits::MutateProvidersInterface>::StorageData;
+    <<T as crate::Config>::Providers as shp_traits::MutateStorageProvidersInterface>::StorageDataUnit;
 
 /// Alias for the `TargetBspsRequired` type used in the FileSystem pallet.
 pub type TargetBspsRequired<T> = <T as crate::Config>::TargetBspsRequired;
@@ -160,11 +160,11 @@ pub type PeerIds<T> = BoundedVec<PeerId<T>, MaxNumberOfPeerIds<T>>;
 
 /// Alias for the `MultiAddress` type used in the ReadProvidersInterface.
 pub type MultiAddress<T> =
-    <<T as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::MultiAddress;
+    <<T as crate::Config>::Providers as shp_traits::ReadStorageProvidersInterface>::MultiAddress;
 
 /// Alias for the `MaxMultiAddresses` type used in the ReadProvidersInterface.
 pub type MaxMultiAddresses<T> =
-    <<T as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::MaxNumberOfMultiAddresses;
+    <<T as crate::Config>::Providers as shp_traits::ReadStorageProvidersInterface>::MaxNumberOfMultiAddresses;
 
 /// Alias for a bounded vector of [`MultiAddress`].
 pub type MultiAddresses<T> = BoundedVec<MultiAddress<T>, MaxMultiAddresses<T>>;
@@ -184,14 +184,14 @@ pub(super) type CollectionConfigFor<T> =
 
 /// Alias for the `BucketNameLimit` type used in the ReadProvidersInterface.
 pub(super) type BucketNameLimitFor<T> =
-    <<T as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::BucketNameLimit;
+    <<T as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::BucketNameLimit;
 
 /// Type alias representing the type of `BucketId` used in `ProvidersInterface`.
 pub(crate) type BucketIdFor<T> =
-    <<T as crate::Config>::Providers as shp_traits::ProvidersConfig>::BucketId;
+    <<T as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::BucketId;
 
 /// Alias for the `ProviderId` type used in the ProvidersInterface.
-pub type ProviderIdFor<T> = <<T as crate::Config>::Providers as ProvidersInterface>::ProviderId;
+pub type ProviderIdFor<T> = <<T as crate::Config>::Providers as ReadProvidersInterface>::ProviderId;
 
 /// Alias for the bucket name.
 pub type BucketNameFor<T> = BoundedVec<u8, BucketNameLimitFor<T>>;

@@ -2,8 +2,8 @@ use crate::{
     mock::*,
     types::{
         BackupStorageProvider, BalanceOf, Bucket, MainStorageProvider, MainStorageProviderId,
-        MaxBuckets, MaxMultiAddressAmount, MultiAddress, StorageData, StorageProvider, ValuePropId,
-        ValueProposition,
+        MaxBuckets, MaxMultiAddressAmount, MultiAddress, StorageDataUnit, StorageProvider,
+        ValuePropId, ValueProposition,
     },
     Error, Event,
 };
@@ -14,7 +14,10 @@ use frame_support::{
     traits::{fungible::InspectHold, Get, OnFinalize, OnIdle, OnInitialize},
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-use shp_traits::{MutateProvidersInterface, ProvidersInterface, ReadProvidersInterface};
+use shp_traits::{
+    MutateBucketsInterface, MutateStorageProvidersInterface, ReadBucketsInterface,
+    ReadProvidersInterface,
+};
 
 type NativeBalance = <Test as crate::Config>::NativeBalance;
 type AccountId = <Test as frame_system::Config>::AccountId;
@@ -68,7 +71,7 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice and check its balance
                     let alice: AccountId = accounts::ALICE.0;
@@ -78,7 +81,7 @@ mod sign_up {
                         0
                     );
 
-                    // Alice is going to sign up as a Main Storage Provider with 100 StorageData units
+                    // Alice is going to sign up as a Main Storage Provider with 100 StorageDataUnit units
                     // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
                     // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
                     let deposit_for_storage_amount: BalanceOf<Test> =
@@ -133,7 +136,7 @@ mod sign_up {
                             StorageProvider::MainStorageProvider(MainStorageProvider {
                                 buckets: BoundedVec::new(),
                                 capacity: storage_amount,
-                                data_used: 0,
+                                capacity_used: 0,
                                 multiaddresses,
                                 value_prop,
                                 last_capacity_change: current_block,
@@ -167,7 +170,7 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice and check its balance
                     let alice: AccountId = accounts::ALICE.0;
@@ -177,7 +180,7 @@ mod sign_up {
                         0
                     );
 
-                    // Alice is going to sign up as a Main Storage Provider with 100 StorageData units
+                    // Alice is going to sign up as a Main Storage Provider with 100 StorageDataUnit units
                     // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
                     // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
                     let deposit_for_storage_amount: BalanceOf<Test> =
@@ -262,7 +265,7 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice and check its balance
                     let alice: AccountId = accounts::ALICE.0;
@@ -272,7 +275,7 @@ mod sign_up {
                         0
                     );
 
-                    // Alice is going to sign up as a Main Storage Provider with 100 StorageData units
+                    // Alice is going to sign up as a Main Storage Provider with 100 StorageDataUnit units
                     // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
                     // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
                     let deposit_for_storage_amount: BalanceOf<Test> =
@@ -357,8 +360,8 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount_alice: StorageData<Test> = 100;
-                    let storage_amount_bob: StorageData<Test> = 300;
+                    let storage_amount_alice: StorageDataUnit<Test> = 100;
+                    let storage_amount_bob: StorageDataUnit<Test> = 300;
 
                     // Get the Account Id of Alice and check its balance
                     let alice: AccountId = accounts::ALICE.0;
@@ -376,7 +379,7 @@ mod sign_up {
                         0
                     );
 
-                    // Alice is going to request to sign up as a Main Storage Provider with 100 StorageData units
+                    // Alice is going to request to sign up as a Main Storage Provider with 100 StorageDataUnit units
                     // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
                     // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
                     let deposit_for_storage_amount_alice: BalanceOf<Test> =
@@ -386,7 +389,7 @@ mod sign_up {
                             ),
                         );
 
-                    // Bob is going to request to sign up as a Main Storage Provider with 300 StorageData units
+                    // Bob is going to request to sign up as a Main Storage Provider with 300 StorageDataUnit units
                     // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
                     // In this case, the deposit would be 10 + 2 * (300 - 1) = 608
                     let deposit_for_storage_amount_bob: BalanceOf<Test> =
@@ -481,7 +484,7 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
                     let alice: AccountId = accounts::ALICE.0;
@@ -502,7 +505,7 @@ mod sign_up {
                         == StorageProvider::MainStorageProvider(MainStorageProvider {
                             buckets: BoundedVec::new(),
                             capacity: storage_amount,
-                            data_used: 0,
+                            capacity_used: 0,
                             multiaddresses: multiaddresses.clone(),
                             value_prop: value_prop.clone(),
                             last_capacity_change: current_block,
@@ -551,7 +554,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice and check its balance
                     let alice: AccountId = accounts::ALICE.0;
@@ -561,7 +564,7 @@ mod sign_up {
                         0
                     );
 
-                    // Alice is going to sign up as a Backup Storage Provider with 100 StorageData units
+                    // Alice is going to sign up as a Backup Storage Provider with 100 StorageDataUnit units
                     // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
                     // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
                     let deposit_for_storage_amount: BalanceOf<Test> =
@@ -617,7 +620,7 @@ mod sign_up {
                             StorageProvider::BackupStorageProvider(BackupStorageProvider {
                                 root: DefaultMerkleRoot::get(),
                                 capacity: storage_amount,
-                                data_used: 0,
+                                capacity_used: 0,
                                 multiaddresses,
                                 last_capacity_change: current_block,
                                 owner_account: alice,
@@ -644,7 +647,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice and check its balance
                     let alice: AccountId = accounts::ALICE.0;
@@ -654,7 +657,7 @@ mod sign_up {
                         0
                     );
 
-                    // Alice is going to sign up as a Backup Storage Provider with 100 StorageData units
+                    // Alice is going to sign up as a Backup Storage Provider with 100 StorageDataUnit units
                     // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
                     // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
                     let deposit_for_storage_amount: BalanceOf<Test> =
@@ -747,7 +750,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice and check its balance
                     let alice: AccountId = accounts::ALICE.0;
@@ -757,7 +760,7 @@ mod sign_up {
                         0
                     );
 
-                    // Alice is going to sign up as a Backup Storage Provider with 100 StorageData units
+                    // Alice is going to sign up as a Backup Storage Provider with 100 StorageDataUnit units
                     // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
                     // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
                     let deposit_for_storage_amount: BalanceOf<Test> =
@@ -850,8 +853,8 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let storage_amount_alice: StorageData<Test> = 100;
-                    let storage_amount_bob: StorageData<Test> = 300;
+                    let storage_amount_alice: StorageDataUnit<Test> = 100;
+                    let storage_amount_bob: StorageDataUnit<Test> = 300;
 
                     // Get the Account Id of Alice and check its balance
                     let alice: AccountId = accounts::ALICE.0;
@@ -869,7 +872,7 @@ mod sign_up {
                         0
                     );
 
-                    // Alice is going to request to sign up as a Backup Storage Provider with 100 StorageData units
+                    // Alice is going to request to sign up as a Backup Storage Provider with 100 StorageDataUnit units
                     // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
                     // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
                     let deposit_for_storage_amount_alice: BalanceOf<Test> =
@@ -879,7 +882,7 @@ mod sign_up {
                             ),
                         );
 
-                    // Bob is going to request to sign up as a Backup Storage Provider with 300 StorageData units
+                    // Bob is going to request to sign up as a Backup Storage Provider with 300 StorageDataUnit units
                     // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
                     // In this case, the deposit would be 10 + 2 * (300 - 1) = 608
                     let deposit_for_storage_amount_bob: BalanceOf<Test> =
@@ -964,7 +967,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
                     let alice: AccountId = accounts::ALICE.0;
@@ -983,7 +986,7 @@ mod sign_up {
                     assert!(alice_sign_up_request.as_ref().is_ok_and(|request| request.0
                         == StorageProvider::BackupStorageProvider(BackupStorageProvider {
                             capacity: storage_amount,
-                            data_used: 0,
+                            capacity_used: 0,
                             multiaddresses: multiaddresses.clone(),
                             root: DefaultMerkleRoot::get(),
                             last_capacity_change: current_block,
@@ -1037,8 +1040,8 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount_alice: StorageData<Test> = 100;
-                    let storage_amount_bob: StorageData<Test> = 300;
+                    let storage_amount_alice: StorageDataUnit<Test> = 100;
+                    let storage_amount_bob: StorageDataUnit<Test> = 300;
 
                     // Get the Account Id of Alice and check its balance
                     let alice: AccountId = accounts::ALICE.0;
@@ -1056,7 +1059,7 @@ mod sign_up {
                         0
                     );
 
-                    // Alice is going to request to sign up as a Main Storage Provider with 100 StorageData units
+                    // Alice is going to request to sign up as a Main Storage Provider with 100 StorageDataUnit units
                     // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
                     // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
                     let deposit_for_storage_amount_alice: BalanceOf<Test> =
@@ -1066,7 +1069,7 @@ mod sign_up {
                             ),
                         );
 
-                    // Bob is going to request to sign up as a Backup Storage Provider with 300 StorageData units
+                    // Bob is going to request to sign up as a Backup Storage Provider with 300 StorageDataUnit units
                     // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
                     // In this case, the deposit would be 10 + 2 * (300 - 1) = 608
                     let deposit_for_storage_amount_bob: BalanceOf<Test> =
@@ -1159,8 +1162,8 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount_alice: StorageData<Test> = 100;
-                    let storage_amount_bob: StorageData<Test> = 300;
+                    let storage_amount_alice: StorageDataUnit<Test> = 100;
+                    let storage_amount_bob: StorageDataUnit<Test> = 300;
 
                     // Get the Account Id of Alice and check its balance
                     let alice: AccountId = accounts::ALICE.0;
@@ -1250,8 +1253,8 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount_alice: StorageData<Test> = 100;
-                    let storage_amount_bob: StorageData<Test> = 300;
+                    let storage_amount_alice: StorageDataUnit<Test> = 100;
+                    let storage_amount_bob: StorageDataUnit<Test> = 300;
 
                     // Get the Account Id of Alice and check its balance
                     let alice: AccountId = accounts::ALICE.0;
@@ -1358,8 +1361,8 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount_alice: StorageData<Test> = 100;
-                    let storage_amount_bob: StorageData<Test> = 300;
+                    let storage_amount_alice: StorageDataUnit<Test> = 100;
+                    let storage_amount_bob: StorageDataUnit<Test> = 300;
 
                     // Get the Account Id of Alice and check its balance
                     let alice: AccountId = accounts::ALICE.0;
@@ -1460,7 +1463,7 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
                     let alice: AccountId = accounts::ALICE.0;
@@ -1525,8 +1528,8 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount_alice: StorageData<Test> = 100;
-                    let storage_amount_bob: StorageData<Test> = 300;
+                    let storage_amount_alice: StorageDataUnit<Test> = 100;
+                    let storage_amount_bob: StorageDataUnit<Test> = 300;
 
                     // Get the Account Id of Alice and check its balance
                     let alice: AccountId = accounts::ALICE.0;
@@ -1544,7 +1547,7 @@ mod sign_up {
                         0
                     );
 
-                    // Alice is going to request to sign up as a Main Storage Provider with 100 StorageData units
+                    // Alice is going to request to sign up as a Main Storage Provider with 100 StorageDataUnit units
                     // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
                     // In this case, the deposit would be 10 + 2 * (100 - 1) = 208
                     let deposit_for_storage_amount_alice: BalanceOf<Test> =
@@ -1554,7 +1557,7 @@ mod sign_up {
                             ),
                         );
 
-                    // Bob is going to request to sign up as a Main Storage Provider with 300 StorageData units
+                    // Bob is going to request to sign up as a Main Storage Provider with 300 StorageDataUnit units
                     // The deposit for any amount of storage would be MinDeposit + DepositPerData * (storage_amount - MinCapacity)
                     // In this case, the deposit would be 10 + 2 * (300 - 1) = 608
                     let deposit_for_storage_amount_bob: BalanceOf<Test> =
@@ -1699,7 +1702,7 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
                     let alice: AccountId = accounts::ALICE.0;
@@ -1759,7 +1762,7 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
                     let alice: AccountId = accounts::ALICE.0;
@@ -1818,7 +1821,7 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
                     let alice: AccountId = accounts::ALICE.0;
@@ -1866,7 +1869,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
                     let alice: AccountId = accounts::ALICE.0;
@@ -1920,7 +1923,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
                     let alice: AccountId = accounts::ALICE.0;
@@ -1973,7 +1976,7 @@ mod sign_up {
                             .try_into()
                             .unwrap(),
                     );
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
                     let alice: AccountId = accounts::ALICE.0;
@@ -2024,7 +2027,7 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
                     let alice: AccountId = accounts::ALICE.0;
@@ -2167,7 +2170,7 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice and Bob
                     let alice: AccountId = accounts::ALICE.0;
@@ -2235,7 +2238,7 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount: StorageData<Test> = 1;
+                    let storage_amount: StorageDataUnit<Test> = 1;
 
                     // Get the Account Id of Alice
                     let alice: AccountId = accounts::ALICE.0;
@@ -2285,7 +2288,7 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Helen (who has no balance)
                     let helen: AccountId = 7;
@@ -2328,7 +2331,7 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
                     let alice: AccountId = accounts::ALICE.0;
@@ -2375,7 +2378,7 @@ mod sign_up {
                         data_limit: 10,
                         protocols: BoundedVec::new(),
                     };
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
 
                     // Get the Account Id of Alice
                     let alice: AccountId = accounts::ALICE.0;
@@ -2424,7 +2427,7 @@ mod sign_off {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
                     let (deposit_amount, _alice_msp) =
                         register_account_as_msp(alice, storage_amount);
 
@@ -2475,7 +2478,7 @@ mod sign_off {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
                     let (deposit_amount, _alice_bsp) =
                         register_account_as_bsp(alice, storage_amount);
 
@@ -2551,7 +2554,7 @@ mod sign_off {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
                     let alice = 0;
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
                     let (deposit_amount, _alice_msp) =
                         register_account_as_msp(alice, storage_amount);
 
@@ -2580,7 +2583,7 @@ mod sign_off {
 
                     // Add used storage to Alice (simulating that she has accepted to store a file)
                     assert_ok!(
-                        <StorageProviders as MutateProvidersInterface>::increase_data_used(
+                        <StorageProviders as MutateStorageProvidersInterface>::increase_capacity_used(
                             &alice_msp_id,
                             10
                         )
@@ -2626,7 +2629,7 @@ mod sign_off {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let storage_amount: StorageData<Test> = 100;
+                    let storage_amount: StorageDataUnit<Test> = 100;
                     let (deposit_amount, _alice_bsp) =
                         register_account_as_bsp(alice, storage_amount);
 
@@ -2655,7 +2658,7 @@ mod sign_off {
 
                     // Add used storage to Alice (simulating that she has accepted to store a file)
                     assert_ok!(
-                        <StorageProviders as MutateProvidersInterface>::increase_data_used(
+                        <StorageProviders as MutateStorageProvidersInterface>::increase_capacity_used(
                             &alice_sp_id,
                             10
                         )
@@ -2700,8 +2703,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let increased_storage_amount: StorageData<Test> = 200;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let increased_storage_amount: StorageDataUnit<Test> = 200;
                     let (old_deposit_amount, _alice_msp) =
                         register_account_as_msp(alice, old_storage_amount);
 
@@ -2768,8 +2771,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let decreased_storage_amount: StorageData<Test> = 50;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let decreased_storage_amount: StorageDataUnit<Test> = 50;
                     let (old_deposit_amount, _alice_msp) =
                         register_account_as_msp(alice, old_storage_amount);
 
@@ -2836,8 +2839,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 500;
-                    let minimum_storage_amount: StorageData<Test> =
+                    let old_storage_amount: StorageDataUnit<Test> = 500;
+                    let minimum_storage_amount: StorageDataUnit<Test> =
                         <SpMinCapacity as Get<u32>>::get();
                     let (old_deposit_amount, _alice_msp) =
                         register_account_as_msp(alice, old_storage_amount);
@@ -2904,8 +2907,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let increased_storage_amount: StorageData<Test> = 200;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let increased_storage_amount: StorageDataUnit<Test> = 200;
                     let (old_deposit_amount, _alice_bsp) =
                         register_account_as_bsp(alice, old_storage_amount);
 
@@ -2984,8 +2987,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let decreased_storage_amount: StorageData<Test> = 50;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let decreased_storage_amount: StorageDataUnit<Test> = 50;
                     let (old_deposit_amount, _alice_bsp) =
                         register_account_as_bsp(alice, old_storage_amount);
 
@@ -3064,8 +3067,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 500;
-                    let minimum_storage_amount: StorageData<Test> =
+                    let old_storage_amount: StorageDataUnit<Test> = 500;
+                    let minimum_storage_amount: StorageDataUnit<Test> =
                         <SpMinCapacity as Get<u32>>::get();
                     let (old_deposit_amount, _alice_bsp) =
                         register_account_as_bsp(alice, old_storage_amount);
@@ -3164,8 +3167,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let new_storage_amount: StorageData<Test> = 200;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let new_storage_amount: StorageDataUnit<Test> = 200;
                     let (_old_deposit_amount, _alice_msp) =
                         register_account_as_msp(alice, old_storage_amount);
 
@@ -3191,8 +3194,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let zero_storage_amount: StorageData<Test> = 0;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let zero_storage_amount: StorageDataUnit<Test> = 0;
                     let (_old_deposit_amount, _alice_msp) =
                         register_account_as_msp(alice, old_storage_amount);
 
@@ -3218,8 +3221,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let new_storage_amount: StorageData<Test> = old_storage_amount;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let new_storage_amount: StorageDataUnit<Test> = old_storage_amount;
                     let (_old_deposit_amount, _alice_msp) =
                         register_account_as_msp(alice, old_storage_amount);
 
@@ -3245,8 +3248,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let decreased_storage_amount: StorageData<Test> = 1;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let decreased_storage_amount: StorageDataUnit<Test> = 1;
                     let (_old_deposit_amount, _alice_msp) =
                         register_account_as_msp(alice, old_storage_amount);
 
@@ -3278,8 +3281,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let decreased_storage_amount: StorageData<Test> = 50;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let decreased_storage_amount: StorageDataUnit<Test> = 50;
                     let (_old_deposit_amount, _alice_sp_id) =
                         register_account_as_msp(alice, old_storage_amount);
 
@@ -3288,7 +3291,7 @@ mod change_capacity {
 
                     // Change used storage to be more than the new capacity
                     assert_ok!(
-                        <StorageProviders as MutateProvidersInterface>::increase_data_used(
+                        <StorageProviders as MutateStorageProvidersInterface>::increase_capacity_used(
                             &alice_msp_id,
                             60
                         )
@@ -3322,8 +3325,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let new_storage_amount: StorageData<Test> =
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let new_storage_amount: StorageDataUnit<Test> =
                         (accounts::ALICE.1 / <DepositPerData as Get<u128>>::get() + 1)
                             .try_into()
                             .unwrap();
@@ -3377,8 +3380,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let new_storage_amount: StorageData<Test> = 200;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let new_storage_amount: StorageDataUnit<Test> = 200;
                     let (_old_deposit_amount, _alice_bsp) =
                         register_account_as_bsp(alice, old_storage_amount);
 
@@ -3416,8 +3419,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let zero_storage_amount: StorageData<Test> = 0;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let zero_storage_amount: StorageDataUnit<Test> = 0;
                     let (_old_deposit_amount, _alice_bsp) =
                         register_account_as_bsp(alice, old_storage_amount);
 
@@ -3455,8 +3458,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let new_storage_amount: StorageData<Test> = old_storage_amount;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let new_storage_amount: StorageDataUnit<Test> = old_storage_amount;
                     let (_old_deposit_amount, _alice_bsp) =
                         register_account_as_bsp(alice, old_storage_amount);
 
@@ -3494,8 +3497,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let decreased_storage_amount: StorageData<Test> = 1;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let decreased_storage_amount: StorageDataUnit<Test> = 1;
                     let (_old_deposit_amount, _alice_bsp) =
                         register_account_as_bsp(alice, old_storage_amount);
 
@@ -3539,8 +3542,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as BSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let decreased_storage_amount: StorageData<Test> = 50;
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let decreased_storage_amount: StorageDataUnit<Test> = 50;
                     let (_old_deposit_amount, _alice_bsp_id) =
                         register_account_as_bsp(alice, old_storage_amount);
 
@@ -3555,7 +3558,7 @@ mod change_capacity {
 
                     // Change used storage to be more than the new capacity
                     assert_ok!(
-                        <StorageProviders as MutateProvidersInterface>::increase_data_used(
+                        <StorageProviders as MutateStorageProvidersInterface>::increase_capacity_used(
                             &alice_bsp_id,
                             60
                         )
@@ -3595,8 +3598,8 @@ mod change_capacity {
                 ExtBuilder::build().execute_with(|| {
                     // Register Alice as MSP:
                     let alice: AccountId = accounts::ALICE.0;
-                    let old_storage_amount: StorageData<Test> = 100;
-                    let new_storage_amount: StorageData<Test> =
+                    let old_storage_amount: StorageDataUnit<Test> = 100;
+                    let new_storage_amount: StorageDataUnit<Test> =
                         (accounts::ALICE.1 / <DepositPerData as Get<u128>>::get() + 1)
                             .try_into()
                             .unwrap();
@@ -3650,14 +3653,14 @@ mod change_bucket {
         fn change_bucket_fails_when_bucket_id_already_exists() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3690,14 +3693,14 @@ mod add_bucket {
         fn add_bucket_already_exists() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3724,7 +3727,7 @@ mod add_bucket {
             ExtBuilder::build().execute_with(|| {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3747,14 +3750,14 @@ mod add_bucket {
         fn add_bucket_passed_max_bucket_msp_capacity() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3763,7 +3766,7 @@ mod add_bucket {
                 for i in 0..MaxBuckets::<Test>::get() {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
-                    let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
                         &bucket_owner,
                         bucket_name,
                     );
@@ -3792,14 +3795,14 @@ mod add_bucket {
         fn add_bucket() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3846,7 +3849,7 @@ mod add_bucket {
         fn add_buckets_to_max_capacity() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
@@ -3857,7 +3860,7 @@ mod add_bucket {
                 for i in 0..MaxBuckets::<Test>::get() {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
-                    let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
                         &bucket_owner,
                         bucket_name,
                     );
@@ -3896,12 +3899,12 @@ mod remove_root_bucket {
         fn remove_root_bucket_when_bucket_does_not_exist() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3922,14 +3925,14 @@ mod remove_root_bucket {
         fn remove_root_bucket() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
 
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3976,7 +3979,7 @@ mod remove_root_bucket {
         fn remove_root_buckets_multiple() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
@@ -3987,7 +3990,7 @@ mod remove_root_bucket {
                 for i in 0..MaxBuckets::<Test>::get() {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
-                    let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
                         &bucket_owner,
                         bucket_name,
                     );
@@ -4016,7 +4019,7 @@ mod remove_root_bucket {
                 for i in 0..MaxBuckets::<Test>::get() {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
-                    let bucket_id = <StorageProviders as ReadProvidersInterface>::derive_bucket_id(
+                    let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
                         &bucket_owner,
                         bucket_name,
                     );
@@ -4067,7 +4070,7 @@ mod slash {
             ExtBuilder::build().execute_with(|| {
                 // register msp
                 let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
                 let provider_id =
@@ -4092,7 +4095,7 @@ mod slash {
             ExtBuilder::build().execute_with(|| {
                 // register msp
                 let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
                 let provider_id =
@@ -4147,7 +4150,7 @@ mod slash {
             ExtBuilder::build().execute_with(|| {
                 // register msp and bsp
                 let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 let (_deposit_amount, _alice_msp) = register_account_as_msp(alice, storage_amount);
 
                 let bob: AccountId = accounts::BOB.0;
@@ -4240,12 +4243,12 @@ mod slash {
 
 // Helper functions for testing:
 
-/// Helper function that registers an account as a Main Storage Provider, with storage_amount StorageData units
+/// Helper function that registers an account as a Main Storage Provider, with storage_amount StorageDataUnit units
 ///
 /// Returns the deposit amount that was utilized from the account's balance and the MSP information
 fn register_account_as_msp(
     account: AccountId,
-    storage_amount: StorageData<Test>,
+    storage_amount: StorageDataUnit<Test>,
 ) -> (BalanceOf<Test>, MainStorageProvider<Test>) {
     // Initialize variables:
     let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
@@ -4320,7 +4323,7 @@ fn register_account_as_msp(
         MainStorageProvider {
             buckets: BoundedVec::new(),
             capacity: storage_amount,
-            data_used: 0,
+            capacity_used: 0,
             multiaddresses,
             value_prop,
             last_capacity_change: frame_system::Pallet::<Test>::block_number(),
@@ -4330,12 +4333,12 @@ fn register_account_as_msp(
     )
 }
 
-/// Helper function that registers an account as a Backup Storage Provider, with storage_amount StorageData units
+/// Helper function that registers an account as a Backup Storage Provider, with storage_amount StorageDataUnit units
 ///
 /// Returns the deposit amount that was utilized from the account's balance and the BSP information
 fn register_account_as_bsp(
     account: AccountId,
-    storage_amount: StorageData<Test>,
+    storage_amount: StorageDataUnit<Test>,
 ) -> (BalanceOf<Test>, BackupStorageProvider<Test>) {
     // Initialize variables:
     let mut multiaddresses: BoundedVec<MultiAddress<Test>, MaxMultiAddressAmount<Test>> =
@@ -4401,7 +4404,7 @@ fn register_account_as_bsp(
         deposit_for_storage_amount,
         BackupStorageProvider {
             capacity: storage_amount,
-            data_used: 0,
+            capacity_used: 0,
             multiaddresses,
             root: DefaultMerkleRoot::get(),
             last_capacity_change: frame_system::Pallet::<Test>::block_number(),
