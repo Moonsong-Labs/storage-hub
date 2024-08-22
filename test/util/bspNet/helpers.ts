@@ -549,7 +549,7 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
     strictEqual(
       volunteerPending.length,
       4,
-      "There should be three pending extrinsics from BSPs (volunteer)"
+      "There should be four pending extrinsics from BSPs (volunteer)"
     );
 
     await userApi.sealBlock();
@@ -560,12 +560,12 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
     strictEqual(
       confirmPending.length,
       4,
-      "There should be three pending extrinsics from BSPs (confirm store)"
+      "There should be four pending extrinsics from BSPs (confirm store)"
     );
 
     await userApi.sealBlock();
 
-    // Wait for the BSPs to process the BspConfirmedStoring event.
+    // Wait for the BSPs to process the confirmation of the file.
     await sleep(1000);
 
     // Stopping BSP that is supposed to be down.
