@@ -16,7 +16,7 @@ use frame_support::dispatch::GetDispatchInfo;
 use frame_support::BoundedVec;
 use pallet_balances;
 use pallet_storage_providers::types::{MaxMultiAddressAmount, MultiAddress};
-use shp_traits::ProvidersInterface;
+use shp_traits::{ReadBucketsInterface, ReadProvidersInterface};
 use sp_core::H256;
 
 mod relay_token {
@@ -1150,7 +1150,6 @@ mod users {
     use pallet_file_system::types::MaxPeerIdSize;
     use pallet_storage_providers::types::ValuePropId;
     use pallet_storage_providers::types::ValueProposition;
-    use shp_traits::ReadProvidersInterface;
     use sp_trie::CompactProof;
     use storagehub::configs::BucketNameLimit;
     use storagehub::configs::SpMinDeposit;

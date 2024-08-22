@@ -4684,7 +4684,7 @@ declare module "@polkadot/types/lookup" {
   /** @name PalletStorageProvidersBackupStorageProvider (391) */
   interface PalletStorageProvidersBackupStorageProvider extends Struct {
     readonly capacity: u32;
-    readonly dataUsed: u32;
+    readonly capacityUsed: u32;
     readonly multiaddresses: Vec<Bytes>;
     readonly root: H256;
     readonly lastCapacityChange: u32;
@@ -4697,7 +4697,7 @@ declare module "@polkadot/types/lookup" {
   interface PalletStorageProvidersMainStorageProvider extends Struct {
     readonly buckets: Vec<PalletStorageProvidersBucket>;
     readonly capacity: u32;
-    readonly dataUsed: u32;
+    readonly capacityUsed: u32;
     readonly multiaddresses: Vec<Bytes>;
     readonly valueProp: PalletStorageProvidersValueProposition;
     readonly lastCapacityChange: u32;

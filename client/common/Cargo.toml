@@ -23,6 +23,7 @@ trie-db = { workspace = true }
 
 # Substrate
 frame-system = { workspace = true }
+frame-benchmarking = { workspace = true }
 sc-executor = { workspace = true }
 sc-network = { workspace = true }
 sc-service = { workspace = true }
@@ -50,3 +51,13 @@ shp-traits = { workspace = true }
 pallet-file-system = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-storage-providers = { workspace = true }
+
+[features]
+runtime-benchmarks = [
+	"frame-benchmarking/runtime-benchmarks",
+	"frame-system/runtime-benchmarks",
+	"pallet-file-system/runtime-benchmarks",
+	"pallet-proofs-dealer/runtime-benchmarks",
+	"pallet-storage-providers/runtime-benchmarks",
+	"sp-runtime/runtime-benchmarks",
+]

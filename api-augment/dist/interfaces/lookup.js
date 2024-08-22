@@ -3770,7 +3770,7 @@ export default {
    **/
   PalletStorageProvidersBackupStorageProvider: {
     capacity: "u32",
-    dataUsed: "u32",
+    capacityUsed: "u32",
     multiaddresses: "Vec<Bytes>",
     root: "H256",
     lastCapacityChange: "u32",
@@ -3784,7 +3784,7 @@ export default {
   PalletStorageProvidersMainStorageProvider: {
     buckets: "Vec<PalletStorageProvidersBucket>",
     capacity: "u32",
-    dataUsed: "u32",
+    capacityUsed: "u32",
     multiaddresses: "Vec<Bytes>",
     valueProp: "PalletStorageProvidersValueProposition",
     lastCapacityChange: "u32",

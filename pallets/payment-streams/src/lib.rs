@@ -35,10 +35,7 @@ pub mod pallet {
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
-    use shp_traits::{
-        ProofSubmittersInterface, ProvidersInterface, ReadProvidersInterface,
-        SystemMetricsInterface,
-    };
+    use shp_traits::{ProofSubmittersInterface, ReadProvidersInterface, SystemMetricsInterface};
     use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, Saturating};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -54,13 +51,12 @@ pub mod pallet {
             + hold::Mutate<Self::AccountId, Reason = Self::RuntimeHoldReason>;
 
         /// The trait for reading provider data.
-        type ProvidersPallet: ProvidersInterface<AccountId = Self::AccountId>
-            + ReadProvidersInterface<AccountId = Self::AccountId>
+        type ProvidersPallet: ReadProvidersInterface<AccountId = Self::AccountId>
             + SystemMetricsInterface<ProvidedUnit = Self::Units>;
 
         /// The trait exposing data of which providers submitted valid proofs in which ticks
         type ProvidersProofSubmitters: ProofSubmittersInterface<
-            ProviderId = <Self::ProvidersPallet as ProvidersInterface>::ProviderId,
+            ProviderId = <Self::ProvidersPallet as ReadProvidersInterface>::ProviderId,
             TickNumber = BlockNumberFor<Self>,
         >;
 
@@ -639,7 +635,7 @@ pub mod pallet {
 
             // Get the Provider ID of the signer
             let provider_id =
-                <T::ProvidersPallet as ProvidersInterface>::get_provider_id(provider_account)
+                <T::ProvidersPallet as ReadProvidersInterface>::get_provider_id(provider_account)
                     .ok_or(Error::<T>::NotAProvider)?;
 
             // Execute checks and logic, update storage

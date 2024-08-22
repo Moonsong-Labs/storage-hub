@@ -463,7 +463,7 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
-    type StorageData = u32;
+    type StorageDataUnit = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
     type DefaultMerkleRoot = DefaultMerkleRoot<StorageProofsMerkleTrieLayout>;
@@ -697,7 +697,7 @@ impl Convert<ChunkId, H256> for ChunkIdToMerkleHashConverter {
 
 impl pallet_bucket_nfts::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type Providers = Providers;
+    type Buckets = Providers;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
 }

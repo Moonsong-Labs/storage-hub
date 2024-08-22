@@ -25,7 +25,7 @@ pub use pallet::*;
 pub use scale_info::Type;
 use types::{
     BackupStorageProvider, BackupStorageProviderId, BalanceOf, BucketId, HashId,
-    MainStorageProviderId, MerklePatriciaRoot, StorageData, StorageProvider,
+    MainStorageProviderId, MerklePatriciaRoot, StorageDataUnit, StorageProvider,
 };
 
 #[frame_support::pallet]
@@ -69,7 +69,7 @@ pub mod pallet {
         type RuntimeHoldReason: From<HoldReason>;
 
         /// Data type for the measurement of storage size
-        type StorageData: Parameter
+        type StorageDataUnit: Parameter
             + Member
             + MaybeSerializeDeserialize
             + Default
@@ -162,9 +162,9 @@ pub mod pallet {
 
         /// The amount that a BSP receives as allocation of storage capacity when it deposits SpMinDeposit.
         #[pallet::constant]
-        type SpMinCapacity: Get<StorageData<Self>>;
+        type SpMinCapacity: Get<StorageDataUnit<Self>>;
 
-        /// The slope of the collateral vs storage capacity curve. In other terms, how many tokens a Storage Provider should add as collateral to increase its storage capacity in one unit of StorageData.
+        /// The slope of the collateral vs storage capacity curve. In other terms, how many tokens a Storage Provider should add as collateral to increase its storage capacity in one unit of StorageDataUnit.
         #[pallet::constant]
         type DepositPerData: Get<BalanceOf<Self>>;
 
@@ -340,14 +340,14 @@ pub mod pallet {
     /// - [confirm_sign_up](crate::dispatchables::confirm_sign_up), which adds the capacity of the registered Storage Provider to this storage if the account to confirm is a Backup Storage Provider.
     /// - [bsp_sign_off](crate::dispatchables::bsp_sign_off), which subtracts the capacity of the Backup Storage Provider to sign off from this storage.
     #[pallet::storage]
-    pub type TotalBspsCapacity<T: Config> = StorageValue<_, StorageData<T>, ValueQuery>;
+    pub type TotalBspsCapacity<T: Config> = StorageValue<_, StorageDataUnit<T>, ValueQuery>;
 
     /// The total amount of storage capacity of BSPs that is currently in use.
     ///
     /// This is used to keep track of the total amount of storage capacity that is currently in use by users, which is useful for
     /// system metrics and also to calculate the current price of storage.
     #[pallet::storage]
-    pub type UsedBspsCapacity<T: Config> = StorageValue<_, StorageData<T>, ValueQuery>;
+    pub type UsedBspsCapacity<T: Config> = StorageValue<_, StorageDataUnit<T>, ValueQuery>;
 
     /// The total global reputation weight of all BSPs.
     #[pallet::storage]
@@ -364,7 +364,7 @@ pub mod pallet {
         MspRequestSignUpSuccess {
             who: T::AccountId,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
-            capacity: StorageData<T>,
+            capacity: StorageDataUnit<T>,
             value_prop: ValueProposition<T>,
         },
 
@@ -373,7 +373,7 @@ pub mod pallet {
         MspSignUpSuccess {
             who: T::AccountId,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
-            capacity: StorageData<T>,
+            capacity: StorageDataUnit<T>,
             value_prop: ValueProposition<T>,
         },
 
@@ -382,7 +382,7 @@ pub mod pallet {
         BspRequestSignUpSuccess {
             who: T::AccountId,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
-            capacity: StorageData<T>,
+            capacity: StorageDataUnit<T>,
         },
 
         /// Event emitted when a Backup Storage Provider has confirmed its sign up successfully. Provides information about
@@ -390,7 +390,7 @@ pub mod pallet {
         BspSignUpSuccess {
             who: T::AccountId,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
-            capacity: StorageData<T>,
+            capacity: StorageDataUnit<T>,
         },
 
         /// Event emitted when a sign up request has been canceled successfully. Provides information about
@@ -409,8 +409,8 @@ pub mod pallet {
         /// that SP's account id, its old total data that could store, and the new total data.
         CapacityChanged {
             who: T::AccountId,
-            old_capacity: StorageData<T>,
-            new_capacity: StorageData<T>,
+            old_capacity: StorageDataUnit<T>,
+            new_capacity: StorageDataUnit<T>,
             next_block_when_change_allowed: BlockNumberFor<T>,
         },
 
@@ -535,7 +535,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn request_msp_sign_up(
             origin: OriginFor<T>,
-            capacity: StorageData<T>,
+            capacity: StorageDataUnit<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             value_prop: ValueProposition<T>,
             payment_account: T::AccountId,
@@ -547,7 +547,7 @@ pub mod pallet {
             let msp_info = MainStorageProvider {
                 buckets: BoundedVec::default(),
                 capacity,
-                data_used: StorageData::<T>::default(),
+                capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
                 value_prop: value_prop.clone(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
@@ -597,7 +597,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn request_bsp_sign_up(
             origin: OriginFor<T>,
-            capacity: StorageData<T>,
+            capacity: StorageDataUnit<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
@@ -607,7 +607,7 @@ pub mod pallet {
             // Set up a structure with the information of the new BSP
             let bsp_info = BackupStorageProvider {
                 capacity,
-                data_used: StorageData::<T>::default(),
+                capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
                 root: T::DefaultMerkleRoot::get(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
@@ -789,7 +789,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn change_capacity(
             origin: OriginFor<T>,
-            new_capacity: StorageData<T>,
+            new_capacity: StorageDataUnit<T>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -865,7 +865,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             who: T::AccountId,
             msp_id: MainStorageProviderId<T>,
-            capacity: StorageData<T>,
+            capacity: StorageDataUnit<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             value_prop: ValueProposition<T>,
             payment_account: T::AccountId,
@@ -877,7 +877,7 @@ pub mod pallet {
             let msp_info = MainStorageProvider {
                 buckets: BoundedVec::default(),
                 capacity,
-                data_used: StorageData::<T>::default(),
+                capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
                 value_prop: value_prop.clone(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
@@ -933,7 +933,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             who: T::AccountId,
             bsp_id: BackupStorageProviderId<T>,
-            capacity: StorageData<T>,
+            capacity: StorageDataUnit<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             payment_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
@@ -943,7 +943,7 @@ pub mod pallet {
             // Set up a structure with the information of the new BSP
             let bsp_info = BackupStorageProvider {
                 capacity,
-                data_used: StorageData::<T>::default(),
+                capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
                 root: T::DefaultMerkleRoot::get(),
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
@@ -999,7 +999,7 @@ impl<T: Config> Pallet<T> {
     }
 
     /// A helper function to get the total capacity of a storage provider.
-    pub fn get_total_capacity_of_sp(who: &T::AccountId) -> Result<StorageData<T>, Error<T>> {
+    pub fn get_total_capacity_of_sp(who: &T::AccountId) -> Result<StorageDataUnit<T>, Error<T>> {
         if let Some(m_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             let msp = MainStorageProviders::<T>::get(m_id).ok_or(Error::<T>::NotRegistered)?;
             Ok(msp.capacity)
@@ -1012,29 +1012,29 @@ impl<T: Config> Pallet<T> {
     }
 
     /// A helper function to get the total capacity of all BSPs which is the total capacity of the network.
-    pub fn get_total_bsp_capacity() -> StorageData<T> {
+    pub fn get_total_bsp_capacity() -> StorageDataUnit<T> {
         TotalBspsCapacity::<T>::get()
     }
 
     /// A helper function to get the total used capacity of all BSPs.
-    pub fn get_used_bsp_capacity() -> StorageData<T> {
+    pub fn get_used_bsp_capacity() -> StorageDataUnit<T> {
         UsedBspsCapacity::<T>::get()
     }
 
     /// A helper function to get the total data used by a Main Storage Provider.
     pub fn get_used_storage_of_msp(
         who: &MainStorageProviderId<T>,
-    ) -> Result<StorageData<T>, Error<T>> {
+    ) -> Result<StorageDataUnit<T>, Error<T>> {
         let msp = MainStorageProviders::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
-        Ok(msp.data_used)
+        Ok(msp.capacity_used)
     }
 
     /// A helper function to get the total data used by a Backup Storage Provider.
     pub fn get_used_storage_of_bsp(
         who: &BackupStorageProviderId<T>,
-    ) -> Result<StorageData<T>, Error<T>> {
+    ) -> Result<StorageDataUnit<T>, Error<T>> {
         let bsp = BackupStorageProviders::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
-        Ok(bsp.data_used)
+        Ok(bsp.capacity_used)
     }
 
     /// A helper function to get the total amount of Backup Storage Providers that have registered.

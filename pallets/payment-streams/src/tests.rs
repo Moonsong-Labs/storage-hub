@@ -12,7 +12,7 @@ use frame_support::{
     weights::WeightMeter,
     BoundedVec,
 };
-use shp_traits::{PaymentStreamsInterface, ProvidersInterface};
+use shp_traits::{PaymentStreamsInterface, ReadProvidersInterface};
 use sp_core::H256;
 use sp_runtime::{traits::Convert, DispatchError};
 
@@ -23,7 +23,7 @@ pub type NewStreamDeposit = <Test as crate::Config>::NewStreamDeposit;
 pub type BlockNumberToBalance = <Test as crate::Config>::BlockNumberToBalance;
 
 // `storage-providers` types:
-pub type StorageData<Test> = <Test as pallet_storage_providers::Config>::StorageData;
+pub type StorageData<Test> = <Test as pallet_storage_providers::Config>::StorageDataUnit;
 pub type SpMinDeposit = <Test as pallet_storage_providers::Config>::SpMinDeposit;
 pub type DepositPerData = <Test as pallet_storage_providers::Config>::DepositPerData;
 pub type SpMinCapacity = <Test as pallet_storage_providers::Config>::SpMinCapacity;
@@ -52,7 +52,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
@@ -115,7 +115,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
@@ -168,12 +168,12 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Register Charlie as a MSP with 1000 units of data and get his MSP ID
                 register_account_as_msp(charlie, 1000);
                 let charlie_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(charlie).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
 
                 // Create a payment stream from Bob to Alice of `bob_initial_balance / 20 + 1` units per block
                 let rate: BalanceOf<Test> = bob_initial_balance / 20 + 1; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
@@ -228,7 +228,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Transfer almost all of Bob's balance to Alice (Bob keeps `rate * NewStreamDeposit - 1` balance)
                 let new_stream_deposit_blocks_balance_typed =
@@ -263,12 +263,12 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Register Charlie as a MSP with 1000 units of data and get his MSP ID
                 register_account_as_msp(charlie, 1000);
                 let charlie_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(charlie).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
 
                 // Set the amount of payment streams that Bob has to u32::MAX - 1
                 RegisteredUsers::<Test>::insert(&bob, u32::MAX - 1);
@@ -349,7 +349,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
@@ -400,7 +400,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
@@ -434,7 +434,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
@@ -467,7 +467,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Try to update the rate of a payment stream that does not exist
                 assert_noop!(
@@ -509,7 +509,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of `bob_initial_balance / 20 + 1` units per block
                 let rate: BalanceOf<Test> = bob_initial_balance / 20 + 1; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
@@ -563,7 +563,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
@@ -655,7 +655,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
@@ -714,7 +714,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Try to delete a payment stream that does not exist
                 assert_noop!(
@@ -753,7 +753,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of `bob_initial_balance / 20 + 1` units per block
                 let rate: BalanceOf<Test> = bob_initial_balance / 20 + 1; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
@@ -805,7 +805,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
@@ -888,7 +888,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
@@ -960,7 +960,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
@@ -1045,7 +1045,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
@@ -1145,7 +1145,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
                 let rate: BalanceOf<Test> = 10;
@@ -1289,7 +1289,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Mint Bob enough tokens to pay for the deposit
                 let maximum_amount_to_mint = u128::MAX - NativeBalance::total_issuance();
@@ -1349,12 +1349,12 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Register Charlie as a MSP with 1000 units of data and get his MSP ID
                 register_account_as_msp(charlie, 1000);
                 let charlie_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(charlie).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
 
                 // Create a payment stream from Bob to Alice of `bob_initial_balance / 20 + 1` units per block
                 let rate: BalanceOf<Test> = bob_initial_balance / 20 + 1; // Bob will have enough balance to pay for only 9 blocks, will come short on the 10th because of the deposit
@@ -1426,7 +1426,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Register Charlie as a MSP with 1000 units of data
                 register_account_as_msp(charlie, 1000);
@@ -1520,7 +1520,7 @@ mod fixed_rate_streams {
                 // Register Alice as a MSP with 100 units of data and get her MSP ID
                 register_account_as_msp(alice_on_poll, 100);
                 let alice_msp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice_on_poll)
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice_on_poll)
                         .unwrap();
 
                 // Create a payment stream from Bob to Alice of 10 units per block
@@ -1575,7 +1575,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -1658,7 +1658,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -1729,12 +1729,12 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Register Charlie as a BSP with 1000 units of data and get his BSP ID
                 register_account_as_bsp(charlie, 1000);
                 let charlie_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(charlie).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -1808,7 +1808,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -1855,12 +1855,12 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Register Charlie as a BSP with 1000 units of data and get his BSP ID
                 register_account_as_bsp(charlie, 1000);
                 let charlie_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(charlie).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -1952,7 +1952,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -2012,7 +2012,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -2055,7 +2055,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -2096,7 +2096,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Try to update the rate of a payment stream that does not exist
                 assert_noop!(
@@ -2144,7 +2144,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -2218,7 +2218,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -2325,7 +2325,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -2391,7 +2391,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Try to delete a payment stream that does not exist
                 assert_noop!(
@@ -2433,7 +2433,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -2504,7 +2504,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -2599,7 +2599,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -2684,7 +2684,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -2772,7 +2772,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -2884,7 +2884,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -3040,7 +3040,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -3103,12 +3103,12 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Register Charlie as a BSP with 1000 units of data and get his BSP ID
                 register_account_as_bsp(charlie, 1000);
                 let charlie_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(charlie).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
 
                 // Update the current price and current price index
                 CurrentPricePerUnitPerTick::<Test>::put(current_price);
@@ -3194,7 +3194,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice).unwrap();
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
 
                 // Register Charlie as a BSP with 1000 units of data
                 register_account_as_bsp(charlie, 1000);
@@ -3302,7 +3302,7 @@ mod dynamic_rate_streams {
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice_on_poll, 100);
                 let alice_bsp_id =
-                    <StorageProviders as ProvidersInterface>::get_provider_id(alice_on_poll)
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice_on_poll)
                         .unwrap();
 
                 // Update the current price and current price index
