@@ -3820,7 +3820,7 @@ mod compute_threshold {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -3876,7 +3876,7 @@ mod compute_threshold {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
