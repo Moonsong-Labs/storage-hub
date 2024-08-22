@@ -28,7 +28,7 @@ use pallet_file_system_runtime_api::{
 use pallet_proofs_dealer_runtime_api::{
     GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError, ProofsDealerApi,
 };
-use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
+use shc_common::types::{BlockNumber, ParachainClient, ProviderId, StorageProviderId};
 
 use crate::{
     commands::BlockchainServiceCommand,
@@ -361,7 +361,21 @@ impl Actor for BlockchainService {
                         .client
                         .runtime_api()
                         .get_storage_provider_id(current_block_hash, &node_pub_key.into())
-                        .unwrap_or_else(|_| None);
+                        .map(|provider_id| {
+                            if let Some(provider_id) = provider_id {
+                                match provider_id {
+                                    StorageProviderId::BackupStorageProvider(id) | StorageProviderId::MainStorageProvider(id) => {
+                                        Some(id)
+                                    }
+                                }
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|_| {
+                            warn!(target: LOG_TARGET, "There is no provider ID for key: {:?}. This means that the node has a BCSV key in the keystore for which there is no provider ID.", node_pub_key);
+                            None
+                        });
 
                     match callback.send(provider_id) {
                         Ok(_) => {
