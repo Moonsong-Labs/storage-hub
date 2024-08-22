@@ -134,6 +134,7 @@ pub mod pallet {
             + CheckedAdd
             + CheckedSub
             + PartialOrd
+            + One
             + Zero;
 
         /// The type to convert a threshold to a block number.

@@ -5,7 +5,9 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use num_bigint::BigUint;
 use sp_runtime::{
-    traits::{CheckedAdd, CheckedDiv, CheckedSub, Convert, Hash, Saturating, Zero},
+    traits::{
+        CheckedAdd, CheckedDiv, CheckedSub, Convert, ConvertBack, Hash, One, Saturating, Zero,
+    },
     ArithmeticError, BoundedVec, DispatchError,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec, vec::Vec};
@@ -19,7 +21,7 @@ use shp_traits::{
     MutateProvidersInterface, ProvidersInterface, ReadProvidersInterface, TrieAddMutation,
     TrieRemoveMutation,
 };
-use sp_runtime::traits::{CheckedMul, ConvertBack, One};
+use sp_runtime::traits::CheckedMul;
 
 use crate::types::{BucketNameFor, ExpiredItems, ReplicationTargetType};
 use crate::{
@@ -1176,16 +1178,17 @@ where
             return Err(Error::<T>::NoGlobalReputationWeightSet.into());
         }
 
-        let replication_target = T::ThresholdType::from(ReplicationTarget::<T>::get());
-
         // Global threshold starting point from which all BSPs begin their threshold slope. All BSPs start at this point
         // with the starting reputation weight.
         let threshold_global_starting_point = maximum_threshold
-            .checked_mul(&(replication_target / global_weight / 2.into()))
-            .unwrap_or_else(|| {
-                log::warn!("Global starting point is beyond MaximumThreshold. Setting it to half of the MaximumThreshold.");
-                maximum_threshold / 2.into()
-            });
+            .checked_div(&global_weight)
+            .unwrap_or(T::ThresholdType::one())
+            .checked_mul(&ReplicationTarget::<T>::get().into()).unwrap_or({
+            log::warn!("Global starting point is beyond MaximumThreshold. Setting it to half of the MaximumThreshold.");
+            maximum_threshold / 2.into()
+        })
+            .checked_div(&T::ThresholdType::from(2u32))
+            .unwrap_or(T::ThresholdType::one());
 
         // Get the BSP's reputation weight.
         let bsp_weight = T::ThresholdType::from(T::Providers::get_bsp_reputation_weight(&bsp_id)?);
@@ -1195,8 +1198,12 @@ where
             bsp_weight.saturating_mul(threshold_global_starting_point);
 
         // Rate of increase from the weighted threshold starting point up to the maximum threshold within a block range.
-        let threshold_slope = maximum_threshold.saturating_sub(threshold_weighted_starting_point)
-            / T::ThresholdTypeToBlockNumber::convert_back(BlockRangeToMaximumThreshold::<T>::get());
+        let threshold_slope = maximum_threshold
+            .saturating_sub(threshold_weighted_starting_point)
+            .checked_div(&T::ThresholdTypeToBlockNumber::convert_back(
+                BlockRangeToMaximumThreshold::<T>::get(),
+            ))
+            .unwrap_or(T::ThresholdType::one());
 
         let current_block_number = <frame_system::Pallet<T>>::block_number();
 
