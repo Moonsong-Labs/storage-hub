@@ -17,8 +17,7 @@ use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::types::{BlockNumber, ParachainClient, ProviderId, BCSV_KEY_TYPE};
 use sp_api::ProvideRuntimeApi;
-use sp_core::Get;
-use sp_core::{Blake2Hasher, Hasher, H256};
+use sp_core::{Blake2Hasher, Get, Hasher, H256};
 use sp_keystore::KeystorePtr;
 use sp_runtime::{
     generic::{self, SignedPayload},
@@ -473,7 +472,7 @@ impl BlockchainService {
             }
         }
 
-        // If we have atleast 1 confirm storing request, send the process event.
+        // If we have at least 1 confirm storing request, send the process event.
         if file_keys.len() > 0 {
             self.emit(ProcessConfirmStoringRequest {
                 file_keys,
