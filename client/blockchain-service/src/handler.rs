@@ -65,13 +65,22 @@ impl SubmitProofRequest {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ConfirmStoringRequest {
     pub file_key: H256,
+    pub try_count: usize,
 }
 
 impl ConfirmStoringRequest {
     pub fn new(file_key: H256) -> Self {
-        Self { file_key }
+        Self {
+            file_key,
+            try_count: 0,
+        }
+    }
+
+    pub fn increment_try_count(&mut self) {
+        self.try_count += 1;
     }
 }
 

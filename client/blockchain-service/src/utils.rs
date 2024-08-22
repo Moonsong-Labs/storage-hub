@@ -464,19 +464,19 @@ impl BlockchainService {
             <<Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests as Get<u32>>::get();
 
         // Batch multiple confirm file storing taking the runtime maximum.
-        let mut file_keys = Vec::new();
+        let mut confirm_storing_requests = Vec::new();
         for _ in 0..max_batch_confirm {
             if let Some(request) = self.pending_confirm_storing.pop_front() {
-                file_keys.push(request.file_key);
+                confirm_storing_requests.push(request);
             } else {
                 break;
             }
         }
 
         // If we have atleast 1 confirm storing request, send the process event.
-        if file_keys.len() > 0 {
+        if confirm_storing_requests.len() > 0 {
             self.emit(ProcessConfirmStoringRequest {
-                file_keys,
+                confirm_storing_requests,
                 forest_root_write_tx,
             });
         }
