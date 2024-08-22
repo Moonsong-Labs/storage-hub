@@ -2,6 +2,79 @@ import type { EventRecord } from "@polkadot/types/interfaces";
 import { strictEqual } from "node:assert";
 import type { ApiPromise } from "@polkadot/api";
 import type { AugmentedEvent } from "@polkadot/api/types";
+import type { BspNetApi } from "./bspNet";
+
+//TODO: add ability to search nested extrinsics e.g. sudo.sudo(balance.forceTransfer(...))
+export const assertExtrinsicPresent = async (
+  api: BspNetApi,
+  options: {
+    blockHeight?: string;
+    blockHash?: string;
+    skipSuccessCheck?: boolean;
+    checkTxPool?: boolean;
+    module: string;
+    method: string;
+    ignoreParamCheck?: boolean;
+  }
+): Promise<
+  {
+    module: string;
+    method: string;
+    extIndex: number;
+  }[]
+> => {
+  if (options.ignoreParamCheck !== true) {
+    strictEqual(
+      options.module in api.tx,
+      true,
+      `Module ${options.module} not found in API metadata. Turn off this check with "ignoreParamCheck: true" if you are sure this exists`
+    );
+    strictEqual(
+      options.method in api.tx[options.module],
+      true,
+      `Method ${options.module}.${options.method} not found in metadata. Turn off this check with "ignoreParamCheck: true" if you are sure this exists`
+    );
+  }
+
+  const blockHash = options?.blockHash
+    ? options.blockHash
+    : options?.blockHeight
+      ? await api.rpc.chain.getBlockHash(options?.blockHeight)
+      : await api.rpc.chain.getBlockHash();
+
+  const extrinsics = !options.checkTxPool
+    ? await (async () => {
+        const response = await api.rpc.chain.getBlock(blockHash);
+
+        if (!options.blockHeight && !options.blockHash) {
+          console.log(
+            `No block height provided, using latest at ${response.block.header.number.toNumber()}`
+          );
+        }
+        return response.block.extrinsics;
+      })()
+    : await api.rpc.author.pendingExtrinsics();
+  const transformed = extrinsics.map(({ method: { method, section } }, index) => {
+    return { module: section, method, extIndex: index };
+  });
+
+  const matches = transformed.filter(
+    ({ method, module }) => method === options?.method && module === options?.module
+  );
+
+  strictEqual(
+    matches.length > 0,
+    true,
+    `No extrinsics matching ${options?.module}.${options?.method} found. \n Extrinsics in block ${options.blockHeight || blockHash}: ${extrinsics.map(({ method: { method, section } }) => `${section}.${method}`).join(" | ")}`
+  );
+
+  if (options?.skipSuccessCheck !== true && options.checkTxPool !== true) {
+    const events = await (await api.at(blockHash)).query.system.events();
+    assertEventPresent(api, "system", "ExtrinsicSuccess", events);
+  }
+
+  return matches;
+};
 
 export const assertEventPresent = (
   api: ApiPromise,

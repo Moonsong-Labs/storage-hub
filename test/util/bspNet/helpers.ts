@@ -1,3 +1,4 @@
+import "@storagehub/api-augment";
 import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
@@ -756,9 +757,12 @@ export const createBucket = async (api: ApiPromise, bucketName: string) => {
   return event;
 };
 
-export const cleardownTest = async (api: BspNetApi) => {
-  await api.disconnect();
-  await closeSimpleBspNet();
+export const cleardownTest = async (cleardownOptions: {
+  api: BspNetApi;
+  keepNetworkAlive?: boolean;
+}) => {
+  await cleardownOptions.api.disconnect();
+  cleardownOptions.keepNetworkAlive === true ? null : await closeSimpleBspNet();
 };
 
 export const createCheckBucket = async (api: BspNetApi, bucketName: string) => {
