@@ -13,7 +13,8 @@ use pallet_file_system_runtime_api::{
 };
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, ChunkId, ForestLeaf, ProviderId, RandomnessOutput, TrieRemoveMutation,
+    BlockNumber, ChunkId, ForestLeaf, ProviderId, RandomnessOutput, StorageProviderId,
+    TrieRemoveMutation,
 };
 
 use super::{
@@ -51,7 +52,7 @@ pub enum BlockchainServiceCommand {
         callback: tokio::sync::oneshot::Sender<sp_core::sr25519::Public>,
     },
     QueryBspConfirmChunksToProveForFile {
-        bsp_id: sp_core::sr25519::Public,
+        bsp_id: ProviderId,
         file_key: H256,
         callback: tokio::sync::oneshot::Sender<
             Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>,
@@ -95,6 +96,10 @@ pub enum BlockchainServiceCommand {
         provider_id: ProviderId,
         callback: tokio::sync::oneshot::Sender<Result<H256, GetBspInfoError>>,
     },
+    QueryStorageProviderId {
+        account: sp_core::sr25519::Public,
+        callback: tokio::sync::oneshot::Sender<Result<Option<StorageProviderId>>>,
+    },
 }
 
 /// Interface for interacting with the BlockchainService actor.
@@ -135,7 +140,7 @@ pub trait BlockchainServiceInterface {
     /// Query the chunks that a BSP needs to confirm for a file.
     async fn query_bsp_confirm_chunks_to_prove_for_file(
         &self,
-        bsp_id: sp_core::sr25519::Public,
+        bsp_id: ProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
 
@@ -183,6 +188,12 @@ pub trait BlockchainServiceInterface {
         &self,
         provider_id: ProviderId,
     ) -> Result<H256, GetBspInfoError>;
+
+    /// Query the ProviderId for a given account.
+    async fn query_storage_provider_id(
+        &self,
+        account: sp_core::sr25519::Public,
+    ) -> Result<Option<StorageProviderId>>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -297,7 +308,7 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
 
     async fn query_bsp_confirm_chunks_to_prove_for_file(
         &self,
-        bsp_id: sp_core::sr25519::Public,
+        bsp_id: ProviderId,
         file_key: H256,
     ) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
@@ -397,6 +408,16 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
             provider_id,
             callback,
         };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_storage_provider_id(
+        &self,
+        account: sp_core::sr25519::Public,
+    ) -> Result<Option<StorageProviderId>> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryStorageProviderId { account, callback };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }

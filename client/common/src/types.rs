@@ -34,6 +34,7 @@ pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
 pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
 pub type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<Runtime>;
 pub type ProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
+pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<Runtime>;
 pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
 pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;
 pub type ForestRoot = pallet_proofs_dealer::types::ForestRootFor<Runtime>;

@@ -13,7 +13,9 @@ use shc_blockchain_service::{
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
     handler::ConfirmStoringRequest,
 };
-use shc_common::types::{FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout};
+use shc_common::types::{
+    FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
+};
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
@@ -252,11 +254,33 @@ where
             }
         };
 
-        let own_bsp_id = self
+        let own_account = self
             .storage_hub_handler
             .blockchain
             .get_node_public_key()
             .await;
+
+        let own_bsp_id = self
+            .storage_hub_handler
+            .blockchain
+            .query_storage_provider_id(own_account)
+            .await?;
+
+        let own_bsp_id = match own_bsp_id {
+            Some(id) => match id {
+                StorageProviderId::MainStorageProvider(_) => {
+                    error!(target: LOG_TARGET, "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.");
+                    return Err(anyhow!(
+                        "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID."
+                    ));
+                }
+                StorageProviderId::BackupStorageProvider(id) => id,
+            },
+            None => {
+                error!(target: LOG_TARGET, "Failed to get own BSP ID.");
+                return Err(anyhow!("Failed to get own BSP ID."));
+            }
+        };
 
         // Query runtime for the chunks to prove for the file.
         let mut confirm_storing_requests_with_chunks_to_prove = Vec::new();

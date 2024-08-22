@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     str::FromStr,
@@ -531,6 +532,22 @@ impl Actor for BlockchainService {
                         Ok(_) => {}
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryStorageProviderId { account, callback } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let provider_id = self
+                        .client
+                        .runtime_api()
+                        .get_storage_provider_id(current_block_hash, &account.into())
+                        .map_err(|_| anyhow!("Internal API error"));
+
+                    match callback.send(provider_id) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send storage provider ID: {:?}", e);
                         }
                     }
                 }
