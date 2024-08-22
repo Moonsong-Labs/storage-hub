@@ -493,7 +493,7 @@ pub trait ReadProvidersInterface {
     ) -> Option<<Self::Balance as fungible::Inspect<Self::AccountId>>::Balance>;
 }
 
-/// A trait to mutate the state of a genneric Provider, such as updating their root.
+/// A trait to mutate the state of a generic Provider, such as updating their root.
 pub trait MutateProvidersInterface {
     /// Type of the registered Providers' IDs.
     type ProviderId: Parameter
