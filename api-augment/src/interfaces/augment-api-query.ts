@@ -335,7 +335,6 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;
       /**
-       * Number of BSPs required to fulfill a storage request
        * Pending file stop storing requests.
        *
        * A double mapping from BSP IDs to a list of file keys pending stop storing requests to the block in which those requests were opened
@@ -353,6 +352,7 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
+       * Number of BSPs required to fulfill a storage request
        *
        * This is also used as a default value if the BSPs required are not specified when creating a storage request.
        **/
