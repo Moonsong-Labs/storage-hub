@@ -17,13 +17,14 @@ use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::types::{BlockNumber, ParachainClient, ProviderId, BCSV_KEY_TYPE};
 use sp_api::ProvideRuntimeApi;
+use sp_core::Get;
 use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::KeystorePtr;
 use sp_runtime::{
     generic::{self, SignedPayload},
     SaturatedConversion,
 };
-use storage_hub_runtime::{SignedExtra, UncheckedExtrinsic};
+use storage_hub_runtime::{Runtime, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
@@ -459,14 +460,23 @@ impl BlockchainService {
             });
             return;
         }
+        let max_batch_confirm =
+            <<Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests as Get<u32>>::get();
 
-        // If we have a confirm storing request, start processing it.
-        if let Some(request) = self.pending_confirm_storing.pop_front() {
+        // Batch multiple confirm file storing taking the runtime maximum.
+        let file_keys: Vec<_> = self
+            .pending_confirm_storing
+            .iter()
+            .take(max_batch_confirm as usize)
+            .map(|request| request.file_key)
+            .collect();
+
+        // If we have atleast 1 confirm storing request, send the process event.
+        if file_keys.len() > 0 {
             self.emit(ProcessConfirmStoringRequest {
-                file_key: request.file_key,
+                file_keys,
                 forest_root_write_tx,
             });
-            return;
         }
     }
 }

@@ -237,7 +237,7 @@ where
         info!(
             target: LOG_TARGET,
             "Processing ConfirmStoringRequest: {:?}",
-            event.file_key,
+            event.file_keys,
         );
 
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
@@ -250,50 +250,79 @@ where
             }
         };
 
-        // Query runtime for the chunks to prove for the file.
-        let chunks_to_prove = self
+        let own_bsp_id = self
             .storage_hub_handler
             .blockchain
-            .query_bsp_confirm_chunks_to_prove_for_file(
-                self.storage_hub_handler
-                    .blockchain
-                    .get_node_public_key()
-                    .await,
-                event.file_key,
-            )
-            .await
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to query BSP confirm chunks to prove for file: {:?}",
-                    e
-                )
-            })?;
+            .get_node_public_key()
+            .await;
 
-        // Generate the proof for the file.
+        // Query runtime for the chunks to prove for the file.
+        let mut file_key_with_chunks_to_prove = Vec::new();
+        for file_key in event.file_keys.iter() {
+            match self
+                .storage_hub_handler
+                .blockchain
+                .query_bsp_confirm_chunks_to_prove_for_file(own_bsp_id, *file_key)
+                .await
+            {
+                Ok(chunks_to_prove) => {
+                    file_key_with_chunks_to_prove.push((*file_key, chunks_to_prove));
+                }
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nEnqueuing file key again!", file_key, e);
+                    self.storage_hub_handler
+                        .blockchain
+                        .queue_confirm_bsp_request(ConfirmStoringRequest::new(*file_key))
+                        .await?;
+                }
+            }
+        }
+
+        // Generate the proof for the files and get metadatas.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let added_file_key_proof = read_file_storage
-            .generate_proof(&event.file_key, &chunks_to_prove)
-            .map_err(|_| anyhow!("File is not in storage, or proof does not exist."))?;
+        let mut file_keys_and_proofs = Vec::new();
+        let mut file_metadatas = Vec::new();
+        for (file_key, chunks_to_prove) in file_key_with_chunks_to_prove.into_iter() {
+            match (
+                read_file_storage.generate_proof(&file_key, &chunks_to_prove),
+                read_file_storage.get_metadata(&file_key),
+            ) {
+                (Ok(proof), Ok(metadata)) => {
+                    file_keys_and_proofs.push((file_key, proof));
+                    file_metadatas.push(metadata);
+                }
+                _ => {
+                    error!(target: LOG_TARGET, "Failed to generate proof or get metadatas for file {:?}.\nEnqueuing file key again!", file_key);
+                    self.storage_hub_handler
+                        .blockchain
+                        .queue_confirm_bsp_request(ConfirmStoringRequest::new(file_key))
+                        .await?;
+                }
+            }
+        }
         // Release the file storage read lock as soon as possible.
         drop(read_file_storage);
 
         // Get a read lock on the forest storage to generate a proof for the file.
         let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
-        let non_inclusion_forest_proof =
-            read_forest_storage
-                .generate_proof(vec![event.file_key])
-                .map_err(|_| anyhow!("Failed to generate forest proof."))?;
+        let non_inclusion_forest_proof = read_forest_storage
+            .generate_proof(event.file_keys)
+            .map_err(|_| anyhow!("Failed to generate forest proof."))?;
         // Release the forest storage read lock.
         drop(read_forest_storage);
+
+        if file_keys_and_proofs.is_empty() {
+            error!(target: LOG_TARGET, "Failed to generate proofs for ALL the requested files.\n");
+            return Err(anyhow!(
+                "Failed to generate proofs for ALL the requested files."
+            ));
+        }
 
         // Build extrinsic.
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
             pallet_file_system::Call::bsp_confirm_storing {
                 non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
-                file_keys_and_proofs: BoundedVec::try_from(vec![(
-                    event.file_key,
-                    added_file_key_proof,
-                )])
+                file_keys_and_proofs: BoundedVec::try_from(file_keys_and_proofs)
                 .map_err(|_| {
                     error!("CRITICAL❗️❗️ This is a bug! Failed to convert file keys and proofs to BoundedVec. Please report it to the StorageHub team.");
                     anyhow!("Failed to convert file keys and proofs to BoundedVec.")
@@ -311,18 +340,10 @@ where
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-
-        let file_metadata = read_file_storage
-            .get_metadata(&event.file_key)
-            .map_err(|_| anyhow!("File metadata not found."))?;
-        // Release the file storage lock.
-        drop(read_file_storage);
-
         // Save [`FileMetadata`] of the successfully retrieved stored files in the forest storage.
         let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
         write_forest_storage
-            .insert_files_metadata(&vec![file_metadata])
+            .insert_files_metadata(&file_metadatas)
             .map_err(|_| anyhow!("Failed to insert files metadata into forest storage."))?;
         // Release the forest storage write lock.
         drop(write_forest_storage);

@@ -74,7 +74,7 @@ pub struct ProcessSubmitProofRequest {
 
 #[derive(Debug, Clone)]
 pub struct ProcessConfirmStoringRequest {
-    pub file_key: H256,
+    pub file_keys: Vec<H256>,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
