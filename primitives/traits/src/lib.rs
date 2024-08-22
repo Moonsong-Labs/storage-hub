@@ -165,8 +165,6 @@ pub trait ReadProvidersInterface: ProvidersConfig + ProvidersInterface {
         + MaybeSerializeDeserialize
         + Default
         + Ord
-        + AtLeast32BitUnsigned
-        + Into<u32>
         + FullCodec
         + Copy
         + Debug
