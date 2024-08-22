@@ -238,8 +238,8 @@ for (const bspNetConfig of bspNetConfigCases) {
     });
 
     it("bsp volunteers multiple files properly", async () => {
-      const source = ["res/whatsup.jpg", "res/adolphus.jpg"];
-      const destination = ["test/whatsup.jpg", "test/adolphus.jpg"];
+      const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/smile.jpg"];
+      const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/smile.jpg"];
       const bucketName = "nothingmuch-3";
 
       const newBucketEventEvent = await userApi.createBucket(bucketName);
@@ -303,6 +303,7 @@ for (const bspNetConfig of bspNetConfigCases) {
         await userApi.query.system.events()
       );
 
+      // Here we expect only 1 file to be confirmed since we always prefer smallest possible latency.
       strictEqual(bspConfirmRes_fileKeys.length, 1);
 
       await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
@@ -334,7 +335,8 @@ for (const bspNetConfig of bspNetConfigCases) {
         await userApi.query.system.events()
       );
 
-      strictEqual(bspConfirm2Res_fileKeys.length, 1);
+      // Here we expect 2 batched files to be confirmed. 
+      strictEqual(bspConfirm2Res_fileKeys.length, 2);
 
       await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
       const bspForestRootAfterConfirm2 = await bspApi.rpc.storagehubclient.getForestRoot();
