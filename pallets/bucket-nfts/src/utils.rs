@@ -1,7 +1,7 @@
 use codec::Encode;
 use frame_support::ensure;
 use frame_system::{pallet_prelude::OriginFor, RawOrigin};
-use shp_traits::ReadProvidersInterface;
+use shp_traits::ReadBucketsInterface;
 use sp_runtime::traits::StaticLookup;
 use sp_runtime::DispatchError;
 
@@ -32,7 +32,7 @@ where
 
         // Check if the bucket is private.
         ensure!(
-            T::Providers::is_bucket_private(&bucket)?,
+            T::Buckets::is_bucket_private(&bucket)?,
             Error::<T>::BucketIsNotPrivate
         );
 
@@ -40,7 +40,7 @@ where
         // It is possible that the collection ID does not exist since users
         // can delete collections by calling the nfts pallet directly. Users
         // can call `create_and_associate_collection` from the file system pallet to fix this.
-        let collection_id = T::Providers::get_read_access_group_id_of_bucket(&bucket)?
+        let collection_id = T::Buckets::get_read_access_group_id_of_bucket(&bucket)?
             .ok_or(Error::<T>::NoCorrespondingCollection)?;
 
         let origin = Self::sign(issuer);
@@ -71,14 +71,14 @@ where
     ) -> Result<(), DispatchError> {
         // Check if the bucket is private.
         ensure!(
-            T::Providers::is_bucket_private(&bucket)?,
+            T::Buckets::is_bucket_private(&bucket)?,
             Error::<T>::BucketIsNotPrivate
         );
 
         // Get the collection ID of the bucket.
         // This should never fail because the file system pallet ensures that collections are created whenever a bucket is created with private access
         // or when a bucket is made private after being public.
-        let collection_id = T::Providers::get_read_access_group_id_of_bucket(&bucket)?
+        let collection_id = T::Buckets::get_read_access_group_id_of_bucket(&bucket)?
             .ok_or(Error::<T>::NoCorrespondingCollection)?;
 
         // We do not add any additional redundant checks already covered by the `set_metadata` function from the `pallet-nfts` pallet.

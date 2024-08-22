@@ -155,6 +155,14 @@ impl ProofsDealerInterface for MockProofsDealer {
         Ok(BTreeSet::new())
     }
 
+    fn verify_generic_forest_proof(
+        _root: &Self::MerkleHash,
+        _challenges: &[Self::MerkleHash],
+        _proof: &Self::ForestProof,
+    ) -> Result<BTreeSet<Self::MerkleHash>, sp_runtime::DispatchError> {
+        Ok(BTreeSet::new())
+    }
+
     fn verify_key_proof(
         _key: &Self::MerkleHash,
         _challenges: &[Self::MerkleHash],
@@ -268,7 +276,7 @@ impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageData = u32;
+    type StorageDataUnit = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
@@ -333,7 +341,7 @@ impl Get<AccountId> for TreasuryAccount {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    type Providers = Providers;
+    type Buckets = Providers;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
 }
@@ -357,16 +365,6 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut ext = sp_io::TestExternalities::new(t);
     ext.execute_with(|| System::set_block_number(1));
     ext
-}
-
-// Converter from the Balance type to the BlockNumber type for math.
-// It performs a saturated conversion, so that the result is always a valid BlockNumber.
-pub struct SaturatingBalanceToBlockNumber;
-
-impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
-    fn convert(block_number: Balance) -> BlockNumberFor<Test> {
-        block_number.saturated_into()
-    }
 }
 
 // Converter from the ThresholdType type (FixedU128) to the BlockNumber type (u64).

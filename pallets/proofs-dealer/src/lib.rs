@@ -25,8 +25,8 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{
-        CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, TrieProofDeltaApplier,
-        TrieRemoveMutation,
+        CommitmentVerifier, MutateChallengeableProvidersInterface, ProofsDealerInterface,
+        ReadChallengeableProvidersInterface, TrieProofDeltaApplier, TrieRemoveMutation,
     };
     use sp_runtime::traits::Convert;
     use sp_std::vec::Vec;
@@ -42,11 +42,11 @@ pub mod pallet {
 
         /// The Providers pallet.
         /// To check if whoever submits a proof is a registered Provider.
-        type ProvidersPallet: ProvidersInterface<
-            AccountId = Self::AccountId,
-            MerkleHash = Self::MerkleTrieHash,
-            Balance = Self::NativeBalance,
-        >;
+        type ProvidersPallet: ReadChallengeableProvidersInterface<
+                AccountId = Self::AccountId,
+                MerkleHash = Self::MerkleTrieHash,
+                Balance = Self::NativeBalance,
+            > + MutateChallengeableProvidersInterface<ProviderId = <Self::ProvidersPallet as ReadChallengeableProvidersInterface>::ProviderId, MerkleHash = Self::MerkleTrieHash>;
 
         /// The type used to verify Merkle Patricia Forest proofs.
         /// This verifies proofs of keys belonging to the Merkle Patricia Forest.

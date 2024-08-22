@@ -16,8 +16,10 @@ use frame_support::traits::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_storage_providers_runtime_api::GetBspInfoError;
 use shp_traits::{
-    MutateProvidersInterface, ProofSubmittersInterface, ProvidersConfig, ProvidersInterface,
-    ReadProvidersInterface, SystemMetricsInterface,
+    MutateBucketsInterface, MutateChallengeableProvidersInterface, MutateProvidersInterface,
+    MutateStorageProvidersInterface, ProofSubmittersInterface, ReadBucketsInterface,
+    ReadChallengeableProvidersInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
+    SystemMetricsInterface,
 };
 use sp_runtime::BoundedVec;
 use types::StorageProviderId;
@@ -383,7 +385,7 @@ where
 
         // Check that the MSP has no storage assigned to it (no buckets or data used by it)
         ensure!(
-            msp.data_used == T::StorageData::zero(),
+            msp.capacity_used == T::StorageDataUnit::zero(),
             Error::<T>::StorageStillInUse
         );
 
@@ -429,7 +431,7 @@ where
 
         // Check that the BSP has no storage assigned to it (it is not currently storing any files)
         ensure!(
-            bsp.data_used == T::StorageData::zero(),
+            bsp.capacity_used == T::StorageDataUnit::zero(),
             Error::<T>::StorageStillInUse
         );
 
@@ -473,11 +475,11 @@ where
     /// that checks if the user can change its capacity and, if so, updates the storage to reflect the new capacity
     pub fn do_change_capacity(
         who: &T::AccountId,
-        new_capacity: StorageData<T>,
-    ) -> Result<StorageData<T>, DispatchError> {
+        new_capacity: StorageDataUnit<T>,
+    ) -> Result<StorageDataUnit<T>, DispatchError> {
         // Check that the new capacity is not zero (there are specific functions to sign off as a SP)
         ensure!(
-            new_capacity != T::StorageData::zero(),
+            new_capacity != T::StorageDataUnit::zero(),
             Error::<T>::NewCapacityCantBeZero
         );
 
@@ -499,8 +501,8 @@ where
     pub fn do_change_capacity_msp(
         account_id: &T::AccountId,
         msp_id: MainStorageProviderId<T>,
-        new_capacity: StorageData<T>,
-    ) -> Result<StorageData<T>, DispatchError> {
+        new_capacity: StorageDataUnit<T>,
+    ) -> Result<StorageDataUnit<T>, DispatchError> {
         // Check that the MSP is registered and get its info
         let mut msp = MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
 
@@ -525,7 +527,7 @@ where
 
         // Check that the new capacity is bigger than the current used capacity by the MSP
         ensure!(
-            new_capacity >= msp.data_used,
+            new_capacity >= msp.capacity_used,
             Error::<T>::NewCapacityLessThanUsedStorage
         );
 
@@ -575,8 +577,8 @@ where
     pub fn do_change_capacity_bsp(
         account_id: &T::AccountId,
         bsp_id: BackupStorageProviderId<T>,
-        new_capacity: StorageData<T>,
-    ) -> Result<StorageData<T>, DispatchError> {
+        new_capacity: StorageDataUnit<T>,
+    ) -> Result<StorageDataUnit<T>, DispatchError> {
         // Check that the BSP is registered and get its info
         let mut bsp = BackupStorageProviders::<T>::get(&bsp_id).ok_or(Error::<T>::NotRegistered)?;
 
@@ -601,7 +603,7 @@ where
 
         // Check that the new capacity is bigger than the current used capacity by the BSP
         ensure!(
-            new_capacity >= bsp.data_used,
+            new_capacity >= bsp.capacity_used,
             Error::<T>::NewCapacityLessThanUsedStorage
         );
 
@@ -787,7 +789,7 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
     fn from(msp: MainStorageProvider<T>) -> Self {
         BackupStorageProvider {
             capacity: msp.capacity,
-            data_used: msp.data_used,
+            capacity_used: msp.capacity_used,
             multiaddresses: msp.multiaddresses,
             root: T::DefaultMerkleRoot::get(),
             last_capacity_change: msp.last_capacity_change,
@@ -797,68 +799,79 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
     }
 }
 
-/// Implement the StorageProvidersInterface trait for the Storage Providers pallet.
-impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
-    type StorageData = T::StorageData;
-    type MerklePatriciaRoot = T::MerklePatriciaRoot;
+/// Implement the ReadBucketsInterface trait for the Storage Providers pallet.
+impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
+    type AccountId = T::AccountId;
+    type BucketId = BucketId<T>;
+    type BucketNameLimit = T::BucketNameLimit;
+    type ProviderId = HashId<T>;
+    type ReadAccessGroupId = T::ReadAccessGroupId;
+    type MerkleHash = MerklePatriciaRoot<T>;
 
-    fn increase_data_used(provider_id: &Self::ProviderId, delta: T::StorageData) -> DispatchResult {
-        if MainStorageProviders::<T>::contains_key(&provider_id) {
-            let mut msp =
-                MainStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
-            msp.data_used = msp.data_used.saturating_add(delta);
-            MainStorageProviders::<T>::insert(&provider_id, msp);
-        } else if BackupStorageProviders::<T>::contains_key(&provider_id) {
-            let mut bsp =
-                BackupStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
-            bsp.data_used = bsp.data_used.saturating_add(delta);
-            BackupStorageProviders::<T>::insert(&provider_id, bsp);
-            UsedBspsCapacity::<T>::mutate(|n| match n.checked_add(&delta) {
-                Some(new_total_bsp_capacity) => {
-                    *n = new_total_bsp_capacity;
-                    Ok(())
-                }
-                None => Err(DispatchError::Arithmetic(ArithmeticError::Overflow)),
-            })?;
-        } else {
-            return Err(Error::<T>::NotRegistered.into());
-        }
-        Ok(())
+    fn derive_bucket_id(
+        owner: &Self::AccountId,
+        bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
+    ) -> Self::BucketId {
+        let concat = owner
+            .encode()
+            .into_iter()
+            .chain(bucket_name.encode().into_iter())
+            .collect::<scale_info::prelude::vec::Vec<u8>>();
+
+        <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)
     }
 
-    fn decrease_data_used(
-        provider_id: &Self::ProviderId,
-        delta: Self::StorageData,
-    ) -> DispatchResult {
-        if MainStorageProviders::<T>::contains_key(&provider_id) {
-            let mut msp =
-                MainStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
-            msp.data_used = msp.data_used.saturating_sub(delta);
-            MainStorageProviders::<T>::insert(&provider_id, msp);
-        } else if BackupStorageProviders::<T>::contains_key(&provider_id) {
-            let mut bsp =
-                BackupStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
-            bsp.data_used = bsp.data_used.saturating_sub(delta);
-            BackupStorageProviders::<T>::insert(&provider_id, bsp);
-            UsedBspsCapacity::<T>::mutate(|n| match n.checked_sub(&delta) {
-                Some(new_total_bsp_capacity) => {
-                    *n = new_total_bsp_capacity;
-                    Ok(())
-                }
-                None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
-            })?;
-        } else {
-            return Err(Error::<T>::NotRegistered.into());
-        }
-        Ok(())
+    fn get_msp_of_bucket(bucket_id: &Self::BucketId) -> Option<Self::ProviderId> {
+        Buckets::<T>::get(bucket_id).map(|bucket| bucket.msp_id)
     }
+
+    fn get_read_access_group_id_of_bucket(
+        bucket_id: &Self::BucketId,
+    ) -> Result<Option<Self::ReadAccessGroupId>, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.read_access_group_id)
+    }
+
+    fn is_bucket_owner(
+        who: &Self::AccountId,
+        bucket_id: &Self::BucketId,
+    ) -> Result<bool, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(&bucket.user_id == who)
+    }
+
+    fn is_bucket_private(bucket_id: &Self::BucketId) -> Result<bool, DispatchError> {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+        Ok(bucket.private)
+    }
+
+    fn is_bucket_stored_by_msp(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId) -> bool {
+        if let Some(bucket) = Buckets::<T>::get(bucket_id) {
+            bucket.msp_id == *msp_id
+        } else {
+            false
+        }
+    }
+
+    fn get_root_bucket(bucket_id: &Self::BucketId) -> Option<Self::MerkleHash> {
+        Buckets::<T>::get(bucket_id).map(|bucket| bucket.root)
+    }
+}
+
+/// Implement the MutateBucketsInterface trait for the Storage Providers pallet.
+impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
+    type AccountId = T::AccountId;
+    type BucketId = BucketId<T>;
+    type ProviderId = HashId<T>;
+    type ReadAccessGroupId = T::ReadAccessGroupId;
+    type MerkleHash = MerklePatriciaRoot<T>;
 
     fn add_bucket(
-        msp_id: MainStorageProviderId<T>,
-        user_id: T::AccountId,
-        bucket_id: BucketId<T>,
-        private: bool,
-        read_access_group_id: Option<T::ReadAccessGroupId>,
+        provider_id: Self::ProviderId,
+        user_id: Self::AccountId,
+        bucket_id: Self::BucketId,
+        privacy: bool,
+        maybe_read_access_group_id: Option<Self::ReadAccessGroupId>,
     ) -> DispatchResult {
         // Check if bucket already exists
         ensure!(
@@ -868,7 +881,7 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
 
         // Check if the MSP exists
         ensure!(
-            MainStorageProviders::<T>::contains_key(&msp_id),
+            MainStorageProviders::<T>::contains_key(&provider_id),
             Error::<T>::NotRegistered
         );
 
@@ -890,48 +903,21 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
 
         let bucket = Bucket {
             root: T::DefaultMerkleRoot::get(),
+            msp_id: provider_id,
+            private: privacy,
+            read_access_group_id: maybe_read_access_group_id,
             user_id,
-            msp_id,
-            private,
-            read_access_group_id,
         };
 
         Buckets::<T>::insert(&bucket_id, &bucket);
 
-        MainStorageProviderIdsToBuckets::<T>::try_append(&msp_id, bucket_id)
+        MainStorageProviderIdsToBuckets::<T>::try_append(&provider_id, bucket_id)
             .map_err(|_| Error::<T>::AppendBucketToMspFailed)?;
 
         Ok(())
     }
 
-    fn update_bucket_privacy(
-        bucket_id: <Self as ProvidersConfig>::BucketId,
-        privacy: bool,
-    ) -> DispatchResult {
-        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
-            let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
-            bucket.private = privacy;
-
-            Ok(())
-        })
-    }
-
-    fn update_bucket_read_access_group_id(
-        bucket_id: <Self as ProvidersConfig>::BucketId,
-        maybe_read_access_group_id: Option<<Self as ProvidersConfig>::ReadAccessGroupId>,
-    ) -> DispatchResult {
-        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
-            let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
-            bucket.read_access_group_id = maybe_read_access_group_id;
-
-            Ok(())
-        })
-    }
-
-    fn change_root_bucket(
-        bucket_id: BucketId<T>,
-        new_root: MerklePatriciaRoot<T>,
-    ) -> DispatchResult {
+    fn change_root_bucket(bucket_id: Self::BucketId, new_root: Self::MerkleHash) -> DispatchResult {
         if let Some(bucket) = Buckets::<T>::get(&bucket_id) {
             Buckets::<T>::insert(
                 &bucket_id,
@@ -946,7 +932,7 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
         Ok(())
     }
 
-    fn remove_root_bucket(bucket_id: BucketId<T>) -> DispatchResult {
+    fn remove_root_bucket(bucket_id: Self::BucketId) -> DispatchResult {
         let bucket = Buckets::<T>::take(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
         MainStorageProviderIdsToBuckets::<T>::mutate_exists(
@@ -973,40 +959,36 @@ impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
 
         Ok(())
     }
+
+    fn update_bucket_privacy(bucket_id: Self::BucketId, privacy: bool) -> DispatchResult {
+        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
+            let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+            bucket.private = privacy;
+
+            Ok(())
+        })
+    }
+
+    fn update_bucket_read_access_group_id(
+        bucket_id: Self::BucketId,
+        maybe_read_access_group_id: Option<Self::ReadAccessGroupId>,
+    ) -> DispatchResult {
+        Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
+            let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
+            bucket.read_access_group_id = maybe_read_access_group_id;
+
+            Ok(())
+        })
+    }
 }
 
-impl<T: pallet::Config> ProvidersConfig for pallet::Pallet<T> {
-    type BucketId = BucketId<T>;
-    type ReadAccessGroupId = T::ReadAccessGroupId;
-}
-
-impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
-    type SpCount = T::SpCount;
-    type MultiAddress = MultiAddress<T>;
+/// Implement the ReadStorageProvidersInterface trait for the Storage Providers pallet.
+impl<T: pallet::Config> ReadStorageProvidersInterface for pallet::Pallet<T> {
     type MaxNumberOfMultiAddresses = T::MaxMultiAddressAmount;
-    type BucketNameLimit = T::BucketNameLimit;
-
-    fn is_bsp(who: &Self::ProviderId) -> bool {
-        BackupStorageProviders::<T>::contains_key(&who)
-    }
-
-    fn is_msp(who: &Self::ProviderId) -> bool {
-        MainStorageProviders::<T>::contains_key(&who)
-    }
-
-    fn get_provider_payment_account(who: Self::ProviderId) -> Option<Self::AccountId> {
-        if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
-            Some(bsp.payment_account)
-        } else if let Some(msp) = MainStorageProviders::<T>::get(&who) {
-            Some(msp.payment_account)
-        } else {
-            None
-        }
-    }
-
-    fn get_number_of_bsps() -> Self::SpCount {
-        Self::get_bsp_count()
-    }
+    type MultiAddress = MultiAddress<T>;
+    type ProviderId = HashId<T>;
+    type SpCount = T::SpCount;
+    type StorageDataUnit = T::StorageDataUnit;
 
     fn get_bsp_multiaddresses(
         who: &Self::ProviderId,
@@ -1019,65 +1001,125 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         }
     }
 
-    fn is_bucket_owner(
-        who: &Self::AccountId,
-        bucket_id: &<Self as ProvidersConfig>::BucketId,
-    ) -> Result<bool, DispatchError> {
-        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
-        Ok(&bucket.user_id == who)
+    fn get_number_of_bsps() -> Self::SpCount {
+        Self::get_bsp_count()
     }
 
-    fn is_bucket_private(
-        bucket_id: &<Self as ProvidersConfig>::BucketId,
-    ) -> Result<bool, DispatchError> {
-        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
-        Ok(bucket.private)
-    }
-
-    fn is_bucket_stored_by_msp(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId) -> bool {
-        if let Some(bucket) = Buckets::<T>::get(bucket_id) {
-            bucket.msp_id == *msp_id
+    fn get_used_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(who) {
+            bsp.capacity_used
+        } else if let Some(msp) = MainStorageProviders::<T>::get(who) {
+            msp.capacity_used
         } else {
-            false
+            Zero::zero()
         }
     }
 
-    fn get_read_access_group_id_of_bucket(
-        bucket_id: &<Self as ProvidersConfig>::BucketId,
-    ) -> Result<Option<<Self as ProvidersConfig>::ReadAccessGroupId>, DispatchError> {
-        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
-        Ok(bucket.read_access_group_id)
+    fn is_bsp(who: &Self::ProviderId) -> bool {
+        BackupStorageProviders::<T>::contains_key(&who)
     }
 
-    fn get_msp_of_bucket(bucket_id: &Self::BucketId) -> Option<Self::ProviderId> {
-        Buckets::<T>::get(bucket_id).map(|bucket| bucket.msp_id)
-    }
-
-    fn derive_bucket_id(
-        owner: &Self::AccountId,
-        bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
-    ) -> <Self as ProvidersConfig>::BucketId {
-        let concat = owner
-            .encode()
-            .into_iter()
-            .chain(bucket_name.encode().into_iter())
-            .collect::<scale_info::prelude::vec::Vec<u8>>();
-
-        <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)
+    fn is_msp(who: &Self::ProviderId) -> bool {
+        MainStorageProviders::<T>::contains_key(&who)
     }
 }
 
-impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
-    type Balance = T::NativeBalance;
-    type AccountId = T::AccountId;
+/// Implement the MutateStorageProvidersInterface trait for the Storage Providers pallet.
+impl<T: pallet::Config> MutateStorageProvidersInterface for pallet::Pallet<T> {
     type ProviderId = HashId<T>;
-    type MerkleHash = MerklePatriciaRoot<T>;
+    type StorageDataUnit = T::StorageDataUnit;
 
-    // TODO: Refine, add checks and tests for all the logic in this implementation
-    fn is_provider(who: Self::ProviderId) -> bool {
-        BackupStorageProviders::<T>::contains_key(&who)
-            || MainStorageProviders::<T>::contains_key(&who)
-            || Buckets::<T>::contains_key(&who)
+    fn decrease_capacity_used(
+        provider_id: &Self::ProviderId,
+        delta: Self::StorageDataUnit,
+    ) -> DispatchResult {
+        if MainStorageProviders::<T>::contains_key(&provider_id) {
+            let mut msp =
+                MainStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
+            msp.capacity_used = msp.capacity_used.saturating_sub(delta);
+            MainStorageProviders::<T>::insert(&provider_id, msp);
+        } else if BackupStorageProviders::<T>::contains_key(&provider_id) {
+            let mut bsp =
+                BackupStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
+            bsp.capacity_used = bsp.capacity_used.saturating_sub(delta);
+            BackupStorageProviders::<T>::insert(&provider_id, bsp);
+            UsedBspsCapacity::<T>::mutate(|n| match n.checked_sub(&delta) {
+                Some(new_total_bsp_capacity) => {
+                    *n = new_total_bsp_capacity;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
+            })?;
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        }
+        Ok(())
+    }
+
+    fn increase_capacity_used(
+        provider_id: &Self::ProviderId,
+        delta: Self::StorageDataUnit,
+    ) -> DispatchResult {
+        if MainStorageProviders::<T>::contains_key(&provider_id) {
+            let mut msp =
+                MainStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
+            msp.capacity_used = msp.capacity_used.saturating_add(delta);
+            MainStorageProviders::<T>::insert(&provider_id, msp);
+        } else if BackupStorageProviders::<T>::contains_key(&provider_id) {
+            let mut bsp =
+                BackupStorageProviders::<T>::get(&provider_id).ok_or(Error::<T>::NotRegistered)?;
+            bsp.capacity_used = bsp.capacity_used.saturating_add(delta);
+            BackupStorageProviders::<T>::insert(&provider_id, bsp);
+            UsedBspsCapacity::<T>::mutate(|n| match n.checked_add(&delta) {
+                Some(new_total_bsp_capacity) => {
+                    *n = new_total_bsp_capacity;
+                    Ok(())
+                }
+                None => Err(DispatchError::Arithmetic(ArithmeticError::Overflow)),
+            })?;
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        }
+        Ok(())
+    }
+}
+
+/// Implement the ReadProvidersInterface for the Storage Providers pallet.
+impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
+    type AccountId = T::AccountId;
+    type Balance = T::NativeBalance;
+    type MerkleHash = MerklePatriciaRoot<T>;
+    type ProviderId = HashId<T>;
+
+    fn get_default_root() -> Self::MerkleHash {
+        T::DefaultMerkleRoot::get()
+    }
+
+    fn get_owner_account(who: Self::ProviderId) -> Option<Self::AccountId> {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
+            Some(bsp.owner_account)
+        } else if let Some(msp) = MainStorageProviders::<T>::get(&who) {
+            Some(msp.owner_account)
+        } else if let Some(bucket) = Buckets::<T>::get(&who) {
+            let msp_for_bucket = bucket.msp_id;
+            if let Some(msp) = MainStorageProviders::<T>::get(&msp_for_bucket) {
+                Some(msp.owner_account)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn get_payment_account(who: Self::ProviderId) -> Option<Self::AccountId> {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
+            Some(bsp.payment_account)
+        } else if let Some(msp) = MainStorageProviders::<T>::get(&who) {
+            Some(msp.payment_account)
+        } else {
+            None
+        }
     }
 
     fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId> {
@@ -1085,23 +1127,6 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
             Some(bsp_id)
         } else if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             Some(msp_id)
-        } else {
-            None
-        }
-    }
-
-    fn get_owner_account(provider_id: Self::ProviderId) -> Option<Self::AccountId> {
-        if let Some(bsp) = BackupStorageProviders::<T>::get(&provider_id) {
-            Some(bsp.owner_account)
-        } else if let Some(msp) = MainStorageProviders::<T>::get(&provider_id) {
-            Some(msp.owner_account)
-        } else if let Some(bucket) = Buckets::<T>::get(&provider_id) {
-            let msp_for_bucket = bucket.msp_id;
-            if let Some(msp) = MainStorageProviders::<T>::get(&msp_for_bucket) {
-                Some(msp.owner_account)
-            } else {
-                None
-            }
         } else {
             None
         }
@@ -1117,7 +1142,10 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
         }
     }
 
-    fn get_stake(who: Self::ProviderId) -> Option<BalanceOf<T>> {
+    fn get_stake(
+        who: Self::ProviderId,
+    ) -> Option<<Self::Balance as frame_support::traits::fungible::Inspect<Self::AccountId>>::Balance>
+    {
         if let Some(bucket) = Buckets::<T>::get(&who) {
             match MainStorageProviders::<T>::get(bucket.msp_id) {
                 Some(related_msp) => Some(T::NativeBalance::balance_on_hold(
@@ -1135,6 +1163,18 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
             None
         }
     }
+
+    fn is_provider(who: Self::ProviderId) -> bool {
+        BackupStorageProviders::<T>::contains_key(&who)
+            || MainStorageProviders::<T>::contains_key(&who)
+            || Buckets::<T>::contains_key(&who)
+    }
+}
+
+/// Implement the MutateProvidersInterface for the Storage Providers pallet.
+impl<T: pallet::Config> MutateProvidersInterface for pallet::Pallet<T> {
+    type MerkleHash = MerklePatriciaRoot<T>;
+    type ProviderId = HashId<T>;
 
     fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult {
         if let Some(bucket) = Buckets::<T>::get(&who) {
@@ -1158,14 +1198,86 @@ impl<T: pallet::Config> ProvidersInterface for pallet::Pallet<T> {
         }
         Ok(())
     }
+}
+
+/// Implement the ReadChallengeableProvidersInterface for the Storage Providers pallet.
+impl<T: pallet::Config> ReadChallengeableProvidersInterface for pallet::Pallet<T> {
+    type AccountId = T::AccountId;
+    type Balance = T::NativeBalance;
+    type MerkleHash = MerklePatriciaRoot<T>;
+    type ProviderId = HashId<T>;
 
     fn get_default_root() -> Self::MerkleHash {
         T::DefaultMerkleRoot::get()
     }
+
+    fn get_owner_account(who: Self::ProviderId) -> Option<Self::AccountId> {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
+            Some(bsp.owner_account)
+        } else {
+            None
+        }
+    }
+
+    fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId> {
+        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who.clone()) {
+            Some(bsp_id)
+        } else {
+            None
+        }
+    }
+
+    fn get_root(who: Self::ProviderId) -> Option<Self::MerkleHash> {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
+            Some(bsp.root)
+        } else {
+            None
+        }
+    }
+
+    fn get_stake(
+        who: Self::ProviderId,
+    ) -> Option<<Self::Balance as frame_support::traits::fungible::Inspect<Self::AccountId>>::Balance>
+    {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
+            Some(T::NativeBalance::balance_on_hold(
+                &HoldReason::StorageProviderDeposit.into(),
+                &bsp.owner_account,
+            ))
+        } else {
+            None
+        }
+    }
+
+    fn is_provider(who: Self::ProviderId) -> bool {
+        BackupStorageProviders::<T>::contains_key(&who)
+    }
 }
 
+/// Implement the MutateChallengeableProvidersInterface for the Storage Providers pallet.
+impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet<T> {
+    type MerkleHash = MerklePatriciaRoot<T>;
+    type ProviderId = HashId<T>;
+
+    fn update_root(who: Self::ProviderId, new_root: Self::MerkleHash) -> DispatchResult {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(&who) {
+            BackupStorageProviders::<T>::insert(
+                &who,
+                BackupStorageProvider {
+                    root: new_root,
+                    ..bsp
+                },
+            );
+        } else {
+            return Err(Error::<T>::NotRegistered.into());
+        }
+        Ok(())
+    }
+}
+
+/// Implement the SystemMetricsInterface for the Storage Providers pallet.
 impl<T: pallet::Config> SystemMetricsInterface for pallet::Pallet<T> {
-    type ProvidedUnit = StorageData<T>;
+    type ProvidedUnit = StorageDataUnit<T>;
 
     fn get_total_capacity() -> Self::ProvidedUnit {
         Self::get_total_bsp_capacity()

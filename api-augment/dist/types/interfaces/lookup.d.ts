@@ -3646,7 +3646,7 @@ declare const _default: {
    **/
   PalletStorageProvidersBackupStorageProvider: {
     capacity: string;
-    dataUsed: string;
+    capacityUsed: string;
     multiaddresses: string;
     root: string;
     lastCapacityChange: string;
@@ -3659,7 +3659,7 @@ declare const _default: {
   PalletStorageProvidersMainStorageProvider: {
     buckets: string;
     capacity: string;
-    dataUsed: string;
+    capacityUsed: string;
     multiaddresses: string;
     valueProp: string;
     lastCapacityChange: string;
