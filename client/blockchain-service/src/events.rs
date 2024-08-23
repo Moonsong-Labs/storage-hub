@@ -9,6 +9,8 @@ use sp_runtime::AccountId32;
 use std::sync::Arc;
 use tokio::sync::{oneshot, Mutex};
 
+use crate::handler::ConfirmStoringRequest;
+
 /// New random challenge emitted by the StorageHub runtime.
 ///
 /// This event is emitted when there's a new random challenge seed that affects this
@@ -74,7 +76,7 @@ pub struct ProcessSubmitProofRequest {
 
 #[derive(Debug, Clone)]
 pub struct ProcessConfirmStoringRequest {
-    pub file_key: H256,
+    pub confirm_storing_requests: Vec<ConfirmStoringRequest>,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
