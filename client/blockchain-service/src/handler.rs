@@ -791,9 +791,9 @@ impl BlockchainService {
                             // Check if the provider ID is one of the provider IDs this node is tracking.
                             if self.provider_ids.contains(&provider) {
                                 self.emit(FinalisedMutationsApplied {
-                                    provider_id: provider.clone(),
+                                    provider_id: provider,
                                     mutations: mutations.clone(),
-                                    new_root: new_root.clone(),
+                                    new_root,
                                 })
                             }
                         }
