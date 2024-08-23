@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use anyhow::{anyhow, Ok};
+use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shp_file_metadata::ChunkId;
 use sp_core::H256;
