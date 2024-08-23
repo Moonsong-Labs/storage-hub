@@ -314,6 +314,12 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxBuckets: u32 & AugmentedConst<ApiType>;
       /**
+       * The estimated maximum size of an unknown file.
+       *
+       * Used primarily to slash a Storage Provider when it fails to provide a chunk of data for an unknown file size.
+       **/
+      maxFileSize: u32 & AugmentedConst<ApiType>;
+      /**
        * The maximum amount of multiaddresses that a Storage Provider can have.
        **/
       maxMultiAddressAmount: u32 & AugmentedConst<ApiType>;

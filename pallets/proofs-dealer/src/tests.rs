@@ -2886,7 +2886,7 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
             provider_balance / 100
         ));
 
-        // Set Provider's root to be an arbitrary value, different then the default root,
+        // Set Provider's root to be an arbitrary value, different from the default root,
         // to simulate that it is actually providing a service.
         let root = BlakeTwo256::hash(b"1234");
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
