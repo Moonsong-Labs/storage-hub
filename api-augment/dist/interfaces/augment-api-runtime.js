@@ -3,3 +3,4 @@
 // import type lookup before we augment - in some environments
 // this is required to allow for ambient/previous definitions
 import "@polkadot/api-base/types/calls";
+//# sourceMappingURL=augment-api-runtime.js.map

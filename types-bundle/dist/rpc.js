@@ -54,3 +54,4 @@ export const rpcDefinitions = {
     }
   }
 };
+//# sourceMappingURL=rpc.js.map
