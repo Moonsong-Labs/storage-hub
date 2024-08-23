@@ -37,7 +37,8 @@ pub mod pallet {
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
         sp_runtime::traits::{
-            AtLeast32BitUnsigned, CheckEqual, CheckedAdd, MaybeDisplay, One, Saturating, SimpleBitOps, Zero
+            AtLeast32BitUnsigned, CheckEqual, CheckedAdd, MaybeDisplay, One, Saturating,
+            SimpleBitOps, Zero,
         },
         traits::{fungible::*, Incrementable},
         Blake2_128Concat,
