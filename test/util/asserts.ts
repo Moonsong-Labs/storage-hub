@@ -4,7 +4,24 @@ import type { ApiPromise } from "@polkadot/api";
 import type { AugmentedEvent } from "@polkadot/api/types";
 import type { BspNetApi } from "./bspNet";
 
-//TODO: add ability to search nested extrinsics e.g. sudo.sudo(balance.forceTransfer(...))
+/**
+ * Asserts that a specific extrinsic (module.method) is present in a blockchain block or transaction pool.
+ *
+ * @param {BspNetApi} api - The API instance connected to the blockchain network.
+ * @param {Object} options - Configuration options for the extrinsic check.
+ * @param {string} [options.blockHeight] - The block height to check. If not provided, the latest block will be used.
+ * @param {string} [options.blockHash] - The block hash to check. Takes precedence over blockHeight if provided.
+ * @param {boolean} [options.skipSuccessCheck=false] - If true, skips the check for an associated `ExtrinsicSuccess` event.
+ * @param {boolean} [options.checkTxPool=false] - If true, checks the pending transaction pool instead of a finalized block.
+ * @param {string} options.module - The module name of the extrinsic to check (e.g., "balances").
+ * @param {string} options.method - The method name of the extrinsic to check (e.g., "transfer").
+ * @param {boolean} [options.ignoreParamCheck=false] - If true, skips the validation check for the module.method existence in the API metadata.
+ *
+ * @returns {Promise<Object[]>} - Returns a list of objects representing the extrinsics that match the module.method criteria.
+ * @throws {Error} - Throws an error if no matching extrinsic is found, or if the success check fails (unless skipped).
+ *
+ * TODO: add ability to search nested extrinsics e.g. sudo.sudo(balance.forceTransfer(...))
+ */
 export const assertExtrinsicPresent = async (
   api: BspNetApi,
   options: {
@@ -76,6 +93,17 @@ export const assertExtrinsicPresent = async (
   return matches;
 };
 
+/**
+ * Asserts that a specific event (module.method) is present in the provided list of events.
+ *
+ * @param {ApiPromise} api - The API instance connected to the blockchain network.
+ * @param {string} module - The module name of the event to check (e.g., "system").
+ * @param {string} method - The method name of the event to check (e.g., "ExtrinsicSuccess").
+ * @param {EventRecord[]} [events] - The list of events to search through. If not provided or empty, an error is thrown.
+ *
+ * @returns {Object} - Returns an object containing the matching event and its data.
+ * @throws {Error} - Throws an error if no matching event is found, or if the event does not match the expected structure.
+ */
 export const assertEventPresent = (
   api: ApiPromise,
   module: string,
@@ -100,6 +128,17 @@ export const assertEventPresent = (
   return { event: event.event, data: event.event.data };
 };
 
+/**
+ * Asserts that multiple instances of a specific event (module.method) are present in the provided list of events.
+ *
+ * @param {ApiPromise} api - The API instance connected to the blockchain network.
+ * @param {string} module - The module name of the event to check (e.g., "system").
+ * @param {string} method - The method name of the event to check (e.g., "ExtrinsicSuccess").
+ * @param {EventRecord[]} [events] - The list of events to search through. If not provided or empty, an error is thrown.
+ *
+ * @returns {EventRecord[]} - Returns an array of matching events.
+ * @throws {Error} - Throws an error if no matching events are found.
+ */
 export const assertEventMany = (
   api: ApiPromise,
   module: string,
