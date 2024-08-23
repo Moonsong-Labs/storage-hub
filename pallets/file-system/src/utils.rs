@@ -1200,6 +1200,19 @@ where
 
         // Global threshold starting point from which all BSPs begin their threshold slope. All BSPs start at this point
         // with the starting reputation weight.
+        //
+        // The calculation is designed to achieve the following:
+        //
+        // 1. In a regular scenario, `maximum_threshold` would be very large, and you'd start bringing it down with
+        //    `global_weight`, also a large number. That way, when you multiply it by the replication target,
+        //    you should still be within the numerical domain.
+        //
+        // 2. If `global_weight` is low still (in the early days of the network), when multiplying with
+        //    replication target, you'll get at most `u32::MAX` and then the threshold would be
+        //    u32::MAX / 2 (still pretty high).
+        //
+        // 3. If maximum_threshold is very low (like sometimes set in tests), the division would saturate to 1,
+        //    and then the threshold would be replication target / 2 (still very low).
         let threshold_global_starting_point = maximum_threshold
             .checked_div(&global_weight)
             .unwrap_or(T::ThresholdType::one())
