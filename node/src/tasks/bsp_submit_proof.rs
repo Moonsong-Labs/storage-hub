@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Ok};
 use sc_tracing::tracing::*;
 use shp_file_metadata::ChunkId;
 use sp_core::H256;
@@ -8,11 +8,11 @@ use sp_core::H256;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
-    events::{NewChallengeSeed, ProcessSubmitProofRequest},
+    events::{FinalisedTrieRemoveMutationsApplied, NewChallengeSeed, ProcessSubmitProofRequest},
     handler::SubmitProofRequest,
 };
 use shc_common::types::{
-    KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
+    FileKey, KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
     StorageProofsMerkleTrieLayout, TrieRemoveMutation,
 };
 use shc_file_manager::traits::FileStorage;
@@ -23,16 +23,30 @@ use crate::services::handler::StorageHubHandler;
 const LOG_TARGET: &str = "bsp-submit-proof-task";
 const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
 
-/// BSP Submit Proof Task: Handles the submission of proof for BSP (Block Storage Provider) to the runtime.
+/// BSP Submit Proof Task: Handles the submission of proof for BSP (Backup Storage Provider) to the runtime.
 ///
 /// The flow includes the following steps:
-/// - Reacting to `NewChallengeSeed` event from the runtime:
-///     - Derive forest challenges from the seed.
-///     - Check and add checkpoint challenges.
-///     - Generate proof for the file from the forest storage.
-///     - Generate key proofs for each file key.
-///     - Submit the proof to the runtime.
-///     - Apply mutations if necessary and ensure the new Forest root matches the one on-chain.
+/// - **NewChallengeSeed Event:**
+///   - Triggered by the on-chain generation of a new challenge seed.
+///   - Derives forest challenges from the seed.
+///   - Checks for any checkpoint challenges and adds them to the forest challenges.
+///   - Queues the challenges for submission to the runtime, to be processed when the Forest write lock is released.
+///
+/// - **ProcessSubmitProofRequest Event:**
+///   - Triggered when the Blockchain Service detects that the Forest write lock has been released.
+///   - Generates proofs for the queued challenges derived from the `NewChallengeSeed`.
+///   - Constructs key proofs for each file key involved in the challenges.
+///   - Submits the proofs to the runtime, with up to [`MAX_PROOF_SUBMISSION_ATTEMPTS`] retries on failure.
+///   - Applies any necessary mutations to the Forest Storage (but not the File Storage).
+///   - Verifies that the new Forest root matches the one recorded on-chain to ensure consistency.
+///
+/// - **FinalisedTrieRemoveMutationsApplied Event:**
+///   - Triggered when mutations applied to the Merkle Trie have been finalized, indicating that certain keys should be removed.
+///   - Iterates over each file key that was part of the finalised mutations.
+///   - Checks if the file key is still present in the Forest Storage:
+///     - If the key is still present, logs a warning, as this may indicate that the key was re-added after deletion.
+///     - If the key is absent from the Forest Storage, safely removes the corresponding file from the File Storage.
+///   - Ensures that no residual file keys remain in the File Storage when they should have been deleted.
 pub struct BspSubmitProofTask<FL, FS>
 where
     FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
@@ -70,10 +84,7 @@ where
 /// This event is triggered by an on-chain event of a new challenge seed being generated. The task performs the following actions:
 /// - Derives forest challenges from the seed.
 /// - Checks for checkpoint challenges and adds them to the forest challenges.
-/// - Generates proofs for the challenges.
-/// - Constructs key proofs and submits the proof to the runtime.
-/// - Applies any necessary mutations.
-/// - Ensures the new Forest root matches the one on-chain.
+/// - Queues the challenges for submission to the runtime, for when the Forest write lock is released.
 impl<FL, FS> EventHandler<NewChallengeSeed> for BspSubmitProofTask<FL, FS>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
@@ -116,6 +127,17 @@ where
     }
 }
 
+/// Handles the `ProcessSubmitProofRequest` event.
+///
+/// This event is triggered when the Blockchain Service realises that the Forest write lock has been released,
+/// giving this task the opportunity to generate proofs and submit them to the runtime.
+///
+/// This task performs the following actions:
+/// - Generates proofs for the challenges.
+/// - Constructs key proofs and submits the proof to the runtime.
+///   - Retries up to [`MAX_PROOF_SUBMISSION_ATTEMPTS`] times if the submission fails.
+/// - Applies any necessary mutations to the Forest Storage (not the File Storage).
+/// - Ensures the new Forest root matches the one on-chain.
 impl<FL, FS> EventHandler<ProcessSubmitProofRequest> for BspSubmitProofTask<FL, FS>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
@@ -209,8 +231,6 @@ where
                 .await
                 .is_ok()
             {
-                // TODO: Wait for finality of the extrinsic.
-
                 extrinsic_submitted = true;
                 break;
             }
@@ -241,7 +261,12 @@ where
                     // then the mutation needs to be applied (i.e. the file key is removed from the Forest).
                     trace!(target: LOG_TARGET, "Applying mutation: {:?}", mutation);
 
-                    self.remove_file(file_key).await?;
+                    // At this point, we only remove the file and its metadata from the Forest of this BSP.
+                    // This is because if in a future block built on top of this one, the BSP needs to provide
+                    // a proof, it will be against the Forest root with this change applied.
+                    // We will remove the file from the File Storage only after finality is reached.
+                    // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
+                    self.remove_file_from_forest(file_key).await?;
                     mutations_applied = true;
                 }
             }
@@ -256,6 +281,58 @@ where
 
         // Release the forest root write "lock".
         let _ = forest_root_write_tx.send(());
+
+        Ok(())
+    }
+}
+
+/// Handles the `FinalisedTrieRemoveMutationsApplied` event.
+///
+/// This event is triggered when mutations applied to the Forest of this BSP have been finalised,
+/// signalling that certain keys (representing files) should be removed from the File Storage if they are
+/// not present in the Forest Storage. If the key is still present in the Forest Storage, it sends out
+/// a warning, since it could indicate that the key has been re-added after being deleted.
+///
+/// This task performs the following actions:
+/// - Iterates over each removed file key.
+/// - Checks if the file key is present in the Forest Storage.
+///   - If the key is still present, it logs a warning,
+///     since this could indicate that the key has been re-added after being deleted.
+///   - If the key is not present in the Forest Storage, it safely removes the key from the File Storage.
+impl<FL, FS> EventHandler<FinalisedTrieRemoveMutationsApplied> for BspSubmitProofTask<FL, FS>
+where
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+{
+    async fn handle_event(
+        &mut self,
+        event: FinalisedTrieRemoveMutationsApplied,
+    ) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET,
+            "Processing finalised mutations applied for provider [{:?}] with mutations: {:?}",
+            event.provider_id,
+            event.mutations
+        );
+
+        // For each mutation...
+        for mutation in event.mutations {
+            let file_key = FileKey::from(mutation.0);
+
+            // Check that the file_key is not in the Forest.
+            let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
+            if read_forest_storage.contains_file_key(&file_key.into())? {
+                warn!(
+                    target: LOG_TARGET,
+                    "TrieRemoveMutation applied and finalised for file key {:?}, but file key is still in Forest. This can only happen if the same file key was added again after deleted by the user.\n Mutation: {:?}",
+                    file_key,
+                    mutation
+                );
+            } else {
+                // If file key is not in Forest, we can now safely remove it from the File Storage.
+                self.remove_file_from_file_storage(&file_key.into()).await?;
+            }
+        }
 
         Ok(())
     }
@@ -367,7 +444,7 @@ where
         })
     }
 
-    async fn remove_file(&self, file_key: &H256) -> anyhow::Result<()> {
+    async fn remove_file_from_forest(&self, file_key: &H256) -> anyhow::Result<()> {
         // Remove the file key from the Forest.
         let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
         write_forest_storage.delete_file_key(file_key).map_err(|e| {
@@ -380,7 +457,10 @@ where
         // Release the forest storage write lock.
         drop(write_forest_storage);
 
-        // TODO: This should actually be done after waiting for finality of the extrinsic.
+        Ok(())
+    }
+
+    async fn remove_file_from_file_storage(&self, file_key: &H256) -> anyhow::Result<()> {
         // Remove the file from the File Storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
         write_file_storage.delete_file(file_key).map_err(|e| {
