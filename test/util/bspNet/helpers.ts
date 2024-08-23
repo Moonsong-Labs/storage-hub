@@ -208,12 +208,10 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
       )
     );
 
-    // u128 max value
-    const u128Max = (BigInt(1) << BigInt(128)) - BigInt(1);
+    // u32 max value
+    const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
 
-    await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.fileSystem.forceUpdateBspsAssignmentThreshold(u128Max))
-    );
+    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(1, u32Max, 1)));
   } catch (e) {
     console.error("Error ", e);
   } finally {
@@ -298,6 +296,13 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
       userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(shUser.address, amount))
     );
 
+    // u32 max value
+    const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
+
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, u32Max, 1))
+    );
+
     // Make BSP
     await userApi.sealBlock(
       userApi.tx.sudo.sudo(
@@ -327,13 +332,6 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
           alice.address
         )
       )
-    );
-
-    // u128 max value
-    const u128Max = (BigInt(1) << BigInt(128)) - BigInt(1);
-
-    await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.forceUpdateBspsAssignmentThreshold(u128Max))
     );
 
     // Everything executed below is tested in `volunteer.test.ts` and `onboard.test.ts` files.
@@ -499,11 +497,11 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
       )
     );
 
-    // u128 max value
-    const u128Max = (BigInt(1) << BigInt(128)) - BigInt(1);
+    // u32 max value
+    const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
 
     await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.forceUpdateBspsAssignmentThreshold(u128Max))
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, u32Max, 1))
     );
 
     // Add more BSPs to the network.

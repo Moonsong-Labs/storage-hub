@@ -26,7 +26,7 @@ use frame_support::{
     BoundedBTreeSet,
 };
 use pallet_storage_providers::HoldReason;
-use shp_traits::{ProofsDealerInterface, ProvidersInterface, TrieRemoveMutation};
+use shp_traits::{ProofsDealerInterface, ReadChallengeableProvidersInterface, TrieRemoveMutation};
 use sp_core::{blake2_256, Get, Hasher, H256};
 use sp_runtime::{traits::BlakeTwo256, BoundedVec, DispatchError};
 use sp_trie::CompactProof;
@@ -283,12 +283,14 @@ fn challenge_submit_by_registered_provider_with_no_funds_succeed() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -510,12 +512,14 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -544,8 +548,10 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
 
         // Check that the Provider's deadline was set to `challenge_period + challenge_ticks_tolerance`
         // after the initialisation.
-        let stake =
-            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id).unwrap();
+        let stake = <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+            provider_id,
+        )
+        .unwrap();
         let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(stake);
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
@@ -586,12 +592,14 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -620,8 +628,10 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
 
         // Check that the Provider's deadline was set to `challenge_period + challenge_ticks_tolerance`
         // after the initialisation.
-        let stake =
-            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id).unwrap();
+        let stake = <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+            provider_id,
+        )
+        .unwrap();
         let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(stake);
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
@@ -647,8 +657,10 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
 
         // Check that the Provider's deadline was set to `challenge_period + challenge_ticks_tolerance`
         // after the initialisation.
-        let stake =
-            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id).unwrap();
+        let stake = <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+            provider_id,
+        )
+        .unwrap();
         let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(stake);
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
@@ -688,12 +700,14 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
             &provider_id_1,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
         pallet_storage_providers::AccountIdToBackupStorageProviderId::<Test>::insert(
@@ -704,12 +718,14 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
             &provider_id_2,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 2u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -748,8 +764,10 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
 
         // Check that Provider 1's deadline was set to `challenge_period + challenge_ticks_tolerance`
         // after the initialisation.
-        let stake =
-            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id_1).unwrap();
+        let stake = <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+            provider_id_1,
+        )
+        .unwrap();
         let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(stake);
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
@@ -773,8 +791,10 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
 
         // Check that the Provider's deadline was set to `challenge_period + challenge_ticks_tolerance`
         // after the initialisation.
-        let stake =
-            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id_1).unwrap();
+        let stake = <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+            provider_id_1,
+        )
+        .unwrap();
         let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(stake);
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
@@ -836,12 +856,14 @@ fn submit_proof_success() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -873,7 +895,10 @@ fn submit_proof_success() {
         // Set Provider's deadline for submitting a proof.
         // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
         let providers_stake =
-            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id).unwrap();
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
         let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
@@ -971,12 +996,14 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1008,7 +1035,10 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
         // Set Provider's deadline for submitting a proof.
         // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
         let providers_stake =
-            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id).unwrap();
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
         let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
@@ -1089,12 +1119,14 @@ fn submit_proof_submitted_by_not_a_provider_success() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1192,12 +1224,14 @@ fn submit_proof_with_checkpoint_challenges_success() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1308,12 +1342,14 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1421,7 +1457,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         // Note: The apply_delta method is applying the mutation the root of the provider for every challenge key.
         // This is to avoid having to construct valid tries and proofs.
         let root =
-            <<Test as crate::Config>::ProvidersPallet as ProvidersInterface>::get_root(provider_id)
+            <<Test as crate::Config>::ProvidersPallet as ReadChallengeableProvidersInterface>::get_root(provider_id)
                 .unwrap();
         assert_eq!(root.as_ref(), challenges.last().unwrap().as_ref());
     });
@@ -1522,12 +1558,14 @@ fn submit_proof_empty_key_proofs_fail() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1592,12 +1630,14 @@ fn submit_proof_no_record_of_last_proof_fail() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1662,12 +1702,14 @@ fn submit_proof_challenges_block_not_reached_fail() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1746,12 +1788,14 @@ fn submit_proof_challenges_block_too_old_fail() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1830,12 +1874,14 @@ fn submit_proof_seed_not_found_fail() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -1917,12 +1963,14 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: (2 * 100) as u32,
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2005,16 +2053,19 @@ fn submit_proof_forest_proof_verification_fail() {
             &1,
             provider_id,
         );
+
         pallet_storage_providers::BackupStorageProviders::<Test>::insert(
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2099,12 +2150,14 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2172,12 +2225,14 @@ fn submit_proof_out_checkpoint_challenges_fail() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2292,12 +2347,14 @@ fn submit_proof_key_proof_verification_fail() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2694,12 +2751,14 @@ fn new_challenges_round_provider_marked_as_slashable() {
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2736,7 +2795,10 @@ fn new_challenges_round_provider_marked_as_slashable() {
         // Set Provider's deadline for submitting a proof.
         // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
         let providers_stake =
-            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(provider_id).unwrap();
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
         let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
@@ -2802,12 +2864,14 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
             &provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2899,12 +2963,14 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
             &alice_provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 1u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2930,12 +2996,14 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
             &bob_provider_id,
             pallet_storage_providers::types::BackupStorageProvider {
                 capacity: Default::default(),
-                data_used: Default::default(),
+                capacity_used: Default::default(),
                 multiaddresses: Default::default(),
                 root: Default::default(),
                 last_capacity_change: Default::default(),
                 owner_account: 2u64,
                 payment_account: Default::default(),
+                reputation_weight:
+                    <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
             },
         );
 
@@ -2976,7 +3044,10 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
         // Set Alice and Bob's deadline for submitting a proof.
         // It is the sum of this Provider's challenge period and the `ChallengesTicksTolerance`.
         let providers_stake =
-            <ProvidersPalletFor<Test> as ProvidersInterface>::get_stake(alice_provider_id).unwrap();
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                alice_provider_id,
+            )
+            .unwrap();
         let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
@@ -3111,12 +3182,14 @@ mod on_idle_hook_tests {
                 &provider_id,
                 pallet_storage_providers::types::BackupStorageProvider {
                     capacity: Default::default(),
-                    data_used: Default::default(),
+                    capacity_used: Default::default(),
                     multiaddresses: Default::default(),
                     root: Default::default(),
                     last_capacity_change: Default::default(),
                     owner_account: 1u64,
                     payment_account: Default::default(),
+                    reputation_weight:
+                        <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
                 },
             );
 
@@ -3189,12 +3262,14 @@ mod on_idle_hook_tests {
                 &provider_id,
                 pallet_storage_providers::types::BackupStorageProvider {
                     capacity: Default::default(),
-                    data_used: Default::default(),
+                    capacity_used: Default::default(),
                     multiaddresses: Default::default(),
                     root: Default::default(),
                     last_capacity_change: Default::default(),
                     owner_account: 1u64,
                     payment_account: Default::default(),
+                    reputation_weight:
+                        <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
                 },
             );
 
@@ -3268,12 +3343,14 @@ mod on_idle_hook_tests {
                 &provider_id,
                 pallet_storage_providers::types::BackupStorageProvider {
                     capacity: Default::default(),
-                    data_used: Default::default(),
+                    capacity_used: Default::default(),
                     multiaddresses: Default::default(),
                     root: Default::default(),
                     last_capacity_change: Default::default(),
                     owner_account: 1u64,
                     payment_account: Default::default(),
+                    reputation_weight:
+                        <Test as pallet_storage_providers::Config>::StartingReputationWeight::get(),
                 },
             );
 

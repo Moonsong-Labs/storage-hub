@@ -1825,6 +1825,10 @@ declare module "@polkadot/types/lookup" {
       readonly fileKeys: Vec<H256>;
       readonly newRoot: H256;
     } & Struct;
+    readonly isStorageRequestFulfilled: boolean;
+    readonly asStorageRequestFulfilled: {
+      readonly fileKey: H256;
+    } & Struct;
     readonly isStorageRequestExpired: boolean;
     readonly asStorageRequestExpired: {
       readonly fileKey: H256;
@@ -1879,6 +1883,7 @@ declare module "@polkadot/types/lookup" {
       | "NewStorageRequest"
       | "AcceptedBspVolunteer"
       | "BspConfirmedStoring"
+      | "StorageRequestFulfilled"
       | "StorageRequestExpired"
       | "StorageRequestRevoked"
       | "BspRequestedToStopStoring"
@@ -3717,9 +3722,11 @@ declare module "@polkadot/types/lookup" {
       readonly bucketId: H256;
       readonly forestProof: SpTrieStorageProofCompactProof;
     } & Struct;
-    readonly isForceUpdateBspsAssignmentThreshold: boolean;
-    readonly asForceUpdateBspsAssignmentThreshold: {
-      readonly bspAssignmentThreshold: u128;
+    readonly isSetGlobalParameters: boolean;
+    readonly asSetGlobalParameters: {
+      readonly replicationTarget: Option<u32>;
+      readonly maximumThreshold: Option<u32>;
+      readonly blockRangeToMaximumThreshold: Option<u32>;
     } & Struct;
     readonly type:
       | "CreateBucket"
@@ -3733,7 +3740,7 @@ declare module "@polkadot/types/lookup" {
       | "BspConfirmStopStoring"
       | "DeleteFile"
       | "PendingFileDeletionRequestSubmitProof"
-      | "ForceUpdateBspsAssignmentThreshold";
+      | "SetGlobalParameters";
   }
   /** @name PalletProofsDealerCall (305) */
   interface PalletProofsDealerCall extends Enum {
@@ -4461,18 +4468,19 @@ declare module "@polkadot/types/lookup" {
   /** @name PalletStorageProvidersBackupStorageProvider (391) */
   interface PalletStorageProvidersBackupStorageProvider extends Struct {
     readonly capacity: u32;
-    readonly dataUsed: u32;
+    readonly capacityUsed: u32;
     readonly multiaddresses: Vec<Bytes>;
     readonly root: H256;
     readonly lastCapacityChange: u32;
     readonly ownerAccount: AccountId32;
     readonly paymentAccount: AccountId32;
+    readonly reputationWeight: u32;
   }
   /** @name PalletStorageProvidersMainStorageProvider (392) */
   interface PalletStorageProvidersMainStorageProvider extends Struct {
     readonly buckets: Vec<PalletStorageProvidersBucket>;
     readonly capacity: u32;
-    readonly dataUsed: u32;
+    readonly capacityUsed: u32;
     readonly multiaddresses: Vec<Bytes>;
     readonly valueProp: PalletStorageProvidersValueProposition;
     readonly lastCapacityChange: u32;
@@ -4568,7 +4576,7 @@ declare module "@polkadot/types/lookup" {
   interface PalletFileSystemError extends Enum {
     readonly isStorageRequestAlreadyRegistered: boolean;
     readonly isStorageRequestNotFound: boolean;
-    readonly isBspsRequiredCannotBeZero: boolean;
+    readonly isReplicationTargetCannotBeZero: boolean;
     readonly isBspsRequiredExceedsMax: boolean;
     readonly isNotABsp: boolean;
     readonly isNotAMsp: boolean;
@@ -4604,13 +4612,16 @@ declare module "@polkadot/types/lookup" {
     readonly isMspNotStoringBucket: boolean;
     readonly isFileKeyNotPendingDeletion: boolean;
     readonly isFileSizeCannotBeZero: boolean;
+    readonly isNoGlobalReputationWeightSet: boolean;
+    readonly isMaximumThresholdCannotBeZero: boolean;
+    readonly isBlockRangeToMaximumThresholdCannotBeZero: boolean;
     readonly isPendingStopStoringRequestNotFound: boolean;
     readonly isMinWaitForStopStoringNotReached: boolean;
     readonly isPendingStopStoringRequestAlreadyExists: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
-      | "BspsRequiredCannotBeZero"
+      | "ReplicationTargetCannotBeZero"
       | "BspsRequiredExceedsMax"
       | "NotABsp"
       | "NotAMsp"
@@ -4646,6 +4657,9 @@ declare module "@polkadot/types/lookup" {
       | "MspNotStoringBucket"
       | "FileKeyNotPendingDeletion"
       | "FileSizeCannotBeZero"
+      | "NoGlobalReputationWeightSet"
+      | "MaximumThresholdCannotBeZero"
+      | "BlockRangeToMaximumThresholdCannotBeZero"
       | "PendingStopStoringRequestNotFound"
       | "MinWaitForStopStoringNotReached"
       | "PendingStopStoringRequestAlreadyExists";

@@ -431,18 +431,19 @@ where
 
         self.file_key_cleanup = Some(file_key.into());
 
-        // Get the node's public key needed for threshold calculation.
-        let node_public_key = self
+        // Get the node's provider id needed for threshold calculation.
+        let provider_id = self
             .storage_hub_handler
             .blockchain
-            .get_node_public_key()
-            .await;
+            .get_provider_id(None)
+            .await
+            .ok_or_else(|| anyhow!("Failed to get BSP provider ID."))?;
 
         // Query runtime for the earliest block where the BSP can volunteer for the file.
         let earliest_volunteer_block = self
             .storage_hub_handler
             .blockchain
-            .query_file_earliest_volunteer_block(node_public_key, file_key.into())
+            .query_file_earliest_volunteer_block(provider_id, file_key.into())
             .await
             .map_err(|e| anyhow!("Failed to query file earliest volunteer block: {:?}", e))?;
 

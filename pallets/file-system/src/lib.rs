@@ -57,28 +57,46 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use sp_runtime::BoundedVec;
-    use sp_runtime::{
-        traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
-        FixedPointNumber,
-    };
-
     use shp_file_metadata::ChunkId;
+    use sp_runtime::{
+        traits::{
+            CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, ConvertBack, One, Saturating, Zero,
+        },
+        BoundedVec,
+    };
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
-        /// The trait for reading and mutating storage provider data.
-        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId, BucketId = <Self::Providers as shp_traits::ProvidersInterface>::ProviderId>
-            + shp_traits::MutateProvidersInterface<AccountId = Self::AccountId, ReadAccessGroupId = CollectionIdFor<Self>,
-            MerklePatriciaRoot = <Self::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash>;
+        /// The trait for reading and mutating Storage Provider and Bucket data.
+        type Providers: shp_traits::ReadProvidersInterface<AccountId = Self::AccountId>
+            + shp_traits::MutateProvidersInterface<
+                MerkleHash = <Self::Providers as shp_traits::ReadProvidersInterface>::MerkleHash,
+                ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+            > + shp_traits::ReadStorageProvidersInterface<
+                ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+            > + shp_traits::MutateStorageProvidersInterface<
+                ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+            > + shp_traits::ReadBucketsInterface<
+                AccountId = Self::AccountId,
+                BucketId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+                MerkleHash = <Self::Providers as shp_traits::ReadProvidersInterface>::MerkleHash,
+                ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+                ReadAccessGroupId = CollectionIdFor<Self>,
+            > + shp_traits::MutateBucketsInterface<
+                AccountId = Self::AccountId,
+                BucketId = <Self::Providers as shp_traits::ReadBucketsInterface>::BucketId,
+                MerkleHash = <Self::Providers as shp_traits::ReadProvidersInterface>::MerkleHash,
+                ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+                ReadAccessGroupId = CollectionIdFor<Self>,
+            >;
 
         /// The trait for issuing challenges and verifying proofs.
         type ProofDealer: shp_traits::ProofsDealerInterface<
-            ProviderId = <Self::Providers as shp_traits::ProvidersInterface>::ProviderId,
-            MerkleHash = <Self::Providers as shp_traits::ProvidersInterface>::MerkleHash,
+            ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+            MerkleHash = <Self::Providers as shp_traits::ReadProvidersInterface>::MerkleHash,
         >;
 
         /// Type for identifying a file, generally a hash.
@@ -96,16 +114,17 @@ pub mod pallet {
             + MaxEncodedLen;
 
         /// Type representing the storage request bsps size type.
-        type StorageRequestBspsRequiredType: Parameter
+        type ReplicationTargetType: Parameter
             + Member
             + MaybeSerializeDeserialize
             + Default
             + MaybeDisplay
-            + Into<u32>
+            + From<u32>
+            + Into<u64>
+            + Into<Self::ThresholdType>
             + Copy
             + MaxEncodedLen
             + HasCompact
-            + Copy
             + Default
             + scale_info::TypeInfo
             + MaybeSerializeDeserialize
@@ -122,6 +141,9 @@ pub mod pallet {
             + Debug
             + Default
             + MaybeDisplay
+            + From<u32>
+            + From<<Self::Providers as shp_traits::ReadStorageProvidersInterface>::ReputationWeight>
+            + From<Self::ReplicationTargetType>
             + Copy
             + MaxEncodedLen
             + Decode
@@ -131,13 +153,11 @@ pub mod pallet {
             + CheckedAdd
             + CheckedSub
             + PartialOrd
-            + FixedPointNumber;
+            + One
+            + Zero;
 
         /// The type to convert a threshold to a block number.
-        type ThresholdTypeToBlockNumber: Convert<Self::ThresholdType, BlockNumberFor<Self>>;
-
-        /// The type to convert a block number to a threshold.
-        type BlockNumberToThresholdType: Convert<BlockNumberFor<Self>, Self::ThresholdType>;
+        type ThresholdTypeToBlockNumber: ConvertBack<Self::ThresholdType, BlockNumberFor<Self>>;
 
         /// The type to convert a hash to a threshold.
         type HashToThresholdType: Convert<Self::Hash, Self::ThresholdType>;
@@ -165,25 +185,6 @@ pub mod pallet {
         type CollectionInspector: shp_traits::InspectCollections<
             CollectionId = CollectionIdFor<Self>,
         >;
-
-        /// The multiplier increases the threshold over time (blocks) which increases the
-        /// likelihood of a BSP successfully volunteering to store a file.
-        #[pallet::constant]
-        type AssignmentThresholdMultiplier: Get<Self::ThresholdType>;
-
-        /// Horizontal asymptote which the volunteering threshold approaches as more BSPs are registered in the system.
-        #[pallet::constant]
-        type AssignmentThresholdAsymptote: Get<Self::ThresholdType>;
-
-        /// Asymptotic decay function for the assignment threshold.
-        #[pallet::constant]
-        type AssignmentThresholdDecayFactor: Get<Self::ThresholdType>;
-
-        /// Minimum number of BSPs required to store a file.
-        ///
-        /// This is also used as a default value if the BSPs required are not specified when creating a storage request.
-        #[pallet::constant]
-        type TargetBspsRequired: Get<Self::StorageRequestBspsRequiredType>;
 
         /// Maximum number of BSPs that can store a file.
         ///
@@ -316,34 +317,45 @@ pub mod pallet {
         (BlockNumberFor<T>, StorageData<T>),
     >;
 
-    /// Minimum BSP assignment threshold.
+    /// Number of BSPs required to fulfill a storage request
     ///
-    /// This is the minimum threshold that a BSP must have to be assigned to store a file.
-    /// It is reduced or increased when BSPs sign off or sign up respectively.
+    /// This is also used as a default value if the BSPs required are not specified when creating a storage request.
     #[pallet::storage]
-    #[pallet::getter(fn bsps_assignment_threshold)]
-    pub type BspsAssignmentThreshold<T: Config> = StorageValue<_, T::ThresholdType, ValueQuery>;
+    #[pallet::getter(fn replication_target)]
+    pub type ReplicationTarget<T: Config> = StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
+
+    /// Maximum threshold a BSP can attain.
+    #[pallet::storage]
+    #[pallet::getter(fn maximum_threshold)]
+    pub type MaximumThreshold<T: Config> = StorageValue<_, T::ThresholdType, ValueQuery>;
+
+    /// Number of blocks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
+    #[pallet::storage]
+    #[pallet::getter(fn block_range_to_maximum_threshold)]
+    pub type BlockRangeToMaximumThreshold<T: Config> =
+        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
-        pub bsp_assignment_threshold: T::ThresholdType,
+        pub replication_target: ReplicationTargetType<T>,
+        pub maximum_threshold: T::ThresholdType,
+        pub block_range_to_maximum_threshold: BlockNumberFor<T>,
     }
 
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
-            let total_bsps =
-                <T::Providers as shp_traits::ReadProvidersInterface>::get_number_of_bsps()
-                    .try_into()
-                    .map_err(|_| Error::<T>::FailedTypeConversion)
-                    .unwrap();
+            let replication_target = 1u32.into();
+            let maximum_threshold = u32::MAX.into();
+            let block_range_to_maximum_threshold = 10u32.into();
 
-            let bsp_assignment_threshold =
-                Pallet::<T>::compute_asymptotic_threshold_point(total_bsps).unwrap();
-
-            BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
+            ReplicationTarget::<T>::put(replication_target);
+            MaximumThreshold::<T>::put(maximum_threshold);
+            BlockRangeToMaximumThreshold::<T>::put(block_range_to_maximum_threshold);
 
             Self {
-                bsp_assignment_threshold: Default::default(),
+                replication_target,
+                maximum_threshold,
+                block_range_to_maximum_threshold,
             }
         }
     }
@@ -351,7 +363,9 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            BspsAssignmentThreshold::<T>::put(self.bsp_assignment_threshold);
+            ReplicationTarget::<T>::put(self.replication_target);
+            MaximumThreshold::<T>::put(self.maximum_threshold);
+            BlockRangeToMaximumThreshold::<T>::put(self.block_range_to_maximum_threshold);
         }
     }
 
@@ -407,6 +421,8 @@ pub mod pallet {
             file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
             new_root: MerkleHash<T>,
         },
+        /// Notifies that a storage request for a file key has been fulfilled.
+        StorageRequestFulfilled { file_key: MerkleHash<T> },
         /// Notifies the expiration of a storage request.
         StorageRequestExpired { file_key: MerkleHash<T> },
         /// Notifies that a storage request has been revoked by the user who initiated it.
@@ -433,7 +449,7 @@ pub mod pallet {
         FileDeletionRequest {
             user: T::AccountId,
             file_key: MerkleHash<T>,
-            bucket_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
             msp_id: ProviderIdFor<T>,
             proof_of_inclusion: bool,
         },
@@ -442,7 +458,7 @@ pub mod pallet {
             msp_id: ProviderIdFor<T>,
             user: T::AccountId,
             file_key: MerkleHash<T>,
-            bucket_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
             proof_of_inclusion: bool,
         },
         /// Notifies that a BSP's challenge cycle has been initialised, adding the first file
@@ -460,8 +476,8 @@ pub mod pallet {
         StorageRequestAlreadyRegistered,
         /// Storage request not registered for the given file.
         StorageRequestNotFound,
-        /// BSPs required for storage request cannot be 0.
-        BspsRequiredCannotBeZero,
+        /// Replication target cannot be zero.
+        ReplicationTargetCannotBeZero,
         /// BSPs required for storage request cannot exceed the maximum allowed.
         BspsRequiredExceedsMax,
         /// Account is not a BSP.
@@ -533,6 +549,12 @@ pub mod pallet {
         FileKeyNotPendingDeletion,
         /// File size cannot be zero.
         FileSizeCannotBeZero,
+        /// No global reputation weight set.
+        NoGlobalReputationWeightSet,
+        /// Maximum threshold cannot be zero.
+        MaximumThresholdCannotBeZero,
+        /// Block range to maximum threshold cannot be zero.
+        BlockRangeToMaximumThresholdCannotBeZero,
         /// Pending stop storing request not found.
         PendingStopStoringRequestNotFound,
         /// Minimum amount of blocks between the request opening and being able to confirm it not reached.
@@ -803,7 +825,7 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn delete_file(
             origin: OriginFor<T>,
-            bucket_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
             file_key: MerkleHash<T>,
             location: FileLocation<T>,
             size: StorageData<T>,
@@ -839,7 +861,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             user: T::AccountId,
             file_key: MerkleHash<T>,
-            bucket_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -865,19 +887,41 @@ pub mod pallet {
 
         #[pallet::call_index(11)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn force_update_bsps_assignment_threshold(
+        pub fn set_global_parameters(
             origin: OriginFor<T>,
-            bsp_assignment_threshold: T::ThresholdType,
+            replication_target: Option<T::ReplicationTargetType>,
+            maximum_threshold: Option<T::ThresholdType>,
+            block_range_to_maximum_threshold: Option<BlockNumberFor<T>>,
         ) -> DispatchResult {
             // Check that the extrinsic was sent with root origin.
             ensure_root(origin)?;
 
-            ensure!(
-                bsp_assignment_threshold >= T::AssignmentThresholdAsymptote::get(),
-                Error::<T>::ThresholdBelowAsymptote
-            );
+            if let Some(replication_target) = replication_target {
+                ensure!(
+                    replication_target > T::ReplicationTargetType::zero(),
+                    Error::<T>::ReplicationTargetCannotBeZero
+                );
 
-            BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
+                ReplicationTarget::<T>::put(replication_target);
+            }
+
+            if let Some(maximum_threshold) = maximum_threshold {
+                ensure!(
+                    maximum_threshold > T::ThresholdType::zero(),
+                    Error::<T>::MaximumThresholdCannotBeZero
+                );
+
+                MaximumThreshold::<T>::put(maximum_threshold);
+            }
+
+            if let Some(block_range_to_maximum_threshold) = block_range_to_maximum_threshold {
+                ensure!(
+                    block_range_to_maximum_threshold > BlockNumberFor::<T>::zero(),
+                    Error::<T>::BlockRangeToMaximumThresholdCannotBeZero
+                );
+
+                BlockRangeToMaximumThreshold::<T>::put(block_range_to_maximum_threshold);
+            }
 
             Ok(().into())
         }

@@ -11,7 +11,7 @@ use frame_support::traits::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
-    PaymentStreamsInterface, ProofSubmittersInterface, ProvidersInterface, ReadProvidersInterface,
+    PaymentStreamsInterface, ProofSubmittersInterface, ReadProvidersInterface,
     SystemMetricsInterface,
 };
 use sp_runtime::{
@@ -64,7 +64,7 @@ where
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual Provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
+            <T::ProvidersPallet as ReadProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
 
@@ -152,7 +152,7 @@ where
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual Provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
+            <T::ProvidersPallet as ReadProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
 
@@ -220,7 +220,7 @@ where
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual Provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
+            <T::ProvidersPallet as ReadProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
 
@@ -283,7 +283,7 @@ where
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual Provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
+            <T::ProvidersPallet as ReadProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
 
@@ -382,7 +382,7 @@ where
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual Provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
+            <T::ProvidersPallet as ReadProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
 
@@ -456,7 +456,7 @@ where
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual Provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
+            <T::ProvidersPallet as ReadProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
 
@@ -521,7 +521,7 @@ where
     ) -> Result<BalanceOf<T>, DispatchError> {
         // Check that the given ID belongs to an actual Provider
         ensure!(
-            <T::ProvidersPallet as ProvidersInterface>::is_provider(*provider_id),
+            <T::ProvidersPallet as ReadProvidersInterface>::is_provider(*provider_id),
             Error::<T>::NotAProvider
         );
 
@@ -588,12 +588,12 @@ where
 
                     // Get the payment account of the SP
                     let provider_payment_account = expect_or_err!(
-                    <T::ProvidersPallet as ReadProvidersInterface>::get_provider_payment_account(
-                        *provider_id
-                    ),
-                    "Provider should exist and have a payment account if its ID exists.",
-                    Error::<T>::ProviderInconsistencyError
-                );
+                        <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
+                            *provider_id
+                        ),
+                        "Provider should exist and have a payment account if its ID exists.",
+                        Error::<T>::ProviderInconsistencyError
+                    );
 
                     // Check if the total amount charged would overflow
                     // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
@@ -674,12 +674,12 @@ where
 
                     // Get the payment account of the SP
                     let provider_payment_account = expect_or_err!(
-                    <T::ProvidersPallet as ReadProvidersInterface>::get_provider_payment_account(
-                        *provider_id
-                    ),
-                    "Provider should exist and have a payment account if its ID exists.",
-                    Error::<T>::ProviderInconsistencyError
-                );
+                        <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
+                            *provider_id
+                        ),
+                        "Provider should exist and have a payment account if its ID exists.",
+                        Error::<T>::ProviderInconsistencyError
+                    );
 
                     // Check if the total amount charged would overflow
                     // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
