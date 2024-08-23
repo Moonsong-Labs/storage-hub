@@ -37,14 +37,14 @@ pub mod pallet {
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
         sp_runtime::traits::{
-            AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps,
+            AtLeast32BitUnsigned, CheckEqual, CheckedAdd, MaybeDisplay, One, Saturating, SimpleBitOps, Zero
         },
         traits::{fungible::*, Incrementable},
         Blake2_128Concat,
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
-    use shp_traits::{ProofSubmittersInterface, SubscribeProvidersInterface};
+    use shp_traits::ProofSubmittersInterface;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -127,9 +127,6 @@ pub mod pallet {
             + MaxEncodedLen
             + FullCodec;
 
-        /// Subscribers to important updates
-        type Subscribers: SubscribeProvidersInterface;
-
         /// The type of the Bucket NFT Collection ID.
         type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
 
@@ -138,6 +135,21 @@ pub mod pallet {
             ProviderId = HashId<Self>,
             TickNumber = BlockNumberFor<Self>,
         >;
+
+        /// The type representing the reputation weight of a BSP.
+        type ReputationWeightType: Parameter
+            + Member
+            + MaybeSerializeDeserialize
+            + Default
+            + MaybeDisplay
+            + Saturating
+            + Copy
+            + MaxEncodedLen
+            + HasCompact
+            + Zero
+            + One
+            + CheckedAdd
+            + Ord;
 
         /// The Treasury AccountId.
         /// The account to which:
@@ -199,6 +211,10 @@ pub mod pallet {
         /// The slash factor deducted from a Storage Provider's deposit for every single storage proof they fail to provide.
         #[pallet::constant]
         type SlashAmountPerChunkOfStorageData: Get<BalanceOf<Self>>;
+
+        /// Starting reputation weight for a newly registered BSP.
+        #[pallet::constant]
+        type StartingReputationWeight: Get<Self::ReputationWeightType>;
     }
 
     #[pallet::pallet]
@@ -334,6 +350,10 @@ pub mod pallet {
     /// system metrics and also to calculate the current price of storage.
     #[pallet::storage]
     pub type UsedBspsCapacity<T: Config> = StorageValue<_, StorageDataUnit<T>, ValueQuery>;
+
+    /// The total global reputation weight of all BSPs.
+    #[pallet::storage]
+    pub type GlobalBspsReputationWeight<T> = StorageValue<_, ReputationWeightType<T>, ValueQuery>;
 
     // Events & Errors:
 
@@ -595,6 +615,7 @@ pub mod pallet {
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 owner_account: who.clone(),
                 payment_account,
+                reputation_weight: T::StartingReputationWeight::get(),
             };
 
             // Sign up the new BSP (if possible), updating storage
@@ -930,6 +951,7 @@ pub mod pallet {
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 owner_account: who.clone(),
                 payment_account,
+                reputation_weight: T::StartingReputationWeight::get(),
             };
 
             // Sign up the new BSP (if possible), updating storage

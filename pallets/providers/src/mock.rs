@@ -11,12 +11,12 @@ use frame_system as system;
 use pallet_proofs_dealer::SlashableProviders;
 use shp_traits::{
     CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadChallengeableProvidersInterface,
-    SubscribeProvidersInterface, TrieMutation, TrieProofDeltaApplier,
+    TrieMutation, TrieProofDeltaApplier,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, IdentityLookup},
-    BuildStorage, DispatchError, DispatchResult, SaturatedConversion,
+    BuildStorage, DispatchError, SaturatedConversion,
 };
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use std::collections::BTreeSet;
@@ -243,9 +243,10 @@ impl crate::Config for Test {
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
-    type Subscribers = MockedProvidersSubscriber;
     type ProvidersRandomness = MockRandomness;
     type SlashAmountPerChunkOfStorageData = ConstU128<10>;
+    type ReputationWeightType = u32;
+    type StartingReputationWeight = ConstU32<10>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
@@ -317,17 +318,5 @@ impl ExtBuilder {
         let mut ext = sp_io::TestExternalities::new(t);
         ext.execute_with(|| System::set_block_number(1));
         ext
-    }
-}
-
-pub struct MockedProvidersSubscriber;
-impl SubscribeProvidersInterface for MockedProvidersSubscriber {
-    type ProviderId = u64;
-
-    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
-        Ok(())
-    }
-    fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
-        Ok(())
     }
 }

@@ -359,6 +359,11 @@ where
         // Remove the sign up request from the SignUpRequests mapping
         SignUpRequests::<T>::remove(who);
 
+        // Increase global reputation weight
+        GlobalBspsReputationWeight::<T>::mutate(|n| {
+            *n = n.saturating_add(bsp_info.reputation_weight);
+        });
+
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::BspSignUpSuccess {
             who: who.clone(),
@@ -466,6 +471,11 @@ where
                 None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
             }
         })?;
+
+        // Decrease global reputation weight
+        GlobalBspsReputationWeight::<T>::mutate(|n| {
+            *n = n.saturating_sub(bsp.reputation_weight);
+        });
 
         Ok(())
     }
@@ -703,7 +713,7 @@ where
             &HoldReason::StorageProviderDeposit.into(),
             &account_id,
             &T::Treasury::get(),
-            slashable_amount.clone(),
+            slashable_amount,
             Precision::BestEffort,
             Restriction::Free,
             Fortitude::Polite,
@@ -718,7 +728,7 @@ where
         }
 
         Self::deposit_event(Event::<T>::Slashed {
-            provider_id: provider_id.clone(),
+            provider_id: *provider_id,
             amount_slashed,
         });
 
@@ -816,6 +826,7 @@ impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
             last_capacity_change: msp.last_capacity_change,
             owner_account: msp.owner_account,
             payment_account: msp.payment_account,
+            reputation_weight: T::StartingReputationWeight::get(),
         }
     }
 }
@@ -1005,18 +1016,30 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
 /// Implement the ReadStorageProvidersInterface trait for the Storage Providers pallet.
 impl<T: pallet::Config> ReadStorageProvidersInterface for pallet::Pallet<T> {
-    type MaxNumberOfMultiAddresses = T::MaxMultiAddressAmount;
-    type MultiAddress = MultiAddress<T>;
     type ProviderId = HashId<T>;
-    type SpCount = T::SpCount;
     type StorageDataUnit = T::StorageDataUnit;
+    type SpCount = T::SpCount;
+    type MultiAddress = MultiAddress<T>;
+    type MaxNumberOfMultiAddresses = T::MaxMultiAddressAmount;
+    type ReputationWeight = T::ReputationWeightType;
 
-    fn get_bsp_multiaddresses(
+    fn is_bsp(who: &Self::ProviderId) -> bool {
+        BackupStorageProviders::<T>::contains_key(&who)
+    }
+
+    fn is_msp(who: &Self::ProviderId) -> bool {
+        MainStorageProviders::<T>::contains_key(&who)
+    }
+
+    fn get_global_bsps_reputation_weight() -> Self::ReputationWeight {
+        GlobalBspsReputationWeight::<T>::get()
+    }
+
+    fn get_bsp_reputation_weight(
         who: &Self::ProviderId,
-    ) -> Result<BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>, DispatchError>
-    {
+    ) -> Result<Self::ReputationWeight, DispatchError> {
         if let Some(bsp) = BackupStorageProviders::<T>::get(who) {
-            Ok(BoundedVec::from(bsp.multiaddresses))
+            Ok(bsp.reputation_weight)
         } else {
             Err(Error::<T>::NotRegistered.into())
         }
@@ -1036,12 +1059,15 @@ impl<T: pallet::Config> ReadStorageProvidersInterface for pallet::Pallet<T> {
         }
     }
 
-    fn is_bsp(who: &Self::ProviderId) -> bool {
-        BackupStorageProviders::<T>::contains_key(&who)
-    }
-
-    fn is_msp(who: &Self::ProviderId) -> bool {
-        MainStorageProviders::<T>::contains_key(&who)
+    fn get_bsp_multiaddresses(
+        who: &Self::ProviderId,
+    ) -> Result<BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>, DispatchError>
+    {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(who) {
+            Ok(BoundedVec::from(bsp.multiaddresses))
+        } else {
+            Err(Error::<T>::NotRegistered.into())
+        }
     }
 }
 

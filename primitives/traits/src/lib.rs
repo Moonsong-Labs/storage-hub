@@ -9,7 +9,7 @@ use frame_support::{BoundedBTreeSet, Parameter};
 use scale_info::prelude::fmt::Debug;
 use scale_info::TypeInfo;
 use sp_core::Get;
-use sp_runtime::traits::{AtLeast32BitUnsigned, Hash, Saturating};
+use sp_runtime::traits::{AtLeast32BitUnsigned, CheckedAdd, Hash, One, Saturating};
 use sp_runtime::{BoundedVec, DispatchError};
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec::Vec;
@@ -259,12 +259,36 @@ pub trait ReadStorageProvidersInterface {
 
     /// Maximum number of MultiAddresses a provider can have.
     type MaxNumberOfMultiAddresses: Get<u32>;
+    /// Type that represents the reputation weight of a Storage Provider.
+    type ReputationWeight: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Default
+        + Ord
+        + FullCodec
+        + Copy
+        + Debug
+        + scale_info::TypeInfo
+        + MaxEncodedLen
+        + CheckedAdd
+        + One
+        + Saturating
+        + PartialOrd
+        + sp_runtime::traits::Zero;
 
     /// Check if provider is a BSP.
     fn is_bsp(who: &Self::ProviderId) -> bool;
 
     /// Check if provider is a MSP.
     fn is_msp(who: &Self::ProviderId) -> bool;
+
+    /// Get the total global reputation weight of all BSPs.
+    fn get_global_bsps_reputation_weight() -> Self::ReputationWeight;
+
+    /// Get the reputation weight of a registered Provider.
+    fn get_bsp_reputation_weight(
+        who: &Self::ProviderId,
+    ) -> Result<Self::ReputationWeight, DispatchError>;
 
     /// Get number of registered BSPs.
     fn get_number_of_bsps() -> Self::SpCount;
@@ -552,18 +576,6 @@ pub trait SystemMetricsInterface {
 
     /// Get the total used capacity of units of the network.
     fn get_total_used_capacity() -> Self::ProvidedUnit;
-}
-
-/// The interface to subscribe to updates on the Storage Providers pallet.
-pub trait SubscribeProvidersInterface {
-    /// The type which represents a registered Provider.
-    type ProviderId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
-
-    /// Subscribe to the sign off of a BSP.
-    fn subscribe_bsp_sign_off(who: &Self::ProviderId) -> DispatchResult;
-
-    /// Subscribe to the sign up of a BSP.
-    fn subscribe_bsp_sign_up(who: &Self::ProviderId) -> DispatchResult;
 }
 
 /// The interface for the ProofsDealer pallet.
