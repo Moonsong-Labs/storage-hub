@@ -16,3 +16,4 @@ export const types = {
     "storage-hub-runtime": storageHubDefinitions
   }
 };
+//# sourceMappingURL=definitions.js.map

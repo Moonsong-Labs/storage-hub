@@ -7,3 +7,4 @@ import "./augment-api-query.js";
 import "./augment-api-tx.js";
 import "./augment-api-rpc.js";
 import "./augment-api-runtime.js";
+//# sourceMappingURL=augment-api.js.map
