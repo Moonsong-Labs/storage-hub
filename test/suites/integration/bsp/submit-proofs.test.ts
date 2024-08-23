@@ -18,8 +18,8 @@ import {
 } from "../../../util";
 
 const bspNetConfigCases: BspNetConfig[] = [
-  { noisy: false, rocksdb: false }
-  // { noisy: false, rocksdb: true }
+  { noisy: false, rocksdb: false },
+  { noisy: false, rocksdb: true }
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
