@@ -21,7 +21,7 @@ describe("BSPNet: Slash Provider", () => {
   });
 
   after(async () => {
-    await cleardownTest(api);
+    await cleardownTest({ api });
   });
 
   it("Network launches and can be queried", async () => {
