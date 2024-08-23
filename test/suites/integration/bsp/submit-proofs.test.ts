@@ -284,6 +284,8 @@ for (const bspNetConfig of bspNetConfigCases) {
         await resumeBspContainer("sh-bsp-two");
         await resumeBspContainer("sh-bsp-three");
 
+        await userApi.sealBlock();
+
         // TODO: Advance to next challenge block.
         // TODO: Build block with proof submission.
         // TODO: Check that proof submission was successful.
