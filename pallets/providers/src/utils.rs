@@ -4,8 +4,8 @@ use frame_support::dispatch::{DispatchResultWithPostInfo, Pays};
 use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::sp_runtime::{
-    traits::{CheckedAdd, CheckedMul, CheckedSub, One, Saturating, Zero},
-    ArithmeticError, DispatchError,
+    traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
+    ArithmeticError, BoundedVec, DispatchError,
 };
 use frame_support::traits::tokens::Restriction;
 use frame_support::traits::{
@@ -21,7 +21,6 @@ use shp_traits::{
     ReadChallengeableProvidersInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
     SystemMetricsInterface,
 };
-use sp_runtime::BoundedVec;
 use types::StorageProviderId;
 
 use crate::*;
@@ -705,7 +704,7 @@ where
         };
 
         // Calculate slashable amount.
-        // Doubling the slash for each failed proof submission is necessary since it is more probablistic for a Storage Provider to have
+        // Doubling the slash for each failed proof submission is necessary since it is more probabilistic for a Storage Provider to have
         // responded with two file key proofs given a random or custom challenge.
         let slashable_amount = Self::compute_worst_case_scenario_slashable_amount(provider_id)?;
 
@@ -807,12 +806,24 @@ where
         provider_id: &HashId<T>,
     ) -> Result<BalanceOf<T>, DispatchError> {
         // The slashable amount for a single file of 4 GB in size with a chunk size of 1 KB.
-        let slashable_amount_per_failed_proof_submission =
-            T::SlashAmountPerChunkOfStorageData::get()
-                .saturating_mul((u32::MAX / shp_constants::FILE_CHUNK_SIZE as u32).into());
+        let mut chunks = T::MaxFileSize::get()
+            .checked_div(&StorageDataUnit::<T>::from(
+                shp_constants::FILE_CHUNK_SIZE as u32,
+            ))
+            .unwrap_or(1u32.into());
 
-        Ok(slashable_amount_per_failed_proof_submission *
-                <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id).ok_or(Error::<T>::ProviderNotSlashable)?.into() * 2u32.into())
+        if chunks == StorageDataUnit::<T>::zero() {
+            chunks = 1u32.into();
+        }
+
+        let slashable_amount_per_failed_proof_submission =
+            T::SlashAmountPerChunkOfStorageData::get().saturating_mul(chunks.into());
+
+        Ok(
+            slashable_amount_per_failed_proof_submission.saturating_mul(
+                <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id).ok_or(Error::<T>::ProviderNotSlashable)?.into()
+            ).saturating_mul(2u32.into())
+        )
     }
 }
 

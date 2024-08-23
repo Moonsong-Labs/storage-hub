@@ -49,7 +49,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     }
 
     pub fn chunks_to_check(&self) -> u32 {
-        // Calculate the number of chunks as before
+        // In here we downcast and saturate to u32, as we're going to saturate to 10 anyway.
         let chunks = (self.file_size / SIZE_TO_CHALLENGES
             + (self.file_size % SIZE_TO_CHALLENGES != 0) as u64)
             .saturated_into::<u32>();

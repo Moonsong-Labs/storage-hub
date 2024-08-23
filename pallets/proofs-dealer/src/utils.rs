@@ -444,15 +444,34 @@ where
                 let mut accrued = slashable.unwrap_or(0);
 
                 let last_tick_provider_submitted_proof =
-                    LastTickProviderSubmittedAProofFor::<T>::get(provider).unwrap_or_default();
+                    match LastTickProviderSubmittedAProofFor::<T>::get(provider) {
+                        Some(tick) => tick,
+                        None => {
+                            Self::deposit_event(Event::NoRecordOfLastSubmittedProof { provider });
 
-                if last_tick_provider_submitted_proof <= last_checkpoint_tick
-                    && last_checkpoint_tick < challenges_ticker
+                            #[cfg(test)]
+                            unreachable!(
+                                "Provider should have a last tick it submitted a proof for."
+                            );
+
+                            #[allow(unreachable_code)]
+                            {
+                                challenges_ticker
+                            }
+                        }
+                    };
+
+                let challenge_ticker_provider_should_have_responded_to =
+                    challenges_ticker.saturating_sub(T::ChallengeTicksTolerance::get());
+
+                if checkpoint_challenges_count != 0
+                    && last_tick_provider_submitted_proof <= last_checkpoint_tick
+                    && last_checkpoint_tick < challenge_ticker_provider_should_have_responded_to
                 {
                     accrued = accrued.saturating_add(checkpoint_challenges_count as u32);
                 }
 
-                accrued = accrued.saturating_add(1);
+                accrued = accrued.saturating_add(RandomChallengesPerBlockFor::<T>::get());
 
                 *slashable = Some(accrued);
             });

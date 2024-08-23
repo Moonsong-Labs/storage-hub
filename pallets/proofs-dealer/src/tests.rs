@@ -1996,7 +1996,6 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
-        println!("Block number: {:?}", System::block_number());
         TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
         // Advance less than `ChallengeTicksTolerance` blocks.
@@ -2091,7 +2090,6 @@ fn submit_proof_forest_proof_verification_fail() {
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
-        println!("Block number: {:?}", System::block_number());
         TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
         // Advance less than `ChallengeTicksTolerance` blocks.
@@ -2183,7 +2181,6 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
-        println!("Block number: {:?}", System::block_number());
         TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
         // Advance less than `ChallengeTicksTolerance` blocks.
@@ -2258,7 +2255,6 @@ fn submit_proof_out_checkpoint_challenges_fail() {
 
         // Set random seed for this block challenges.
         let seed = BlakeTwo256::hash(b"seed");
-        println!("Block number: {:?}", System::block_number());
         TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
@@ -2822,7 +2818,10 @@ fn new_challenges_round_provider_marked_as_slashable() {
 
         // Check that Provider is in the SlashableProviders storage map.
         assert!(SlashableProviders::<Test>::contains_key(&provider_id));
-        assert_eq!(SlashableProviders::<Test>::get(&provider_id), Some(1));
+        assert_eq!(
+            SlashableProviders::<Test>::get(&provider_id),
+            Some(<Test as crate::Config>::RandomChallengesPerBlock::get())
+        );
 
         // Check the new last time this provider submitted a proof.
         let current_tick_provider_submitted_proof =
@@ -2887,7 +2886,7 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
             provider_balance / 100
         ));
 
-        // Set Provider's root to be an arbitrary value, different than the default root,
+        // Set Provider's root to be an arbitrary value, different then the default root,
         // to simulate that it is actually providing a service.
         let root = BlakeTwo256::hash(b"1234");
         pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
@@ -2917,7 +2916,7 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
         assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
 
         // Set last checkpoint challenge block.
-        let checkpoint_challenge_block = 2;
+        let checkpoint_challenge_block = 1;
         LastCheckpointTick::<Test>::set(checkpoint_challenge_block);
 
         // Make up custom challenges.
@@ -2948,7 +2947,16 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
 
         // Check that Provider is in the SlashableProviders storage map.
         assert!(SlashableProviders::<Test>::contains_key(&provider_id));
-        assert_eq!(SlashableProviders::<Test>::get(&provider_id), Some(3));
+
+        let random_challenges_per_block: u32 =
+            <Test as crate::Config>::RandomChallengesPerBlock::get();
+
+        let missed_proof_submissions = random_challenges_per_block.saturating_add(2);
+
+        assert_eq!(
+            SlashableProviders::<Test>::get(&provider_id),
+            Some(missed_proof_submissions)
+        );
 
         // New challenges round
         let current_tick = ChallengesTicker::<Test>::get();
@@ -2969,7 +2977,10 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
 
         // Check that Provider is in the SlashableProviders storage map.
         assert!(SlashableProviders::<Test>::contains_key(&provider_id));
-        assert_eq!(SlashableProviders::<Test>::get(&provider_id), Some(4));
+        assert_eq!(
+            SlashableProviders::<Test>::get(&provider_id),
+            Some(random_challenges_per_block.saturating_add(missed_proof_submissions))
+        );
     });
 }
 
@@ -3155,7 +3166,10 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
             &alice_provider_id
         ));
         assert!(SlashableProviders::<Test>::contains_key(&bob_provider_id));
-        assert_eq!(SlashableProviders::<Test>::get(&bob_provider_id), Some(1));
+        assert_eq!(
+            SlashableProviders::<Test>::get(&bob_provider_id),
+            Some(<Test as crate::Config>::RandomChallengesPerBlock::get())
+        );
 
         // Check the new last tick interval for Alice and Bob.
         let expected_new_tick = last_interval_tick + challenge_period;
@@ -3189,7 +3203,6 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
 }
 
 mod on_idle_hook_tests {
-
     use super::*;
 
     #[test]

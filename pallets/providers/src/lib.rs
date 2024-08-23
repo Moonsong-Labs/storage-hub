@@ -46,6 +46,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
     use shp_traits::ProofSubmittersInterface;
+    use sp_runtime::traits::CheckedDiv;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -77,6 +78,8 @@ pub mod pallet {
             + MaybeDisplay
             + AtLeast32BitUnsigned
             + Saturating
+            + CheckedDiv
+            + Zero
             + Copy
             + MaxEncodedLen
             + HasCompact
@@ -170,6 +173,12 @@ pub mod pallet {
         /// The slope of the collateral vs storage capacity curve. In other terms, how many tokens a Storage Provider should add as collateral to increase its storage capacity in one unit of StorageDataUnit.
         #[pallet::constant]
         type DepositPerData: Get<BalanceOf<Self>>;
+
+        /// The estimated maximum size of an unknown file.
+        ///
+        /// Used primarily to slash a Storage Provider when it fails to provide a chunk of data for an unknown file size.
+        #[pallet::constant]
+        type MaxFileSize: Get<StorageDataUnit<Self>>;
 
         // TODO: Change these next constants to a more generic type
 
