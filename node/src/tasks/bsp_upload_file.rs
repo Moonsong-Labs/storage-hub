@@ -254,19 +254,13 @@ where
             }
         };
 
-        let own_account = self
+        let own_provider_id = self
             .storage_hub_handler
             .blockchain
-            .get_node_public_key()
-            .await;
-
-        let own_bsp_id = self
-            .storage_hub_handler
-            .blockchain
-            .query_storage_provider_id(own_account)
+            .query_storage_provider_id(None)
             .await?;
 
-        let own_bsp_id = match own_bsp_id {
+        let own_bsp_id = match own_provider_id {
             Some(id) => match id {
                 StorageProviderId::MainStorageProvider(_) => {
                     error!(target: LOG_TARGET, "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.");
@@ -432,18 +426,33 @@ where
         self.file_key_cleanup = Some(file_key.into());
 
         // Get the node's provider id needed for threshold calculation.
-        let provider_id = self
+        let own_provider_id = self
             .storage_hub_handler
             .blockchain
-            .get_provider_id(None)
-            .await
-            .ok_or_else(|| anyhow!("Failed to get BSP provider ID."))?;
+            .query_storage_provider_id(None)
+            .await?;
+
+        let own_bsp_id = match own_provider_id {
+            Some(id) => match id {
+                StorageProviderId::MainStorageProvider(_) => {
+                    error!(target: LOG_TARGET, "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.");
+                    return Err(anyhow!(
+                        "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID."
+                    ));
+                }
+                StorageProviderId::BackupStorageProvider(id) => id,
+            },
+            None => {
+                error!(target: LOG_TARGET, "Failed to get own BSP ID.");
+                return Err(anyhow!("Failed to get own BSP ID."));
+            }
+        };
 
         // Query runtime for the earliest block where the BSP can volunteer for the file.
         let earliest_volunteer_block = self
             .storage_hub_handler
             .blockchain
-            .query_file_earliest_volunteer_block(provider_id, file_key.into())
+            .query_file_earliest_volunteer_block(own_bsp_id, file_key.into())
             .await
             .map_err(|e| anyhow!("Failed to query file earliest volunteer block: {:?}", e))?;
 

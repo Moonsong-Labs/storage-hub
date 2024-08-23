@@ -29,7 +29,7 @@ use pallet_file_system_runtime_api::{
 use pallet_proofs_dealer_runtime_api::{
     GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError, ProofsDealerApi,
 };
-use shc_common::types::{BlockNumber, ParachainClient, ProviderId, StorageProviderId};
+use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
 
 use crate::{
     commands::BlockchainServiceCommand,
@@ -358,44 +358,6 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
-                BlockchainServiceCommand::GetProviderId {
-                    maybe_node_pub_key,
-                    callback,
-                } => {
-                    let current_block_hash = self.client.info().best_hash;
-
-                    let node_pub_key = maybe_node_pub_key
-                        .unwrap_or_else(|| Self::caller_pub_key(self.keystore.clone()));
-
-                    let provider_id = self
-                        .client
-                        .runtime_api()
-                        .get_storage_provider_id(current_block_hash, &node_pub_key.into())
-                        .map(|provider_id| {
-                            if let Some(provider_id) = provider_id {
-                                match provider_id {
-                                    StorageProviderId::BackupStorageProvider(id) | StorageProviderId::MainStorageProvider(id) => {
-                                        Some(id)
-                                    }
-                                }
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or_else(|_| {
-                            warn!(target: LOG_TARGET, "There is no provider ID for key: {:?}. This means that the node has a BCSV key in the keystore for which there is no provider ID.", node_pub_key);
-                            None
-                        });
-
-                    match callback.send(provider_id) {
-                        Ok(_) => {
-                            trace!(target: LOG_TARGET, "Provider ID sent successfully");
-                        }
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send provider ID: {:?}", e);
-                        }
-                    }
-                }
                 BlockchainServiceCommand::QueryBspConfirmChunksToProveForFile {
                     bsp_id,
                     file_key,
@@ -573,13 +535,19 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
-                BlockchainServiceCommand::QueryStorageProviderId { account, callback } => {
+                BlockchainServiceCommand::QueryStorageProviderId {
+                    maybe_node_pub_key,
+                    callback,
+                } => {
                     let current_block_hash = self.client.info().best_hash;
+
+                    let node_pub_key = maybe_node_pub_key
+                        .unwrap_or_else(|| Self::caller_pub_key(self.keystore.clone()));
 
                     let provider_id = self
                         .client
                         .runtime_api()
-                        .get_storage_provider_id(current_block_hash, &account.into())
+                        .get_storage_provider_id(current_block_hash, &node_pub_key.into())
                         .map_err(|_| anyhow!("Internal API error"));
 
                     match callback.send(provider_id) {
