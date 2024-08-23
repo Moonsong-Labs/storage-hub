@@ -1204,9 +1204,12 @@ where
             .checked_div(&global_weight)
             .unwrap_or(T::ThresholdType::one())
             .checked_mul(&ReplicationTarget::<T>::get().into()).unwrap_or({
-            log::warn!("Global starting point is beyond MaximumThreshold. Setting it to half of the MaximumThreshold.");
-            maximum_threshold / 2.into()
-        })
+                log::warn!("Global starting point is beyond MaximumThreshold. Setting it to half of the MaximumThreshold.");
+                maximum_threshold.checked_div(2.into()).unwrap_or({
+                    log::warn!("This should not happen unless MaximumThreshold is 2 or less.");
+                    T::ThresholdType::one()
+                })
+            })
             .checked_div(&T::ThresholdType::from(2u32))
             .unwrap_or(T::ThresholdType::one());
 

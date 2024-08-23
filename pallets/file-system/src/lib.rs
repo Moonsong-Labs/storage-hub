@@ -321,14 +321,17 @@ pub mod pallet {
     ///
     /// This is also used as a default value if the BSPs required are not specified when creating a storage request.
     #[pallet::storage]
+    #[pallet::getter(fn replication_target)]
     pub type ReplicationTarget<T: Config> = StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
 
     /// Maximum threshold a BSP can attain.
     #[pallet::storage]
+    #[pallet::getter(fn maximum_threshold)]
     pub type MaximumThreshold<T: Config> = StorageValue<_, T::ThresholdType, ValueQuery>;
 
     /// Number of blocks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
     #[pallet::storage]
+    #[pallet::getter(fn block_range_to_maximum_threshold)]
     pub type BlockRangeToMaximumThreshold<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 

@@ -37,7 +37,8 @@ pub mod pallet {
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::*,
         sp_runtime::traits::{
-            AtLeast32BitUnsigned, CheckEqual, MaybeDisplay, Saturating, SimpleBitOps,
+            AtLeast32BitUnsigned, CheckEqual, CheckedAdd, MaybeDisplay, One, Saturating,
+            SimpleBitOps, Zero,
         },
         traits::{fungible::*, Incrementable},
         Blake2_128Concat,
@@ -142,12 +143,14 @@ pub mod pallet {
             + MaybeSerializeDeserialize
             + Default
             + MaybeDisplay
-            + AtLeast32BitUnsigned
             + Saturating
             + Copy
             + MaxEncodedLen
             + HasCompact
-            + Into<u32>;
+            + Zero
+            + One
+            + CheckedAdd
+            + Ord;
 
         /// The Treasury AccountId.
         /// The account to which:
