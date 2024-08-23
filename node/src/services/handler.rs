@@ -155,4 +155,10 @@ where
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         slashable_provider_event_bus_listener.start();
     }
+
+    pub fn start_msp_tasks(&self) {
+        log::info!("Starting MSP tasks");
+
+        // TODO: Implement MSP tasks
+    }
 }
