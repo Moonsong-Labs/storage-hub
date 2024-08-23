@@ -6,7 +6,7 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use num_bigint::BigUint;
 use sp_runtime::{
     traits::{
-        CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, Hash, One, Saturating, Zero,
+        CheckedAdd, CheckedDiv, CheckedSub, Convert, ConvertBack, Hash, One, Saturating, Zero,
     },
     ArithmeticError, BoundedVec, DispatchError,
 };
@@ -21,19 +21,19 @@ use shp_traits::{
     MutateBucketsInterface, MutateStorageProvidersInterface, ReadBucketsInterface,
     ReadProvidersInterface, ReadStorageProvidersInterface, TrieAddMutation, TrieRemoveMutation,
 };
+use sp_runtime::traits::CheckedMul;
 
-use crate::types::{BucketNameFor, ExpiredItems};
+use crate::types::{BucketNameFor, ExpiredItems, ReplicationTargetType};
 use crate::{
     pallet,
     types::{
         BucketIdFor, CollectionConfigFor, CollectionIdFor, FileKeyHasher, FileLocation,
         Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest, MerkleHash, MultiAddresses,
         PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
-        TargetBspsRequired,
     },
-    BspsAssignmentThreshold, Error, Event, ItemExpirations, NextAvailableExpirationInsertionBlock,
-    Pallet, PendingFileDeletionRequests, PendingStopStoringRequests, StorageRequestBsps,
-    StorageRequests,
+    BlockRangeToMaximumThreshold, Error, Event, ItemExpirations, MaximumThreshold,
+    NextAvailableExpirationInsertionBlock, Pallet, PendingFileDeletionRequests,
+    PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -70,6 +70,7 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
+    /// Compute the block number at which the BSP is eligible to volunteer for a storage request.
     pub fn query_earliest_file_volunteer_block(
         bsp_id: ProviderIdFor<T>,
         file_key: MerkleHash<T>,
@@ -89,19 +90,23 @@ where
         let bsp_threshold = Self::get_threshold_for_bsp_request(&bsp_id, &fingerprint);
 
         // Compute the block number at which the BSP should send the volunteer request.
-        Self::compute_volunteer_block_number(bsp_threshold, storage_request_block)
+        Self::compute_volunteer_block_number(bsp_id, bsp_threshold, storage_request_block)
             .map_err(|_| QueryFileEarliestVolunteerBlockError::ThresholdArithmeticError)
     }
 
     fn compute_volunteer_block_number(
-        bsp_xor: T::ThresholdType,
+        bsp_id: ProviderIdFor<T>,
+        bsp_threshold: T::ThresholdType,
         storage_request_block: BlockNumberFor<T>,
     ) -> Result<BlockNumberFor<T>, DispatchError>
     where
         T: frame_system::Config,
     {
-        // Calculate the difference between BSP's XOR and the starting threshold value.
-        let threshold_diff = match bsp_xor.checked_sub(&BspsAssignmentThreshold::<T>::get()) {
+        // Compute the threshold to succeed and the slope of the bsp.
+        let (to_succeed, slope) =
+            Self::compute_threshold_to_succeed(&bsp_id, storage_request_block)?;
+
+        let threshold_diff = match bsp_threshold.checked_sub(&to_succeed) {
             Some(diff) => diff,
             None => {
                 // The BSP's threshold is less than the current threshold.
@@ -110,13 +115,12 @@ where
         };
 
         // Calculate the number of blocks required to be below the threshold.
-        let blocks_to_wait =
-            match threshold_diff.checked_div(&T::AssignmentThresholdMultiplier::get()) {
-                Some(blocks) => blocks,
-                None => {
-                    return Err(Error::<T>::ThresholdArithmeticError.into());
-                }
-            };
+        let blocks_to_wait = match threshold_diff.checked_div(&slope) {
+            Some(blocks) => blocks,
+            None => {
+                return Err(Error::<T>::ThresholdArithmeticError.into());
+            }
+        };
 
         // Compute the block number at which the BSP should send the volunteer request.
         let volunteer_block_number = storage_request_block
@@ -250,10 +254,10 @@ where
             }
             // Handle case where the bucket has an existing collection.
             (_, Some(current_collection_id))
-                if !<T::CollectionInspector as shp_traits::InspectCollections>::collection_exists(&current_collection_id) =>
-            {
-                Some(Self::do_create_and_associate_collection_with_bucket(sender.clone(), bucket_id)?)
-            }
+            if !<T::CollectionInspector as shp_traits::InspectCollections>::collection_exists(&current_collection_id) =>
+                {
+                    Some(Self::do_create_and_associate_collection_with_bucket(sender.clone(), bucket_id)?)
+                }
             // Use the existing collection ID if it exists.
             (_, Some(current_collection_id)) => Some(current_collection_id),
             // No collection needed if the bucket is public and no collection exists.
@@ -306,7 +310,7 @@ where
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         msp: Option<ProviderIdFor<T>>,
-        bsps_required: Option<T::StorageRequestBspsRequiredType>,
+        bsps_required: Option<ReplicationTargetType<T>>,
         user_peer_ids: Option<PeerIds<T>>,
         data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
@@ -330,13 +334,13 @@ where
             Error::<T>::NotBucketOwner
         );
 
-        let bsps_required = bsps_required.unwrap_or(TargetBspsRequired::<T>::get());
+        let bsps_required = bsps_required.unwrap_or(ReplicationTarget::<T>::get());
 
         if bsps_required.is_zero() {
-            return Err(Error::<T>::BspsRequiredCannotBeZero)?;
+            return Err(Error::<T>::ReplicationTargetCannotBeZero)?;
         }
 
-        if bsps_required.into() > MaxBspsPerStorageRequest::<T>::get().into() {
+        if bsps_required > MaxBspsPerStorageRequest::<T>::get().into() {
             return Err(Error::<T>::BspsRequiredExceedsMax)?;
         }
 
@@ -351,8 +355,8 @@ where
             user_peer_ids: user_peer_ids.unwrap_or_default(),
             data_server_sps,
             bsps_required,
-            bsps_confirmed: T::StorageRequestBspsRequiredType::zero(),
-            bsps_volunteered: T::StorageRequestBspsRequiredType::zero(),
+            bsps_confirmed: ReplicationTargetType::<T>::zero(),
+            bsps_volunteered: ReplicationTargetType::<T>::zero(),
         };
 
         // Compute the file key used throughout this file's lifespan.
@@ -418,7 +422,7 @@ where
             <StorageRequests<T>>::get(&file_key).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         expect_or_err!(
-            storage_request_metadata.bsps_confirmed.into() < storage_request_metadata.bsps_required.into(),
+            storage_request_metadata.bsps_confirmed < storage_request_metadata.bsps_required,
             "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
             Error::<T>::StorageRequestBspsRequiredFulfilled,
             bool
@@ -434,22 +438,12 @@ where
         let bsp_threshold =
             Self::get_threshold_for_bsp_request(&bsp_id, &storage_request_metadata.fingerprint);
 
-        let current_block_number = <frame_system::Pallet<T>>::block_number();
+        // Compute threshold for BSP to succeed.
+        let (to_succeed, _slope) =
+            Self::compute_threshold_to_succeed(&bsp_id, storage_request_metadata.requested_at)?;
 
-        // Get number of blocks since the storage request was issued.
-        let blocks_since_requested =
-            current_block_number.saturating_sub(storage_request_metadata.requested_at);
-        let blocks_since_requested = T::BlockNumberToThresholdType::convert(blocks_since_requested);
-
-        // Compute the threshold increasing rate.
-        let rate_increase =
-            blocks_since_requested.saturating_mul(T::AssignmentThresholdMultiplier::get());
-
-        // Compute current threshold needed to volunteer.
-        let threshold = rate_increase.saturating_add(BspsAssignmentThreshold::<T>::get());
-
-        // Check that the BSP's threshold is under the threshold required to qualify as BSP for the storage request.
-        ensure!(bsp_threshold <= (threshold), Error::<T>::AboveThreshold);
+        // Check that the BSP's threshold is under the threshold required to volunteer for the storage request.
+        ensure!(bsp_threshold <= to_succeed, Error::<T>::AboveThreshold);
 
         // Add BSP to storage request metadata.
         <StorageRequestBsps<T>>::insert(
@@ -464,7 +458,7 @@ where
         // Increment the number of bsps volunteered.
         match storage_request_metadata
             .bsps_volunteered
-            .checked_add(&T::StorageRequestBspsRequiredType::one())
+            .checked_add(&ReplicationTargetType::<T>::one())
         {
             Some(inc_bsps_volunteered) => {
                 storage_request_metadata.bsps_volunteered = inc_bsps_volunteered;
@@ -567,7 +561,7 @@ where
             // Increment the number of bsps confirmed.
             match storage_request_metadata
                 .bsps_confirmed
-                .checked_add(&T::StorageRequestBspsRequiredType::one())
+                .checked_add(&ReplicationTargetType::<T>::one())
             {
                 Some(inc_bsps_confirmed) => {
                     storage_request_metadata.bsps_confirmed = inc_bsps_confirmed;
@@ -609,23 +603,22 @@ where
                 // Remove storage request metadata.
                 <StorageRequests<T>>::remove(&file_key.0);
 
-                // There should only be the number of bsps volunteered under the storage request prefix.
-                let remove_limit: u32 = storage_request_metadata
-                    .bsps_volunteered
-                    .try_into()
-                    .map_err(|_| Error::<T>::FailedTypeConversion)?;
-
                 // Remove storage request bsps
                 let removed =
                     <StorageRequestBsps<T>>::drain_prefix(&file_key.0).fold(0, |acc, _| acc + 1);
 
                 // Make sure that the expected number of bsps were removed.
                 expect_or_err!(
-                    removed == remove_limit,
+                    storage_request_metadata.bsps_volunteered == removed.into(),
                     "Number of volunteered bsps for storage request should have been removed",
                     Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
                     bool
                 );
+
+                // Notify that the storage request has been fulfilled.
+                Self::deposit_event(Event::StorageRequestFulfilled {
+                    file_key: file_key.0,
+                });
             } else {
                 // Update storage request metadata.
                 <StorageRequests<T>>::set(&file_key.0, Some(storage_request_metadata.clone()));
@@ -716,9 +709,7 @@ where
         );
 
         // Check if there are already BSPs who have confirmed to store the file.
-        if storage_request_metadata.bsps_confirmed.into()
-            >= T::StorageRequestBspsRequiredType::zero().into()
-        {
+        if storage_request_metadata.bsps_confirmed >= ReplicationTargetType::<T>::one() {
             // Apply Remove mutation of the file key to the BSPs that have confirmed storing the file (proofs of inclusion).
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
                 &file_key,
@@ -726,18 +717,12 @@ where
             )?;
         }
 
-        // There should only be the number of bsps volunteered under the storage request prefix.
-        let remove_limit: u32 = storage_request_metadata
-            .bsps_volunteered
-            .try_into()
-            .map_err(|_| Error::<T>::FailedTypeConversion)?;
-
         // Remove storage request bsps
         let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key).fold(0, |acc, _| acc + 1);
 
         // Make sure that the expected number of bsps were removed.
         expect_or_err!(
-            removed == remove_limit,
+            storage_request_metadata.bsps_volunteered == removed.into(),
             "Number of volunteered bsps for storage request should have been removed",
             Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
             bool
@@ -852,11 +837,11 @@ where
 
                         storage_request_metadata.bsps_confirmed = storage_request_metadata
                             .bsps_confirmed
-                            .saturating_sub(T::StorageRequestBspsRequiredType::one());
+                            .saturating_sub(ReplicationTargetType::<T>::one());
 
                         storage_request_metadata.bsps_volunteered = storage_request_metadata
                             .bsps_volunteered
-                            .saturating_sub(T::StorageRequestBspsRequiredType::one());
+                            .saturating_sub(ReplicationTargetType::<T>::one());
 
                         <StorageRequestBsps<T>>::remove(&file_key, &bsp_id);
                     }
@@ -865,7 +850,7 @@ where
                     None => {
                         storage_request_metadata.bsps_required = storage_request_metadata
                             .bsps_required
-                            .saturating_add(T::StorageRequestBspsRequiredType::one());
+                            .saturating_add(ReplicationTargetType::<T>::one());
                     }
                 }
 
@@ -882,7 +867,7 @@ where
                     fingerprint,
                     size,
                     None,
-                    Some(T::StorageRequestBspsRequiredType::one()),
+                    Some(ReplicationTargetType::<T>::one()),
                     None,
                     if can_serve {
                         BoundedVec::try_from(vec![bsp_id]).unwrap()
@@ -1157,22 +1142,6 @@ where
         Ok(expiration_block)
     }
 
-    /// Compute the asymptotic threshold point for the given number of total BSPs.
-    ///
-    /// This function calculates the threshold at which the decay factor stabilizes,
-    /// representing a horizontal asymptote.
-    pub(crate) fn compute_asymptotic_threshold_point(
-        total_bsps: u32,
-    ) -> Result<T::ThresholdType, Error<T>> {
-        let asymptotic_decay_factor = T::AssignmentThresholdDecayFactor::get().saturating_pow(
-            total_bsps
-                .try_into()
-                .map_err(|_| Error::<T>::FailedToConvertBlockNumber)?,
-        );
-
-        Ok(T::AssignmentThresholdAsymptote::get().saturating_add(asymptotic_decay_factor))
-    }
-
     pub fn compute_file_key(
         owner: T::AccountId,
         bucket_id: BucketIdFor<T>,
@@ -1208,41 +1177,88 @@ where
         // Return the threshold needed for the BSP to be able to volunteer for the storage request.
         T::HashToThresholdType::convert(volunteering_hash)
     }
-}
 
-impl<T: crate::Config> shp_traits::SubscribeProvidersInterface for Pallet<T> {
-    type ProviderId = ProviderIdFor<T>;
+    /// Compute the threshold for a BSP to succeed.
+    ///
+    /// Succeeding this threshold is required for the BSP to be eligible to volunteer for a storage request.
+    /// The threshold is computed based on the global reputation weight and the BSP's reputation weight, giving
+    /// an advantage to BSPs with higher reputation weights.
+    ///
+    /// The formalized formulas are documented in the [README](https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/file-system/README.md#volunteering-succeeding-threshold-checks).
+    pub fn compute_threshold_to_succeed(
+        bsp_id: &ProviderIdFor<T>,
+        requested_at: BlockNumberFor<T>,
+    ) -> Result<(T::ThresholdType, T::ThresholdType), DispatchError> {
+        let maximum_threshold = MaximumThreshold::<T>::get();
 
-    fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
-        // Adjust bsp assignment threshold by applying the inverse of the decay function after removing the asymptote
-        let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
-        let base_threshold =
-            bsp_assignment_threshold.saturating_sub(T::AssignmentThresholdAsymptote::get());
+        let global_weight =
+            T::ThresholdType::from(T::Providers::get_global_bsps_reputation_weight());
 
-        bsp_assignment_threshold = base_threshold
-            .checked_div(&T::AssignmentThresholdDecayFactor::get())
-            .ok_or(Error::<T>::ThresholdArithmeticError)?
-            .saturating_add(T::AssignmentThresholdAsymptote::get());
+        if global_weight == T::ThresholdType::zero() {
+            return Err(Error::<T>::NoGlobalReputationWeightSet.into());
+        }
 
-        BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
+        // Global threshold starting point from which all BSPs begin their threshold slope. All BSPs start at this point
+        // with the starting reputation weight.
+        //
+        // The calculation is designed to achieve the following:
+        //
+        // 1. In a regular scenario, `maximum_threshold` would be very large, and you'd start bringing it down with
+        //    `global_weight`, also a large number. That way, when you multiply it by the replication target,
+        //    you should still be within the numerical domain.
+        //
+        // 2. If `global_weight` is low still (in the early days of the network), when multiplying with
+        //    replication target, you'll get at most `u32::MAX` and then the threshold would be
+        //    u32::MAX / 2 (still pretty high).
+        //
+        // 3. If maximum_threshold is very low (like sometimes set in tests), the division would saturate to 1,
+        //    and then the threshold would be replication target / 2 (still very low).
+        let threshold_global_starting_point = maximum_threshold
+            .checked_div(&global_weight)
+            .unwrap_or(T::ThresholdType::one())
+            .checked_mul(&ReplicationTarget::<T>::get().into()).unwrap_or({
+                log::warn!("Global starting point is beyond MaximumThreshold. Setting it to half of the MaximumThreshold.");
+                maximum_threshold.checked_div(&2u32.into()).unwrap_or({
+                    log::warn!("This should not happen unless MaximumThreshold is 2 or less.");
+                    T::ThresholdType::one()
+                })
+            })
+            .checked_div(&T::ThresholdType::from(2u32))
+            .unwrap_or(T::ThresholdType::one());
 
-        Ok(())
-    }
+        // Get the BSP's reputation weight.
+        let bsp_weight = T::ThresholdType::from(T::Providers::get_bsp_reputation_weight(&bsp_id)?);
 
-    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
-        // Adjust bsp assignment threshold by applying the decay function after removing the asymptote
-        let mut bsp_assignment_threshold = BspsAssignmentThreshold::<T>::get();
-        let base_threshold =
-            bsp_assignment_threshold.saturating_sub(T::AssignmentThresholdAsymptote::get());
+        // Actual BSP's threshold starting point, taking into account their reputation weight.
+        let threshold_weighted_starting_point =
+            bsp_weight.saturating_mul(threshold_global_starting_point);
 
-        bsp_assignment_threshold = base_threshold
-            .checked_mul(&T::AssignmentThresholdDecayFactor::get())
-            .ok_or(Error::<T>::ThresholdArithmeticError)?
-            .saturating_add(T::AssignmentThresholdAsymptote::get());
+        // Rate of increase from the weighted threshold starting point up to the maximum threshold within a block range.
+        let threshold_slope = maximum_threshold
+            .saturating_sub(threshold_weighted_starting_point)
+            .checked_div(&T::ThresholdTypeToBlockNumber::convert_back(
+                BlockRangeToMaximumThreshold::<T>::get(),
+            ))
+            .unwrap_or(T::ThresholdType::one());
 
-        BspsAssignmentThreshold::<T>::put(bsp_assignment_threshold);
+        // Since checked div only returns None on a result of zero, there is the case when the result is between 0 and 1 and rounds down to 0.
+        let threshold_slope = if threshold_slope.is_zero() {
+            T::ThresholdType::one()
+        } else {
+            threshold_slope
+        };
 
-        Ok(())
+        let current_block_number = <frame_system::Pallet<T>>::block_number();
+
+        // Get number of blocks since the storage request was issued.
+        let blocks_since_requested = current_block_number.saturating_sub(requested_at);
+        let blocks_since_requested =
+            T::ThresholdTypeToBlockNumber::convert_back(blocks_since_requested);
+
+        let to_succeed = threshold_weighted_starting_point
+            .saturating_add(threshold_slope.saturating_mul(blocks_since_requested));
+
+        Ok((to_succeed, threshold_slope))
     }
 }
 
@@ -1250,7 +1266,7 @@ mod hooks {
     use crate::types::{ExpiredItems, MerkleHash};
     use crate::{
         pallet, Event, ItemExpirations, NextStartingBlockToCleanUp, Pallet,
-        PendingFileDeletionRequests, StorageRequestBsps, StorageRequests,
+        PendingFileDeletionRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
     };
     use frame_support::weights::Weight;
     use frame_system::pallet_prelude::BlockNumberFor;
@@ -1322,13 +1338,10 @@ mod hooks {
         fn process_expired_storage_request(file_key: MerkleHash<T>, remaining_weight: &mut Weight) {
             let db_weight = T::DbWeight::get();
 
-            // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `TargetBspsRequired`.
+            // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `ReplicationTarget`.
             // We could increase this potential weight to account for potentially more volunteers.
-            let potential_weight = db_weight.writes(
-                Into::<u32>::into(T::TargetBspsRequired::get())
-                    .saturating_add(1)
-                    .into(),
-            );
+            let potential_weight =
+                db_weight.writes(ReplicationTarget::<T>::get().saturating_plus_one().into());
 
             if !remaining_weight.all_gte(potential_weight) {
                 return;

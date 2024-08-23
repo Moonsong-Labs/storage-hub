@@ -1320,7 +1320,7 @@ mod users {
             assert!(storagehub::FileSystem::storage_requests(file_key.clone()).is_some());
 
             // Advance enough blocks to make sure Bob can volunteer according to the threshold
-            storagehub::System::set_block_number(1000); // In the config we set to reach the maximum threshold at 1000 blocks
+            storagehub::System::set_block_number(storagehub::System::block_number() + 1); // In the config we set to reach the maximum threshold after 1 block
 
             // Volunteer Bob
             assert_ok!(storagehub::FileSystem::bsp_volunteer(
@@ -1691,7 +1691,7 @@ mod users {
             assert!(storagehub::FileSystem::storage_requests(file_key.clone()).is_some());
 
             // Advance enough blocks to make sure Bob can volunteer according to the threshold
-            storagehub::System::set_block_number(1000); // In the config we set to reach the maximum threshold at 1000 blocks
+            storagehub::System::set_block_number(storagehub::System::block_number() + 1); // In the config we set to reach the maximum threshold after 1 block
 
             // Volunteer Bob
             assert_ok!(storagehub::FileSystem::bsp_volunteer(

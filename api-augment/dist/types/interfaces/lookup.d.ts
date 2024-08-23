@@ -1429,6 +1429,9 @@ declare const _default: {
         fileKeys: string;
         newRoot: string;
       };
+      StorageRequestFulfilled: {
+        fileKey: string;
+      };
       StorageRequestExpired: {
         fileKey: string;
       };
@@ -3060,8 +3063,10 @@ declare const _default: {
         bucketId: string;
         forestProof: string;
       };
-      force_update_bsps_assignment_threshold: {
-        bspAssignmentThreshold: string;
+      set_global_parameters: {
+        replicationTarget: string;
+        maximumThreshold: string;
+        blockRangeToMaximumThreshold: string;
       };
     };
   };
@@ -3652,6 +3657,7 @@ declare const _default: {
     lastCapacityChange: string;
     ownerAccount: string;
     paymentAccount: string;
+    reputationWeight: string;
   };
   /**
    * Lookup392: pallet_storage_providers::types::MainStorageProvider<T>

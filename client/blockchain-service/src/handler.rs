@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     str::FromStr,
@@ -65,13 +66,22 @@ impl SubmitProofRequest {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ConfirmStoringRequest {
     pub file_key: H256,
+    pub try_count: usize,
 }
 
 impl ConfirmStoringRequest {
     pub fn new(file_key: H256) -> Self {
-        Self { file_key }
+        Self {
+            file_key,
+            try_count: 0,
+        }
+    }
+
+    pub fn increment_try_count(&mut self) {
+        self.try_count += 1;
     }
 }
 
@@ -525,6 +535,28 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryStorageProviderId {
+                    maybe_node_pub_key,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let node_pub_key = maybe_node_pub_key
+                        .unwrap_or_else(|| Self::caller_pub_key(self.keystore.clone()));
+
+                    let provider_id = self
+                        .client
+                        .runtime_api()
+                        .get_storage_provider_id(current_block_hash, &node_pub_key.into())
+                        .map_err(|_| anyhow!("Internal API error"));
+
+                    match callback.send(provider_id) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send storage provider ID: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }
@@ -753,9 +785,9 @@ impl BlockchainService {
                             // Check if the provider ID is one of the provider IDs this node is tracking.
                             if self.provider_ids.contains(&provider) {
                                 self.emit(FinalisedMutationsApplied {
-                                    provider_id: provider.clone(),
+                                    provider_id: provider,
                                     mutations: mutations.clone(),
-                                    new_root: new_root.clone(),
+                                    new_root,
                                 })
                             }
                         }
