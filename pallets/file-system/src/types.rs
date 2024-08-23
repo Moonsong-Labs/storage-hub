@@ -50,16 +50,16 @@ pub struct StorageRequestMetadata<T: Config> {
     ///
     /// The storage request will be dropped/complete once all the minimum required BSPs have
     /// submitted a proof of storage after volunteering to store the data.
-    pub bsps_required: T::StorageRequestBspsRequiredType,
+    pub bsps_required: ReplicationTargetType<T>,
     /// Number of BSPs that have successfully volunteered AND confirmed that they are storing the data.
     ///
     /// This starts at 0 and increases up to `bsps_required`. Once this reaches `bsps_required`, the
     /// storage request is considered complete and will be deleted..
-    pub bsps_confirmed: T::StorageRequestBspsRequiredType,
+    pub bsps_confirmed: ReplicationTargetType<T>,
     /// Number of BSPs that have volunteered to store the data.
     ///
     /// There can be more than `bsps_required` volunteers, but it is essentially a race for BSPs to confirm that they are storing the data.
-    pub bsps_volunteered: T::StorageRequestBspsRequiredType,
+    pub bsps_volunteered: ReplicationTargetType<T>,
 }
 
 impl<T: Config> StorageRequestMetadata<T> {
@@ -134,8 +134,8 @@ pub type Fingerprint<T> = <T as crate::Config>::Fingerprint;
 pub type StorageData<T> =
     <<T as crate::Config>::Providers as shp_traits::MutateStorageProvidersInterface>::StorageDataUnit;
 
-/// Alias for the `TargetBspsRequired` type used in the FileSystem pallet.
-pub type TargetBspsRequired<T> = <T as crate::Config>::TargetBspsRequired;
+/// Alias for the `ReplicationTargetType` type used in the FileSystem pallet.
+pub type ReplicationTargetType<T> = <T as crate::Config>::ReplicationTargetType;
 
 /// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
 pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;

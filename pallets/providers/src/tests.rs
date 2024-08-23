@@ -624,7 +624,9 @@ mod sign_up {
                                 multiaddresses,
                                 last_capacity_change: current_block,
                                 owner_account: alice,
-                                payment_account: alice
+                                payment_account: alice,
+                                reputation_weight:
+                                    <Test as crate::Config>::StartingReputationWeight::get(),
                             }),
                             current_block
                         )
@@ -991,7 +993,9 @@ mod sign_up {
                             root: DefaultMerkleRoot::get(),
                             last_capacity_change: current_block,
                             owner_account: alice,
-                            payment_account: alice
+                            payment_account: alice,
+                            reputation_weight:
+                                <Test as crate::Config>::StartingReputationWeight::get(),
                         })));
                     assert!(alice_sign_up_request.is_ok_and(|request| request.1 == current_block));
 
@@ -4395,6 +4399,7 @@ fn register_account_as_bsp(
             last_capacity_change: frame_system::Pallet::<Test>::block_number(),
             owner_account: account,
             payment_account: account,
+            reputation_weight: <Test as crate::Config>::StartingReputationWeight::get(),
         },
     )
 }
