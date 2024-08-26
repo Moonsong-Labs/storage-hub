@@ -23,7 +23,22 @@ export type BspNetApi = ApiPromise & {
     signer?: KeyringPair
   ) => Promise<SealedBlock>;
 
-  /** @description Creates a new bucket.
+  /**
+   * @description Creates a new bucket and submits a new storage request.
+   *
+   * @param source - The local path to the file to be uploaded.
+   * @param location - The StorageHub "location" field of the file to be uploaded.
+   * @param bucketName - The name of the bucket to be created.
+   * @returns
+   */
+  sendNewStorageRequest: (
+    source: string,
+    location: string,
+    bucketName: string
+  ) => Promise<FileMetadata>;
+
+  /**
+   * @description Creates a new bucket.
    *
    * @param bucketName - The name of the bucket to be created.
    * @returns A promise that resolves to a new bucket event.
@@ -80,4 +95,24 @@ export interface ToxicInfo {
   attributes: {
     [key: string]: string | number | undefined;
   };
+}
+
+/**
+ * Represents the metadata of a file.
+ *
+ * @interface
+ * @property {string} fileKey - The StorageHub file key of the file.
+ * @property {string} bucketId - The StorageHub bucket ID of the file.
+ * @property {string} location - The StorageHub location of the file.
+ * @property {string} owner - The StorageHub owner of the file.
+ * @property {string} fingerprint - The StorageHub fingerprint of the file.
+ * @property {number} fileSize - The size of the file in bytes.
+ */
+export interface FileMetadata {
+  fileKey: string;
+  bucketId: string;
+  location: string;
+  owner: string;
+  fingerprint: string;
+  fileSize: number;
 }

@@ -268,8 +268,8 @@ fn start_provider_tasks<FL, FS>(
     // Starting the tasks according to the provider type.
     match provider_options.provider_type {
         ProviderType::Bsp => sh_handler.start_bsp_tasks(),
+        ProviderType::Msp => sh_handler.start_msp_tasks(),
         ProviderType::User => sh_handler.start_user_tasks(),
-        _ => {}
     }
 }
 
@@ -494,7 +494,7 @@ where
 
     thread_local!(static TIMESTAMP: RefCell<u64> = RefCell::new(Utc::now().timestamp_millis().try_into().unwrap()));
 
-    /// Provide a mock duration starting at 0 in millisecond for timestamp inherent.
+    /// Provide a mock duration starting at Utc::now() in millisecond for timestamp inherent.
     /// Each call will increment timestamp by slot_duration making Aura think time has passed.
     struct MockTimestampInherentDataProvider;
 
