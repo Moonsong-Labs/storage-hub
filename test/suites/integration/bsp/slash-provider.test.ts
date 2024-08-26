@@ -1,6 +1,6 @@
 import "@storagehub/api-augment";
-import {strictEqual} from "node:assert";
-import {after, before, describe, it} from "node:test";
+import { strictEqual } from "node:assert";
+import { after, before, describe, it } from "node:test";
 import {
   type BspNetApi,
   cleardownTest,
@@ -10,7 +10,7 @@ import {
   NODE_INFOS,
   runSimpleBspNet
 } from "../../../util";
-import {sleep} from "@zombienet/utils";
+import { sleep } from "@zombienet/utils";
 
 describe("BSPNet: Slash Provider", () => {
   let api: BspNetApi;
@@ -127,7 +127,8 @@ async function runToNextChallengePeriodBlock(
   const slashableProviders = await api.query.proofsDealer.slashableProviders(provider);
   strictEqual(
     slashableProviders.unwrap().toNumber(),
-    oldFailedSubmissionsCount.unwrapOrDefault().toNumber() + api.consts.proofsDealer.randomChallengesPerBlock.toNumber()
+    oldFailedSubmissionsCount.unwrapOrDefault().toNumber() +
+      api.consts.proofsDealer.randomChallengesPerBlock.toNumber()
   );
 
   return nextChallengeDeadline.toNumber();
