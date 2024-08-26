@@ -9,7 +9,7 @@ use frame_support::{BoundedBTreeSet, Parameter};
 use scale_info::prelude::fmt::Debug;
 use scale_info::TypeInfo;
 use sp_core::Get;
-use sp_runtime::traits::{AtLeast32BitUnsigned, CheckedAdd, Hash, One, Saturating, Zero};
+use sp_runtime::traits::{AtLeast32BitUnsigned, CheckedAdd, Hash, One, Saturating};
 use sp_runtime::{BoundedVec, DispatchError};
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec::Vec;
@@ -274,7 +274,7 @@ pub trait ReadStorageProvidersInterface {
         + One
         + Saturating
         + PartialOrd
-        + Zero;
+        + sp_runtime::traits::Zero;
 
     /// Check if provider is a BSP.
     fn is_bsp(who: &Self::ProviderId) -> bool;

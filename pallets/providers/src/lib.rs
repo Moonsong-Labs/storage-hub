@@ -46,6 +46,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
     use shp_traits::ProofSubmittersInterface;
+    use sp_runtime::traits::CheckedDiv;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -77,6 +78,8 @@ pub mod pallet {
             + MaybeDisplay
             + AtLeast32BitUnsigned
             + Saturating
+            + CheckedDiv
+            + Zero
             + Copy
             + MaxEncodedLen
             + HasCompact
@@ -171,6 +174,12 @@ pub mod pallet {
         #[pallet::constant]
         type DepositPerData: Get<BalanceOf<Self>>;
 
+        /// The estimated maximum size of an unknown file.
+        ///
+        /// Used primarily to slash a Storage Provider when it fails to provide a chunk of data for an unknown file size.
+        #[pallet::constant]
+        type MaxFileSize: Get<StorageDataUnit<Self>>;
+
         // TODO: Change these next constants to a more generic type
 
         /// The maximum size of a multiaddress.
@@ -211,7 +220,7 @@ pub mod pallet {
 
         /// The slash factor deducted from a Storage Provider's deposit for every single storage proof they fail to provide.
         #[pallet::constant]
-        type SlashFactor: Get<BalanceOf<Self>>;
+        type SlashAmountPerMaxFileSize: Get<BalanceOf<Self>>;
 
         /// Starting reputation weight for a newly registered BSP.
         #[pallet::constant]

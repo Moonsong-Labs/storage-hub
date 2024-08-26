@@ -413,8 +413,17 @@ where
             seed,
         });
 
-        // Calculate if this is a checkpoint challenge round.
         let last_checkpoint_tick = LastCheckpointTick::<T>::get();
+
+        // Count last checkpoint challenges tick challenges
+        let checkpoint_challenges_count =
+            TickToCheckpointChallenges::<T>::get(last_checkpoint_tick)
+                .unwrap_or_else(||
+                    // Returning an empty list so slashable providers will not accrue any failed proof submissions for checkpoint challenges.
+                    BoundedVec::new())
+                .len();
+        weight.consume(T::DbWeight::get().reads_writes(1, 0));
+
         // This hook does not return an error, and it cannot fail, that's why we use `saturating_add`.
         let next_checkpoint_tick =
             last_checkpoint_tick.saturating_add(T::CheckpointChallengePeriod::get());
@@ -433,12 +442,44 @@ where
             weight.consume(T::DbWeight::get().reads_writes(1, 1));
 
             // Accrue number of failed proof submission for this slashable provider.
-            SlashableProviders::<T>::mutate_exists(provider, |slashable| {
-                if let Some(slashable) = slashable {
-                    slashable.saturating_inc();
-                } else {
-                    *slashable = Some(1);
+            // Add custom checkpoint challenges if the provider needed to respond to them.
+            SlashableProviders::<T>::mutate(provider, |slashable| {
+                let mut accrued = slashable.unwrap_or(0);
+
+                let last_tick_provider_submitted_proof =
+                    match LastTickProviderSubmittedAProofFor::<T>::get(provider) {
+                        Some(tick) => tick,
+                        None => {
+                            Self::deposit_event(Event::NoRecordOfLastSubmittedProof { provider });
+
+                            #[cfg(test)]
+                            unreachable!(
+                                "Provider should have a last tick it submitted a proof for."
+                            );
+
+                            #[allow(unreachable_code)]
+                            {
+                                // If the Provider has no record of the last tick it submitted a proof for,
+                                // we set it to the current challenges ticker, so they will not be slashed.
+                                challenges_ticker
+                            }
+                        }
+                    };
+                weight.consume(T::DbWeight::get().reads_writes(1, 0));
+
+                let challenge_ticker_provider_should_have_responded_to =
+                    challenges_ticker.saturating_sub(T::ChallengeTicksTolerance::get());
+
+                if checkpoint_challenges_count != 0
+                    && last_tick_provider_submitted_proof <= last_checkpoint_tick
+                    && last_checkpoint_tick < challenge_ticker_provider_should_have_responded_to
+                {
+                    accrued = accrued.saturating_add(checkpoint_challenges_count as u32);
                 }
+
+                accrued = accrued.saturating_add(RandomChallengesPerBlockFor::<T>::get());
+
+                *slashable = Some(accrued);
             });
 
             weight.consume(T::DbWeight::get().reads_writes(0, 1));
