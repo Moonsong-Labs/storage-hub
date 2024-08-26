@@ -28,9 +28,9 @@ impl<T: Config> core::fmt::Debug for ItemMetadata<T> {
     }
 }
 
-/// Type alias representing the type of `BucketId` used in `ProvidersInterface`.
+/// Type alias representing the type of `BucketId` used in `ReadBucketsInterface`.
 pub(crate) type BucketIdFor<T> =
-    <<T as crate::Config>::Providers as shp_traits::ProvidersConfig>::BucketId;
+    <<T as crate::Config>::Buckets as shp_traits::ReadBucketsInterface>::BucketId;
 
 /// Type alias for the account ID source type.
 pub(crate) type AccountIdLookupSourceOf<T> =
@@ -49,4 +49,4 @@ pub(crate) type CollectionIdFor<T> = <T as pallet_nfts::Config>::CollectionId;
 #[cfg(test)]
 /// Type alias for the `ProviderId` type used in `ProvidersInterface`.
 pub(crate) type ProviderIdFor<T> =
-    <<T as crate::Config>::Providers as shp_traits::ProvidersInterface>::ProviderId;
+    <<T as crate::Config>::Buckets as shp_traits::ReadBucketsInterface>::ProviderId;

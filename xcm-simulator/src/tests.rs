@@ -16,7 +16,7 @@ use frame_support::dispatch::GetDispatchInfo;
 use frame_support::BoundedVec;
 use pallet_balances;
 use pallet_storage_providers::types::{MaxMultiAddressAmount, MultiAddress};
-use shp_traits::ProvidersInterface;
+use shp_traits::{ReadBucketsInterface, ReadProvidersInterface};
 use sp_core::H256;
 
 mod relay_token {
@@ -1150,7 +1150,6 @@ mod users {
     use pallet_file_system::types::MaxPeerIdSize;
     use pallet_storage_providers::types::ValuePropId;
     use pallet_storage_providers::types::ValueProposition;
-    use shp_traits::ReadProvidersInterface;
     use sp_trie::CompactProof;
     use storagehub::configs::BucketNameLimit;
     use storagehub::configs::SpMinDeposit;
@@ -1321,7 +1320,7 @@ mod users {
             assert!(storagehub::FileSystem::storage_requests(file_key.clone()).is_some());
 
             // Advance enough blocks to make sure Bob can volunteer according to the threshold
-            storagehub::System::set_block_number(1000); // In the config we set to reach the maximum threshold at 1000 blocks
+            storagehub::System::set_block_number(storagehub::System::block_number() + 1); // In the config we set to reach the maximum threshold after 1 block
 
             // Volunteer Bob
             assert_ok!(storagehub::FileSystem::bsp_volunteer(
@@ -1692,7 +1691,7 @@ mod users {
             assert!(storagehub::FileSystem::storage_requests(file_key.clone()).is_some());
 
             // Advance enough blocks to make sure Bob can volunteer according to the threshold
-            storagehub::System::set_block_number(1000); // In the config we set to reach the maximum threshold at 1000 blocks
+            storagehub::System::set_block_number(storagehub::System::block_number() + 1); // In the config we set to reach the maximum threshold after 1 block
 
             // Volunteer Bob
             assert_ok!(storagehub::FileSystem::bsp_volunteer(

@@ -2,7 +2,108 @@ import type { EventRecord } from "@polkadot/types/interfaces";
 import { strictEqual } from "node:assert";
 import type { ApiPromise } from "@polkadot/api";
 import type { AugmentedEvent } from "@polkadot/api/types";
+import type { BspNetApi } from "./bspNet";
 
+/**
+ * Asserts that a specific extrinsic (module.method) is present in a blockchain block or transaction pool.
+ *
+ * @param {BspNetApi} api - The API instance connected to the blockchain network.
+ * @param {Object} options - Configuration options for the extrinsic check.
+ * @param {string} [options.blockHeight] - The block height to check. If not provided, the latest block will be used.
+ * @param {string} [options.blockHash] - The block hash to check. Takes precedence over blockHeight if provided.
+ * @param {boolean} [options.skipSuccessCheck=false] - If true, skips the check for an associated `ExtrinsicSuccess` event.
+ * @param {boolean} [options.checkTxPool=false] - If true, checks the pending transaction pool instead of a finalized block.
+ * @param {string} options.module - The module name of the extrinsic to check (e.g., "balances").
+ * @param {string} options.method - The method name of the extrinsic to check (e.g., "transfer").
+ * @param {boolean} [options.ignoreParamCheck=false] - If true, skips the validation check for the module.method existence in the API metadata.
+ *
+ * @returns {Promise<Object[]>} - Returns a list of objects representing the extrinsics that match the module.method criteria.
+ * @throws {Error} - Throws an error if no matching extrinsic is found, or if the success check fails (unless skipped).
+ *
+ * TODO: add ability to search nested extrinsics e.g. sudo.sudo(balance.forceTransfer(...))
+ */
+export const assertExtrinsicPresent = async (
+  api: BspNetApi,
+  options: {
+    blockHeight?: string;
+    blockHash?: string;
+    skipSuccessCheck?: boolean;
+    checkTxPool?: boolean;
+    module: string;
+    method: string;
+    ignoreParamCheck?: boolean;
+  }
+): Promise<
+  {
+    module: string;
+    method: string;
+    extIndex: number;
+  }[]
+> => {
+  if (options.ignoreParamCheck !== true) {
+    strictEqual(
+      options.module in api.tx,
+      true,
+      `Module ${options.module} not found in API metadata. Turn off this check with "ignoreParamCheck: true" if you are sure this exists`
+    );
+    strictEqual(
+      options.method in api.tx[options.module],
+      true,
+      `Method ${options.module}.${options.method} not found in metadata. Turn off this check with "ignoreParamCheck: true" if you are sure this exists`
+    );
+  }
+
+  const blockHash = options?.blockHash
+    ? options.blockHash
+    : options?.blockHeight
+      ? await api.rpc.chain.getBlockHash(options?.blockHeight)
+      : await api.rpc.chain.getBlockHash();
+
+  const extrinsics = !options.checkTxPool
+    ? await (async () => {
+        const response = await api.rpc.chain.getBlock(blockHash);
+
+        if (!options.blockHeight && !options.blockHash) {
+          console.log(
+            `No block height provided, using latest at ${response.block.header.number.toNumber()}`
+          );
+        }
+        return response.block.extrinsics;
+      })()
+    : await api.rpc.author.pendingExtrinsics();
+  const transformed = extrinsics.map(({ method: { method, section } }, index) => {
+    return { module: section, method, extIndex: index };
+  });
+
+  const matches = transformed.filter(
+    ({ method, module }) => method === options?.method && module === options?.module
+  );
+
+  strictEqual(
+    matches.length > 0,
+    true,
+    `No extrinsics matching ${options?.module}.${options?.method} found. \n Extrinsics in block ${options.blockHeight || blockHash}: ${extrinsics.map(({ method: { method, section } }) => `${section}.${method}`).join(" | ")}`
+  );
+
+  if (options?.skipSuccessCheck !== true && options.checkTxPool !== true) {
+    const events = await (await api.at(blockHash)).query.system.events();
+    assertEventPresent(api, "system", "ExtrinsicSuccess", events);
+  }
+
+  return matches;
+};
+
+/**
+ * Asserts that a specific event (module.method) is present in the provided list of events.
+ *
+ * @param {ApiPromise} api - The API instance connected to the blockchain network.
+ * @param {string} module - The module name of the event to check (e.g., "system").
+ * @param {string} method - The method name of the event to check (e.g., "ExtrinsicSuccess").
+ * @param {EventRecord[]} [events] - The list of events to search through. If not provided or empty, an error is thrown.
+ *
+ * @returns {Object} - Returns an object containing the matching event and its data.
+ * @throws {Error} - Throws an error if no matching event is found, or if the event does not match the expected structure.
+ */
 export const assertEventPresent = (
   api: ApiPromise,
   module: string,
@@ -27,6 +128,17 @@ export const assertEventPresent = (
   return { event: event.event, data: event.event.data };
 };
 
+/**
+ * Asserts that multiple instances of a specific event (module.method) are present in the provided list of events.
+ *
+ * @param {ApiPromise} api - The API instance connected to the blockchain network.
+ * @param {string} module - The module name of the event to check (e.g., "system").
+ * @param {string} method - The method name of the event to check (e.g., "ExtrinsicSuccess").
+ * @param {EventRecord[]} [events] - The list of events to search through. If not provided or empty, an error is thrown.
+ *
+ * @returns {EventRecord[]} - Returns an array of matching events.
+ * @throws {Error} - Throws an error if no matching events are found.
+ */
 export const assertEventMany = (
   api: ApiPromise,
   module: string,

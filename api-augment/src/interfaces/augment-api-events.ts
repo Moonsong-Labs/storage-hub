@@ -513,6 +513,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       StorageRequestExpired: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
       /**
+       * Notifies that a storage request for a file key has been fulfilled.
+       **/
+      StorageRequestFulfilled: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
+      /**
        * Notifies that a storage request has been revoked by the user who initiated it.
        **/
       StorageRequestRevoked: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;

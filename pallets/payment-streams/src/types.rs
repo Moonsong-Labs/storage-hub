@@ -6,7 +6,7 @@ use frame_support::pallet_prelude::*;
 use frame_support::traits::fungible::Inspect;
 use frame_system::pallet_prelude::BlockNumberFor;
 use scale_info::TypeInfo;
-use shp_traits::ProvidersInterface;
+use shp_traits::ReadProvidersInterface;
 
 /// Structure that has the Fixed-Rate Payment Stream information
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
@@ -53,4 +53,4 @@ pub type UnitsProvidedFor<T> = <T as Config>::Units;
 
 /// Syntactic sugar for the ProviderId type used in the proofs pallet.
 pub type ProviderIdFor<T> =
-    <<T as crate::Config>::ProvidersPallet as ProvidersInterface>::ProviderId;
+    <<T as crate::Config>::ProvidersPallet as ReadProvidersInterface>::ProviderId;

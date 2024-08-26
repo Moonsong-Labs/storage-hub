@@ -6,7 +6,7 @@ pub mod bsp_submit_proof;
 pub mod bsp_upload_file;
 pub mod mock_bsp_volunteer;
 pub mod mock_sp_react_to_event;
-pub mod slash_provider;
+pub mod sp_slash_provider;
 pub mod user_sends_file;
 
 use sc_tracing::tracing::info;

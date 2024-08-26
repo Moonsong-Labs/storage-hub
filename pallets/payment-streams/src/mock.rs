@@ -9,12 +9,12 @@ use frame_support::{
 };
 use frame_system as system;
 use pallet_nfts::PalletFeatures;
-use shp_traits::{ProofSubmittersInterface, ProvidersInterface, SubscribeProvidersInterface};
+use shp_traits::{ProofSubmittersInterface, ReadProvidersInterface};
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     testing::TestSignature,
     traits::{BlakeTwo256, IdentityLookup},
-    BuildStorage, DispatchResult,
+    BuildStorage,
 };
 use sp_runtime::{traits::Convert, BoundedBTreeSet};
 use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
@@ -133,7 +133,7 @@ impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageData = StorageUnit;
+    type StorageDataUnit = StorageUnit;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
@@ -151,10 +151,11 @@ impl pallet_storage_providers::Config for Test {
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
-    type Subscribers = MockedProvidersSubscriber;
     type ProvidersRandomness = MockRandomness;
     type BucketNameLimit = ConstU32<100>;
     type SlashFactor = ConstU128<10>;
+    type ReputationWeightType = u32;
+    type StartingReputationWeight = ConstU32<10>;
 }
 
 parameter_types! {
@@ -215,7 +216,7 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
     ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
         let mut set = BoundedBTreeSet::<Self::ProviderId, Self::MaxProofSubmitters>::new();
         // We convert the block number + 1 to the corresponding Provider ID, to simulate that the Provider submitted a proof
-        <StorageProviders as ProvidersInterface>::get_provider_id(*block_number + 1)
+        <StorageProviders as ReadProvidersInterface>::get_provider_id(*block_number + 1)
             .map(|id| set.try_insert(id));
         Some(set)
     }
@@ -274,17 +275,5 @@ impl ExtBuilder {
             pallet_payment_streams::OnPollTicker::<Test>::set(1);
         });
         ext
-    }
-}
-
-pub struct MockedProvidersSubscriber;
-impl SubscribeProvidersInterface for MockedProvidersSubscriber {
-    type ProviderId = u64;
-
-    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
-        Ok(())
-    }
-    fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
-        Ok(())
     }
 }

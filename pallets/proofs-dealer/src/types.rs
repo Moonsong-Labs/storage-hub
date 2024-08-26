@@ -1,7 +1,7 @@
 use codec::{Decode, Encode};
 use frame_support::traits::fungible;
 use scale_info::TypeInfo;
-use shp_traits::{CommitmentVerifier, ProvidersInterface};
+use shp_traits::{CommitmentVerifier, ReadChallengeableProvidersInterface};
 use sp_std::{
     collections::btree_map::BTreeMap,
     fmt::{Debug, Formatter, Result},
@@ -114,7 +114,7 @@ pub type ProvidersPalletFor<T> = <T as crate::Config>::ProvidersPallet;
 
 /// Syntactic sugar for the Provider ID type used in the proofs pallet.
 pub type ProviderIdFor<T> =
-    <<T as crate::Config>::ProvidersPallet as ProvidersInterface>::ProviderId;
+    <<T as crate::Config>::ProvidersPallet as ReadChallengeableProvidersInterface>::ProviderId;
 
 /// Syntactic sugar for the ForestVerifier type used in the proofs pallet.
 pub type ForestVerifierFor<T> = <T as crate::Config>::ForestVerifier;

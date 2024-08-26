@@ -167,6 +167,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       AboveThreshold: AugmentedError<ApiType>;
       /**
+       * Block range to maximum threshold cannot be zero.
+       **/
+      BlockRangeToMaximumThresholdCannotBeZero: AugmentedError<ApiType>;
+      /**
        * BSP has already confirmed storing the given file.
        **/
       BspAlreadyConfirmed: AugmentedError<ApiType>;
@@ -182,10 +186,6 @@ declare module "@polkadot/api-base/types/errors" {
        * BSP has not volunteered to store the given file.
        **/
       BspNotVolunteered: AugmentedError<ApiType>;
-      /**
-       * BSPs required for storage request cannot be 0.
-       **/
-      BspsRequiredCannotBeZero: AugmentedError<ApiType>;
       /**
        * BSPs required for storage request cannot exceed the maximum allowed.
        **/
@@ -256,6 +256,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       MaxBlockNumberReached: AugmentedError<ApiType>;
       /**
+       * Maximum threshold cannot be zero.
+       **/
+      MaximumThresholdCannotBeZero: AugmentedError<ApiType>;
+      /**
        * Max number of user pending deletion requests reached.
        **/
       MaxUserPendingDeletionRequestsReached: AugmentedError<ApiType>;
@@ -267,6 +271,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Unauthorized operation, signer is not an MSP of the bucket id.
        **/
       MspNotStoringBucket: AugmentedError<ApiType>;
+      /**
+       * No global reputation weight set.
+       **/
+      NoGlobalReputationWeightSet: AugmentedError<ApiType>;
       /**
        * Account is not a BSP.
        **/
@@ -295,6 +303,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Root of the provider not found.
        **/
       ProviderRootNotFound: AugmentedError<ApiType>;
+      /**
+       * Replication target cannot be zero.
+       **/
+      ReplicationTargetCannotBeZero: AugmentedError<ApiType>;
       /**
        * Storage request already registered for the given file.
        **/
