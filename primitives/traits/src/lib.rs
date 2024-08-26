@@ -106,8 +106,9 @@ pub trait ReadBucketsInterface {
     /// Check if a bucket is private.
     fn is_bucket_private(bucket_id: &Self::BucketId) -> Result<bool, DispatchError>;
 
-    /// Derive the Bucket Id of a bucket, from its owner and name.
+    /// Derive the Bucket Id of a bucket, from its MSP, owner and name.
     fn derive_bucket_id(
+        msp_id: &Self::ProviderId,
         owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
     ) -> Self::BucketId;

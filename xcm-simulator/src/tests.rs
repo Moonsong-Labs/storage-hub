@@ -1249,6 +1249,7 @@ mod users {
         // We check that the bucket was created
         StorageHub::execute_with(|| {
             bucket_id = storagehub::Providers::derive_bucket_id(
+                &alice_msp_id,
                 &parachain_account_in_sh,
                 bucket_name.clone(),
             );
@@ -1608,6 +1609,7 @@ mod users {
         // We check that the bucket was created
         StorageHub::execute_with(|| {
             bucket_id = storagehub::Providers::derive_bucket_id(
+                &alice_msp_id,
                 &charlie_parachain_account_in_sh,
                 bucket_name.clone(),
             );

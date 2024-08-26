@@ -212,7 +212,7 @@ where
             None
         };
 
-        let bucket_id = <T as crate::Config>::Providers::derive_bucket_id(&sender, name);
+        let bucket_id = <T as crate::Config>::Providers::derive_bucket_id(&msp_id, &sender, name);
 
         <T::Providers as MutateBucketsInterface>::add_bucket(
             msp_id,
