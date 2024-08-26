@@ -155,7 +155,7 @@ impl pallet_storage_providers::Config for Test {
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
-    type SlashAmountPerChunkOfStorageData = ConstU128<10>;
+    type SlashAmountPerMaxFileSize = ConstU128<10>;
     type StartingReputationWeight = ConstU32<10>;
 }
 

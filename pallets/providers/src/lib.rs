@@ -220,7 +220,7 @@ pub mod pallet {
 
         /// The slash factor deducted from a Storage Provider's deposit for every single storage proof they fail to provide.
         #[pallet::constant]
-        type SlashAmountPerChunkOfStorageData: Get<BalanceOf<Self>>;
+        type SlashAmountPerMaxFileSize: Get<BalanceOf<Self>>;
 
         /// Starting reputation weight for a newly registered BSP.
         #[pallet::constant]

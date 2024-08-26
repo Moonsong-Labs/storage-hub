@@ -4,7 +4,7 @@ use frame_support::dispatch::{DispatchResultWithPostInfo, Pays};
 use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::sp_runtime::{
-    traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Saturating, Zero},
+    traits::{CheckedAdd, CheckedMul, CheckedSub, One, Saturating, Zero},
     ArithmeticError, BoundedVec, DispatchError,
 };
 use frame_support::traits::tokens::Restriction;
@@ -801,29 +801,16 @@ where
     /// being an exact match to a file key stored by the Storage Provider. The StorageHub protocol requires the Storage Provider to
     /// submit a proof of storage for the neighboring file keys of the missing challenged file key.
     ///
-    /// Every file is assumed to be 4 GB in size.
+    /// The slashing amount is calculated based on an assumption that every file is the maximum size allowed by the protocol.
     pub fn compute_worst_case_scenario_slashable_amount(
         provider_id: &HashId<T>,
     ) -> Result<BalanceOf<T>, DispatchError> {
-        // The slashable amount for a single file of 4 GB in size with a chunk size of 1 KB.
-        let mut chunks = T::MaxFileSize::get()
-            .checked_div(&StorageDataUnit::<T>::from(
-                shp_constants::FILE_CHUNK_SIZE as u32,
-            ))
-            .unwrap_or(1u32.into());
+        let accrued_failed_submission_count = <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id)
+            .ok_or(Error::<T>::ProviderNotSlashable)?.into();
 
-        if chunks == StorageDataUnit::<T>::zero() {
-            chunks = 1u32.into();
-        }
-
-        let slashable_amount_per_failed_proof_submission =
-            T::SlashAmountPerChunkOfStorageData::get().saturating_mul(chunks.into());
-
-        Ok(
-            slashable_amount_per_failed_proof_submission.saturating_mul(
-                <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id).ok_or(Error::<T>::ProviderNotSlashable)?.into()
-            ).saturating_mul(2u32.into())
-        )
+        Ok(T::SlashAmountPerMaxFileSize::get()
+            .saturating_mul(accrued_failed_submission_count)
+            .saturating_mul(2u32.into()))
     }
 }
 

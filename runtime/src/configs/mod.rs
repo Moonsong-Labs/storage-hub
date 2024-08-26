@@ -486,7 +486,7 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = ConstU32<10>;
     type DefaultMerkleRoot = DefaultMerkleRoot<StorageProofsMerkleTrieLayout>;
-    type SlashAmountPerChunkOfStorageData = SlashAmountPerChunkOfStorageData;
+    type SlashAmountPerMaxFileSize = SlashAmountPerChunkOfStorageData;
     type StartingReputationWeight = ConstU32<10>;
 }
 

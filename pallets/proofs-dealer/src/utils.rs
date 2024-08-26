@@ -418,8 +418,11 @@ where
         // Count last checkpoint challenges tick challenges
         let checkpoint_challenges_count =
             TickToCheckpointChallenges::<T>::get(last_checkpoint_tick)
-                .unwrap_or_default()
+                .unwrap_or_else(||
+                    // Returning an empty list so slashable providers will not accrue any failed proof submissions for checkpoint challenges.
+                    BoundedVec::new())
                 .len();
+        weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
         // This hook does not return an error, and it cannot fail, that's why we use `saturating_add`.
         let next_checkpoint_tick =
@@ -456,10 +459,13 @@ where
 
                             #[allow(unreachable_code)]
                             {
+                                // If the Provider has no record of the last tick it submitted a proof for,
+                                // we set it to the current challenges ticker, so they will not be slashed.
                                 challenges_ticker
                             }
                         }
                     };
+                weight.consume(T::DbWeight::get().reads_writes(1, 0));
 
                 let challenge_ticker_provider_should_have_responded_to =
                     challenges_ticker.saturating_sub(T::ChallengeTicksTolerance::get());
