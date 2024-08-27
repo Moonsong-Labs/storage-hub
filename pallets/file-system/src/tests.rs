@@ -903,7 +903,7 @@ mod request_storage {
 
                 // Assert that the next expiration block number is the storage request ttl since a single storage request was made
                 assert_eq!(
-                    FileSystem::next_available_storage_proof_expiration_block(),
+                    FileSystem::next_available_storage_request_expiration_block(),
                     expiration_block
                 );
 
