@@ -32,6 +32,7 @@ tokio = { workspace = true }
 # Local
 pallet-file-system = { workspace = true }
 pallet-file-system-runtime-api = { workspace = true }
+pallet-payment-streams = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }

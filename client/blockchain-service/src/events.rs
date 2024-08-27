@@ -1,8 +1,8 @@
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
-    BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, ForestRoot, PeerIds, ProviderId,
-    RandomnessOutput, StorageData, TrieRemoveMutation,
+    BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, ForestRoot, KeyProofs, PeerIds,
+    ProviderId, RandomnessOutput, StorageData, TrieRemoveMutation,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -104,6 +104,14 @@ pub struct FinalisedMutationsApplied {
 
 impl EventBusMessage for FinalisedMutationsApplied {}
 
+#[derive(Debug, Clone)]
+pub struct ProofAccepted {
+    pub provider_id: ProviderId,
+    pub proofs: KeyProofs,
+}
+
+impl EventBusMessage for ProofAccepted {}
+
 /// The event bus provider for the BlockchainService actor.
 ///
 /// It holds the event buses for the different events that the BlockchainService actor
@@ -117,6 +125,7 @@ pub struct BlockchainServiceEventBusProvider {
     process_confirm_storage_request_event_bus: EventBus<ProcessConfirmStoringRequest>,
     slashable_provider_event_bus: EventBus<SlashableProvider>,
     finalised_mutations_applied_event_bus: EventBus<FinalisedMutationsApplied>,
+    proof_accepted_event_bus: EventBus<ProofAccepted>,
 }
 
 impl EventBusMessage for ProcessSubmitProofRequest {}
@@ -131,6 +140,7 @@ impl BlockchainServiceEventBusProvider {
             process_confirm_storage_request_event_bus: EventBus::new(),
             slashable_provider_event_bus: EventBus::new(),
             finalised_mutations_applied_event_bus: EventBus::new(),
+            proof_accepted_event_bus: EventBus::new(),
         }
     }
 }
@@ -176,5 +186,11 @@ impl ProvidesEventBus<SlashableProvider> for BlockchainServiceEventBusProvider {
 impl ProvidesEventBus<FinalisedMutationsApplied> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<FinalisedMutationsApplied> {
         &self.finalised_mutations_applied_event_bus
+    }
+}
+
+impl ProvidesEventBus<ProofAccepted> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<ProofAccepted> {
+        &self.proof_accepted_event_bus
     }
 }

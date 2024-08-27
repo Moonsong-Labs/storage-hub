@@ -35,7 +35,7 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, FinalisedMutationsApplied,
-        NewChallengeSeed, NewStorageRequest, SlashableProvider,
+        NewChallengeSeed, NewStorageRequest, ProofAccepted, SlashableProvider,
     },
     transaction::SubmittedTransaction,
 };
@@ -693,6 +693,13 @@ impl BlockchainService {
                         ) => self.emit(SlashableProvider {
                             provider,
                             next_challenge_deadline,
+                        }),
+                        // A new proof has been submitted and accepted.
+                        RuntimeEvent::ProofsDealer(
+                            pallet_proofs_dealer::Event::ProofAccepted { provider, proof },
+                        ) => self.emit(ProofAccepted {
+                            provider_id: provider,
+                            proofs: proof.key_proofs,
                         }),
                         // This event should only be of any use if a node is run by as a user.
                         RuntimeEvent::FileSystem(
