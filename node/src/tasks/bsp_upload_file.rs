@@ -10,9 +10,12 @@ use sp_runtime::AccountId32;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
-    events::{BspConfirmedStoring, NewStorageRequest},
+    events::{NewStorageRequest, ProcessConfirmStoringRequest},
+    handler::ConfirmStoringRequest,
 };
-use shc_common::types::{FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout};
+use shc_common::types::{
+    FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
+};
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
@@ -22,6 +25,8 @@ use shc_forest_manager::traits::ForestStorage;
 use crate::services::handler::StorageHubHandler;
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
+
+const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: usize = 3;
 
 /// BSP Upload File Task: Handles the whole flow of a file being uploaded to a BSP, from
 /// the BSP's perspective.
@@ -35,9 +40,9 @@ const LOG_TARGET: &str = "bsp-upload-file-task";
 /// - [`RemoteUploadRequest`] event: The second part of the flow. It is triggered by a
 ///   user sending a chunk of the file to the BSP. It checks the proof for the chunk
 ///   and if it is valid, stores it, until the whole file is stored.
-/// - [`BspConfirmedStoring`] event: The third part of the flow. It is triggered by the
-///   runtime confirming that the BSP is now storing the file so that the BSP can update
-///   its Forest storage.
+/// - [`ProcessConfirmStoringRequest`] event: The third part of the flow. It is triggered by the
+///   runtime when the BSP should construct a proof for the new file(s) and submit a confirm storing
+///   before updating it's local Forest storage root.
 pub struct BspUploadFileTask<FL, FS>
 where
     FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
@@ -223,65 +228,172 @@ where
     }
 }
 
-/// Handles the `BspConfirmedStoring` event.
+/// Handles the `ProcessConfirmStoringRequest` event.
 ///
-/// This event is triggered by the runtime confirming that the BSP is now storing the file.
-impl<FL, FS> EventHandler<BspConfirmedStoring> for BspUploadFileTask<FL, FS>
+/// This event is triggered by the runtime when it decides it is the right time to submit a confirm
+/// storing extrinsic (and update the local forest root).
+impl<FL, FS> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<FL, FS>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
-    async fn handle_event(&mut self, event: BspConfirmedStoring) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: ProcessConfirmStoringRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Runtime confirmed BSP storing files: {:?}",
-            event.file_keys,
+            "Processing ConfirmStoringRequest: {:?}",
+            event.confirm_storing_requests,
         );
-        let mut successful_metadatas = Vec::new();
 
-        // Get the metadata of the stored file.
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
+            Some(tx) => tx,
+            None => {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken.\nThis is a critical bug. Please report it to the StorageHub team.");
+                return Err(anyhow!(
+                    "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. Please report it to the StorageHub team."
+                ));
+            }
+        };
 
-        for fk in &event.file_keys {
-            // TODO: use `convert_raw_bytes_to_hasher_out` when moved to shc_common
-            match TryFrom::<[u8; 32]>::try_from(*fk.as_ref()) {
-                Ok(file_key_hash) => match read_file_storage.get_metadata(&file_key_hash) {
-                    Ok(file_metadata) => successful_metadatas.push(file_metadata),
-                    Err(e) => {
-                        warn!(
-                            target: LOG_TARGET,
-                            "Failed to get metadata for file key: {:?}, error: {:?}", fk, e
-                        );
+        let own_provider_id = self
+            .storage_hub_handler
+            .blockchain
+            .query_storage_provider_id(None)
+            .await?;
+
+        let own_bsp_id = match own_provider_id {
+            Some(id) => match id {
+                StorageProviderId::MainStorageProvider(_) => {
+                    error!(target: LOG_TARGET, "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.");
+                    return Err(anyhow!(
+                        "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID."
+                    ));
+                }
+                StorageProviderId::BackupStorageProvider(id) => id,
+            },
+            None => {
+                error!(target: LOG_TARGET, "Failed to get own BSP ID.");
+                return Err(anyhow!("Failed to get own BSP ID."));
+            }
+        };
+
+        // Query runtime for the chunks to prove for the file.
+        let mut confirm_storing_requests_with_chunks_to_prove = Vec::new();
+        for confirm_storing_request in event.confirm_storing_requests.iter() {
+            match self
+                .storage_hub_handler
+                .blockchain
+                .query_bsp_confirm_chunks_to_prove_for_file(
+                    own_bsp_id,
+                    confirm_storing_request.file_key,
+                )
+                .await
+            {
+                Ok(chunks_to_prove) => {
+                    confirm_storing_requests_with_chunks_to_prove
+                        .push((confirm_storing_request, chunks_to_prove));
+                }
+                Err(e) => {
+                    let mut confirm_storing_request = confirm_storing_request.clone();
+                    confirm_storing_request.increment_try_count();
+                    if confirm_storing_request.try_count > MAX_CONFIRM_STORING_REQUEST_TRY_COUNT {
+                        error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nMax try count exceeded! Dropping request!", confirm_storing_request.file_key, e);
+                    } else {
+                        error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, e, confirm_storing_request.try_count, MAX_CONFIRM_STORING_REQUEST_TRY_COUNT);
+                        self.storage_hub_handler
+                            .blockchain
+                            .queue_confirm_bsp_request(confirm_storing_request)
+                            .await?;
                     }
-                },
-                Err(_) => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "File key and HasherOutT mismatch for key: {:?}", fk
-                    );
                 }
             }
         }
 
-        // Release the file storage lock.
+        // Generate the proof for the files and get metadatas.
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let mut file_keys_and_proofs = Vec::new();
+        let mut file_metadatas = Vec::new();
+        for (confirm_storing_request, chunks_to_prove) in
+            confirm_storing_requests_with_chunks_to_prove.into_iter()
+        {
+            match (
+                read_file_storage
+                    .generate_proof(&confirm_storing_request.file_key, &chunks_to_prove),
+                read_file_storage.get_metadata(&confirm_storing_request.file_key),
+            ) {
+                (Ok(proof), Ok(metadata)) => {
+                    file_keys_and_proofs.push((confirm_storing_request.file_key, proof));
+                    file_metadatas.push(metadata);
+                }
+                _ => {
+                    let mut confirm_storing_request = confirm_storing_request.clone();
+                    confirm_storing_request.increment_try_count();
+                    if confirm_storing_request.try_count > MAX_CONFIRM_STORING_REQUEST_TRY_COUNT {
+                        error!(target: LOG_TARGET, "Failed to generate proof or get metadatas for file {:?}.\nMax try count exceeded! Dropping request!", confirm_storing_request.file_key);
+                    } else {
+                        error!(target: LOG_TARGET, "Failed to generate proof or get metadatas for file {:?}.\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, confirm_storing_request.try_count, MAX_CONFIRM_STORING_REQUEST_TRY_COUNT);
+                        self.storage_hub_handler
+                            .blockchain
+                            .queue_confirm_bsp_request(confirm_storing_request)
+                            .await?;
+                    }
+                }
+            }
+        }
+        // Release the file storage read lock as soon as possible.
         drop(read_file_storage);
 
-        if !successful_metadatas.is_empty() {
-            // Save [`FileMetadata`] of the successfully retrieved stored files in the forest storage.
-            let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
-            if let Err(e) = write_forest_storage.insert_files_metadata(&successful_metadatas) {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to insert metadata into forest storage: {:?}", e
-                );
-            }
-        } else {
-            warn!(
-                target: LOG_TARGET,
-                "No valid metadata was retrieved for any of the file keys: {:?}",
-                event.file_keys
-            );
+        if file_keys_and_proofs.is_empty() {
+            error!(target: LOG_TARGET, "Failed to generate proofs for ALL the requested files.\n");
+            return Err(anyhow!(
+                "Failed to generate proofs for ALL the requested files."
+            ));
         }
+
+        let file_keys = file_keys_and_proofs
+            .iter()
+            .map(|(file_key, _)| *file_key)
+            .collect::<Vec<_>>();
+
+        // Get a read lock on the forest storage to generate a proof for the file.
+        let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
+        let non_inclusion_forest_proof = read_forest_storage
+            .generate_proof(file_keys)
+            .map_err(|_| anyhow!("Failed to generate forest proof."))?;
+        // Release the forest storage read lock.
+        drop(read_forest_storage);
+
+        // Build extrinsic.
+        let call = storage_hub_runtime::RuntimeCall::FileSystem(
+            pallet_file_system::Call::bsp_confirm_storing {
+                non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
+                file_keys_and_proofs: BoundedVec::try_from(file_keys_and_proofs)
+                .map_err(|_| {
+                    error!("CRITICAL❗️❗️ This is a bug! Failed to convert file keys and proofs to BoundedVec. Please report it to the StorageHub team.");
+                    anyhow!("Failed to convert file keys and proofs to BoundedVec.")
+                })?,
+            },
+        );
+
+        // Send the confirmation transaction and wait for it to be included in the block and
+        // continue only if it is successful.
+        self.storage_hub_handler
+            .blockchain
+            .send_extrinsic(call)
+            .await?
+            .with_timeout(Duration::from_secs(60))
+            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .await?;
+
+        // Save [`FileMetadata`] of the successfully retrieved stored files in the forest storage.
+        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
+        write_forest_storage
+            .insert_files_metadata(&file_metadatas)
+            .map_err(|_| anyhow!("Failed to insert files metadata into forest storage."))?;
+        // Release the forest storage write lock.
+        drop(write_forest_storage);
+
+        // Release the forest root write "lock".
+        let _ = forest_root_write_tx.send(());
 
         Ok(())
     }
@@ -313,18 +425,34 @@ where
 
         self.file_key_cleanup = Some(file_key.into());
 
-        // Get the node's public key needed for threshold calculation.
-        let node_public_key = self
+        // Get the node's provider id needed for threshold calculation.
+        let own_provider_id = self
             .storage_hub_handler
             .blockchain
-            .get_node_public_key()
-            .await;
+            .query_storage_provider_id(None)
+            .await?;
+
+        let own_bsp_id = match own_provider_id {
+            Some(id) => match id {
+                StorageProviderId::MainStorageProvider(_) => {
+                    error!(target: LOG_TARGET, "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID.");
+                    return Err(anyhow!(
+                        "Current node account is a Main Storage Provider. Expected a Backup Storage Provider ID."
+                    ));
+                }
+                StorageProviderId::BackupStorageProvider(id) => id,
+            },
+            None => {
+                error!(target: LOG_TARGET, "Failed to get own BSP ID.");
+                return Err(anyhow!("Failed to get own BSP ID."));
+            }
+        };
 
         // Query runtime for the earliest block where the BSP can volunteer for the file.
         let earliest_volunteer_block = self
             .storage_hub_handler
             .blockchain
-            .query_file_earliest_volunteer_block(node_public_key, file_key.into())
+            .query_file_earliest_volunteer_block(own_bsp_id, file_key.into())
             .await
             .map_err(|e| anyhow!("Failed to query file earliest volunteer block: {:?}", e))?;
 
@@ -396,13 +524,13 @@ where
             .unregister_file(file_key.as_ref().into())
             .await;
 
+        // TODO: Send transaction to runtime to unvolunteer the file.
+
         // Delete the file from the file storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
         // TODO: Handle error
         let _ = write_file_storage.delete_file(&file_key);
-
-        // TODO: Send transaction to runtime to unvolunteer the file.
 
         Ok(())
     }
@@ -410,66 +538,17 @@ where
     async fn on_file_complete(&self, file_key: &H256) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "File upload complete ({:?})", file_key);
 
-        // // Unregister the file from the file transfer service.
-        // self.storage_hub_handler
-        //     .file_transfer
-        //     .unregister_file(file_key.as_ref().into())
-        //     .await
-        //     .map_err(|e| anyhow!("File is not registered. This should not happen!: {:?}", e));
-
-        // Query runtime for the chunks to prove for the file.
-        let chunks_to_prove = self
-            .storage_hub_handler
-            .blockchain
-            .query_bsp_confirm_chunks_to_prove_for_file(
-                self.storage_hub_handler
-                    .blockchain
-                    .get_node_public_key()
-                    .await,
-                *file_key,
-            )
+        // Unregister the file from the file transfer service.
+        self.storage_hub_handler
+            .file_transfer
+            .unregister_file((*file_key).into())
             .await
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to query BSP confirm chunks to prove for file: {:?}",
-                    e
-                )
-            })?;
+            .map_err(|e| anyhow!("File is not registered. This should not happen!: {:?}", e))?;
 
-        // Get the metadata for the file.
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let _metadata = read_file_storage
-            .get_metadata(file_key)
-            .map_err(|e| anyhow!("File metadata not found: {:?}", e))?;
-        let added_file_key_proof = read_file_storage
-            .generate_proof(file_key, &chunks_to_prove)
-            .map_err(|e| anyhow!("File is not in storage, or proof does not exist: {:?}", e))?;
-        // Release the file storage read lock as soon as possible.
-        drop(read_file_storage);
-
-        // Get a read lock on the forest storage to generate a proof for the file.
-        let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
-        let non_inclusion_forest_proof = read_forest_storage
-            .generate_proof(vec![*file_key])
-            .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
-        // Release the forest storage read lock.
-        drop(read_forest_storage);
-
-        // Build extrinsic.
-        let call = storage_hub_runtime::RuntimeCall::FileSystem(
-            pallet_file_system::Call::bsp_confirm_storing {
-                non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
-                file_keys_and_proofs: BoundedVec::try_from(vec![(*file_key, added_file_key_proof)])
-                    .expect("Failed to convert file keys and proofs."),
-            },
-        );
-
+        // Queue a request to confirm the storing of the file.
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call)
-            .await?
-            .with_timeout(Duration::from_secs(60))
-            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .queue_confirm_bsp_request(ConfirmStoringRequest::new(*file_key))
             .await?;
 
         Ok(())

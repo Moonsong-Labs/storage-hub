@@ -513,6 +513,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       StorageRequestExpired: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
       /**
+       * Notifies that a storage request for a file key has been fulfilled.
+       **/
+      StorageRequestFulfilled: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
+      /**
        * Notifies that a storage request has been revoked by the user who initiated it.
        **/
       StorageRequestRevoked: AugmentedEvent<ApiType, [fileKey: H256], { fileKey: H256 }>;
@@ -1372,6 +1376,22 @@ declare module "@polkadot/api-base/types/events" {
     };
     proofsDealer: {
       /**
+       * A set of mutations has been applied to the Forest.
+       **/
+      MutationsApplied: AugmentedEvent<
+        ApiType,
+        [
+          provider: H256,
+          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>,
+          newRoot: H256
+        ],
+        {
+          provider: H256;
+          mutations: Vec<ITuple<[H256, ShpTraitsTrieRemoveMutation]>>;
+          newRoot: H256;
+        }
+      >;
+      /**
        * A manual challenge was submitted.
        **/
       NewChallenge: AugmentedEvent<
@@ -1419,6 +1439,10 @@ declare module "@polkadot/api-base/types/events" {
           challenges: Vec<ITuple<[H256, Option<ShpTraitsTrieRemoveMutation>]>>;
         }
       >;
+      /**
+       * No record of the last tick the Provider submitted a proof for.
+       **/
+      NoRecordOfLastSubmittedProof: AugmentedEvent<ApiType, [provider: H256], { provider: H256 }>;
       /**
        * A proof was accepted.
        **/

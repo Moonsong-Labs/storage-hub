@@ -39,7 +39,7 @@ import {
   VALUE_PROP
 } from "./consts";
 import { addBspContainer, showContainers } from "./docker";
-import type { BspNetApi } from "./types";
+import type { BspNetApi, FileMetadata } from "./types";
 
 const exec = util.promisify(child_process.exec);
 
@@ -206,12 +206,10 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
       )
     );
 
-    // u128 max value
-    const u128Max = (BigInt(1) << BigInt(128)) - BigInt(1);
+    // u32 max value
+    const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
 
-    await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.fileSystem.forceUpdateBspsAssignmentThreshold(u128Max))
-    );
+    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(1, u32Max, 1)));
   } catch (e) {
     console.error("Error ", e);
   } finally {
@@ -318,6 +316,13 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
       userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(shUser.address, amount))
     );
 
+    // u32 max value
+    const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
+
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, u32Max, 1))
+    );
+
     // Make BSP
     await forceSignupBsp({
       api: userApi,
@@ -342,13 +347,6 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
           alice.address
         )
       )
-    );
-
-    // u128 max value
-    const u128Max = (BigInt(1) << BigInt(128)) - BigInt(1);
-
-    await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.forceUpdateBspsAssignmentThreshold(u128Max))
     );
 
     // Everything executed below is tested in `volunteer.test.ts` and `onboard.test.ts` files.
@@ -514,11 +512,11 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
       )
     );
 
-    // u128 max value
-    const u128Max = (BigInt(1) << BigInt(128)) - BigInt(1);
+    // u32 max value
+    const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
 
     await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.forceUpdateBspsAssignmentThreshold(u128Max))
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, u32Max, 1))
     );
 
     // Add more BSPs to the network.
@@ -550,52 +548,10 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
 
     /**** CREATE BUCKET AND ISSUE STORAGE REQUEST ****/
     const source = "res/whatsup.jpg";
-    const destination = "test/smile.jpg";
+    const location = "test/smile.jpg";
     const bucketName = "nothingmuch-1";
 
-    const newBucketEventEvent = await userApi.createBucket(bucketName);
-    const newBucketEventDataBlob =
-      userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
-
-    if (!newBucketEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
-
-    const {
-      fingerprint,
-      file_size: fileSize,
-      location
-    } = await userApi.rpc.storagehubclient.loadFileInStorage(
-      source,
-      destination,
-      NODE_INFOS.user.AddressId,
-      newBucketEventDataBlob.bucketId
-    );
-
-    const issueStorageRequestResult = await userApi.sealBlock(
-      userApi.tx.fileSystem.issueStorageRequest(
-        newBucketEventDataBlob.bucketId,
-        location,
-        fingerprint,
-        fileSize,
-        DUMMY_MSP_ID,
-        [NODE_INFOS.user.expectedPeerId]
-      ),
-      shUser
-    );
-
-    const newStrorageRequestEvent = userApi.assertEvent(
-      "fileSystem",
-      "NewStorageRequest",
-      issueStorageRequestResult.events
-    );
-    const newStorageRequestEventDataBlob =
-      userApi.events.fileSystem.NewStorageRequest.is(newStrorageRequestEvent.event) &&
-      newStrorageRequestEvent.event.data;
-
-    if (!newStorageRequestEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
+    const fileMetadata = await sendNewStorageRequest(userApi, source, location, bucketName);
 
     /**** BSP VOLUNTEERS ****/
     // Wait for the BSPs to volunteer.
@@ -605,7 +561,7 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
     strictEqual(
       volunteerPending.length,
       4,
-      "There should be three pending extrinsics from BSPs (volunteer)"
+      "There should be four pending extrinsics from BSPs (volunteer)"
     );
 
     await userApi.sealBlock();
@@ -616,12 +572,12 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
     strictEqual(
       confirmPending.length,
       4,
-      "There should be three pending extrinsics from BSPs (confirm store)"
+      "There should be four pending extrinsics from BSPs (confirm store)"
     );
 
     await userApi.sealBlock();
 
-    // Wait for the BSPs to process the BspConfirmedStoring event.
+    // Wait for the BSPs to process the confirmation of the file.
     await sleep(1000);
 
     // Stopping BSP that is supposed to be down.
@@ -631,12 +587,12 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
       bspTwoRpcPort,
       bspThreeRpcPort,
       fileData: {
-        fileKey: newStorageRequestEventDataBlob.fileKey.toString(),
-        bucketId: newBucketEventDataBlob.bucketId.toString(),
-        location: destination,
-        owner: newBucketEventDataBlob.who,
-        fingerprint,
-        fileSize
+        fileKey: fileMetadata.fileKey,
+        bucketId: fileMetadata.bucketId,
+        location: location,
+        owner: fileMetadata.owner,
+        fingerprint: fileMetadata.fingerprint,
+        fileSize: fileMetadata.fileSize
       }
     };
   } catch (e) {
@@ -657,52 +613,77 @@ export interface SealedBlock {
   extSuccess?: boolean;
 }
 
-// TODO: extend to take multiple exts in one block
-// TODO: Accept ext hash strings as well
 export const sealBlock = async (
   api: ApiPromise,
-  call?: SubmittableExtrinsic<"promise", ISubmittableResult>,
+  calls?:
+    | SubmittableExtrinsic<"promise", ISubmittableResult>
+    | SubmittableExtrinsic<"promise", ISubmittableResult>[],
   signer?: KeyringPair
 ): Promise<SealedBlock> => {
   const initialHeight = (await api.rpc.chain.getHeader()).number.toNumber();
 
   const results: {
-    hash?: Hash;
-    events?: EventRecord[];
+    hashes: Hash[];
+    events: EventRecord[];
     blockData?: SignedBlock;
-    success?: boolean;
-  } = {};
+    success: boolean[];
+  } = {
+    hashes: [],
+    events: [],
+    success: []
+  };
 
-  if (call?.isSigned) {
-    results.hash = await call.send();
-  } else if (call) {
-    results.hash = await call.signAndSend(signer || alice);
+  // Normalize to array
+  const callArray = Array.isArray(calls) ? calls : calls ? [calls] : [];
+
+  if (callArray.length > 0) {
+    const nonce = await api.rpc.system.accountNextIndex((signer || alice).address);
+
+    // Send all transactions in sequence
+    for (let i = 0; i < callArray.length; i++) {
+      const call = callArray[i];
+      let hash: Hash;
+
+      if (call.isSigned) {
+        hash = await call.send();
+      } else {
+        hash = await call.signAndSend(signer || alice, { nonce: nonce.addn(i) });
+      }
+
+      results.hashes.push(hash);
+    }
   }
 
   const sealedResults = {
     blockReceipt: await api.rpc.engine.createBlock(true, true),
-    txHash: results.hash?.toString()
+    txHashes: results.hashes.map((hash) => hash.toString())
   };
 
   const blockHash = sealedResults.blockReceipt.blockHash;
   const allEvents = await (await api.at(blockHash)).query.system.events();
 
-  if (results.hash) {
+  if (results.hashes.length > 0) {
     const blockData = await api.rpc.chain.getBlock(blockHash);
+    results.blockData = blockData;
+
     const getExtIndex = (txHash: Hash) => {
       return blockData.block.extrinsics.findIndex((ext) => ext.hash.toHex() === txHash.toString());
     };
-    const extIndex = getExtIndex(results.hash);
-    const extEvents = allEvents.filter(
-      ({ phase }) =>
-        phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex
-    );
-    results.blockData = blockData;
-    results.events = extEvents;
-    results.success = isExtSuccess(extEvents);
+
+    for (const hash of results.hashes) {
+      const extIndex = getExtIndex(hash);
+      const extEvents = allEvents.filter(
+        ({ phase }) =>
+          phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex
+      );
+      results.events.push(...extEvents);
+      results.success.push(isExtSuccess(extEvents) ?? false);
+    }
   } else {
-    results.events = allEvents;
+    results.events.push(...allEvents);
   }
+
+  const extSuccess = results.success.every((success) => success);
 
   // Allow time for chain to settle
   for (let i = 0; i < 20; i++) {
@@ -710,15 +691,71 @@ export const sealBlock = async (
     if (currentHeight > initialHeight) {
       break;
     }
-    console.log("Waiting for block to be finalized...");
-    console.log("You shouldn't see this message often, if you do, something is wrong");
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
   return Object.assign(sealedResults, {
     events: results.events,
-    extSuccess: results.success
+    extSuccess: extSuccess
   }) satisfies SealedBlock;
+};
+
+export const sendNewStorageRequest = async (
+  api: ApiPromise,
+  source: string,
+  location: string,
+  bucketName: string
+): Promise<FileMetadata> => {
+  const newBucketEventEvent = await createBucket(api, bucketName);
+  const newBucketEventDataBlob =
+    api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+
+  if (!newBucketEventDataBlob) {
+    throw new Error("Event doesn't match Type");
+  }
+
+  const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
+    source,
+    location,
+    NODE_INFOS.user.AddressId,
+    newBucketEventDataBlob.bucketId
+  );
+
+  const issueStorageRequestResult = await sealBlock(
+    api,
+    api.tx.fileSystem.issueStorageRequest(
+      newBucketEventDataBlob.bucketId,
+      location,
+      fileMetadata.fingerprint,
+      fileMetadata.file_size,
+      DUMMY_MSP_ID,
+      [NODE_INFOS.user.expectedPeerId]
+    ),
+    shUser
+  );
+
+  const newStorageRequestEvent = assertEventPresent(
+    api,
+    "fileSystem",
+    "NewStorageRequest",
+    issueStorageRequestResult.events
+  );
+  const newStorageRequestEventDataBlob =
+    api.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent.event) &&
+    newStorageRequestEvent.event.data;
+
+  if (!newStorageRequestEventDataBlob) {
+    throw new Error("Event doesn't match Type");
+  }
+
+  return {
+    fileKey: newStorageRequestEventDataBlob.fileKey.toString(),
+    bucketId: newBucketEventDataBlob.bucketId.toString(),
+    location: newStorageRequestEventDataBlob.location.toString(),
+    owner: newBucketEventDataBlob.who.toString(),
+    fingerprint: fileMetadata.fingerprint,
+    fileSize: fileMetadata.file_size
+  };
 };
 
 export const createBucket = async (api: ApiPromise, bucketName: string) => {

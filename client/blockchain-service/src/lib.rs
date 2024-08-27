@@ -3,6 +3,7 @@ pub mod events;
 pub mod handler;
 pub mod transaction;
 pub mod types;
+pub mod utils;
 
 use std::sync::Arc;
 

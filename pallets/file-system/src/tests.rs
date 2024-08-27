@@ -3,9 +3,10 @@ use crate::{
     types::{
         BucketIdFor, BucketNameFor, ExpiredItems, FileLocation, PeerIds,
         PendingFileDeletionRequestTtl, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestTtl, TargetBspsRequired,
+        StorageRequestMetadata, StorageRequestTtl,
     },
-    Config, Error, Event, ItemExpirations, PendingStopStoringRequests,
+    BlockRangeToMaximumThreshold, Config, Error, Event, ItemExpirations, MaximumThreshold,
+    PendingStopStoringRequests, ReplicationTarget,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -16,12 +17,12 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::{LastTickProviderSubmittedAProofFor, PriorityChallengesQueue};
 use pallet_storage_providers::types::Bucket;
-use shp_traits::{ReadProvidersInterface, SubscribeProvidersInterface, TrieRemoveMutation};
+use shp_traits::{ReadBucketsInterface, TrieRemoveMutation};
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
-    traits::{BlakeTwo256, Get, One, Zero},
-    BoundedVec, DispatchError, FixedU128,
+    traits::{BlakeTwo256, Get},
+    BoundedVec, DispatchError,
 };
 use sp_trie::CompactProof;
 
@@ -662,7 +663,7 @@ mod request_storage {
                         msp: Some(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         data_server_sps: BoundedVec::default(),
-                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -735,7 +736,7 @@ mod request_storage {
                         msp: Some(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         data_server_sps: BoundedVec::default(),
-                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -773,7 +774,7 @@ mod request_storage {
                         msp: Some(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         data_server_sps: BoundedVec::default(),
-                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -879,7 +880,7 @@ mod request_storage {
                         msp: Some(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         data_server_sps: BoundedVec::default(),
-                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -1234,7 +1235,7 @@ mod revoke_storage_request {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -1512,7 +1513,8 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                crate::BspsAssignmentThreshold::<Test>::put(FixedU128::zero());
+                // Set MaximumThreshold to zero
+                MaximumThreshold::<Test>::put(1);
 
                 // Dispatch BSP volunteer.
                 assert_noop!(
@@ -1570,7 +1572,7 @@ mod bsp_volunteer {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -1768,12 +1770,14 @@ mod bsp_confirm {
         }
 
         #[test]
-        fn bsp_already_confirmed_fail() {
+        fn bsp_confirming_for_non_existent_storage_request() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
-                let bsp_account_id = Keyring::Bob.to_account_id();
-                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let bsp_bob_account_id = Keyring::Bob.to_account_id();
+                let bsp_bob_signed = RuntimeOrigin::signed(bsp_bob_account_id.clone());
+                let bsp_charlie_account_id = Keyring::Dave.to_account_id();
+                let bsp_charlie_signed = RuntimeOrigin::signed(bsp_charlie_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
@@ -1800,7 +1804,8 @@ mod bsp_confirm {
                 ));
 
                 // Sign up account as a Backup Storage Provider
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
+                assert_ok!(bsp_sign_up(bsp_bob_signed.clone(), storage_amount,));
+                assert_ok!(bsp_sign_up(bsp_charlie_signed.clone(), storage_amount,));
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -1811,11 +1816,29 @@ mod bsp_confirm {
                 );
 
                 // Dispatch BSP volunteer.
-                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+                assert_ok!(FileSystem::bsp_volunteer(bsp_bob_signed.clone(), file_key,));
 
-                // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
-                    bsp_signed.clone(),
+                    bsp_bob_signed.clone(),
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    BoundedVec::try_from(vec![(
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    )])
+                    .unwrap(),
+                ));
+
+                assert_ok!(FileSystem::bsp_volunteer(
+                    bsp_charlie_signed.clone(),
+                    file_key,
+                ));
+
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_charlie_signed.clone(),
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
@@ -1830,7 +1853,7 @@ mod bsp_confirm {
 
                 assert_noop!(
                     FileSystem::bsp_confirm_storing(
-                        bsp_signed.clone(),
+                        bsp_bob_signed.clone(),
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
@@ -1842,7 +1865,7 @@ mod bsp_confirm {
                         )])
                         .unwrap(),
                     ),
-                    Error::<Test>::BspAlreadyConfirmed
+                    Error::<Test>::StorageRequestNotFound
                 );
             });
         }
@@ -1894,7 +1917,7 @@ mod bsp_confirm {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id.clone(),
                     )
                         .unwrap();
@@ -1932,7 +1955,7 @@ mod bsp_confirm {
                         msp: Some(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         data_server_sps: BoundedVec::default(),
-                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -1957,7 +1980,7 @@ mod bsp_confirm {
                 );
 
                 let new_root =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
                         bsp_id,
                     )
                         .unwrap();
@@ -2097,7 +2120,7 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2140,7 +2163,7 @@ mod bsp_stop_storing {
                         msp: Some(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         data_server_sps: BoundedVec::default(),
-                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -2216,7 +2239,7 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2259,7 +2282,7 @@ mod bsp_stop_storing {
                         msp: Some(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         data_server_sps: BoundedVec::default(),
-                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -2353,7 +2376,7 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2396,7 +2419,7 @@ mod bsp_stop_storing {
                         msp: Some(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         data_server_sps: BoundedVec::default(),
-                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -2441,7 +2464,7 @@ mod bsp_stop_storing {
                         msp: Some(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         data_server_sps: BoundedVec::default(),
-                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -2523,7 +2546,7 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2566,7 +2589,7 @@ mod bsp_stop_storing {
                         msp: Some(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         data_server_sps: BoundedVec::default(),
-                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -2611,7 +2634,7 @@ mod bsp_stop_storing {
                         msp: Some(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         data_server_sps: BoundedVec::default(),
-                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -2677,7 +2700,7 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2720,7 +2743,7 @@ mod bsp_stop_storing {
                         msp: Some(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         data_server_sps: BoundedVec::default(),
-                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                     })
@@ -2765,7 +2788,7 @@ mod bsp_stop_storing {
                         msp: Some(msp_id),
                         user_peer_ids: peer_ids.clone(),
                         data_server_sps: BoundedVec::default(),
-                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -2802,7 +2825,7 @@ mod bsp_stop_storing {
 
 				// Assert that the correct event was deposited.
 				let new_root =
-					<<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_root(
+					<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
 						bsp_id,
 					)
 						.unwrap();
@@ -2859,7 +2882,7 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2918,7 +2941,7 @@ mod bsp_stop_storing {
                         msp: Some(msp_id),
                         user_peer_ids: Default::default(),
                         data_server_sps: BoundedVec::default(),
-                        bsps_required: TargetBspsRequired::<Test>::get(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                     })
@@ -2970,7 +2993,7 @@ mod bsp_stop_storing {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -2984,9 +3007,9 @@ mod bsp_stop_storing {
                 );
 
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
-                assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
-					&bsp_id, size,
-				));
+                assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateStorageProvidersInterface>::increase_capacity_used(
+            		&bsp_id, size,
+        		));
 
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
@@ -3003,8 +3026,8 @@ mod bsp_stop_storing {
 					},
 				));
 
-                let current_bsps_required: <Test as Config>::StorageRequestBspsRequiredType =
-                    TargetBspsRequired::<Test>::get();
+                let current_bsps_required: <Test as Config>::ReplicationTargetType =
+                    ReplicationTarget::<Test>::get();
 
                 // Assert that the storage request bsps_required was incremented
                 assert_eq!(
@@ -3060,7 +3083,7 @@ mod bsp_stop_storing {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
 
                 let bsp_id =
-                    <<Test as crate::Config>::Providers as shp_traits::ProvidersInterface>::get_provider_id(
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                         bsp_account_id,
                     )
                         .unwrap();
@@ -3074,9 +3097,9 @@ mod bsp_stop_storing {
                 );
 
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
-                assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateProvidersInterface>::increase_data_used(
-					&bsp_id, size,
-				));
+                assert_ok!(<<Test as crate::Config>::Providers as shp_traits::MutateStorageProvidersInterface>::increase_capacity_used(
+            		&bsp_id, size,
+        		));
 
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
@@ -3127,120 +3150,41 @@ mod bsp_stop_storing {
     }
 }
 
-#[test]
-fn compute_asymptotic_threshold_point_success() {
-    new_test_ext().execute_with(|| {
-        // Test the computation of the asymptotic threshold
-        let threshold = FileSystem::compute_asymptotic_threshold_point(1)
-            .expect("Threshold should be computable");
-
-        // Assert that the computed threshold is as expected
-        assert!(
-            threshold > FixedU128::zero()
-                && threshold >= <Test as Config>::AssignmentThresholdAsymptote::get(),
-            "Threshold should be positive"
-        );
-    });
-}
-
-mod bsp_subscribe_asymptotic_threshold_computation {
-    use super::*;
-    mod success {
-        use super::*;
-
-        #[test]
-        fn threshold_does_not_exceed_asymptote_success() {
-            new_test_ext().execute_with(|| {
-                crate::BspsAssignmentThreshold::<Test>::put(
-                    <Test as Config>::AssignmentThresholdAsymptote::get(),
-                );
-
-                // Simulate the threshold decrease due to a new BSP sign up
-                FileSystem::subscribe_bsp_sign_up(&H256::from_slice(&[1; 32]))
-                    .expect("BSP sign up should be successful");
-
-                // Verify that the threshold does is equal to the asymptote
-                assert!(
-                    FileSystem::bsps_assignment_threshold()
-                        == <Test as Config>::AssignmentThresholdAsymptote::get(),
-                    "Threshold should not go below the asymptote"
-                );
-            });
-        }
-
-        #[test]
-        fn subscribe_bsp_sign_up_decreases_threshold_success() {
-            new_test_ext().execute_with(|| {
-                let initial_threshold = compute_set_get_initial_threshold();
-
-                // Simulate the threshold decrease due to a new BSP sign up
-                FileSystem::subscribe_bsp_sign_up(&H256::from_slice(&[1; 32]))
-                    .expect("BSP sign up should be successful");
-
-                let updated_threshold = FileSystem::bsps_assignment_threshold();
-                // Verify that the threshold decreased
-                assert!(
-                    updated_threshold < initial_threshold
-                        && updated_threshold
-                            >= <Test as Config>::AssignmentThresholdAsymptote::get(),
-                    "Threshold should decrease after BSP sign up"
-                );
-            });
-        }
-
-        #[test]
-        fn subscribe_bsp_sign_off_increases_threshold_success() {
-            new_test_ext().execute_with(|| {
-                let initial_threshold = compute_set_get_initial_threshold();
-
-                // Simulate the threshold increase due to a new BSP sign off
-                FileSystem::subscribe_bsp_sign_off(&H256::from_slice(&[1; 32]))
-                    .expect("BSP sign off should be successful");
-
-                let updated_threshold = FileSystem::bsps_assignment_threshold();
-                // Verify that the threshold increased
-                assert!(
-                    updated_threshold > initial_threshold
-                        && updated_threshold
-                            >= <Test as Config>::AssignmentThresholdAsymptote::get(),
-                    "Threshold should increase after BSP sign off"
-                );
-            });
-        }
-    }
-}
-
-mod force_bsps_assignment_threshold_tests {
+mod set_global_parameters_tests {
     use super::*;
 
     mod failure {
         use super::*;
         #[test]
-        fn force_bsps_assignment_threshold_non_root_signer_fail() {
+        fn set_global_parameters_non_root_signer_fail() {
             new_test_ext().execute_with(|| {
                 let non_root = Keyring::Bob.to_account_id();
                 let non_root_signed = RuntimeOrigin::signed(non_root.clone());
 
                 // Assert BadOrigin error when non-root account tries to set the threshold
                 assert_noop!(
-                    FileSystem::force_update_bsps_assignment_threshold(
-                        non_root_signed,
-                        FixedU128::zero()
-                    ),
+                    FileSystem::set_global_parameters(non_root_signed, None, None, None),
                     DispatchError::BadOrigin
                 );
             });
         }
 
         #[test]
-        fn force_bsps_assignment_threshold_below_asymptote_fail() {
+        fn set_global_parameters_0_value() {
             new_test_ext().execute_with(|| {
                 assert_noop!(
-                    FileSystem::force_update_bsps_assignment_threshold(
-                        RuntimeOrigin::root(),
-                        <Test as Config>::AssignmentThresholdAsymptote::get() - FixedU128::one()
-                    ),
-                    Error::<Test>::ThresholdBelowAsymptote
+                    FileSystem::set_global_parameters(RuntimeOrigin::root(), Some(0), None, None),
+                    Error::<Test>::ReplicationTargetCannotBeZero
+                );
+
+                assert_noop!(
+                    FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(0), None),
+                    Error::<Test>::MaximumThresholdCannotBeZero
+                );
+
+                assert_noop!(
+                    FileSystem::set_global_parameters(RuntimeOrigin::root(), None, None, Some(0)),
+                    Error::<Test>::BlockRangeToMaximumThresholdCannotBeZero
                 );
             });
         }
@@ -3250,21 +3194,22 @@ mod force_bsps_assignment_threshold_tests {
         use super::*;
 
         #[test]
-        fn force_bsps_assignment_threshold_above_asymptote_success() {
+        fn set_global_parameters() {
             new_test_ext().execute_with(|| {
-                let new_threshold = <Test as crate::Config>::AssignmentThresholdAsymptote::get();
+                let root = RuntimeOrigin::root();
 
-                FileSystem::force_update_bsps_assignment_threshold(
-                    RuntimeOrigin::root(),
-                    new_threshold,
-                )
-                .expect("Threshold should be set successfully");
+                // Set the global parameters
+                assert_ok!(FileSystem::set_global_parameters(
+                    root.clone(),
+                    Some(3),
+                    Some(5),
+                    Some(10)
+                ));
 
-                // Verify that the threshold increased
-                assert!(
-                    FileSystem::bsps_assignment_threshold() == new_threshold,
-                    "Threshold should be set to one"
-                );
+                // Assert that the global parameters were set correctly
+                assert_eq!(ReplicationTarget::<Test>::get(), 3);
+                assert_eq!(MaximumThreshold::<Test>::get(), 5);
+                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 10);
             });
         }
     }
@@ -3826,6 +3771,177 @@ mod delete_file_and_pending_deletions_tests {
     }
 }
 
+mod compute_threshold {
+    use super::*;
+    mod success {
+        use super::*;
+        #[test]
+        fn query_earliest_file_volunteer_block() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let user = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+
+                // Dispatch a signed extrinsic.
+                assert_ok!(FileSystem::issue_storage_request(
+                    user.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+
+                let storage_amount: StorageData<Test> = 100;
+
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                let bsp_id =
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
+                        bsp_account_id,
+                    )
+                        .unwrap();
+
+                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+
+                assert!(frame_system::Pallet::<Test>::block_number() <= block_number);
+            });
+        }
+
+        #[test]
+        fn compute_threshold_to_succeed() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let user = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+
+                // Dispatch a signed extrinsic.
+                assert_ok!(FileSystem::issue_storage_request(
+                    user.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+
+                let storage_amount: StorageData<Test> = 100;
+
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                let bsp_id =
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
+                        bsp_account_id,
+                    )
+                        .unwrap();
+
+                let storage_request = FileSystem::storage_requests(file_key).unwrap();
+
+                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, None, Some(1)).unwrap();
+
+                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1);
+
+                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
+
+                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= MaximumThreshold::<Test>::get());
+                assert!(slope > 0);
+
+                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+
+                // BSP should be able to volunteer immediately for the storage request since the BlockRangeToMaximumThreshold is 1
+                assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
+
+                let starting_bsp_weight: pallet_storage_providers::types::ReputationWeightType<Test> = <Test as pallet_storage_providers::Config>::StartingReputationWeight::get();
+
+                // Simulate there being many BSPs in the network with high reputation weight
+                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1000u32.saturating_mul(starting_bsp_weight.into()));
+
+                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, None, Some(1000000000)).unwrap();
+
+                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1000000000);
+
+                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
+
+                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= MaximumThreshold::<Test>::get());
+                assert!(slope > 0);
+
+                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+
+                // BSP can only volunteer after some number of blocks have passed.
+                assert!(block_number > frame_system::Pallet::<Test>::block_number());
+
+                // Set reputation weight of BSP to max
+                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
+                    match bsp {
+                        Some(bsp) => {
+                            bsp.reputation_weight = u32::MAX;
+                        }
+                        None => {
+                            panic!("BSP should exits");
+                        }
+                    }
+                });
+
+                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
+
+                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= MaximumThreshold::<Test>::get());
+                assert!(slope > 0);
+
+                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+
+                // BSP should be able to volunteer immediately for the storage request since the reputation weight is so high.
+                assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
+            });
+        }
+    }
+}
+
 /// Helper function that registers an account as a Backup Storage Provider
 fn bsp_sign_up(
     bsp_signed: RuntimeOrigin,
@@ -3870,7 +3986,7 @@ fn add_msp_to_provider_storage(msp: &sp_runtime::AccountId32) -> ProviderIdFor<T
     let msp_info = pallet_storage_providers::types::MainStorageProvider {
         buckets: BoundedVec::default(),
         capacity: 100,
-        data_used: 0,
+        capacity_used: 0,
         multiaddresses: BoundedVec::default(),
         value_prop: pallet_storage_providers::types::ValueProposition {
             identifier: pallet_storage_providers::types::ValuePropId::<Test>::default(),

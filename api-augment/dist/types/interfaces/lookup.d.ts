@@ -1429,6 +1429,9 @@ declare const _default: {
         fileKeys: string;
         newRoot: string;
       };
+      StorageRequestFulfilled: {
+        fileKey: string;
+      };
       StorageRequestExpired: {
         fileKey: string;
       };
@@ -1495,11 +1498,19 @@ declare const _default: {
         provider: string;
         nextChallengeDeadline: string;
       };
+      NoRecordOfLastSubmittedProof: {
+        provider: string;
+      };
       NewChallengeCycleInitialised: {
         currentTick: string;
         nextChallengeDeadline: string;
         provider: string;
         maybeProviderAccount: string;
+      };
+      MutationsApplied: {
+        provider: string;
+        mutations: string;
+        newRoot: string;
       };
     };
   };
@@ -1549,7 +1560,7 @@ declare const _default: {
    **/
   ShpTraitsTrieRemoveMutation: string;
   /**
-   * Lookup151: pallet_randomness::pallet::Event<T>
+   * Lookup153: pallet_randomness::pallet::Event<T>
    **/
   PalletRandomnessEvent: {
     _enum: {
@@ -1561,7 +1572,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup152: pallet_payment_streams::pallet::Event<T>
+   * Lookup154: pallet_payment_streams::pallet::Event<T>
    **/
   PalletPaymentStreamsEvent: {
     _enum: {
@@ -1609,7 +1620,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup153: pallet_bucket_nfts::pallet::Event<T>
+   * Lookup155: pallet_bucket_nfts::pallet::Event<T>
    **/
   PalletBucketNftsEvent: {
     _enum: {
@@ -1630,7 +1641,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup154: pallet_nfts::pallet::Event<T, I>
+   * Lookup156: pallet_nfts::pallet::Event<T, I>
    **/
   PalletNftsEvent: {
     _enum: {
@@ -1831,7 +1842,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup158: pallet_nfts::types::AttributeNamespace<sp_core::crypto::AccountId32>
+   * Lookup160: pallet_nfts::types::AttributeNamespace<sp_core::crypto::AccountId32>
    **/
   PalletNftsAttributeNamespace: {
     _enum: {
@@ -1842,20 +1853,20 @@ declare const _default: {
     };
   };
   /**
-   * Lookup160: pallet_nfts::types::PriceWithDirection<Amount>
+   * Lookup162: pallet_nfts::types::PriceWithDirection<Amount>
    **/
   PalletNftsPriceWithDirection: {
     amount: string;
     direction: string;
   };
   /**
-   * Lookup161: pallet_nfts::types::PriceDirection
+   * Lookup163: pallet_nfts::types::PriceDirection
    **/
   PalletNftsPriceDirection: {
     _enum: string[];
   };
   /**
-   * Lookup162: pallet_nfts::types::PalletAttributes<CollectionId>
+   * Lookup164: pallet_nfts::types::PalletAttributes<CollectionId>
    **/
   PalletNftsPalletAttributes: {
     _enum: {
@@ -1864,7 +1875,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup163: frame_system::Phase
+   * Lookup165: frame_system::Phase
    **/
   FrameSystemPhase: {
     _enum: {
@@ -1874,21 +1885,21 @@ declare const _default: {
     };
   };
   /**
-   * Lookup166: frame_system::LastRuntimeUpgradeInfo
+   * Lookup168: frame_system::LastRuntimeUpgradeInfo
    **/
   FrameSystemLastRuntimeUpgradeInfo: {
     specVersion: string;
     specName: string;
   };
   /**
-   * Lookup168: frame_system::CodeUpgradeAuthorization<T>
+   * Lookup170: frame_system::CodeUpgradeAuthorization<T>
    **/
   FrameSystemCodeUpgradeAuthorization: {
     codeHash: string;
     checkVersion: string;
   };
   /**
-   * Lookup169: frame_system::pallet::Call<T>
+   * Lookup171: frame_system::pallet::Call<T>
    **/
   FrameSystemCall: {
     _enum: {
@@ -1933,7 +1944,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup172: frame_system::limits::BlockWeights
+   * Lookup174: frame_system::limits::BlockWeights
    **/
   FrameSystemLimitsBlockWeights: {
     baseBlock: string;
@@ -1941,7 +1952,7 @@ declare const _default: {
     perClass: string;
   };
   /**
-   * Lookup173: frame_support::dispatch::PerDispatchClass<frame_system::limits::WeightsPerClass>
+   * Lookup175: frame_support::dispatch::PerDispatchClass<frame_system::limits::WeightsPerClass>
    **/
   FrameSupportDispatchPerDispatchClassWeightsPerClass: {
     normal: string;
@@ -1949,7 +1960,7 @@ declare const _default: {
     mandatory: string;
   };
   /**
-   * Lookup174: frame_system::limits::WeightsPerClass
+   * Lookup176: frame_system::limits::WeightsPerClass
    **/
   FrameSystemLimitsWeightsPerClass: {
     baseExtrinsic: string;
@@ -1958,13 +1969,13 @@ declare const _default: {
     reserved: string;
   };
   /**
-   * Lookup176: frame_system::limits::BlockLength
+   * Lookup178: frame_system::limits::BlockLength
    **/
   FrameSystemLimitsBlockLength: {
     max: string;
   };
   /**
-   * Lookup177: frame_support::dispatch::PerDispatchClass<T>
+   * Lookup179: frame_support::dispatch::PerDispatchClass<T>
    **/
   FrameSupportDispatchPerDispatchClassU32: {
     normal: string;
@@ -1972,14 +1983,14 @@ declare const _default: {
     mandatory: string;
   };
   /**
-   * Lookup178: sp_weights::RuntimeDbWeight
+   * Lookup180: sp_weights::RuntimeDbWeight
    **/
   SpWeightsRuntimeDbWeight: {
     read: string;
     write: string;
   };
   /**
-   * Lookup179: sp_version::RuntimeVersion
+   * Lookup181: sp_version::RuntimeVersion
    **/
   SpVersionRuntimeVersion: {
     specName: string;
@@ -1992,13 +2003,13 @@ declare const _default: {
     stateVersion: string;
   };
   /**
-   * Lookup184: frame_system::pallet::Error<T>
+   * Lookup186: frame_system::pallet::Error<T>
    **/
   FrameSystemError: {
     _enum: string[];
   };
   /**
-   * Lookup186: cumulus_pallet_parachain_system::unincluded_segment::Ancestor<primitive_types::H256>
+   * Lookup188: cumulus_pallet_parachain_system::unincluded_segment::Ancestor<primitive_types::H256>
    **/
   CumulusPalletParachainSystemUnincludedSegmentAncestor: {
     usedBandwidth: string;
@@ -2006,7 +2017,7 @@ declare const _default: {
     consumedGoAheadSignal: string;
   };
   /**
-   * Lookup187: cumulus_pallet_parachain_system::unincluded_segment::UsedBandwidth
+   * Lookup189: cumulus_pallet_parachain_system::unincluded_segment::UsedBandwidth
    **/
   CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth: {
     umpMsgCount: string;
@@ -2014,20 +2025,20 @@ declare const _default: {
     hrmpOutgoing: string;
   };
   /**
-   * Lookup189: cumulus_pallet_parachain_system::unincluded_segment::HrmpChannelUpdate
+   * Lookup191: cumulus_pallet_parachain_system::unincluded_segment::HrmpChannelUpdate
    **/
   CumulusPalletParachainSystemUnincludedSegmentHrmpChannelUpdate: {
     msgCount: string;
     totalBytes: string;
   };
   /**
-   * Lookup194: polkadot_primitives::v6::UpgradeGoAhead
+   * Lookup196: polkadot_primitives::v6::UpgradeGoAhead
    **/
   PolkadotPrimitivesV6UpgradeGoAhead: {
     _enum: string[];
   };
   /**
-   * Lookup195: cumulus_pallet_parachain_system::unincluded_segment::SegmentTracker<primitive_types::H256>
+   * Lookup197: cumulus_pallet_parachain_system::unincluded_segment::SegmentTracker<primitive_types::H256>
    **/
   CumulusPalletParachainSystemUnincludedSegmentSegmentTracker: {
     usedBandwidth: string;
@@ -2035,7 +2046,7 @@ declare const _default: {
     consumedGoAheadSignal: string;
   };
   /**
-   * Lookup196: polkadot_primitives::v6::PersistedValidationData<primitive_types::H256, N>
+   * Lookup198: polkadot_primitives::v6::PersistedValidationData<primitive_types::H256, N>
    **/
   PolkadotPrimitivesV6PersistedValidationData: {
     parentHead: string;
@@ -2044,19 +2055,19 @@ declare const _default: {
     maxPovSize: string;
   };
   /**
-   * Lookup199: polkadot_primitives::v6::UpgradeRestriction
+   * Lookup201: polkadot_primitives::v6::UpgradeRestriction
    **/
   PolkadotPrimitivesV6UpgradeRestriction: {
     _enum: string[];
   };
   /**
-   * Lookup200: sp_trie::storage_proof::StorageProof
+   * Lookup202: sp_trie::storage_proof::StorageProof
    **/
   SpTrieStorageProof: {
     trieNodes: string;
   };
   /**
-   * Lookup202: cumulus_pallet_parachain_system::relay_state_snapshot::MessagingStateSnapshot
+   * Lookup204: cumulus_pallet_parachain_system::relay_state_snapshot::MessagingStateSnapshot
    **/
   CumulusPalletParachainSystemRelayStateSnapshotMessagingStateSnapshot: {
     dmqMqcHead: string;
@@ -2065,14 +2076,14 @@ declare const _default: {
     egressChannels: string;
   };
   /**
-   * Lookup203: cumulus_pallet_parachain_system::relay_state_snapshot::RelayDispatchQueueRemainingCapacity
+   * Lookup205: cumulus_pallet_parachain_system::relay_state_snapshot::RelayDispatchQueueRemainingCapacity
    **/
   CumulusPalletParachainSystemRelayStateSnapshotRelayDispatchQueueRemainingCapacity: {
     remainingCount: string;
     remainingSize: string;
   };
   /**
-   * Lookup206: polkadot_primitives::v6::AbridgedHrmpChannel
+   * Lookup208: polkadot_primitives::v6::AbridgedHrmpChannel
    **/
   PolkadotPrimitivesV6AbridgedHrmpChannel: {
     maxCapacity: string;
@@ -2083,7 +2094,7 @@ declare const _default: {
     mqcHead: string;
   };
   /**
-   * Lookup207: polkadot_primitives::v6::AbridgedHostConfiguration
+   * Lookup209: polkadot_primitives::v6::AbridgedHostConfiguration
    **/
   PolkadotPrimitivesV6AbridgedHostConfiguration: {
     maxCodeSize: string;
@@ -2098,21 +2109,21 @@ declare const _default: {
     asyncBackingParams: string;
   };
   /**
-   * Lookup208: polkadot_primitives::v6::async_backing::AsyncBackingParams
+   * Lookup210: polkadot_primitives::v6::async_backing::AsyncBackingParams
    **/
   PolkadotPrimitivesV6AsyncBackingAsyncBackingParams: {
     maxCandidateDepth: string;
     allowedAncestryLen: string;
   };
   /**
-   * Lookup214: polkadot_core_primitives::OutboundHrmpMessage<polkadot_parachain_primitives::primitives::Id>
+   * Lookup216: polkadot_core_primitives::OutboundHrmpMessage<polkadot_parachain_primitives::primitives::Id>
    **/
   PolkadotCorePrimitivesOutboundHrmpMessage: {
     recipient: string;
     data: string;
   };
   /**
-   * Lookup216: cumulus_pallet_parachain_system::pallet::Call<T>
+   * Lookup218: cumulus_pallet_parachain_system::pallet::Call<T>
    **/
   CumulusPalletParachainSystemCall: {
     _enum: {
@@ -2132,7 +2143,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup217: cumulus_primitives_parachain_inherent::ParachainInherentData
+   * Lookup219: cumulus_primitives_parachain_inherent::ParachainInherentData
    **/
   CumulusPrimitivesParachainInherentParachainInherentData: {
     validationData: string;
@@ -2141,27 +2152,27 @@ declare const _default: {
     horizontalMessages: string;
   };
   /**
-   * Lookup219: polkadot_core_primitives::InboundDownwardMessage<BlockNumber>
+   * Lookup221: polkadot_core_primitives::InboundDownwardMessage<BlockNumber>
    **/
   PolkadotCorePrimitivesInboundDownwardMessage: {
     sentAt: string;
     msg: string;
   };
   /**
-   * Lookup222: polkadot_core_primitives::InboundHrmpMessage<BlockNumber>
+   * Lookup224: polkadot_core_primitives::InboundHrmpMessage<BlockNumber>
    **/
   PolkadotCorePrimitivesInboundHrmpMessage: {
     sentAt: string;
     data: string;
   };
   /**
-   * Lookup225: cumulus_pallet_parachain_system::pallet::Error<T>
+   * Lookup227: cumulus_pallet_parachain_system::pallet::Error<T>
    **/
   CumulusPalletParachainSystemError: {
     _enum: string[];
   };
   /**
-   * Lookup226: pallet_timestamp::pallet::Call<T>
+   * Lookup228: pallet_timestamp::pallet::Call<T>
    **/
   PalletTimestampCall: {
     _enum: {
@@ -2171,11 +2182,11 @@ declare const _default: {
     };
   };
   /**
-   * Lookup227: staging_parachain_info::pallet::Call<T>
+   * Lookup229: staging_parachain_info::pallet::Call<T>
    **/
   StagingParachainInfoCall: string;
   /**
-   * Lookup229: pallet_balances::types::BalanceLock<Balance>
+   * Lookup231: pallet_balances::types::BalanceLock<Balance>
    **/
   PalletBalancesBalanceLock: {
     id: string;
@@ -2183,20 +2194,20 @@ declare const _default: {
     reasons: string;
   };
   /**
-   * Lookup230: pallet_balances::types::Reasons
+   * Lookup232: pallet_balances::types::Reasons
    **/
   PalletBalancesReasons: {
     _enum: string[];
   };
   /**
-   * Lookup233: pallet_balances::types::ReserveData<ReserveIdentifier, Balance>
+   * Lookup235: pallet_balances::types::ReserveData<ReserveIdentifier, Balance>
    **/
   PalletBalancesReserveData: {
     id: string;
     amount: string;
   };
   /**
-   * Lookup237: storage_hub_runtime::RuntimeHoldReason
+   * Lookup239: storage_hub_runtime::RuntimeHoldReason
    **/
   StorageHubRuntimeRuntimeHoldReason: {
     _enum: {
@@ -2248,26 +2259,26 @@ declare const _default: {
     };
   };
   /**
-   * Lookup238: pallet_storage_providers::pallet::HoldReason
+   * Lookup240: pallet_storage_providers::pallet::HoldReason
    **/
   PalletStorageProvidersHoldReason: {
     _enum: string[];
   };
   /**
-   * Lookup239: pallet_payment_streams::pallet::HoldReason
+   * Lookup241: pallet_payment_streams::pallet::HoldReason
    **/
   PalletPaymentStreamsHoldReason: {
     _enum: string[];
   };
   /**
-   * Lookup242: pallet_balances::types::IdAmount<Id, Balance>
+   * Lookup244: pallet_balances::types::IdAmount<Id, Balance>
    **/
   PalletBalancesIdAmount: {
     id: string;
     amount: string;
   };
   /**
-   * Lookup244: pallet_balances::pallet::Call<T, I>
+   * Lookup246: pallet_balances::pallet::Call<T, I>
    **/
   PalletBalancesCall: {
     _enum: {
@@ -2308,25 +2319,25 @@ declare const _default: {
     };
   };
   /**
-   * Lookup247: pallet_balances::types::AdjustmentDirection
+   * Lookup249: pallet_balances::types::AdjustmentDirection
    **/
   PalletBalancesAdjustmentDirection: {
     _enum: string[];
   };
   /**
-   * Lookup248: pallet_balances::pallet::Error<T, I>
+   * Lookup250: pallet_balances::pallet::Error<T, I>
    **/
   PalletBalancesError: {
     _enum: string[];
   };
   /**
-   * Lookup249: pallet_transaction_payment::Releases
+   * Lookup251: pallet_transaction_payment::Releases
    **/
   PalletTransactionPaymentReleases: {
     _enum: string[];
   };
   /**
-   * Lookup250: pallet_sudo::pallet::Call<T>
+   * Lookup252: pallet_sudo::pallet::Call<T>
    **/
   PalletSudoCall: {
     _enum: {
@@ -2351,7 +2362,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup252: pallet_collator_selection::pallet::Call<T>
+   * Lookup254: pallet_collator_selection::pallet::Call<T>
    **/
   PalletCollatorSelectionCall: {
     _enum: {
@@ -2385,7 +2396,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup253: pallet_session::pallet::Call<T>
+   * Lookup255: pallet_session::pallet::Call<T>
    **/
   PalletSessionCall: {
     _enum: {
@@ -2400,21 +2411,21 @@ declare const _default: {
     };
   };
   /**
-   * Lookup254: storage_hub_runtime::SessionKeys
+   * Lookup256: storage_hub_runtime::SessionKeys
    **/
   StorageHubRuntimeSessionKeys: {
     aura: string;
   };
   /**
-   * Lookup255: sp_consensus_aura::sr25519::app_sr25519::Public
+   * Lookup257: sp_consensus_aura::sr25519::app_sr25519::Public
    **/
   SpConsensusAuraSr25519AppSr25519Public: string;
   /**
-   * Lookup256: sp_core::sr25519::Public
+   * Lookup258: sp_core::sr25519::Public
    **/
   SpCoreSr25519Public: string;
   /**
-   * Lookup257: cumulus_pallet_xcmp_queue::pallet::Call<T>
+   * Lookup259: cumulus_pallet_xcmp_queue::pallet::Call<T>
    **/
   CumulusPalletXcmpQueueCall: {
     _enum: {
@@ -2442,7 +2453,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup258: pallet_xcm::pallet::Call<T>
+   * Lookup260: pallet_xcm::pallet::Call<T>
    **/
   PalletXcmCall: {
     _enum: {
@@ -2510,7 +2521,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup259: xcm::VersionedXcm<RuntimeCall>
+   * Lookup261: xcm::VersionedXcm<RuntimeCall>
    **/
   XcmVersionedXcm: {
     _enum: {
@@ -2522,11 +2533,11 @@ declare const _default: {
     };
   };
   /**
-   * Lookup260: xcm::v2::Xcm<RuntimeCall>
+   * Lookup262: xcm::v2::Xcm<RuntimeCall>
    **/
   XcmV2Xcm: string;
   /**
-   * Lookup262: xcm::v2::Instruction<RuntimeCall>
+   * Lookup264: xcm::v2::Instruction<RuntimeCall>
    **/
   XcmV2Instruction: {
     _enum: {
@@ -2624,7 +2635,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup263: xcm::v2::Response
+   * Lookup265: xcm::v2::Response
    **/
   XcmV2Response: {
     _enum: {
@@ -2635,7 +2646,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup266: xcm::v2::traits::Error
+   * Lookup268: xcm::v2::traits::Error
    **/
   XcmV2TraitsError: {
     _enum: {
@@ -2668,7 +2679,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup267: xcm::v2::multiasset::MultiAssetFilter
+   * Lookup269: xcm::v2::multiasset::MultiAssetFilter
    **/
   XcmV2MultiassetMultiAssetFilter: {
     _enum: {
@@ -2677,7 +2688,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup268: xcm::v2::multiasset::WildMultiAsset
+   * Lookup270: xcm::v2::multiasset::WildMultiAsset
    **/
   XcmV2MultiassetWildMultiAsset: {
     _enum: {
@@ -2689,13 +2700,13 @@ declare const _default: {
     };
   };
   /**
-   * Lookup269: xcm::v2::multiasset::WildFungibility
+   * Lookup271: xcm::v2::multiasset::WildFungibility
    **/
   XcmV2MultiassetWildFungibility: {
     _enum: string[];
   };
   /**
-   * Lookup270: xcm::v2::WeightLimit
+   * Lookup272: xcm::v2::WeightLimit
    **/
   XcmV2WeightLimit: {
     _enum: {
@@ -2704,11 +2715,11 @@ declare const _default: {
     };
   };
   /**
-   * Lookup271: xcm::v3::Xcm<Call>
+   * Lookup273: xcm::v3::Xcm<Call>
    **/
   XcmV3Xcm: string;
   /**
-   * Lookup273: xcm::v3::Instruction<Call>
+   * Lookup275: xcm::v3::Instruction<Call>
    **/
   XcmV3Instruction: {
     _enum: {
@@ -2850,7 +2861,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup274: xcm::v3::Response
+   * Lookup276: xcm::v3::Response
    **/
   XcmV3Response: {
     _enum: {
@@ -2863,7 +2874,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup276: xcm::v3::PalletInfo
+   * Lookup278: xcm::v3::PalletInfo
    **/
   XcmV3PalletInfo: {
     index: string;
@@ -2874,7 +2885,7 @@ declare const _default: {
     patch: string;
   };
   /**
-   * Lookup280: xcm::v3::QueryResponseInfo
+   * Lookup282: xcm::v3::QueryResponseInfo
    **/
   XcmV3QueryResponseInfo: {
     destination: string;
@@ -2882,7 +2893,7 @@ declare const _default: {
     maxWeight: string;
   };
   /**
-   * Lookup281: xcm::v3::multiasset::MultiAssetFilter
+   * Lookup283: xcm::v3::multiasset::MultiAssetFilter
    **/
   XcmV3MultiassetMultiAssetFilter: {
     _enum: {
@@ -2891,7 +2902,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup282: xcm::v3::multiasset::WildMultiAsset
+   * Lookup284: xcm::v3::multiasset::WildMultiAsset
    **/
   XcmV3MultiassetWildMultiAsset: {
     _enum: {
@@ -2909,17 +2920,17 @@ declare const _default: {
     };
   };
   /**
-   * Lookup283: xcm::v3::multiasset::WildFungibility
+   * Lookup285: xcm::v3::multiasset::WildFungibility
    **/
   XcmV3MultiassetWildFungibility: {
     _enum: string[];
   };
   /**
-   * Lookup295: cumulus_pallet_xcm::pallet::Call<T>
+   * Lookup297: cumulus_pallet_xcm::pallet::Call<T>
    **/
   CumulusPalletXcmCall: string;
   /**
-   * Lookup296: pallet_message_queue::pallet::Call<T>
+   * Lookup298: pallet_message_queue::pallet::Call<T>
    **/
   PalletMessageQueueCall: {
     _enum: {
@@ -2936,7 +2947,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup297: pallet_storage_providers::pallet::Call<T>
+   * Lookup299: pallet_storage_providers::pallet::Call<T>
    **/
   PalletStorageProvidersCall: {
     _enum: {
@@ -2984,7 +2995,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup298: pallet_file_system::pallet::Call<T>
+   * Lookup300: pallet_file_system::pallet::Call<T>
    **/
   PalletFileSystemCall: {
     _enum: {
@@ -3055,13 +3066,15 @@ declare const _default: {
         bucketId: string;
         forestProof: string;
       };
-      force_update_bsps_assignment_threshold: {
-        bspAssignmentThreshold: string;
+      set_global_parameters: {
+        replicationTarget: string;
+        maximumThreshold: string;
+        blockRangeToMaximumThreshold: string;
       };
     };
   };
   /**
-   * Lookup303: pallet_proofs_dealer::pallet::Call<T>
+   * Lookup305: pallet_proofs_dealer::pallet::Call<T>
    **/
   PalletProofsDealerCall: {
     _enum: {
@@ -3078,13 +3091,13 @@ declare const _default: {
     };
   };
   /**
-   * Lookup304: pallet_randomness::pallet::Call<T>
+   * Lookup306: pallet_randomness::pallet::Call<T>
    **/
   PalletRandomnessCall: {
     _enum: string[];
   };
   /**
-   * Lookup305: pallet_payment_streams::pallet::Call<T>
+   * Lookup307: pallet_payment_streams::pallet::Call<T>
    **/
   PalletPaymentStreamsCall: {
     _enum: {
@@ -3125,7 +3138,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup306: pallet_bucket_nfts::pallet::Call<T>
+   * Lookup308: pallet_bucket_nfts::pallet::Call<T>
    **/
   PalletBucketNftsCall: {
     _enum: {
@@ -3143,7 +3156,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup308: pallet_nfts::pallet::Call<T, I>
+   * Lookup310: pallet_nfts::pallet::Call<T, I>
    **/
   PalletNftsCall: {
     _enum: {
@@ -3340,7 +3353,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup309: pallet_nfts::types::CollectionConfig<Price, BlockNumber, CollectionId>
+   * Lookup311: pallet_nfts::types::CollectionConfig<Price, BlockNumber, CollectionId>
    **/
   PalletNftsCollectionConfig: {
     settings: string;
@@ -3348,13 +3361,13 @@ declare const _default: {
     mintSettings: string;
   };
   /**
-   * Lookup311: pallet_nfts::types::CollectionSetting
+   * Lookup313: pallet_nfts::types::CollectionSetting
    **/
   PalletNftsCollectionSetting: {
     _enum: string[];
   };
   /**
-   * Lookup312: pallet_nfts::types::MintSettings<Price, BlockNumber, CollectionId>
+   * Lookup314: pallet_nfts::types::MintSettings<Price, BlockNumber, CollectionId>
    **/
   PalletNftsMintSettings: {
     mintType: string;
@@ -3364,7 +3377,7 @@ declare const _default: {
     defaultItemSettings: string;
   };
   /**
-   * Lookup313: pallet_nfts::types::MintType<CollectionId>
+   * Lookup315: pallet_nfts::types::MintType<CollectionId>
    **/
   PalletNftsMintType: {
     _enum: {
@@ -3374,13 +3387,13 @@ declare const _default: {
     };
   };
   /**
-   * Lookup316: pallet_nfts::types::ItemSetting
+   * Lookup318: pallet_nfts::types::ItemSetting
    **/
   PalletNftsItemSetting: {
     _enum: string[];
   };
   /**
-   * Lookup317: pallet_nfts::types::DestroyWitness
+   * Lookup319: pallet_nfts::types::DestroyWitness
    **/
   PalletNftsDestroyWitness: {
     itemMetadatas: string;
@@ -3388,26 +3401,26 @@ declare const _default: {
     attributes: string;
   };
   /**
-   * Lookup319: pallet_nfts::types::MintWitness<ItemId, Balance>
+   * Lookup321: pallet_nfts::types::MintWitness<ItemId, Balance>
    **/
   PalletNftsMintWitness: {
     ownedItem: string;
     mintPrice: string;
   };
   /**
-   * Lookup320: pallet_nfts::types::ItemConfig
+   * Lookup322: pallet_nfts::types::ItemConfig
    **/
   PalletNftsItemConfig: {
     settings: string;
   };
   /**
-   * Lookup322: pallet_nfts::types::CancelAttributesApprovalWitness
+   * Lookup324: pallet_nfts::types::CancelAttributesApprovalWitness
    **/
   PalletNftsCancelAttributesApprovalWitness: {
     accountAttributes: string;
   };
   /**
-   * Lookup324: pallet_nfts::types::ItemTip<CollectionId, ItemId, sp_core::crypto::AccountId32, Amount>
+   * Lookup326: pallet_nfts::types::ItemTip<CollectionId, ItemId, sp_core::crypto::AccountId32, Amount>
    **/
   PalletNftsItemTip: {
     collection: string;
@@ -3416,7 +3429,7 @@ declare const _default: {
     amount: string;
   };
   /**
-   * Lookup326: pallet_nfts::types::PreSignedMint<CollectionId, ItemId, sp_core::crypto::AccountId32, Deadline, Balance>
+   * Lookup328: pallet_nfts::types::PreSignedMint<CollectionId, ItemId, sp_core::crypto::AccountId32, Deadline, Balance>
    **/
   PalletNftsPreSignedMint: {
     collection: string;
@@ -3428,7 +3441,7 @@ declare const _default: {
     mintPrice: string;
   };
   /**
-   * Lookup327: sp_runtime::MultiSignature
+   * Lookup329: sp_runtime::MultiSignature
    **/
   SpRuntimeMultiSignature: {
     _enum: {
@@ -3438,19 +3451,19 @@ declare const _default: {
     };
   };
   /**
-   * Lookup328: sp_core::ed25519::Signature
+   * Lookup330: sp_core::ed25519::Signature
    **/
   SpCoreEd25519Signature: string;
   /**
-   * Lookup330: sp_core::sr25519::Signature
+   * Lookup332: sp_core::sr25519::Signature
    **/
   SpCoreSr25519Signature: string;
   /**
-   * Lookup331: sp_core::ecdsa::Signature
+   * Lookup333: sp_core::ecdsa::Signature
    **/
   SpCoreEcdsaSignature: string;
   /**
-   * Lookup333: pallet_nfts::types::PreSignedAttributes<CollectionId, ItemId, sp_core::crypto::AccountId32, Deadline>
+   * Lookup335: pallet_nfts::types::PreSignedAttributes<CollectionId, ItemId, sp_core::crypto::AccountId32, Deadline>
    **/
   PalletNftsPreSignedAttributes: {
     collection: string;
@@ -3460,36 +3473,36 @@ declare const _default: {
     deadline: string;
   };
   /**
-   * Lookup334: pallet_sudo::pallet::Error<T>
+   * Lookup336: pallet_sudo::pallet::Error<T>
    **/
   PalletSudoError: {
     _enum: string[];
   };
   /**
-   * Lookup337: pallet_collator_selection::pallet::CandidateInfo<sp_core::crypto::AccountId32, Balance>
+   * Lookup339: pallet_collator_selection::pallet::CandidateInfo<sp_core::crypto::AccountId32, Balance>
    **/
   PalletCollatorSelectionCandidateInfo: {
     who: string;
     deposit: string;
   };
   /**
-   * Lookup339: pallet_collator_selection::pallet::Error<T>
+   * Lookup341: pallet_collator_selection::pallet::Error<T>
    **/
   PalletCollatorSelectionError: {
     _enum: string[];
   };
   /**
-   * Lookup343: sp_core::crypto::KeyTypeId
+   * Lookup345: sp_core::crypto::KeyTypeId
    **/
   SpCoreCryptoKeyTypeId: string;
   /**
-   * Lookup344: pallet_session::pallet::Error<T>
+   * Lookup346: pallet_session::pallet::Error<T>
    **/
   PalletSessionError: {
     _enum: string[];
   };
   /**
-   * Lookup353: cumulus_pallet_xcmp_queue::OutboundChannelDetails
+   * Lookup355: cumulus_pallet_xcmp_queue::OutboundChannelDetails
    **/
   CumulusPalletXcmpQueueOutboundChannelDetails: {
     recipient: string;
@@ -3499,13 +3512,13 @@ declare const _default: {
     lastIndex: string;
   };
   /**
-   * Lookup354: cumulus_pallet_xcmp_queue::OutboundState
+   * Lookup356: cumulus_pallet_xcmp_queue::OutboundState
    **/
   CumulusPalletXcmpQueueOutboundState: {
     _enum: string[];
   };
   /**
-   * Lookup356: cumulus_pallet_xcmp_queue::QueueConfigData
+   * Lookup358: cumulus_pallet_xcmp_queue::QueueConfigData
    **/
   CumulusPalletXcmpQueueQueueConfigData: {
     suspendThreshold: string;
@@ -3513,13 +3526,13 @@ declare const _default: {
     resumeThreshold: string;
   };
   /**
-   * Lookup357: cumulus_pallet_xcmp_queue::pallet::Error<T>
+   * Lookup359: cumulus_pallet_xcmp_queue::pallet::Error<T>
    **/
   CumulusPalletXcmpQueueError: {
     _enum: string[];
   };
   /**
-   * Lookup358: pallet_xcm::pallet::QueryStatus<BlockNumber>
+   * Lookup360: pallet_xcm::pallet::QueryStatus<BlockNumber>
    **/
   PalletXcmQueryStatus: {
     _enum: {
@@ -3540,7 +3553,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup362: xcm::VersionedResponse
+   * Lookup364: xcm::VersionedResponse
    **/
   XcmVersionedResponse: {
     _enum: {
@@ -3552,7 +3565,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup368: pallet_xcm::pallet::VersionMigrationStage
+   * Lookup370: pallet_xcm::pallet::VersionMigrationStage
    **/
   PalletXcmVersionMigrationStage: {
     _enum: {
@@ -3563,7 +3576,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup371: xcm::VersionedAssetId
+   * Lookup373: xcm::VersionedAssetId
    **/
   XcmVersionedAssetId: {
     _enum: {
@@ -3575,7 +3588,7 @@ declare const _default: {
     };
   };
   /**
-   * Lookup372: pallet_xcm::pallet::RemoteLockedFungibleRecord<ConsumerIdentifier, MaxConsumers>
+   * Lookup374: pallet_xcm::pallet::RemoteLockedFungibleRecord<ConsumerIdentifier, MaxConsumers>
    **/
   PalletXcmRemoteLockedFungibleRecord: {
     amount: string;
@@ -3584,13 +3597,13 @@ declare const _default: {
     consumers: string;
   };
   /**
-   * Lookup379: pallet_xcm::pallet::Error<T>
+   * Lookup381: pallet_xcm::pallet::Error<T>
    **/
   PalletXcmError: {
     _enum: string[];
   };
   /**
-   * Lookup380: pallet_message_queue::BookState<cumulus_primitives_core::AggregateMessageOrigin>
+   * Lookup382: pallet_message_queue::BookState<cumulus_primitives_core::AggregateMessageOrigin>
    **/
   PalletMessageQueueBookState: {
     _alias: {
@@ -3604,14 +3617,14 @@ declare const _default: {
     size_: string;
   };
   /**
-   * Lookup382: pallet_message_queue::Neighbours<cumulus_primitives_core::AggregateMessageOrigin>
+   * Lookup384: pallet_message_queue::Neighbours<cumulus_primitives_core::AggregateMessageOrigin>
    **/
   PalletMessageQueueNeighbours: {
     prev: string;
     next: string;
   };
   /**
-   * Lookup384: pallet_message_queue::Page<Size, HeapSize>
+   * Lookup386: pallet_message_queue::Page<Size, HeapSize>
    **/
   PalletMessageQueuePage: {
     remaining: string;
@@ -3622,13 +3635,13 @@ declare const _default: {
     heap: string;
   };
   /**
-   * Lookup386: pallet_message_queue::pallet::Error<T>
+   * Lookup388: pallet_message_queue::pallet::Error<T>
    **/
   PalletMessageQueueError: {
     _enum: string[];
   };
   /**
-   * Lookup388: pallet_storage_providers::types::StorageProvider<T>
+   * Lookup390: pallet_storage_providers::types::StorageProvider<T>
    **/
   PalletStorageProvidersStorageProvider: {
     _enum: {
@@ -3637,24 +3650,25 @@ declare const _default: {
     };
   };
   /**
-   * Lookup389: pallet_storage_providers::types::BackupStorageProvider<T>
+   * Lookup391: pallet_storage_providers::types::BackupStorageProvider<T>
    **/
   PalletStorageProvidersBackupStorageProvider: {
     capacity: string;
-    dataUsed: string;
+    capacityUsed: string;
     multiaddresses: string;
     root: string;
     lastCapacityChange: string;
     ownerAccount: string;
     paymentAccount: string;
+    reputationWeight: string;
   };
   /**
-   * Lookup390: pallet_storage_providers::types::MainStorageProvider<T>
+   * Lookup392: pallet_storage_providers::types::MainStorageProvider<T>
    **/
   PalletStorageProvidersMainStorageProvider: {
     buckets: string;
     capacity: string;
-    dataUsed: string;
+    capacityUsed: string;
     multiaddresses: string;
     valueProp: string;
     lastCapacityChange: string;
@@ -3662,7 +3676,7 @@ declare const _default: {
     paymentAccount: string;
   };
   /**
-   * Lookup392: pallet_storage_providers::types::Bucket<T>
+   * Lookup394: pallet_storage_providers::types::Bucket<T>
    **/
   PalletStorageProvidersBucket: {
     root: string;
@@ -3672,13 +3686,13 @@ declare const _default: {
     readAccessGroupId: string;
   };
   /**
-   * Lookup395: pallet_storage_providers::pallet::Error<T>
+   * Lookup397: pallet_storage_providers::pallet::Error<T>
    **/
   PalletStorageProvidersError: {
     _enum: string[];
   };
   /**
-   * Lookup396: pallet_file_system::types::StorageRequestMetadata<T>
+   * Lookup398: pallet_file_system::types::StorageRequestMetadata<T>
    **/
   PalletFileSystemStorageRequestMetadata: {
     _alias: {
@@ -3698,13 +3712,13 @@ declare const _default: {
     bspsVolunteered: string;
   };
   /**
-   * Lookup399: pallet_file_system::types::StorageRequestBspsMetadata<T>
+   * Lookup401: pallet_file_system::types::StorageRequestBspsMetadata<T>
    **/
   PalletFileSystemStorageRequestBspsMetadata: {
     confirmed: string;
   };
   /**
-   * Lookup401: pallet_file_system::types::ExpiredItems<T>
+   * Lookup403: pallet_file_system::types::ExpiredItems<T>
    **/
   PalletFileSystemExpiredItems: {
     _enum: {
@@ -3713,19 +3727,19 @@ declare const _default: {
     };
   };
   /**
-   * Lookup406: pallet_file_system::pallet::Error<T>
+   * Lookup408: pallet_file_system::pallet::Error<T>
    **/
   PalletFileSystemError: {
     _enum: string[];
   };
   /**
-   * Lookup412: pallet_proofs_dealer::pallet::Error<T>
+   * Lookup414: pallet_proofs_dealer::pallet::Error<T>
    **/
   PalletProofsDealerError: {
     _enum: string[];
   };
   /**
-   * Lookup415: pallet_payment_streams::types::FixedRatePaymentStream<T>
+   * Lookup417: pallet_payment_streams::types::FixedRatePaymentStream<T>
    **/
   PalletPaymentStreamsFixedRatePaymentStream: {
     rate: string;
@@ -3733,7 +3747,7 @@ declare const _default: {
     userDeposit: string;
   };
   /**
-   * Lookup416: pallet_payment_streams::types::DynamicRatePaymentStream<T>
+   * Lookup418: pallet_payment_streams::types::DynamicRatePaymentStream<T>
    **/
   PalletPaymentStreamsDynamicRatePaymentStream: {
     amountProvided: string;
@@ -3741,26 +3755,26 @@ declare const _default: {
     userDeposit: string;
   };
   /**
-   * Lookup417: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
+   * Lookup419: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
    **/
   PalletPaymentStreamsProviderLastChargeableInfo: {
     lastChargeableTick: string;
     priceIndex: string;
   };
   /**
-   * Lookup418: pallet_payment_streams::pallet::Error<T>
+   * Lookup420: pallet_payment_streams::pallet::Error<T>
    **/
   PalletPaymentStreamsError: {
     _enum: string[];
   };
   /**
-   * Lookup419: pallet_bucket_nfts::pallet::Error<T>
+   * Lookup421: pallet_bucket_nfts::pallet::Error<T>
    **/
   PalletBucketNftsError: {
     _enum: string[];
   };
   /**
-   * Lookup420: pallet_nfts::types::CollectionDetails<sp_core::crypto::AccountId32, DepositBalance>
+   * Lookup422: pallet_nfts::types::CollectionDetails<sp_core::crypto::AccountId32, DepositBalance>
    **/
   PalletNftsCollectionDetails: {
     owner: string;
@@ -3771,13 +3785,13 @@ declare const _default: {
     attributes: string;
   };
   /**
-   * Lookup425: pallet_nfts::types::CollectionRole
+   * Lookup427: pallet_nfts::types::CollectionRole
    **/
   PalletNftsCollectionRole: {
     _enum: string[];
   };
   /**
-   * Lookup426: pallet_nfts::types::ItemDetails<sp_core::crypto::AccountId32, pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>, bounded_collections::bounded_btree_map::BoundedBTreeMap<sp_core::crypto::AccountId32, Option<T>, S>>
+   * Lookup428: pallet_nfts::types::ItemDetails<sp_core::crypto::AccountId32, pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>, bounded_collections::bounded_btree_map::BoundedBTreeMap<sp_core::crypto::AccountId32, Option<T>, S>>
    **/
   PalletNftsItemDetails: {
     owner: string;
@@ -3785,42 +3799,42 @@ declare const _default: {
     deposit: string;
   };
   /**
-   * Lookup427: pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   * Lookup429: pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>
    **/
   PalletNftsItemDeposit: {
     account: string;
     amount: string;
   };
   /**
-   * Lookup432: pallet_nfts::types::CollectionMetadata<Deposit, StringLimit>
+   * Lookup434: pallet_nfts::types::CollectionMetadata<Deposit, StringLimit>
    **/
   PalletNftsCollectionMetadata: {
     deposit: string;
     data: string;
   };
   /**
-   * Lookup433: pallet_nfts::types::ItemMetadata<pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>, StringLimit>
+   * Lookup435: pallet_nfts::types::ItemMetadata<pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>, StringLimit>
    **/
   PalletNftsItemMetadata: {
     deposit: string;
     data: string;
   };
   /**
-   * Lookup434: pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   * Lookup436: pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>
    **/
   PalletNftsItemMetadataDeposit: {
     account: string;
     amount: string;
   };
   /**
-   * Lookup437: pallet_nfts::types::AttributeDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   * Lookup439: pallet_nfts::types::AttributeDeposit<DepositBalance, sp_core::crypto::AccountId32>
    **/
   PalletNftsAttributeDeposit: {
     account: string;
     amount: string;
   };
   /**
-   * Lookup441: pallet_nfts::types::PendingSwap<CollectionId, ItemId, pallet_nfts::types::PriceWithDirection<Amount>, Deadline>
+   * Lookup443: pallet_nfts::types::PendingSwap<CollectionId, ItemId, pallet_nfts::types::PriceWithDirection<Amount>, Deadline>
    **/
   PalletNftsPendingSwap: {
     desiredCollection: string;
@@ -3829,51 +3843,51 @@ declare const _default: {
     deadline: string;
   };
   /**
-   * Lookup443: pallet_nfts::types::PalletFeature
+   * Lookup445: pallet_nfts::types::PalletFeature
    **/
   PalletNftsPalletFeature: {
     _enum: string[];
   };
   /**
-   * Lookup444: pallet_nfts::pallet::Error<T, I>
+   * Lookup446: pallet_nfts::pallet::Error<T, I>
    **/
   PalletNftsError: {
     _enum: string[];
   };
   /**
-   * Lookup447: frame_system::extensions::check_non_zero_sender::CheckNonZeroSender<T>
+   * Lookup449: frame_system::extensions::check_non_zero_sender::CheckNonZeroSender<T>
    **/
   FrameSystemExtensionsCheckNonZeroSender: string;
   /**
-   * Lookup448: frame_system::extensions::check_spec_version::CheckSpecVersion<T>
+   * Lookup450: frame_system::extensions::check_spec_version::CheckSpecVersion<T>
    **/
   FrameSystemExtensionsCheckSpecVersion: string;
   /**
-   * Lookup449: frame_system::extensions::check_tx_version::CheckTxVersion<T>
+   * Lookup451: frame_system::extensions::check_tx_version::CheckTxVersion<T>
    **/
   FrameSystemExtensionsCheckTxVersion: string;
   /**
-   * Lookup450: frame_system::extensions::check_genesis::CheckGenesis<T>
+   * Lookup452: frame_system::extensions::check_genesis::CheckGenesis<T>
    **/
   FrameSystemExtensionsCheckGenesis: string;
   /**
-   * Lookup453: frame_system::extensions::check_nonce::CheckNonce<T>
+   * Lookup455: frame_system::extensions::check_nonce::CheckNonce<T>
    **/
   FrameSystemExtensionsCheckNonce: string;
   /**
-   * Lookup454: frame_system::extensions::check_weight::CheckWeight<T>
+   * Lookup456: frame_system::extensions::check_weight::CheckWeight<T>
    **/
   FrameSystemExtensionsCheckWeight: string;
   /**
-   * Lookup455: pallet_transaction_payment::ChargeTransactionPayment<T>
+   * Lookup457: pallet_transaction_payment::ChargeTransactionPayment<T>
    **/
   PalletTransactionPaymentChargeTransactionPayment: string;
   /**
-   * Lookup456: cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim<T>
+   * Lookup458: cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim<T>
    **/
   CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim: string;
   /**
-   * Lookup457: storage_hub_runtime::Runtime
+   * Lookup459: storage_hub_runtime::Runtime
    **/
   StorageHubRuntimeRuntime: string;
 };

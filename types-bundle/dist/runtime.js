@@ -127,6 +127,16 @@ const STORAGE_PROVIDERS_V1 = {
       }
     ],
     type: "Result<BackupStorageProvider, GetBspInfoError>"
+  },
+  get_storage_provider_id: {
+    description: "Get the Storage Provider ID for a given Account ID.",
+    params: [
+      {
+        name: "who",
+        type: "AccountId"
+      }
+    ],
+    type: "Option<StorageProviderId>"
   }
 };
 export const runtime = {
@@ -149,3 +159,4 @@ export const runtime = {
     }
   ]
 };
+//# sourceMappingURL=runtime.js.map

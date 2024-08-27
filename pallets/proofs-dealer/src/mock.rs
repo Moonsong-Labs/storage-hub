@@ -11,13 +11,12 @@ use frame_support::{
 };
 use frame_system as system;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, SubscribeProvidersInterface,
-    TrieMutation, TrieProofDeltaApplier,
+    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, IdentityLookup},
-    BuildStorage, DispatchError, DispatchResult, SaturatedConversion,
+    BuildStorage, DispatchError, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
@@ -132,30 +131,32 @@ impl Get<AccountId> for TreasuryAccount {
 
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageData = u32;
+    type StorageDataUnit = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
-    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = H256;
     type ReadAccessGroupId = u32;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
+    type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
+    type SpMinCapacity = ConstU32<2>;
+    type DepositPerData = ConstU128<2>;
+    type MaxFileSize = ConstU32<{ u32::MAX }>;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = ConstU128<10>;
     type BucketNameLimit = ConstU32<100>;
-    type SpMinDeposit = ConstU128<{ 10 * UNITS }>;
-    type SpMinCapacity = ConstU32<2>;
-    type DepositPerData = ConstU128<2>;
-    type Subscribers = MockedProvidersSubscriber;
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
-    type ProvidersRandomness = MockRandomness;
-    type SlashFactor = ConstU128<10>;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
+    type SlashAmountPerMaxFileSize = ConstU128<10>;
+    type StartingReputationWeight = ConstU32<10>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
@@ -192,24 +193,12 @@ impl crate::Config for Test {
     type TargetTicksStorageOfSubmitters = ConstU32<3>;
     type ChallengeHistoryLength = ConstU64<30>;
     type ChallengesQueueLength = ConstU32<25>;
-    type CheckpointChallengePeriod = ConstU64<10>;
+    type CheckpointChallengePeriod = ConstU64<20>;
     type ChallengesFee = ConstU128<1_000_000>;
     type Treasury = ConstU64<181222>;
     type RandomnessProvider = MockRandomness;
     type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
-    type ChallengeTicksTolerance = ConstU64<20>;
-}
-
-pub struct MockedProvidersSubscriber;
-impl SubscribeProvidersInterface for MockedProvidersSubscriber {
-    type ProviderId = u64;
-
-    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
-        Ok(())
-    }
-    fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
-        Ok(())
-    }
+    type ChallengeTicksTolerance = ConstU64<10>;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty

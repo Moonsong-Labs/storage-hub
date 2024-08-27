@@ -10,13 +10,13 @@ use frame_support::{
 use frame_system as system;
 use pallet_proofs_dealer::SlashableProviders;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ProvidersInterface,
-    SubscribeProvidersInterface, TrieMutation, TrieProofDeltaApplier,
+    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadChallengeableProvidersInterface,
+    TrieMutation, TrieProofDeltaApplier,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_runtime::{
     traits::{BlakeTwo256, Convert, IdentityLookup},
-    BuildStorage, DispatchError, DispatchResult, SaturatedConversion,
+    BuildStorage, DispatchError, SaturatedConversion,
 };
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
 use std::collections::BTreeSet;
@@ -222,30 +222,32 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageData = u32;
+    type StorageDataUnit = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
-    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = H256;
     type ReadAccessGroupId = u32;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
-    type MaxMultiAddressSize = ConstU32<100>;
-    type MaxMultiAddressAmount = ConstU32<5>;
-    type MaxProtocols = ConstU32<100>;
-    type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
-    type MinBlocksBetweenCapacityChanges = ConstU64<10>;
-    type MaxBuckets = ConstU32<10000>;
-    type BucketDeposit = ConstU128<10>;
-    type BucketNameLimit = ConstU32<100>;
     type SpMinDeposit = ConstU128<10>;
     type SpMinCapacity = ConstU32<2>;
     type DepositPerData = ConstU128<2>;
-    type Subscribers = MockedProvidersSubscriber;
-    type ProvidersRandomness = MockRandomness;
-    type SlashFactor = ConstU128<10>;
+    type MaxFileSize = ConstU32<{ u32::MAX }>;
+    type MaxMultiAddressSize = ConstU32<100>;
+    type MaxMultiAddressAmount = ConstU32<5>;
+    type MaxProtocols = ConstU32<100>;
+    type MaxBuckets = ConstU32<10000>;
+    type BucketDeposit = ConstU128<10>;
+    type BucketNameLimit = ConstU32<100>;
+    type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
+    type MinBlocksBetweenCapacityChanges = ConstU64<10>;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
+    type SlashAmountPerMaxFileSize = ConstU128<10>;
+    type StartingReputationWeight = ConstU32<10>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
@@ -259,8 +261,10 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
     ) -> Option<BoundedBTreeSet<Self::ProviderId, Self::MaxProofSubmitters>> {
         let mut set = BoundedBTreeSet::<Self::ProviderId, Self::MaxProofSubmitters>::new();
         // We convert the block number + 1 to the corresponding Provider ID, to simulate that the Provider submitted a proof
-        <StorageProviders as ProvidersInterface>::get_provider_id(*block_number + 1)
-            .map(|id| set.try_insert(id));
+        <StorageProviders as ReadChallengeableProvidersInterface>::get_provider_id(
+            *block_number + 1,
+        )
+        .map(|id| set.try_insert(id));
         Some(set)
     }
 
@@ -315,17 +319,5 @@ impl ExtBuilder {
         let mut ext = sp_io::TestExternalities::new(t);
         ext.execute_with(|| System::set_block_number(1));
         ext
-    }
-}
-
-pub struct MockedProvidersSubscriber;
-impl SubscribeProvidersInterface for MockedProvidersSubscriber {
-    type ProviderId = u64;
-
-    fn subscribe_bsp_sign_up(_who: &Self::ProviderId) -> DispatchResult {
-        Ok(())
-    }
-    fn subscribe_bsp_sign_off(_who: &Self::ProviderId) -> DispatchResult {
-        Ok(())
     }
 }

@@ -6,7 +6,11 @@ use shp_file_metadata::ChunkId;
 use sp_core::H256;
 
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewChallengeSeed};
+use shc_blockchain_service::{
+    commands::BlockchainServiceInterface,
+    events::{NewChallengeSeed, ProcessSubmitProofRequest},
+    handler::SubmitProofRequest,
+};
 use shc_common::types::{
     KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
     StorageProofsMerkleTrieLayout, TrieRemoveMutation,
@@ -99,12 +103,44 @@ where
             .await?;
         trace!(target: LOG_TARGET, "Checkpoint challenges to respond to: {:?}", checkpoint_challenges);
 
-        // TODO: In the near future, from here onwards we should be using the locking mechanism so that only
-        // TODO: one task at a time can be sending Forest-related transactions to the runtime.
-        // Get a read lock on the forest storage to generate a proof for the file.
+        self.storage_hub_handler
+            .blockchain
+            .queue_submit_proof_request(SubmitProofRequest::new(
+                event,
+                forest_challenges,
+                checkpoint_challenges,
+            ))
+            .await?;
+
+        Ok(())
+    }
+}
+
+impl<FL, FS> EventHandler<ProcessSubmitProofRequest> for BspSubmitProofTask<FL, FS>
+where
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+{
+    async fn handle_event(&mut self, event: ProcessSubmitProofRequest) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET,
+            "Processing SubmitProofRequest {:?}",
+            event.forest_challenges
+        );
+
+        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
+            Some(tx) => tx,
+            None => {
+                error!(target: LOG_TARGET, "This is a bug! Forest root write tx already taken.");
+                return Err(anyhow!(
+                    "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken!"
+                ));
+            }
+        };
+
         let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
         let proven_file_keys = read_forest_storage
-            .generate_proof(forest_challenges)
+            .generate_proof(event.forest_challenges)
             .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
         // Release the forest storage read lock.
         drop(read_forest_storage);
@@ -137,7 +173,7 @@ where
         for file_key in &proven_keys {
             // Generate the key proof for each file key.
             let key_proof = self
-                .generate_key_proof(*file_key, seed, provider_id)
+                .generate_key_proof(*file_key, event.seed, event.provider_id)
                 .await?;
 
             key_proofs.insert(*file_key, key_proof);
@@ -195,7 +231,7 @@ where
 
         // Apply mutations, if any.
         let mut mutations_applied = false;
-        for (file_key, maybe_mutation) in &checkpoint_challenges {
+        for (file_key, maybe_mutation) in &event.checkpoint_challenges {
             if proven_keys.contains(file_key) {
                 // If the file key is proven, it means that this provider had an exact match for a checkpoint challenge.
                 trace!(target: LOG_TARGET, "Checkpoint challenge proven with exact match for file key: {:?}", file_key);
@@ -215,8 +251,11 @@ where
             trace!(target: LOG_TARGET, "Mutations applied successfully");
 
             // Check that the new Forest root matches the one on-chain.
-            self.check_provider_root(provider_id).await?;
+            self.check_provider_root(event.provider_id).await?;
         }
+
+        // Release the forest root write "lock".
+        let _ = forest_root_write_tx.send(());
 
         Ok(())
     }

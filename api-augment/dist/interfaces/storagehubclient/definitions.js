@@ -4,3 +4,4 @@ export default {
   runtime: storageHubDefinitions.runtime,
   rpc: storageHubDefinitions.rpc?.storagehubclient
 };
+//# sourceMappingURL=definitions.js.map

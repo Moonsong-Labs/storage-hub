@@ -53,19 +53,6 @@ declare module "@polkadot/api-base/types/consts" {
     };
     fileSystem: {
       /**
-       * Horizontal asymptote which the volunteering threshold approaches as more BSPs are registered in the system.
-       **/
-      assignmentThresholdAsymptote: u128 & AugmentedConst<ApiType>;
-      /**
-       * Asymptotic decay function for the assignment threshold.
-       **/
-      assignmentThresholdDecayFactor: u128 & AugmentedConst<ApiType>;
-      /**
-       * The multiplier increases the threshold over time (blocks) which increases the
-       * likelihood of a BSP successfully volunteering to store a file.
-       **/
-      assignmentThresholdMultiplier: u128 & AugmentedConst<ApiType>;
-      /**
        * Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
        **/
       maxBatchConfirmStorageRequests: u32 & AugmentedConst<ApiType>;
@@ -108,12 +95,6 @@ declare module "@polkadot/api-base/types/consts" {
        * Time-to-live for a storage request.
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
-      /**
-       * Minimum number of BSPs required to store a file.
-       *
-       * This is also used as a default value if the BSPs required are not specified when creating a storage request.
-       **/
-      targetBspsRequired: u32 & AugmentedConst<ApiType>;
       /**
        * Generic const
        **/
@@ -329,7 +310,7 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       defaultMerkleRoot: H256 & AugmentedConst<ApiType>;
       /**
-       * The slope of the collateral vs storage capacity curve. In other terms, how many tokens a Storage Provider should add as collateral to increase its storage capacity in one unit of StorageData.
+       * The slope of the collateral vs storage capacity curve. In other terms, how many tokens a Storage Provider should add as collateral to increase its storage capacity in one unit of StorageDataUnit.
        **/
       depositPerData: u128 & AugmentedConst<ApiType>;
       /**
@@ -340,6 +321,12 @@ declare module "@polkadot/api-base/types/consts" {
        * The maximum amount of Buckets that a MSP can have.
        **/
       maxBuckets: u32 & AugmentedConst<ApiType>;
+      /**
+       * The estimated maximum size of an unknown file.
+       *
+       * Used primarily to slash a Storage Provider when it fails to provide a chunk of data for an unknown file size.
+       **/
+      maxFileSize: u32 & AugmentedConst<ApiType>;
       /**
        * The maximum amount of multiaddresses that a Storage Provider can have.
        **/
@@ -359,7 +346,7 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * The slash factor deducted from a Storage Provider's deposit for every single storage proof they fail to provide.
        **/
-      slashFactor: u128 & AugmentedConst<ApiType>;
+      slashAmountPerChunkOfStorageData: u128 & AugmentedConst<ApiType>;
       /**
        * The amount that a BSP receives as allocation of storage capacity when it deposits SpMinDeposit.
        **/
@@ -368,6 +355,10 @@ declare module "@polkadot/api-base/types/consts" {
        * The minimum amount that an account has to deposit to become a storage provider.
        **/
       spMinDeposit: u128 & AugmentedConst<ApiType>;
+      /**
+       * Starting reputation weight for a newly registered BSP.
+       **/
+      startingReputationWeight: u32 & AugmentedConst<ApiType>;
       /**
        * The Treasury AccountId.
        * The account to which:

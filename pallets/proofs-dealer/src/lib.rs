@@ -25,10 +25,11 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{
-        CommitmentVerifier, ProofsDealerInterface, ProvidersInterface, TrieProofDeltaApplier,
-        TrieRemoveMutation,
+        CommitmentVerifier, MutateChallengeableProvidersInterface, ProofsDealerInterface,
+        ReadChallengeableProvidersInterface, TrieProofDeltaApplier, TrieRemoveMutation,
     };
     use sp_runtime::traits::Convert;
+    use sp_std::vec::Vec;
     use types::{KeyFor, ProviderIdFor};
 
     use crate::types::*;
@@ -41,11 +42,11 @@ pub mod pallet {
 
         /// The Providers pallet.
         /// To check if whoever submits a proof is a registered Provider.
-        type ProvidersPallet: ProvidersInterface<
-            AccountId = Self::AccountId,
-            MerkleHash = Self::MerkleTrieHash,
-            Balance = Self::NativeBalance,
-        >;
+        type ProvidersPallet: ReadChallengeableProvidersInterface<
+                AccountId = Self::AccountId,
+                MerkleHash = Self::MerkleTrieHash,
+                Balance = Self::NativeBalance,
+            > + MutateChallengeableProvidersInterface<ProviderId = <Self::ProvidersPallet as ReadChallengeableProvidersInterface>::ProviderId, MerkleHash = Self::MerkleTrieHash>;
 
         /// The type used to verify Merkle Patricia Forest proofs.
         /// This verifies proofs of keys belonging to the Merkle Patricia Forest.
@@ -348,12 +349,22 @@ pub mod pallet {
             next_challenge_deadline: BlockNumberFor<T>,
         },
 
+        /// No record of the last tick the Provider submitted a proof for.
+        NoRecordOfLastSubmittedProof { provider: ProviderIdFor<T> },
+
         /// A provider's challenge cycle was initialised.
         NewChallengeCycleInitialised {
             current_tick: BlockNumberFor<T>,
             next_challenge_deadline: BlockNumberFor<T>,
             provider: ProviderIdFor<T>,
             maybe_provider_account: Option<T::AccountId>,
+        },
+
+        /// A set of mutations has been applied to the Forest.
+        MutationsApplied {
+            provider: ProviderIdFor<T>,
+            mutations: Vec<(KeyFor<T>, TrieRemoveMutation)>,
+            new_root: KeyFor<T>,
         },
     }
 

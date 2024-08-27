@@ -15,8 +15,8 @@ use shp_traits::{
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
-    traits::{BlakeTwo256, Bounded, Convert, IdentifyAccount, IdentityLookup, Verify},
-    BuildStorage, DispatchError, FixedPointNumber, FixedU128, MultiSignature, SaturatedConversion,
+    traits::{BlakeTwo256, Convert, ConvertBack, IdentifyAccount, IdentityLookup, Verify},
+    BuildStorage, DispatchError, MultiSignature, SaturatedConversion,
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
@@ -188,30 +188,32 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
 }
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageData = u32;
+    type StorageDataUnit = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
-    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
+    type SpMinDeposit = ConstU128<10>;
+    type SpMinCapacity = ConstU32<2>;
+    type DepositPerData = ConstU128<2>;
+    type MaxFileSize = ConstU32<{ u32::MAX }>;
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = ConstU128<10>;
     type BucketNameLimit = ConstU32<100>;
-    type SpMinDeposit = ConstU128<10>;
-    type SpMinCapacity = ConstU32<2>;
-    type DepositPerData = ConstU128<2>;
-    type Subscribers = FileSystem;
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
-    type ProvidersRandomness = MockRandomness;
-    type SlashFactor = ConstU128<10>;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
+    type SlashAmountPerMaxFileSize = ConstU128<10>;
+    type StartingReputationWeight = ConstU32<10>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
@@ -316,17 +318,14 @@ where
 
 impl pallet_bucket_nfts::Config for Test {
     type RuntimeEvent = RuntimeEvent;
-    type Providers = Providers;
+    type Buckets = Providers;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
 }
 
-pub(crate) type ThresholdType = FixedU128;
+pub(crate) type ThresholdType = u32;
 
 parameter_types! {
-    pub const ThresholdAsymptoticDecayFactor: FixedU128 = FixedU128::from_rational(1, 2); // 0.5
-    pub const ThresholdAsymptote: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
-    pub const ThresholdMultiplier: FixedU128 = FixedU128::from_rational(100, 1); // 100.0
     pub const MinWaitForStopStoring: BlockNumber = 1;
 }
 
@@ -335,29 +334,24 @@ impl crate::Config for Test {
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
     type Fingerprint = H256;
-    type StorageRequestBspsRequiredType = u32;
+    type ReplicationTargetType = u32;
     type ThresholdType = ThresholdType;
-    type ThresholdTypeToBlockNumber = SaturatingThresholdTypeToBlockNumberConverter;
-    type BlockNumberToThresholdType = BlockNumberToThresholdTypeConverter;
+    type ThresholdTypeToBlockNumber = ThresholdTypeToBlockNumberConverter;
     type HashToThresholdType = HashToThresholdTypeConverter;
     type MerkleHashToRandomnessOutput = MerkleHashToRandomnessOutputConverter;
     type ChunkIdToMerkleHash = ChunkIdToMerkleHashConverter;
     type Currency = Balances;
     type Nfts = Nfts;
     type CollectionInspector = BucketNfts;
-    type AssignmentThresholdDecayFactor = ThresholdAsymptoticDecayFactor;
-    type AssignmentThresholdAsymptote = ThresholdAsymptote;
-    type AssignmentThresholdMultiplier = ThresholdMultiplier;
-    type TargetBspsRequired = ConstU32<3>;
-    type MaxBspsPerStorageRequest = ConstU32<5>;
+    type MaxBspsPerStorageRequest = ConstU32<10>;
     type MaxBatchConfirmStorageRequests = ConstU32<10>;
+    type MaxFilePathSize = ConstU32<512u32>;
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = MaxNumberOfPeerIds;
-    type MaxDataServerMultiAddresses = ConstU32<5>; // TODO: this should probably be a multiplier of the number of maximum multiaddresses per storage provider
-    type MaxFilePathSize = ConstU32<512u32>;
+    type MaxDataServerMultiAddresses = ConstU32<5>;
+    type MaxExpiredItemsInBlock = ConstU32<100u32>;
     type StorageRequestTtl = ConstU32<40u32>;
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
-    type MaxExpiredItemsInBlock = ConstU32<100u32>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
 }
@@ -369,7 +363,9 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         .unwrap();
 
     crate::GenesisConfig::<Test> {
-        bsp_assignment_threshold: FixedU128::max_value(),
+        replication_target: 2,
+        maximum_threshold: u32::MAX,
+        block_range_to_maximum_threshold: 1,
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -379,6 +375,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
             (Keyring::Alice.to_account_id(), 1_000_000_000_000_000),
             (Keyring::Bob.to_account_id(), 1_000_000_000_000_000),
             (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Dave.to_account_id(), 1_000_000_000_000_000),
         ],
     }
     .assimilate_storage(&mut t)
@@ -387,13 +384,6 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut ext = sp_io::TestExternalities::new(t);
     ext.execute_with(|| System::set_block_number(1));
     ext
-}
-
-pub(crate) fn compute_set_get_initial_threshold() -> ThresholdType {
-    let initial_threshold = FileSystem::compute_asymptotic_threshold_point(1)
-        .expect("Initial threshold should be computable");
-    crate::BspsAssignmentThreshold::<Test>::put(initial_threshold);
-    initial_threshold
 }
 
 // Converter from the Balance type to the BlockNumber type for math.
@@ -406,44 +396,34 @@ impl Convert<Balance, BlockNumberFor<Test>> for SaturatingBalanceToBlockNumber {
     }
 }
 
-// Converter from the ThresholdType type (FixedU128) to the BlockNumber type (u64).
+// Converter from the ThresholdType to the BlockNumber type and vice versa.
 // It performs a saturated conversion, so that the result is always a valid BlockNumber.
-pub struct SaturatingThresholdTypeToBlockNumberConverter;
+pub struct ThresholdTypeToBlockNumberConverter;
 
-impl Convert<ThresholdType, BlockNumberFor<Test>>
-    for SaturatingThresholdTypeToBlockNumberConverter
-{
+impl Convert<ThresholdType, BlockNumberFor<Test>> for ThresholdTypeToBlockNumberConverter {
     fn convert(threshold: ThresholdType) -> BlockNumberFor<Test> {
-        (threshold.into_inner() / FixedU128::accuracy()).saturated_into()
+        threshold.saturated_into()
     }
 }
 
-// Converter from the BlockNumber type (u64) to the ThresholdType type (FixedU128).
-pub struct BlockNumberToThresholdTypeConverter;
-
-impl Convert<BlockNumberFor<Test>, ThresholdType> for BlockNumberToThresholdTypeConverter {
-    fn convert(block_number: BlockNumberFor<Test>) -> ThresholdType {
-        FixedU128::from_inner((block_number as u128) * FixedU128::accuracy())
+impl ConvertBack<ThresholdType, BlockNumberFor<Test>> for ThresholdTypeToBlockNumberConverter {
+    fn convert_back(block_number: BlockNumberFor<Test>) -> ThresholdType {
+        block_number.saturated_into()
     }
 }
 
-// Converter from the Hash type from the runtime (BlakeTwo256) to the ThresholdType type (FixedU128).
-// Since we can't convert directly a hash to a FixedU128 (since the hash type used in the runtime has
-// 256 bits and FixedU128 has 128 bits), we convert the hash to a BigUint, then map it to a FixedU128
-// by keeping its relative position between zero and the maximum 256-bit number.
+/// Converter from the [`Hash`] type to the [`ThresholdType`].
 pub struct HashToThresholdTypeConverter;
 impl Convert<<Test as frame_system::Config>::Hash, ThresholdType> for HashToThresholdTypeConverter {
     fn convert(hash: <Test as frame_system::Config>::Hash) -> ThresholdType {
         // Get the hash as bytes
         let hash_bytes = hash.as_ref();
 
-        // Get the 16 least significant bytes of the hash and interpret them as a u128
-        let truncated_hash_bytes: [u8; 16] =
-            hash_bytes[16..].try_into().expect("Hash is 32 bytes; qed");
-        let hash_as_u128 = u128::from_be_bytes(truncated_hash_bytes);
+        // Get the 4 least significant bytes of the hash and interpret them as an u32
+        let truncated_hash_bytes: [u8; 4] =
+            hash_bytes[28..].try_into().expect("Hash is 32 bytes; qed");
 
-        // Return it as a FixedU128
-        FixedU128::from_inner(hash_as_u128)
+        ThresholdType::from_be_bytes(truncated_hash_bytes)
     }
 }
 

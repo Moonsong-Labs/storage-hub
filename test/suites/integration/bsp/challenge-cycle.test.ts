@@ -129,7 +129,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       },
       async () => {
         // Resume BSP.
-        await resumeBspContainer(NODE_INFOS.bsp.containerName);
+        await resumeBspContainer({ containerName: NODE_INFOS.bsp.containerName });
 
         // Advance to the next tick the BSP should submit a proof for, that is after the current block.
         // We first get the last tick for which the BSP submitted a proof.

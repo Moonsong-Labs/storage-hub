@@ -42,6 +42,7 @@ import type {
   QueryBspConfirmChunksToProveForFileError,
   QueryFileEarliestVolunteerBlockError,
   RandomnessOutput,
+  StorageProviderId,
   TrieRemoveMutation
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 export type __AugmentedCall<ApiType extends ApiTypes> = AugmentedCall<ApiType>;
@@ -428,6 +429,13 @@ declare module "@polkadot/api-base/types/calls" {
         (
           bspId: BackupStorageProviderId | string | Uint8Array
         ) => Observable<Result<BackupStorageProvider, GetBspInfoError>>
+      >;
+      /**
+       * Get the Storage Provider ID for a given Account ID.
+       **/
+      getStorageProviderId: AugmentedCall<
+        ApiType,
+        (who: AccountId | string | Uint8Array) => Observable<Option<StorageProviderId>>
       >;
       /**
        * Generic call

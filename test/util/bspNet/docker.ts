@@ -154,27 +154,39 @@ export const stopBspContainer = async (options: { containerName: string; api: Bs
 
 export const startBspContainer = async (options: {
   containerName: string;
-  endpoint: string;
-}): Promise<BspNetApi> => {
+  endpoint?: string;
+}) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
   await container.start();
-  await checkNodeAlive(options.endpoint);
-  return await createApiObject(options.endpoint);
+
+  if (options.endpoint) {
+    await checkNodeAlive(options.endpoint);
+    return await createApiObject(options.endpoint);
+  }
+
+  return undefined;
 };
 
 export const restartBspContainer = async (options: {
   containerName: string;
   api: BspNetApi;
-  endpoint: string;
-}): Promise<BspNetApi> => {
+  endpoint?: string;
+}) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
   await container.restart();
 
-  return await createApiObject(options.endpoint);
+  return options.endpoint ? await createApiObject(options.endpoint) : undefined;
 };
 
-export const resumeBspContainer = async (_containerName: string) => {
-  throw new Error("This function is not implemented yet.");
+export const resumeBspContainer = async (options: {
+  containerName: string;
+  endpoint?: string;
+}) => {
+  const docker = new Docker();
+  const container = docker.getContainer(options.containerName);
+  await container.unpause();
+
+  return options.endpoint ? await createApiObject(options.endpoint) : undefined;
 };

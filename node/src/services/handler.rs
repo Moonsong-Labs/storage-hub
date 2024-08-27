@@ -5,9 +5,9 @@ use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::{EventBusListener, EventHandler},
 };
-use shc_blockchain_service::events::SlashableProvider;
+use shc_blockchain_service::events::{ProcessSubmitProofRequest, SlashableProvider};
 use shc_blockchain_service::{
-    events::{BspConfirmedStoring, NewChallengeSeed, NewStorageRequest},
+    events::{NewChallengeSeed, NewStorageRequest, ProcessConfirmStoringRequest},
     BlockchainService,
 };
 use shc_file_manager::traits::FileStorage;
@@ -18,7 +18,7 @@ use shc_file_transfer_service::{
 use shc_forest_manager::traits::ForestStorage;
 use storage_hub_runtime::StorageProofsMerkleTrieLayout;
 
-use crate::tasks::slash_provider::SlashProviderTask;
+use crate::tasks::sp_slash_provider::SlashProviderTask;
 use crate::tasks::{
     bsp_download_file::BspDownloadFileTask, bsp_submit_proof::BspSubmitProofTask,
     bsp_upload_file::BspUploadFileTask, user_sends_file::UserSendsFileTask,
@@ -101,27 +101,33 @@ where
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         new_storage_request_event_bus_listener.start();
-        // Subscribing to BspConfirmedStoring event from the BlockchainService.
-        let bsp_confirmed_storing_event_bus_listener: EventBusListener<BspConfirmedStoring, _> =
+        // Subscribing to RemoteUploadRequest event from the FileTransferService.
+        let remote_upload_request_event_bus_listener: EventBusListener<RemoteUploadRequest, _> =
             bsp_upload_file_task
                 .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain);
-        bsp_confirmed_storing_event_bus_listener.start();
+                .subscribe_to(&self.task_spawner, &self.file_transfer);
+        remote_upload_request_event_bus_listener.start();
+        // Subscribing to ProcessConfirmStoringRequest event from the BlockchainService.
+        let process_confirm_storing_request_event_bus_listener: EventBusListener<
+            ProcessConfirmStoringRequest,
+            _,
+        > = bsp_upload_file_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        process_confirm_storing_request_event_bus_listener.start();
 
         // The BspDownloadFileTask
         let bsp_download_file_task = BspDownloadFileTask::new(self.clone());
-        // Subscribing to RemoteUploadRequest event from the FileTransferService.
-        let remote_upload_request_event_bus_listener: EventBusListener<RemoteUploadRequest, _> =
-            bsp_upload_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
-        remote_upload_request_event_bus_listener.start();
         // Subscribing to RemoteDownloadRequest event from the FileTransferService.
         let remote_download_request_event_bus_listener: EventBusListener<RemoteDownloadRequest, _> =
             bsp_download_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
         remote_download_request_event_bus_listener.start();
 
         // BspSubmitProofTask is triggered by a NewChallengeSeed event emitted by the BlockchainService.
-        // It responds by submitting proofs to the challenges derived from the seed, taking also into account
-        // the custom challenges in checkpoint challenge rounds.
+        // It responds by computing challenges derived from the seed, taking also into account
+        // the custom challenges in checkpoint challenge rounds and enqueuing them in BlockchainService.
+        // BspSubmitProofTask also listens to ProcessSubmitProofRequest events, which are emitted by the
+        // BlockchainService when it is time to actually submit the proof of storage.
         // Additionally, it handles file deletions as a consequence of inclusion proofs in custom challenges.
         let bsp_submit_proof_task = BspSubmitProofTask::new(self.clone());
         // Subscribing to NewChallengeSeed event from the BlockchainService.
@@ -130,6 +136,14 @@ where
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         new_challenge_seed_event_bus_listener.start();
+        // Subscribing to ProcessSubmitProofRequest event from the BlockchainService.
+        let process_submit_proof_request_event_bus_listener: EventBusListener<
+            ProcessSubmitProofRequest,
+            _,
+        > = bsp_submit_proof_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        process_submit_proof_request_event_bus_listener.start();
 
         // Slash your own kin or potentially commit seppuku on your own stake.
         // Running this is as a BSP is very honourable and shows a great sense of justice.
@@ -140,5 +154,11 @@ where
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         slashable_provider_event_bus_listener.start();
+    }
+
+    pub fn start_msp_tasks(&self) {
+        log::info!("Starting MSP tasks");
+
+        // TODO: Implement MSP tasks
     }
 }

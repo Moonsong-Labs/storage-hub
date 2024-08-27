@@ -11,10 +11,11 @@ import {
   DUMMY_BSP_ID,
   sleep,
   assertEventMany,
-  BSP_DOWN_ID
+  BSP_DOWN_ID,
+  pauseBspContainer,
+  resumeBspContainer,
+  assertExtrinsicPresent
 } from "../../../util";
-import type { AccountId32 } from "@polkadot/types/interfaces";
-import type { u32 } from "@polkadot/types";
 
 const bspNetConfigCases: BspNetConfig[] = [
   { noisy: false, rocksdb: false },
@@ -31,9 +32,9 @@ for (const bspNetConfig of bspNetConfigCases) {
       fileKey: string;
       bucketId: string;
       location: string;
-      owner: AccountId32;
+      owner: string;
       fingerprint: string;
-      fileSize: u32;
+      fileSize: number;
     };
 
     before(async () => {
@@ -71,12 +72,12 @@ for (const bspNetConfig of bspNetConfigCases) {
       // the same time.
       // We first get the last tick for which the BSP submitted a proof.
       const lastTickResult =
-        await bspApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
       assert(lastTickResult.isOk);
       const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
       // Then we get the challenge period for the BSP.
       const challengePeriodResult =
-        await bspApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
+        await userApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
       assert(challengePeriodResult.isOk);
       const challengePeriod = challengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
@@ -117,7 +118,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       // Get the new last tick for which the BSP submitted a proof.
       // It should be the previous last tick plus one BSP period.
       const lastTickResultAfterProof =
-        await bspApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
       assert(lastTickResultAfterProof.isOk);
       const lastTickBspSubmittedProofAfterProof = lastTickResultAfterProof.asOk.toNumber();
       strictEqual(
@@ -128,10 +129,11 @@ for (const bspNetConfig of bspNetConfigCases) {
 
       // Get the new deadline for the BSP.
       // It should be the current last tick, plus one BSP period, plus the challenges tick tolerance.
-      const challengesTickTolerance = Number(bspApi.consts.proofsDealer.challengeTicksTolerance);
+      const challengesTickTolerance = Number(userApi.consts.proofsDealer.challengeTicksTolerance);
       const newDeadline =
         lastTickBspSubmittedProofAfterProof + challengePeriod + challengesTickTolerance;
-      const newDeadlineResult = await bspApi.call.proofsDealerApi.getNextDeadlineTick(DUMMY_BSP_ID);
+      const newDeadlineResult =
+        await userApi.call.proofsDealerApi.getNextDeadlineTick(DUMMY_BSP_ID);
       assert(newDeadlineResult.isOk);
       const newDeadlineOnChain = newDeadlineResult.asOk.toNumber();
       strictEqual(
@@ -144,13 +146,13 @@ for (const bspNetConfig of bspNetConfigCases) {
     it("BSP fails to submit proof and is marked as slashable", async () => {
       // Get BSP-Down's deadline.
       const bspDownDeadlineResult =
-        await bspApi.call.proofsDealerApi.getNextDeadlineTick(BSP_DOWN_ID);
+        await userApi.call.proofsDealerApi.getNextDeadlineTick(BSP_DOWN_ID);
       assert(bspDownDeadlineResult.isOk);
       const bspDownDeadline = bspDownDeadlineResult.asOk.toNumber();
 
       // Get the last tick for which the BSP-Down submitted a proof before advancing to the deadline.
       const lastTickResult =
-        await bspApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_DOWN_ID);
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_DOWN_ID);
       assert(lastTickResult.isOk);
       const lastTickBspDownSubmittedProof = lastTickResult.asOk.toNumber();
 
@@ -164,13 +166,13 @@ for (const bspNetConfig of bspNetConfigCases) {
       }
 
       // Expect to see a `SlashableProvider` event in the last block.
-      const slashableProviderEvent = bspApi.assertEvent(
+      const slashableProviderEvent = userApi.assertEvent(
         "proofsDealer",
         "SlashableProvider",
         blockResult?.events
       );
       const slashableProviderEventDataBlob =
-        bspApi.events.proofsDealer.SlashableProvider.is(slashableProviderEvent.event) &&
+        userApi.events.proofsDealer.SlashableProvider.is(slashableProviderEvent.event) &&
         slashableProviderEvent.event.data;
       assert(slashableProviderEventDataBlob, "Event doesn't match Type");
       strictEqual(
@@ -181,14 +183,14 @@ for (const bspNetConfig of bspNetConfigCases) {
 
       // Get the last tick for which the BSP-Down submitted a proof after advancing to the deadline.
       const lastTickResultAfterSlashable =
-        await bspApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_DOWN_ID);
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_DOWN_ID);
       assert(lastTickResultAfterSlashable.isOk);
       const lastTickBspDownSubmittedProofAfterSlashable =
         lastTickResultAfterSlashable.asOk.toNumber();
 
       // The new last tick should be equal to the last tick before BSP-Down was marked as slashable plus one challenge period.
       const challengePeriodResult =
-        await bspApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
+        await userApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
       assert(challengePeriodResult.isOk);
       const challengePeriod = challengePeriodResult.asOk.toNumber();
       strictEqual(
@@ -218,7 +220,7 @@ for (const bspNetConfig of bspNetConfigCases) {
         //   ),
         //   bspThreeKey
         // );
-        it("BSP is not challenged any more", async () => {
+        await it("BSP is not challenged any more", async () => {
           // TODO: Check that BSP-Three no longer has a challenge deadline.
         });
       }
@@ -230,43 +232,83 @@ for (const bspNetConfig of bspNetConfigCases) {
       async () => {}
     );
 
-    it(
-      "New storage request sent by user",
-      { skip: "Preventing BSPs from volunteering is not implemented yet" },
-      async () => {
-        // TODO: Stop BSP-Two and BSP-Three.
-        // TODO: Send transaction to create new storage request.
+    it("New storage request sent by user", async () => {
+      // Pause BSP-Two and BSP-Three.
+      await pauseBspContainer("sh-bsp-two");
+      await pauseBspContainer("sh-bsp-three");
 
-        it("Only one BSP confirms it", async () => {
-          // TODO: Check that BSP volunteers alone.
-          // TODO: Check that BSP confirms storage request.
-        });
+      // Send transaction to create new storage request.
+      const source = "res/adolphus.jpg";
+      const location = "test/adolphus.jpg";
+      const bucketName = "nothingmuch-2";
+      await userApi.sendNewStorageRequest(source, location, bucketName);
 
-        it("BSP correctly responds to challenge with new forest root", async () => {
-          // TODO: Advance to next challenge block.
-          // TODO: Build block with proof submission.
-          // TODO: Check that proof submission was successful.
+      await it("Only one BSP confirms it", async () => {
+        // Wait for the remaining BSP to volunteer.
+        await sleep(500);
+
+        const volunteerPending = await assertExtrinsicPresent(userApi, {
+          module: "fileSystem",
+          method: "bspVolunteer",
+          checkTxPool: true
         });
-      }
-    );
+        strictEqual(
+          volunteerPending.length,
+          1,
+          "There should only be one volunteer transaction, from the remaining BSP"
+        );
+
+        await userApi.sealBlock();
+
+        // Wait for the BSP to download the file.
+        await sleep(5000);
+        const confirmPending = await assertExtrinsicPresent(userApi, {
+          module: "fileSystem",
+          method: "bspConfirmStoring",
+          checkTxPool: true
+        });
+        strictEqual(
+          confirmPending.length,
+          1,
+          "There should only be one confirm transaction, from the remaining BSP"
+        );
+
+        await userApi.sealBlock();
+
+        // Wait for the BSP to process the confirmation of the file.
+        await sleep(1000);
+      });
+
+      await it("BSP correctly responds to challenge with new forest root", async () => {
+        // Resume BSP-Two and BSP-Three.
+        await resumeBspContainer({ containerName: "sh-bsp-two" });
+        await resumeBspContainer({ containerName: "sh-bsp-three" });
+
+        await userApi.sealBlock();
+
+        // TODO: Advance to next challenge block.
+        // TODO: Build block with proof submission.
+        // TODO: Check that proof submission was successful.
+      });
+    });
 
     it(
       "Custom challenge is added",
       { skip: "Not implemented yet. All files have the same files." },
       async () => {
-        it("Custom challenge is included in checkpoint challenge round", async () => {
+        await it("Custom challenge is included in checkpoint challenge round", async () => {
           // TODO: Send transaction for custom challenge with new file key.
           // TODO: Advance until next checkpoint challenge block.
           // TODO: Check that custom challenge was included in checkpoint challenge round.
         });
 
-        it("BSP that has it responds to custom challenge with proof of inclusion", async () => {
+        await it("BSP that has it responds to custom challenge with proof of inclusion", async () => {
           // TODO: Advance until next challenge for BSP.
           // TODO: Build block with proof submission.
           // TODO: Check that proof submission was successful, including the custom challenge.
         });
 
-        it("BSPs who don't have it respond non-inclusion proof", async () => {
+        await it("BSPs who don't have it respond non-inclusion proof", async () => {
           // TODO: Advance until next challenge for BSP-Two and BSP-Three.
           // TODO: Build block with proof submission.
           // TODO: Check that proof submission was successful, with proof of non-inclusion.
@@ -281,22 +323,22 @@ for (const bspNetConfig of bspNetConfigCases) {
         // TODO: Send transaction to delete file.
         // TODO: Advance until file deletion request makes it into the priority challenge round.
 
-        it("Priority challenge is included in checkpoint challenge round", async () => {
+        await it("Priority challenge is included in checkpoint challenge round", async () => {
           // TODO: Advance to next checkpoint challenge block.
           // TODO: Check that priority challenge was included in checkpoint challenge round.
         });
 
-        it("BSP that has it responds to priority challenge with proof of inclusion", async () => {
+        await it("BSP that has it responds to priority challenge with proof of inclusion", async () => {
           // TODO: Advance to next challenge block.
           // TODO: Build block with proof submission.
           // TODO: Check that proof submission was successful, with proof of inclusion.
         });
-        it("File is deleted by BSP", async () => {
+        await it("File is deleted by BSP", async () => {
           // TODO: Check that file is deleted by BSP, and no longer is in the Forest.
           // TODO: Check that file is deleted by BSP, and no longer is in the File System.
         });
 
-        it("BSPs who don't have it respond non-inclusion proof", async () => {
+        await it("BSPs who don't have it respond non-inclusion proof", async () => {
           // TODO: Advance to next challenge block.
           // TODO: Build block with proof submission.
           // TODO: Check that proof submission was successful, with proof of non-inclusion.

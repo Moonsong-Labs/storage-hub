@@ -25,6 +25,9 @@ pub struct FileMetadata<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE
     pub fingerprint: Fingerprint<H_LENGTH>,
 }
 
+/// Maximum number of chunks a Storage Provider would need to prove for a file.
+const MAX_CHUNKS_TO_CHECK: u32 = 10;
+
 impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
     FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
 {
@@ -49,10 +52,14 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     }
 
     pub fn chunks_to_check(&self) -> u32 {
-        // In here we downcast and saturate to u32, as we consider u32::MAX to be an already large
-        // enough number of challenges to be generated.
-        (self.file_size / SIZE_TO_CHALLENGES + (self.file_size % SIZE_TO_CHALLENGES != 0) as u64)
-            .saturated_into::<u32>()
+        // In here we downcast and saturate to u32, as we're going to saturate to MAX_CHUNKS_TO_CHECK anyway.
+        let chunks = (self.file_size / SIZE_TO_CHALLENGES
+            + (self.file_size % SIZE_TO_CHALLENGES != 0) as u64)
+            .saturated_into::<u32>();
+
+        // Cap chunks to check at MAX_CHUNKS_TO_CHECK.
+        // This maximum number of chunks is based on the issue raised in the audit https://github.com/Moonsong-Labs/internal-storage-hub-design-audit/issues/11.
+        chunks.min(MAX_CHUNKS_TO_CHECK)
     }
 
     pub fn chunks_count(&self) -> u64 {
@@ -204,7 +211,7 @@ impl ChunkId {
     pub fn from_challenge(challenge: &[u8], chunks_count: u64) -> Self {
         // Calculate the modulo of the challenge with the number of chunks in the file.
         // The challenge is a big endian 32 byte array.
-        let challenged_chunk = BigUint::from_bytes_be(challenge.as_ref()) % chunks_count;
+        let challenged_chunk = BigUint::from_bytes_be(challenge) % chunks_count;
         ChunkId::new(challenged_chunk.try_into().expect(
             "This is impossible. The modulo of a number with a u64 should always fit in a u64.",
         ))
