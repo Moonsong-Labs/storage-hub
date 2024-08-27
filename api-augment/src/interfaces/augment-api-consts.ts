@@ -346,7 +346,7 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * The slash factor deducted from a Storage Provider's deposit for every single storage proof they fail to provide.
        **/
-      slashAmountPerChunkOfStorageData: u128 & AugmentedConst<ApiType>;
+      slashAmountPerMaxFileSize: u128 & AugmentedConst<ApiType>;
       /**
        * The amount that a BSP receives as allocation of storage capacity when it deposits SpMinDeposit.
        **/
