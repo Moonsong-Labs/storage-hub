@@ -37,7 +37,7 @@ use crate::{
         StorageRequestExpirationItem, StorageRequestMetadata,
     },
     BlockRangeToMaximumThreshold, Error, Event, FileDeletionRequestExpirations, MaximumThreshold,
-    NextAvailableFileDeletionRequestExpirationBlock, NextAvailableStorageProofExpirationBlock,
+    NextAvailableFileDeletionRequestExpirationBlock, NextAvailableStorageRequestExpirationBlock,
     Pallet, PendingFileDeletionRequests, PendingStopStoringRequests, ReplicationTarget,
     StorageRequestBsps, StorageRequestExpirations, StorageRequests,
 };
@@ -1129,7 +1129,7 @@ where
         let current_block = frame_system::Pallet::<T>::block_number();
         let storage_request_ttl = T::StorageRequestTtl::get();
         let mut expiration_block = max(
-            NextAvailableStorageProofExpirationBlock::<T>::get(),
+            NextAvailableStorageRequestExpirationBlock::<T>::get(),
             current_block + storage_request_ttl.into(),
         );
 
@@ -1142,7 +1142,7 @@ where
                 .ok_or(Error::<T>::MaxBlockNumberReached)?;
         }
 
-        <NextAvailableStorageProofExpirationBlock<T>>::set(expiration_block);
+        <NextAvailableStorageRequestExpirationBlock<T>>::set(expiration_block);
 
         Ok(expiration_block)
     }

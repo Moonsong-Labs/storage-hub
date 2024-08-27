@@ -285,8 +285,8 @@ pub mod pallet {
     ///
     /// This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
     #[pallet::storage]
-    #[pallet::getter(fn next_available_storage_proof_expiration_block)]
-    pub type NextAvailableStorageProofExpirationBlock<T: Config> =
+    #[pallet::getter(fn next_available_storage_request_expiration_block)]
+    pub type NextAvailableStorageRequestExpirationBlock<T: Config> =
         StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     /// A pointer to the earliest available block to insert a new file deletion request expiration.
