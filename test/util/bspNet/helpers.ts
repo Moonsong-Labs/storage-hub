@@ -1,7 +1,13 @@
 import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type { CreatedBlock, EventRecord, Hash, SignedBlock } from "@polkadot/types/interfaces";
+import type {
+  CreatedBlock,
+  EventRecord,
+  H256,
+  Hash,
+  SignedBlock
+} from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import "@storagehub/api-augment";
 import { v2 as compose } from "docker-compose";
@@ -119,6 +125,7 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
 export type BspNetConfig = {
   noisy: boolean;
   rocksdb: boolean;
+  capacity?: bigint;
 };
 
 export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
@@ -185,7 +192,8 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
       api,
       who: bspKey.address,
       multiaddress: multiAddressBsp,
-      bspId: DUMMY_BSP_ID
+      bspId: DUMMY_BSP_ID,
+      capacity: bspNetConfig.capacity || CAPACITY_512
     });
 
     // Make MSP
@@ -194,7 +202,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
         api.tx.providers.forceMspSignUp(
           alice.address,
           DUMMY_MSP_ID,
-          CAPACITY_512,
+          bspNetConfig.capacity || CAPACITY_512,
           [multiAddressBsp],
           {
             identifier: VALUE_PROP,
@@ -328,7 +336,8 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
       api: userApi,
       who: bspKey.address,
       multiaddress: multiAddressBsp,
-      bspId: DUMMY_BSP_ID
+      bspId: DUMMY_BSP_ID,
+      capacity: bspNetConfig.capacity || CAPACITY_512
     });
 
     // Make MSP
@@ -337,7 +346,7 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
         userApi.tx.providers.forceMspSignUp(
           alice.address,
           DUMMY_MSP_ID,
-          CAPACITY_512,
+          bspNetConfig.capacity || CAPACITY_512,
           [multiAddressBsp],
           {
             identifier: VALUE_PROP,
@@ -487,7 +496,7 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
         userApi.tx.providers.forceBspSignUp(
           bspKey.address,
           DUMMY_BSP_ID,
-          CAPACITY_512,
+          bspNetConfig.capacity || CAPACITY_512,
           [multiAddressBsp],
           bspKey.address
         )
@@ -500,7 +509,7 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
         userApi.tx.providers.forceMspSignUp(
           alice.address,
           DUMMY_MSP_ID,
-          CAPACITY_512,
+          bspNetConfig.capacity || CAPACITY_512,
           [multiAddressBsp],
           {
             identifier: VALUE_PROP,
@@ -842,8 +851,29 @@ const stopBsp = async (name: string) => {
 };
 
 export const skipBlocks = async (api: ApiPromise, blocksToSkip: number) => {
-  console.log(`Skipping ${blocksToSkip} blocks...`);
+  console.log(`\tSkipping ${blocksToSkip} blocks...`);
   for (let i = 0; i < blocksToSkip; i++) {
     await sealBlock(api);
+  }
+};
+
+export const skipBlocksToMinChangeTime = async (
+  api: BspNetApi,
+  bspId: `0x${string}` | H256 | Uint8Array = DUMMY_BSP_ID
+) => {
+  const lastCapacityChangeHeight = (await api.query.providers.backupStorageProviders(bspId))
+    .unwrap()
+    .lastCapacityChange.toNumber();
+  const currentHeight = (await api.rpc.chain.getHeader()).number.toNumber();
+  const minChangeTime = api.consts.providers.minBlocksBetweenCapacityChanges.toNumber();
+  const blocksToSkip = minChangeTime - (currentHeight - lastCapacityChangeHeight);
+
+  if (blocksToSkip > 0) {
+    console.log(
+      `\tSkipping blocks to reach MinBlocksBetweenCapacityChanges height: #${minChangeTime}`
+    );
+    await skipBlocks(api, blocksToSkip);
+  } else {
+    console.log("\tNo need to skip blocks, already past MinBlocksBetweenCapacityChanges");
   }
 };
