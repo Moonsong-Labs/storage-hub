@@ -465,7 +465,7 @@ parameter_types! {
     pub const SpMinCapacity: u32 = 2;
     pub const DepositPerData: Balance = 2;
     pub const MinBlocksBetweenCapacityChanges: u32 = 10;
-    pub const SlashFactor: Balance = 20 * UNIT;
+    pub const SlashAmountPerChunkOfStorageData: Balance = 20 * UNIT;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -477,30 +477,31 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
 }
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type NativeBalance = Balances;
+    type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
-    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
+    type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
+    type SpMinDeposit = SpMinDeposit;
+    type SpMinCapacity = SpMinCapacity;
+    type DepositPerData = DepositPerData;
+    type MaxFileSize = ConstU32<{ u32::MAX }>;
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = MaxProtocols;
     type MaxBuckets = MaxBuckets;
     type BucketDeposit = BucketDeposit;
     type BucketNameLimit = BucketNameLimit;
-    type SpMinDeposit = SpMinDeposit;
-    type SpMinCapacity = SpMinCapacity;
-    type DepositPerData = DepositPerData;
-    type RuntimeHoldReason = RuntimeHoldReason;
-    type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = MinBlocksBetweenCapacityChanges;
-    type SlashFactor = SlashFactor;
-    type ReputationWeightType = u32;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
+    type SlashAmountPerMaxFileSize = SlashAmountPerChunkOfStorageData;
     type StartingReputationWeight = ConstU32<10>;
 }
 
