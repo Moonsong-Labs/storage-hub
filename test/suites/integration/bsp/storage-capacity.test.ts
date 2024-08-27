@@ -17,7 +17,9 @@ import {
   runSimpleBspNet,
   skipBlocks,
   skipBlocksToMinChangeTime,
-  sleep
+  sleep,
+  waitForBspStored,
+  waitForBspVolunteer
 } from "../../../util";
 
 const bspNetConfigCases: BspNetConfig[] = [
@@ -78,8 +80,9 @@ for (const bspNetConfig of bspNetConfigCases) {
       const location = "test/cloud.jpg";
       const bucketName = "toobig-1";
       await api.sendNewStorageRequest(source, location, bucketName);
-      await sleep(500);
 
+      //To allow for BSP to react to request
+      await sleep(500);
       await assert.rejects(
         async () => {
           assertExtrinsicPresent(api, {
@@ -124,13 +127,8 @@ for (const bspNetConfig of bspNetConfigCases) {
       const bucketName = "nothingmuch-2";
       await api.sendNewStorageRequest(source, location, bucketName);
 
-      // Wait for BSP to volunteer
-      await sleep(500);
-      await api.sealBlock();
-
-      // Wait for file to be transferred and confirmed
-      await sleep(5000);
-      await api.sealBlock();
+      await waitForBspVolunteer(api);
+      await waitForBspStored(api);
 
       // Skip block height past threshold
       await skipBlocksToMinChangeTime(api);
