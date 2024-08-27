@@ -1,6 +1,10 @@
+use core::cmp::max;
+
 use codec::Encode;
 use frame_support::{
-    ensure, pallet_prelude::DispatchResult, traits::nonfungibles_v2::Create, traits::Get,
+    ensure,
+    pallet_prelude::DispatchResult,
+    traits::{nonfungibles_v2::Create, Get},
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use num_bigint::BigUint;
@@ -1120,7 +1124,14 @@ where
     pub(crate) fn enqueue_storage_request_expiration(
         expiring_storage_request: StorageRequestExpirationItem<T>,
     ) -> Result<BlockNumberFor<T>, DispatchError> {
-        let mut expiration_block = NextAvailableStorageProofExpirationBlock::<T>::get();
+        // The expiration block is the maximum between the [`NextAvailableStorageProofExpirationBlock`] and
+        // the current block number plus [`StorageRequestTtl`]
+        let current_block = frame_system::Pallet::<T>::block_number();
+        let storage_request_ttl = T::StorageRequestTtl::get();
+        let mut expiration_block = max(
+            NextAvailableStorageProofExpirationBlock::<T>::get(),
+            current_block + storage_request_ttl.into(),
+        );
 
         while let Err(_) = <StorageRequestExpirations<T>>::try_append(
             expiration_block,
@@ -1143,7 +1154,14 @@ where
     pub(crate) fn enqueue_file_deletion_request_expiration(
         expiring_file_deletion_request: FileDeletionRequestExpirationItem<T>,
     ) -> Result<BlockNumberFor<T>, DispatchError> {
-        let mut expiration_block = NextAvailableFileDeletionRequestExpirationBlock::<T>::get();
+        // The expiration block is the maximum between the [`NextAvailableFileDeletionRequestExpirationBlock`] and
+        // the current block number plus [`PendingFileDeletionRequestTtl`]
+        let current_block = frame_system::Pallet::<T>::block_number();
+        let pending_file_deletion_request_ttl = T::PendingFileDeletionRequestTtl::get();
+        let mut expiration_block = max(
+            NextAvailableFileDeletionRequestExpirationBlock::<T>::get(),
+            current_block + pending_file_deletion_request_ttl.into(),
+        );
 
         while let Err(_) = <FileDeletionRequestExpirations<T>>::try_append(
             expiration_block,
@@ -1280,11 +1298,10 @@ where
 }
 
 mod hooks {
-    use crate::FileDeletionRequestExpirations;
     use crate::{
-        pallet, types::MerkleHash, Event, NextStartingBlockToCleanUp, Pallet,
-        PendingFileDeletionRequests, ReplicationTarget, StorageRequestBsps,
-        StorageRequestExpirations, StorageRequests,
+        pallet, types::MerkleHash, Event, FileDeletionRequestExpirations,
+        NextStartingBlockToCleanUp, Pallet, PendingFileDeletionRequests, ReplicationTarget,
+        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use frame_support::weights::Weight;
     use frame_system::pallet_prelude::BlockNumberFor;
