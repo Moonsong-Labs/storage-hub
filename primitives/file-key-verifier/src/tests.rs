@@ -7,7 +7,6 @@ use shp_file_metadata::Fingerprint;
 use shp_traits::AsCompact;
 use shp_traits::CommitmentVerifier;
 use sp_runtime::traits::{BlakeTwo256, Keccak256};
-use sp_runtime::SaturatedConversion;
 use sp_trie::{
     recorder::Recorder, CompactProof, LayoutV1, MemoryDB, TrieDBBuilder, TrieDBMutBuilder,
     TrieLayout, TrieMut,
@@ -746,14 +745,8 @@ fn commitment_verifier_wrong_file_key_vec_fingerprint_failure() {
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
     let recorder: Recorder<BlakeTwo256> = Recorder::default();
 
-    let mut chunks_count = FILE_SIZE / CHUNK_SIZE;
-    if FILE_SIZE % CHUNK_SIZE != 0 {
-        chunks_count += 1;
-    }
-    let mut challenges_count = (FILE_SIZE / SIZE_TO_CHALLENGES).saturated_into();
-    if FILE_SIZE % SIZE_TO_CHALLENGES != 0 {
-        challenges_count += 1;
-    }
+    let chunks_count = file_metadata.chunks_count();
+    let challenges_count = file_metadata.chunks_to_check();
     let (challenges, chunks_challenged) =
         generate_challenges::<LayoutV1<BlakeTwo256>>(challenges_count, chunks_count);
 

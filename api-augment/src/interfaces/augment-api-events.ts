@@ -1440,6 +1440,10 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * No record of the last tick the Provider submitted a proof for.
+       **/
+      NoRecordOfLastSubmittedProof: AugmentedEvent<ApiType, [provider: H256], { provider: H256 }>;
+      /**
        * A proof was accepted.
        **/
       ProofAccepted: AugmentedEvent<

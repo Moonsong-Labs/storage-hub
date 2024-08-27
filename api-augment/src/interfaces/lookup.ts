@@ -1514,6 +1514,9 @@ export default {
         provider: "H256",
         nextChallengeDeadline: "u32"
       },
+      NoRecordOfLastSubmittedProof: {
+        provider: "H256"
+      },
       NewChallengeCycleInitialised: {
         currentTick: "u32",
         nextChallengeDeadline: "u32",

@@ -349,6 +349,9 @@ pub mod pallet {
             next_challenge_deadline: BlockNumberFor<T>,
         },
 
+        /// No record of the last tick the Provider submitted a proof for.
+        NoRecordOfLastSubmittedProof { provider: ProviderIdFor<T> },
+
         /// A provider's challenge cycle was initialised.
         NewChallengeCycleInitialised {
             current_tick: BlockNumberFor<T>,

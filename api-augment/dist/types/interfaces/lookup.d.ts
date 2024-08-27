@@ -1498,6 +1498,9 @@ declare const _default: {
         provider: string;
         nextChallengeDeadline: string;
       };
+      NoRecordOfLastSubmittedProof: {
+        provider: string;
+      };
       NewChallengeCycleInitialised: {
         currentTick: string;
         nextChallengeDeadline: string;
