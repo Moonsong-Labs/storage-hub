@@ -98,6 +98,7 @@ export const addBspContainer = async (options?: {
       "--rpc-cors=all",
       `--port=${p2pPort}`,
       "--base-path=/data",
+      "--storage-path=/tmp/bsp/${BSP_IP:-default_bsp_ip}",
       bootNodeArg,
       ...(options?.additionalArgs || [])
     ]

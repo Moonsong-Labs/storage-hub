@@ -1,6 +1,7 @@
 use anyhow::anyhow;
+use codec::{Decode, Encode};
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet},
     str::FromStr,
     sync::Arc,
 };
@@ -37,11 +38,14 @@ use crate::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, FinalisedMutationsApplied,
         NewChallengeSeed, NewStorageRequest, SlashableProvider,
     },
+    state::BlockchainServiceStateStore,
     transaction::SubmittedTransaction,
+    typed_store::CFDequeAPI,
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
 
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct SubmitProofRequest {
     pub provider_id: ProviderId,
     pub tick: BlockNumber,
@@ -66,10 +70,10 @@ impl SubmitProofRequest {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct ConfirmStoringRequest {
     pub file_key: H256,
-    pub try_count: usize,
+    pub try_count: u32,
 }
 
 impl ConfirmStoringRequest {
@@ -116,10 +120,8 @@ pub struct BlockchainService {
     /// thread (blockchain service) and unlock it at the end of the spawned task. The alternative
     /// would be to send a [`MutexGuard`].
     pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
-    /// A list of [SubmitProofRequest] that are waiting to be processed (sent to the runtime).
-    pub(crate) pending_submit_proof: VecDeque<SubmitProofRequest>,
-    /// A list of [ConfirmStoringRequest] that are waiting to be processed (sent to the runtime).
-    pub(crate) pending_confirm_storing: VecDeque<ConfirmStoringRequest>,
+    /// A persistent state store for the BlockchainService actor.
+    pub(crate) persistent_state: BlockchainServiceStateStore,
 }
 
 /// Event loop for the BlockchainService actor.
@@ -514,7 +516,11 @@ impl Actor for BlockchainService {
                     }
                 }
                 BlockchainServiceCommand::QueueConfirmBspRequest { request, callback } => {
-                    self.pending_confirm_storing.push_back(request);
+                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                    state_store_context
+                        .pending_confirm_storing_request_deque()
+                        .push_back(request);
+                    state_store_context.commit();
                     // We check right away if we can process the request so we don't waste time.
                     self.check_pending_forest_root_writes();
                     match callback.send(Ok(())) {
@@ -525,7 +531,11 @@ impl Actor for BlockchainService {
                     }
                 }
                 BlockchainServiceCommand::QueueSubmitProofRequest { request, callback } => {
-                    self.pending_submit_proof.push_back(request);
+                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                    state_store_context
+                        .pending_submit_proof_request_deque()
+                        .push_back(request);
+                    state_store_context.commit();
                     // We check right away if we can process the request so we don't waste time.
                     self.check_pending_forest_root_writes();
                     match callback.send(Ok(())) {
@@ -572,6 +582,7 @@ impl BlockchainService {
         client: Arc<ParachainClient>,
         rpc_handlers: Arc<RpcHandlers>,
         keystore: KeystorePtr,
+        storage_path: String,
     ) -> Self {
         Self {
             client,
@@ -582,8 +593,7 @@ impl BlockchainService {
             wait_for_block_request_by_number: BTreeMap::new(),
             provider_ids: BTreeSet::new(),
             forest_root_write_lock: None,
-            pending_submit_proof: VecDeque::new(),
-            pending_confirm_storing: VecDeque::new(),
+            persistent_state: BlockchainServiceStateStore::new(storage_path.into()),
         }
     }
 

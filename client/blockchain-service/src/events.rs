@@ -1,3 +1,4 @@
+use codec::{Decode, Encode};
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
@@ -64,19 +65,47 @@ pub struct AcceptedBspVolunteer {
 
 impl EventBusMessage for AcceptedBspVolunteer {}
 
-#[derive(Debug, Clone)]
-pub struct ProcessSubmitProofRequest {
+#[derive(Debug, Clone, Encode, Decode)]
+pub enum OngoingForestWriteLockTaskData {
+    SubmitProofRequest(ProcessSubmitProofRequestData),
+    ConfirmStoringRequest(ProcessConfirmStoringRequestData),
+}
+
+impl From<ProcessSubmitProofRequestData> for OngoingForestWriteLockTaskData {
+    fn from(data: ProcessSubmitProofRequestData) -> Self {
+        Self::SubmitProofRequest(data)
+    }
+}
+
+impl From<ProcessConfirmStoringRequestData> for OngoingForestWriteLockTaskData {
+    fn from(data: ProcessConfirmStoringRequestData) -> Self {
+        Self::ConfirmStoringRequest(data)
+    }
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ProcessSubmitProofRequestData {
     pub provider_id: ProviderId,
     pub tick: BlockNumber,
     pub seed: RandomnessOutput,
     pub forest_challenges: Vec<H256>,
     pub checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProcessSubmitProofRequest {
+    pub data: ProcessSubmitProofRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ProcessConfirmStoringRequestData {
+    pub confirm_storing_requests: Vec<ConfirmStoringRequest>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ProcessConfirmStoringRequest {
-    pub confirm_storing_requests: Vec<ConfirmStoringRequest>,
+    pub data: ProcessConfirmStoringRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 

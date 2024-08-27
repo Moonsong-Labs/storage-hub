@@ -789,8 +789,8 @@ const addBsp = async (
   const additionalArgs = options?.additionalArgs ?? [];
   if (options?.rocksdb) {
     additionalArgs.push("--storage-layer=rocks-db");
-    additionalArgs.push(`--storage-path=/tmp/bsp/${bspKey.address}`);
   }
+  additionalArgs.push(`--storage-path=/tmp/bsp/${bspKey.address}`);
   const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer(options);
 
   //Give it some balance.

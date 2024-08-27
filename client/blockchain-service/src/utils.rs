@@ -28,8 +28,12 @@ use substrate_frame_rpc_system::AccountNonceApi;
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use crate::{
-    events::{ProcessConfirmStoringRequest, ProcessSubmitProofRequest},
+    events::{
+        ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData, ProcessSubmitProofRequest,
+        ProcessSubmitProofRequestData,
+    },
     handler::LOG_TARGET,
+    typed_store::CFDequeAPI,
     types::{EventsVec, Extrinsic},
     BlockchainService,
 };
@@ -442,43 +446,59 @@ impl BlockchainService {
         }
 
         // At this point we know that the lock is released and we can start processing new requests.
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.forest_root_write_lock = Some(rx);
-
-        let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
 
         // If we have a submit proof request, prioritize it.
-        if let Some(request) = self.pending_submit_proof.pop_front() {
+        if let Some(request) = state_store_context
+            .pending_submit_proof_request_deque()
+            .pop_front()
+        {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            self.forest_root_write_lock = Some(rx);
+            let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
             self.emit(ProcessSubmitProofRequest {
-                seed: request.seed,
-                provider_id: request.provider_id,
-                tick: request.tick,
-                forest_challenges: request.forest_challenges,
-                checkpoint_challenges: request.checkpoint_challenges,
+                data: ProcessSubmitProofRequestData {
+                    seed: request.seed,
+                    provider_id: request.provider_id,
+                    tick: request.tick,
+                    forest_challenges: request.forest_challenges,
+                    checkpoint_challenges: request.checkpoint_challenges,
+                },
                 forest_root_write_tx,
             });
-            return;
-        }
-        let max_batch_confirm =
-            <<Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests as Get<u32>>::get();
+        } else {
+            let max_batch_confirm =
+                <<Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests as Get<
+                    u32,
+                >>::get();
 
-        // Batch multiple confirm file storing taking the runtime maximum.
-        let mut confirm_storing_requests = Vec::new();
-        for _ in 0..max_batch_confirm {
-            if let Some(request) = self.pending_confirm_storing.pop_front() {
-                confirm_storing_requests.push(request);
-            } else {
-                break;
+            // Batch multiple confirm file storing taking the runtime maximum.
+            let mut confirm_storing_requests = Vec::new();
+            for _ in 0..max_batch_confirm {
+                if let Some(request) = state_store_context
+                    .pending_confirm_storing_request_deque()
+                    .pop_front()
+                {
+                    confirm_storing_requests.push(request);
+                } else {
+                    break;
+                }
+            }
+
+            // If we have at least 1 confirm storing request, send the process event.
+            if confirm_storing_requests.len() > 0 {
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                self.forest_root_write_lock = Some(rx);
+                let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
+                self.emit(ProcessConfirmStoringRequest {
+                    data: ProcessConfirmStoringRequestData {
+                        confirm_storing_requests,
+                    },
+                    forest_root_write_tx,
+                });
             }
         }
-
-        // If we have at least 1 confirm storing request, send the process event.
-        if confirm_storing_requests.len() > 0 {
-            self.emit(ProcessConfirmStoringRequest {
-                confirm_storing_requests,
-                forest_root_write_tx,
-            });
-        }
+        state_store_context.commit();
     }
 }
 

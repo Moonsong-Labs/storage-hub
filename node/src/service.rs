@@ -10,6 +10,7 @@ use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
 
 use futures::{Stream, StreamExt};
+use log::info;
 use shc_file_manager::{
     in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage, traits::FileStorage,
 };
@@ -206,11 +207,22 @@ where
 {
     match provider_options {
         Some(ProviderOptions { storage_path, .. }) => {
+            info!(
+                "Starting as a Storage Provider. Storage path: {:?}",
+                storage_path
+            );
+
             // Start building the StorageHubHandler, if running as a provider.
             let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
             // Create builder for the StorageHubHandler.
             let mut storage_hub_builder = StorageHubBuilder::new(task_spawner);
+
+            // Getting the caller pub key used for the blockchain service, from the keystore.
+            // Then add it to the StorageHub builder.
+            let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
+            storage_hub_builder.with_provider_pub_key(caller_pub_key);
+            storage_hub_builder.with_storage_path(storage_path.clone());
 
             // Add FileTransfer Service to the StorageHubHandler.
             let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
@@ -224,12 +236,7 @@ where
                 )
                 .await;
 
-            // Getting the caller pub key used for the blockchain service, from the keystore.
-            // Then add it to the StorageHub builder.
-            let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-            storage_hub_builder.with_provider_pub_key(caller_pub_key);
-
-            storage_hub_builder.setup_storage_layer(storage_path.clone());
+            storage_hub_builder.setup_storage_layer();
             Some(storage_hub_builder)
         }
         None => None,
