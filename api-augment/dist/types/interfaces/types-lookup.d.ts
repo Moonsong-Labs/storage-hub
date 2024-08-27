@@ -1920,6 +1920,10 @@ declare module "@polkadot/types/lookup" {
       readonly provider: H256;
       readonly nextChallengeDeadline: u32;
     } & Struct;
+    readonly isNoRecordOfLastSubmittedProof: boolean;
+    readonly asNoRecordOfLastSubmittedProof: {
+      readonly provider: H256;
+    } & Struct;
     readonly isNewChallengeCycleInitialised: boolean;
     readonly asNewChallengeCycleInitialised: {
       readonly currentTick: u32;
@@ -1939,6 +1943,7 @@ declare module "@polkadot/types/lookup" {
       | "NewChallengeSeed"
       | "NewCheckpointChallenge"
       | "SlashableProvider"
+      | "NoRecordOfLastSubmittedProof"
       | "NewChallengeCycleInitialised"
       | "MutationsApplied";
   }

@@ -4116,6 +4116,10 @@ mod slash {
                 let treasury_balance =
                     NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
 
+                let slash_factor: BalanceOf<Test> =
+                    StorageProviders::compute_worst_case_scenario_slashable_amount(&provider_id)
+                        .expect("Failed to compute slashable amount");
+
                 // Slash the provider
                 assert_ok!(StorageProviders::slash(
                     RuntimeOrigin::signed(caller),
@@ -4128,18 +4132,19 @@ mod slash {
                     None
                 );
 
-                let slash_factor: BalanceOf<Test> = <Test as crate::Config>::SlashFactor::get();
-
                 // Check that the held deposit of the provider has been reduced by slash factor
                 assert_eq!(
                     NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
-                    deposit_on_hold - slash_factor
+                    deposit_on_hold.saturating_sub(slash_factor)
                 );
+
+                // If the slash factor is greater than the deposit on hold, the slash amount is the deposit on hold
+                let actual_slashed_amount = slash_factor.min(deposit_on_hold);
 
                 // Check that the Treasury has received the slash amount
                 assert_eq!(
                     NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get()),
-                    treasury_balance + slash_factor
+                    treasury_balance + actual_slashed_amount
                 );
             });
         }
@@ -4160,8 +4165,8 @@ mod slash {
                 let bob_provider_id =
                     crate::AccountIdToBackupStorageProviderId::<Test>::get(&bob).unwrap();
 
-                let alice_accrued_failed_proof_submissions = 10;
-                let bob_accrued_failed_proof_submissions = 20;
+                let alice_accrued_failed_proof_submissions = 5;
+                let bob_accrued_failed_proof_submissions = 10;
 
                 // Set proofs-dealer storage to have a slashable provider
                 pallet_proofs_dealer::SlashableProviders::<Test>::insert(
@@ -4183,6 +4188,19 @@ mod slash {
                 let treasury_balance =
                     NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
 
+                // Check that the held deposit of the providers has been reduced by slash factor
+                let alice_slash_amount: BalanceOf<Test> =
+                    StorageProviders::compute_worst_case_scenario_slashable_amount(
+                        &alice_provider_id,
+                    )
+                    .expect("Failed to compute slashable amount");
+
+                let bob_slash_amount: BalanceOf<Test> =
+                    StorageProviders::compute_worst_case_scenario_slashable_amount(
+                        &bob_provider_id,
+                    )
+                    .expect("Failed to compute slashable amount");
+
                 // Slash the providers
                 assert_ok!(StorageProviders::slash(
                     RuntimeOrigin::signed(caller),
@@ -4203,27 +4221,24 @@ mod slash {
                     None
                 );
 
-                let slash_factor: BalanceOf<Test> = <Test as crate::Config>::SlashFactor::get();
-
-                // Check that the held deposit of the providers has been reduced by slash factor
-                let alice_slash_amount: BalanceOf<Test> = slash_factor
-                    * <u32 as Into<BalanceOf<Test>>>::into(alice_accrued_failed_proof_submissions);
                 assert_eq!(
                     NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
-                    alice_deposit_on_hold - alice_slash_amount
+                    alice_deposit_on_hold.saturating_sub(alice_slash_amount)
                 );
 
-                let bob_slash_amount: BalanceOf<Test> = slash_factor
-                    * <u32 as Into<BalanceOf<Test>>>::into(bob_accrued_failed_proof_submissions);
                 assert_eq!(
                     NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &bob),
-                    bob_deposit_on_hold - bob_slash_amount
+                    bob_deposit_on_hold.saturating_sub(bob_slash_amount)
                 );
+
+                // If slash amount is greater than deposit then the actual slash amount should be the deposit amount
+                let actual_alice_slashed_amount = alice_slash_amount.min(alice_deposit_on_hold);
+                let actual_bob_slashed_amount = bob_slash_amount.min(bob_deposit_on_hold);
 
                 // Check that the Treasury has received the slash amount
                 assert_eq!(
                     NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get()),
-                    treasury_balance + alice_slash_amount + bob_slash_amount
+                    treasury_balance + actual_alice_slashed_amount + actual_bob_slashed_amount
                 );
             });
         }
