@@ -10,6 +10,7 @@ use frame_support::traits::{
     Get,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
+use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use shp_traits::{
     PaymentStreamsInterface, ProofSubmittersInterface, ReadProvidersInterface,
     SystemMetricsInterface,
@@ -986,5 +987,77 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     ) -> Option<Self::DynamicRatePaymentStream> {
         // Return the payment stream information
         DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
+    }
+}
+
+/// Runtime API implementation for the PaymentStreams pallet
+impl<T> Pallet<T>
+where
+    T: pallet::Config,
+{
+    pub fn get_users_with_debt_over_threshold(
+        provider_id: &ProviderIdFor<T>,
+        threshold: BalanceOf<T>,
+    ) -> Result<Vec<T::AccountId>, GetUsersWithDebtOverThresholdError> {
+        // Check if the Provider ID received belongs to an actual Provider
+        ensure!(
+            <T::ProvidersPallet as ReadProvidersInterface>::is_provider(*provider_id),
+            GetUsersWithDebtOverThresholdError::ProviderNotRegistered
+        );
+
+        // Check if the Provider has any payment streams active
+        let provider_has_payment_streams =
+            !Self::get_fixed_rate_payment_streams_of_provider(provider_id).is_empty()
+                || !Self::get_dynamic_rate_payment_streams_of_provider(provider_id).is_empty();
+
+        ensure!(
+            provider_has_payment_streams,
+            GetUsersWithDebtOverThresholdError::ProviderWithoutPaymentStreams
+        );
+
+        // Get the last chargeable info of the Provider
+        let last_chargeable_info = LastChargeableInfo::<T>::get(provider_id);
+
+        // Get all the users that have a payment stream with this Provider
+        let users_of_provider = Self::get_users_with_payment_stream_with_provider(provider_id);
+
+        // Initialize the vector that will hold the users with debt over the threshold
+        let mut users_with_debt_over_threshold = Vec::new();
+
+        // For each user, check if they have a debt over the threshold and if so, add them to the vector
+        for user in users_of_provider {
+            let mut debt: BalanceOf<T> = Zero::zero();
+
+            if let Some(dynamic_stream) = DynamicRatePaymentStreams::<T>::get(provider_id, &user) {
+                let price_index_difference = last_chargeable_info
+                    .price_index
+                    .saturating_sub(dynamic_stream.price_index_when_last_charged);
+                let amount_to_charge = price_index_difference
+                    .checked_mul(&dynamic_stream.amount_provided.into())
+                    .ok_or(GetUsersWithDebtOverThresholdError::AmountToChargeOverflow)?;
+                debt = debt
+                    .checked_add(&amount_to_charge)
+                    .ok_or(GetUsersWithDebtOverThresholdError::DebtOverflow)?;
+            }
+
+            if let Some(fixed_stream) = FixedRatePaymentStreams::<T>::get(provider_id, &user) {
+                let time_passed = last_chargeable_info
+                    .last_chargeable_tick
+                    .saturating_sub(fixed_stream.last_charged_tick);
+                let amount_to_charge = fixed_stream
+                    .rate
+                    .checked_mul(&T::BlockNumberToBalance::convert(time_passed))
+                    .ok_or(GetUsersWithDebtOverThresholdError::AmountToChargeOverflow)?;
+                debt = debt
+                    .checked_add(&amount_to_charge)
+                    .ok_or(GetUsersWithDebtOverThresholdError::DebtOverflow)?;
+            }
+
+            if debt > threshold {
+                users_with_debt_over_threshold.push(user);
+            }
+        }
+
+        Ok(users_with_debt_over_threshold)
     }
 }

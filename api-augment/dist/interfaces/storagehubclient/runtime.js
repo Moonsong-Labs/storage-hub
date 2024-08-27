@@ -28,6 +28,22 @@ const FILE_SYSTEM_V1 = {
     type: "Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>"
   }
 };
+const PAYMENT_STREAMS_V1 = {
+  get_users_with_debt_over_threshold: {
+    description: "Get the users that have a debt to the provider greater than the threshold.",
+    params: [
+      {
+        name: "providerId",
+        type: "ProviderId"
+      },
+      {
+        name: "threshold",
+        type: "Balance"
+      }
+    ],
+    type: "Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError>"
+  }
+};
 const PROOFS_DEALER_V1 = {
   get_last_tick_provider_submitted_proof: {
     description: "Get the last tick for which the submitter submitted a proof.",
@@ -133,6 +149,12 @@ export const runtime = {
   FileSystemApi: [
     {
       methods: FILE_SYSTEM_V1,
+      version: 1
+    }
+  ],
+  PaymentStreamsApi: [
+    {
+      methods: PAYMENT_STREAMS_V1,
       version: 1
     }
   ],

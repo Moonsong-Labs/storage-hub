@@ -50,6 +50,10 @@ for (const bspNetConfig of bspNetConfigCases) {
       // We first get the last tick for which the BSP submitted a proof.
       const lastTickResult =
         await bspApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
+      const yourMama = await bspApi.call.paymentStreamsApi.get_users_with_debt_over_threshold(
+        DUMMY_BSP_ID,
+        100
+      );
       assert(lastTickResult.isOk);
       const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
       // Then we get the challenge period for the BSP.
