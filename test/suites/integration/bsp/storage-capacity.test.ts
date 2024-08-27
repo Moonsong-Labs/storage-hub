@@ -26,7 +26,7 @@ const bspNetConfigCases: BspNetConfig[] = [
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
-  describe.only("BSPNet: Validating max storage", () => {
+  describe("BSPNet: Validating max storage", () => {
     let api: BspNetApi;
 
     before(async () => {
