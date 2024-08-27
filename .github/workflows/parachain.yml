@@ -188,6 +188,7 @@ jobs:
       - name: Run Zombienet network
         run: |
           chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
           cd test
           pnpm  install
           pnpm  zombie:run:full:native &
@@ -228,6 +229,7 @@ jobs:
       - name: Run Zombienet setup
         run: |
           chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
           cd test
           pnpm  install
           pnpm  tsx scripts/downloadPolkadot.ts 1.8.0
@@ -266,6 +268,7 @@ jobs:
       - name: Build Local Docker Image
         run: |
           chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
           cd test
           pnpm install
           pnpm docker:build
@@ -318,6 +321,7 @@ jobs:
       - name: Build Local Docker Image
         run: |
           chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
           cd test
           pnpm install
           pnpm docker:build
