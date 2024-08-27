@@ -1,13 +1,15 @@
-import "@storagehub/api-augment";
 import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { CreatedBlock, EventRecord, Hash, SignedBlock } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
+import "@storagehub/api-augment";
 import { v2 as compose } from "docker-compose";
 import Docker from "dockerode";
+import { strictEqual } from "node:assert";
 import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
+import crypto from "node:crypto";
 import path from "node:path";
 import * as util from "node:util";
 import { assertEventPresent } from "../asserts.ts";
@@ -15,15 +17,16 @@ import { DOCKER_IMAGE } from "../constants.ts";
 import { isExtSuccess } from "../extrinsics";
 import {
   alice,
-  bspKey,
-  shUser,
   bspDownKey,
-  bspTwoKey,
+  bspDownSeed,
+  bspKey,
   bspThreeKey,
-  bspTwoSeed,
   bspThreeSeed,
-  bspDownSeed
+  bspTwoKey,
+  bspTwoSeed,
+  shUser
 } from "../pjsKeyring";
+import { sleep } from "../timer.ts";
 import { createApiObject } from "./api";
 import {
   BSP_DOWN_ID,
@@ -37,8 +40,6 @@ import {
 } from "./consts";
 import { addBspContainer, showContainers } from "./docker";
 import type { BspNetApi } from "./types";
-import { sleep } from "../timer.ts";
-import { strictEqual } from "node:assert";
 
 const exec = util.promisify(child_process.exec);
 
@@ -76,6 +77,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
   throw new Error("Error fetching container IP");
 };
 
+export const checkNodeAlive = async (url: string, verbose = false) => getContainerIp(url, verbose);
 export const getContainerPeerId = async (url: string, verbose = false) => {
   const maxRetries = 60;
   const sleepTime = 500;
@@ -179,17 +181,12 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
     await api.sealBlock(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(shUser.address, amount)));
 
     // Make BSP
-    await api.sealBlock(
-      api.tx.sudo.sudo(
-        api.tx.providers.forceBspSignUp(
-          bspKey.address,
-          DUMMY_BSP_ID,
-          CAPACITY_512,
-          [multiAddressBsp],
-          bspKey.address
-        )
-      )
-    );
+    await forceSignupBsp({
+      api,
+      who: bspKey.address,
+      multiaddress: multiAddressBsp,
+      bspId: DUMMY_BSP_ID
+    });
 
     // Make MSP
     await api.sealBlock(
@@ -222,6 +219,28 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
   }
 };
 
+export const forceSignupBsp = async (options: {
+  api: BspNetApi;
+  multiaddress: string;
+  who: string | Uint8Array;
+  bspId?: string;
+  capacity?: bigint;
+  payeeAddress?: string;
+}) => {
+  const bspId = options.bspId || `0x${crypto.randomBytes(32).toString("hex")}`;
+  const blockResults = await options.api.sealBlock(
+    options.api.tx.sudo.sudo(
+      options.api.tx.providers.forceBspSignUp(
+        options.who,
+        bspId,
+        options.capacity || CAPACITY_512,
+        [options.multiaddress],
+        options.payeeAddress || options.who
+      )
+    )
+  );
+  return Object.assign(bspId, blockResults);
+};
 export const closeSimpleBspNet = async () => {
   const docker = new Docker();
 
@@ -300,17 +319,12 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
     );
 
     // Make BSP
-    await userApi.sealBlock(
-      userApi.tx.sudo.sudo(
-        userApi.tx.providers.forceBspSignUp(
-          bspKey.address,
-          DUMMY_BSP_ID,
-          CAPACITY_512,
-          [multiAddressBsp],
-          bspKey.address
-        )
-      )
-    );
+    await forceSignupBsp({
+      api: userApi,
+      who: bspKey.address,
+      multiaddress: multiAddressBsp,
+      bspId: DUMMY_BSP_ID
+    });
 
     // Make MSP
     await userApi.sealBlock(
@@ -737,7 +751,7 @@ export const createCheckBucket = async (api: BspNetApi, bucketName: string) => {
   return newBucketEventDataBlob;
 };
 
-const addBsp = async (
+export const addBsp = async (
   api: BspNetApi,
   bspKey: KeyringPair,
   options?: {
@@ -788,4 +802,11 @@ const stopBsp = async (name: string) => {
 
   await docker.getContainer(containersToStop[0].Id).stop();
   await docker.getContainer(containersToStop[0].Id).remove();
+};
+
+export const skipBlocks = async (api: ApiPromise, blocksToSkip: number) => {
+  console.log(`Skipping ${blocksToSkip} blocks...`);
+  for (let i = 0; i < blocksToSkip; i++) {
+    await sealBlock(api);
+  }
 };

@@ -1,7 +1,6 @@
 import { setTimeout } from "node:timers/promises";
 import {
   createApiObject,
-  createCheckBucket,
   DUMMY_MSP_ID,
   getContainerPeerId,
   NODE_INFOS,
@@ -61,37 +60,47 @@ async function bootStrapNetwork() {
 
   api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
-  const newBucketEventDataBlob = await createCheckBucket(api, CONFIG.bucketName);
+  // const newBucketEventDataBlob = await createCheckBucket(api, CONFIG.bucketName);
+  const newBucketEventEvent = await api.createBucket(CONFIG.bucketName);
+  const newBucketEventDataBlob =
+    api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+
+  if (!newBucketEventDataBlob) {
+    throw new Error("Event doesn't match Type");
+  }
 
   const localPath = CONFIG.localPath;
   const remotePath = CONFIG.remotePath;
 
   // Issue file Storage request
-  const rpcResponse = await api.rpc.storagehubclient.loadFileInStorage(
+  const { fingerprint, file_size, location } = await api.rpc.storagehubclient.loadFileInStorage(
     localPath,
     remotePath,
     NODE_INFOS.user.AddressId,
     newBucketEventDataBlob.bucketId
   );
-  console.log(rpcResponse);
 
   const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
   console.log(`sh-user Peer ID: ${peerIDUser}`);
 
   await api.sealBlock(
     api.tx.fileSystem.issueStorageRequest(
-      rpcResponse.bucket_id,
-      remotePath,
-      rpcResponse.fingerprint,
-      rpcResponse.size,
+      newBucketEventDataBlob.bucketId,
+      location,
+      fingerprint,
+      file_size,
       DUMMY_MSP_ID,
-      [peerIDUser]
+      [NODE_INFOS.user.expectedPeerId]
     ),
     shUser
   );
 
   // Seal the block from BSP volunteer
   await setTimeout(1000);
+  await api.sealBlock();
+
+  // Seal the block from BSP confirm
+  await setTimeout(5000);
   await api.sealBlock();
 
   if (bspNetConfig.noisy) {

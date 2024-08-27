@@ -1,9 +1,11 @@
-import path from "node:path";
-import { execSync } from "node:child_process";
 import Docker from "dockerode";
+import { execSync } from "node:child_process";
+import path from "node:path";
 import { DOCKER_IMAGE } from "../constants";
-import { createApiObject } from "./api";
 import { sendCustomRpc } from "../rpc";
+import { createApiObject } from "./api";
+import type { BspNetApi } from "./types";
+import { checkNodeAlive } from "./helpers";
 
 export const checkBspForFile = async (filePath: string) => {
   const containerId = "docker-sh-bsp-1";
@@ -40,7 +42,7 @@ export const showContainers = () => {
 
 export const addBspContainer = async (options?: {
   name?: string;
-  connectToPeer?: boolean;
+  connectToPeer?: boolean; // unused
   additionalArgs?: string[];
 }) => {
   const docker = new Docker();
@@ -136,10 +138,41 @@ export const addBspContainer = async (options?: {
   return { containerName, rpcPort, p2pPort, peerId };
 };
 
+// Make this a rusty style OO function with api contexts
 export const pauseBspContainer = async (containerName: string) => {
   const docker = new Docker();
   const container = docker.getContainer(containerName);
   await container.pause();
+};
+
+export const stopBspContainer = async (options: { containerName: string; api: BspNetApi }) => {
+  await options.api.disconnect();
+  const docker = new Docker();
+  const container = docker.getContainer(options.containerName);
+  await container.stop();
+};
+
+export const startBspContainer = async (options: {
+  containerName: string;
+  endpoint: string;
+}): Promise<BspNetApi> => {
+  const docker = new Docker();
+  const container = docker.getContainer(options.containerName);
+  await container.start();
+  await checkNodeAlive(options.endpoint);
+  return await createApiObject(options.endpoint);
+};
+
+export const restartBspContainer = async (options: {
+  containerName: string;
+  api: BspNetApi;
+  endpoint: string;
+}): Promise<BspNetApi> => {
+  const docker = new Docker();
+  const container = docker.getContainer(options.containerName);
+  await container.restart();
+
+  return await createApiObject(options.endpoint);
 };
 
 export const resumeBspContainer = async (_containerName: string) => {
