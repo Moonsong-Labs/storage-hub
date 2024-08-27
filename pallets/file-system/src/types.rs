@@ -98,13 +98,6 @@ pub enum BucketPrivacy {
     Private,
 }
 
-#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
-#[scale_info(skip_type_params(T))]
-pub enum ExpiredItems<T: Config> {
-    StorageRequest(MerkleHash<T>),
-    PendingFileDeletionRequests((T::AccountId, MerkleHash<T>)),
-}
-
 /// Alias for the `MerkleHash` type used in the ProofsDealerInterface representing file keys.
 pub type MerkleHash<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash;
@@ -195,3 +188,10 @@ pub type ProviderIdFor<T> = <<T as crate::Config>::Providers as ReadProvidersInt
 
 /// Alias for the bucket name.
 pub type BucketNameFor<T> = BoundedVec<u8, BucketNameLimitFor<T>>;
+
+/// Alias for the type of the storage request expiration item.
+pub type StorageRequestExpirationItem<T> = MerkleHash<T>;
+
+/// Alias for the type of the file deletion request expiration item.
+pub type FileDeletionRequestExpirationItem<T> =
+    (<T as frame_system::Config>::AccountId, MerkleHash<T>);
