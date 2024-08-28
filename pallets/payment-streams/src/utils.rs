@@ -12,7 +12,7 @@ use frame_support::traits::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_traits::{
     PaymentStreamsInterface, ProofSubmittersInterface, ReadProvidersInterface,
-    SystemMetricsInterface,
+    ReadUserSolvencyInterface, SystemMetricsInterface,
 };
 use sp_runtime::{
     traits::{Convert, One},
@@ -1273,5 +1273,13 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
     ) -> Option<Self::DynamicRatePaymentStream> {
         // Return the payment stream information
         DynamicRatePaymentStreams::<T>::get(provider_id, user_account)
+    }
+}
+
+impl<T: pallet::Config> ReadUserSolvencyInterface for pallet::Pallet<T> {
+    type AccountId = T::AccountId;
+
+    fn is_user_insolvent(user_account: &Self::AccountId) -> bool {
+        UsersWithoutFunds::<T>::contains_key(user_account)
     }
 }

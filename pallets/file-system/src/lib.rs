@@ -99,6 +99,9 @@ pub mod pallet {
             MerkleHash = <Self::Providers as shp_traits::ReadProvidersInterface>::MerkleHash,
         >;
 
+        /// The trait for checking user solvency in the system
+        type UserSolvency: shp_traits::ReadUserSolvencyInterface<AccountId = Self::AccountId>;
+
         /// Type for identifying a file, generally a hash.
         type Fingerprint: Parameter
             + Member
@@ -440,6 +443,14 @@ pub mod pallet {
             file_key: MerkleHash<T>,
             new_root: MerkleHash<T>,
         },
+        /// Notifies that a SP has stopped storing a file because its owner has become insolvent.
+        SpStopStoringInsolventUser {
+            sp_id: ProviderIdFor<T>,
+            file_key: MerkleHash<T>,
+            owner: T::AccountId,
+            location: FileLocation<T>,
+            new_root: MerkleHash<T>,
+        },
         /// Notifies that a priority challenge failed to be queued for pending file deletion.
         FailedToQueuePriorityChallenge {
             user: T::AccountId,
@@ -484,6 +495,8 @@ pub mod pallet {
         NotABsp,
         /// Account is not a MSP.
         NotAMsp,
+        /// Account is not a SP.
+        NotASp,
         /// BSP has not volunteered to store the given file.
         BspNotVolunteered,
         /// BSP has not confirmed storing the given file.
@@ -561,6 +574,8 @@ pub mod pallet {
         MinWaitForStopStoringNotReached,
         /// Pending stop storing request already exists.
         PendingStopStoringRequestAlreadyExists,
+        /// A SP tried to stop storing files from a user that was supposedly insolvent, but the user is not insolvent.
+        UserNotInsolvent,
     }
 
     #[pallet::call]
@@ -821,7 +836,51 @@ pub mod pallet {
             Ok(())
         }
 
+        /// Executed by a SP to stop storing a file from an insolvent user.
+        ///
+        /// This is used when a user has become insolvent and the SP needs to stop storing the files of that user, since
+        /// it won't be getting paid for it anymore.
+        /// The validations are similar to the ones in the `bsp_request_stop_storing` and `bsp_confirm_stop_storing` extrinsics, but the SP doesn't need to
+        /// wait for a minimum amount of blocks to confirm to stop storing the file nor it has to be a BSP.
         #[pallet::call_index(9)]
+        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        pub fn stop_storing_for_insolvent_user(
+            origin: OriginFor<T>,
+            file_key: MerkleHash<T>,
+            bucket_id: BucketIdFor<T>,
+            location: FileLocation<T>,
+            owner: T::AccountId,
+            fingerprint: Fingerprint<T>,
+            size: StorageData<T>,
+            inclusion_forest_proof: ForestProof<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            // Perform validations and stop storing the file.
+            let (sp_id, new_root) = Self::do_sp_stop_storing_for_insolvent_user(
+                who.clone(),
+                file_key,
+                bucket_id,
+                location.clone(),
+                owner.clone(),
+                fingerprint,
+                size,
+                inclusion_forest_proof,
+            )?;
+
+            // Emit event.
+            Self::deposit_event(Event::SpStopStoringInsolventUser {
+                sp_id,
+                file_key,
+                owner,
+                location,
+                new_root,
+            });
+
+            Ok(())
+        }
+
+        #[pallet::call_index(10)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn delete_file(
             origin: OriginFor<T>,
@@ -855,7 +914,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(10)]
+        #[pallet::call_index(11)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn pending_file_deletion_request_submit_proof(
             origin: OriginFor<T>,
@@ -885,7 +944,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(11)]
+        #[pallet::call_index(12)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn set_global_parameters(
             origin: OriginFor<T>,

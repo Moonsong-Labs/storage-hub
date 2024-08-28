@@ -10,7 +10,8 @@ use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, TrieMutation, TrieProofDeltaApplier,
+    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadUserSolvencyInterface,
+    TrieMutation, TrieProofDeltaApplier,
 };
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
@@ -333,6 +334,7 @@ impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Providers = Providers;
     type ProofDealer = ProofsDealer;
+    type UserSolvency = MockUserSolvency;
     type Fingerprint = H256;
     type ReplicationTargetType = u32;
     type ThresholdType = ThresholdType;
@@ -354,6 +356,17 @@ impl crate::Config for Test {
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
+}
+
+// TODO: To write tests we probably should use the actual implementation instead of this mock.
+// (Or at least a better mock)
+pub struct MockUserSolvency;
+impl ReadUserSolvencyInterface for MockUserSolvency {
+    type AccountId = AccountId;
+
+    fn is_user_insolvent(_user_account: &Self::AccountId) -> bool {
+        false
+    }
 }
 
 // Build genesis storage according to the mock runtime.
