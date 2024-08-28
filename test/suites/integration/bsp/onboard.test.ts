@@ -91,8 +91,9 @@ for (const bspNetConfig of bspNetConfigCases) {
     });
 
     it("Inserts new blockchain service keys (bcsv)", async () => {
+      const keystore_path = "/tmp/test/insert/keystore";
       const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
-        keystorePath: "/tmp/test/insert/keystore"
+        keystorePath: keystore_path
       });
       const newApi = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
 
@@ -112,15 +113,16 @@ for (const bspNetConfig of bspNetConfigCases) {
       has_bob_key = await newApi.rpc.author.hasKey(bob_pub_key, bcsv_key_type);
       strictEqual(has_bob_key.toHuman().valueOf(), true);
 
-      const keystore_path = "/tmp/test/insert/keystore";
+      // We remove again the keys added in this test.
       await newApi.rpc.storagehubclient.removeBcsvKeys(keystore_path);
 
       newApi.disconnect();
     });
 
     it("Removes keys from keystore", async () => {
+      const keystore_path = "/tmp/test/remove/keystore";
       const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
-        keystorePath: "/tmp/test/remove/keystore"
+        keystorePath: keystore_path
       });
       const newApi = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
 
@@ -128,7 +130,6 @@ for (const bspNetConfig of bspNetConfigCases) {
       const dave_pub_key = "0x306721211d5404bd9da88e0204360a1a9ab8b87c66c1bc2fcdd37f3c2222cc20";
       const bcsv_key_type = "bcsv";
       const dave_seed = "//Dave";
-      const keystore_path = "/tmp/test/remove/keystore";
 
       let has_alice_key = await newApi.rpc.author.hasKey(alice_pub_key, bcsv_key_type);
       strictEqual(has_alice_key.toHuman().valueOf(), true);
