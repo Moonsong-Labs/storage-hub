@@ -15,6 +15,7 @@ pub struct FixedRatePaymentStream<T: Config> {
     pub rate: BalanceOf<T>,
     pub last_charged_tick: BlockNumberFor<T>,
     pub user_deposit: BalanceOf<T>,
+    pub out_of_funds_tick: Option<BlockNumberFor<T>>,
 }
 
 /// Structure that has the Dynamic-Rate Payment Stream information
@@ -24,6 +25,16 @@ pub struct DynamicRatePaymentStream<T: Config> {
     pub amount_provided: UnitsProvidedFor<T>,
     pub price_index_when_last_charged: BalanceOf<T>,
     pub user_deposit: BalanceOf<T>,
+    pub out_of_funds_tick: Option<BlockNumberFor<T>>,
+}
+
+/// Enum that represents a Payment Stream. It holds either a FixedRatePaymentStream or a DynamicRatePaymentStream,
+/// allowing to operate generically with both types.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub enum PaymentStream<T: Config> {
+    FixedRatePaymentStream(FixedRatePaymentStream<T>),
+    DynamicRatePaymentStream(DynamicRatePaymentStream<T>),
 }
 
 /// Structure that holds the information of the last chargeable tick and price index for a Provider

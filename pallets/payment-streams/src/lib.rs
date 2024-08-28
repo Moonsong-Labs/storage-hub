@@ -262,6 +262,9 @@ pub mod pallet {
         /// This event is emitted to flag the user and let the network know that the user is not paying for the requested services, so other Providers can
         /// stop providing services to that user.
         UserWithoutFunds { who: T::AccountId },
+        /// Event emitted when a User that has been flagged as not having enough funds to pay for their services has correctly paid all their outstanding debt
+        /// and can now contract new services again.
+        UserSolvent { who: T::AccountId },
     }
 
     /// The errors that can be thrown by this pallet to inform users about what went wrong
@@ -295,6 +298,8 @@ pub mod pallet {
         ChargeOverflow,
         /// Error thrown when trying to operate when the User has been flagged for not having enough funds.
         UserWithoutFunds,
+        /// Error thrown when a user that has not been flagged as without funds tries to use the extrinsic to pay its outstanding debt
+        UserNotFlaggedAsWithoutFunds,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -647,6 +652,41 @@ pub mod pallet {
                 provider_id: provider_id,
                 amount: amount_charged,
             });
+
+            // Return a successful DispatchResultWithPostInfo
+            Ok(().into())
+        }
+
+        /// Dispatchable extrinsic that allows a user flagged as without funds to pay all remaining payment streams to be able to recover
+        /// its deposits and be able to pay for services again.
+        ///
+        /// The dispatch origin for this call must be Signed.
+        /// The origin must be the User that has been flagged as without funds.
+        ///
+        /// This extrinsic will perform the following checks and logic:
+        /// 1. Check that the extrinsic was signed and get the signer.
+        /// 2. Check that the user has been flagged as without funds.
+        /// 3. Release the user's funds that were held as a deposit for each payment stream.
+        /// 4. Get all payment streams of the user and charge them, paying the Providers for the services.
+        /// 5. Delete all payment streams of the user.
+        /// 6. Unflag the user as without funds.
+        ///
+        /// Emits a 'UserSolvent' event when successful.
+        ///
+        /// Notes: this extrinsic iterates over all payment streams of the user and charges them, so it can be expensive in terms of weight.
+        /// The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
+        /// finds more convenient to wait for Providers to get its deposits one by one instead.
+        #[pallet::call_index(7)]
+        #[pallet::weight(Weight::from_parts(100_000, 0) + T::DbWeight::get().reads_writes(1, 1))]
+        pub fn pay_outstanding_debt(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was signed and get the signer
+            let user_account = ensure_signed(origin)?;
+
+            // Execute checks and logic, update storage
+            Self::do_pay_outstanding_debt(&user_account)?;
+
+            // Emit the corresponding event
+            Self::deposit_event(Event::<T>::UserSolvent { who: user_account });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())

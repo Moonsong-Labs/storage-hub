@@ -138,6 +138,7 @@ where
                 rate,
                 last_charged_tick: OnPollTicker::<T>::get(),
                 user_deposit: deposit,
+                out_of_funds_tick: None,
             },
         );
 
@@ -366,6 +367,7 @@ where
                 amount_provided,
                 price_index_when_last_charged: current_accumulated_price_index,
                 user_deposit: deposit,
+                out_of_funds_tick: None,
             },
         );
 
@@ -549,131 +551,236 @@ where
 
         // If the fixed-rate payment stream exists:
         if let Some(fixed_rate_payment_stream) = fixed_rate_payment_stream {
-            // Calculate the time passed between the last chargeable tick and the last charged tick
-            let last_chargeable_tick =
-                LastChargeableInfo::<T>::get(provider_id).last_chargeable_tick;
-            if let Some(time_passed) =
-                last_chargeable_tick.checked_sub(&fixed_rate_payment_stream.last_charged_tick)
-            {
-                // Convert it to the balance type (for math)
-                let time_passed_balance_typed = T::BlockNumberToBalance::convert(time_passed);
-
-                // Calculate the amount to charge
-                let amount_to_charge = fixed_rate_payment_stream
-                    .rate
-                    .checked_mul(&time_passed_balance_typed)
-                    .ok_or(Error::<T>::ChargeOverflow)?;
-
-                // Check the free balance of the user
-                let user_balance = T::NativeBalance::reducible_balance(
-                    &user_account,
-                    Preservation::Preserve,
-                    Fortitude::Polite,
-                );
-
-                // If the user does not have enough balance to pay for its storage:
-                if user_balance < amount_to_charge {
-                    // TODO: Probably just charge what the user has and then flag it
-                    // Flag it in the UsersWithoutFunds mapping and emit the UserWithoutFunds event
-                    UsersWithoutFunds::<T>::insert(user_account, ());
-                    Self::deposit_event(Event::<T>::UserWithoutFunds {
-                        who: user_account.clone(),
-                    });
-                } else {
-                    // If the user does have enough funds to pay for its storage:
-
-                    // Clear the user from the UsersWithoutFunds mapping
-                    // TODO: Design a more robust way of handling out-of-funds users
-                    UsersWithoutFunds::<T>::remove(user_account);
-
-                    // Get the payment account of the SP
-                    let provider_payment_account = expect_or_err!(
-                        <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
-                            *provider_id
-                        ),
-                        "Provider should exist and have a payment account if its ID exists.",
-                        Error::<T>::ProviderInconsistencyError
-                    );
-
-                    // Check if the total amount charged would overflow
-                    // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
-                    ensure!(
-                        total_amount_charged
-                            .checked_add(&amount_to_charge)
-                            .is_some(),
-                        ArithmeticError::Overflow
-                    );
-
-                    // Charge the payment stream from the user's balance
-                    T::NativeBalance::transfer(
-                        user_account,
-                        &provider_payment_account,
-                        amount_to_charge,
-                        Preservation::Preserve,
+            // Check if the user is flagged as without funds to execute the correct charging logic
+            match UsersWithoutFunds::<T>::get(user_account) {
+                Some(()) => {
+                    // If the user has been flagged as without funds, manage it accordingly
+                    Self::manage_user_without_funds(
+                        &provider_id,
+                        &user_account,
+                        &PaymentStream::FixedRatePaymentStream(fixed_rate_payment_stream),
                     )?;
+                }
+                None => {
+                    // If the user hasn't been flagged as without funds, charge the payment stream
+                    // Calculate the time passed between the last chargeable tick and the last charged tick
+                    let last_chargeable_tick =
+                        LastChargeableInfo::<T>::get(provider_id).last_chargeable_tick;
+                    if let Some(time_passed) = last_chargeable_tick
+                        .checked_sub(&fixed_rate_payment_stream.last_charged_tick)
+                    {
+                        // Convert it to the balance type (for math)
+                        let time_passed_balance_typed =
+                            T::BlockNumberToBalance::convert(time_passed);
 
-                    // Set the last charged tick to the tick number of the last chargeable tick
-                    FixedRatePaymentStreams::<T>::mutate(
-                        provider_id,
-                        user_account,
-                        |payment_stream| {
-                            let payment_stream = expect_or_err!(
-                                payment_stream,
-                                "Payment stream should exist if it was found before.",
-                                Error::<T>::PaymentStreamNotFound
+                        // Calculate the amount to charge
+                        let amount_to_charge = fixed_rate_payment_stream
+                            .rate
+                            .checked_mul(&time_passed_balance_typed)
+                            .ok_or(Error::<T>::ChargeOverflow)?;
+
+                        // Check the free balance of the user
+                        let user_balance = T::NativeBalance::reducible_balance(
+                            &user_account,
+                            Preservation::Preserve,
+                            Fortitude::Polite,
+                        );
+
+                        // If the user does not have enough balance to pay for its storage:
+                        if user_balance < amount_to_charge {
+                            // Check if this payment stream was already flagged as without funds and, if so, how many ticks have passed since then
+                            let out_of_funds_tick = fixed_rate_payment_stream.out_of_funds_tick;
+                            let current_tick = OnPollTicker::<T>::get();
+                            let ticks_since_out_of_funds = match out_of_funds_tick {
+                                Some(tick) => current_tick.saturating_sub(tick),
+                                None => {
+                                    // If this payment stream wasn't flagged as without funds before, flag it now with the current tick
+                                    FixedRatePaymentStreams::<T>::mutate(
+                                        provider_id,
+                                        user_account,
+                                        |payment_stream| {
+                                            let payment_stream = expect_or_err!(
+												payment_stream,
+												"Payment stream should exist if it was found before.",
+												Error::<T>::PaymentStreamNotFound
+											);
+                                            payment_stream.out_of_funds_tick = Some(current_tick);
+                                            Ok::<(), DispatchError>(())
+                                        },
+                                    )?;
+                                    Zero::zero()
+                                }
+                            };
+
+                            // If the user has missed payment for more than the allowed number of ticks (which is the number of ticks
+                            // that the user deposited when it was created), consider it as without funds.
+                            if ticks_since_out_of_funds >= T::NewStreamDeposit::get() {
+                                Self::manage_user_without_funds(
+                                    &provider_id,
+                                    &user_account,
+                                    &PaymentStream::FixedRatePaymentStream(
+                                        fixed_rate_payment_stream,
+                                    ),
+                                )?;
+                            }
+                        } else {
+                            // If the user does have enough funds to pay for its storage:
+
+                            // Clear the out-of-funds flag from the payment stream
+                            FixedRatePaymentStreams::<T>::mutate(
+                                provider_id,
+                                user_account,
+                                |payment_stream| {
+                                    let payment_stream = expect_or_err!(
+                                        payment_stream,
+                                        "Payment stream should exist if it was found before.",
+                                        Error::<T>::PaymentStreamNotFound
+                                    );
+                                    payment_stream.out_of_funds_tick = None;
+                                    Ok::<(), DispatchError>(())
+                                },
+                            )?;
+
+                            // Get the payment account of the SP
+                            let provider_payment_account = expect_or_err!(
+								<T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
+									*provider_id
+								),
+								"Provider should exist and have a payment account if its ID exists.",
+								Error::<T>::ProviderInconsistencyError
+							);
+
+                            // Check if the total amount charged would overflow
+                            // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
+                            ensure!(
+                                total_amount_charged
+                                    .checked_add(&amount_to_charge)
+                                    .is_some(),
+                                ArithmeticError::Overflow
                             );
-                            payment_stream.last_charged_tick = last_chargeable_tick;
-                            Ok::<(), DispatchError>(())
-                        },
-                    )?;
 
-                    // Update the total amount charged:
-                    total_amount_charged = total_amount_charged
-                        .checked_add(&amount_to_charge)
-                        .ok_or(Error::<T>::ChargeOverflow)?;
+                            // Charge the payment stream from the user's balance
+                            T::NativeBalance::transfer(
+                                user_account,
+                                &provider_payment_account,
+                                amount_to_charge,
+                                Preservation::Preserve,
+                            )?;
+
+                            // Set the last charged tick to the tick number of the last chargeable tick
+                            FixedRatePaymentStreams::<T>::mutate(
+                                provider_id,
+                                user_account,
+                                |payment_stream| {
+                                    let payment_stream = expect_or_err!(
+                                        payment_stream,
+                                        "Payment stream should exist if it was found before.",
+                                        Error::<T>::PaymentStreamNotFound
+                                    );
+                                    payment_stream.last_charged_tick = last_chargeable_tick;
+                                    Ok::<(), DispatchError>(())
+                                },
+                            )?;
+
+                            // Update the total amount charged:
+                            total_amount_charged = total_amount_charged
+                                .checked_add(&amount_to_charge)
+                                .ok_or(Error::<T>::ChargeOverflow)?;
+                        }
+                    }
                 }
             }
         }
 
         // If the dynamic-rate payment stream exists:
         if let Some(dynamic_rate_payment_stream) = dynamic_rate_payment_stream {
-            // Calculate the difference between the last charged price index and the price index at the last chargeable tick
-            // Note: If the last chargeable price index is less than the last charged price index, we charge 0 to the user, because that would be an impossible state.
+            match UsersWithoutFunds::<T>::get(user_account) {
+                Some(()) => {
+                    // If the user has been flagged as without funds, manage it accordingly
+                    Self::manage_user_without_funds(
+                        &provider_id,
+                        &user_account,
+                        &PaymentStream::DynamicRatePaymentStream(dynamic_rate_payment_stream),
+                    )?;
+                }
+                None => {
+                    // Calculate the difference between the last charged price index and the price index at the last chargeable tick
+                    // Note: If the last chargeable price index is less than the last charged price index, we charge 0 to the user, because that would be an impossible state.
 
-            let price_index_at_last_chargeable_tick =
-                LastChargeableInfo::<T>::get(provider_id).price_index;
-            if let Some(price_index_difference) = price_index_at_last_chargeable_tick
-                .checked_sub(&dynamic_rate_payment_stream.price_index_when_last_charged)
-            {
-                // Calculate the amount to charge
-                let amount_to_charge = price_index_difference
-                    .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
-                    .ok_or(Error::<T>::ChargeOverflow)?;
+                    let price_index_at_last_chargeable_tick =
+                        LastChargeableInfo::<T>::get(provider_id).price_index;
+                    if let Some(price_index_difference) = price_index_at_last_chargeable_tick
+                        .checked_sub(&dynamic_rate_payment_stream.price_index_when_last_charged)
+                    {
+                        // Calculate the amount to charge
+                        let amount_to_charge = price_index_difference
+                            .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
+                            .ok_or(Error::<T>::ChargeOverflow)?;
 
-                // Check the free balance of the user
-                let user_balance = T::NativeBalance::reducible_balance(
-                    &user_account,
-                    Preservation::Preserve,
-                    Fortitude::Polite,
-                );
+                        // Check the free balance of the user
+                        let user_balance = T::NativeBalance::reducible_balance(
+                            &user_account,
+                            Preservation::Preserve,
+                            Fortitude::Polite,
+                        );
 
-                // If the user does not have enough balance to pay for its storage:
-                if user_balance < amount_to_charge {
-                    // TODO: Probably just charge what the user has and then flag it
-                    // Flag it in the UsersWithoutFunds mapping and emit the UserWithoutFunds event
-                    UsersWithoutFunds::<T>::insert(user_account, ());
-                    Self::deposit_event(Event::<T>::UserWithoutFunds {
-                        who: user_account.clone(),
-                    });
-                } else {
-                    // If the user does have enough funds to pay for its storage:
+                        // If the user does not have enough balance to pay for its storage:
+                        if user_balance < amount_to_charge {
+                            // Check if this payment stream was already flagged as without funds and, if so, how many ticks have passed since then
+                            let out_of_funds_tick = dynamic_rate_payment_stream.out_of_funds_tick;
+                            let current_tick = OnPollTicker::<T>::get();
+                            let ticks_since_out_of_funds = match out_of_funds_tick {
+                                Some(tick) => current_tick.saturating_sub(tick),
+                                None => {
+                                    // If this payment stream wasn't flagged as without funds before, flag it now with the current tick
+                                    DynamicRatePaymentStreams::<T>::mutate(
+                                        provider_id,
+                                        user_account,
+                                        |payment_stream| {
+                                            let payment_stream = expect_or_err!(
+                                        payment_stream,
+                                        "Payment stream should exist if it was found before.",
+                                        Error::<T>::PaymentStreamNotFound
+                                    );
+                                            payment_stream.out_of_funds_tick = Some(current_tick);
+                                            Ok::<(), DispatchError>(())
+                                        },
+                                    )?;
+                                    Zero::zero()
+                                }
+                            };
 
-                    // Clear the user from the UsersWithoutFunds mapping
-                    // TODO: Design a more robust way of handling out-of-funds users
-                    UsersWithoutFunds::<T>::remove(user_account);
+                            // If the user has missed payment for more than the allowed number of ticks (which is the number of ticks
+                            // that the user deposited when it was created), consider it as without funds.
+                            if ticks_since_out_of_funds >= T::NewStreamDeposit::get() {
+                                Self::manage_user_without_funds(
+                                    &provider_id,
+                                    &user_account,
+                                    &PaymentStream::DynamicRatePaymentStream(
+                                        dynamic_rate_payment_stream,
+                                    ),
+                                )?;
+                            }
+                        } else {
+                            // If the user does have enough funds to pay for its storage:
 
-                    // Get the payment account of the SP
-                    let provider_payment_account = expect_or_err!(
+                            // Clear the out-of-funds flag from the payment stream
+                            DynamicRatePaymentStreams::<T>::mutate(
+                                provider_id,
+                                user_account,
+                                |payment_stream| {
+                                    let payment_stream = expect_or_err!(
+                                        payment_stream,
+                                        "Payment stream should exist if it was found before.",
+                                        Error::<T>::PaymentStreamNotFound
+                                    );
+                                    payment_stream.out_of_funds_tick = None;
+                                    Ok::<(), DispatchError>(())
+                                },
+                            )?;
+
+                            // Get the payment account of the SP
+                            let provider_payment_account = expect_or_err!(
                         <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(
                             *provider_id
                         ),
@@ -681,48 +788,152 @@ where
                         Error::<T>::ProviderInconsistencyError
                     );
 
-                    // Check if the total amount charged would overflow
-                    // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
-                    ensure!(
-                        total_amount_charged
-                            .checked_add(&amount_to_charge)
-                            .is_some(),
-                        ArithmeticError::Overflow
-                    );
-
-                    // Charge the payment stream from the user's balance
-                    T::NativeBalance::transfer(
-                        user_account,
-                        &provider_payment_account,
-                        amount_to_charge,
-                        Preservation::Preserve,
-                    )?;
-
-                    // Set the last charged price index to be the price index of the last chargeable tick
-                    DynamicRatePaymentStreams::<T>::mutate(
-                        provider_id,
-                        user_account,
-                        |payment_stream| {
-                            let payment_stream = expect_or_err!(
-                                payment_stream,
-                                "Payment stream should exist if it was found before.",
-                                Error::<T>::PaymentStreamNotFound
+                            // Check if the total amount charged would overflow
+                            // NOTE: We check this BEFORE transferring the amount to the provider, as the `transfer` function does NOT revert when the extrinsic fails !?!?
+                            ensure!(
+                                total_amount_charged
+                                    .checked_add(&amount_to_charge)
+                                    .is_some(),
+                                ArithmeticError::Overflow
                             );
-                            payment_stream.price_index_when_last_charged =
-                                price_index_at_last_chargeable_tick;
-                            Ok::<(), DispatchError>(())
-                        },
-                    )?;
 
-                    // Update the total amount charged:
-                    total_amount_charged = total_amount_charged
-                        .checked_add(&amount_to_charge)
-                        .ok_or(Error::<T>::ChargeOverflow)?;
+                            // Charge the payment stream from the user's balance
+                            T::NativeBalance::transfer(
+                                user_account,
+                                &provider_payment_account,
+                                amount_to_charge,
+                                Preservation::Preserve,
+                            )?;
+
+                            // Set the last charged price index to be the price index of the last chargeable tick
+                            DynamicRatePaymentStreams::<T>::mutate(
+                                provider_id,
+                                user_account,
+                                |payment_stream| {
+                                    let payment_stream = expect_or_err!(
+                                        payment_stream,
+                                        "Payment stream should exist if it was found before.",
+                                        Error::<T>::PaymentStreamNotFound
+                                    );
+                                    payment_stream.price_index_when_last_charged =
+                                        price_index_at_last_chargeable_tick;
+                                    Ok::<(), DispatchError>(())
+                                },
+                            )?;
+
+                            // Update the total amount charged:
+                            total_amount_charged = total_amount_charged
+                                .checked_add(&amount_to_charge)
+                                .ok_or(Error::<T>::ChargeOverflow)?;
+                        }
+                    }
                 }
             }
         }
 
         Ok(total_amount_charged)
+    }
+
+    pub fn do_pay_outstanding_debt(user_account: &T::AccountId) -> DispatchResult {
+        // Check that the user is flagged as without funds
+        ensure!(
+            UsersWithoutFunds::<T>::contains_key(user_account),
+            Error::<T>::UserNotFlaggedAsWithoutFunds
+        );
+
+        // Release the total deposit amount that the user has deposited
+        T::NativeBalance::release_all(
+            &HoldReason::PaymentStreamDeposit.into(),
+            &user_account,
+            Precision::Exact,
+        )?;
+
+        // Get all payment streams of the user
+        let fixed_rate_payment_streams = Self::get_fixed_rate_payment_streams_of_user(user_account);
+        let dynamic_rate_payment_streams =
+            Self::get_dynamic_rate_payment_streams_of_user(user_account);
+
+        // Iterate through all fixed-rate payment streams of the user, paying the outstanding debt and deleting the payment stream
+        for (provider_id, fixed_rate_payment_stream) in fixed_rate_payment_streams {
+            // Get the amount that should be charged for this payment stream
+            let last_chargeable_info = LastChargeableInfo::<T>::get(provider_id);
+            let amount_to_charge = fixed_rate_payment_stream
+                .rate
+                .checked_mul(&T::BlockNumberToBalance::convert(
+                    last_chargeable_info
+                        .last_chargeable_tick
+                        .saturating_sub(fixed_rate_payment_stream.last_charged_tick),
+                ))
+                .ok_or(ArithmeticError::Overflow)?;
+
+            // If the amount to charge is greater than the deposit, just charge the deposit
+            let amount_to_charge = amount_to_charge.min(fixed_rate_payment_stream.user_deposit);
+
+            // Transfer the amount to charge from the user to the Provider
+            let provider_payment_account = expect_or_err!(
+                <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(provider_id),
+                "Provider should exist and have a payment account if its ID exists.",
+                Error::<T>::ProviderInconsistencyError
+            );
+            T::NativeBalance::transfer(
+                &user_account,
+                &provider_payment_account,
+                amount_to_charge,
+                Preservation::Preserve,
+            )?;
+
+            // Remove the payment stream from the FixedRatePaymentStreams mapping
+            FixedRatePaymentStreams::<T>::remove(provider_id, user_account);
+
+            // Decrease the user's payment streams count
+            let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
+            user_payment_streams_count = user_payment_streams_count
+                .checked_sub(1)
+                .ok_or(ArithmeticError::Underflow)?;
+            RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+        }
+
+        // Do the same for the dynamic-rate payment streams
+        for (provider_id, dynamic_rate_payment_stream) in dynamic_rate_payment_streams {
+            // Get the amount that should be charged for this payment stream
+            let price_index_at_last_chargeable_tick =
+                LastChargeableInfo::<T>::get(provider_id).price_index;
+            let amount_to_charge = price_index_at_last_chargeable_tick
+                .saturating_sub(dynamic_rate_payment_stream.price_index_when_last_charged)
+                .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
+                .ok_or(ArithmeticError::Overflow)?;
+
+            // If the amount to charge is greater than the deposit, just charge the deposit
+            let amount_to_charge = amount_to_charge.min(dynamic_rate_payment_stream.user_deposit);
+
+            // Transfer the amount to charge from the user to the Provider
+            let provider_payment_account = expect_or_err!(
+                <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(provider_id),
+                "Provider should exist and have a payment account if its ID exists.",
+                Error::<T>::ProviderInconsistencyError
+            );
+            T::NativeBalance::transfer(
+                &user_account,
+                &provider_payment_account,
+                amount_to_charge,
+                Preservation::Preserve,
+            )?;
+
+            // Remove the payment stream from the DynamicRatePaymentStreams mapping
+            DynamicRatePaymentStreams::<T>::remove(provider_id, user_account);
+
+            // Decrease the user's payment streams count
+            let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
+            user_payment_streams_count = user_payment_streams_count
+                .checked_sub(1)
+                .ok_or(ArithmeticError::Underflow)?;
+            RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+        }
+
+        // Remove the user from the UsersWithoutFunds mapping
+        UsersWithoutFunds::<T>::remove(user_account);
+
+        Ok(())
     }
 
     /// This function gets the Providers that submitted a valid proof in the last tick using the `ReadProofSubmittersInterface`,
@@ -833,6 +1044,82 @@ where
                 &user_account,
                 difference_in_deposit,
             )?;
+        }
+
+        Ok(())
+    }
+
+    /// This function holds the logic that has to be executed when it is detected that a Provider is trying to charge a user that
+    /// has been or should be flagged as without funds.
+    ///
+    /// It releases the deposit of the payment stream from the user and transfers it to the Provider to pay for the unpaid services,
+    /// deletes the payment stream, decreases the user's payment streams count and flags the user as without funds if they still have
+    /// remaining payment streams and hadn't been flagged before. If the user has no more payment streams, it removes the user from the
+    /// UsersWithoutFunds mapping, since it is no longer considered insolvent.
+    pub fn manage_user_without_funds(
+        provider_id: &ProviderIdFor<T>,
+        user_account: &T::AccountId,
+        payment_stream: &PaymentStream<T>,
+    ) -> DispatchResult {
+        // Get the user deposit from the payment stream
+        let deposit = match payment_stream {
+            PaymentStream::FixedRatePaymentStream(payment_stream) => payment_stream.user_deposit,
+            PaymentStream::DynamicRatePaymentStream(payment_stream) => payment_stream.user_deposit,
+        };
+
+        // Release the deposit from the user and transfer it to the Provider to pay for the unpaid services
+        let provider_payment_account = expect_or_err!(
+            <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(*provider_id),
+            "Provider should exist and have a payment account if its ID exists.",
+            Error::<T>::ProviderInconsistencyError
+        );
+        T::NativeBalance::release(
+            &HoldReason::PaymentStreamDeposit.into(),
+            &user_account,
+            deposit,
+            Precision::Exact,
+        )?;
+        T::NativeBalance::transfer(
+            &user_account,
+            &provider_payment_account,
+            deposit,
+            Preservation::Preserve,
+        )?;
+
+        // If the stream is a fixed-rate payment stream, remove it from the FixedRatePaymentStreams mapping
+        if let PaymentStream::FixedRatePaymentStream(_) = payment_stream {
+            FixedRatePaymentStreams::<T>::remove(provider_id, user_account);
+        } else {
+            // Else if it's a dynamic-rate payment stream, remove it from the DynamicRatePaymentStreams mapping
+            DynamicRatePaymentStreams::<T>::remove(provider_id, user_account);
+        }
+
+        // Decrease the user's payment streams count
+        let mut user_payment_streams_count = RegisteredUsers::<T>::get(user_account);
+        user_payment_streams_count = user_payment_streams_count
+            .checked_sub(1)
+            .ok_or(ArithmeticError::Underflow)?;
+        RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
+
+        // If the user still has remaining payment streams and wasn't added to the UsersWithoutFunds mapping,
+        // add it and emit the UserWithoutFunds event. If not, remove it from the UsersWithoutFunds mapping.
+        // Note: once a user is flagged as without funds, it is considered insolvent by the system and every Provider
+        // will be incentivized to stop providing services to that user.
+        // The user has two ways of being unflagged and being allowed to use the system again:
+        // - Wait until all its Providers remove their payment streams, paying its debt with its deposit for each one.
+        // - Executing an expensive extrinsic after depositing enough funds to pay all its outstanding debt.
+        if user_payment_streams_count > Zero::zero() {
+            if !UsersWithoutFunds::<T>::contains_key(user_account) {
+                UsersWithoutFunds::<T>::insert(user_account, ());
+                Self::deposit_event(Event::<T>::UserWithoutFunds {
+                    who: user_account.clone(),
+                });
+            }
+        } else {
+            UsersWithoutFunds::<T>::remove(user_account);
+            Self::deposit_event(Event::<T>::UserSolvent {
+                who: user_account.clone(),
+            })
         }
 
         Ok(())
