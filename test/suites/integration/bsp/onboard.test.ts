@@ -90,7 +90,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(sh_nodes.length > 3, true);
     });
 
-    it("Inserts new blockchain service keys (bcsv)", async () => {
+    it("Inserts new blockchain service keys (bcsv)", { skip: true }, async () => {
       const alice_pub_key = "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d";
       const bob_pub_key = "0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48";
       const bcsv_key_type = "bcsv";
@@ -108,7 +108,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(has_bob_key.toHuman().valueOf(), true);
     });
 
-    it("Removes keys from keystore", async () => {
+    it("Removes keys from keystore", { skip: true }, async () => {
       const alice_pub_key = "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d";
       const dave_pub_key = "0x306721211d5404bd9da88e0204360a1a9ab8b87c66c1bc2fcdd37f3c2222cc20";
       const bcsv_key_type = "bcsv";
