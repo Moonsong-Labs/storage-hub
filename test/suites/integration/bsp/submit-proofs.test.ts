@@ -1,31 +1,24 @@
 import "@storagehub/api-augment";
 import assert, { strictEqual } from "node:assert";
-import { after, before, describe, it } from "node:test";
 import {
-  NODE_INFOS,
-  createApiObject,
-  type BspNetApi,
-  type BspNetConfig,
-  closeSimpleBspNet,
-  runMultipleInitialisedBspsNet,
-  DUMMY_BSP_ID,
-  sleep,
   assertEventMany,
+  assertExtrinsicPresent,
   BSP_DOWN_ID,
+  createApiObject,
+  describeBspNet,
+  DUMMY_BSP_ID,
+  NODE_INFOS,
   pauseBspContainer,
   resumeBspContainer,
-  assertExtrinsicPresent
+  sleep,
+  type BspNetApi
 } from "../../../util";
 
-const bspNetConfigCases: BspNetConfig[] = [
-  { noisy: false, rocksdb: false },
-  { noisy: false, rocksdb: true }
-];
-
-for (const bspNetConfig of bspNetConfigCases) {
-  describe(`BSPNet: Many BSPs Submit Proofs (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
+describeBspNet(
+  `Many BSPs Submit Proofs`,
+  { initialised: "multi", networkConfig: "standard" },
+  ({ before, launchResponse, createUserApi, after, it }) => {
     let userApi: BspNetApi;
-    let bspApi: BspNetApi;
     let bspTwoApi: BspNetApi;
     let bspThreeApi: BspNetApi;
     let fileData: {
@@ -36,24 +29,19 @@ for (const bspNetConfig of bspNetConfigCases) {
       fingerprint: string;
       fileSize: number;
     };
-
+    // TODO Figure out why this doesn't work
     before(async () => {
-      const bspNetInfo = await runMultipleInitialisedBspsNet(bspNetConfig);
-      userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
-      bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
-      bspTwoApi = await createApiObject(`ws://127.0.0.1:${bspNetInfo?.bspTwoRpcPort}`);
-      bspThreeApi = await createApiObject(`ws://127.0.0.1:${bspNetInfo?.bspThreeRpcPort}`);
+      userApi = await createUserApi();
+      bspTwoApi = await createApiObject(`ws://127.0.0.1:${launchResponse?.bspTwoRpcPort}`);
+      bspThreeApi = await createApiObject(`ws://127.0.0.1:${launchResponse?.bspThreeRpcPort}`);
 
-      assert(bspNetInfo, "BSPNet failed to initialise");
-      fileData = bspNetInfo?.fileData;
+      assert(launchResponse, "BSPNet failed to initialise");
+      fileData = launchResponse?.fileData;
     });
 
     after(async () => {
-      await userApi.disconnect();
-      await bspApi.disconnect();
       await bspTwoApi.disconnect();
       await bspThreeApi.disconnect();
-      await closeSimpleBspNet();
     });
 
     it("Network launches and can be queried", async () => {
@@ -345,5 +333,5 @@ for (const bspNetConfig of bspNetConfigCases) {
         });
       }
     );
-  });
-}
+  }
+);

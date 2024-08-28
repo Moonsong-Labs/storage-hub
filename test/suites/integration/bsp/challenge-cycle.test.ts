@@ -1,32 +1,25 @@
 import "@storagehub/api-augment";
 import assert, { strictEqual } from "node:assert";
-import { after, before, describe, it } from "node:test";
 import {
+  DUMMY_BSP_ID,
   NODE_INFOS,
   createApiObject,
-  type BspNetApi,
-  DUMMY_BSP_ID,
-  type BspNetConfig,
-  runInitialisedBspsNet,
-  closeSimpleBspNet,
-  sleep,
+  describeBspNet,
   pauseBspContainer,
   resumeBspContainer,
+  sleep,
+  type BspNetApi,
   type SealedBlock
 } from "../../../util";
 
-const bspNetConfigCases: BspNetConfig[] = [
-  { noisy: false, rocksdb: false },
-  { noisy: false, rocksdb: true }
-];
-
-for (const bspNetConfig of bspNetConfigCases) {
-  describe("BSPNet: BSP Challenge Cycle and Proof Submission", () => {
+describeBspNet(
+  "BSPNet: BSP Challenge Cycle and Proof Submission",
+  { initialised: true },
+  ({ it, before, after }) => {
     let userApi: BspNetApi;
     let bspApi: BspNetApi;
 
     before(async () => {
-      await runInitialisedBspsNet(bspNetConfig);
       userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
       bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
     });
@@ -34,7 +27,6 @@ for (const bspNetConfig of bspNetConfigCases) {
     after(async () => {
       await userApi.disconnect();
       await bspApi.disconnect();
-      await closeSimpleBspNet();
     });
 
     it("Network launches and can be queried", async () => {
@@ -167,5 +159,5 @@ for (const bspNetConfig of bspNetConfigCases) {
         bspApi.assertEvent("proofsDealer", "ProofAccepted", blockResult.events);
       }
     );
-  });
-}
+  }
+);

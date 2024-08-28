@@ -1,9 +1,13 @@
 import { after, before, describe, it } from "node:test";
 import { createApiObject } from "./api";
 import { NODE_INFOS } from "./consts";
-import { cleardownTest, runSimpleBspNet } from "./helpers";
+import {
+  cleardownTest,
+  runInitialisedBspsNet,
+  runMultipleInitialisedBspsNet,
+  runSimpleBspNet
+} from "./helpers";
 import type { BspNetApi, BspNetConfig, BspNetContext, TestOptions } from "./types";
-
 /**
  * Describes a set of BspNet tests.
  * @param title The title of the test suite.
@@ -53,21 +57,42 @@ export async function describeBspNet<
           ? [{ noisy: true, rocksdb: false }]
           : typeof options.networkConfig === "object"
             ? options.networkConfig
-            : [{ noisy: false, rocksdb: false }];
+            : // default config is same as "ALL"
+              [
+                { noisy: false, rocksdb: false },
+                { noisy: false, rocksdb: true }
+              ];
 
   for (const bspNetConfig of bspNetConfigCases) {
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
     describeFunc(`BSPNet: ${title} (${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
-      let apiPromise: Promise<BspNetApi>;
+      // TODO - maybe make the below awaited and always connected?
+      let userApiPromise: Promise<BspNetApi>;
+      let bspApiPromise: Promise<BspNetApi>;
+      let launchResponse: Awaited<
+        | ReturnType<typeof runSimpleBspNet>
+        | ReturnType<typeof runInitialisedBspsNet>
+        | ReturnType<typeof runMultipleInitialisedBspsNet>
+      >;
 
       before(async () => {
-        await runSimpleBspNet(bspNetConfig);
-        apiPromise = createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+        // Launch the network
+        launchResponse =
+          options?.initialised === "multi"
+            ? await runMultipleInitialisedBspsNet(bspNetConfig)
+            : options?.initialised === true
+              ? await runInitialisedBspsNet(bspNetConfig)
+              : await runSimpleBspNet(bspNetConfig);
+
+        // Create API Connectors
+        userApiPromise = createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+        bspApiPromise = createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
       });
 
       after(async () => {
-        await cleardownTest({ api: await apiPromise, keepNetworkAlive: options?.keepAlive });
+        await cleardownTest({ api: await userApiPromise, keepNetworkAlive: options?.keepAlive });
+        await (await bspApiPromise).disconnect();
         if (options?.keepAlive) {
           if (bspNetConfigCases.length > 1) {
             console.error(
@@ -82,10 +107,12 @@ export async function describeBspNet<
 
       const context = {
         it,
-        createApi: () => apiPromise,
+        createUserApi: () => userApiPromise,
+        createBspApi: () => bspApiPromise,
         bspNetConfig,
         before,
-        after
+        after,
+        launchResponse
       } satisfies BspNetContext;
 
       tests(context);

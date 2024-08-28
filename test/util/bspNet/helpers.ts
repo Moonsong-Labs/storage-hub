@@ -12,7 +12,6 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 import "@storagehub/api-augment";
 import { v2 as compose } from "docker-compose";
 import Docker from "dockerode";
-import { strictEqual } from "node:assert";
 import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
 import crypto from "node:crypto";
@@ -32,7 +31,6 @@ import {
   bspTwoSeed,
   shUser
 } from "../pjsKeyring";
-import { sleep } from "../timer.ts";
 import { createApiObject } from "./api";
 import {
   BSP_DOWN_ID,
@@ -46,6 +44,9 @@ import {
 } from "./consts";
 import { addBspContainer, showContainers } from "./docker";
 import type { BspNetApi, BspNetConfig, FileMetadata } from "./types";
+import { waitForBspStored, waitForBspVolunteer } from "./waits.ts";
+import { sleep } from "../timer.ts";
+import { strictEqual } from "node:assert";
 
 const exec = util.promisify(child_process.exec);
 
@@ -123,139 +124,6 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
 };
 
 export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
-  let api: BspNetApi | undefined;
-  try {
-    console.log(`sh user id: ${shUser.address}`);
-    console.log(`sh bsp id: ${bspKey.address}`);
-    let file = "local-dev-bsp-compose.yml";
-    if (bspNetConfig.rocksdb) {
-      file = "local-dev-bsp-rocksdb-compose.yml";
-    }
-    if (bspNetConfig.noisy) {
-      file = "noisy-bsp-compose.yml";
-    }
-    const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
-
-    if (bspNetConfig.noisy) {
-      await compose.upOne("toxiproxy", { config: composeFilePath, log: true });
-    }
-
-    await compose.upOne("sh-bsp", { config: composeFilePath, log: true });
-
-    const bspIp = await getContainerIp(
-      bspNetConfig.noisy ? "toxiproxy" : NODE_INFOS.bsp.containerName
-    );
-
-    if (bspNetConfig.noisy) {
-      console.log(`toxiproxy IP: ${bspIp}`);
-    } else {
-      console.log(`sh-bsp IP: ${bspIp}`);
-    }
-
-    const bspPeerId = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.bsp.port}`, true);
-    console.log(`sh-bsp Peer ID: ${bspPeerId}`);
-
-    process.env.BSP_IP = bspIp;
-    process.env.BSP_PEER_ID = bspPeerId;
-
-    await compose.upOne("sh-user", {
-      config: composeFilePath,
-      log: true,
-      env: {
-        ...process.env,
-        BSP_IP: bspIp,
-        BSP_PEER_ID: bspPeerId
-      }
-    });
-
-    const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
-    console.log(`sh-user Peer ID: ${peerIDUser}`);
-
-    const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
-
-    // Create Connection API Object to User Node
-    api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
-
-    // Give Balances
-    const amount = 10000n * 10n ** 12n;
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(bspKey.address, amount)));
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.balances.forceSetBalance(shUser.address, amount)));
-
-    // Make BSP
-    await forceSignupBsp({
-      api,
-      who: bspKey.address,
-      multiaddress: multiAddressBsp,
-      bspId: DUMMY_BSP_ID,
-      capacity: bspNetConfig.capacity || CAPACITY_512
-    });
-
-    // Make MSP
-    await api.sealBlock(
-      api.tx.sudo.sudo(
-        api.tx.providers.forceMspSignUp(
-          alice.address,
-          DUMMY_MSP_ID,
-          bspNetConfig.capacity || CAPACITY_512,
-          [multiAddressBsp],
-          {
-            identifier: VALUE_PROP,
-            dataLimit: 500,
-            protocols: ["https", "ssh", "telnet"]
-          },
-          alice.address
-        )
-      )
-    );
-
-    // u32 max value
-    const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
-
-    await api.sealBlock(api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(1, u32Max, 1)));
-  } catch (e) {
-    console.error("Error ", e);
-  } finally {
-    api?.disconnect();
-  }
-};
-
-export const forceSignupBsp = async (options: {
-  api: BspNetApi;
-  multiaddress: string;
-  who: string | Uint8Array;
-  bspId?: string;
-  capacity?: bigint;
-  payeeAddress?: string;
-}) => {
-  const bspId = options.bspId || `0x${crypto.randomBytes(32).toString("hex")}`;
-  const blockResults = await options.api.sealBlock(
-    options.api.tx.sudo.sudo(
-      options.api.tx.providers.forceBspSignUp(
-        options.who,
-        bspId,
-        options.capacity || CAPACITY_512,
-        [options.multiaddress],
-        options.payeeAddress || options.who
-      )
-    )
-  );
-  return Object.assign(bspId, blockResults);
-};
-export const closeSimpleBspNet = async () => {
-  const docker = new Docker();
-
-  const existingNodes = await docker.listContainers({
-    filters: { ancestor: [DOCKER_IMAGE] }
-  });
-
-  const promises = existingNodes.map(async (node) => docker.getContainer(node.Id).stop());
-  await Promise.all(promises);
-
-  await docker.pruneContainers();
-  await docker.pruneVolumes();
-};
-
-export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
   let userApi: BspNetApi | undefined;
   try {
     console.log(`SH user id: ${shUser.address}`);
@@ -352,8 +220,58 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
       )
     );
 
-    // Everything executed below is tested in `volunteer.test.ts` and `onboard.test.ts` files.
-    // For the context of this test, this is a preamble, so that a BSP has a challenge cycle initiated.
+    await userApi.sealBlock(
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, u32Max, 1))
+    );
+  } catch (e) {
+    console.error("Error ", e);
+  } finally {
+    userApi?.disconnect();
+  }
+};
+
+export const forceSignupBsp = async (options: {
+  api: BspNetApi;
+  multiaddress: string;
+  who: string | Uint8Array;
+  bspId?: string;
+  capacity?: bigint;
+  payeeAddress?: string;
+}) => {
+  const bspId = options.bspId || `0x${crypto.randomBytes(32).toString("hex")}`;
+  const blockResults = await options.api.sealBlock(
+    options.api.tx.sudo.sudo(
+      options.api.tx.providers.forceBspSignUp(
+        options.who,
+        bspId,
+        options.capacity || CAPACITY_512,
+        [options.multiaddress],
+        options.payeeAddress || options.who
+      )
+    )
+  );
+  return Object.assign(bspId, blockResults);
+};
+export const closeSimpleBspNet = async () => {
+  const docker = new Docker();
+
+  const existingNodes = await docker.listContainers({
+    filters: { ancestor: [DOCKER_IMAGE] }
+  });
+
+  const promises = existingNodes.map(async (node) => docker.getContainer(node.Id).stop());
+  await Promise.all(promises);
+
+  await docker.pruneContainers();
+  await docker.pruneVolumes();
+};
+
+export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
+  await runSimpleBspNet(bspNetConfig);
+
+  let userApi: BspNetApi | undefined;
+  try {
+    userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
     /**** CREATE BUCKET AND ISSUE STORAGE REQUEST ****/
     const source = "res/whatsup.jpg";
@@ -388,32 +306,9 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
       shUser
     );
 
-    /**** BSP VOLUNTEERS ****/
-    // Wait for the BSPs to volunteer.
-    await sleep(500);
+    await waitForBspVolunteer(userApi);
 
-    const volunteerPending = await userApi.rpc.author.pendingExtrinsics();
-    strictEqual(
-      volunteerPending.length,
-      1,
-      "There should be one pending extrinsic from the BSP (volunteer)"
-    );
-
-    await userApi.sealBlock();
-
-    // Wait for the BSPs to download the file.
-    await sleep(5000);
-    const confirmPending = await userApi.rpc.author.pendingExtrinsics();
-    strictEqual(
-      confirmPending.length,
-      1,
-      "There should be one pending extrinsic from the BSP (confirm store)"
-    );
-
-    await userApi.sealBlock();
-
-    // Wait for the BSPs to process the BspConfirmedStoring event.
-    await sleep(1000);
+    await waitForBspStored(userApi);
   } catch (e) {
     console.error("Error ", e);
   } finally {

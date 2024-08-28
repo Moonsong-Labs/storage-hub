@@ -2,7 +2,12 @@ import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
-import type { SealedBlock } from "./helpers";
+import type {
+  runInitialisedBspsNet,
+  runMultipleInitialisedBspsNet,
+  runSimpleBspNet,
+  SealedBlock
+} from "./helpers";
 import type { EventRecord, Event } from "@polkadot/types/interfaces";
 import type { after, before, it } from "node:test";
 
@@ -127,10 +132,16 @@ export type BspNetConfig = {
 // TODO: Add DOcs here
 export type BspNetContext = {
   it: typeof it;
-  createApi: () => Promise<BspNetApi>;
+  createUserApi: () => Promise<BspNetApi>;
+  createBspApi: () => Promise<BspNetApi>;
   bspNetConfig: BspNetConfig;
   before: typeof before;
   after: typeof after;
+  launchResponse: Awaited<
+    | ReturnType<typeof runSimpleBspNet>
+    | ReturnType<typeof runInitialisedBspsNet>
+    | ReturnType<typeof runMultipleInitialisedBspsNet>
+  >;
 };
 
 /**
@@ -160,4 +171,11 @@ export type TestOptions = {
   timeout?: number;
   /** Specifies the network configuration to use */
   networkConfig?: NetworkConfig;
+  /**
+   * Determines the initial state of the network:
+   * - false: Network starts with MSP & BSP already enrolled
+   * - true: Network starts with MSP & BSP already enrolled and sample file already stored
+   * - "multi": Runs tests with both initialised and non-initialised network configurations
+   */
+  initialised?: boolean | "multi";
 };
