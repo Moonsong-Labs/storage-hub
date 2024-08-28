@@ -1,4 +1,3 @@
-import "@storagehub/api-augment";
 import assert from "node:assert";
 import { after, before, describe, it } from "node:test";
 import {
@@ -62,40 +61,44 @@ for (const bspNetConfig of bspNetConfigCases) {
       assert.ok(totalCapacityAfter.eq(totalCapacityBefore));
     });
 
-    it("Maxed out storages not volunteered", { skip: "Not Implemented yet" }, async () => {
-      const capacityUsed = (await api.query.providers.backupStorageProviders(DUMMY_BSP_ID))
-        .unwrap()
-        .capacityUsed.toNumber();
-      await skipBlocksToMinChangeTime(api);
-      const minCapacity = api.consts.providers.spMinCapacity.toNumber();
-      const newCapacity = Math.max(minCapacity, capacityUsed + 1);
+    it(
+      "Maxed out storages not volunteered",
+      { skip: "Capacity check not Implemented yet" },
+      async () => {
+        const capacityUsed = (await api.query.providers.backupStorageProviders(DUMMY_BSP_ID))
+          .unwrap()
+          .capacityUsed.toNumber();
+        await skipBlocksToMinChangeTime(api);
+        const minCapacity = api.consts.providers.spMinCapacity.toNumber();
+        const newCapacity = Math.max(minCapacity, capacityUsed + 1);
 
-      const { extSuccess } = await api.sealBlock(
-        api.tx.providers.changeCapacity(newCapacity),
-        bspKey
-      );
-      assert.strictEqual(extSuccess, true);
+        const { extSuccess } = await api.sealBlock(
+          api.tx.providers.changeCapacity(newCapacity),
+          bspKey
+        );
+        assert.strictEqual(extSuccess, true);
 
-      const source = "res/cloud.jpg";
-      const location = "test/cloud.jpg";
-      const bucketName = "toobig-1";
-      await api.sendNewStorageRequest(source, location, bucketName);
+        const source = "res/cloud.jpg";
+        const location = "test/cloud.jpg";
+        const bucketName = "toobig-1";
+        await api.sendNewStorageRequest(source, location, bucketName);
 
-      //To allow for BSP to react to request
-      await sleep(500);
-      await assert.rejects(
-        async () => {
-          assertExtrinsicPresent(api, {
-            module: "fileSystem",
-            method: "bspVolunteer",
-            checkTxPool: true,
-            skipSuccessCheck: true
-          });
-        },
-        /No events matching system\.ExtrinsicSuccess/,
-        "BSP should not have volunteered to a file that's too big"
-      );
-    });
+        //To allow for BSP to react to request
+        await sleep(500);
+        await assert.rejects(
+          async () => {
+            assertExtrinsicPresent(api, {
+              module: "fileSystem",
+              method: "bspVolunteer",
+              checkTxPool: true,
+              skipSuccessCheck: true
+            });
+          },
+          /No events matching system\.ExtrinsicSuccess/,
+          "BSP should not have volunteered to a file that's too big"
+        );
+      }
+    );
 
     it("Total capacity updated when single BSP capacity updated", async () => {
       const newCapacity = BigInt(Math.floor(Math.random() * 1000 * 1024 * 1024)) + CAPACITY_512;
@@ -107,19 +110,6 @@ for (const bspNetConfig of bspNetConfigCases) {
       assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), newCapacity);
       assert.strictEqual(totalCapacityAfter.toBigInt(), newCapacity);
     });
-
-    it(
-      "File sent for storage bigger than max filesize",
-      { skip: "blocked by multi-proof defect" },
-      async () => {
-        const source = "res/big_chart.jpg";
-        const location = "test/big_chart.jpg";
-        const bucketName = "toobig-1";
-        await api.sendNewStorageRequest(source, location, bucketName);
-
-        // Check for error event
-      }
-    );
 
     it("Test BSP storage size can not be decreased below used", async () => {
       const source = "res/adolphus.jpg";

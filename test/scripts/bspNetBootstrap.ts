@@ -1,12 +1,10 @@
-import { setTimeout } from "node:timers/promises";
 import {
   createApiObject,
-  DUMMY_MSP_ID,
-  getContainerPeerId,
   NODE_INFOS,
   registerToxics,
   runSimpleBspNet,
-  shUser,
+  waitForBspStored,
+  waitForBspVolunteer,
   type BspNetApi,
   type BspNetConfig,
   type ToxicInfo
@@ -14,8 +12,8 @@ import {
 
 let api: BspNetApi | undefined;
 const bspNetConfig: BspNetConfig = {
-  noisy: process.env.NOISY === "1" ?? false,
-  rocksdb: process.env.ROCKSDB === "1" ?? false
+  noisy: process.env.NOISY === "1",
+  rocksdb: process.env.ROCKSDB === "1"
 };
 
 const CONFIG = {
@@ -60,48 +58,10 @@ async function bootStrapNetwork() {
 
   api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
-  // const newBucketEventDataBlob = await createCheckBucket(api, CONFIG.bucketName);
-  const newBucketEventEvent = await api.createBucket(CONFIG.bucketName);
-  const newBucketEventDataBlob =
-    api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+  await api.sendNewStorageRequest(CONFIG.localPath, CONFIG.remotePath, CONFIG.bucketName);
 
-  if (!newBucketEventDataBlob) {
-    throw new Error("Event doesn't match Type");
-  }
-
-  const localPath = CONFIG.localPath;
-  const remotePath = CONFIG.remotePath;
-
-  // Issue file Storage request
-  const { fingerprint, file_size, location } = await api.rpc.storagehubclient.loadFileInStorage(
-    localPath,
-    remotePath,
-    NODE_INFOS.user.AddressId,
-    newBucketEventDataBlob.bucketId
-  );
-
-  const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
-  console.log(`sh-user Peer ID: ${peerIDUser}`);
-
-  await api.sealBlock(
-    api.tx.fileSystem.issueStorageRequest(
-      newBucketEventDataBlob.bucketId,
-      location,
-      fingerprint,
-      file_size,
-      DUMMY_MSP_ID,
-      [NODE_INFOS.user.expectedPeerId]
-    ),
-    shUser
-  );
-
-  // Seal the block from BSP volunteer
-  await setTimeout(1000);
-  await api.sealBlock();
-
-  // Seal the block from BSP confirm
-  await setTimeout(5000);
-  await api.sealBlock();
+  await waitForBspVolunteer(api);
+  await waitForBspStored(api);
 
   if (bspNetConfig.noisy) {
     console.log("✅ NoisyNet Bootstrap success");
