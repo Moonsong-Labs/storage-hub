@@ -4818,15 +4818,6 @@ declare module "@polkadot/types/lookup" {
     readonly confirmed: bool;
   }
 
-  /** @name PalletFileSystemExpiredItems (403) */
-  interface PalletFileSystemExpiredItems extends Enum {
-    readonly isStorageRequest: boolean;
-    readonly asStorageRequest: H256;
-    readonly isPendingFileDeletionRequests: boolean;
-    readonly asPendingFileDeletionRequests: ITuple<[AccountId32, H256]>;
-    readonly type: "StorageRequest" | "PendingFileDeletionRequests";
-  }
-
   /** @name PalletFileSystemError (408) */
   interface PalletFileSystemError extends Enum {
     readonly isStorageRequestAlreadyRegistered: boolean;
