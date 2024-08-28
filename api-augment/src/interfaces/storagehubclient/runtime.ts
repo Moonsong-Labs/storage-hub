@@ -31,23 +31,6 @@ const FILE_SYSTEM_V1: Record<string, DefinitionCall> = {
   }
 };
 
-const PAYMENT_STREAMS_V1: Record<string, DefinitionCall> = {
-  get_users_with_debt_over_threshold: {
-    description: "Get the users that have a debt to the provider greater than the threshold.",
-    params: [
-      {
-        name: "providerId",
-        type: "ProviderId"
-      },
-      {
-        name: "threshold",
-        type: "Balance"
-      }
-    ],
-    type: "Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError>"
-  }
-};
-
 const PROOFS_DEALER_V1: Record<string, DefinitionCall> = {
   get_last_tick_provider_submitted_proof: {
     description: "Get the last tick for which the submitter submitted a proof.",
@@ -155,12 +138,6 @@ export const runtime: DefinitionsCall = {
   FileSystemApi: [
     {
       methods: FILE_SYSTEM_V1,
-      version: 1
-    }
-  ],
-  PaymentStreamsApi: [
-    {
-      methods: PAYMENT_STREAMS_V1,
       version: 1
     }
   ],

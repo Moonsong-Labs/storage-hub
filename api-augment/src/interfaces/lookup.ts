@@ -3863,15 +3863,6 @@ export default {
     confirmed: "bool"
   },
   /**
-   * Lookup403: pallet_file_system::types::ExpiredItems<T>
-   **/
-  PalletFileSystemExpiredItems: {
-    _enum: {
-      StorageRequest: "H256",
-      PendingFileDeletionRequests: "(AccountId32,H256)"
-    }
-  },
-  /**
    * Lookup408: pallet_file_system::pallet::Error<T>
    **/
   PalletFileSystemError: {
