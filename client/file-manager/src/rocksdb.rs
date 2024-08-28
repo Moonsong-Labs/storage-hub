@@ -2,7 +2,7 @@ use std::{io, path::PathBuf, sync::Arc};
 
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
-use log::{debug, error};
+use log::{debug, error, info};
 use shc_common::types::{
     Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
 };
@@ -238,6 +238,7 @@ where
 
         // We Read all the chunks to prove from the trie.
         // This is step is required to actually record the proof.
+        info!("Generating proof for chunks: {:?}", chunk_ids);
         let mut chunks = Vec::new();
         for chunk_id in chunk_ids {
             let chunk: Option<Vec<u8>> = trie.get(&chunk_id.as_trie_key()).map_err(|e| {
@@ -251,9 +252,12 @@ where
         // Drop the `trie_recorder` to release the `recorder`
         drop(trie_recorder);
 
+        info!("Recorded keys: {:?}", recorder.recorded_keys());
+
+        let storage_proof = recorder.drain_storage_proof();
+
         // Generate proof
-        let proof = recorder
-            .drain_storage_proof()
+        let proof = storage_proof
             .to_compact_proof::<T::Hash>(self.root)
             .map_err(|_| FileStorageError::FailedToGenerateCompactProof)?;
 

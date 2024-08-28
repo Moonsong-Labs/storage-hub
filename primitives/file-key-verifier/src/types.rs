@@ -66,7 +66,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
 
         let trie = TrieDBBuilder::<T>::new(&memdb, &root).build();
         let mut trie_iter = trie
-            .key_iter()
+            .iter()
             .map_err(|_| ProvenFileKeyError::FailedToGetTrieKeyIterator)?;
 
         let mut proven = Vec::new();
@@ -74,7 +74,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         while let Some(key) = trie_iter.next() {
             // Only add chunks to `proven` if they are present in the trie.
             // Ignore them otherwise.
-            if let Ok(key) = key {
+            if let Ok((key, _value)) = key {
                 let chunk_id = ChunkId::from_trie_key(&key)
                     .map_err(|e| ProvenFileKeyError::ChunkIdFromKeyError(e))?;
                 let chunk = trie

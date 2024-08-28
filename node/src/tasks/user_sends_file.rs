@@ -114,7 +114,18 @@ where
                     .await
                     .generate_proof(&file_key, &vec![ChunkId::new(chunk_id)])
                 {
-                    Ok(proof) => proof,
+                    Ok(proof) => {
+                        info!(
+                            "{:?}",
+                            proof
+                                .proven::<StorageProofsMerkleTrieLayout>()
+                                .unwrap()
+                                .into_iter()
+                                .map(|leaf| leaf.key)
+                                .collect::<Vec<_>>()
+                        );
+                        proof
+                    }
                     Err(e) => {
                         return Err(anyhow::anyhow!(
                             "Failed to generate proof for chunk id {:?} of file {:?}\n Error: {:?}",
