@@ -24,8 +24,6 @@ use shc_blockchain_service::BlockchainService;
 use shc_common::types::{StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE};
 use sp_consensus_aura::Slot;
 use sp_core::H256;
-use sp_core::{sr25519::Pair as Sr25519Pair, Pair};
-
 // Local Runtime Types
 use storage_hub_runtime::{
     opaque::{Block, Hash},
@@ -311,11 +309,9 @@ where
 
     // Initialise seed for signing transactions using blockchain service.
     // In dev mode we use a well known dev account.
-    let new_pair = Sr25519Pair::from_string(signing_dev_key.as_ref(), None)
-        .expect("Should be able to generate new pair from seed.");
     keystore
-        .insert(BCSV_KEY_TYPE, signing_dev_key.as_ref(), &new_pair.public())
-        .expect("Should be able to insert new key in local Keystore.");
+        .sr25519_generate_new(BCSV_KEY_TYPE, Some(signing_dev_key.as_ref()))
+        .expect("Invalid dev signing key provided.");
 
     let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
     let collator = config.role.is_authority();
