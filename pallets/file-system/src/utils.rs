@@ -30,16 +30,14 @@ use sp_runtime::traits::CheckedMul;
 use crate::{
     pallet,
     types::{
-        BucketIdFor, BucketNameFor, CollectionConfigFor, CollectionIdFor,
-        FileDeletionRequestExpirationItem, FileKeyHasher, FileLocation, Fingerprint, ForestProof,
-        KeyProof, MaxBspsPerStorageRequest, MerkleHash, MultiAddresses, PeerIds, ProviderIdFor,
-        ReplicationTargetType, StorageData, StorageRequestBspsMetadata,
-        StorageRequestExpirationItem, StorageRequestMetadata,
+        BucketIdFor, BucketNameFor, CollectionConfigFor, CollectionIdFor, ExpirationItem,
+        FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest,
+        MerkleHash, MultiAddresses, PeerIds, ProviderIdFor, ReplicationTargetType, StorageData,
+        StorageRequestBspsMetadata, StorageRequestMetadata,
     },
-    BlockRangeToMaximumThreshold, Error, Event, FileDeletionRequestExpirations, MaximumThreshold,
-    NextAvailableFileDeletionRequestExpirationBlock, NextAvailableStorageProofExpirationBlock,
-    Pallet, PendingFileDeletionRequests, PendingStopStoringRequests, ReplicationTarget,
-    StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+    BlockRangeToMaximumThreshold, Error, Event, MaximumThreshold, Pallet,
+    PendingFileDeletionRequests, PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps,
+    StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -218,7 +216,7 @@ where
             None
         };
 
-        let bucket_id = <T as crate::Config>::Providers::derive_bucket_id(&sender, name);
+        let bucket_id = <T as crate::Config>::Providers::derive_bucket_id(&msp_id, &sender, name);
 
         <T::Providers as MutateBucketsInterface>::add_bucket(
             msp_id,
@@ -383,7 +381,8 @@ where
         // Register storage request.
         <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
 
-        Self::enqueue_storage_request_expiration(file_key)?;
+        let expiration_item = ExpirationItem::StorageRequest(file_key);
+        Self::enqueue_expiration_item(expiration_item)?;
 
         Ok(file_key)
     }
@@ -1000,7 +999,9 @@ where
                     .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
 
                 // Queue the expiration item.
-                Self::enqueue_file_deletion_request_expiration((sender, file_key))?;
+                let expiration_item =
+                    ExpirationItem::PendingFileDeletionRequests((sender, file_key));
+                Self::enqueue_expiration_item(expiration_item)?;
 
                 false
             }
@@ -1117,64 +1118,18 @@ where
         T::Nfts::create_collection(&owner, &owner, &config)
     }
 
-    /// Compute the next block number to insert an expiring storage request.
+    /// Compute the next block number to insert an expiring item, and insert it in the corresponding expiration queue.
     ///
-    /// This function attempts to insert a storage request expiration at the next available block starting from
-    /// the current [`NextAvailableStorageProofExpirationBlock`].
-    pub(crate) fn enqueue_storage_request_expiration(
-        expiring_storage_request: StorageRequestExpirationItem<T>,
+    /// This function attempts to insert a the expiration item at the next available block starting from
+    /// the current next available block.
+    pub(crate) fn enqueue_expiration_item(
+        expiration_item: ExpirationItem<T>,
     ) -> Result<BlockNumberFor<T>, DispatchError> {
-        // The expiration block is the maximum between the [`NextAvailableStorageProofExpirationBlock`] and
-        // the current block number plus [`StorageRequestTtl`]
-        let current_block = frame_system::Pallet::<T>::block_number();
-        let storage_request_ttl = T::StorageRequestTtl::get();
-        let mut expiration_block = max(
-            NextAvailableStorageProofExpirationBlock::<T>::get(),
-            current_block + storage_request_ttl.into(),
-        );
+        let expiration_block = expiration_item.get_next_expiration_block();
+        let new_expiration_block = expiration_item.try_append(expiration_block)?;
+        expiration_item.set_next_expiration_block(new_expiration_block);
 
-        while let Err(_) = <StorageRequestExpirations<T>>::try_append(
-            expiration_block,
-            expiring_storage_request.clone(),
-        ) {
-            expiration_block = expiration_block
-                .checked_add(&1u8.into())
-                .ok_or(Error::<T>::MaxBlockNumberReached)?;
-        }
-
-        <NextAvailableStorageProofExpirationBlock<T>>::set(expiration_block);
-
-        Ok(expiration_block)
-    }
-
-    /// Compute the next block number to insert an expiring file deletion request.
-    ///
-    /// This function attempts to insert a file deletion request expiration at the next available block starting from
-    /// the current [`NextAvailableFileDeletionRequestExpirationBlock`].
-    pub(crate) fn enqueue_file_deletion_request_expiration(
-        expiring_file_deletion_request: FileDeletionRequestExpirationItem<T>,
-    ) -> Result<BlockNumberFor<T>, DispatchError> {
-        // The expiration block is the maximum between the [`NextAvailableFileDeletionRequestExpirationBlock`] and
-        // the current block number plus [`PendingFileDeletionRequestTtl`]
-        let current_block = frame_system::Pallet::<T>::block_number();
-        let pending_file_deletion_request_ttl = T::PendingFileDeletionRequestTtl::get();
-        let mut expiration_block = max(
-            NextAvailableFileDeletionRequestExpirationBlock::<T>::get(),
-            current_block + pending_file_deletion_request_ttl.into(),
-        );
-
-        while let Err(_) = <FileDeletionRequestExpirations<T>>::try_append(
-            expiration_block,
-            expiring_file_deletion_request.clone(),
-        ) {
-            expiration_block = expiration_block
-                .checked_add(&1u8.into())
-                .ok_or(Error::<T>::MaxBlockNumberReached)?;
-        }
-
-        <NextAvailableFileDeletionRequestExpirationBlock<T>>::set(expiration_block);
-
-        Ok(expiration_block)
+        Ok(new_expiration_block)
     }
 
     pub fn compute_file_key(

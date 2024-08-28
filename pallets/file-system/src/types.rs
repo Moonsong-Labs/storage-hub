@@ -1,6 +1,8 @@
+use core::cmp::max;
+
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{
-    traits::{nonfungibles_v2::Inspect as NonFungiblesInspect, Currency},
+    traits::{nonfungibles_v2::Inspect as NonFungiblesInspect, Currency, Get},
     BoundedVec,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
@@ -8,8 +10,12 @@ use pallet_nfts::CollectionConfig;
 use scale_info::TypeInfo;
 use shp_file_metadata::FileMetadata;
 use shp_traits::ReadProvidersInterface;
+use sp_runtime::{traits::CheckedAdd, DispatchError};
 
-use crate::Config;
+use crate::{
+    Config, Error, FileDeletionRequestExpirations, NextAvailableFileDeletionRequestExpirationBlock,
+    NextAvailableStorageRequestExpirationBlock, StorageRequestExpirations,
+};
 
 /// Ephemeral metadata of a storage request.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
@@ -96,6 +102,77 @@ pub struct StorageRequestBspsMetadata<T: Config> {
 pub enum BucketPrivacy {
     Public,
     Private,
+}
+
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub enum ExpirationItem<T: Config> {
+    StorageRequest(MerkleHash<T>),
+    PendingFileDeletionRequests((T::AccountId, MerkleHash<T>)),
+}
+
+impl<T: Config> ExpirationItem<T> {
+    pub(crate) fn get_ttl(&self) -> BlockNumberFor<T> {
+        match self {
+            ExpirationItem::StorageRequest(_) => T::StorageRequestTtl::get().into(),
+            ExpirationItem::PendingFileDeletionRequests(_) => {
+                T::PendingFileDeletionRequestTtl::get().into()
+            }
+        }
+    }
+
+    pub(crate) fn get_next_expiration_block(&self) -> BlockNumberFor<T> {
+        // The expiration block is the maximum between the next available block and the current block number plus the TTL.
+        let current_block_plus_ttl = frame_system::Pallet::<T>::block_number() + self.get_ttl();
+        let next_available_block = match self {
+            ExpirationItem::StorageRequest(_) => {
+                NextAvailableStorageRequestExpirationBlock::<T>::get()
+            }
+            ExpirationItem::PendingFileDeletionRequests(_) => {
+                NextAvailableFileDeletionRequestExpirationBlock::<T>::get()
+            }
+        };
+
+        max(next_available_block, current_block_plus_ttl)
+    }
+
+    pub(crate) fn try_append(
+        &self,
+        expiration_block: BlockNumberFor<T>,
+    ) -> Result<BlockNumberFor<T>, DispatchError> {
+        let mut next_expiration_block = expiration_block;
+        while let Err(_) = match self {
+            ExpirationItem::StorageRequest(storage_request) => {
+                <StorageRequestExpirations<T>>::try_append(
+                    next_expiration_block,
+                    storage_request.clone(),
+                )
+            }
+            ExpirationItem::PendingFileDeletionRequests(pending_file_deletion_requests) => {
+                <FileDeletionRequestExpirations<T>>::try_append(
+                    next_expiration_block,
+                    pending_file_deletion_requests.clone(),
+                )
+            }
+        } {
+            next_expiration_block = next_expiration_block
+                .checked_add(&1u8.into())
+                .ok_or(Error::<T>::MaxBlockNumberReached)?;
+        }
+
+        Ok(next_expiration_block)
+    }
+
+    pub(crate) fn set_next_expiration_block(&self, next_expiration_block: BlockNumberFor<T>) {
+        match self {
+            ExpirationItem::StorageRequest(_) => {
+                NextAvailableStorageRequestExpirationBlock::<T>::set(next_expiration_block);
+            }
+            ExpirationItem::PendingFileDeletionRequests(_) => {
+                NextAvailableFileDeletionRequestExpirationBlock::<T>::set(next_expiration_block);
+            }
+        }
+    }
 }
 
 /// Alias for the `MerkleHash` type used in the ProofsDealerInterface representing file keys.

@@ -839,13 +839,19 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
     type MerkleHash = MerklePatriciaRoot<T>;
 
     fn derive_bucket_id(
+        msp_id: &Self::ProviderId,
         owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
     ) -> Self::BucketId {
-        let concat = owner
+        let concat = msp_id
             .encode()
             .into_iter()
-            .chain(bucket_name.encode().into_iter())
+            .chain(
+                owner
+                    .encode()
+                    .into_iter()
+                    .chain(bucket_name.encode().into_iter()),
+            )
             .collect::<scale_info::prelude::vec::Vec<u8>>();
 
         <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)

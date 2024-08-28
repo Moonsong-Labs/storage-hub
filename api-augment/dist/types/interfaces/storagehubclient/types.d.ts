@@ -62,6 +62,20 @@ export interface GetNextDeadlineTickError extends Enum {
     | "ArithmeticOverflow"
     | "InternalApiError";
 }
+/** @name GetUsersWithDebtOverThresholdError */
+export interface GetUsersWithDebtOverThresholdError extends Enum {
+  readonly isProviderNotRegistered: boolean;
+  readonly isProviderWithoutPaymentStreams: boolean;
+  readonly isAmountToChargeOverflow: boolean;
+  readonly isDebtOverflow: boolean;
+  readonly isInternalApiError: boolean;
+  readonly type:
+    | "ProviderNotRegistered"
+    | "ProviderWithoutPaymentStreams"
+    | "AmountToChargeOverflow"
+    | "DebtOverflow"
+    | "InternalApiError";
+}
 /** @name IncompleteFileStatus */
 export interface IncompleteFileStatus extends Struct {
   readonly file_metadata: FileMetadata;

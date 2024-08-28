@@ -91,5 +91,14 @@ export const ALL_TYPES: RegistryTypes = {
       StorageRequestNotFound: null,
       InternalError: null
     }
+  },
+  GetUsersWithDebtOverThresholdError: {
+    _enum: {
+      ProviderNotRegistered: null,
+      ProviderWithoutPaymentStreams: null,
+      AmountToChargeOverflow: null,
+      DebtOverflow: null,
+      InternalApiError: null
+    }
   }
 };

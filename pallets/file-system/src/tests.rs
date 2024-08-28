@@ -67,8 +67,11 @@ mod create_bucket_tests {
 
                 let msp_id = add_msp_to_provider_storage(&msp);
 
-                let bucket_id =
-                    <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                    &msp_id,
+                    &owner,
+                    name.clone(),
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
@@ -113,8 +116,11 @@ mod create_bucket_tests {
 
                 let msp_id = add_msp_to_provider_storage(&msp);
 
-                let bucket_id =
-                    <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                    &msp_id,
+                    &owner,
+                    name.clone(),
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
@@ -164,10 +170,13 @@ mod update_bucket_privacy_tests {
                 let msp = Keyring::Charlie.to_account_id();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-                add_msp_to_provider_storage(&msp);
+                let msp_id = add_msp_to_provider_storage(&msp);
 
-                let bucket_id =
-                    <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                    &msp_id,
+                    &owner,
+                    name.clone(),
+                );
 
                 assert_noop!(
                     FileSystem::update_bucket_privacy(origin, bucket_id, false),
@@ -190,8 +199,11 @@ mod update_bucket_privacy_tests {
 
                 let msp_id = add_msp_to_provider_storage(&msp);
 
-                let bucket_id =
-                    <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                    &msp_id,
+                    &owner,
+                    name.clone(),
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
@@ -259,8 +271,11 @@ mod update_bucket_privacy_tests {
 
                 let msp_id = add_msp_to_provider_storage(&msp);
 
-                let bucket_id =
-                    <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                    &msp_id,
+                    &owner,
+                    name.clone(),
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
@@ -355,8 +370,11 @@ mod update_bucket_privacy_tests {
 
                 let msp_id = add_msp_to_provider_storage(&msp);
 
-                let bucket_id =
-                    <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                    &msp_id,
+                    &owner,
+                    name.clone(),
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
@@ -457,10 +475,13 @@ mod create_and_associate_collection_with_bucket_tests {
                 let msp = Keyring::Charlie.to_account_id();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
 
-                add_msp_to_provider_storage(&msp);
+                let msp_id = add_msp_to_provider_storage(&msp);
 
-                let bucket_id =
-                    <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                    &msp_id,
+                    &owner,
+                    name.clone(),
+                );
 
                 assert_noop!(
                     FileSystem::create_and_associate_collection_with_bucket(origin, bucket_id),
@@ -484,8 +505,11 @@ mod create_and_associate_collection_with_bucket_tests {
 
                 let msp_id = add_msp_to_provider_storage(&msp);
 
-                let bucket_id =
-                    <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+                let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(
+                    &msp_id,
+                    &owner,
+                    name.clone(),
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::create_bucket(
@@ -903,7 +927,7 @@ mod request_storage {
 
                 // Assert that the next expiration block number is the storage request ttl since a single storage request was made
                 assert_eq!(
-                    FileSystem::next_available_storage_proof_expiration_block(),
+                    FileSystem::next_available_storage_request_expiration_block(),
                     expiration_block
                 );
 
@@ -4018,7 +4042,8 @@ fn create_bucket(
     name: BucketNameFor<Test>,
     msp_id: ProviderIdFor<Test>,
 ) -> BucketIdFor<Test> {
-    let bucket_id = <Test as crate::Config>::Providers::derive_bucket_id(&owner, name.clone());
+    let bucket_id =
+        <Test as crate::Config>::Providers::derive_bucket_id(&msp_id, &owner, name.clone());
 
     let origin = RuntimeOrigin::signed(owner.clone());
 

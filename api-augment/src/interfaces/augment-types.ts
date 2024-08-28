@@ -1270,6 +1270,7 @@ import type {
   GetCheckpointChallengesError,
   GetLastTickProviderSubmittedProofError,
   GetNextDeadlineTickError,
+  GetUsersWithDebtOverThresholdError,
   IncompleteFileStatus,
   MainStorageProviderId,
   MerklePatriciaRoot,
@@ -1750,6 +1751,7 @@ declare module "@polkadot/types/types/registry" {
     GetCheckpointChallengesError: GetCheckpointChallengesError;
     GetLastTickProviderSubmittedProofError: GetLastTickProviderSubmittedProofError;
     GetNextDeadlineTickError: GetNextDeadlineTickError;
+    GetUsersWithDebtOverThresholdError: GetUsersWithDebtOverThresholdError;
     GiltBid: GiltBid;
     GlobalValidationData: GlobalValidationData;
     GlobalValidationSchedule: GlobalValidationSchedule;
