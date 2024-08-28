@@ -322,7 +322,11 @@ declare module "@polkadot/api-base/types/storage" {
        *
        * This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
        **/
-      nextAvailableStorageProofExpirationBlock: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+      nextAvailableStorageRequestExpirationBlock: AugmentedQuery<
+        ApiType,
+        () => Observable<u32>,
+        []
+      > &
         QueryableStorageEntry<ApiType, []>;
       /**
        * A pointer to the starting block to clean up expired storage requests.

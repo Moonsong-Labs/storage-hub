@@ -1,5 +1,3 @@
-use core::cmp::max;
-
 use codec::Encode;
 use frame_support::{
     ensure,
