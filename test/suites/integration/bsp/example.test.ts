@@ -1,13 +1,28 @@
 import "@storagehub/api-augment";
 import assert from "node:assert";
-import { assertExtrinsicPresent, bspKey, type BspNetApi, CAPACITY, CAPACITY_512, describeBspNet, DUMMY_BSP_ID, ferdie, fetchEventData, skipBlocks, skipBlocksToMinChangeTime, sleep, waitForBspStored, waitForBspVolunteer } from "../../../util";
+import {
+  assertExtrinsicPresent,
+  bspKey,
+  type BspNetApi,
+  CAPACITY,
+  CAPACITY_512,
+  describeBspNet,
+  DUMMY_BSP_ID,
+  ferdie,
+  fetchEventData,
+  skipBlocks,
+  skipBlocksToMinChangeTime,
+  sleep,
+  waitForBspStored,
+  waitForBspVolunteer
+} from "../../../util";
 
 describeBspNet("Example Suite", ({ it, createApi, before }) => {
   let api: BspNetApi;
 
   before(async () => {
-    api = await createApi()
-  })
+    api = await createApi();
+  });
 
   it("Unregistered accounts fail when changing capacities", async () => {
     const totalCapacityBefore = await api.query.providers.totalBspsCapacity();
@@ -93,14 +108,10 @@ describeBspNet("Example Suite", ({ it, createApi, before }) => {
     // Skip block height past threshold
     await skipBlocksToMinChangeTime(api);
 
-    const { events, extSuccess } = await api.sealBlock(
-      api.tx.providers.changeCapacity(2n),
-      bspKey
-    );
+    const { events, extSuccess } = await api.sealBlock(api.tx.providers.changeCapacity(2n), bspKey);
     assert.strictEqual(extSuccess, false);
     const [eventInfo, _eventError] = fetchEventData(api.events.system.ExtrinsicFailed, events);
     assert.strictEqual(eventInfo.asModule.index.toNumber(), 40); // providers
     assert.strictEqual(eventInfo.asModule.error.toHex(), "0x0b000000"); // NewCapacityLessThanUsedStorage
   });
-
 });

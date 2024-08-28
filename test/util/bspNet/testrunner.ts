@@ -26,29 +26,34 @@ export function describeBspNet(
   tests: (context: BspNetContext) => void
 ): Promise<void>;
 
-
 /**
  * Implementation of the describeBspNet function.
  * @param title The title of the test suite.
  * @param args Additional arguments (either tests function or options and tests function).
  */
-export async function describeBspNet<T extends [
-  (context: BspNetContext) => void
-] | [TestOptions, (context: BspNetContext) => void]>(
-  title: string,
-  ...args: T
-): Promise<void> {
+export async function describeBspNet<
+  T extends [(context: BspNetContext) => void] | [TestOptions, (context: BspNetContext) => void]
+>(title: string, ...args: T): Promise<void> {
   const options = args.length === 2 ? args[0] : {};
   const tests = args.length === 2 ? args[1] : args[0];
 
-  const bspNetConfigCases: BspNetConfig[] = options.networkConfig === "all" ? [
-    // "ALL" network config
-    { noisy: false, rocksdb: false },
-    { noisy: false, rocksdb: true }
-  ] : options.networkConfig === "standard" ? [
-    // "STANDARD" network config
-    { noisy: false, rocksdb: false }
-  ] : options.networkConfig === "noisy" ? [{ noisy: true, rocksdb: false }] : typeof options.networkConfig === "object" ? options.networkConfig : [{ noisy: false, rocksdb: false }];
+  const bspNetConfigCases: BspNetConfig[] =
+    options.networkConfig === "all"
+      ? [
+          // "ALL" network config
+          { noisy: false, rocksdb: false },
+          { noisy: false, rocksdb: true }
+        ]
+      : options.networkConfig === "standard"
+        ? [
+            // "STANDARD" network config
+            { noisy: false, rocksdb: false }
+          ]
+        : options.networkConfig === "noisy"
+          ? [{ noisy: true, rocksdb: false }]
+          : typeof options.networkConfig === "object"
+            ? options.networkConfig
+            : [{ noisy: false, rocksdb: false }];
 
   for (const bspNetConfig of bspNetConfigCases) {
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
@@ -62,15 +67,16 @@ export async function describeBspNet<T extends [
       });
 
       after(async () => {
-
         await cleardownTest({ api: await apiPromise, keepNetworkAlive: options?.keepAlive });
         if (options?.keepAlive) {
           if (bspNetConfigCases.length > 1) {
-            console.error(`test run configured for multiple bspNetConfigs, only ${JSON.stringify(bspNetConfig)} will be kept alive`);
+            console.error(
+              `test run configured for multiple bspNetConfigs, only ${JSON.stringify(bspNetConfig)} will be kept alive`
+            );
           }
           console.log("🩺 Info:  Test run configured to keep BSPNet alive");
-          console.log("ℹ️ Hint: close network with:   pnpm docker:stop:bspnet  ")
-          process.exit(0)
+          console.log("ℹ️ Hint: close network with:   pnpm docker:stop:bspnet  ");
+          process.exit(0);
         }
       });
 
@@ -79,10 +85,10 @@ export async function describeBspNet<T extends [
         createApi: () => apiPromise,
         bspNetConfig,
         before,
-        after,
-      } satisfies BspNetContext
+        after
+      } satisfies BspNetContext;
 
       tests(context);
     });
   }
-};
+}

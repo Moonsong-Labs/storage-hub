@@ -75,7 +75,8 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
     console.log(e);
   }
   console.log(
-    `Error fetching container IP for ${containerName} after ${(maxRetries * sleepTime) / 1000
+    `Error fetching container IP for ${containerName} after ${
+      (maxRetries * sleepTime) / 1000
     } seconds`
   );
   showContainers();

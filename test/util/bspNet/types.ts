@@ -129,8 +129,8 @@ export type BspNetContext = {
   it: typeof it;
   createApi: () => Promise<BspNetApi>;
   bspNetConfig: BspNetConfig;
-  before: typeof before
-  after: typeof after,
+  before: typeof before;
+  after: typeof after;
 };
 
 /**
@@ -159,5 +159,5 @@ export type TestOptions = {
   /** Sets a custom timeout for the test suite */
   timeout?: number;
   /** Specifies the network configuration to use */
-  networkConfig?: NetworkConfig
-}
+  networkConfig?: NetworkConfig;
+};
