@@ -74,7 +74,7 @@ export const addBspContainer = async (options?: {
   let keystore_path = options?.keystorePath;
   if (options?.keystorePath == null) {
     keystore_path = "/keystore";
-  };
+  }
   const container = await docker.createContainer({
     Image: DOCKER_IMAGE,
     name: containerName,
