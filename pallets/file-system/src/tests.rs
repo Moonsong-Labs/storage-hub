@@ -1,12 +1,12 @@
 use crate::{
     mock::*,
     types::{
-        BucketIdFor, BucketNameFor, ExpiredItems, FileLocation, PeerIds,
-        PendingFileDeletionRequestTtl, ProviderIdFor, StorageData, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestTtl,
+        BucketIdFor, BucketNameFor, FileLocation, PeerIds, PendingFileDeletionRequestTtl,
+        ProviderIdFor, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestTtl,
     },
-    BlockRangeToMaximumThreshold, Config, Error, Event, ItemExpirations, MaximumThreshold,
-    PendingStopStoringRequests, ReplicationTarget,
+    BlockRangeToMaximumThreshold, Config, Error, Event, MaximumThreshold,
+    PendingStopStoringRequests, ReplicationTarget, StorageRequestExpirations,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -920,26 +920,30 @@ mod request_storage {
 
                 let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
                 let storage_request_ttl: BlockNumberFor<Test> = storage_request_ttl.into();
+                let expiration_block = System::block_number() + storage_request_ttl;
 
                 // Assert that the next starting block to clean up is set to 0 initially
                 assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
 
                 // Assert that the next expiration block number is the storage request ttl since a single storage request was made
                 assert_eq!(
-                    FileSystem::next_available_expiration_insertion_block(),
-                    storage_request_ttl
+                    FileSystem::next_available_storage_request_expiration_block(),
+                    expiration_block
                 );
 
                 // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
                 assert_eq!(
-                    FileSystem::item_expirations(storage_request_ttl),
-                    vec![ExpiredItems::StorageRequest(file_key)]
+                    FileSystem::storage_request_expirations(expiration_block),
+                    vec![file_key]
                 );
 
-                roll_to(storage_request_ttl + 1);
+                roll_to(expiration_block + 1);
 
                 // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
-                assert_eq!(FileSystem::item_expirations(storage_request_ttl), vec![]);
+                assert_eq!(
+                    FileSystem::storage_request_expirations(expiration_block),
+                    vec![]
+                );
             });
         }
 
@@ -976,9 +980,9 @@ mod request_storage {
                 let max_expired_items_in_block: u32 =
                     <Test as Config>::MaxExpiredItemsInBlock::get();
                 for _ in 0..max_expired_items_in_block {
-                    assert_ok!(ItemExpirations::<Test>::try_append(
+                    assert_ok!(StorageRequestExpirations::<Test>::try_append(
                         expected_expiration_block_number,
-                        ExpiredItems::StorageRequest(file_key)
+                        file_key
                     ));
                 }
 
@@ -995,7 +999,7 @@ mod request_storage {
 
                 // Assert that the storage request expirations storage is at max capacity
                 assert_eq!(
-                    FileSystem::item_expirations(expected_expiration_block_number).len(),
+                    FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
                     max_expired_items_in_block as usize
                 );
 
@@ -1004,7 +1008,7 @@ mod request_storage {
 
                 // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
                 assert_eq!(
-                    FileSystem::item_expirations(expected_expiration_block_number),
+                    FileSystem::storage_request_expirations(expected_expiration_block_number),
                     vec![]
                 );
             });
@@ -1044,9 +1048,9 @@ mod request_storage {
                     expected_expiration_block_number.into();
 
                 for _ in 0..max_storage_request_expiry {
-                    assert_ok!(ItemExpirations::<Test>::try_append(
+                    assert_ok!(StorageRequestExpirations::<Test>::try_append(
                         expected_expiration_block_number,
-                        ExpiredItems::StorageRequest(file_key)
+                        file_key
                     ));
                 }
 
@@ -1070,7 +1074,7 @@ mod request_storage {
 
                 // Assert that the storage request expirations storage is at max capacity
                 assert_eq!(
-                    FileSystem::item_expirations(expected_expiration_block_number).len(),
+                    FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
                     max_storage_request_expiry as usize
                 );
 
@@ -1082,7 +1086,7 @@ mod request_storage {
                 // Assert that the storage request expirations storage is at max capacity
                 // TODO: Fix this test...
                 assert_eq!(
-                    FileSystem::item_expirations(expected_expiration_block_number).len(),
+                    FileSystem::storage_request_expirations(expected_expiration_block_number).len(),
                     max_storage_request_expiry as usize
                 );
 
@@ -1094,7 +1098,7 @@ mod request_storage {
 
                 // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
                 assert_eq!(
-                    FileSystem::item_expirations(expected_expiration_block_number),
+                    FileSystem::storage_request_expirations(expected_expiration_block_number),
                     vec![]
                 );
 
@@ -1208,14 +1212,15 @@ mod revoke_storage_request {
 
                 let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
                 let storage_request_ttl: BlockNumberFor<Test> = storage_request_ttl.into();
+                let expiration_block = System::block_number() + storage_request_ttl;
 
                 // Assert that the NextExpirationInsertionBlockNumber storage is set to 0 initially
                 assert_eq!(FileSystem::next_starting_block_to_clean_up(), 0);
 
                 // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
                 assert_eq!(
-                    FileSystem::item_expirations(storage_request_ttl),
-                    vec![ExpiredItems::StorageRequest(file_key)]
+                    FileSystem::storage_request_expirations(expiration_block),
+                    vec![file_key]
                 );
 
                 assert_ok!(FileSystem::revoke_storage_request(owner.clone(), file_key));
@@ -3593,22 +3598,23 @@ mod delete_file_and_pending_deletions_tests {
                     PendingFileDeletionRequestTtl::<Test>::get();
                 let pending_file_deletion_request_ttl: BlockNumberFor<Test> =
                     pending_file_deletion_request_ttl.into();
+                let expiration_block = pending_file_deletion_request_ttl + System::block_number();
 
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
-                    FileSystem::item_expirations(pending_file_deletion_request_ttl),
-                    vec![ExpiredItems::PendingFileDeletionRequests((
+                    FileSystem::file_deletion_request_expirations(expiration_block),
+                    vec![(
                         owner_account_id.clone(),
                         file_key
-                    ))]
+                    )]
                 );
 
                 // Roll past the expiration block
-                roll_to(pending_file_deletion_request_ttl);
+                roll_to(pending_file_deletion_request_ttl + 1);
 
                 // Item expiration should be removed
                 assert_eq!(
-                    FileSystem::item_expirations(pending_file_deletion_request_ttl),
+                    FileSystem::file_deletion_request_expirations(expiration_block),
                     vec![]
                 );
 
