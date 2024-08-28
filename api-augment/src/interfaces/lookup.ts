@@ -1465,6 +1465,13 @@ export default {
         fileKey: "H256",
         newRoot: "H256"
       },
+      SpStopStoringInsolventUser: {
+        spId: "H256",
+        fileKey: "H256",
+        owner: "AccountId32",
+        location: "Bytes",
+        newRoot: "H256"
+      },
       FailedToQueuePriorityChallenge: {
         user: "AccountId32",
         fileKey: "H256"
@@ -1631,6 +1638,9 @@ export default {
         lastChargeablePriceIndex: "u128"
       },
       UserWithoutFunds: {
+        who: "AccountId32"
+      },
+      UserSolvent: {
         who: "AccountId32"
       }
     }
@@ -3098,6 +3108,18 @@ export default {
         fileKey: "H256",
         inclusionForestProof: "SpTrieStorageProofCompactProof"
       },
+      stop_storing_for_insolvent_user: {
+        _alias: {
+          size_: "size"
+        },
+        fileKey: "H256",
+        bucketId: "H256",
+        location: "Bytes",
+        owner: "AccountId32",
+        fingerprint: "H256",
+        size_: "u32",
+        inclusionForestProof: "SpTrieStorageProofCompactProof"
+      },
       delete_file: {
         _alias: {
           size_: "size"
@@ -3183,7 +3205,8 @@ export default {
       },
       charge_payment_streams: {
         userAccount: "AccountId32"
-      }
+      },
+      pay_outstanding_debt: "Null"
     }
   },
   /**
@@ -3882,6 +3905,7 @@ export default {
       "BspsRequiredExceedsMax",
       "NotABsp",
       "NotAMsp",
+      "NotASp",
       "BspNotVolunteered",
       "BspNotConfirmed",
       "BspAlreadyConfirmed",
@@ -3919,7 +3943,8 @@ export default {
       "BlockRangeToMaximumThresholdCannotBeZero",
       "PendingStopStoringRequestNotFound",
       "MinWaitForStopStoringNotReached",
-      "PendingStopStoringRequestAlreadyExists"
+      "PendingStopStoringRequestAlreadyExists",
+      "UserNotInsolvent"
     ]
   },
   /**
@@ -3956,7 +3981,8 @@ export default {
   PalletPaymentStreamsFixedRatePaymentStream: {
     rate: "u128",
     lastChargedTick: "u32",
-    userDeposit: "u128"
+    userDeposit: "u128",
+    outOfFundsTick: "Option<u32>"
   },
   /**
    * Lookup418: pallet_payment_streams::types::DynamicRatePaymentStream<T>
@@ -3964,7 +3990,8 @@ export default {
   PalletPaymentStreamsDynamicRatePaymentStream: {
     amountProvided: "u32",
     priceIndexWhenLastCharged: "u128",
-    userDeposit: "u128"
+    userDeposit: "u128",
+    outOfFundsTick: "Option<u32>"
   },
   /**
    * Lookup419: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
@@ -3991,7 +4018,8 @@ export default {
       "InvalidLastChargeableBlockNumber",
       "InvalidLastChargeablePriceIndex",
       "ChargeOverflow",
-      "UserWithoutFunds"
+      "UserWithoutFunds",
+      "UserNotFlaggedAsWithoutFunds"
     ]
   },
   /**

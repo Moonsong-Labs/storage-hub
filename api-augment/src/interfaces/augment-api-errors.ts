@@ -284,6 +284,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       NotAMsp: AugmentedError<ApiType>;
       /**
+       * Account is not a SP.
+       **/
+      NotASp: AugmentedError<ApiType>;
+      /**
        * Operation failed because the account is not the owner of the bucket.
        **/
       NotBucketOwner: AugmentedError<ApiType>;
@@ -339,6 +343,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Number of removed BSPs volunteered from storage request prefix did not match the expected number.
        **/
       UnexpectedNumberOfRemovedVolunteeredBsps: AugmentedError<ApiType>;
+      /**
+       * A SP tried to stop storing files from a user that was supposedly insolvent, but the user is not insolvent.
+       **/
+      UserNotInsolvent: AugmentedError<ApiType>;
       /**
        * Generic error
        **/
@@ -670,6 +678,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when trying to update the rate of a fixed-rate payment stream to the same rate as before
        **/
       UpdateRateToSameRate: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a user that has not been flagged as without funds tries to use the extrinsic to pay its outstanding debt
+       **/
+      UserNotFlaggedAsWithoutFunds: AugmentedError<ApiType>;
       /**
        * Error thrown when trying to operate when the User has been flagged for not having enough funds.
        **/

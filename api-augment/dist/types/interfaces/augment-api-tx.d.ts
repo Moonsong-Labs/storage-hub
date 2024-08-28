@@ -639,6 +639,32 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [Option<u32>, Option<u32>, Option<u32>]
       >;
+      /**
+       * Executed by a SP to stop storing a file from an insolvent user.
+       *
+       * This is used when a user has become insolvent and the SP needs to stop storing the files of that user, since
+       * it won't be getting paid for it anymore.
+       * The validations are similar to the ones in the `bsp_request_stop_storing` and `bsp_confirm_stop_storing` extrinsics, but the SP doesn't need to
+       * wait for a minimum amount of blocks to confirm to stop storing the file nor it has to be a BSP.
+       **/
+      stopStoringForInsolventUser: AugmentedSubmittable<
+        (
+          fileKey: H256 | string | Uint8Array,
+          bucketId: H256 | string | Uint8Array,
+          location: Bytes | string | Uint8Array,
+          owner: AccountId32 | string | Uint8Array,
+          fingerprint: H256 | string | Uint8Array,
+          size: u32 | AnyNumber | Uint8Array,
+          inclusionForestProof:
+            | SpTrieStorageProofCompactProof
+            | {
+                encodedNodes?: any;
+              }
+            | string
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, H256, Bytes, AccountId32, H256, u32, SpTrieStorageProofCompactProof]
+      >;
       updateBucketPrivacy: AugmentedSubmittable<
         (
           bucketId: H256 | string | Uint8Array,
@@ -2290,6 +2316,28 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [H256, AccountId32]
       >;
+      /**
+       * Dispatchable extrinsic that allows a user flagged as without funds to pay all remaining payment streams to be able to recover
+       * its deposits and be able to pay for services again.
+       *
+       * The dispatch origin for this call must be Signed.
+       * The origin must be the User that has been flagged as without funds.
+       *
+       * This extrinsic will perform the following checks and logic:
+       * 1. Check that the extrinsic was signed and get the signer.
+       * 2. Check that the user has been flagged as without funds.
+       * 3. Release the user's funds that were held as a deposit for each payment stream.
+       * 4. Get all payment streams of the user and charge them, paying the Providers for the services.
+       * 5. Delete all payment streams of the user.
+       * 6. Unflag the user as without funds.
+       *
+       * Emits a 'UserSolvent' event when successful.
+       *
+       * Notes: this extrinsic iterates over all payment streams of the user and charges them, so it can be expensive in terms of weight.
+       * The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
+       * finds more convenient to wait for Providers to get its deposits one by one instead.
+       **/
+      payOutstandingDebt: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
       /**
        * Dispatchable extrinsic that allows root to update an existing dynamic-rate payment stream between a User and a Provider.
        *
