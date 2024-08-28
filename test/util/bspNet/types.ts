@@ -4,6 +4,7 @@ import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
 import type { SealedBlock } from "./helpers";
 import type { EventRecord, Event } from "@polkadot/types/interfaces";
+import type { after, before, it } from "node:test";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -115,4 +116,48 @@ export interface FileMetadata {
   owner: string;
   fingerprint: string;
   fileSize: number;
+}
+
+export type BspNetConfig = {
+  noisy: boolean;
+  rocksdb: boolean;
+  capacity?: bigint;
+};
+
+// TODO: Add DOcs here
+export type BspNetContext = {
+  it: typeof it;
+  createApi: () => Promise<BspNetApi>;
+  bspNetConfig: BspNetConfig;
+  before: typeof before
+  after: typeof after,
+};
+
+/**
+ * Network configuration options for BspNet tests.
+ */
+type NetworkConfig =
+  /** Uses default configuration with a single BSP and no network noise */
+  | "standard"
+  /** Runs tests with multiple configurations, including both RocksDB and MemoryDB */
+  | "all"
+  /** Simulates a noisy network environment with added latency and bandwidth limitations */
+  | "noisy"
+  /** Custom network configuration */
+  | BspNetConfig[];
+
+/**
+ * Options for configuring BspNet test runs.
+ */
+export type TestOptions = {
+  /** If true, keeps the network alive after tests complete */
+  keepAlive?: boolean;
+  /** If true, skips the test suite */
+  skip?: boolean;
+  /** If true, runs only this test suite */
+  only?: boolean;
+  /** Sets a custom timeout for the test suite */
+  timeout?: number;
+  /** Specifies the network configuration to use */
+  networkConfig?: NetworkConfig
 }

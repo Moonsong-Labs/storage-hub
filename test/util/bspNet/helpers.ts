@@ -45,7 +45,7 @@ import {
   VALUE_PROP
 } from "./consts";
 import { addBspContainer, showContainers } from "./docker";
-import type { BspNetApi, FileMetadata } from "./types";
+import type { BspNetApi, BspNetConfig, FileMetadata } from "./types";
 
 const exec = util.promisify(child_process.exec);
 
@@ -75,8 +75,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
     console.log(e);
   }
   console.log(
-    `Error fetching container IP for ${containerName} after ${
-      (maxRetries * sleepTime) / 1000
+    `Error fetching container IP for ${containerName} after ${(maxRetries * sleepTime) / 1000
     } seconds`
   );
   showContainers();
@@ -120,12 +119,6 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
   console.log(`Error fetching peerId from ${url} after ${(maxRetries * sleepTime) / 1000} seconds`);
   showContainers();
   throw new Error(`Error fetching peerId from ${url}`);
-};
-
-export type BspNetConfig = {
-  noisy: boolean;
-  rocksdb: boolean;
-  capacity?: bigint;
 };
 
 export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
