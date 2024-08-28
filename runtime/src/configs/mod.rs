@@ -529,7 +529,7 @@ parameter_types! {
     pub const ChallengesQueueLength: u32 = 100;
     pub const CheckpointChallengePeriod: u32 = 10;
     pub const ChallengesFee: Balance = 1 * UNIT;
-    pub const StakeToChallengePeriod: Balance = 1_000_000 * UNIT;
+    pub const StakeToChallengePeriod: Balance = 100 * UNIT; // TODO: Change this value into something much higher like 1_000_000 * UNIT
     pub const MinChallengePeriod: u32 = 30;
     pub const ChallengeTicksTolerance: u32 = 50;
     pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
