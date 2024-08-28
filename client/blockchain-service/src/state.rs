@@ -107,7 +107,7 @@ pub struct BlockchainServiceStateStore {
 impl BlockchainServiceStateStore {
     pub fn new(root_path: PathBuf) -> Self {
         let mut path = root_path;
-        path.push("storagehub/blockchain_service");
+        path.push("storagehub/blockchain_service/");
 
         let db_path_str = path.to_str().expect("Failed to convert path to string");
         info!("Blockchain service state store path: {}", db_path_str);

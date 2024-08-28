@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use codec::{Decode, Encode};
 use std::{
     collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
     str::FromStr,
     sync::Arc,
 };
@@ -582,7 +583,7 @@ impl BlockchainService {
         client: Arc<ParachainClient>,
         rpc_handlers: Arc<RpcHandlers>,
         keystore: KeystorePtr,
-        storage_path: String,
+        rocksdb_root_path: impl Into<PathBuf>,
     ) -> Self {
         Self {
             client,
@@ -593,7 +594,7 @@ impl BlockchainService {
             wait_for_block_request_by_number: BTreeMap::new(),
             provider_ids: BTreeSet::new(),
             forest_root_write_lock: None,
-            persistent_state: BlockchainServiceStateStore::new(storage_path.into()),
+            persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
         }
     }
 

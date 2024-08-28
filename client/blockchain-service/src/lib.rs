@@ -7,7 +7,7 @@ pub mod typed_store;
 pub mod types;
 pub mod utils;
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use sc_service::RpcHandlers;
 use sp_keystore::KeystorePtr;
@@ -22,13 +22,14 @@ pub async fn spawn_blockchain_service(
     client: Arc<ParachainClient>,
     rpc_handlers: Arc<RpcHandlers>,
     keystore: KeystorePtr,
-    storage_path: String,
+    rocksdb_root_path: impl Into<PathBuf>,
 ) -> ActorHandle<BlockchainService> {
     let task_spawner = task_spawner
         .with_name("blockchain-service")
         .with_group("network");
 
-    let blockchain_service = BlockchainService::new(client, rpc_handlers, keystore, storage_path);
+    let blockchain_service =
+        BlockchainService::new(client, rpc_handlers, keystore, rocksdb_root_path);
 
     task_spawner.spawn_actor(blockchain_service)
 }
