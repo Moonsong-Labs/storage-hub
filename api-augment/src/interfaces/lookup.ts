@@ -1465,6 +1465,10 @@ export default {
         fileKey: "H256",
         newRoot: "H256"
       },
+      PriorityChallengeForFileDeletionQueued: {
+        user: "AccountId32",
+        fileKey: "H256"
+      },
       FailedToQueuePriorityChallenge: {
         user: "AccountId32",
         fileKey: "H256"

@@ -1390,6 +1390,12 @@ mod hooks {
                 });
             });
 
+            // Emit event.
+            Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
+                user: user.clone(),
+                file_key,
+            });
+
             remaining_weight.saturating_reduce(potential_weight);
         }
     }

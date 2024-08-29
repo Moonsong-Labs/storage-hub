@@ -460,6 +460,11 @@ pub mod pallet {
             file_key: MerkleHash<T>,
             new_root: MerkleHash<T>,
         },
+        /// Notifies that a file key has been queued for a priority challenge for file deletion.
+        PriorityChallengeForFileDeletionQueued {
+            user: T::AccountId,
+            file_key: MerkleHash<T>,
+        },
         /// Notifies that a priority challenge failed to be queued for pending file deletion.
         FailedToQueuePriorityChallenge {
             user: T::AccountId,
