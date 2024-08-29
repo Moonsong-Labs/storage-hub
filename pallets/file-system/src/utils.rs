@@ -715,6 +715,12 @@ where
                 &file_key,
                 Some(TrieRemoveMutation),
             )?;
+
+            // Emit event.
+            Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
+                user: sender,
+                file_key,
+            });
         }
 
         // Remove storage request bsps
@@ -1030,6 +1036,12 @@ where
                     Some(TrieRemoveMutation),
                 )?;
 
+                // Emit event.
+                Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
+                    user: sender,
+                    file_key,
+                });
+
                 true
             }
         };
@@ -1088,6 +1100,12 @@ where
                 &file_key,
                 Some(TrieRemoveMutation),
             )?;
+
+            // Emit event.
+            Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
+                user: user.clone(),
+                file_key,
+            });
         }
 
         // Delete the pending deletion request.
