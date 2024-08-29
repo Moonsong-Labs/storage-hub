@@ -12,6 +12,7 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 import "@storagehub/api-augment";
 import { v2 as compose } from "docker-compose";
 import Docker from "dockerode";
+import { strictEqual } from "node:assert";
 import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
 import crypto from "node:crypto";
@@ -31,6 +32,7 @@ import {
   bspTwoSeed,
   shUser
 } from "../pjsKeyring";
+import { sleep } from "../timer.ts";
 import { createApiObject } from "./api";
 import {
   BSP_DOWN_ID,
