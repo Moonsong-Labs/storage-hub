@@ -686,6 +686,41 @@ export const sealBlock = async (
   }) satisfies SealedBlock;
 };
 
+export const advanceToBlock = async (
+  api: ApiPromise,
+  blockNumber: number,
+  waitBetweenBlocks?: number | boolean
+): Promise<SealedBlock> => {
+  const currentBlock = await api.rpc.chain.getBlock();
+  const currentBlockNumber = currentBlock.block.header.number.toNumber();
+
+  let blockResult = null;
+  if (blockNumber > currentBlockNumber) {
+    const blocksToAdvance = blockNumber - currentBlockNumber;
+    for (let i = 0; i < blocksToAdvance; i++) {
+      blockResult = await sealBlock(api);
+
+      if (waitBetweenBlocks) {
+        if (typeof waitBetweenBlocks === "number") {
+          await sleep(waitBetweenBlocks);
+        } else {
+          await sleep(500);
+        }
+      }
+    }
+  } else {
+    throw new Error(
+      `Block number ${blockNumber} is lower than current block number ${currentBlockNumber}`
+    );
+  }
+
+  if (blockResult) {
+    return blockResult;
+  }
+
+  throw new Error("Block wasn't sealed");
+};
+
 export const sendNewStorageRequest = async (
   api: ApiPromise,
   source: string,
