@@ -3718,15 +3718,6 @@ declare const _default: {
     confirmed: string;
   };
   /**
-   * Lookup403: pallet_file_system::types::ExpiredItems<T>
-   **/
-  PalletFileSystemExpiredItems: {
-    _enum: {
-      StorageRequest: string;
-      PendingFileDeletionRequests: string;
-    };
-  };
-  /**
    * Lookup408: pallet_file_system::pallet::Error<T>
    **/
   PalletFileSystemError: {

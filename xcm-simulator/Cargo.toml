@@ -31,6 +31,7 @@ pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-randomness = { workspace = true }
 pallet-bucket-nfts = { workspace = true }
 pallet-payment-streams = { workspace = true }
+pallet-payment-streams-runtime-api = { workspace = true }
 
 shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
@@ -130,6 +131,7 @@ std = [
 	"pallet-file-system/std",
 	"pallet-message-queue/std",
 	"pallet-nfts/std",
+	"pallet-payment-streams/std",
 	"pallet-proofs-dealer/std",
 	"pallet-randomness/std",
 	"pallet-bucket-nfts/std",
