@@ -281,8 +281,8 @@ for (const bspNetConfig of bspNetConfigCases) {
 
       await it("BSP correctly responds to challenge with new forest root", async () => {
         // Resume BSP-Two and BSP-Three.
-        await resumeBspContainer("sh-bsp-two");
-        await resumeBspContainer("sh-bsp-three");
+        await resumeBspContainer({ containerName: "sh-bsp-two" });
+        await resumeBspContainer({ containerName: "sh-bsp-three" });
 
         await userApi.sealBlock();
 

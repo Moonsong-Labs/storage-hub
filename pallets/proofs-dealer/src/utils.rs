@@ -32,7 +32,7 @@ use crate::{
         ChallengeTicksToleranceFor, ChallengesFeeFor, ChallengesQueueLengthFor,
         CheckpointChallengePeriodFor, ForestVerifierFor, ForestVerifierProofFor, KeyFor,
         KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor,
-        MaxSubmittersPerTickFor, Proof, ProviderIdFor, ProvidersPalletFor,
+        MaxSubmittersPerTickFor, MinChallengePeriodFor, Proof, ProviderIdFor, ProvidersPalletFor,
         RandomChallengesPerBlockFor, RandomnessOutputFor, RandomnessProviderFor,
         StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
     },
@@ -643,14 +643,14 @@ where
 
     /// Convert stake to challenge period.
     ///
-    /// Stake is divided by `StakeToChallengePeriod` to get the number of blocks in between challenges
-    /// for a Provider. The result is then converted to `BlockNumber` type.
+    /// [`StakeToChallengePeriodFor`] is divided by `stake` to get the number of blocks in between challenges
+    /// for a Provider. The result is then converted to `BlockNumber` type. The division saturates at [`MinChallengePeriodFor`].
     pub(crate) fn stake_to_challenge_period(stake: BalanceFor<T>) -> BlockNumberFor<T> {
-        let block_period = stake
-            .checked_div(&StakeToChallengePeriodFor::<T>::get())
-            .unwrap_or(1u32.into());
-
-        T::StakeToBlockNumber::convert(block_period)
+        let min_challenge_period = MinChallengePeriodFor::<T>::get();
+        match StakeToChallengePeriodFor::<T>::get().checked_div(&stake) {
+            Some(block_period) => T::StakeToBlockNumber::convert(block_period),
+            None => min_challenge_period,
+        }
     }
 
     /// Add challenge to ChallengesQueue.

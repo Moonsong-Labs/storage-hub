@@ -3665,6 +3665,7 @@ mod change_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3705,6 +3706,7 @@ mod add_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3732,6 +3734,7 @@ mod add_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &MainStorageProviderId::<Test>::default(),
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3762,6 +3765,7 @@ mod add_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3771,6 +3775,7 @@ mod add_bucket {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );
@@ -3807,6 +3812,7 @@ mod add_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3865,6 +3871,7 @@ mod add_bucket {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );
@@ -3909,6 +3916,7 @@ mod remove_root_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &MainStorageProviderId::<Test>::default(),
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3937,6 +3945,7 @@ mod remove_root_bucket {
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &msp_id,
                     &bucket_owner,
                     bucket_name,
                 );
@@ -3995,6 +4004,7 @@ mod remove_root_bucket {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );
@@ -4024,6 +4034,7 @@ mod remove_root_bucket {
                     let bucket_name =
                         BoundedVec::try_from(format!("bucket{}", i).as_bytes().to_vec()).unwrap();
                     let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                        &msp_id,
                         &bucket_owner,
                         bucket_name,
                     );

@@ -1,3 +1,4 @@
+import "@storagehub/types-bundle";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { BspNetApi } from "./types";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
