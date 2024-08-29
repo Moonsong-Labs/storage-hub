@@ -24,7 +24,7 @@ const bspNetConfigCases: BspNetConfig[] = [
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
-  describe.only(`BSPNet: Many BSPs Submit Proofs (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
+  describe(`BSPNet: Many BSPs Submit Proofs (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
     let userApi: BspNetApi;
     let bspApi: BspNetApi;
     let bspTwoApi: BspNetApi;
@@ -218,7 +218,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       async () => {}
     );
 
-    it.only("New storage request sent by user, to only one BSP", async () => {
+    it("New storage request sent by user, to only one BSP", async () => {
       // Pause BSP-Two and BSP-Three.
       await pauseBspContainer("sh-bsp-two");
       await pauseBspContainer("sh-bsp-three");
