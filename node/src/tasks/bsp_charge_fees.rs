@@ -11,9 +11,7 @@ use storage_hub_runtime::Balance;
 use crate::services::handler::StorageHubHandler;
 
 const LOG_TARGET: &str = "bsp-charge-fees-task";
-
-// TODO: add integration tests
-// TODO: add doc comments
+const MIN_DEBT: Balance = 1;
 
 /// BSP Charge Fees Task: Handles the debt collection from users served by a BSP.
 ///
@@ -46,7 +44,7 @@ where
     FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
     FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
 {
-    fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -61,12 +59,13 @@ where
     async fn handle_event(&mut self, event: ProofAccepted) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "A proof was accepted for provider {:?} and users' fees are going to be charged.", event.provider_id);
 
+        // TODO: Allow for customizable threshold, for example using YAML files.
         // Retrieves users with debt over the `min_debt` threshold
         // using a Runtime API.
         let users_with_debt = self
             .storage_hub_handler
             .blockchain
-            .query_users_with_debt(event.provider_id, Balance::MIN)
+            .query_users_with_debt(event.provider_id, MIN_DEBT)
             .await
             .map_err(|e| {
                 anyhow!(
@@ -74,6 +73,8 @@ where
                     e
                 )
             })?;
+
+        println!("USERS WITH DEBT: {:?}", users_with_debt);
 
         // Calls the `charge_payment_streams` extrinsic for each user in the list to be charged.
         // Logs an error in case of failure and continues.
