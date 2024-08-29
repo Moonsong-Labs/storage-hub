@@ -563,23 +563,25 @@ impl Actor for BlockchainService {
                     min_debt,
                     callback,
                 } => {
+                    let current_block_hash = self.client.info().best_hash;
+
                     let users_with_debt = self
                         .client
                         .runtime_api()
                         .get_users_with_debt_over_threshold(
-                            provider_id,
-                            // &H256::from(min_debt),
-                            &H256::zero(),
-                            0u128,
+                            current_block_hash,
+                            &provider_id,
+                            min_debt,
                         )
-                        .unwrap_or_else(|_| {
+                        .unwrap_or_else(|e| {
+                            error!(target: LOG_TARGET, "{}", e);
                             Err(GetUsersWithDebtOverThresholdError::InternalApiError)
                         });
 
                     match callback.send(users_with_debt) {
                         Ok(_) => {}
                         Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send users with debt: {:?}", e);
+                            error!(target: LOG_TARGET, "Failed to send back users with debt: {:?}", e);
                         }
                     }
                 }

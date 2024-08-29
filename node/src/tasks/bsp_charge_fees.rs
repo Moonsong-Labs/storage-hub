@@ -1,18 +1,26 @@
+use anyhow::anyhow;
+use log::error;
 use log::info;
-use pallet_payment_streams_runtime_api::PaymentStreamsApi;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::ProofAccepted};
-use shc_common::types::{ProviderId, StorageProofsMerkleTrieLayout};
+use shc_common::types::StorageProofsMerkleTrieLayout;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
-use sp_core::H256;
-use sp_runtime::AccountId32;
 use storage_hub_runtime::Balance;
 
 use crate::services::handler::StorageHubHandler;
 
 const LOG_TARGET: &str = "bsp-charge-fees-task";
 
+// TODO: add integration tests
+// TODO: add doc comments
+
+/// BSP Charge Fees Task: Handles the debt collection from users served by a BSP.
+///
+/// The flow includes the following steps:
+/// - Reacting to [`ProofAccepted`] event from the runtime:
+///     - Calls a Runtime API to retrieve a list of users with debt over a certain custom threshold.
+///     - For each user, submits an extrinsic to [`pallet_payment_streams`] to charge them.
 pub struct BspChargeFeesTask<FL, FS>
 where
     FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
@@ -53,22 +61,42 @@ where
     async fn handle_event(&mut self, event: ProofAccepted) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "A proof was accepted for provider {:?} and users' fees are going to be charged.", event.provider_id);
 
-        // given some condition that will require a runtime API we will call charge_payment_streams for each user
+        // Retrieves users with debt over the `min_debt` threshold
+        // using a Runtime API.
         let users_with_debt = self
             .storage_hub_handler
             .blockchain
-            .query_users_with_debt(H256::random(), Balance::MIN);
+            .query_users_with_debt(event.provider_id, Balance::MIN)
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to retrieve users with debt from the runtime: {:?}",
+                    e
+                )
+            })?;
 
-        let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
-            pallet_payment_streams::Call::charge_payment_streams {
-                user_account: AccountId32::new([0u8; 32]),
-            },
-        );
+        // Calls the `charge_payment_streams` extrinsic for each user in the list to be charged.
+        // Logs an error in case of failure and continues.
+        for user in users_with_debt {
+            let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
+                pallet_payment_streams::Call::charge_payment_streams { user_account: user },
+            );
 
-        self.storage_hub_handler
-            .blockchain
-            .send_extrinsic(call)
-            .await?;
+            let charging_result = self
+                .storage_hub_handler
+                .blockchain
+                .send_extrinsic(call)
+                .await;
+
+            match charging_result {
+                Ok(submitted_transaction) => {
+                    info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash());
+                }
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Failed to send extrinsic to charge users with debt: {}", e);
+                }
+            }
+        }
 
         Ok(())
     }
