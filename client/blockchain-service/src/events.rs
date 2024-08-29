@@ -66,18 +66,18 @@ pub struct AcceptedBspVolunteer {
 impl EventBusMessage for AcceptedBspVolunteer {}
 
 #[derive(Debug, Clone, Encode, Decode)]
-pub enum OngoingForestWriteLockTaskData {
+pub enum ForestWriteLockTaskData {
     SubmitProofRequest(ProcessSubmitProofRequestData),
     ConfirmStoringRequest(ProcessConfirmStoringRequestData),
 }
 
-impl From<ProcessSubmitProofRequestData> for OngoingForestWriteLockTaskData {
+impl From<ProcessSubmitProofRequestData> for ForestWriteLockTaskData {
     fn from(data: ProcessSubmitProofRequestData) -> Self {
         Self::SubmitProofRequest(data)
     }
 }
 
-impl From<ProcessConfirmStoringRequestData> for OngoingForestWriteLockTaskData {
+impl From<ProcessConfirmStoringRequestData> for ForestWriteLockTaskData {
     fn from(data: ProcessConfirmStoringRequestData) -> Self {
         Self::ConfirmStoringRequest(data)
     }

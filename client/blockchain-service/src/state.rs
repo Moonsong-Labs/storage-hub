@@ -5,7 +5,7 @@ use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use shc_common::types::BlockNumber;
 
 use crate::{
-    events::OngoingForestWriteLockTaskData,
+    events::ForestWriteLockTaskData,
     handler::{ConfirmStoringRequest, SubmitProofRequest},
     typed_store::{
         BufferedWriteSupport, CFDequeAPI, ProvidesDbContext, ProvidesTypedDbSingleAccess,
@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Last processed block number.
-struct LastProcessedBlockNumberCf;
+pub struct LastProcessedBlockNumberCf;
 impl SingleScaleEncodedValueCf for LastProcessedBlockNumberCf {
     type Value = BlockNumber;
 
@@ -22,9 +22,9 @@ impl SingleScaleEncodedValueCf for LastProcessedBlockNumberCf {
 }
 
 /// Current ongoing task which requires a forest write lock.
-struct OngoingForestWriteLockTaskDataCf;
+pub struct OngoingForestWriteLockTaskDataCf;
 impl SingleScaleEncodedValueCf for OngoingForestWriteLockTaskDataCf {
-    type Value = OngoingForestWriteLockTaskData;
+    type Value = ForestWriteLockTaskData;
 
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "ongoing_forest_write_lock_task_data";
 }

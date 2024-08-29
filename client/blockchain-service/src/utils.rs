@@ -29,11 +29,12 @@ use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use crate::{
     events::{
-        ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData, ProcessSubmitProofRequest,
-        ProcessSubmitProofRequestData,
+        ForestWriteLockTaskData, ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData,
+        ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
-    typed_store::CFDequeAPI,
+    state::OngoingForestWriteLockTaskDataCf,
+    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{EventsVec, Extrinsic},
     BlockchainService,
 };
@@ -55,7 +56,7 @@ lazy_static! {
 
 impl BlockchainService {
     /// Notify tasks waiting for a block number.
-    pub(crate) fn notify_import_block_number(&mut self, block_number: BlockNumber) {
+    pub(crate) fn notify_import_block_number(&mut self, block_number: &BlockNumber) {
         let mut keys_to_remove = Vec::new();
 
         for (block_number, waiters) in self
@@ -81,12 +82,12 @@ impl BlockchainService {
     /// Checks if the account nonce on-chain is higher than the nonce in the [`BlockchainService`].
     ///
     /// If the nonce is higher, the account nonce is updated in the [`BlockchainService`].
-    pub(crate) fn check_nonce(&mut self, block_hash: H256) {
+    pub(crate) fn check_nonce(&mut self, block_hash: &H256) {
         let pub_key = Self::caller_pub_key(self.keystore.clone());
         let latest_nonce = self
             .client
             .runtime_api()
-            .account_nonce(block_hash, pub_key.into())
+            .account_nonce(*block_hash, pub_key.into())
             .expect("Fetching account nonce works; qed");
         if latest_nonce > self.nonce_counter {
             self.nonce_counter = latest_nonce
@@ -96,11 +97,11 @@ impl BlockchainService {
     /// Get all the provider IDs linked to keys in this node's keystore.
     ///
     /// The provider IDs found are added to the [`BlockchainService`]'s list of provider IDs.
-    pub(crate) fn get_provider_ids(&mut self, block_hash: H256) {
+    pub(crate) fn get_provider_ids(&mut self, block_hash: &H256) {
         for key in self.keystore.sr25519_public_keys(BCSV_KEY_TYPE) {
             self.client
                 .runtime_api()
-                .get_storage_provider_id(block_hash, &key.into())
+                .get_storage_provider_id(*block_hash, &key.into())
                 .map(|provider_id| {
                     if let Some(provider_id) = provider_id {
                         match provider_id {
@@ -288,7 +289,7 @@ impl BlockchainService {
             .expect("Extrinsic not found in block. This shouldn't be possible if we're looking into a block for which we got confirmation that the extrinsic was included; qed");
 
         // Get the events from storage.
-        let events_in_block = self.get_events_storage_element(block_hash)?;
+        let events_in_block = self.get_events_storage_element(&block_hash)?;
 
         // Filter the events for the extrinsic.
         // Each event record is composed of the `phase`, `event` and `topics` fields.
@@ -347,11 +348,11 @@ impl BlockchainService {
     }
 
     /// Get the events storage element in a block.
-    pub(crate) fn get_events_storage_element(&self, block_hash: H256) -> Result<EventsVec> {
+    pub(crate) fn get_events_storage_element(&self, block_hash: &H256) -> Result<EventsVec> {
         // Get the events storage.
         let raw_storage_opt = self
             .client
-            .storage(block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))
+            .storage(*block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))
             .expect("Failed to get Events storage element");
 
         // Decode the events storage.
@@ -438,34 +439,41 @@ impl BlockchainService {
                 }
                 Ok(_) => {
                     trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
+                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                    state_store_context
+                        .access(&OngoingForestWriteLockTaskDataCf)
+                        .delete();
+                    state_store_context.commit();
                 }
                 Err(TryRecvError::Closed) => {
                     error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
+                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                    state_store_context
+                        .access(&OngoingForestWriteLockTaskDataCf)
+                        .delete();
+                    state_store_context.commit();
                 }
             }
         }
 
         // At this point we know that the lock is released and we can start processing new requests.
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        let mut next_event_data = None;
 
         // If we have a submit proof request, prioritize it.
         if let Some(request) = state_store_context
             .pending_submit_proof_request_deque()
             .pop_front()
         {
-            let (tx, rx) = tokio::sync::oneshot::channel();
-            self.forest_root_write_lock = Some(rx);
-            let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
-            self.emit(ProcessSubmitProofRequest {
-                data: ProcessSubmitProofRequestData {
+            next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
+                ProcessSubmitProofRequestData {
                     seed: request.seed,
                     provider_id: request.provider_id,
                     tick: request.tick,
                     forest_challenges: request.forest_challenges,
                     checkpoint_challenges: request.checkpoint_challenges,
                 },
-                forest_root_write_tx,
-            });
+            ));
         } else {
             let max_batch_confirm =
                 <<Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests as Get<
@@ -487,18 +495,49 @@ impl BlockchainService {
 
             // If we have at least 1 confirm storing request, send the process event.
             if confirm_storing_requests.len() > 0 {
-                let (tx, rx) = tokio::sync::oneshot::channel();
-                self.forest_root_write_lock = Some(rx);
-                let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
-                self.emit(ProcessConfirmStoringRequest {
-                    data: ProcessConfirmStoringRequestData {
+                next_event_data = Some(
+                    ProcessConfirmStoringRequestData {
                         confirm_storing_requests,
-                    },
+                    }
+                    .into(),
+                );
+            }
+        }
+        if let Some(event_data) = &next_event_data {
+            state_store_context
+                .access(&OngoingForestWriteLockTaskDataCf)
+                .write(event_data);
+        }
+        state_store_context.commit();
+
+        if let Some(event_data) = next_event_data {
+            self.emit_forest_write_event(event_data);
+        }
+    }
+
+    pub(crate) fn emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData>) {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.forest_root_write_lock = Some(rx);
+
+        // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
+        // T so that we can keep using the current actors event bus (emit) which requires Clone on the
+        // event. Clone is required because there is no constraint on the number of listeners that can
+        // subscribe to the event (and each is guaranteed to receive all emitted events).
+        let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
+        match data.into() {
+            ForestWriteLockTaskData::SubmitProofRequest(data) => {
+                self.emit(ProcessSubmitProofRequest {
+                    data,
+                    forest_root_write_tx,
+                });
+            }
+            ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
+                self.emit(ProcessConfirmStoringRequest {
+                    data,
                     forest_root_write_tx,
                 });
             }
         }
-        state_store_context.commit();
     }
 }
 

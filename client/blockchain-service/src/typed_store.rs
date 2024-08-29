@@ -457,7 +457,7 @@ impl<'a, CF: SingleScaleEncodedValueCf> SingleValueScopedAccess<'a, CF> {
         self.db_context.cf(self.cf).get(&())
     }
 
-    pub fn write(&mut self, value: CF::Value) {
+    pub fn write(&mut self, value: &CF::Value) {
         self.db_context.cf(self.cf).put(&(), &value);
     }
 
@@ -510,7 +510,7 @@ pub trait CFDequeAPI: ProvidesTypedDbSingleAccess {
             .cf(&Self::DataCF::default())
             .put(&right_index, &value);
         self.access(&Self::RightIndexCF::default())
-            .write(right_index + 1);
+            .write(&(right_index + 1));
     }
 
     fn pop_front(&mut self) -> Option<Self::Value> {
@@ -526,7 +526,7 @@ pub trait CFDequeAPI: ProvidesTypedDbSingleAccess {
             .cf(&Self::DataCF::default())
             .delete(&left_index);
         self.access(&Self::LeftIndexCF::default())
-            .write(left_index + 1);
+            .write(&(left_index + 1));
         value
     }
 
