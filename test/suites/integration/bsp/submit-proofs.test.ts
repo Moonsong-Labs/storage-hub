@@ -206,11 +206,12 @@ for (const bspNetConfig of bspNetConfigCases) {
         //   ),
         //   bspThreeKey
         // );
-        await it("BSP is not challenged any more", async () => {
-          // TODO: Check that BSP-Three no longer has a challenge deadline.
-        });
       }
     );
+
+    it("BSP is not challenged any more", async () => {
+      // TODO: Check that BSP-Three no longer has a challenge deadline.
+    });
 
     it(
       "BSP submits proof, transaction gets dropped, BSP-resubmits and succeeds",
