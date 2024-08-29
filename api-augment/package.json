@@ -31,7 +31,7 @@
     "@polkadot/typegen": "12.3.1",
     "@polkadot/types": "^12.3.1",
     "@polkadot/types-codec": "12.3.1",
-    "@storagehub/types-bundle":"workspace:*",
+    "@storagehub/types-bundle": "workspace:*",
     "tsx": "4.17.0",
     "typescript": "5.5.4"
   }
