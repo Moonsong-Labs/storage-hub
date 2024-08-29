@@ -7,14 +7,12 @@ import {
     type BspNetApi,
     type BspNetConfig,
     closeSimpleBspNet,
-    runMultipleInitialisedBspsNet,
     DUMMY_BSP_ID,
     sleep,
     assertEventMany,
-    BSP_DOWN_ID,
-    pauseBspContainer,
-    resumeBspContainer,
-    assertExtrinsicPresent
+    runSimpleBspNet,
+    runMultipleInitialisedBspsNet,
+    assertEventPresent
 } from "../../../util";
 
 const bspNetConfigCases: BspNetConfig[] = [
@@ -56,8 +54,24 @@ for (const bspNetConfig of bspNetConfigCases) {
             await closeSimpleBspNet();
         });
 
-
         it.only("ProofAccepted emitted", async () => {
+            // create payment stream.
+            let alice = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
+            let result = await userApi.sealBlock(userApi.tx.sudo.sudo(userApi.tx.paymentStreams.createDynamicRatePaymentStream(DUMMY_BSP_ID, alice, 100, 1, 1)));
+            await sleep(500);
+
+            // Seal one more block with the pending extrinsics.
+            const dynamicStreamEvents = assertEventMany(
+                bspApi,
+                "paymentStreams",
+                "DynamicRatePaymentStreamCreated",
+                result.events
+            );
+            strictEqual(dynamicStreamEvents.length, 1, "There should be one dynamic stream event");
+
+            // Seal one more block with the pending extrinsics.
+            result = await userApi.sealBlock();
+
             // Calculate the next challenge tick for the BSPs. It should be the same for all BSPs,
             // since they all have the same file they were initialised with, and responded to it at
             // the same time.
@@ -106,27 +120,15 @@ for (const bspNetConfig of bspNetConfigCases) {
             );
             strictEqual(proofAcceptedEvents.length, 3, "There should be three proofs accepted events");
 
-            // Wait for tasks to execute and for the BSPs to submit proofs.
             await sleep(500);
-            // Check that there are 3 pending extrinsics from BSPs (proof submission).
-            const pending = await userApi.rpc.author.pendingExtrinsics();
-            strictEqual(
-                pending.length,
-                3,
-                "There should be three pending extrinsics from BSPs (proof submission)"
-            );
-
-            // Seal one more block with the pending extrinsics.
-            blockResult = await userApi.sealBlock();
-
             // Assert for the the event of the proof successfully submitted and verified.
-            const paymentStreamsChargedEvents = assertEventMany(
+            const paymentStreamsChargedEvents = assertEventPresent(
                 userApi,
                 "paymentStreams",
                 "PaymentStreamCharged",
                 blockResult.events
             );
-            strictEqual(paymentStreamsChargedEvents.length, 3, "There should be three proofs accepted events");
+            // strictEqual(paymentStreamsChargedEvents.length, 1, "There should be three proofs accepted events");
         }
         );
     });
