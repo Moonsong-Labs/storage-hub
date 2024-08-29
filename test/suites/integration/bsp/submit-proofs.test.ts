@@ -19,12 +19,12 @@ import {
 } from "../../../util";
 
 const bspNetConfigCases: BspNetConfig[] = [
-  // { noisy: false, rocksdb: false },
+  { noisy: false, rocksdb: false },
   { noisy: false, rocksdb: true }
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
-  describe.only(`BSPNet: Many BSPs Submit Proofs (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
+  describe(`BSPNet: Many BSPs Submit Proofs (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
     let userApi: BspNetApi;
     let bspApi: BspNetApi;
     let bspTwoApi: BspNetApi;
@@ -209,7 +209,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       }
     );
 
-    it("BSP is not challenged any more", async () => {
+    it("BSP is not challenged any more", { skip: "Not implemented yet." }, async () => {
       // TODO: Check that BSP-Three no longer has a challenge deadline.
     });
 
@@ -268,7 +268,12 @@ for (const bspNetConfig of bspNetConfigCases) {
     });
 
     it("BSP correctly responds to challenge with new forest root", async () => {
-      // Advance to next challenge tick for first BSP.
+      // Advance to two challenge periods ahead for first BSP.
+      // This is because in the odd case that we're exactly on the next challenge tick right now,
+      // there is a race condition chance where the BSP will send the submit proof extrinsic in the
+      // next block, since the Forest write lock is released as a consequence of the confirm storing
+      // extrinsic. So we advance two challenge periods ahead to be sure.
+
       // First we get the last tick for which the BSP submitted a proof.
       const lastTickResult =
         await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
@@ -279,17 +284,13 @@ for (const bspNetConfig of bspNetConfigCases) {
         await userApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
       assert(challengePeriodResult.isOk);
       const challengePeriod = challengePeriodResult.asOk.toNumber();
-      // Then we calculate the next challenge tick.
-      const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
-      // Finally, advance to the next challenge tick.
-      const currentBlock = await userApi.rpc.chain.getBlock();
-      const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      if (!(nextChallengeTick === currentBlockNumber)) {
-        await userApi.advanceToBlock(nextChallengeTick);
-      }
+      // Then we calculate two challenge ticks ahead.
+      const nextChallengeTick = lastTickBspSubmittedProof + 2 * challengePeriod;
+      // Finally, advance two challenge ticks ahead.
+      await userApi.advanceToBlock(nextChallengeTick);
 
       // Wait for BSP to submit proof.
-      await sleep(500);
+      await sleep(1000);
 
       // There should be at least one pending submit proof transaction.
       const submitProofsPending = await assertExtrinsicPresent(userApi, {
@@ -333,7 +334,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       await sleep(500);
 
       // There shouldn't be any pending volunteer transactions.
-      assert.rejects(
+      await assert.rejects(
         async () => {
           await assertExtrinsicPresent(userApi, {
             module: "fileSystem",
