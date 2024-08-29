@@ -14,6 +14,8 @@ export const createApiObject = async (uri: string): Promise<BspNetApi> => {
   const baseApi = await ApiPromise.create({
     provider: new WsProvider(uri),
     noInitWarn: true,
+    throwOnConnect: false,
+    throwOnUnknown: false,
     typesBundle: BundledTypes
   });
 

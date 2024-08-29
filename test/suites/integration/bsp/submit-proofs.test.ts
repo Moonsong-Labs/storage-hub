@@ -7,7 +7,6 @@ import {
   createApiObject,
   describeBspNet,
   DUMMY_BSP_ID,
-  launchEventEmitter,
   NODE_INFOS,
   pauseBspContainer,
   resumeBspContainer,
@@ -24,7 +23,7 @@ describeBspNet(
     let bspTwoApi: BspNetApi;
     let bspThreeApi: BspNetApi;
     let fileData: FileMetadata;
-    // TODO Figure out why this doesn't work
+
     before(async () => {
       const launchResponse = await getLaunchResponse();
       assert(launchResponse, "BSPNet failed to initialise");

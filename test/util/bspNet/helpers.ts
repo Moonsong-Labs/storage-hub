@@ -45,8 +45,6 @@ import {
 import { addBspContainer, showContainers } from "./docker";
 import type { BspNetApi, BspNetConfig, FileMetadata, InitialisedMultiBspNetwork } from "./types";
 import { waitForBspStored, waitForBspVolunteer } from "./waits.ts";
-import { sleep } from "../timer.ts";
-import { strictEqual } from "node:assert";
 
 const exec = util.promisify(child_process.exec);
 
@@ -317,98 +315,11 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
 };
 
 export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
+  await runSimpleBspNet(bspNetConfig);
+
   let userApi: BspNetApi | undefined;
   try {
-    console.log(`SH user id: ${shUser.address}`);
-    console.log(`SH BSP id: ${bspKey.address}`);
-    let file = "local-dev-bsp-compose.yml";
-    if (bspNetConfig.rocksdb) {
-      file = "local-dev-bsp-rocksdb-compose.yml";
-    }
-    if (bspNetConfig.noisy) {
-      file = "noisy-bsp-compose.yml";
-    }
-    const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
-
-    if (bspNetConfig.noisy) {
-      await compose.upOne("toxiproxy", { config: composeFilePath, log: true });
-    }
-
-    await compose.upOne("sh-bsp", { config: composeFilePath, log: true });
-
-    const bspIp = await getContainerIp(
-      bspNetConfig.noisy ? "toxiproxy" : NODE_INFOS.bsp.containerName
-    );
-
-    if (bspNetConfig.noisy) {
-      console.log(`toxiproxy IP: ${bspIp}`);
-    } else {
-      console.log(`sh-bsp IP: ${bspIp}`);
-    }
-
-    const bspPeerId = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.bsp.port}`, true);
-    console.log(`sh-bsp Peer ID: ${bspPeerId}`);
-
-    process.env.BSP_IP = bspIp;
-    process.env.BSP_PEER_ID = bspPeerId;
-
-    await compose.upOne("sh-user", {
-      config: composeFilePath,
-      log: true,
-      env: {
-        ...process.env,
-        BSP_IP: bspIp,
-        BSP_PEER_ID: bspPeerId
-      }
-    });
-
-    const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
-    console.log(`sh-user Peer ID: ${peerIDUser}`);
-
-    const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
-
-    // Create Connection API Object to User Node
     userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
-
-    // Give Balances
-    const amount = 10000n * 10n ** 12n;
-    await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(bspKey.address, amount))
-    );
-    await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(shUser.address, amount))
-    );
-
-    // Make BSP
-    await userApi.sealBlock(
-      userApi.tx.sudo.sudo(
-        userApi.tx.providers.forceBspSignUp(
-          bspKey.address,
-          DUMMY_BSP_ID,
-          bspNetConfig.capacity || CAPACITY_512,
-          [multiAddressBsp],
-          bspKey.address
-        )
-      )
-    );
-
-    // Make MSP
-    await userApi.sealBlock(
-      userApi.tx.sudo.sudo(
-        userApi.tx.providers.forceMspSignUp(
-          alice.address,
-          DUMMY_MSP_ID,
-          bspNetConfig.capacity || CAPACITY_512,
-          [multiAddressBsp],
-          {
-            identifier: VALUE_PROP,
-            dataLimit: 500,
-            protocols: ["https", "ssh", "telnet"]
-          },
-          alice.address
-        )
-      )
-    );
 
     // u32 max value
     const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
@@ -451,32 +362,8 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
 
     const fileMetadata = await sendNewStorageRequest(userApi, source, location, bucketName);
 
-    /**** BSP VOLUNTEERS ****/
-    // Wait for the BSPs to volunteer.
-    await sleep(500);
-
-    const volunteerPending = await userApi.rpc.author.pendingExtrinsics();
-    strictEqual(
-      volunteerPending.length,
-      4,
-      "There should be four pending extrinsics from BSPs (volunteer)"
-    );
-
-    await userApi.sealBlock();
-
-    // Wait for the BSPs to download the file.
-    await sleep(5000);
-    const confirmPending = await userApi.rpc.author.pendingExtrinsics();
-    strictEqual(
-      confirmPending.length,
-      4,
-      "There should be four pending extrinsics from BSPs (confirm store)"
-    );
-
-    await userApi.sealBlock();
-
-    // Wait for the BSPs to process the confirmation of the file.
-    await sleep(1000);
+    await waitForBspVolunteer(userApi);
+    await waitForBspStored(userApi);
 
     // Stopping BSP that is supposed to be down.
     await stopBsp(bspDownContainerName);
@@ -668,10 +555,21 @@ export const createBucket = async (api: ApiPromise, bucketName: string) => {
 };
 
 export const cleardownTest = async (cleardownOptions: {
-  api: BspNetApi;
+  api: BspNetApi | BspNetApi[];
   keepNetworkAlive?: boolean;
 }) => {
-  await cleardownOptions.api.disconnect();
+  try {
+    if (Array.isArray(cleardownOptions.api)) {
+      for (const api of cleardownOptions.api) {
+        await api.disconnect();
+      }
+    } else {
+      await cleardownOptions.api.disconnect();
+    }
+  } catch (e) {
+    console.error(e);
+    console.log("cleardown failed, but we will continue.");
+  }
   cleardownOptions.keepNetworkAlive === true ? null : await closeSimpleBspNet();
 };
 

@@ -9,7 +9,6 @@ import {
 } from "./helpers";
 import type { BspNetApi, BspNetConfig, BspNetContext, TestOptions } from "./types";
 import { EventEmitter } from "node:events";
-import { ok } from "node:assert";
 
 export const launchEventEmitter = new EventEmitter();
 
@@ -52,7 +51,6 @@ export async function describeBspNet<
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
     describeFunc(`BSPNet: ${title} (${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
-      // TODO - maybe make the below awaited and always connected?
       let userApiPromise: Promise<BspNetApi>;
       let bspApiPromise: Promise<BspNetApi>;
       let responseListenerPromise: ReturnType<typeof launchNetwork>;
@@ -70,8 +68,10 @@ export async function describeBspNet<
       });
 
       after(async () => {
-        await cleardownTest({ api: await userApiPromise, keepNetworkAlive: options?.keepAlive });
-        await (await bspApiPromise).disconnect();
+        await cleardownTest({
+          api: [await userApiPromise, await bspApiPromise],
+          keepNetworkAlive: options?.keepAlive
+        });
         if (options?.keepAlive) {
           if (bspNetConfigCases.length > 1) {
             console.error(

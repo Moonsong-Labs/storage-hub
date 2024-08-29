@@ -2,3 +2,4 @@
 zombienet-*
 
 tmp/*
+tsconfig.tsbuildinfo
