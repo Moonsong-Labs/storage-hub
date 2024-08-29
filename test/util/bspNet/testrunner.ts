@@ -8,6 +8,11 @@ import {
   runSimpleBspNet
 } from "./helpers";
 import type { BspNetApi, BspNetConfig, BspNetContext, TestOptions } from "./types";
+import { EventEmitter } from "node:events";
+import { ok } from "node:assert";
+
+export const launchEventEmitter = new EventEmitter();
+
 /**
  * Describes a set of BspNet tests.
  * @param title The title of the test suite.
@@ -41,27 +46,7 @@ export async function describeBspNet<
   const options = args.length === 2 ? args[0] : {};
   const tests = args.length === 2 ? args[1] : args[0];
 
-  const bspNetConfigCases: BspNetConfig[] =
-    options.networkConfig === "all"
-      ? [
-          // "ALL" network config
-          { noisy: false, rocksdb: false },
-          { noisy: false, rocksdb: true }
-        ]
-      : options.networkConfig === "standard"
-        ? [
-            // "STANDARD" network config
-            { noisy: false, rocksdb: false }
-          ]
-        : options.networkConfig === "noisy"
-          ? [{ noisy: true, rocksdb: false }]
-          : typeof options.networkConfig === "object"
-            ? options.networkConfig
-            : // default config is same as "ALL"
-              [
-                { noisy: false, rocksdb: false },
-                { noisy: false, rocksdb: true }
-              ];
+  const bspNetConfigCases = pickConfig(options);
 
   for (const bspNetConfig of bspNetConfigCases) {
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
@@ -70,22 +55,16 @@ export async function describeBspNet<
       // TODO - maybe make the below awaited and always connected?
       let userApiPromise: Promise<BspNetApi>;
       let bspApiPromise: Promise<BspNetApi>;
-      let launchResponse: Awaited<
-        | ReturnType<typeof runSimpleBspNet>
-        | ReturnType<typeof runInitialisedBspsNet>
-        | ReturnType<typeof runMultipleInitialisedBspsNet>
-      >;
+      let responseListenerPromise: ReturnType<typeof launchNetwork>;
 
       before(async () => {
+        // Create a promise which captures a response from the launchNetwork function
+        responseListenerPromise = new Promise((resolve) => {
+          launchEventEmitter.once("networkLaunched", resolve);
+        });
         // Launch the network
-        launchResponse =
-          options?.initialised === "multi"
-            ? await runMultipleInitialisedBspsNet(bspNetConfig)
-            : options?.initialised === true
-              ? await runInitialisedBspsNet(bspNetConfig)
-              : await runSimpleBspNet(bspNetConfig);
-
-        // Create API Connectors
+        const launchResponse = await launchNetwork(bspNetConfig, options?.initialised);
+        launchEventEmitter.emit("networkLaunched", launchResponse);
         userApiPromise = createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
         bspApiPromise = createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
       });
@@ -112,10 +91,44 @@ export async function describeBspNet<
         bspNetConfig,
         before,
         after,
-        launchResponse
+        getLaunchResponse: () => responseListenerPromise
       } satisfies BspNetContext;
 
       tests(context);
     });
   }
 }
+
+export const launchNetwork = async (
+  config: BspNetConfig,
+  initialised: boolean | "multi" = false
+) => {
+  return initialised === "multi"
+    ? await runMultipleInitialisedBspsNet(config)
+    : initialised === true
+      ? await runInitialisedBspsNet(config)
+      : await runSimpleBspNet(config);
+};
+
+const pickConfig = (options: TestOptions) => {
+  return options.networkConfig === "all"
+    ? [
+        // "ALL" network config
+        { noisy: false, rocksdb: false },
+        { noisy: false, rocksdb: true }
+      ]
+    : options.networkConfig === "standard"
+      ? [
+          // "STANDARD" network config
+          { noisy: false, rocksdb: false }
+        ]
+      : options.networkConfig === "noisy"
+        ? [{ noisy: true, rocksdb: false }]
+        : typeof options.networkConfig === "object"
+          ? options.networkConfig
+          : // default config is same as "ALL"
+            [
+              { noisy: false, rocksdb: false },
+              { noisy: false, rocksdb: true }
+            ];
+};

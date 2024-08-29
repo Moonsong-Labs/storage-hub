@@ -43,7 +43,7 @@ import {
   VALUE_PROP
 } from "./consts";
 import { addBspContainer, showContainers } from "./docker";
-import type { BspNetApi, BspNetConfig, FileMetadata } from "./types";
+import type { BspNetApi, BspNetConfig, FileMetadata, InitialisedMultiBspNetwork } from "./types";
 import { waitForBspStored, waitForBspVolunteer } from "./waits.ts";
 import { sleep } from "../timer.ts";
 import { strictEqual } from "node:assert";
@@ -492,7 +492,7 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
         fingerprint: fileMetadata.fingerprint,
         fileSize: fileMetadata.fileSize
       }
-    };
+    } satisfies InitialisedMultiBspNetwork;
   } catch (e) {
     console.error("Error ", e);
   } finally {

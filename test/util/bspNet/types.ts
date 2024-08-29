@@ -10,6 +10,8 @@ import type {
 } from "./helpers";
 import type { EventRecord, Event } from "@polkadot/types/interfaces";
 import type { after, before, it } from "node:test";
+import type { launchNetwork } from "./testrunner";
+import type { BN } from "@polkadot/util";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -137,17 +139,13 @@ export type BspNetContext = {
   bspNetConfig: BspNetConfig;
   before: typeof before;
   after: typeof after;
-  launchResponse: Awaited<
-    | ReturnType<typeof runSimpleBspNet>
-    | ReturnType<typeof runInitialisedBspsNet>
-    | ReturnType<typeof runMultipleInitialisedBspsNet>
-  >;
+  getLaunchResponse: () => ReturnType<typeof launchNetwork>;
 };
 
 /**
  * Network configuration options for BspNet tests.
  */
-type NetworkConfig =
+export type NetworkConfig =
   /** Uses default configuration with a single BSP and no network noise */
   | "standard"
   /** Runs tests with multiple configurations, including both RocksDB and MemoryDB */
@@ -178,4 +176,10 @@ export type TestOptions = {
    * - "multi": Runs tests with both initialised and non-initialised network configurations
    */
   initialised?: boolean | "multi";
+};
+
+export type InitialisedMultiBspNetwork = {
+  bspTwoRpcPort: number;
+  bspThreeRpcPort: number;
+  fileData: FileMetadata;
 };

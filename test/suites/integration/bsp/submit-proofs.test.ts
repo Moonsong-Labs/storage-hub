@@ -7,36 +7,31 @@ import {
   createApiObject,
   describeBspNet,
   DUMMY_BSP_ID,
+  launchEventEmitter,
   NODE_INFOS,
   pauseBspContainer,
   resumeBspContainer,
   sleep,
-  type BspNetApi
+  type BspNetApi,
+  type FileMetadata
 } from "../../../util";
 
 describeBspNet(
-  `Many BSPs Submit Proofs`,
+  "Many BSPs Submit Proofs",
   { initialised: "multi", networkConfig: "standard" },
-  ({ before, launchResponse, createUserApi, after, it }) => {
+  ({ before, createUserApi, after, it, getLaunchResponse }) => {
     let userApi: BspNetApi;
     let bspTwoApi: BspNetApi;
     let bspThreeApi: BspNetApi;
-    let fileData: {
-      fileKey: string;
-      bucketId: string;
-      location: string;
-      owner: string;
-      fingerprint: string;
-      fileSize: number;
-    };
+    let fileData: FileMetadata;
     // TODO Figure out why this doesn't work
     before(async () => {
+      const launchResponse = await getLaunchResponse();
+      assert(launchResponse, "BSPNet failed to initialise");
+      fileData = launchResponse.fileData;
       userApi = await createUserApi();
       bspTwoApi = await createApiObject(`ws://127.0.0.1:${launchResponse?.bspTwoRpcPort}`);
       bspThreeApi = await createApiObject(`ws://127.0.0.1:${launchResponse?.bspThreeRpcPort}`);
-
-      assert(launchResponse, "BSPNet failed to initialise");
-      fileData = launchResponse?.fileData;
     });
 
     after(async () => {
