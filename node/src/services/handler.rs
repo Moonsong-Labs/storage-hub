@@ -15,7 +15,7 @@ use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest},
     FileTransferService,
 };
-use shc_forest_manager::traits::ForestStorage;
+use shc_forest_manager::traits::ForestStorageHandler;
 use storage_hub_runtime::StorageProofsMerkleTrieLayout;
 
 use crate::tasks::sp_slash_provider::SlashProviderTask;
@@ -25,10 +25,10 @@ use crate::tasks::{
 };
 
 /// Represents the handler for the Storage Hub service.
-pub struct StorageHubHandler<FL, FS>
+pub struct StorageHubHandler<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FSH: ForestStorageHandler + Clone + Send + Sync,
 {
     /// The task spawner for spawning asynchronous tasks.
     pub task_spawner: TaskSpawner,
@@ -39,43 +39,43 @@ where
     /// The file storage layer which stores all files in chunks.
     pub file_storage: Arc<RwLock<FL>>,
     /// The forest storage layer which tracks all complete files stored in the file storage layer.
-    pub forest_storage: Arc<RwLock<FS>>,
+    pub forest_storage_handler: FSH,
 }
 
-impl<FL, FS> Clone for StorageHubHandler<FL, FS>
+impl<FL, FSH> Clone for StorageHubHandler<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FSH: ForestStorageHandler + Clone + Send + Sync,
 {
-    fn clone(&self) -> StorageHubHandler<FL, FS> {
+    fn clone(&self) -> StorageHubHandler<FL, FSH> {
         Self {
             task_spawner: self.task_spawner.clone(),
             file_transfer: self.file_transfer.clone(),
             blockchain: self.blockchain.clone(),
             file_storage: self.file_storage.clone(),
-            forest_storage: self.forest_storage.clone(),
+            forest_storage_handler: self.forest_storage_handler.clone(),
         }
     }
 }
 
-impl<FL, FS> StorageHubHandler<FL, FS>
+impl<FL, FSH> StorageHubHandler<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     pub fn new(
         task_spawner: TaskSpawner,
         file_transfer: ActorHandle<FileTransferService>,
         blockchain: ActorHandle<BlockchainService>,
         file_storage: Arc<RwLock<FL>>,
-        forest_storage: Arc<RwLock<FS>>,
+        forest_storage_handler: FSH,
     ) -> Self {
         Self {
             task_spawner,
             file_transfer,
             blockchain,
             file_storage,
-            forest_storage,
+            forest_storage_handler,
         }
     }
 

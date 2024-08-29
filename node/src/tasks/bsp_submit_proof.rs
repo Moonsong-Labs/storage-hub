@@ -16,7 +16,7 @@ use shc_common::types::{
     StorageProofsMerkleTrieLayout, TrieRemoveMutation,
 };
 use shc_file_manager::traits::FileStorage;
-use shc_forest_manager::traits::ForestStorage;
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::services::handler::StorageHubHandler;
 
@@ -33,32 +33,32 @@ const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
 ///     - Generate key proofs for each file key.
 ///     - Submit the proof to the runtime.
 ///     - Apply mutations if necessary and ensure the new Forest root matches the one on-chain.
-pub struct BspSubmitProofTask<FL, FS>
+pub struct BspSubmitProofTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FSH: ForestStorageHandler + Clone + Send + Sync,
 {
-    storage_hub_handler: StorageHubHandler<FL, FS>,
+    storage_hub_handler: StorageHubHandler<FL, FSH>,
 }
 
-impl<FL, FS> Clone for BspSubmitProofTask<FL, FS>
+impl<FL, FSH> Clone for BspSubmitProofTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FSH: ForestStorageHandler + Clone + Send + Sync,
 {
-    fn clone(&self) -> BspSubmitProofTask<FL, FS> {
+    fn clone(&self) -> BspSubmitProofTask<FL, FSH> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FS> BspSubmitProofTask<FL, FS>
+impl<FL, FSH> BspSubmitProofTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FSH: ForestStorageHandler + Clone + Send + Sync,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -74,10 +74,10 @@ where
 /// - Constructs key proofs and submits the proof to the runtime.
 /// - Applies any necessary mutations.
 /// - Ensures the new Forest root matches the one on-chain.
-impl<FL, FS> EventHandler<NewChallengeSeed> for BspSubmitProofTask<FL, FS>
+impl<FL, FSH> EventHandler<NewChallengeSeed> for BspSubmitProofTask<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Key = ()> + Clone + Send + Sync + 'static,
 {
     async fn handle_event(&mut self, event: NewChallengeSeed) -> anyhow::Result<()> {
         info!(
@@ -116,10 +116,10 @@ where
     }
 }
 
-impl<FL, FS> EventHandler<ProcessSubmitProofRequest> for BspSubmitProofTask<FL, FS>
+impl<FL, FSH> EventHandler<ProcessSubmitProofRequest> for BspSubmitProofTask<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Key = ()> + Clone + Send + Sync + 'static,
 {
     async fn handle_event(&mut self, event: ProcessSubmitProofRequest) -> anyhow::Result<()> {
         info!(
@@ -138,12 +138,22 @@ where
             }
         };
 
-        let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
-        let proven_file_keys = read_forest_storage
-            .generate_proof(event.forest_challenges)
-            .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
-        // Release the forest storage read lock.
-        drop(read_forest_storage);
+        let proven_file_keys = {
+            let fs = self
+                .storage_hub_handler
+                .forest_storage_handler
+                .get(&())
+                .await
+                .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+
+            let p = fs
+                .read()
+                .await
+                .generate_proof(event.forest_challenges)
+                .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
+
+            p
+        };
 
         // Get the keys that were proven.
         let mut proven_keys = Vec::new();
@@ -261,10 +271,10 @@ where
     }
 }
 
-impl<FL, FS> BspSubmitProofTask<FL, FS>
+impl<FL, FSH> BspSubmitProofTask<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Key = ()> + Clone + Send + Sync + 'static,
 {
     async fn derive_forest_challenges_from_seed(
         &self,
@@ -369,16 +379,23 @@ where
 
     async fn remove_file(&self, file_key: &H256) -> anyhow::Result<()> {
         // Remove the file key from the Forest.
-        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
-        write_forest_storage.delete_file_key(file_key).map_err(|e| {
-            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
-            anyhow!(
-                "Failed to remove file key from Forest storage: {:?}",
-                e
-            )
-        })?;
-        // Release the forest storage write lock.
-        drop(write_forest_storage);
+        // Check that the new Forest root matches the one on-chain.
+        {
+            let fs = self
+                .storage_hub_handler
+                .forest_storage_handler
+                .get(&())
+                .await
+                .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+
+            fs.write().await.delete_file_key(file_key).map_err(|e| {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                anyhow!(
+                    "Failed to remove file key from Forest storage: {:?}",
+                    e
+                )
+            })?;
+        };
 
         // TODO: This should actually be done after waiting for finality of the extrinsic.
         // Remove the file from the File Storage.
@@ -414,10 +431,14 @@ where
         trace!(target: LOG_TARGET, "Provider root according to runtime: {:?}", onchain_root);
 
         // Check that the new Forest root matches the one on-chain.
-        let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
-        let root = read_forest_storage.root();
-        // Release the forest storage read lock.
-        drop(read_forest_storage);
+        let fs = self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get(&())
+            .await
+            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+
+        let root = { fs.read().await.root() };
 
         trace!(target: LOG_TARGET, "Provider root according to Forest Storage: {:?}", root);
 

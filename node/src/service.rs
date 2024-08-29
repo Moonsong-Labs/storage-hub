@@ -14,7 +14,7 @@ use shc_file_manager::{
     in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage, traits::FileStorage,
 };
 use shc_forest_manager::{
-    in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
+    in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorageHandler,
 };
 
 use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
@@ -62,6 +62,7 @@ use crate::{
     cli::StorageLayer,
     services::{
         builder::{StorageHubBuilder, StorageLayerBuilder},
+        forest_storage::{ForestStorageCaching, ForestStorageSingle},
         handler::StorageHubHandler,
     },
 };
@@ -192,17 +193,17 @@ pub fn new_partial(
     })
 }
 
-async fn init_sh_builder<FL, FS>(
+async fn init_sh_builder<FL, FSH>(
     provider_options: &Option<ProviderOptions>,
     task_manager: &TaskManager,
     file_transfer_request_protocol: Option<(ProtocolName, Receiver<IncomingRequest>)>,
     network: Arc<ParachainNetworkService>,
     keystore: KeystorePtr,
-) -> Option<StorageHubBuilder<FL, FS>>
+) -> Option<StorageHubBuilder<FL, FSH>>
 where
-    StorageHubBuilder<FL, FS>: StorageLayerBuilder,
+    StorageHubBuilder<FL, FSH>: StorageLayerBuilder,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     match provider_options {
         Some(ProviderOptions { storage_path, .. }) => {
@@ -236,16 +237,16 @@ where
     }
 }
 
-async fn finish_sh_builder_and_build<FL, FS>(
-    mut sh_builder: StorageHubBuilder<FL, FS>,
+async fn finish_sh_builder_and_build<FL, FSH>(
+    mut sh_builder: StorageHubBuilder<FL, FSH>,
     client: Arc<ParachainClient>,
     rpc_handlers: RpcHandlers,
     keystore: KeystorePtr,
     provider_options: ProviderOptions,
 ) where
-    StorageHubBuilder<FL, FS>: StorageLayerBuilder,
+    StorageHubBuilder<FL, FSH>: StorageLayerBuilder,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     // Spawn the Blockchain Service if node is running as a Storage Provider, now that
     // the rpc handlers has been created.
@@ -258,12 +259,12 @@ async fn finish_sh_builder_and_build<FL, FS>(
     start_provider_tasks(provider_options, sh_handler);
 }
 
-fn start_provider_tasks<FL, FS>(
+fn start_provider_tasks<FL, FSH>(
     provider_options: ProviderOptions,
-    sh_handler: StorageHubHandler<FL, FS>,
+    sh_handler: StorageHubHandler<FL, FSH>,
 ) where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     // Starting the tasks according to the provider type.
     match provider_options.provider_type {
@@ -275,7 +276,7 @@ fn start_provider_tasks<FL, FS>(
 
 /// Start a development node with the given solo chain `Configuration`.
 #[sc_tracing::logging::prefix_logs_with("Solo chain 💾")]
-async fn start_dev_impl<FL, FS>(
+async fn start_dev_impl<FL, FSH>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
@@ -283,9 +284,9 @@ async fn start_dev_impl<FL, FS>(
     sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager>
 where
-    StorageHubBuilder<FL, FS>: StorageLayerBuilder,
+    StorageHubBuilder<FL, FSH>: StorageLayerBuilder,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     use async_io::Timer;
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
@@ -631,7 +632,7 @@ where
 ///
 /// This is the actual implementation that is abstract over the executor and the runtime api.
 #[sc_tracing::logging::prefix_logs_with("StorageHub 💾")]
-async fn start_node_impl<FL, FS>(
+async fn start_node_impl<FL, FSH>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
@@ -640,9 +641,9 @@ async fn start_node_impl<FL, FS>(
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
 where
-    StorageHubBuilder<FL, FS>: StorageLayerBuilder,
+    StorageHubBuilder<FL, FSH>: StorageLayerBuilder,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     let parachain_config = prepare_node_config(parachain_config);
 
@@ -978,29 +979,49 @@ pub async fn start_dev_node(
     sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager> {
     match provider_options {
-        Some(provider_options) => match provider_options.storage_layer {
-            StorageLayer::Memory => {
-                start_dev_impl::<InMemoryFileStorage<_>, InMemoryForestStorage<_>>(
-                    config,
-                    Some(provider_options),
-                    hwbench,
-                    para_id,
-                    sealing,
-                )
-                .await
-            }
-            StorageLayer::RocksDB => {
+        Some(provider_options) => match (
+            &provider_options.provider_type,
+            &provider_options.storage_layer.clone(),
+        ) {
+            (&ProviderType::Bsp, &StorageLayer::Memory) => {
                 start_dev_impl::<
-                    RocksDbFileStorage<_, kvdb_rocksdb::Database>,
-                    RocksDBForestStorage<_, kvdb_rocksdb::Database>,
+                    InMemoryFileStorage<_>,
+                    ForestStorageSingle<InMemoryForestStorage<_>>,
                 >(config, Some(provider_options), hwbench, para_id, sealing)
                 .await
+            }
+            (&ProviderType::Msp, &StorageLayer::Memory) => {
+                start_dev_impl::<
+                    InMemoryFileStorage<_>,
+                    ForestStorageCaching<Vec<u8>, InMemoryForestStorage<_>>,
+                >(config, Some(provider_options), hwbench, para_id, sealing)
+                .await
+            }
+            (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
+                start_dev_impl::<
+                    RocksDbFileStorage<_, kvdb_rocksdb::Database>,
+                    ForestStorageSingle<RocksDBForestStorage<_, kvdb_rocksdb::Database>>,
+                >(config, Some(provider_options), hwbench, para_id, sealing)
+                .await
+            }
+            (&ProviderType::Msp, &StorageLayer::RocksDB) => {
+                start_dev_impl::<
+                    RocksDbFileStorage<_, kvdb_rocksdb::Database>,
+                    ForestStorageCaching<Vec<u8>, RocksDBForestStorage<_, kvdb_rocksdb::Database>>,
+                >(config, Some(provider_options), hwbench, para_id, sealing)
+                .await
+            }
+            // TODO: Remove this once User is removed from the ProviderType enum.
+            _ => {
+                return Err(sc_service::Error::Other(
+                    "Invalid combination of provider type and storage layer.".into(),
+                ));
             }
         },
         // In this case, it is not really important the types used for the storage layer, as
         // the node will not run as a provider.
         None => {
-            start_dev_impl::<InMemoryFileStorage<_>, InMemoryForestStorage<_>>(
+            start_dev_impl::<InMemoryFileStorage<_>, ForestStorageSingle<InMemoryForestStorage<_>>>(
                 config, None, hwbench, para_id, sealing,
             )
             .await
@@ -1018,22 +1039,14 @@ pub async fn start_parachain_node(
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
     match provider_options {
-        Some(provider_options) => match provider_options.storage_layer {
-            StorageLayer::Memory => {
-                start_node_impl::<InMemoryFileStorage<_>, InMemoryForestStorage<_>>(
-                    parachain_config,
-                    polkadot_config,
-                    collator_options,
-                    Some(provider_options),
-                    para_id,
-                    hwbench,
-                )
-                .await
-            }
-            StorageLayer::RocksDB => {
+        Some(provider_options) => match (
+            &provider_options.provider_type,
+            &provider_options.storage_layer,
+        ) {
+            (&ProviderType::Bsp, &StorageLayer::Memory) => {
                 start_node_impl::<
-                    RocksDbFileStorage<_, kvdb_rocksdb::Database>,
-                    RocksDBForestStorage<_, kvdb_rocksdb::Database>,
+                    InMemoryFileStorage<_>,
+                    ForestStorageSingle<InMemoryForestStorage<_>>,
                 >(
                     parachain_config,
                     polkadot_config,
@@ -1044,11 +1057,59 @@ pub async fn start_parachain_node(
                 )
                 .await
             }
+            (&ProviderType::Msp, &StorageLayer::Memory) => {
+                start_node_impl::<
+                    InMemoryFileStorage<_>,
+                    ForestStorageCaching<Vec<u8>, InMemoryForestStorage<_>>,
+                >(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
+                start_node_impl::<
+                    RocksDbFileStorage<_, kvdb_rocksdb::Database>,
+                    ForestStorageSingle<RocksDBForestStorage<_, kvdb_rocksdb::Database>>,
+                >(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            (&ProviderType::Msp, &StorageLayer::RocksDB) => {
+                start_node_impl::<
+                    RocksDbFileStorage<_, kvdb_rocksdb::Database>,
+                    ForestStorageCaching<Vec<u8>, RocksDBForestStorage<_, kvdb_rocksdb::Database>>,
+                >(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            // TODO: Remove this once User is removed from the ProviderType enum.
+            _ => {
+                return Err(sc_service::Error::Other(
+                    "Invalid combination of provider type and storage layer.".into(),
+                ));
+            }
         },
         None => {
             // In this case, it is not really important the types used for the storage layer, as
             // the node will not run as a provider.
-            start_node_impl::<InMemoryFileStorage<_>, InMemoryForestStorage<_>>(
+            start_node_impl::<InMemoryFileStorage<_>, ForestStorageSingle<InMemoryForestStorage<_>>>(
                 parachain_config,
                 polkadot_config,
                 collator_options,
