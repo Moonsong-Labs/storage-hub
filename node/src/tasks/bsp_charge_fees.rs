@@ -1,10 +1,13 @@
 use log::info;
+use pallet_payment_streams_runtime_api::PaymentStreamsApi;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::ProofAccepted};
-use shc_common::types::StorageProofsMerkleTrieLayout;
+use shc_common::types::{ProviderId, StorageProofsMerkleTrieLayout};
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
+use sp_core::H256;
 use sp_runtime::AccountId32;
+use storage_hub_runtime::Balance;
 
 use crate::services::handler::StorageHubHandler;
 
@@ -51,6 +54,10 @@ where
         info!(target: LOG_TARGET, "A proof was accepted for provider {:?} and users' fees are going to be charged.", event.provider_id);
 
         // given some condition that will require a runtime API we will call charge_payment_streams for each user
+        let users_with_debt = self
+            .storage_hub_handler
+            .blockchain
+            .query_users_with_debt(H256::random(), Balance::MIN);
 
         let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
             pallet_payment_streams::Call::charge_payment_streams {

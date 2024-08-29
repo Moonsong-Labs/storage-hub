@@ -50,6 +50,8 @@ cumulus-primitives-core = { workspace = true }
 cumulus-primitives-storage-weight-reclaim = { workspace = true }
 
 # Local
+pallet-payment-streams = { workspace = true }
+pallet-payment-streams-runtime-api = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }

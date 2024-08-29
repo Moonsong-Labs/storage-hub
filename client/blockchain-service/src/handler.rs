@@ -26,6 +26,7 @@ use storage_hub_runtime::RuntimeEvent;
 use pallet_file_system_runtime_api::{
     FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
 };
+use pallet_payment_streams_runtime_api::{GetUsersWithDebtOverThresholdError, PaymentStreamsApi};
 use pallet_proofs_dealer_runtime_api::{
     GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError, ProofsDealerApi,
 };
@@ -554,6 +555,31 @@ impl Actor for BlockchainService {
                         Ok(_) => {}
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send storage provider ID: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryUsersWithDebt {
+                    provider_id,
+                    min_debt,
+                    callback,
+                } => {
+                    let users_with_debt = self
+                        .client
+                        .runtime_api()
+                        .get_users_with_debt_over_threshold(
+                            provider_id,
+                            // &H256::from(min_debt),
+                            &H256::zero(),
+                            0u128,
+                        )
+                        .unwrap_or_else(|_| {
+                            Err(GetUsersWithDebtOverThresholdError::InternalApiError)
+                        });
+
+                    match callback.send(users_with_debt) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send users with debt: {:?}", e);
                         }
                     }
                 }
