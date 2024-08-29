@@ -905,12 +905,23 @@ fn submit_proof_success() {
         let prev_deadline = current_tick + challenge_period_plus_tolerance;
         ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
 
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
         // Advance less than `ChallengeTicksTolerance` blocks.
+        let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let current_block = System::block_number();
         run_to_block(current_block + challenge_ticks_tolerance - 1);
 
-        // Get the seed for block 2.
-        let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
+        // Get the seed for challenge block.
+        let seed = TickToChallengesSeed::<Test>::get(challenge_block).unwrap();
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
         let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
@@ -1045,12 +1056,16 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
         let prev_deadline = current_tick + challenge_period_plus_tolerance;
         ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
 
+        // Advance to the next challenge the Provider should listen to.
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
         // Advance less than `ChallengeTicksTolerance` blocks.
         let current_block = System::block_number();
         run_to_block(current_block + challenge_ticks_tolerance - 1);
 
-        // Get the seed for block 2.
-        let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
+        // Get the seed for challenge block.
+        let seed = TickToChallengesSeed::<Test>::get(challenge_block).unwrap();
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
         let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
@@ -1155,12 +1170,23 @@ fn submit_proof_submitted_by_not_a_provider_success() {
         // Set Provider's last submitted proof block.
         LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
 
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
-        run_to_block(challenge_ticks_tolerance - 1);
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
 
-        // Get the seed for block 2.
-        let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
+        // Get the seed for challenge block.
+        let seed = TickToChallengesSeed::<Test>::get(challenge_block).unwrap();
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
         let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
@@ -1256,12 +1282,23 @@ fn submit_proof_with_checkpoint_challenges_success() {
         let last_tick_provider_submitted_proof = System::block_number();
         LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
 
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
-        run_to_block(challenge_ticks_tolerance - 1);
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
 
-        // Get the seed for block 3 (after custom challenges).
-        let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
+        // Get the seed for challenge block.
+        let seed = TickToChallengesSeed::<Test>::get(challenge_block).unwrap();
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
         let mut challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
@@ -1374,12 +1411,23 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
         let last_tick_provider_submitted_proof = System::block_number();
         LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
 
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
-        run_to_block(challenge_ticks_tolerance - 1);
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
 
-        // Get the seed for block 3 (after custom challenges).
-        let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
+        // Get the seed for challenge block.
+        let seed = TickToChallengesSeed::<Test>::get(challenge_block).unwrap();
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
         let mut challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
@@ -1905,12 +1953,23 @@ fn submit_proof_seed_not_found_fail() {
         // Set Provider's last submitted proof block.
         LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, 1);
 
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
-        run_to_block(challenge_ticks_tolerance - 1);
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
 
-        // Remove challenge seed for block 2.
-        TickToChallengesSeed::<Test>::remove(2);
+        // Remove challenge seed for challenge block.
+        TickToChallengesSeed::<Test>::remove(challenge_block);
 
         // Dispatch challenge extrinsic.
         let _ = ProofsDealer::submit_proof(user, proof, None);
@@ -1998,9 +2057,20 @@ fn submit_proof_checkpoint_challenge_not_found_fail() {
         let seed = BlakeTwo256::hash(b"seed");
         TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
 
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
-        run_to_block(challenge_ticks_tolerance - 1);
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
 
         // Set last checkpoint challenge block to something before the challenge tick
         // that is being submitted.
@@ -2088,13 +2158,20 @@ fn submit_proof_forest_proof_verification_fail() {
         // Set Provider's last submitted proof block.
         LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
 
-        // Set random seed for this block challenges.
-        let seed = BlakeTwo256::hash(b"seed");
-        TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
-
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
-        run_to_block(challenge_ticks_tolerance - 1);
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
 
         // Dispatch challenge extrinsic.
         assert_noop!(
@@ -2179,13 +2256,20 @@ fn submit_proof_no_key_proofs_for_keys_verified_in_forest_fail() {
         // Set Provider's last submitted proof block.
         LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
 
-        // Set random seed for this block challenges.
-        let seed = BlakeTwo256::hash(b"seed");
-        TickToChallengesSeed::<Test>::insert(System::block_number(), seed);
-
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
-        run_to_block(challenge_ticks_tolerance - 1);
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
 
         // Dispatch challenge extrinsic.
         // The forest proof will pass because it's not empty, so the MockVerifier will accept it,
@@ -2303,9 +2387,20 @@ fn submit_proof_out_checkpoint_challenges_fail() {
             key_proofs,
         };
 
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
-        run_to_block(challenge_ticks_tolerance - 1);
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
 
         // Dispatch challenge extrinsic.
         // The forest proof will pass because it's not empty, so the MockVerifier will accept it,
@@ -2374,12 +2469,23 @@ fn submit_proof_key_proof_verification_fail() {
         // Set Provider's last submitted proof block.
         LastTickProviderSubmittedAProofFor::<Test>::insert(&provider_id, System::block_number());
 
+        // Advance to the next challenge the Provider should listen to.
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
         // Advance less than `ChallengeTicksTolerance` blocks.
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
-        run_to_block(challenge_ticks_tolerance - 1);
+        let current_block = System::block_number();
+        run_to_block(current_block + challenge_ticks_tolerance - 1);
 
-        // Get the seed for block 2.
-        let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
+        // Get the seed for challenge block.
+        let seed = TickToChallengesSeed::<Test>::get(challenge_block).unwrap();
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
         let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(
@@ -2905,7 +3011,12 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
 
         // New challenges round
         let current_tick = ChallengesTicker::<Test>::get();
-        let challenge_period = 1;
+        let providers_stake =
+            <ProvidersPalletFor<Test> as ReadChallengeableProvidersInterface>::get_stake(
+                provider_id,
+            )
+            .unwrap();
+        let challenge_period = crate::Pallet::<Test>::stake_to_challenge_period(providers_stake);
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = current_tick + challenge_period_plus_tolerance;
@@ -3098,12 +3209,16 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
         ));
         assert!(!SlashableProviders::<Test>::contains_key(&bob_provider_id));
 
+        // Advance to the next challenge Alice and Bob should listen to.
+        let current_block = System::block_number();
+        let challenge_block = current_block + challenge_period;
+        run_to_block(challenge_block);
         // Advance less than `ChallengeTicksTolerance` blocks.
         let current_block = System::block_number();
         run_to_block(current_block + challenge_ticks_tolerance - 1);
 
         // Get the seed for block 2.
-        let seed = TickToChallengesSeed::<Test>::get(2).unwrap();
+        let seed = TickToChallengesSeed::<Test>::get(challenge_block).unwrap();
 
         // Calculate challenges from seed, so that we can mock a key proof for each.
         let challenges = crate::Pallet::<Test>::generate_challenges_from_seed(

@@ -137,9 +137,13 @@ pub mod pallet {
 
         /// The ratio to convert staked balance to block period.
         /// This is used to determine the period in which a Provider should submit a proof, based on
-        /// their stake. The period is calculated as `stake / StakeToBlockPeriod`, saturating at 1.
+        /// their stake. The period is calculated as `StakeToChallengePeriod / stake`, saturating at [`Config::MinChallengePeriod`].
         #[pallet::constant]
         type StakeToChallengePeriod: Get<BalanceFor<Self>>;
+
+        /// The minimum period in which a Provider can be challenged, regardless of their stake.
+        #[pallet::constant]
+        type MinChallengePeriod: Get<BlockNumberFor<Self>>;
 
         /// The tolerance in number of ticks (almost equivalent to blocks, but skipping MBM) that
         /// a Provider has to submit a proof, counting from the tick the challenge is emitted for
