@@ -54,7 +54,7 @@ for (const bspNetConfig of bspNetConfigCases) {
             await closeSimpleBspNet();
         });
 
-        it.only("ProofAccepted emitted", async () => {
+        it.only("BSP Charging Task reacts to ProofAccepted and charges users", async () => {
             // create payment stream.
             let alice = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
             let result = await userApi.sealBlock(userApi.tx.sudo.sudo(userApi.tx.paymentStreams.createDynamicRatePaymentStream(DUMMY_BSP_ID, alice, 100, 1, 1)));
@@ -122,13 +122,13 @@ for (const bspNetConfig of bspNetConfigCases) {
 
             await sleep(500);
             // Assert for the the event of the proof successfully submitted and verified.
-            const paymentStreamsChargedEvents = assertEventPresent(
+            assertEventPresent(
                 userApi,
                 "paymentStreams",
                 "PaymentStreamCharged",
                 blockResult.events
             );
-            // strictEqual(paymentStreamsChargedEvents.length, 1, "There should be three proofs accepted events");
+            // TODO: check users' balances
         }
         );
     });
