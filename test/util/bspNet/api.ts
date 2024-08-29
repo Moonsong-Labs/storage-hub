@@ -25,8 +25,14 @@ export const createApiObject = async (uri: string): Promise<BspNetApi> => {
       signer?: KeyringPair
     ) => sealBlock(baseApi, calls, signer),
 
-    advanceToBlock: async (blockNumber: number, waitBetweenBlocks?: number | boolean) =>
-      advanceToBlock(baseApi, blockNumber, waitBetweenBlocks),
+    advanceToBlock: async (
+      blockNumber: number,
+      options?: {
+        waitBetweenBlocks?: number | boolean;
+        waitForBspProofs?: string[];
+      }
+    ) =>
+      advanceToBlock(baseApi, blockNumber, options?.waitBetweenBlocks, options?.waitForBspProofs),
 
     sendNewStorageRequest: async (source: string, location: string, bucketName: string) =>
       sendNewStorageRequest(baseApi, source, location, bucketName),

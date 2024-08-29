@@ -32,7 +32,10 @@ export type BspNetApi = ApiPromise & {
    */
   advanceToBlock: (
     blockNumber: number,
-    waitBetweenBlocks?: number | boolean
+    options?: {
+      waitBetweenBlocks?: number | boolean;
+      waitForBspProofs?: string[];
+    }
   ) => Promise<SealedBlock>;
 
   /**
