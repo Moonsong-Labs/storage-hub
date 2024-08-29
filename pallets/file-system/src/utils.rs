@@ -1,6 +1,8 @@
 use codec::Encode;
 use frame_support::{
-    ensure, pallet_prelude::DispatchResult, traits::nonfungibles_v2::Create, traits::Get,
+    ensure,
+    pallet_prelude::DispatchResult,
+    traits::{nonfungibles_v2::Create, Get},
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use num_bigint::BigUint;
@@ -23,17 +25,17 @@ use shp_traits::{
 };
 use sp_runtime::traits::CheckedMul;
 
-use crate::types::{BucketNameFor, ExpiredItems, ReplicationTargetType};
 use crate::{
     pallet,
     types::{
-        BucketIdFor, CollectionConfigFor, CollectionIdFor, FileKeyHasher, FileLocation,
-        Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest, MerkleHash, MultiAddresses,
-        PeerIds, ProviderIdFor, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        BucketIdFor, BucketNameFor, CollectionConfigFor, CollectionIdFor, ExpirationItem,
+        FileKeyHasher, FileLocation, Fingerprint, ForestProof, KeyProof, MaxBspsPerStorageRequest,
+        MerkleHash, MultiAddresses, PeerIds, ProviderIdFor, ReplicationTargetType, StorageData,
+        StorageRequestBspsMetadata, StorageRequestMetadata,
     },
-    BlockRangeToMaximumThreshold, Error, Event, ItemExpirations, MaximumThreshold,
-    NextAvailableExpirationInsertionBlock, Pallet, PendingFileDeletionRequests,
-    PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
+    BlockRangeToMaximumThreshold, Error, Event, MaximumThreshold, Pallet,
+    PendingFileDeletionRequests, PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps,
+    StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -212,7 +214,7 @@ where
             None
         };
 
-        let bucket_id = <T as crate::Config>::Providers::derive_bucket_id(&sender, name);
+        let bucket_id = <T as crate::Config>::Providers::derive_bucket_id(&msp_id, &sender, name);
 
         <T::Providers as MutateBucketsInterface>::add_bucket(
             msp_id,
@@ -377,10 +379,8 @@ where
         // Register storage request.
         <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
 
-        Self::queue_expiration_item(
-            T::StorageRequestTtl::get().into(),
-            ExpiredItems::StorageRequest(file_key),
-        )?;
+        let expiration_item = ExpirationItem::StorageRequest(file_key);
+        Self::enqueue_expiration_item(expiration_item)?;
 
         Ok(file_key)
     }
@@ -997,10 +997,9 @@ where
                     .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
 
                 // Queue the expiration item.
-                Self::queue_expiration_item(
-                    T::PendingFileDeletionRequestTtl::get().into(),
-                    ExpiredItems::PendingFileDeletionRequests((sender, file_key)),
-                )?;
+                let expiration_item =
+                    ExpirationItem::PendingFileDeletionRequests((sender, file_key));
+                Self::enqueue_expiration_item(expiration_item)?;
 
                 false
             }
@@ -1117,29 +1116,18 @@ where
         T::Nfts::create_collection(&owner, &owner, &config)
     }
 
-    /// Compute the next block number to insert an expiration after a given TTL.
+    /// Compute the next block number to insert an expiring item, and insert it in the corresponding expiration queue.
     ///
-    /// This function attempts to insert an expiration item at the next available block after the given TTL starting from
-    /// the current [`NextAvailableExpirationInsertionBlock`].
-    pub(crate) fn queue_expiration_item(
-        expiration_item_ttl: BlockNumberFor<T>,
-        expiration_item: ExpiredItems<T>,
+    /// This function attempts to insert a the expiration item at the next available block starting from
+    /// the current next available block.
+    pub(crate) fn enqueue_expiration_item(
+        expiration_item: ExpirationItem<T>,
     ) -> Result<BlockNumberFor<T>, DispatchError> {
-        let mut expiration_block = NextAvailableExpirationInsertionBlock::<T>::get()
-            .checked_add(&expiration_item_ttl)
-            .ok_or(Error::<T>::MaxBlockNumberReached)?;
+        let expiration_block = expiration_item.get_next_expiration_block();
+        let new_expiration_block = expiration_item.try_append(expiration_block)?;
+        expiration_item.set_next_expiration_block(new_expiration_block);
 
-        while let Err(_) =
-            <ItemExpirations<T>>::try_append(expiration_block, expiration_item.clone())
-        {
-            expiration_block = expiration_block
-                .checked_add(&1u8.into())
-                .ok_or(Error::<T>::MaxBlockNumberReached)?;
-        }
-
-        <NextAvailableExpirationInsertionBlock<T>>::set(expiration_block);
-
-        Ok(expiration_block)
+        Ok(new_expiration_block)
     }
 
     pub fn compute_file_key(
@@ -1263,10 +1251,10 @@ where
 }
 
 mod hooks {
-    use crate::types::{ExpiredItems, MerkleHash};
     use crate::{
-        pallet, Event, ItemExpirations, NextStartingBlockToCleanUp, Pallet,
-        PendingFileDeletionRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
+        pallet, types::MerkleHash, Event, FileDeletionRequestExpirations,
+        NextStartingBlockToCleanUp, Pallet, PendingFileDeletionRequests, ReplicationTarget,
+        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use frame_support::weights::Weight;
     use frame_system::pallet_prelude::BlockNumberFor;
@@ -1309,28 +1297,36 @@ mod hooks {
                 return;
             }
 
-            // Remove expired items if any existed and process them.
-            let mut expired_items = ItemExpirations::<T>::take(&block);
+            // Remove expired storage requests if any existed and process them.
+            let mut expired_storage_requests = StorageRequestExpirations::<T>::take(&block);
             remaining_weight.saturating_reduce(minimum_required_weight);
 
-            while let Some(expired) = expired_items.pop() {
-                match expired {
-                    ExpiredItems::StorageRequest(file_key) => {
-                        Self::process_expired_storage_request(file_key, remaining_weight)
-                    }
-                    ExpiredItems::PendingFileDeletionRequests((user, file_key)) => {
-                        Self::process_expired_pending_file_deletion(
-                            user,
-                            file_key,
-                            remaining_weight,
-                        )
-                    }
-                };
+            // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
+            // TODO: process all the expired storage requests. If not, we should return early.
+            while let Some(file_key) = expired_storage_requests.pop() {
+                Self::process_expired_storage_request(file_key, remaining_weight)
             }
 
             // If there are remaining items which were not processed, put them back in storage
-            if !expired_items.is_empty() {
-                ItemExpirations::<T>::insert(&block, expired_items);
+            if !expired_storage_requests.is_empty() {
+                StorageRequestExpirations::<T>::insert(&block, expired_storage_requests);
+                remaining_weight.saturating_reduce(db_weight.writes(1));
+            }
+
+            // Remove expired file deletion requests if any existed and process them.
+            let mut expired_file_deletion_requests =
+                FileDeletionRequestExpirations::<T>::take(&block);
+            remaining_weight.saturating_reduce(minimum_required_weight);
+
+            // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
+            // TODO: process all the expired file deletion requests. If not, we should return early.
+            while let Some((user, file_key)) = expired_file_deletion_requests.pop() {
+                Self::process_expired_pending_file_deletion(user, file_key, remaining_weight)
+            }
+
+            // If there are remaining items which were not processed, put them back in storage
+            if !expired_file_deletion_requests.is_empty() {
+                FileDeletionRequestExpirations::<T>::insert(&block, expired_file_deletion_requests);
                 remaining_weight.saturating_reduce(db_weight.writes(1));
             }
         }

@@ -41,7 +41,6 @@ import type {
   PalletBalancesIdAmount,
   PalletBalancesReserveData,
   PalletCollatorSelectionCandidateInfo,
-  PalletFileSystemExpiredItems,
   PalletFileSystemStorageRequestBspsMetadata,
   PalletFileSystemStorageRequestMetadata,
   PalletMessageQueueBookState,
@@ -294,11 +293,11 @@ declare module "@polkadot/api-base/types/storage" {
       blockRangeToMaximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A map of blocks to expired storage requests.
+       * A map of blocks to expired file deletion requests.
        **/
-      itemExpirations: AugmentedQuery<
+      fileDeletionRequestExpirations: AugmentedQuery<
         ApiType,
-        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<PalletFileSystemExpiredItems>>,
+        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<ITuple<[AccountId32, H256]>>>,
         [u32]
       > &
         QueryableStorageEntry<ApiType, [u32]>;
@@ -308,11 +307,26 @@ declare module "@polkadot/api-base/types/storage" {
       maximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
+       * A pointer to the earliest available block to insert a new file deletion request expiration.
+       *
+       * This should always be greater or equal than current block + [`Config::PendingFileDeletionRequestTtl`].
+       **/
+      nextAvailableFileDeletionRequestExpirationBlock: AugmentedQuery<
+        ApiType,
+        () => Observable<u32>,
+        []
+      > &
+        QueryableStorageEntry<ApiType, []>;
+      /**
        * A pointer to the earliest available block to insert a new storage request expiration.
        *
        * This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
        **/
-      nextAvailableExpirationInsertionBlock: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+      nextAvailableStorageRequestExpirationBlock: AugmentedQuery<
+        ApiType,
+        () => Observable<u32>,
+        []
+      > &
         QueryableStorageEntry<ApiType, []>;
       /**
        * A pointer to the starting block to clean up expired storage requests.
@@ -375,6 +389,15 @@ declare module "@polkadot/api-base/types/storage" {
         [H256, H256]
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
+      /**
+       * A map of blocks to expired storage requests.
+       **/
+      storageRequestExpirations: AugmentedQuery<
+        ApiType,
+        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<H256>>,
+        [u32]
+      > &
+        QueryableStorageEntry<ApiType, [u32]>;
       storageRequests: AugmentedQuery<
         ApiType,
         (

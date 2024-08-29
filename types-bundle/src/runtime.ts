@@ -144,6 +144,23 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
   }
 };
 
+const PAYMENT_STREAMS_V1: Record<string, DefinitionCall> = {
+  get_users_with_debt_over_threshold: {
+    description: "Get the users that have a debt to the provider greater than the threshold.",
+    params: [
+      {
+        name: "providerId",
+        type: "ProviderId"
+      },
+      {
+        name: "threshold",
+        type: "Balance"
+      }
+    ],
+    type: "Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError>"
+  }
+};
+
 export const runtime: DefinitionsCall = {
   FileSystemApi: [
     {
@@ -160,6 +177,12 @@ export const runtime: DefinitionsCall = {
   StorageProvidersApi: [
     {
       methods: STORAGE_PROVIDERS_V1,
+      version: 1
+    }
+  ],
+  PaymentStreamsApi: [
+    {
+      methods: PAYMENT_STREAMS_V1,
       version: 1
     }
   ]
