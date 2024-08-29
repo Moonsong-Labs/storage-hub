@@ -114,6 +114,8 @@ for (const bspNetConfig of bspNetConfigCases) {
 
       const keystore_path = "/tmp/test/insert/keystore";
       await newApi.rpc.storagehubclient.removeBcsvKeys(keystore_path);
+
+      newApi.disconnect();
     });
 
     it("Removes keys from keystore", async () => {
@@ -146,6 +148,8 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(has_alice_key.toHuman().valueOf(), true);
       has_dave_key = await newApi.rpc.author.hasKey(dave_pub_key, bcsv_key_type);
       strictEqual(has_dave_key.toHuman().valueOf(), false);
+
+      newApi.disconnect();
     });
   });
 }
