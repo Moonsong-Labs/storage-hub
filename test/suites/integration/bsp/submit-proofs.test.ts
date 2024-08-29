@@ -15,7 +15,10 @@ import {
   pauseBspContainer,
   resumeBspContainer,
   assertExtrinsicPresent,
-  BSP_TWO_ID
+  BSP_TWO_ID,
+  assertEventPresent,
+  shUser,
+  BSP_THREE_ID
 } from "../../../util";
 
 const bspNetConfigCases: BspNetConfig[] = [
@@ -30,6 +33,14 @@ for (const bspNetConfig of bspNetConfigCases) {
     let bspTwoApi: BspNetApi;
     let bspThreeApi: BspNetApi;
     let fileData: {
+      fileKey: string;
+      bucketId: string;
+      location: string;
+      owner: string;
+      fingerprint: string;
+      fileSize: number;
+    };
+    let oneBspFileData: {
       fileKey: string;
       bucketId: string;
       location: string;
@@ -228,7 +239,8 @@ for (const bspNetConfig of bspNetConfigCases) {
       const source = "res/adolphus.jpg";
       const location = "test/adolphus.jpg";
       const bucketName = "nothingmuch-2";
-      await userApi.sendNewStorageRequest(source, location, bucketName);
+      const fileData = await userApi.sendNewStorageRequest(source, location, bucketName);
+      oneBspFileData = fileData;
     });
 
     it("Only one BSP confirms it", async () => {
@@ -350,6 +362,7 @@ for (const bspNetConfig of bspNetConfigCases) {
       );
     });
 
+    // TODO: FIX THIS TEST
     it(
       "BSP-Two still correctly responds to challenges with same forest root",
       {
@@ -442,39 +455,87 @@ for (const bspNetConfig of bspNetConfigCases) {
       }
     );
 
+    it("File is deleted by user", async () => {
+      // User sends file deletion request.
+      const deleteFileExtrinsicResult = await userApi.sealBlock(
+        userApi.tx.fileSystem.deleteFile(
+          oneBspFileData.bucketId,
+          oneBspFileData.fileKey,
+          oneBspFileData.location,
+          oneBspFileData.fileSize,
+          oneBspFileData.fingerprint,
+          null
+        ),
+        shUser
+      );
+
+      // Check for a file deletion request event.
+      assertEventPresent(
+        userApi,
+        "fileSystem",
+        "FileDeletionRequest",
+        deleteFileExtrinsicResult.events
+      );
+
+      // Advance until the deletion request expires so that it can be processed.
+      const deletionRequestTtl = Number(userApi.consts.fileSystem.pendingFileDeletionRequestTtl);
+      const currentBlock = await userApi.rpc.chain.getBlock();
+      const currentBlockNumber = currentBlock.block.header.number.toNumber();
+      const deletionRequestEnqueuedResult = await userApi.advanceToBlock(
+        currentBlockNumber + deletionRequestTtl,
+        {
+          waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
+        }
+      );
+
+      // Check for a file deletion request event.
+      assertEventPresent(
+        userApi,
+        "fileSystem",
+        "PriorityChallengeForFileDeletionQueued",
+        deletionRequestEnqueuedResult.events
+      );
+    });
+
     it(
-      "File is deleted by user",
-      { skip: "Not implemented yet. All BSPs have the same files." },
+      "Priority challenge is included in checkpoint challenge round",
+      { skip: "Not implemented yet." },
       async () => {
-        // TODO: Add many files to a bucket.
-        // TODO: Wait for confirmations of all BSPs.
-        // TODO: Send transaction to delete file.
-        // TODO: Advance until file deletion request makes it into the priority challenge round.
+        // TODO: Advance to next checkpoint challenge block.
+        // TODO: Check that priority challenge was included in checkpoint challenge round.
+      }
+    );
 
-        await it("Priority challenge is included in checkpoint challenge round", async () => {
-          // TODO: Advance to next checkpoint challenge block.
-          // TODO: Check that priority challenge was included in checkpoint challenge round.
-        });
+    it(
+      "BSP that has it responds to priority challenge with proof of inclusion",
+      { skip: "Not implemented yet." },
+      async () => {
+        // TODO: Advance to next challenge block.
+        // TODO: Build block with proof submission.
+        // TODO: Check that proof submission was successful, with proof of inclusion.
+      }
+    );
 
-        await it("BSP that has it responds to priority challenge with proof of inclusion", async () => {
-          // TODO: Advance to next challenge block.
-          // TODO: Build block with proof submission.
-          // TODO: Check that proof submission was successful, with proof of inclusion.
-        });
-        await it("File is removed from Forest by BSP", async () => {
-          // TODO: Check that file is deleted by BSP, and no longer is in the Forest.
-        });
+    it("File is removed from Forest by BSP", { skip: "Not implemented yet." }, async () => {
+      // TODO: Check that file is deleted by BSP, and no longer is in the Forest.
+    });
 
-        await it("BSPs who don't have it respond non-inclusion proof", async () => {
-          // TODO: Advance to next challenge block.
-          // TODO: Build block with proof submission.
-          // TODO: Check that proof submission was successful, with proof of non-inclusion.
-        });
+    it(
+      "BSPs who don't have it respond non-inclusion proof",
+      { skip: "Not implemented yet." },
+      async () => {
+        // TODO: Advance to next challenge block.
+        // TODO: Build block with proof submission.
+        // TODO: Check that proof submission was successful, with proof of non-inclusion.
+      }
+    );
 
-        await it("File mutation is finalised and BSP removes it from File Storage", async () => {
-          // TODO: Finalise block with mutations.
-          // TODO: Check that file is removed from File Storage.
-        });
+    it(
+      "File mutation is finalised and BSP removes it from File Storage",
+      { skip: "Not implemented yet." },
+      async () => {
+        // TODO: Finalise block with mutations.
+        // TODO: Check that file is removed from File Storage.
       }
     );
   });
