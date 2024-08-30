@@ -2,7 +2,9 @@ use anyhow::anyhow;
 use log::error;
 use log::info;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::{commands::BlockchainServiceInterface, events::ProofAccepted};
+use shc_blockchain_service::{
+    commands::BlockchainServiceInterface, events::LastChargeableInfoUpdated,
+};
 use shc_common::types::StorageProofsMerkleTrieLayout;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
@@ -16,7 +18,7 @@ const MIN_DEBT: Balance = 1;
 /// BSP Charge Fees Task: Handles the debt collection from users served by a BSP.
 ///
 /// The flow includes the following steps:
-/// - Reacting to [`ProofAccepted`] event from the runtime:
+/// - Reacting to [`LastChargeableInfoUpdated`] event from the runtime:
 ///     - Calls a Runtime API to retrieve a list of users with debt over a certain custom threshold.
 ///     - For each user, submits an extrinsic to [`pallet_payment_streams`] to charge them.
 pub struct BspChargeFeesTask<FL, FS>
@@ -51,12 +53,12 @@ where
     }
 }
 
-impl<FL, FS> EventHandler<ProofAccepted> for BspChargeFeesTask<FL, FS>
+impl<FL, FS> EventHandler<LastChargeableInfoUpdated> for BspChargeFeesTask<FL, FS>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
-    async fn handle_event(&mut self, event: ProofAccepted) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: LastChargeableInfoUpdated) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "A proof was accepted for provider {:?} and users' fees are going to be charged.", event.provider_id);
 
         // TODO: Allow for customizable threshold, for example using YAML files.

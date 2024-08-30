@@ -5,7 +5,9 @@ use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::{EventBusListener, EventHandler},
 };
-use shc_blockchain_service::events::{ProcessSubmitProofRequest, ProofAccepted, SlashableProvider};
+use shc_blockchain_service::events::{
+    LastChargeableInfoUpdated, ProcessSubmitProofRequest, SlashableProvider,
+};
 use shc_blockchain_service::{
     events::{NewChallengeSeed, NewStorageRequest, ProcessConfirmStoringRequest},
     BlockchainService,
@@ -157,11 +159,13 @@ where
 
         // Collect debt from users after a BSP proof is accepted.
         let bsp_charge_fees_task = BspChargeFeesTask::new(self.clone());
-        let proof_accepted_event_bus_listener: EventBusListener<ProofAccepted, _> =
-            bsp_charge_fees_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain);
-        proof_accepted_event_bus_listener.start();
+        let last_chargeable_info_updated_event_bus_listener: EventBusListener<
+            LastChargeableInfoUpdated,
+            _,
+        > = bsp_charge_fees_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        last_chargeable_info_updated_event_bus_listener.start();
     }
 
     pub fn start_msp_tasks(&self) {
