@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use log::error;
 use log::info;
+use log::trace;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface, events::LastChargeableInfoUpdated,
@@ -13,7 +14,7 @@ use storage_hub_runtime::Balance;
 use crate::services::handler::StorageHubHandler;
 
 const LOG_TARGET: &str = "bsp-charge-fees-task";
-const MIN_DEBT: Balance = 1;
+const MIN_DEBT: Balance = 0;
 
 /// BSP Charge Fees Task: Handles the debt collection from users served by a BSP.
 ///
@@ -76,11 +77,11 @@ where
                 )
             })?;
 
-        println!("USERS WITH DEBT: {:?}", users_with_debt);
-
         // Calls the `charge_payment_streams` extrinsic for each user in the list to be charged.
         // Logs an error in case of failure and continues.
         for user in users_with_debt {
+            trace!(target: LOG_TARGET, "Charging user {:?}", user);
+
             let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
                 pallet_payment_streams::Call::charge_payment_streams { user_account: user },
             );
