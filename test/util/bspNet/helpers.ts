@@ -12,7 +12,7 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 import "@storagehub/api-augment";
 import { v2 as compose } from "docker-compose";
 import Docker from "dockerode";
-import assert, { strictEqual } from "node:assert";
+import assert from "node:assert";
 import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
 import crypto from "node:crypto";
