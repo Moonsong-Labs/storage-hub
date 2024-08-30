@@ -1,13 +1,10 @@
-import { setTimeout } from "node:timers/promises";
 import {
   createApiObject,
-  createCheckBucket,
-  DUMMY_MSP_ID,
-  getContainerPeerId,
   NODE_INFOS,
   registerToxics,
   runSimpleBspNet,
-  shUser,
+  waitForBspStored,
+  waitForBspVolunteer,
   type BspNetApi,
   type BspNetConfig,
   type ToxicInfo
@@ -15,8 +12,8 @@ import {
 
 let api: BspNetApi | undefined;
 const bspNetConfig: BspNetConfig = {
-  noisy: process.env.NOISY === "1" ?? false,
-  rocksdb: process.env.ROCKSDB === "1" ?? false
+  noisy: process.env.NOISY === "1",
+  rocksdb: process.env.ROCKSDB === "1"
 };
 
 const CONFIG = {
@@ -61,38 +58,10 @@ async function bootStrapNetwork() {
 
   api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
-  const newBucketEventDataBlob = await createCheckBucket(api, CONFIG.bucketName);
+  await api.sendNewStorageRequest(CONFIG.localPath, CONFIG.remotePath, CONFIG.bucketName);
 
-  const localPath = CONFIG.localPath;
-  const remotePath = CONFIG.remotePath;
-
-  // Issue file Storage request
-  const rpcResponse = await api.rpc.storagehubclient.loadFileInStorage(
-    localPath,
-    remotePath,
-    NODE_INFOS.user.AddressId,
-    newBucketEventDataBlob.bucketId
-  );
-  console.log(rpcResponse);
-
-  const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
-  console.log(`sh-user Peer ID: ${peerIDUser}`);
-
-  await api.sealBlock(
-    api.tx.fileSystem.issueStorageRequest(
-      rpcResponse.bucket_id,
-      remotePath,
-      rpcResponse.fingerprint,
-      rpcResponse.size,
-      DUMMY_MSP_ID,
-      [peerIDUser]
-    ),
-    shUser
-  );
-
-  // Seal the block from BSP volunteer
-  await setTimeout(1000);
-  await api.sealBlock();
+  await waitForBspVolunteer(api);
+  await waitForBspStored(api);
 
   if (bspNetConfig.noisy) {
     console.log("✅ NoisyNet Bootstrap success");

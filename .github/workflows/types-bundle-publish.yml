@@ -43,5 +43,4 @@ jobs:
           package: types-bundle/package.json
           registry: https://registry.npmjs.org/
           access: public
-          command: pnpm publish
           dry-run: ${{ github.event.inputs.dry_run }}
