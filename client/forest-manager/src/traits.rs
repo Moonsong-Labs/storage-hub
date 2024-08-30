@@ -1,7 +1,6 @@
 use std::{fmt::Debug, sync::Arc};
 
 use async_trait::async_trait;
-use serde::de::DeserializeOwned;
 use shc_common::types::{FileMetadata, ForestProof, HasherOutT, StorageProofsMerkleTrieLayout};
 use tokio::sync::RwLock;
 use trie_db::TrieLayout;
@@ -34,7 +33,7 @@ pub trait ForestStorage<T: TrieLayout>: 'static {
 #[async_trait]
 pub trait ForestStorageHandler {
     /// The key type used to identify forest storage instances.
-    type Key: DeserializeOwned + Debug + Send + Sync;
+    type Key: From<String> + Debug + Send + Sync;
     /// Type representing the forest storage instance.
     type FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync;
 

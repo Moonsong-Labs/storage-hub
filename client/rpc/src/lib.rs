@@ -89,7 +89,7 @@ pub enum SaveFileToDisk {
 /// to generate the trait that is actually going to be implemented.
 #[rpc(server, namespace = "storagehubclient")]
 #[async_trait]
-pub trait StorageHubClientApi<Key> {
+pub trait StorageHubClientApi {
     #[method(name = "loadFileInStorage")]
     async fn load_file_in_storage(
         &self,
@@ -107,7 +107,7 @@ pub trait StorageHubClientApi<Key> {
     ) -> RpcResult<SaveFileToDisk>;
 
     #[method(name = "getForestRoot")]
-    async fn get_forest_root(&self, key: Key) -> RpcResult<H256>;
+    async fn get_forest_root(&self, key: String) -> RpcResult<H256>;
 
     #[method(name = "rotateBcsvKeys")]
     async fn rotate_bcsv_keys(&self, seed: String) -> RpcResult<String>;
@@ -139,7 +139,7 @@ where
 // file uploads, even if the file is not in its storage. So we need a way to inform the task
 // to only react to its file.
 #[async_trait]
-impl<FL, FSH> StorageHubClientApiServer<FSH::Key> for StorageHubClientRpc<FL, FSH>
+impl<FL, FSH> StorageHubClientApiServer for StorageHubClientRpc<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     FSH: ForestStorageHandler + Send + Sync + 'static,
@@ -271,7 +271,9 @@ where
         Ok(SaveFileToDisk::Success(file_metadata))
     }
 
-    async fn get_forest_root(&self, key: FSH::Key) -> RpcResult<H256> {
+    async fn get_forest_root(&self, key: String) -> RpcResult<H256> {
+        let key = FSH::Key::from(key);
+
         let fs =
             self.forest_storage_handler.get(&key).await.ok_or_else(|| {
                 into_rpc_error(format!("Forest storage not found for key {:?}", key))

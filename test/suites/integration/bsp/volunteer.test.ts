@@ -126,7 +126,8 @@ for (const bspNetConfig of bspNetConfigCases) {
       const destination = "test/whatsup.jpg";
       const bucketName = "nothingmuch-2";
 
-      const initialBspForestRoot = await bspApi.rpc.storagehubclient.getForestRoot();
+      const initialBspForestRoot = await bspApi.rpc.storagehubclient.getForestRoot("".toString());
+
       strictEqual(
         initialBspForestRoot.toString(),
         "0x03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314"
@@ -204,7 +205,9 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(bspConfirmRes_bspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
 
       await sleep(1000); // wait for the bsp to process the BspConfirmedStoring event
-      const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot();
+      const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot(
+        "".toString()
+      );
       strictEqual(bspForestRootAfterConfirm.toString(), bspConfirmRes_newRoot.toString());
       notEqual(bspForestRootAfterConfirm.toString(), initialBspForestRoot.toString());
       // TODO: check the file key. We need an RPC endpoint to compute the file key.
@@ -307,7 +310,9 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(bspConfirmRes_fileKeys.length, 1);
 
       await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
-      const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot();
+      const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot(
+        "".toString()
+      );
       strictEqual(bspForestRootAfterConfirm.toString(), bspConfirmRes_newRoot.toString());
 
       // This block should trigger the next file to be confirmed.
@@ -339,7 +344,9 @@ for (const bspNetConfig of bspNetConfigCases) {
       strictEqual(bspConfirm2Res_fileKeys.length, 2);
 
       await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
-      const bspForestRootAfterConfirm2 = await bspApi.rpc.storagehubclient.getForestRoot();
+      const bspForestRootAfterConfirm2 = await bspApi.rpc.storagehubclient.getForestRoot(
+        "".toString()
+      );
       strictEqual(bspForestRootAfterConfirm2.toString(), bspConfirm2Res_newRoot.toString());
     });
   });

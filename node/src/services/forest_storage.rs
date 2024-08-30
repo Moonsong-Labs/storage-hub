@@ -1,10 +1,10 @@
 use async_trait::async_trait;
-use serde::de::DeserializeOwned;
 use shc_common::types::StorageProofsMerkleTrieLayout;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use std::{collections::HashMap, fmt::Debug, hash::Hash, sync::Arc};
 use tokio::sync::RwLock;
 
+#[derive(Debug)]
 pub struct ForestStorageSingle<FS>
 where
     FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
@@ -34,12 +34,21 @@ where
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct NoKey;
+
+impl From<String> for NoKey {
+    fn from(_: String) -> Self {
+        NoKey
+    }
+}
+
 #[async_trait]
 impl<FS> ForestStorageHandler for ForestStorageSingle<FS>
 where
     FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
 {
-    type Key = ();
+    type Key = NoKey;
     type FS = FS;
 
     async fn get(&self, _key: &Self::Key) -> Option<Arc<RwLock<Self::FS>>> {
@@ -55,6 +64,7 @@ where
     async fn remove_forest_storage(&mut self, _key: &Self::Key) {}
 }
 
+#[derive(Debug)]
 pub struct ForestStorageCaching<K, FS>
 where
     K: Eq + Hash + Send + Sync,
@@ -90,7 +100,7 @@ where
 #[async_trait]
 impl<K, FS> ForestStorageHandler for ForestStorageCaching<K, FS>
 where
-    K: Eq + Hash + DeserializeOwned + Debug + Clone + Send + Sync + 'static,
+    K: Eq + Hash + From<String> + Clone + Debug + Send + Sync + 'static,
     FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
 {
     type Key = K;

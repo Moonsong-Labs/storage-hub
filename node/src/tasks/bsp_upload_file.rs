@@ -22,7 +22,7 @@ use shc_file_transfer_service::{
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
-use crate::services::handler::StorageHubHandler;
+use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
@@ -88,7 +88,7 @@ where
 impl<FL, FSH> EventHandler<NewStorageRequest> for BspUploadFileTask<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Key = ()> + Clone + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
@@ -115,7 +115,7 @@ where
 impl<FL, FSH> EventHandler<RemoteUploadRequest> for BspUploadFileTask<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Key = ()> + Clone + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
@@ -235,7 +235,7 @@ where
 impl<FL, FSH> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Key = ()> + Clone + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static,
 {
     async fn handle_event(&mut self, event: ProcessConfirmStoringRequest) -> anyhow::Result<()> {
         info!(
@@ -357,7 +357,7 @@ where
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&())
+            .get(&NoKey)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 

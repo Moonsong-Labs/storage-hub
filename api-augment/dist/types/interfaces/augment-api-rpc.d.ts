@@ -1070,7 +1070,7 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       /**
        * Get the root of the forest trie.
        **/
-      getForestRoot: AugmentedRpc<() => Observable<H256>>;
+      getForestRoot: AugmentedRpc<(key: Text | string) => Observable<H256>>;
       /**
        * Load a file in the local storage. This is the first step when uploading a file.
        **/

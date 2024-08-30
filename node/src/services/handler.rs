@@ -24,6 +24,8 @@ use crate::tasks::{
     bsp_upload_file::BspUploadFileTask, user_sends_file::UserSendsFileTask,
 };
 
+use super::forest_storage::NoKey;
+
 /// Represents the handler for the Storage Hub service.
 pub struct StorageHubHandler<FL, FSH>
 where
@@ -86,7 +88,25 @@ where
             .subscribe_to(&self.task_spawner, &self.blockchain)
             .start();
     }
+}
 
+impl<FL, FSH> StorageHubHandler<FL, FSH>
+where
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FSH: ForestStorageHandler<Key = Vec<u8>> + Clone + Send + Sync + 'static,
+{
+    pub fn start_msp_tasks(&self) {
+        log::info!("Starting MSP tasks");
+
+        // TODO: Implement MSP tasks
+    }
+}
+
+impl<FL, FSH> StorageHubHandler<FL, FSH>
+where
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FSH: ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static,
+{
     pub fn start_bsp_tasks(&self) {
         log::info!("Starting BSP tasks");
 
@@ -154,11 +174,5 @@ where
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         slashable_provider_event_bus_listener.start();
-    }
-
-    pub fn start_msp_tasks(&self) {
-        log::info!("Starting MSP tasks");
-
-        // TODO: Implement MSP tasks
     }
 }

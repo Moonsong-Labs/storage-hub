@@ -18,7 +18,7 @@ use shc_common::types::{
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
-use crate::services::handler::StorageHubHandler;
+use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
 
 const LOG_TARGET: &str = "bsp-submit-proof-task";
 const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
@@ -77,7 +77,7 @@ where
 impl<FL, FSH> EventHandler<NewChallengeSeed> for BspSubmitProofTask<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Key = ()> + Clone + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static,
 {
     async fn handle_event(&mut self, event: NewChallengeSeed) -> anyhow::Result<()> {
         info!(
@@ -119,7 +119,7 @@ where
 impl<FL, FSH> EventHandler<ProcessSubmitProofRequest> for BspSubmitProofTask<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Key = ()> + Clone + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static,
 {
     async fn handle_event(&mut self, event: ProcessSubmitProofRequest) -> anyhow::Result<()> {
         info!(
@@ -142,7 +142,7 @@ where
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&())
+                .get(&NoKey)
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -274,7 +274,7 @@ where
 impl<FL, FSH> BspSubmitProofTask<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Key = ()> + Clone + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static,
 {
     async fn derive_forest_challenges_from_seed(
         &self,
@@ -384,7 +384,7 @@ where
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
-                .get(&())
+                .get(&NoKey)
                 .await
                 .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
@@ -434,7 +434,7 @@ where
         let fs = self
             .storage_hub_handler
             .forest_storage_handler
-            .get(&())
+            .get(&NoKey)
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
