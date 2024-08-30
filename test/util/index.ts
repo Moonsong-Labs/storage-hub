@@ -1,7 +1,6 @@
 export * from "./constants";
 export * from "./pjsKeyring";
 export * from "./testContainers";
-export * from "./blocks";
 export * from "./zombieHelpers";
 export * from "./extrinsics";
 export * from "./bspNet";
