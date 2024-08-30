@@ -97,6 +97,9 @@ pub type ChallengesFeeFor<T> = <T as crate::Config>::ChallengesFee;
 /// Syntactic sugar for the StakeToChallengePeriod type used in the proofs pallet.
 pub type StakeToChallengePeriodFor<T> = <T as crate::Config>::StakeToChallengePeriod;
 
+/// Syntactic sugar for the MinChallengePeriod type used in the proofs pallet.
+pub type MinChallengePeriodFor<T> = <T as crate::Config>::MinChallengePeriod;
+
 /// Syntactic sugar for the ChallengeHistoryLength type used in the proofs pallet.
 pub type ChallengeHistoryLengthFor<T> = <T as crate::Config>::ChallengeHistoryLength;
 
