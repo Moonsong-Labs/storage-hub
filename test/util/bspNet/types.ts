@@ -103,36 +103,92 @@ export interface ToxicInfo {
  * Represents the metadata of a file.
  *
  * @interface
- * @property {string} fileKey - The StorageHub file key of the file.
- * @property {string} bucketId - The StorageHub bucket ID of the file.
- * @property {string} location - The StorageHub location of the file.
- * @property {string} owner - The StorageHub owner of the file.
- * @property {string} fingerprint - The StorageHub fingerprint of the file.
+ * @property {string} fileKey - The file key of the stored file.
+ * @property {string} bucketId - The bucket ID registered of the file.
+ * @property {string} location - The remote location of the file.
+ * @property {string} owner - The owner of the file.
+ * @property {string} fingerprint - The generated fingerprint of the file.
  * @property {number} fileSize - The size of the file in bytes.
  */
 export interface FileMetadata {
+  /**The file key of the stored file. */
   fileKey: string;
+  /**The bucket ID registered of the file. */
   bucketId: string;
+  /**The remote location of the file. */
   location: string;
+  /**The owner of the file. */
   owner: string;
+  /**The generated fingerprint of the file. */
   fingerprint: string;
+  /**The size of the file in bytes. */
   fileSize: number;
 }
 
+/**
+ * Configuration options for the BSP network.
+ * These settings determine the behavior and characteristics of the network during tests.
+ */
 export type BspNetConfig = {
+  /**
+   * If true, simulates a noisy network environment with added latency and bandwidth limitations.
+   * Useful for testing network resilience and performance under suboptimal conditions.
+   */
   noisy: boolean;
+
+  /**
+   * If true, uses RocksDB as the storage backend instead of the default in-memory database.
+   */
   rocksdb: boolean;
+
+  /**
+   * Optional parameter to set the storage capacity of the BSP.
+   * Measured in bytes.
+   */
   capacity?: bigint;
 };
 
-// TODO: Add DOcs here
+/**
+ * Context object provided to test suites for interacting with the BSP network.
+ * Contains utility functions and configuration for setting up and manipulating the test environment.
+ */
 export type BspNetContext = {
+  /**
+   * Test runner's wrapped 'it' function for defining individual test cases.
+   */
   it: typeof it;
+
+  /**
+   * Creates and returns a connected API instance for a user node.
+   * @returns A promise that resolves to a BspNetApi instance for user operations.
+   */
   createUserApi: () => Promise<BspNetApi>;
+
+  /**
+   * Creates and returns a connected API instance for a BSP node.
+   * @returns A promise that resolves to a BspNetApi instance for BSP operations.
+   */
   createBspApi: () => Promise<BspNetApi>;
+
+  /**
+   * The current configuration of the BSP network for this test run.
+   */
   bspNetConfig: BspNetConfig;
+
+  /**
+   * Before hook for test setup operations.
+   */
   before: typeof before;
+
+  /**
+   * After hook for test cleanup operations.
+   */
   after: typeof after;
+
+  /**
+   * Retrieves the response from launching the network.
+   * @returns The result of the launchNetwork function, which may include network details or initialization data (for multiInitialised network only).
+   */
   getLaunchResponse: () => ReturnType<typeof launchNetwork>;
 };
 
@@ -151,6 +207,7 @@ export type NetworkConfig =
 
 /**
  * Options for configuring BspNet test runs.
+ * These options allow fine-tuning of test behavior and network configuration.
  */
 export type TestOptions = {
   /** If true, keeps the network alive after tests complete */
@@ -172,8 +229,26 @@ export type TestOptions = {
   initialised?: boolean | "multi";
 };
 
+/**
+ * Represents the configuration and metadata for an initialised multi-BSP network.
+ * This type is used to store information about additional BSPs in the network and
+ * the initial file data stored in the network.
+ *
+ * @property {number} bspTwoRpcPort - The RPC port number for the second BSP node.
+ * @property {number} bspThreeRpcPort - The RPC port number for the third BSP node.
+ * @property {FileMetadata} fileData - Metadata of the initial file stored in the network.
+ */
 export type InitialisedMultiBspNetwork = {
+  /**
+   * The RPC port number for the second BSP node.
+   */
   bspTwoRpcPort: number;
+  /**
+   * The RPC port number for the third BSP node.
+   */
   bspThreeRpcPort: number;
+  /**
+   * @see FileMetadata for details on the file metadata structure.
+   */
   fileData: FileMetadata;
 };

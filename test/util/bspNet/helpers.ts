@@ -316,7 +316,9 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
   }
 };
 
-export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
+export const runMultipleInitialisedBspsNet = async (
+  bspNetConfig: BspNetConfig
+): Promise<undefined | InitialisedMultiBspNetwork> => {
   await runSimpleBspNet(bspNetConfig);
 
   let userApi: BspNetApi | undefined;
@@ -381,7 +383,7 @@ export const runMultipleInitialisedBspsNet = async (bspNetConfig: BspNetConfig) 
         fingerprint: fileMetadata.fingerprint,
         fileSize: fileMetadata.fileSize
       }
-    } satisfies InitialisedMultiBspNetwork;
+    };
   } catch (e) {
     console.error("Error ", e);
   } finally {
