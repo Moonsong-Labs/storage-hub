@@ -22,12 +22,12 @@ import {
 } from "../../../util";
 
 const bspNetConfigCases: BspNetConfig[] = [
-  // { noisy: false, rocksdb: false },
+  { noisy: false, rocksdb: false },
   { noisy: false, rocksdb: true }
 ];
 
 for (const bspNetConfig of bspNetConfigCases) {
-  describe.only(`BSPNet: Many BSPs Submit Proofs (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
+  describe(`BSPNet: Many BSPs Submit Proofs (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
     let userApi: BspNetApi;
     let bspApi: BspNetApi;
     let bspTwoApi: BspNetApi;
