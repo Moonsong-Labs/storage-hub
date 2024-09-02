@@ -1,56 +1,37 @@
 import "@storagehub/api-augment";
 import assert, { strictEqual } from "node:assert";
-import { after, before, describe, it } from "node:test";
+import { after } from "node:test";
 import {
-  NODE_INFOS,
   createApiObject,
   type BspNetApi,
-  type BspNetConfig,
-  closeSimpleBspNet,
+  describeBspNet,
   DUMMY_BSP_ID,
   sleep,
   assertEventMany,
-  fetchEventData,
-  runMultipleInitialisedBspsNet
+  fetchEventData
 } from "../../../util";
 
-const bspNetConfigCases: BspNetConfig[] = [
-  { noisy: false, rocksdb: false },
-  { noisy: false, rocksdb: true }
-];
-
-for (const bspNetConfig of bspNetConfigCases) {
-  describe(`BSPNet: Users's debt collection (${bspNetConfig.noisy ? "Noisy" : "Noiseless"} and ${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
+describeBspNet(
+  "BSPNet: Collect users debt",
+  { initialised: "multi", networkConfig: "standard" },
+  ({ before, it, createUserApi, createBspApi, getLaunchResponse }) => {
     let userApi: BspNetApi;
     let bspApi: BspNetApi;
     let bspTwoApi: BspNetApi;
     let bspThreeApi: BspNetApi;
-    let fileData: {
-      fileKey: string;
-      bucketId: string;
-      location: string;
-      owner: string;
-      fingerprint: string;
-      fileSize: number;
-    };
 
     before(async () => {
-      const bspNetInfo = await runMultipleInitialisedBspsNet(bspNetConfig);
-      userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
-      bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
-      bspTwoApi = await createApiObject(`ws://127.0.0.1:${bspNetInfo?.bspTwoRpcPort}`);
-      bspThreeApi = await createApiObject(`ws://127.0.0.1:${bspNetInfo?.bspThreeRpcPort}`);
-
-      assert(bspNetInfo, "BSPNet failed to initialise");
-      fileData = bspNetInfo?.fileData;
+      const launchResponse = await getLaunchResponse();
+      assert(launchResponse, "BSPNet failed to initialise");
+      userApi = await createUserApi();
+      bspApi = await createBspApi();
+      bspTwoApi = await createApiObject(`ws://127.0.0.1:${launchResponse?.bspTwoRpcPort}`);
+      bspThreeApi = await createApiObject(`ws://127.0.0.1:${launchResponse?.bspThreeRpcPort}`);
     });
 
     after(async () => {
-      await userApi.disconnect();
-      await bspApi.disconnect();
       await bspTwoApi.disconnect();
       await bspThreeApi.disconnect();
-      await closeSimpleBspNet();
     });
 
     it("BSP correctly charges payment stream", async () => {
@@ -242,5 +223,5 @@ for (const bspNetConfig of bspNetConfigCases) {
       // Assert that event for the BSP charging its payment stream was emitted
       userApi.assertEvent("paymentStreams", "PaymentStreamCharged", blockResult.events);
     });
-  });
-}
+  }
+);
