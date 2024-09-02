@@ -1,41 +1,23 @@
-use jsonrpsee::core::async_trait;
-use jsonrpsee::core::RpcResult;
-use jsonrpsee::proc_macros::rpc;
-use jsonrpsee::types::error::ErrorObjectOwned as JsonRpseeError;
-use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
-use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
-use jsonrpsee::types::ErrorObjectOwned;
-
-use shc_common::types::HashT;
-use shc_common::types::{
-    ChunkId, FileMetadata, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
+use jsonrpsee::{
+    core::{async_trait, RpcResult},
+    proc_macros::rpc,
+    types::error::{ErrorObjectOwned as JsonRpseeError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG},
 };
-use sp_core::sr25519::Pair as Sr25519Pair;
-use sp_core::Pair;
-use sp_core::H256;
+use shc_common::types::{
+    ChunkId, FileMetadata, HashT, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
+};
+use sp_core::{sr25519::Pair as Sr25519Pair, Pair, H256};
 use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::AccountId32;
-use sp_runtime::Deserialize;
-use sp_runtime::KeyTypeId;
-use sp_runtime::Serialize;
+use sp_runtime::{AccountId32, Deserialize, KeyTypeId, Serialize};
 
-use shc_file_manager::traits::FileDataTrie;
-use shc_file_manager::traits::FileStorage;
-use shc_file_manager::traits::FileStorageError;
+use shc_file_manager::traits::{FileDataTrie, FileStorage, FileStorageError};
 use shc_forest_manager::traits::ForestStorage;
 
-use log::debug;
-use log::error;
+use log::{debug, error};
 use tokio::fs;
 
-use std::fmt::Debug;
-use std::fs::File;
-use std::io::Read;
-use std::io::Write;
-use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::fs::create_dir_all;
-use tokio::sync::RwLock;
+use std::{fmt::Debug, fs::File, io::Read, io::Write, path::PathBuf, sync::Arc};
+use tokio::{fs::create_dir_all, sync::RwLock};
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
 
@@ -340,7 +322,7 @@ fn key_file_name(public: &[u8], key_type: KeyTypeId) -> PathBuf {
 
 /// Converts into the expected kind of error for `jsonrpsee`'s `RpcResult<_>`.
 fn into_rpc_error(e: impl Debug) -> JsonRpseeError {
-    ErrorObjectOwned::owned(
+    JsonRpseeError::owned(
         INTERNAL_ERROR_CODE,
         INTERNAL_ERROR_MSG,
         Some(format!("{:?}", e)),
