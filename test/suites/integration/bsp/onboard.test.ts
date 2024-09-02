@@ -77,37 +77,37 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
     strictEqual(sh_nodes.length > 3, true);
   });
 
-  it("Inserts new blockchain service keys (bcsv)", async () => {
-    const keystore_path = "/tmp/test/insert/keystore";
+  it("Inserts new blockchain service keys (BCSV)", async () => {
+    const keystorePath = "/tmp/test/insert/keystore";
     const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
       name: "insert-keys-container",
-      additionalArgs: [`--keystore-path=${keystore_path}`],
+      additionalArgs: [`--keystore-path=${keystorePath}`],
     });
     const insertKeysApi = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
 
-    const alice_pub_key = "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d";
-    const bob_pub_key = "0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48";
-    const bcsv_key_type = "bcsv";
-    const bob_seed = "//Bob";
+    const alicePubKey = "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d";
+    const bobPubKey = "0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48";
+    const bcsvKeyType = "bcsv";
+    const bobSeed = "//Bob";
 
-    const has_alice_key = await insertKeysApi.rpc.author.hasKey(alice_pub_key, bcsv_key_type);
-    strictEqual(has_alice_key.toHuman().valueOf(), true);
+    const hasAliceKey = await insertKeysApi.rpc.author.hasKey(alicePubKey, bcsvKeyType);
+    strictEqual(hasAliceKey.toHuman().valueOf(), true);
 
-    let has_bob_key = await insertKeysApi.rpc.author.hasKey(bob_pub_key, bcsv_key_type);
-    strictEqual(has_bob_key.toHuman().valueOf(), false);
+    let hasBobKey = await insertKeysApi.rpc.author.hasKey(bobPubKey, bcsvKeyType);
+    strictEqual(hasBobKey.toHuman().valueOf(), false);
 
     // Rotate keys and check that Bob's pub key is now in Keystore.
-    await insertKeysApi.rpc.storagehubclient.insertBcsvKeys(bob_seed);
-    has_bob_key = await insertKeysApi.rpc.author.hasKey(bob_pub_key, bcsv_key_type);
-    strictEqual(has_bob_key.toHuman().valueOf(), true);
+    await insertKeysApi.rpc.storagehubclient.insertBcsvKeys(bobSeed);
+    hasBobKey = await insertKeysApi.rpc.author.hasKey(bobPubKey, bcsvKeyType);
+    strictEqual(hasBobKey.toHuman().valueOf(), true);
 
     // We remove again the keys added in this test.
-    await insertKeysApi.rpc.storagehubclient.removeBcsvKeys(keystore_path);
+    await insertKeysApi.rpc.storagehubclient.removeBcsvKeys(keystorePath);
 
     stopBspContainer({ containerName, api: insertKeysApi });
   });
 
-  it("Removes keys from keystore",
+  it("Removes BCSV keys from keystore",
     async () => {
       const keystore_path = "/tmp/test/remove/keystore";
       const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
@@ -116,29 +116,29 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
       });
       const removeKeysApi = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
 
-      const alice_pub_key = "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d";
-      const dave_pub_key = "0x306721211d5404bd9da88e0204360a1a9ab8b87c66c1bc2fcdd37f3c2222cc20";
-      const bcsv_key_type = "bcsv";
-      const dave_seed = "//Dave";
+      const alicePubKey = "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d";
+      const davePubKey = "0x306721211d5404bd9da88e0204360a1a9ab8b87c66c1bc2fcdd37f3c2222cc20";
+      const bcsvKeyType = "bcsv";
+      const daveSeed = "//Dave";
 
-      let has_alice_key = await removeKeysApi.rpc.author.hasKey(alice_pub_key, bcsv_key_type);
-      strictEqual(has_alice_key.toHuman().valueOf(), true);
+      let hasAliceKey = await removeKeysApi.rpc.author.hasKey(alicePubKey, bcsvKeyType);
+      strictEqual(hasAliceKey.toHuman().valueOf(), true);
 
-      let has_dave_key = await removeKeysApi.rpc.author.hasKey(dave_pub_key, bcsv_key_type);
-      strictEqual(has_dave_key.toHuman().valueOf(), false);
+      let hasDaveKey = await removeKeysApi.rpc.author.hasKey(davePubKey, bcsvKeyType);
+      strictEqual(hasDaveKey.toHuman().valueOf(), false);
 
       // Rotate keys and check that Dave's pub key is now in Keystore.
-      await removeKeysApi.rpc.storagehubclient.insertBcsvKeys(dave_seed);
-      has_dave_key = await removeKeysApi.rpc.author.hasKey(dave_pub_key, bcsv_key_type);
-      strictEqual(has_dave_key.toHuman().valueOf(), true);
+      await removeKeysApi.rpc.storagehubclient.insertBcsvKeys(daveSeed);
+      hasDaveKey = await removeKeysApi.rpc.author.hasKey(davePubKey, bcsvKeyType);
+      strictEqual(hasDaveKey.toHuman().valueOf(), true);
 
       await removeKeysApi.rpc.storagehubclient.removeBcsvKeys(keystore_path);
 
       // We still have Alice's key in `--dev` mode because it's inserted into the in-memory Keystore.
-      has_alice_key = await removeKeysApi.rpc.author.hasKey(alice_pub_key, bcsv_key_type);
-      strictEqual(has_alice_key.toHuman().valueOf(), true);
-      has_dave_key = await removeKeysApi.rpc.author.hasKey(dave_pub_key, bcsv_key_type);
-      strictEqual(has_dave_key.toHuman().valueOf(), false);
+      hasAliceKey = await removeKeysApi.rpc.author.hasKey(alicePubKey, bcsvKeyType);
+      strictEqual(hasAliceKey.toHuman().valueOf(), true);
+      hasDaveKey = await removeKeysApi.rpc.author.hasKey(davePubKey, bcsvKeyType);
+      strictEqual(hasDaveKey.toHuman().valueOf(), false);
 
       stopBspContainer({ containerName, api: removeKeysApi });
     });
