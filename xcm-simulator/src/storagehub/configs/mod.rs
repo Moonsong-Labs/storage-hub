@@ -544,7 +544,8 @@ parameter_types! {
     pub const ChallengesQueueLength: u32 = 100;
     pub const CheckpointChallengePeriod: u32 = 10;
     pub const ChallengesFee: Balance = 1 * UNIT;
-    pub const StakeToChallengePeriod: Balance = 10 * UNIT;
+    pub const StakeToChallengePeriod: Balance = 1_000_000 * UNIT;
+    pub const MinChallengePeriod: u32 = 30;
     pub const ChallengeTicksTolerance: u32 = 50;
     pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
     pub const TargetTicksStorageOfSubmitters: u32 = 3;
@@ -570,6 +571,7 @@ impl pallet_proofs_dealer::Config for Runtime {
     type Treasury = TreasuryAccount;
     type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
     type StakeToChallengePeriod = StakeToChallengePeriod;
+    type MinChallengePeriod = MinChallengePeriod;
     type ChallengeTicksTolerance = ChallengeTicksTolerance;
 }
 
