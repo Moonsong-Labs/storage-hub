@@ -153,6 +153,16 @@ const PAYMENT_STREAMS_V1 = {
       }
     ],
     type: "Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError>"
+  },
+  get_users_of_payment_streams_of_provider: {
+    description: "Get the payment streams of a provider.",
+    params: [
+      {
+        name: "providerId",
+        type: "ProviderId"
+      }
+    ],
+    type: "Vec<AccountId>"
   }
 };
 export const runtime = {

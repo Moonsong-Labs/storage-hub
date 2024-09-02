@@ -50,10 +50,6 @@ cumulus-primitives-core = { workspace = true }
 cumulus-primitives-storage-weight-reclaim = { workspace = true }
 
 # Local
-pallet-proofs-dealer = { workspace = true }
-pallet-proofs-dealer-runtime-api = { workspace = true }
-pallet-storage-providers = { workspace = true }
-pallet-storage-providers-runtime-api = { workspace = true }
 storage-hub-runtime = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }
@@ -63,3 +59,9 @@ shp-file-metadata = { workspace = true }
 # Local pallets
 pallet-file-system = { workspace = true }
 pallet-file-system-runtime-api = { workspace = true }
+pallet-payment-streams = { workspace = true }
+pallet-payment-streams-runtime-api = { workspace = true }
+pallet-proofs-dealer = { workspace = true }
+pallet-proofs-dealer-runtime-api = { workspace = true }
+pallet-storage-providers = { workspace = true }
+pallet-storage-providers-runtime-api = { workspace = true }

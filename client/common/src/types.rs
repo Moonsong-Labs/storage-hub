@@ -45,6 +45,7 @@ pub type StorageProof = pallet_proofs_dealer::types::Proof<Runtime>;
 pub type ForestVerifierProof = pallet_proofs_dealer::types::ForestVerifierProofFor<Runtime>;
 pub type KeyProof = pallet_proofs_dealer::types::KeyProof<Runtime>;
 pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
+pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = (

@@ -745,9 +745,15 @@ where
             // Iterate through the proof submitters and update their last chargeable tick and last chargeable price index
             for provider_id in proof_submitters {
                 // Update the last chargeable tick and last chargeable price index of the Provider
+                let accumulated_price_index = AccumulatedPriceIndex::<T>::get();
                 LastChargeableInfo::<T>::mutate(provider_id, |provider_info| {
                     provider_info.last_chargeable_tick = n;
-                    provider_info.price_index = AccumulatedPriceIndex::<T>::get();
+                    provider_info.price_index = accumulated_price_index;
+                });
+                Self::deposit_event(Event::<T>::LastChargeableInfoUpdated {
+                    provider_id,
+                    last_chargeable_tick: n,
+                    last_chargeable_price_index: accumulated_price_index,
                 });
                 weight.consume(T::DbWeight::get().reads_writes(1, 1));
             }
@@ -1053,11 +1059,36 @@ where
                     .ok_or(GetUsersWithDebtOverThresholdError::DebtOverflow)?;
             }
 
-            if debt > threshold {
+            if debt >= threshold {
                 users_with_debt_over_threshold.push(user);
             }
         }
 
         Ok(users_with_debt_over_threshold)
+    }
+
+    pub fn get_users_of_payment_streams_of_provider(
+        provider_id: &ProviderIdFor<T>,
+    ) -> Vec<T::AccountId> {
+        let mut payment_streams = Vec::new();
+
+        // Check if the Provider has any payment streams active
+        let provider_has_payment_streams =
+            !Self::get_fixed_rate_payment_streams_of_provider(provider_id).is_empty()
+                || !Self::get_dynamic_rate_payment_streams_of_provider(provider_id).is_empty();
+
+        if provider_has_payment_streams {
+            // Get the fixed-rate payment streams of the Provider
+            let fixed_rate_payment_streams =
+                FixedRatePaymentStreams::<T>::iter_prefix(provider_id).map(|(user, _)| user);
+            payment_streams.extend(fixed_rate_payment_streams);
+
+            // Get the dynamic-rate payment streams of the Provider
+            let dynamic_rate_payment_streams =
+                DynamicRatePaymentStreams::<T>::iter_prefix(provider_id).map(|(user, _)| user);
+            payment_streams.extend(dynamic_rate_payment_streams);
+        }
+
+        payment_streams
     }
 }

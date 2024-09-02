@@ -26,6 +26,7 @@ use storage_hub_runtime::RuntimeEvent;
 use pallet_file_system_runtime_api::{
     FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
 };
+use pallet_payment_streams_runtime_api::{GetUsersWithDebtOverThresholdError, PaymentStreamsApi};
 use pallet_proofs_dealer_runtime_api::{
     GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError, ProofsDealerApi,
 };
@@ -35,8 +36,8 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider,
-        FinalisedTrieRemoveMutationsApplied, NewChallengeSeed, NewStorageRequest,
-        SlashableProvider,
+        FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewChallengeSeed,
+        NewStorageRequest, SlashableProvider,
     },
     transaction::SubmittedTransaction,
 };
@@ -558,6 +559,33 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryUsersWithDebt {
+                    provider_id,
+                    min_debt,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let users_with_debt = self
+                        .client
+                        .runtime_api()
+                        .get_users_with_debt_over_threshold(
+                            current_block_hash,
+                            &provider_id,
+                            min_debt,
+                        )
+                        .unwrap_or_else(|e| {
+                            error!(target: LOG_TARGET, "{}", e);
+                            Err(GetUsersWithDebtOverThresholdError::InternalApiError)
+                        });
+
+                    match callback.send(users_with_debt) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back users with debt: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }
@@ -695,6 +723,22 @@ impl BlockchainService {
                             provider,
                             next_challenge_deadline,
                         }),
+                        // The last chargeable info of a provider has been updated
+                        RuntimeEvent::PaymentStreams(
+                            pallet_payment_streams::Event::LastChargeableInfoUpdated {
+                                provider_id,
+                                last_chargeable_tick,
+                                last_chargeable_price_index,
+                            },
+                        ) => {
+                            if self.provider_ids.contains(&provider_id) {
+                                self.emit(LastChargeableInfoUpdated {
+                                    provider_id: provider_id,
+                                    last_chargeable_tick: last_chargeable_tick,
+                                    last_chargeable_price_index: last_chargeable_price_index,
+                                })
+                            }
+                        }
                         // This event should only be of any use if a node is run by as a user.
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::AcceptedBspVolunteer {
