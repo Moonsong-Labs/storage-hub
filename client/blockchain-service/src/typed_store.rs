@@ -1,28 +1,28 @@
 use codec::{Decode, Encode};
 use rocksdb::{AsColumnFamilyRef, ColumnFamily, DBPinnableSlice, WriteBatch, DB};
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, marker::PhantomData};
 
 pub trait DbCodec<T> {
     /// Encode a value to bytes.
-    fn encode(&self, value: &T) -> Vec<u8>;
+    fn encode(value: &T) -> Vec<u8>;
 
     /// Decode a value from bytes.
-    fn decode(&self, bytes: &[u8]) -> T;
+    fn decode(bytes: &[u8]) -> T;
 }
 
 /// A DbCodec for the SCALE codec.
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct ScaleDbCodec;
 
 impl<T> DbCodec<T> for ScaleDbCodec
 where
-    T: codec::Encode + codec::Decode,
+    T: Encode + Decode,
 {
-    fn encode(&self, value: &T) -> Vec<u8> {
+    fn encode(value: &T) -> Vec<u8> {
         value.encode()
     }
 
-    fn decode(&self, bytes: &[u8]) -> T {
+    fn decode(bytes: &[u8]) -> T {
         T::decode(&mut &bytes[..]).expect("ScaleDbCodec: Failed to decode value")
     }
 }
@@ -33,76 +33,31 @@ pub trait TypedCf {
     type Value;
 
     /// Type of the [`DbCodec`] for the keys.
-    type KeyCodec: DbCodec<Self::Key> + Clone;
+    type KeyCodec: DbCodec<Self::Key>;
 
     /// Type of the [`DbCodec`] for the values.
-    type ValueCodec: DbCodec<Self::Value> + Clone;
+    type ValueCodec: DbCodec<Self::Value>;
 
     /// Column family name (as known to the DB).
     const NAME: &'static str;
-    /// Creates a new [`DbCodec`] for keys within this column family.
-    fn key_codec(&self) -> Self::KeyCodec;
-    /// Creates a new [`DbCodec`] for values within this column family.
-    fn value_codec(&self) -> Self::ValueCodec;
 }
 
 /// A DbCodec for the unit type, used for single row column families.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct SingleRowDbCodec;
 
 impl DbCodec<()> for SingleRowDbCodec {
-    fn encode(&self, _value: &()) -> Vec<u8> {
+    fn encode(_value: &()) -> Vec<u8> {
         vec![]
     }
 
-    fn decode(&self, _bytes: &[u8]) -> () {
+    fn decode(_bytes: &[u8]) -> () {
         ()
     }
 }
 
-/// A convenience trait implementing [`TypedCf`] for a simple case where both [`DbCodec`]s have
-/// cheap [`Default`] implementations.
-pub trait DefaultCf {
-    /// Type of the key.
-    type Key;
-    /// Type of the value.
-    type Value;
-
-    /// Column family name (as known to the DB).
-    const DEFAULT_NAME: &'static str;
-    /// Key codec type.
-    type KeyCodec: Default;
-    /// Value codec type.
-    type ValueCodec: Default;
-}
-
-impl<
-        K,
-        V,
-        KC: Default + DbCodec<K> + Clone,
-        VC: Default + DbCodec<V> + Clone,
-        D: DefaultCf<Key = K, Value = V, KeyCodec = KC, ValueCodec = VC>,
-    > TypedCf for D
-{
-    type Key = K;
-    type Value = V;
-
-    type KeyCodec = KC;
-    type ValueCodec = VC;
-
-    const NAME: &'static str = Self::DEFAULT_NAME;
-
-    fn key_codec(&self) -> KC {
-        KC::default()
-    }
-
-    fn value_codec(&self) -> VC {
-        VC::default()
-    }
-}
-
-/// A convenience trait implementing [`DefaultCf`] for a simple case where both [`DefaultCf::Key`]
-/// and [`DefaultCf::Key`] implement scale encoding and decoding.
+/// A convenience trait implementing [`TypedCf`] for when [`Self::Key`] and [`Self::Value`] support
+/// SCALE encode/decode.
 pub trait ScaleEncodedCf {
     type Key: Encode + Decode;
     type Value: Encode + Decode;
@@ -110,14 +65,14 @@ pub trait ScaleEncodedCf {
     const SCALE_ENCODED_NAME: &'static str;
 }
 
-impl<K, V, S: ScaleEncodedCf<Key = K, Value = V>> DefaultCf for S {
+impl<K: Encode + Decode, V: Encode + Decode, S: ScaleEncodedCf<Key = K, Value = V>> TypedCf for S {
     type Key = K;
     type Value = V;
 
     type KeyCodec = ScaleDbCodec;
     type ValueCodec = ScaleDbCodec;
 
-    const DEFAULT_NAME: &'static str = Self::SCALE_ENCODED_NAME;
+    const NAME: &'static str = Self::SCALE_ENCODED_NAME;
 }
 
 /// A convenience trait implementing [`ScaleEncodedCf`] for a single SCALE-encoded value column family.
@@ -181,22 +136,18 @@ pub trait WriteableRocks: ReadableRocks {
 }
 
 /// An internal wrapper for a [`TypedCf`] and dependencies resolved from it.
-struct ResolvedCf<'r, CF: TypedCf> {
+struct CfHandle<'r, CF: TypedCf> {
     handle: &'r ColumnFamily,
-    key_codec: CF::KeyCodec,
-    value_codec: CF::ValueCodec,
+    phantom: PhantomData<CF>,
 }
 
-impl<'r, CF: TypedCf> ResolvedCf<'r, CF> {
-    /// Resolves and caches properties of the given [`TypedCf`].
-    pub fn resolve<R: ReadableRocks>(rocks: &'r R, cf: &CF) -> Self {
+impl<'r, CF: TypedCf> CfHandle<'r, CF> {
+    /// Resolves a [`ColumnFamily`] from a [`TypedCf`].
+    pub fn resolve<R: ReadableRocks>(rocks: &'r R, _cf: &CF) -> Self {
         let handle = rocks.cf_handle(CF::NAME);
-        let key_codec = cf.key_codec();
-        let value_codec = cf.value_codec();
         Self {
             handle,
-            key_codec,
-            value_codec,
+            phantom: PhantomData,
         }
     }
 }
@@ -280,7 +231,7 @@ impl<'r, R: WriteableRocks> TypedDbContext<'r, R, BufferedWriteSupport<'r, R>> {
 /// A higher-level DB access API bound to its [`TypedDbContext`] and scoped at a specific column
 /// family.
 pub struct TypedCfApi<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> {
-    cf: ResolvedCf<'r, CF>,
+    cf: CfHandle<'r, CF>,
     rocks: &'r R,
     overlay: &'o DbOverlay,
     write_support: &'w W,
@@ -289,7 +240,7 @@ pub struct TypedCfApi<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport
 impl<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> TypedCfApi<'r, 'o, 'w, CF, R, W> {
     /// Creates an instance for the given column family.
     fn new(
-        cf: ResolvedCf<'r, CF>,
+        cf: CfHandle<'r, CF>,
         rocks: &'r R,
         overlay: &'o DbOverlay,
         write_support: &'w W,
@@ -306,9 +257,9 @@ impl<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> TypedCfApi<'r, 
 impl<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> TypedCfApi<'r, 'o, 'w, CF, R, W> {
     /// Gets value by key.
     pub fn get(&self, key: &CF::Key) -> Option<CF::Value> {
-        match self.overlay.get::<CF>(self.cf.key_codec.encode(key)) {
+        match self.overlay.get::<CF>(CF::KeyCodec::encode(key)) {
             Some(DbOverlayValueOp::Put(value)) => {
-                return Some(self.cf.value_codec.decode(&value));
+                return Some(CF::ValueCodec::decode(&value));
             }
             Some(DbOverlayValueOp::Delete) => {
                 return None;
@@ -317,8 +268,8 @@ impl<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> TypedCfApi<'r, 
         }
 
         self.rocks
-            .get_pinned_cf(self.cf.handle, self.cf.key_codec.encode(key).as_slice())
-            .map(|pinnable_slice| self.cf.value_codec.decode(pinnable_slice.as_ref()))
+            .get_pinned_cf(self.cf.handle, CF::KeyCodec::encode(key).as_slice())
+            .map(|pinnable_slice| CF::ValueCodec::decode(pinnable_slice.as_ref()))
     }
 }
 
@@ -327,23 +278,19 @@ impl<'r, 'o, 'w, CF: TypedCf, R: WriteableRocks>
 {
     /// Upserts the new value at the given key.
     pub fn put(&self, key: &CF::Key, value: &CF::Value) {
-        self.overlay.put::<CF>(
-            self.cf.key_codec.encode(key),
-            self.cf.value_codec.encode(value),
-        );
-        self.write_support.buffer.put(
-            self.cf.handle,
-            self.cf.key_codec.encode(key),
-            self.cf.value_codec.encode(value),
-        );
+        let raw_key = CF::KeyCodec::encode(key);
+        let raw_value = CF::ValueCodec::encode(value);
+        self.overlay.put::<CF>(raw_key.clone(), raw_value.clone());
+        self.write_support
+            .buffer
+            .put(self.cf.handle, raw_key, raw_value);
     }
 
     /// Deletes the entry of the given key.
     pub fn delete(&self, key: &CF::Key) {
-        self.overlay.delete::<CF>(self.cf.key_codec.encode(key));
-        self.write_support
-            .buffer
-            .delete(self.cf.handle, self.cf.key_codec.encode(key));
+        let raw_key = CF::KeyCodec::encode(key);
+        self.overlay.delete::<CF>(raw_key.clone());
+        self.write_support.buffer.delete(self.cf.handle, raw_key);
     }
 }
 
@@ -351,7 +298,7 @@ impl<'r, R: ReadableRocks, W: WriteSupport> TypedDbContext<'r, R, W> {
     /// Returns a typed helper scoped at the given column family.
     pub fn cf<CF: TypedCf>(&self, typed_cf: &CF) -> TypedCfApi<'r, '_, '_, CF, R, W> {
         TypedCfApi::new(
-            ResolvedCf::resolve(self.rocks, typed_cf),
+            CfHandle::resolve(self.rocks, typed_cf),
             self.rocks,
             &self.overlay,
             &self.write_support,

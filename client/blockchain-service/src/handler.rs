@@ -639,7 +639,6 @@ impl BlockchainService {
         // If this is the first block import notification, we might need to catch up.
         if !self.first_block_import_notification {
             info!(target: LOG_TARGET, "First block import notification: {}", block_hash);
-            self.catch_up_block_import(&block_hash, &block_number).await;
 
             // Check if there is an ongoing forest write lock task.
             let state_store_context = self.persistent_state.open_rw_context_with_overlay();
@@ -652,6 +651,9 @@ impl BlockchainService {
             if let Some(event_data) = maybe_ongoing_forest_write_lock_task_data {
                 self.emit_forest_write_event(event_data);
             }
+
+            self.catch_up_block_import(&block_hash, &block_number).await;
+
             self.first_block_import_notification = true;
         }
 
