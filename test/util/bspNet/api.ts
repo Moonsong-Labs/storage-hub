@@ -1,3 +1,4 @@
+import "@storagehub/types-bundle";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { BspNetApi } from "./types";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
@@ -13,6 +14,8 @@ export const createApiObject = async (uri: string): Promise<BspNetApi> => {
   const baseApi = await ApiPromise.create({
     provider: new WsProvider(uri),
     noInitWarn: true,
+    throwOnConnect: false,
+    throwOnUnknown: false,
     typesBundle: BundledTypes
   });
 
