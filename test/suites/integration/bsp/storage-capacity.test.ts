@@ -1,6 +1,5 @@
 import assert from "node:assert";
 import {
-  assertExtrinsicPresent,
   bspKey,
   CAPACITY,
   CAPACITY_512,
@@ -66,13 +65,13 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
       const source = "res/cloud.jpg";
       const location = "test/cloud.jpg";
       const bucketName = "toobig-1";
-      await api.sendNewStorageRequest(source, location, bucketName);
+      await api.file.newStorageRequest(source, location, bucketName);
 
       //To allow for BSP to react to request
       await sleep(500);
       await assert.rejects(
         async () => {
-          assertExtrinsicPresent(api, {
+          api.assert.extrinsicPresent({
             module: "fileSystem",
             method: "bspVolunteer",
             checkTxPool: true,
@@ -100,7 +99,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     const source = "res/adolphus.jpg";
     const location = "test/adolphus.jpg";
     const bucketName = "nothingmuch-2";
-    await api.sendNewStorageRequest(source, location, bucketName);
+    await api.file.newStorageRequest(source, location, bucketName);
 
     await api.wait.bspVolunteer();
     await api.wait.bspStored();

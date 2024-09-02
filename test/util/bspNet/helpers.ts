@@ -17,7 +17,6 @@ import { execSync } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 import * as util from "node:util";
-import { assertEventPresent } from "../asserts.ts";
 import { DOCKER_IMAGE } from "../constants.ts";
 import { isExtSuccess } from "../extrinsics";
 import {
@@ -44,7 +43,7 @@ import {
 } from "./consts";
 import { addBspContainer, showContainers } from "./docker";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api.ts";
-import type { BspNetConfig, FileMetadata, InitialisedMultiBspNetwork } from "./types";
+import type { BspNetConfig, InitialisedMultiBspNetwork } from "./types";
 
 const exec = util.promisify(child_process.exec);
 
@@ -361,7 +360,7 @@ export const runMultipleInitialisedBspsNet = async (
     const location = "test/smile.jpg";
     const bucketName = "nothingmuch-1";
 
-    const fileMetadata = await sendNewStorageRequest(userApi, source, location, bucketName);
+    const fileMetadata = await userApi.file.newStorageRequest(source, location, bucketName);
 
     await userApi.wait.bspVolunteer();
     await userApi.wait.bspStored();
@@ -484,75 +483,6 @@ export const sealBlock = async (
     events: results.events,
     extSuccess: extSuccess
   }) satisfies SealedBlock;
-};
-
-export const sendNewStorageRequest = async (
-  api: ApiPromise,
-  source: string,
-  location: string,
-  bucketName: string
-): Promise<FileMetadata> => {
-  const newBucketEventEvent = await createBucket(api, bucketName);
-  const newBucketEventDataBlob =
-    api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
-
-  if (!newBucketEventDataBlob) {
-    throw new Error("Event doesn't match Type");
-  }
-
-  const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
-    source,
-    location,
-    NODE_INFOS.user.AddressId,
-    newBucketEventDataBlob.bucketId
-  );
-
-  const issueStorageRequestResult = await sealBlock(
-    api,
-    api.tx.fileSystem.issueStorageRequest(
-      newBucketEventDataBlob.bucketId,
-      location,
-      fileMetadata.fingerprint,
-      fileMetadata.file_size,
-      DUMMY_MSP_ID,
-      [NODE_INFOS.user.expectedPeerId]
-    ),
-    shUser
-  );
-
-  const newStorageRequestEvent = assertEventPresent(
-    api,
-    "fileSystem",
-    "NewStorageRequest",
-    issueStorageRequestResult.events
-  );
-  const newStorageRequestEventDataBlob =
-    api.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent.event) &&
-    newStorageRequestEvent.event.data;
-
-  if (!newStorageRequestEventDataBlob) {
-    throw new Error("Event doesn't match Type");
-  }
-
-  return {
-    fileKey: newStorageRequestEventDataBlob.fileKey.toString(),
-    bucketId: newBucketEventDataBlob.bucketId.toString(),
-    location: newStorageRequestEventDataBlob.location.toString(),
-    owner: newBucketEventDataBlob.who.toString(),
-    fingerprint: fileMetadata.fingerprint,
-    fileSize: fileMetadata.file_size
-  };
-};
-
-export const createBucket = async (api: ApiPromise, bucketName: string) => {
-  const createBucketResult = await sealBlock(
-    api,
-    api.tx.fileSystem.createBucket(DUMMY_MSP_ID, bucketName, false),
-    shUser
-  );
-  const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
-
-  return event;
 };
 
 export const cleardownTest = async (cleardownOptions: {

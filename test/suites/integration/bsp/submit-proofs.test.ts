@@ -1,8 +1,6 @@
 import "@storagehub/api-augment";
 import assert, { strictEqual } from "node:assert";
 import {
-  assertEventMany,
-  assertExtrinsicPresent,
   BSP_DOWN_ID,
   describeBspNet,
   DUMMY_BSP_ID,
@@ -88,8 +86,7 @@ describeBspNet(
       const blockResult = await userApi.sealBlock();
 
       // Assert for the the event of the proof successfully submitted and verified.
-      const proofAcceptedEvents = assertEventMany(
-        userApi,
+      const proofAcceptedEvents = userApi.assert.eventMany(
         "proofsDealer",
         "ProofAccepted",
         blockResult.events
@@ -222,13 +219,13 @@ describeBspNet(
       const source = "res/adolphus.jpg";
       const location = "test/adolphus.jpg";
       const bucketName = "nothingmuch-2";
-      await userApi.sendNewStorageRequest(source, location, bucketName);
+      await userApi.file.newStorageRequest(source, location, bucketName);
 
       await it("Only one BSP confirms it", async () => {
         // Wait for the remaining BSP to volunteer.
         await sleep(500);
 
-        const volunteerPending = await assertExtrinsicPresent(userApi, {
+        const volunteerPending = await userApi.assert.extrinsicPresent({
           module: "fileSystem",
           method: "bspVolunteer",
           checkTxPool: true
@@ -243,7 +240,7 @@ describeBspNet(
 
         // Wait for the BSP to download the file.
         await sleep(5000);
-        const confirmPending = await assertExtrinsicPresent(userApi, {
+        const confirmPending = await userApi.assert.extrinsicPresent({
           module: "fileSystem",
           method: "bspConfirmStoring",
           checkTxPool: true
