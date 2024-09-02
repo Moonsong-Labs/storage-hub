@@ -282,26 +282,25 @@ where
         Ok(forest_storage_read_lock.root())
     }
 
+    // If a seed is provided, we manually generate and persist it into the file system.
+    // In the case a seed is not provided, we delegate generation and insertion to `sr25519_generate_new`, which
+    // internally uses the block number as a seed.
+    // See https://paritytech.github.io/polkadot-sdk/master/sc_keystore/struct.LocalKeystore.html#method.sr25519_generate_new
     async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String> {
-        let seed = seed.as_ref().map(|s| s.as_str());
+        let seed = seed.as_deref();
 
         let new_pub_key = match seed {
-            // This method only persists the key into file system if a seed is NOT provided.
-            // In case there is a seed, we need to manually generate and insert the key in the keystore.
-            // See https://paritytech.github.io/polkadot-sdk/master/sc_keystore/struct.LocalKeystore.html#method.sr25519_generate_new
             None => self
                 .keystore
                 .sr25519_generate_new(BCSV_KEY_TYPE, seed)
                 .map_err(into_rpc_error)?,
-            // If there is a seed, we generate a new pair and insert into the keystore.
             Some(seed) => {
                 let new_pair = Sr25519Pair::from_string(seed, None).map_err(into_rpc_error)?;
                 let new_pub_key = new_pair.public();
-
-                // Persists new key to keystore in file system.
                 self.keystore
                     .insert(BCSV_KEY_TYPE, seed, &new_pub_key)
                     .map_err(into_rpc_error)?;
+
                 new_pub_key
             }
         };
@@ -309,6 +308,7 @@ where
         Ok(new_pub_key.to_string())
     }
 
+    // Deletes all files with keys of type BCSV from the Keystore.
     async fn remove_bcsv_keys(&self, keystore_path: String) -> RpcResult<()> {
         let pub_keys = self.keystore.keys(BCSV_KEY_TYPE).map_err(into_rpc_error)?;
         let key_path = PathBuf::from(keystore_path);
