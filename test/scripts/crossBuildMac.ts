@@ -5,6 +5,7 @@ async function main() {
   const { confirm } = await inquirer.prompt({
     type: "confirm",
     name: "confirm",
+    // @ts-expect-error bug with inquirer
     message: "This script will build the project for Linux. Continue?",
     default: true
   });
@@ -20,9 +21,10 @@ async function main() {
     const { wrongArch } = await inquirer.prompt({
       type: "confirm",
       name: "wrongArch",
+      // @ts-expect-error bug with inquirer
       message:
         "⚠️ This script is intended for Apple Silicon devices ⚠️\nℹ️ You can probably just run 'cargo build --release' to build the node.\n Are you sure you want to crossbuild?",
-      default: false
+      default: true
     });
     if (!wrongArch) {
       return;

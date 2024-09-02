@@ -7,8 +7,8 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import { assertEventPresent } from "../asserts";
 import { createBucket, sendNewStorageRequest } from "./fileHelpers";
-import { sealBlock } from "./helpers";
 import type { BspNetApi } from "./types";
+import { sealBlock } from "./block";
 
 /**
  * DEPRECATED: Use BspNetTestApi.create() instead

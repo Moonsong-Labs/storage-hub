@@ -1,13 +1,6 @@
 import "@storagehub/api-augment";
-import { sleep } from "@zombienet/utils";
 import { strictEqual } from "node:assert";
-import {
-  describeBspNet,
-  DUMMY_BSP_ID,
-  type EnrichedBspApi,
-  fetchEventData,
-  NODE_INFOS
-} from "../../../util";
+import { describeBspNet, sleep, type EnrichedBspApi } from "../../../util";
 
 describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi, it }) => {
   let api: EnrichedBspApi;
@@ -18,18 +11,18 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi,
 
   it("Network launches and can be queried", async () => {
     const userNodePeerId = await api.rpc.system.localPeerId();
-    strictEqual(userNodePeerId.toString(), NODE_INFOS.user.expectedPeerId);
+    strictEqual(userNodePeerId.toString(), api.shConsts.NODE_INFOS.user.expectedPeerId);
 
     const bspApi = await createBspApi();
     const bspNodePeerId = await bspApi.rpc.system.localPeerId();
     await bspApi.disconnect();
-    strictEqual(bspNodePeerId.toString(), NODE_INFOS.bsp.expectedPeerId);
+    strictEqual(bspNodePeerId.toString(), api.shConsts.NODE_INFOS.bsp.expectedPeerId);
   });
 
   it("Slash provider when SlashableProvider event processed", async () => {
     // Force initialise challenge cycle of Provider.
     const initialiseChallengeCycleResult = await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.proofsDealer.forceInitialiseChallengeCycle(DUMMY_BSP_ID))
+      api.tx.sudo.sudo(api.tx.proofsDealer.forceInitialiseChallengeCycle(api.shConsts.DUMMY_BSP_ID))
     );
 
     // Assert that event for challenge cycle initialisation is emitted.
@@ -39,28 +32,30 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi,
       initialiseChallengeCycleResult.events
     );
 
-    const [_currentTick, nextChallengeDeadline1, _provider, _maybeProviderAccount] = fetchEventData(
-      api.events.proofsDealer.NewChallengeCycleInitialised,
-      await api.query.system.events()
-    );
+    const [_currentTick, nextChallengeDeadline1, _provider, _maybeProviderAccount] =
+      api.assert.fetchEvent(
+        api.events.proofsDealer.NewChallengeCycleInitialised,
+        await api.query.system.events()
+      );
 
     const nextChallengeDeadline2 = await runToNextChallengePeriodBlock(
       api,
       nextChallengeDeadline1.toNumber(),
-      DUMMY_BSP_ID
+      api.shConsts.DUMMY_BSP_ID
     );
 
-    await checkProviderWasSlashed(api, DUMMY_BSP_ID);
+    await checkProviderWasSlashed(api, api.shConsts.DUMMY_BSP_ID);
 
     // Check that the provider is no longer slashable.
-    const slashableProvidersAfterSlash =
-      await api.query.proofsDealer.slashableProviders(DUMMY_BSP_ID);
+    const slashableProvidersAfterSlash = await api.query.proofsDealer.slashableProviders(
+      api.shConsts.DUMMY_BSP_ID
+    );
     strictEqual(slashableProvidersAfterSlash.isNone, true);
 
     // Simulate 2 failed challenge periods
-    await runToNextChallengePeriodBlock(api, nextChallengeDeadline2, DUMMY_BSP_ID);
+    await runToNextChallengePeriodBlock(api, nextChallengeDeadline2, api.shConsts.DUMMY_BSP_ID);
 
-    await checkProviderWasSlashed(api, DUMMY_BSP_ID);
+    await checkProviderWasSlashed(api, api.shConsts.DUMMY_BSP_ID);
   });
 });
 
@@ -72,9 +67,9 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi,
 async function checkProviderWasSlashed(api: EnrichedBspApi, providerId: string) {
   // Wait for provider to be slashed.
   await sleep(500);
-  await api.sealBlock();
+  await api.block.seal();
 
-  const [provider, _amountSlashed] = fetchEventData(
+  const [provider, _amountSlashed] = api.assert.fetchEvent(
     api.events.providers.Slashed,
     await api.query.system.events()
   );
@@ -110,7 +105,7 @@ async function runToNextChallengePeriodBlock(
   // Assert that the SlashableProvider event is emitted.
   const blockResult = await api.sealBlock();
 
-  const [_provider, nextChallengeDeadline] = fetchEventData(
+  const [_provider, nextChallengeDeadline] = api.assert.fetchEvent(
     api.events.proofsDealer.SlashableProvider,
     blockResult.events
   );

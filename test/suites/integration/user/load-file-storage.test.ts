@@ -1,12 +1,12 @@
 import "@storagehub/api-augment";
 import assert, { strictEqual } from "node:assert";
-import { NODE_INFOS, TEST_ARTEFACTS, describeBspNet, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, type EnrichedBspApi } from "../../../util";
 
 describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) => {
-  let user_api: EnrichedBspApi;
+  let userApi: EnrichedBspApi;
 
   before(async () => {
-    user_api = await createUserApi();
+    userApi = await createUserApi();
   });
 
   it("loadFileInStorage works", async () => {
@@ -14,25 +14,25 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     const destination = "test/adolphus.jpg";
     const bucketName = "bucket-0";
 
-    const newBucketEventEvent = await user_api.createBucket(bucketName);
+    const newBucketEventEvent = await userApi.createBucket(bucketName);
     const newBucketEventDataBlob =
-      user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+      userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
     if (!newBucketEventDataBlob) {
       throw new Error("Event doesn't match Type");
     }
 
     const { location, fingerprint, file_size } =
-      await user_api.rpc.storagehubclient.loadFileInStorage(
+      await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
-        NODE_INFOS.user.AddressId,
+        userApi.shConsts.NODE_INFOS.user.AddressId,
         newBucketEventDataBlob.bucketId
       );
 
     strictEqual(location.toHuman(), destination);
-    strictEqual(fingerprint.toString(), TEST_ARTEFACTS[source].fingerprint);
-    strictEqual(file_size.toBigInt(), TEST_ARTEFACTS[source].size);
+    strictEqual(fingerprint.toString(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);
+    strictEqual(file_size.toBigInt(), userApi.shConsts.TEST_ARTEFACTS[source].size);
   });
 
   it("loadFileInStorage fails if file is empty", async () => {
@@ -40,19 +40,19 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     const destination = "test/empty-file";
     const bucketName = "bucket-1";
 
-    const newBucketEventEvent = await user_api.createBucket(bucketName);
+    const newBucketEventEvent = await userApi.createBucket(bucketName);
     const newBucketEventDataBlob =
-      user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+      userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
     if (!newBucketEventDataBlob) {
       throw new Error("Event doesn't match Type");
     }
 
     try {
-      await user_api.rpc.storagehubclient.loadFileInStorage(
+      await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
-        NODE_INFOS.user.AddressId,
+        userApi.shConsts.NODE_INFOS.user.AddressId,
         newBucketEventDataBlob.bucketId
       );
     } catch (e: any) {
@@ -65,25 +65,25 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     const destination = "test/one-chunk-file";
     const bucketName = "bucket-5";
 
-    const newBucketEventEvent = await user_api.createBucket(bucketName);
+    const newBucketEventEvent = await userApi.createBucket(bucketName);
     const newBucketEventDataBlob =
-      user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+      userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
     if (!newBucketEventDataBlob) {
       throw new Error("Event doesn't match Type");
     }
 
     const { location, fingerprint, file_size } =
-      await user_api.rpc.storagehubclient.loadFileInStorage(
+      await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
-        NODE_INFOS.user.AddressId,
+        userApi.shConsts.NODE_INFOS.user.AddressId,
         newBucketEventDataBlob.bucketId
       );
 
     strictEqual(location.toHuman(), destination);
-    strictEqual(fingerprint.toString(), TEST_ARTEFACTS[source].fingerprint);
-    strictEqual(file_size.toBigInt(), TEST_ARTEFACTS[source].size);
+    strictEqual(fingerprint.toString(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);
+    strictEqual(file_size.toBigInt(), userApi.shConsts.TEST_ARTEFACTS[source].size);
   });
 
   it("loadFileInStorage for the same file twice fails", async () => {
@@ -91,31 +91,31 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     const destination = "test/one-chunk-file";
     const bucketName = "bucket-10";
 
-    const newBucketEventEvent = await user_api.createBucket(bucketName);
+    const newBucketEventEvent = await userApi.createBucket(bucketName);
     const newBucketEventDataBlob =
-      user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+      userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
     if (!newBucketEventDataBlob) {
       throw new Error("Event doesn't match Type");
     }
 
     const { location, fingerprint, file_size } =
-      await user_api.rpc.storagehubclient.loadFileInStorage(
+      await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
-        NODE_INFOS.user.AddressId,
+        userApi.shConsts.NODE_INFOS.user.AddressId,
         newBucketEventDataBlob.bucketId
       );
 
     strictEqual(location.toHuman(), destination);
-    strictEqual(fingerprint.toString(), TEST_ARTEFACTS[source].fingerprint);
-    strictEqual(file_size.toBigInt(), TEST_ARTEFACTS[source].size);
+    strictEqual(fingerprint.toString(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);
+    strictEqual(file_size.toBigInt(), userApi.shConsts.TEST_ARTEFACTS[source].size);
 
     try {
-      await user_api.rpc.storagehubclient.loadFileInStorage(
+      await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
-        NODE_INFOS.user.AddressId,
+        userApi.shConsts.NODE_INFOS.user.AddressId,
         newBucketEventDataBlob.bucketId
       );
     } catch (e: any) {
@@ -128,9 +128,9 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     const destination = "test/inexistent-file";
     const bucketName = "bucket-11";
 
-    const newBucketEventEvent = await user_api.createBucket(bucketName);
+    const newBucketEventEvent = await userApi.createBucket(bucketName);
     const newBucketEventDataBlob =
-      user_api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+      userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
     if (!newBucketEventDataBlob) {
       throw new Error("Event doesn't match Type");
@@ -138,10 +138,10 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
 
     await assert.rejects(
       () =>
-        user_api.rpc.storagehubclient.loadFileInStorage(
+        userApi.rpc.storagehubclient.loadFileInStorage(
           source,
           destination,
-          NODE_INFOS.user.AddressId,
+          userApi.shConsts.NODE_INFOS.user.AddressId,
           newBucketEventDataBlob.bucketId
         ),
       /-32603: Internal error: Os { code: 2, kind: NotFound, message: "No such file or directory" }/,

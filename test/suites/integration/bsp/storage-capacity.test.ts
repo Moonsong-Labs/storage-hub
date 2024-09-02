@@ -1,10 +1,7 @@
 import assert from "node:assert";
 import {
   bspKey,
-  CAPACITY,
-  CAPACITY_512,
   describeBspNet,
-  DUMMY_BSP_ID,
   type EnrichedBspApi,
   ferdie,
   fetchEventData,
@@ -22,11 +19,13 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
 
   it("Unregistered accounts fail when changing capacities", async () => {
     const totalCapacityBefore = await api.query.providers.totalBspsCapacity();
-    const bspCapacityBefore = await api.query.providers.backupStorageProviders(DUMMY_BSP_ID);
+    const bspCapacityBefore = await api.query.providers.backupStorageProviders(
+      api.shConsts.DUMMY_BSP_ID
+    );
     assert.ok(bspCapacityBefore.unwrap().capacity.eq(totalCapacityBefore));
 
     const { events, extSuccess } = await api.sealBlock(
-      api.tx.providers.changeCapacity(CAPACITY[1024]),
+      api.tx.providers.changeCapacity(api.shConsts.CAPACITY[1024]),
       ferdie
     );
     assert.strictEqual(extSuccess, false);
@@ -39,8 +38,12 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     assert.strictEqual(eventInfo.asModule.index.toNumber(), 40); // providers
     assert.strictEqual(eventInfo.asModule.error.toHex(), "0x0f000000"); // NotRegistered
 
+    api.rpc.storagehubclient.getForestRoot();
+
     const totalCapacityAfter = await api.query.providers.totalBspsCapacity();
-    const bspCapacityAfter = await api.query.providers.backupStorageProviders(DUMMY_BSP_ID);
+    const bspCapacityAfter = await api.query.providers.backupStorageProviders(
+      api.shConsts.DUMMY_BSP_ID
+    );
     assert.ok(bspCapacityAfter.unwrap().capacity.eq(totalCapacityBefore));
     assert.ok(totalCapacityAfter.eq(totalCapacityBefore));
   });
@@ -49,7 +52,9 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     "Maxed out storages not volunteered",
     { skip: "Capacity check not Implemented yet" },
     async () => {
-      const capacityUsed = (await api.query.providers.backupStorageProviders(DUMMY_BSP_ID))
+      const capacityUsed = (
+        await api.query.providers.backupStorageProviders(api.shConsts.DUMMY_BSP_ID)
+      )
         .unwrap()
         .capacityUsed.toNumber();
       await skipBlocksToMinChangeTime(api);
@@ -85,12 +90,15 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
   );
 
   it("Total capacity updated when single BSP capacity updated", async () => {
-    const newCapacity = BigInt(Math.floor(Math.random() * 1000 * 1024 * 1024)) + CAPACITY_512;
+    const newCapacity =
+      BigInt(Math.floor(Math.random() * 1000 * 1024 * 1024)) + api.shConsts.CAPACITY_512;
 
     await api.sealBlock(api.tx.providers.changeCapacity(newCapacity), bspKey);
 
     const totalCapacityAfter = await api.query.providers.totalBspsCapacity();
-    const bspCapacityAfter = await api.query.providers.backupStorageProviders(DUMMY_BSP_ID);
+    const bspCapacityAfter = await api.query.providers.backupStorageProviders(
+      api.shConsts.DUMMY_BSP_ID
+    );
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), newCapacity);
     assert.strictEqual(totalCapacityAfter.toBigInt(), newCapacity);
   });

@@ -1,7 +1,7 @@
 import type { ApiPromise } from "@polkadot/api";
 import { assertEventPresent, assertExtrinsicPresent } from "../asserts";
 import { sleep } from "../timer";
-import { sealBlock } from "./helpers";
+import { sealBlock } from "./block";
 
 export const waitForBspVolunteer = async (api: ApiPromise) => {
   // To allow node to react

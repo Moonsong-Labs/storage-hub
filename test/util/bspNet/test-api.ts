@@ -1,21 +1,16 @@
+import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { EventRecord } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
-import "@storagehub/api-augment";
 import { types as BundledTypes } from "@storagehub/types-bundle";
-import {
-  assertEventMany,
-  assertEventPresent,
-  assertExtrinsicPresent,
-  Assertions,
-  type AssertExtrinsicOptions
-} from "../asserts";
-import { createBucket, Files, sendNewStorageRequest } from "./fileHelpers";
-import { sealBlock } from "./helpers";
+import { Assertions, type AssertExtrinsicOptions } from "../asserts";
+import { Files } from "./fileHelpers";
 import type { BspNetApi } from "./types";
-import { waitForBspStored, waitForBspVolunteer, Waits } from "./waits";
+import { Waits } from "./waits";
+import { ShConsts } from "./consts";
+import { BspNetBlock, sealBlock } from "./block";
 
 export class BspNetTestApi implements AsyncDisposable {
   private _api: ApiPromise;
@@ -48,31 +43,32 @@ export class BspNetTestApi implements AsyncDisposable {
   }
 
   private async sendNewStorageRequest(source: string, location: string, bucketName: string) {
-    return sendNewStorageRequest(this._api, source, location, bucketName);
+    return Files.newStorageRequest(this._api, source, location, bucketName);
   }
+
   private async createBucket(bucketName: string) {
-    return createBucket(this._api, bucketName);
+    return Files.newBucket(this._api, bucketName);
   }
 
   private assertEvent(module: string, method: string, events?: EventRecord[]) {
-    return assertEventPresent(this._api, module, method, events);
+    return Assertions.eventPresent(this._api, module, method, events);
   }
 
   private enrichApi() {
     const remappedAssertNs = {
       ...Assertions,
       eventPresent: (module: string, method: string, events?: EventRecord[]) =>
-        assertEventPresent(this._api, module, method, events),
+        Assertions.eventPresent(this._api, module, method, events),
       eventMany: (module: string, method: string, events?: EventRecord[]) =>
-        assertEventMany(this._api, module, method, events),
+        Assertions.eventMany(this._api, module, method, events),
       extrinsicPresent: (options: AssertExtrinsicOptions) =>
-        assertExtrinsicPresent(this._api, options)
+        Assertions.extrinsicPresent(this._api, options)
     };
 
     const remappedWaitsNs = {
       ...Waits,
-      bspVolunteer: () => waitForBspVolunteer(this._api),
-      bspStored: () => waitForBspStored(this._api)
+      bspVolunteer: () => Waits.bspVolunteer(this._api),
+      bspStored: () => Waits.bspStored(this._api)
     };
 
     const remappedFileNs = {
@@ -83,7 +79,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param bucketName - The name of the bucket to be created.
        * @returns A promise that resolves to a new bucket event.
        */
-      newBucket: (bucketName: string) => createBucket(this._api, bucketName),
+      newBucket: (bucketName: string) => Files.newBucket(this._api, bucketName),
       /**
        * Creates a new bucket and submits a new storage request.
        *
@@ -93,7 +89,18 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves to file metadata.
        */
       newStorageRequest: (source: string, location: string, bucketName: string) =>
-        sendNewStorageRequest(this._api, source, location, bucketName)
+        Files.newStorageRequest(this._api, source, location, bucketName)
+    };
+
+    const remappedBlockNs = {
+      ...BspNetBlock,
+      seal: (
+        calls?:
+          | SubmittableExtrinsic<"promise", ISubmittableResult>
+          | SubmittableExtrinsic<"promise", ISubmittableResult>[],
+        signer?: KeyringPair
+      ) => BspNetBlock.seal(this._api, calls, signer),
+      skip: (blocksToSkip: number) => BspNetBlock.skip(this._api, blocksToSkip)
     };
 
     return Object.assign(this._api, {
@@ -103,7 +110,9 @@ export class BspNetTestApi implements AsyncDisposable {
       assertEvent: this.assertEvent.bind(this),
       assert: remappedAssertNs,
       wait: remappedWaitsNs,
-      file: remappedFileNs
+      file: remappedFileNs,
+      block: remappedBlockNs,
+      shConsts: ShConsts
       // Add docker
     }) satisfies BspNetApi;
   }

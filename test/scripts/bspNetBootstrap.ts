@@ -1,8 +1,8 @@
 import {
   BspNetTestApi,
-  NODE_INFOS,
   registerToxics,
   runSimpleBspNet,
+  ShConsts,
   type BspNetConfig,
   type EnrichedBspApi,
   type ToxicInfo
@@ -54,7 +54,7 @@ async function bootStrapNetwork() {
     await registerToxics(reqToxics);
   }
 
-  api = await BspNetTestApi.create(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+  api = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
   await api.file.newStorageRequest(CONFIG.localPath, CONFIG.remotePath, CONFIG.bucketName);
 

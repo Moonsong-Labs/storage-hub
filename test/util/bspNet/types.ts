@@ -2,11 +2,11 @@ import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
-import type { SealedBlock } from "./helpers";
 import type { EventRecord, Event } from "@polkadot/types/interfaces";
 import type { after, before, it } from "node:test";
 import type { launchNetwork } from "./testrunner";
 import type { BspNetTestApi } from "./test-api";
+import type { SealedBlock } from "./block";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -61,14 +61,6 @@ export interface BspNetApi extends ApiPromise {
     method: string,
     events?: EventRecord[]
   ): { event: Event; data: Codec[] & IEventData };
-
-  /**
-   * Fetches an event, inferring its type from the module and method.
-   *
-   * @remarks
-   * This function needs to be implemented.
-   */
-  // fetchEvent: () => void;
 }
 
 /**

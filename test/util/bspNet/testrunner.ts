@@ -1,6 +1,5 @@
 import { EventEmitter } from "node:events";
 import { after, before, describe, it } from "node:test";
-import { NODE_INFOS } from "./consts";
 import {
   cleardownTest,
   runInitialisedBspsNet,
@@ -9,6 +8,7 @@ import {
 } from "./helpers";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
 import type { BspNetConfig, BspNetContext, TestOptions } from "./types";
+import { ShConsts } from "./consts";
 
 export const launchEventEmitter = new EventEmitter();
 
@@ -64,8 +64,8 @@ export async function describeBspNet<
         const launchResponse = await launchNetwork(bspNetConfig, options?.initialised);
         launchEventEmitter.emit("networkLaunched", launchResponse);
 
-        userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
-        bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
+        userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+        bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
       });
 
       after(async () => {

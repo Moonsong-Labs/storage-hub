@@ -1,9 +1,9 @@
 import type { ApiPromise } from "@polkadot/api";
 import type { FileMetadata } from "./types";
-import { DUMMY_MSP_ID, NODE_INFOS } from "./consts";
-import { sealBlock } from "./helpers";
 import { assertEventPresent } from "../asserts";
 import { shUser } from "../pjsKeyring";
+import { ShConsts } from "./consts";
+import { sealBlock } from "./block";
 
 export const sendNewStorageRequest = async (
   api: ApiPromise,
@@ -22,7 +22,7 @@ export const sendNewStorageRequest = async (
   const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
     source,
     location,
-    NODE_INFOS.user.AddressId,
+    ShConsts.NODE_INFOS.user.AddressId,
     newBucketEventDataBlob.bucketId
   );
 
@@ -33,8 +33,8 @@ export const sendNewStorageRequest = async (
       location,
       fileMetadata.fingerprint,
       fileMetadata.file_size,
-      DUMMY_MSP_ID,
-      [NODE_INFOS.user.expectedPeerId]
+      ShConsts.DUMMY_MSP_ID,
+      [ShConsts.NODE_INFOS.user.expectedPeerId]
     ),
     shUser
   );
@@ -66,7 +66,7 @@ export const sendNewStorageRequest = async (
 export const createBucket = async (api: ApiPromise, bucketName: string) => {
   const createBucketResult = await sealBlock(
     api,
-    api.tx.fileSystem.createBucket(DUMMY_MSP_ID, bucketName, false),
+    api.tx.fileSystem.createBucket(ShConsts.DUMMY_MSP_ID, bucketName, false),
     shUser
   );
   const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);

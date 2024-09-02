@@ -8,3 +8,4 @@ export * from "./toxic";
 export * from "./waits";
 export * from "./test-api";
 export * from "./fileHelpers";
+export * from "./block";

@@ -1,8 +1,8 @@
-import { NODE_INFOS } from "./consts";
+import { ShConsts } from "./consts";
 import type { ToxicInfo } from "./types";
 
 export const registerToxic = async (toxicDef: ToxicInfo) => {
-  const url = `http://localhost:${NODE_INFOS.toxiproxy.port}/proxies/sh-bsp-proxy/toxics`;
+  const url = `http://localhost:${ShConsts.NODE_INFOS.toxiproxy.port}/proxies/sh-bsp-proxy/toxics`;
 
   const options: RequestInit = {
     method: "POST",
@@ -18,7 +18,7 @@ export const registerToxic = async (toxicDef: ToxicInfo) => {
 };
 
 export const getToxics = async () => {
-  const url = `http://localhost:${NODE_INFOS.toxiproxy.port}/proxies/sh-bsp-proxy/toxics`;
+  const url = `http://localhost:${ShConsts.NODE_INFOS.toxiproxy.port}/proxies/sh-bsp-proxy/toxics`;
   const resp = await fetch(url);
   return (await resp.json()) as ToxicInfo[];
 };
