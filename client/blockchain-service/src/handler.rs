@@ -599,11 +599,7 @@ impl BlockchainService {
         }
     }
 
-    async fn catch_up_block_import(
-        &mut self,
-        current_block_hash: &H256,
-        current_block_number: &BlockNumber,
-    ) {
+    async fn catch_up_block_import(&mut self, current_block_number: &BlockNumber) {
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         let latest_processed_block_number = match state_store_context
             .access(&LastProcessedBlockNumberCf)
@@ -621,8 +617,19 @@ impl BlockchainService {
         info!(target: LOG_TARGET, "Catching up from block #{} to block #{}", latest_processed_block_number, current_block_number);
 
         for block_number in latest_processed_block_number..=*current_block_number {
-            self.process_block_import(&current_block_hash, &block_number)
-                .await;
+            let block_hash = match self.client.hash(block_number.into()) {
+                Ok(Some(hash)) => hash,
+                Ok(None) => {
+                    error!(target: LOG_TARGET, "Block #{} not found.", block_number);
+                    continue;
+                }
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Error fetching block hash for block #{}: {:?}", block_number, e);
+                    continue;
+                }
+            };
+
+            self.process_block_import(&block_hash, &block_number).await;
         }
     }
 
@@ -652,7 +659,7 @@ impl BlockchainService {
                 self.emit_forest_write_event(event_data);
             }
 
-            self.catch_up_block_import(&block_hash, &block_number).await;
+            self.catch_up_block_import(&block_number).await;
 
             self.first_block_import_notification = true;
         }
