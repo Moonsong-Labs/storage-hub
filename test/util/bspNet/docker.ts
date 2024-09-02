@@ -43,7 +43,6 @@ export const showContainers = () => {
 export const addBspContainer = async (options?: {
   name?: string;
   connectToPeer?: boolean; // unused
-  keystorePath?: string;
   additionalArgs?: string[];
 }) => {
   const docker = new Docker();
@@ -73,10 +72,7 @@ export const addBspContainer = async (options?: {
     throw new Error("No bootnode found in docker args");
   }
 
-  let keystore_path = options?.keystorePath;
-  if (keystore_path == null) {
-    keystore_path = "/keystore";
-  }
+  let keystore_path = Args.find((arg) => arg.includes("--keystore-path=")) || "/keystore";
 
   const container = await docker.createContainer({
     Image: DOCKER_IMAGE,
@@ -106,7 +102,6 @@ export const addBspContainer = async (options?: {
       "--rpc-cors=all",
       `--port=${p2pPort}`,
       "--base-path=/data",
-      `--keystore-path=${keystore_path}`,
       bootNodeArg,
       ...(options?.additionalArgs || [])
     ]
@@ -139,7 +134,7 @@ export const addBspContainer = async (options?: {
   await api.disconnect();
 
   console.log(
-    `▶️ BSP container started with name: docker-sh-bsp-${bspNum + 1}, rpc port: ${rpcPort}, p2p port: ${p2pPort}, peerId: ${peerId}`
+    `▶️ BSP container started with name: ${containerName}, rpc port: ${rpcPort}, p2p port: ${p2pPort}, peerId: ${peerId}`
   );
 
   return { containerName, rpcPort, p2pPort, peerId };
