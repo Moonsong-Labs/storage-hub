@@ -1,16 +1,14 @@
 import {
-  createApiObject,
+  BspNetTestApi,
   NODE_INFOS,
   registerToxics,
   runSimpleBspNet,
-  waitForBspStored,
-  waitForBspVolunteer,
-  type BspNetApi,
   type BspNetConfig,
+  type EnrichedBspApi,
   type ToxicInfo
 } from "../util";
 
-let api: BspNetApi | undefined;
+let api: EnrichedBspApi | undefined;
 const bspNetConfig: BspNetConfig = {
   noisy: process.env.NOISY === "1",
   rocksdb: process.env.ROCKSDB === "1"
@@ -56,12 +54,12 @@ async function bootStrapNetwork() {
     await registerToxics(reqToxics);
   }
 
-  api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+  api = await BspNetTestApi.create(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
   await api.sendNewStorageRequest(CONFIG.localPath, CONFIG.remotePath, CONFIG.bucketName);
 
-  await waitForBspVolunteer(api);
-  await waitForBspStored(api);
+  await api.wait.bspVolunteer();
+  await api.wait.bspStored();
 
   if (bspNetConfig.noisy) {
     console.log("✅ NoisyNet Bootstrap success");

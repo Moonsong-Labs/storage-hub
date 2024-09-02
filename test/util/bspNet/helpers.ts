@@ -12,7 +12,6 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 import "@storagehub/api-augment";
 import { v2 as compose } from "docker-compose";
 import Docker from "dockerode";
-import { strictEqual } from "node:assert";
 import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
 import crypto from "node:crypto";
@@ -33,7 +32,6 @@ import {
   shUser
 } from "../pjsKeyring";
 import { sleep } from "../timer.ts";
-import { createApiObject } from "./api";
 import {
   BSP_DOWN_ID,
   BSP_THREE_ID,
@@ -45,8 +43,8 @@ import {
   VALUE_PROP
 } from "./consts";
 import { addBspContainer, showContainers } from "./docker";
-import type { BspNetApi, BspNetConfig, FileMetadata, InitialisedMultiBspNetwork } from "./types";
-import { waitForBspStored, waitForBspVolunteer } from "./waits.ts";
+import { BspNetTestApi, type EnrichedBspApi } from "./test-api.ts";
+import type { BspNetConfig, FileMetadata, InitialisedMultiBspNetwork } from "./types";
 
 const exec = util.promisify(child_process.exec);
 
@@ -124,7 +122,7 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
 };
 
 export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
-  let userApi: BspNetApi | undefined;
+  let userApi: EnrichedBspApi | undefined;
   try {
     console.log(`SH user id: ${shUser.address}`);
     console.log(`SH BSP id: ${bspKey.address}`);
@@ -175,7 +173,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
     // Create Connection API Object to User Node
-    userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+    userApi = await BspNetTestApi.create(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
     // Give Balances
     const amount = 10000n * 10n ** 12n;
@@ -231,7 +229,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
 };
 
 export const forceSignupBsp = async (options: {
-  api: BspNetApi;
+  api: EnrichedBspApi;
   multiaddress: string;
   who: string | Uint8Array;
   bspId?: string;
@@ -269,9 +267,9 @@ export const closeSimpleBspNet = async () => {
 export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
   await runSimpleBspNet(bspNetConfig);
 
-  let userApi: BspNetApi | undefined;
+  let userApi: EnrichedBspApi | undefined;
   try {
-    userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+    userApi = await BspNetTestApi.create(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
     /**** CREATE BUCKET AND ISSUE STORAGE REQUEST ****/
     const source = "res/whatsup.jpg";
@@ -306,9 +304,8 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
       shUser
     );
 
-    await waitForBspVolunteer(userApi);
-
-    await waitForBspStored(userApi);
+    await userApi.wait.bspVolunteer();
+    await userApi.wait.bspStored();
   } catch (e) {
     console.error("Error ", e);
   } finally {
@@ -321,9 +318,9 @@ export const runMultipleInitialisedBspsNet = async (
 ): Promise<undefined | InitialisedMultiBspNetwork> => {
   await runSimpleBspNet(bspNetConfig);
 
-  let userApi: BspNetApi | undefined;
+  let userApi: EnrichedBspApi | undefined;
   try {
-    userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+    userApi = await BspNetTestApi.create(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
 
     // u32 max value
     const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
@@ -366,8 +363,8 @@ export const runMultipleInitialisedBspsNet = async (
 
     const fileMetadata = await sendNewStorageRequest(userApi, source, location, bucketName);
 
-    await waitForBspVolunteer(userApi);
-    await waitForBspStored(userApi);
+    await userApi.wait.bspVolunteer();
+    await userApi.wait.bspStored();
 
     // Stopping BSP that is supposed to be down.
     await stopBsp(bspDownContainerName);
@@ -559,7 +556,7 @@ export const createBucket = async (api: ApiPromise, bucketName: string) => {
 };
 
 export const cleardownTest = async (cleardownOptions: {
-  api: BspNetApi | BspNetApi[];
+  api: EnrichedBspApi | EnrichedBspApi[];
   keepNetworkAlive?: boolean;
 }) => {
   try {
@@ -577,7 +574,7 @@ export const cleardownTest = async (cleardownOptions: {
   cleardownOptions.keepNetworkAlive === true ? null : await closeSimpleBspNet();
 };
 
-export const createCheckBucket = async (api: BspNetApi, bucketName: string) => {
+export const createCheckBucket = async (api: EnrichedBspApi, bucketName: string) => {
   const newBucketEventEvent = await api.createBucket(bucketName);
   const newBucketEventDataBlob =
     api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
@@ -589,7 +586,7 @@ export const createCheckBucket = async (api: BspNetApi, bucketName: string) => {
 };
 
 export const addBsp = async (
-  api: BspNetApi,
+  api: EnrichedBspApi,
   bspKey: KeyringPair,
   options?: {
     name?: string;
@@ -649,7 +646,7 @@ export const skipBlocks = async (api: ApiPromise, blocksToSkip: number) => {
 };
 
 export const skipBlocksToMinChangeTime = async (
-  api: BspNetApi,
+  api: EnrichedBspApi,
   bspId: `0x${string}` | H256 | Uint8Array = DUMMY_BSP_ID
 ) => {
   const lastCapacityChangeHeight = (await api.query.providers.backupStorageProviders(bspId))

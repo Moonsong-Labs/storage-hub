@@ -1,9 +1,9 @@
 import "@storagehub/api-augment";
 import assert, { strictEqual } from "node:assert";
-import { NODE_INFOS, TEST_ARTEFACTS, type BspNetApi, describeBspNet } from "../../../util";
+import { NODE_INFOS, TEST_ARTEFACTS, describeBspNet, type EnrichedBspApi } from "../../../util";
 
 describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) => {
-  let user_api: BspNetApi;
+  let user_api: EnrichedBspApi;
 
   before(async () => {
     user_api = await createUserApi();

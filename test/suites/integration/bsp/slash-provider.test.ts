@@ -2,16 +2,15 @@ import "@storagehub/api-augment";
 import { sleep } from "@zombienet/utils";
 import { strictEqual } from "node:assert";
 import {
-  type BspNetApi,
-  createApiObject,
   describeBspNet,
   DUMMY_BSP_ID,
+  type EnrichedBspApi,
   fetchEventData,
   NODE_INFOS
 } from "../../../util";
 
-describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, it }) => {
-  let api: BspNetApi;
+describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi, it }) => {
+  let api: EnrichedBspApi;
 
   before(async () => {
     api = await createUserApi();
@@ -21,7 +20,7 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, it }) => {
     const userNodePeerId = await api.rpc.system.localPeerId();
     strictEqual(userNodePeerId.toString(), NODE_INFOS.user.expectedPeerId);
 
-    const bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
+    const bspApi = await createBspApi();
     const bspNodePeerId = await bspApi.rpc.system.localPeerId();
     await bspApi.disconnect();
     strictEqual(bspNodePeerId.toString(), NODE_INFOS.bsp.expectedPeerId);
@@ -70,7 +69,7 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, it }) => {
  * @param api
  * @param providerId
  */
-async function checkProviderWasSlashed(api: BspNetApi, providerId: string) {
+async function checkProviderWasSlashed(api: EnrichedBspApi, providerId: string) {
   // Wait for provider to be slashed.
   await sleep(500);
   await api.sealBlock();
@@ -92,7 +91,7 @@ async function checkProviderWasSlashed(api: BspNetApi, providerId: string) {
  * @param provider
  */
 async function runToNextChallengePeriodBlock(
-  api: BspNetApi,
+  api: EnrichedBspApi,
   nextChallengeTick: number,
   provider: string
 ): Promise<number> {

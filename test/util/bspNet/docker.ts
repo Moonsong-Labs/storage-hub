@@ -3,9 +3,8 @@ import { execSync } from "node:child_process";
 import path from "node:path";
 import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
-import { createApiObject } from "./api";
-import type { BspNetApi } from "./types";
 import { checkNodeAlive } from "./helpers";
+import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
 
 export const checkBspForFile = async (filePath: string) => {
   const containerId = "docker-sh-bsp-1";
@@ -121,7 +120,7 @@ export const addBspContainer = async (options?: {
     throw new Error("Failed to connect to the new BSP container");
   }
 
-  const api = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
+  const api = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
 
   const chainName = api.consts.system.version.specName.toString();
   if (chainName !== "storage-hub-runtime") {
@@ -145,7 +144,7 @@ export const pauseBspContainer = async (containerName: string) => {
   await container.pause();
 };
 
-export const stopBspContainer = async (options: { containerName: string; api: BspNetApi }) => {
+export const stopBspContainer = async (options: { containerName: string; api: EnrichedBspApi }) => {
   await options.api.disconnect();
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
@@ -154,7 +153,7 @@ export const stopBspContainer = async (options: { containerName: string; api: Bs
 
 export const startBspContainer = async (options: {
   containerName: string;
-  endpoint?: string;
+  endpoint?: `ws://${string}`;
 }) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
@@ -162,7 +161,7 @@ export const startBspContainer = async (options: {
 
   if (options.endpoint) {
     await checkNodeAlive(options.endpoint);
-    return await createApiObject(options.endpoint);
+    return await BspNetTestApi.create(options.endpoint);
   }
 
   return undefined;
@@ -170,23 +169,23 @@ export const startBspContainer = async (options: {
 
 export const restartBspContainer = async (options: {
   containerName: string;
-  api: BspNetApi;
-  endpoint?: string;
+  api: EnrichedBspApi;
+  endpoint?: `ws://${string}`;
 }) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
   await container.restart();
 
-  return options.endpoint ? await createApiObject(options.endpoint) : undefined;
+  return options.endpoint ? await BspNetTestApi.create(options.endpoint) : undefined;
 };
 
 export const resumeBspContainer = async (options: {
   containerName: string;
-  endpoint?: string;
+  endpoint?: `ws://${string}`;
 }) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
   await container.unpause();
 
-  return options.endpoint ? await createApiObject(options.endpoint) : undefined;
+  return options.endpoint ? await BspNetTestApi.create(options.endpoint) : undefined;
 };

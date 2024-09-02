@@ -1,16 +1,10 @@
 import "@storagehub/api-augment";
 import Docker from "dockerode";
 import { strictEqual } from "node:assert";
-import {
-  addBspContainer,
-  type BspNetApi,
-  createApiObject,
-  describeBspNet,
-  DOCKER_IMAGE
-} from "../../../util";
+import { addBspContainer, describeBspNet, DOCKER_IMAGE, type EnrichedBspApi } from "../../../util";
 
-describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
-  let api: BspNetApi;
+describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, createApi, it }) => {
+  let api: EnrichedBspApi;
 
   before(async () => {
     api = await createBspApi();
@@ -29,7 +23,7 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
 
     await it("can open new API connection with", async () => {
       console.log(`connecting to rpcPort ${rpcPort}`);
-      const newApi = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
+      const newApi = await createApi(`ws://127.0.0.1:${rpcPort}`);
 
       await it("has correct reported peerId", async () => {
         const localPeerId = await newApi.rpc.system.localPeerId();

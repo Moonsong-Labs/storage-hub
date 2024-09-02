@@ -4,24 +4,23 @@ import {
   assertEventMany,
   assertExtrinsicPresent,
   BSP_DOWN_ID,
-  createApiObject,
   describeBspNet,
   DUMMY_BSP_ID,
   NODE_INFOS,
   pauseBspContainer,
   resumeBspContainer,
   sleep,
-  type BspNetApi,
+  type EnrichedBspApi,
   type FileMetadata
 } from "../../../util";
 
 describeBspNet(
   "Many BSPs Submit Proofs",
   { initialised: "multi", networkConfig: "standard" },
-  ({ before, createUserApi, after, it, getLaunchResponse }) => {
-    let userApi: BspNetApi;
-    let bspTwoApi: BspNetApi;
-    let bspThreeApi: BspNetApi;
+  ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
+    let userApi: EnrichedBspApi;
+    let bspTwoApi: EnrichedBspApi;
+    let bspThreeApi: EnrichedBspApi;
     let fileData: FileMetadata;
 
     before(async () => {
@@ -29,8 +28,8 @@ describeBspNet(
       assert(launchResponse, "BSPNet failed to initialise");
       fileData = launchResponse.fileData;
       userApi = await createUserApi();
-      bspTwoApi = await createApiObject(`ws://127.0.0.1:${launchResponse?.bspTwoRpcPort}`);
-      bspThreeApi = await createApiObject(`ws://127.0.0.1:${launchResponse?.bspThreeRpcPort}`);
+      bspTwoApi = await createApi(`ws://127.0.0.1:${launchResponse?.bspTwoRpcPort}`);
+      bspThreeApi = await createApi(`ws://127.0.0.1:${launchResponse?.bspThreeRpcPort}`);
     });
 
     after(async () => {
@@ -42,7 +41,7 @@ describeBspNet(
       const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), NODE_INFOS.user.expectedPeerId);
 
-      const bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
+      const bspApi = await createBspApi();
       const bspNodePeerId = await bspApi.rpc.system.localPeerId();
       await bspApi.disconnect();
       strictEqual(bspNodePeerId.toString(), NODE_INFOS.bsp.expectedPeerId);

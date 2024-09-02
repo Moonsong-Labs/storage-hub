@@ -5,13 +5,13 @@ import {
   NODE_INFOS,
   TEST_ARTEFACTS,
   shUser,
-  type BspNetApi,
   sleep,
-  describeBspNet
+  describeBspNet,
+  type EnrichedBspApi
 } from "../../../util";
 
 describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) => {
-  let user_api: BspNetApi;
+  let user_api: EnrichedBspApi;
 
   before(async () => {
     user_api = await createUserApi();

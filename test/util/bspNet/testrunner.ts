@@ -1,5 +1,5 @@
-import { after, before, beforeEach, describe, it } from "node:test";
-import { createApiObject } from "./api";
+import { EventEmitter } from "node:events";
+import { after, before, describe, it } from "node:test";
 import { NODE_INFOS } from "./consts";
 import {
   cleardownTest,
@@ -7,9 +7,8 @@ import {
   runMultipleInitialisedBspsNet,
   runSimpleBspNet
 } from "./helpers";
-import type { BspNetApi, BspNetConfig, BspNetContext, TestOptions } from "./types";
-import { EventEmitter } from "node:events";
-import { BspNetTestApi } from "./test-api";
+import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
+import type { BspNetConfig, BspNetContext, TestOptions } from "./types";
 
 export const launchEventEmitter = new EventEmitter();
 
@@ -52,8 +51,8 @@ export async function describeBspNet<
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
     describeFunc(`BSPNet: ${title} (${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
-      let userApiPromise: Promise<BspNetApi>;
-      let bspApiPromise: Promise<BspNetApi>;
+      let userApiPromise: Promise<EnrichedBspApi>;
+      let bspApiPromise: Promise<EnrichedBspApi>;
       let responseListenerPromise: ReturnType<typeof launchNetwork>;
 
       before(async () => {
@@ -67,10 +66,6 @@ export async function describeBspNet<
 
         userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
         bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
-      });
-
-      beforeEach(async () => {
-        console.log(`Is connected: ${(await userApiPromise).isConnected}`);
       });
 
       after(async () => {
@@ -94,6 +89,7 @@ export async function describeBspNet<
         it,
         createUserApi: () => userApiPromise,
         createBspApi: () => bspApiPromise,
+        createApi: (endpoint) => BspNetTestApi.create(endpoint),
         bspNetConfig,
         before,
         after,

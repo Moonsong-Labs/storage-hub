@@ -6,6 +6,7 @@ import type { SealedBlock } from "./helpers";
 import type { EventRecord, Event } from "@polkadot/types/interfaces";
 import type { after, before, it } from "node:test";
 import type { launchNetwork } from "./testrunner";
+import type { BspNetTestApi } from "./test-api";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -160,15 +161,23 @@ export type BspNetContext = {
 
   /**
    * Creates and returns a connected API instance for a user node.
-   * @returns A promise that resolves to a BspNetApi instance for user operations.
+   * @returns A promise that resolves to an enriched api instance for user operations.
    */
-  createUserApi: () => Promise<BspNetApi>;
+  createUserApi: () => ReturnType<typeof BspNetTestApi.create>;
 
   /**
    * Creates and returns a connected API instance for a BSP node.
-   * @returns A promise that resolves to a BspNetApi instance for BSP operations.
+   * @returns A promise that resolves to an enriched api instance for BSP operations.
    */
-  createBspApi: () => Promise<BspNetApi>;
+  createBspApi: () => ReturnType<typeof BspNetTestApi.create>;
+
+  /**
+   * Creates and returns a connected API instance for a BSP node.
+   * @returns A promise that resolves to  an enriched api instance for BSP operations.
+   */
+  createApi: (
+    endpoint: `ws://${string}` | `wss://${string}`
+  ) => ReturnType<typeof BspNetTestApi.create>;
 
   /**
    * The current configuration of the BSP network for this test run.

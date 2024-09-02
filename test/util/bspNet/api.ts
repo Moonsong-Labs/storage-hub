@@ -9,6 +9,10 @@ import { assertEventPresent } from "../asserts";
 import type { EventRecord } from "@polkadot/types/interfaces";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 
+/**
+ * DEPRECATED: Use BspNetTestApi.create() instead
+ *
+ */
 export const createApiObject = async (
   uri: `ws://${string}` | `wss://${string}`
 ): Promise<BspNetApi> => {

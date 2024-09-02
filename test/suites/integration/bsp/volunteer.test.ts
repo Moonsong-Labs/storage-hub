@@ -1,22 +1,21 @@
 import "@storagehub/api-augment";
-import { strictEqual, notEqual } from "node:assert";
+import { notEqual, strictEqual } from "node:assert";
+import { assert } from "node:console";
 import {
   DUMMY_MSP_ID,
   NODE_INFOS,
   TEST_ARTEFACTS,
-  createApiObject,
+  checkFileChecksum,
+  describeBspNet,
   fetchEventData,
   shUser,
-  checkFileChecksum,
-  type BspNetApi,
   sleep,
-  describeBspNet
+  type EnrichedBspApi
 } from "../../../util";
-import { assert } from "node:console";
 
 describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
-  let userApi: BspNetApi;
-  let bspApi: BspNetApi;
+  let userApi: EnrichedBspApi;
+  let bspApi: EnrichedBspApi;
 
   before(async () => {
     userApi = await createUserApi();
@@ -27,9 +26,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     const userNodePeerId = await userApi.rpc.system.localPeerId();
     strictEqual(userNodePeerId.toString(), NODE_INFOS.user.expectedPeerId);
 
-    const bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
     const bspNodePeerId = await bspApi.rpc.system.localPeerId();
-    await bspApi.disconnect();
     strictEqual(bspNodePeerId.toString(), NODE_INFOS.bsp.expectedPeerId);
   });
 
@@ -202,8 +199,8 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 });
 
 describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserApi, it }) => {
-  let userApi: BspNetApi;
-  let bspApi: BspNetApi;
+  let userApi: EnrichedBspApi;
+  let bspApi: EnrichedBspApi;
 
   before(async () => {
     userApi = await createUserApi();

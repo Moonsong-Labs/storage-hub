@@ -2,22 +2,20 @@ import assert from "node:assert";
 import {
   assertExtrinsicPresent,
   bspKey,
-  type BspNetApi,
   CAPACITY,
   CAPACITY_512,
   describeBspNet,
   DUMMY_BSP_ID,
+  type EnrichedBspApi,
   ferdie,
   fetchEventData,
   skipBlocks,
   skipBlocksToMinChangeTime,
-  sleep,
-  waitForBspStored,
-  waitForBspVolunteer
+  sleep
 } from "../../../util";
 
 describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi }) => {
-  let api: BspNetApi;
+  let api: EnrichedBspApi;
 
   before(async () => {
     api = await createUserApi();
@@ -35,7 +33,10 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     assert.strictEqual(extSuccess, false);
 
     await skipBlocks(api, 20);
-    const [eventInfo, _eventError] = fetchEventData(api.events.system.ExtrinsicFailed, events);
+    const [eventInfo, _eventError] = api.assert.fetchEvent(
+      api.events.system.ExtrinsicFailed,
+      events
+    );
     assert.strictEqual(eventInfo.asModule.index.toNumber(), 40); // providers
     assert.strictEqual(eventInfo.asModule.error.toHex(), "0x0f000000"); // NotRegistered
 
@@ -101,8 +102,8 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     const bucketName = "nothingmuch-2";
     await api.sendNewStorageRequest(source, location, bucketName);
 
-    await waitForBspVolunteer(api);
-    await waitForBspStored(api);
+    await api.wait.bspVolunteer();
+    await api.wait.bspStored();
 
     // Skip block height past threshold
     await skipBlocksToMinChangeTime(api);

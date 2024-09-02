@@ -2,12 +2,11 @@ import type { EventRecord } from "@polkadot/types/interfaces";
 import { strictEqual } from "node:assert";
 import type { ApiPromise } from "@polkadot/api";
 import type { AugmentedEvent } from "@polkadot/api/types";
-import type { BspNetApi } from "./bspNet";
 
 /**
  * Asserts that a specific extrinsic (module.method) is present in a blockchain block or transaction pool.
  *
- * @param {BspNetApi} api - The API instance connected to the blockchain network.
+ * @param {ApiPromise} api - The API instance connected to the blockchain network.
  * @param {Object} options - Configuration options for the extrinsic check.
  * @param {string} [options.blockHeight] - The block height to check. If not provided, the latest block will be used.
  * @param {string} [options.blockHash] - The block hash to check. Takes precedence over blockHeight if provided.
@@ -23,7 +22,7 @@ import type { BspNetApi } from "./bspNet";
  * TODO: add ability to search nested extrinsics e.g. sudo.sudo(balance.forceTransfer(...))
  */
 export const assertExtrinsicPresent = async (
-  api: BspNetApi,
+  api: ApiPromise,
   options: {
     blockHeight?: string;
     blockHash?: string;

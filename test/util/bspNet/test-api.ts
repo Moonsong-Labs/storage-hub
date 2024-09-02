@@ -1,13 +1,14 @@
-import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
-import { types as BundledTypes } from "@storagehub/types-bundle";
-import { sealBlock, sendNewStorageRequest, createBucket } from "./helpers";
-import type { BspNetApi } from "./types";
-import type { KeyringPair } from "@polkadot/keyring/types";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
-import type { ISubmittableResult } from "@polkadot/types/types";
-import { assertEventPresent, Assertions } from "../asserts";
+import type { KeyringPair } from "@polkadot/keyring/types";
 import type { EventRecord } from "@polkadot/types/interfaces";
+import type { ISubmittableResult } from "@polkadot/types/types";
+import "@storagehub/api-augment";
+import { types as BundledTypes } from "@storagehub/types-bundle";
+import { assertEventMany, assertEventPresent, Assertions } from "../asserts";
+import { createBucket, sealBlock, sendNewStorageRequest } from "./helpers";
+import type { BspNetApi } from "./types";
+import { waitForBspStored, waitForBspVolunteer, Waits } from "./waits";
 
 export class BspNetTestApi implements AsyncDisposable {
   private _api: ApiPromise;
@@ -51,12 +52,27 @@ export class BspNetTestApi implements AsyncDisposable {
   }
 
   private enrichApi() {
+    const remappedAssertNs = {
+      ...Assertions,
+      eventPresent: (module: string, method: string, events?: EventRecord[]) =>
+        assertEventPresent(this._api, module, method, events),
+      eventMany: (module: string, method: string, events?: EventRecord[]) =>
+        assertEventMany(this._api, module, method, events)
+    };
+
+    const remappedWaitsNs = {
+      ...Waits,
+      bspVolunteer: () => waitForBspVolunteer(this._api),
+      bspStored: () => waitForBspStored(this._api)
+    };
+
     return Object.assign(this._api, {
       sealBlock: this.sealBlock.bind(this),
       sendNewStorageRequest: this.sendNewStorageRequest.bind(this),
       createBucket: this.createBucket.bind(this),
       assertEvent: this.assertEvent.bind(this),
-      assert: Assertions
+      assert: remappedAssertNs,
+      wait: remappedWaitsNs
     }) satisfies BspNetApi;
   }
 
@@ -65,7 +81,7 @@ export class BspNetTestApi implements AsyncDisposable {
   }
 
   // TODO: Add namespaces
-  //      - assert
   //      - files
-  //      - wait
 }
+
+export type EnrichedBspApi = Awaited<ReturnType<typeof BspNetTestApi.create>>;

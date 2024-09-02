@@ -7,7 +7,7 @@ import {
   pauseBspContainer,
   resumeBspContainer,
   sleep,
-  type BspNetApi,
+  type EnrichedBspApi,
   type SealedBlock
 } from "../../../util";
 
@@ -15,8 +15,8 @@ describeBspNet(
   "BSPNet: BSP Challenge Cycle and Proof Submission",
   { initialised: true },
   ({ it, before, createBspApi, createUserApi }) => {
-    let userApi: BspNetApi;
-    let bspApi: BspNetApi;
+    let userApi: EnrichedBspApi;
+    let bspApi: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
@@ -62,7 +62,7 @@ describeBspNet(
       const blockResult = await userApi.sealBlock();
 
       // Assert for the the event of the proof successfully submitted and verified.
-      userApi.assertEvent("proofsDealer", "ProofAccepted", blockResult.events);
+      userApi.assert.eventPresent("proofsDealer", "ProofAccepted", blockResult.events);
     });
 
     it("BSP fails to submit proof and is marked as slashable", async () => {
@@ -98,7 +98,7 @@ describeBspNet(
       }
 
       // Check for event of slashable BSP.
-      userApi.assertEvent("proofsDealer", "SlashableProvider", blockResult?.events);
+      userApi.assert.eventPresent("proofsDealer", "SlashableProvider", blockResult?.events);
     });
 
     it(
@@ -151,7 +151,7 @@ describeBspNet(
         const blockResult = await userApi.sealBlock();
 
         // Assert for the the event of the proof successfully submitted and verified.
-        userApi.assertEvent("proofsDealer", "ProofAccepted", blockResult.events);
+        userApi.assert.eventPresent("proofsDealer", "ProofAccepted", blockResult.events);
       }
     );
   }
