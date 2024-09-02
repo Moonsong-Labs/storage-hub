@@ -96,13 +96,13 @@ impl EventBusMessage for SlashableProvider {}
 /// This event is emitted when a finalised block is received by the Blockchain service,
 /// in which there is a `MutationsApplied` event for one of the providers that this node is tracking.
 #[derive(Debug, Clone)]
-pub struct FinalisedMutationsApplied {
+pub struct FinalisedTrieRemoveMutationsApplied {
     pub provider_id: ProviderId,
     pub mutations: Vec<(ForestRoot, TrieRemoveMutation)>,
     pub new_root: H256,
 }
 
-impl EventBusMessage for FinalisedMutationsApplied {}
+impl EventBusMessage for FinalisedTrieRemoveMutationsApplied {}
 
 #[derive(Debug, Clone)]
 pub struct ProofAccepted {
@@ -133,7 +133,7 @@ pub struct BlockchainServiceEventBusProvider {
     process_submit_proof_request_event_bus: EventBus<ProcessSubmitProofRequest>,
     process_confirm_storage_request_event_bus: EventBus<ProcessConfirmStoringRequest>,
     slashable_provider_event_bus: EventBus<SlashableProvider>,
-    finalised_mutations_applied_event_bus: EventBus<FinalisedMutationsApplied>,
+    finalised_mutations_applied_event_bus: EventBus<FinalisedTrieRemoveMutationsApplied>,
     proof_accepted_event_bus: EventBus<ProofAccepted>,
     last_chargeable_info_updated_event_bus: EventBus<LastChargeableInfoUpdated>,
 }
@@ -194,8 +194,8 @@ impl ProvidesEventBus<SlashableProvider> for BlockchainServiceEventBusProvider {
     }
 }
 
-impl ProvidesEventBus<FinalisedMutationsApplied> for BlockchainServiceEventBusProvider {
-    fn event_bus(&self) -> &EventBus<FinalisedMutationsApplied> {
+impl ProvidesEventBus<FinalisedTrieRemoveMutationsApplied> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<FinalisedTrieRemoveMutationsApplied> {
         &self.finalised_mutations_applied_event_bus
     }
 }
