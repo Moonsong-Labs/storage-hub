@@ -81,7 +81,7 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
     const keystorePath = "/tmp/test/insert/keystore";
     const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
       name: "insert-keys-container",
-      additionalArgs: [`--keystore-path=${keystorePath}`],
+      additionalArgs: [`--keystore-path=${keystorePath}`]
     });
     const insertKeysApi = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
 
@@ -107,39 +107,38 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
     stopBspContainer({ containerName, api: insertKeysApi });
   });
 
-  it("Removes BCSV keys from keystore",
-    async () => {
-      const keystore_path = "/tmp/test/remove/keystore";
-      const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
-        name: "remove-keys-container",
-        additionalArgs: [`--keystore-path=${keystore_path}`],
-      });
-      const removeKeysApi = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
-
-      const alicePubKey = "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d";
-      const davePubKey = "0x306721211d5404bd9da88e0204360a1a9ab8b87c66c1bc2fcdd37f3c2222cc20";
-      const bcsvKeyType = "bcsv";
-      const daveSeed = "//Dave";
-
-      let hasAliceKey = await removeKeysApi.rpc.author.hasKey(alicePubKey, bcsvKeyType);
-      strictEqual(hasAliceKey.toHuman().valueOf(), true);
-
-      let hasDaveKey = await removeKeysApi.rpc.author.hasKey(davePubKey, bcsvKeyType);
-      strictEqual(hasDaveKey.toHuman().valueOf(), false);
-
-      // Rotate keys and check that Dave's pub key is now in Keystore.
-      await removeKeysApi.rpc.storagehubclient.insertBcsvKeys(daveSeed);
-      hasDaveKey = await removeKeysApi.rpc.author.hasKey(davePubKey, bcsvKeyType);
-      strictEqual(hasDaveKey.toHuman().valueOf(), true);
-
-      await removeKeysApi.rpc.storagehubclient.removeBcsvKeys(keystore_path);
-
-      // We still have Alice's key in `--dev` mode because it's inserted into the in-memory Keystore.
-      hasAliceKey = await removeKeysApi.rpc.author.hasKey(alicePubKey, bcsvKeyType);
-      strictEqual(hasAliceKey.toHuman().valueOf(), true);
-      hasDaveKey = await removeKeysApi.rpc.author.hasKey(davePubKey, bcsvKeyType);
-      strictEqual(hasDaveKey.toHuman().valueOf(), false);
-
-      stopBspContainer({ containerName, api: removeKeysApi });
+  it("Removes BCSV keys from keystore", async () => {
+    const keystore_path = "/tmp/test/remove/keystore";
+    const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
+      name: "remove-keys-container",
+      additionalArgs: [`--keystore-path=${keystore_path}`]
     });
+    const removeKeysApi = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
+
+    const alicePubKey = "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d";
+    const davePubKey = "0x306721211d5404bd9da88e0204360a1a9ab8b87c66c1bc2fcdd37f3c2222cc20";
+    const bcsvKeyType = "bcsv";
+    const daveSeed = "//Dave";
+
+    let hasAliceKey = await removeKeysApi.rpc.author.hasKey(alicePubKey, bcsvKeyType);
+    strictEqual(hasAliceKey.toHuman().valueOf(), true);
+
+    let hasDaveKey = await removeKeysApi.rpc.author.hasKey(davePubKey, bcsvKeyType);
+    strictEqual(hasDaveKey.toHuman().valueOf(), false);
+
+    // Rotate keys and check that Dave's pub key is now in Keystore.
+    await removeKeysApi.rpc.storagehubclient.insertBcsvKeys(daveSeed);
+    hasDaveKey = await removeKeysApi.rpc.author.hasKey(davePubKey, bcsvKeyType);
+    strictEqual(hasDaveKey.toHuman().valueOf(), true);
+
+    await removeKeysApi.rpc.storagehubclient.removeBcsvKeys(keystore_path);
+
+    // We still have Alice's key in `--dev` mode because it's inserted into the in-memory Keystore.
+    hasAliceKey = await removeKeysApi.rpc.author.hasKey(alicePubKey, bcsvKeyType);
+    strictEqual(hasAliceKey.toHuman().valueOf(), true);
+    hasDaveKey = await removeKeysApi.rpc.author.hasKey(davePubKey, bcsvKeyType);
+    strictEqual(hasDaveKey.toHuman().valueOf(), false);
+
+    stopBspContainer({ containerName, api: removeKeysApi });
+  });
 });

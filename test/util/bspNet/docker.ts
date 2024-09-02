@@ -73,11 +73,11 @@ export const addBspContainer = async (options?: {
   }
 
   let keystorePath: string;
-  let keystoreArg = Args.find((arg) => arg.includes("--keystore-path="));
+  const keystoreArg = Args.find((arg) => arg.includes("--keystore-path="));
   if (keystoreArg) {
-    keystorePath = keystoreArg.split("=")[1]
+    keystorePath = keystoreArg.split("=")[1];
   } else {
-    keystorePath = "/keystore"
+    keystorePath = "/keystore";
   }
 
   const container = await docker.createContainer({
