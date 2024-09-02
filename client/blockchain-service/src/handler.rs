@@ -34,8 +34,9 @@ use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
 use crate::{
     commands::BlockchainServiceCommand,
     events::{
-        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, FinalisedMutationsApplied,
-        NewChallengeSeed, NewStorageRequest, SlashableProvider,
+        AcceptedBspVolunteer, BlockchainServiceEventBusProvider,
+        FinalisedTrieRemoveMutationsApplied, NewChallengeSeed, NewStorageRequest,
+        SlashableProvider,
     },
     transaction::SubmittedTransaction,
 };
@@ -784,7 +785,7 @@ impl BlockchainService {
                         ) => {
                             // Check if the provider ID is one of the provider IDs this node is tracking.
                             if self.provider_ids.contains(&provider) {
-                                self.emit(FinalisedMutationsApplied {
+                                self.emit(FinalisedTrieRemoveMutationsApplied {
                                     provider_id: provider,
                                     mutations: mutations.clone(),
                                     new_root,

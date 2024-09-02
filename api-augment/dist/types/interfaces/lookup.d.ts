@@ -1449,6 +1449,10 @@ declare const _default: {
         fileKey: string;
         newRoot: string;
       };
+      PriorityChallengeForFileDeletionQueued: {
+        user: string;
+        fileKey: string;
+      };
       FailedToQueuePriorityChallenge: {
         user: string;
         fileKey: string;
