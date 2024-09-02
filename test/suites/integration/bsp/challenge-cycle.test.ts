@@ -3,7 +3,6 @@ import assert, { strictEqual } from "node:assert";
 import {
   DUMMY_BSP_ID,
   NODE_INFOS,
-  createApiObject,
   describeBspNet,
   pauseBspContainer,
   resumeBspContainer,
@@ -15,18 +14,13 @@ import {
 describeBspNet(
   "BSPNet: BSP Challenge Cycle and Proof Submission",
   { initialised: true },
-  ({ it, before, after }) => {
+  ({ it, before, createBspApi, createUserApi }) => {
     let userApi: BspNetApi;
     let bspApi: BspNetApi;
 
     before(async () => {
-      userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
-      bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
-    });
-
-    after(async () => {
-      await userApi.disconnect();
-      await bspApi.disconnect();
+      userApi = await createUserApi();
+      bspApi = await createBspApi();
     });
 
     it("Network launches and can be queried", async () => {
@@ -38,6 +32,7 @@ describeBspNet(
     });
 
     it("BSP is challenged and correctly submits proof", async () => {
+      console.log(userApi.consts.system.version.specName.toString());
       // Calculate the next challenge tick for the BSP.
       // We first get the last tick for which the BSP submitted a proof.
       const lastTickResult =

@@ -9,8 +9,9 @@ import { assertEventPresent } from "../asserts";
 import type { EventRecord } from "@polkadot/types/interfaces";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 
-//TODO: Maybe make this a resource?
-export const createApiObject = async (uri: string): Promise<BspNetApi> => {
+export const createApiObject = async (
+  uri: `ws://${string}` | `wss://${string}`
+): Promise<BspNetApi> => {
   const baseApi = await ApiPromise.create({
     provider: new WsProvider(uri),
     noInitWarn: true,

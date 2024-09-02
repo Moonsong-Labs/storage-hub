@@ -186,3 +186,9 @@ export const fetchEventData = <T extends AugmentedEvent<"promise">>(
 
   throw new Error("Event doesn't match, should be caught earlier");
 };
+
+export namespace Assertions {
+  export const eventPresent = assertEventPresent;
+  export const eventMany = assertEventMany;
+  export const fetchEvent = fetchEventData;
+}

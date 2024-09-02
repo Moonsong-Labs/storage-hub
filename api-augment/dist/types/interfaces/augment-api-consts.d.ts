@@ -260,6 +260,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxSubmittersPerTick: u32 & AugmentedConst<ApiType>;
       /**
+       * The minimum period in which a Provider can be challenged, regardless of their stake.
+       **/
+      minChallengePeriod: u32 & AugmentedConst<ApiType>;
+      /**
        * The number of random challenges that are generated per block, using the random seed
        * generated for that block.
        **/
@@ -267,7 +271,7 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * The ratio to convert staked balance to block period.
        * This is used to determine the period in which a Provider should submit a proof, based on
-       * their stake. The period is calculated as `stake / StakeToBlockPeriod`, saturating at 1.
+       * their stake. The period is calculated as `StakeToChallengePeriod / stake`, saturating at [`Config::MinChallengePeriod`].
        **/
       stakeToChallengePeriod: u128 & AugmentedConst<ApiType>;
       /**

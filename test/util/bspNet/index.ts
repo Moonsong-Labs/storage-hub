@@ -6,3 +6,4 @@ export * from "./docker";
 export * from "./testrunner";
 export * from "./toxic";
 export * from "./waits";
+export * from "./test-api";

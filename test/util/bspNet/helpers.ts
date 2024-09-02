@@ -480,7 +480,7 @@ export const sealBlock = async (
     if (currentHeight > initialHeight) {
       break;
     }
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await sleep(50);
   }
 
   return Object.assign(sealedResults, {

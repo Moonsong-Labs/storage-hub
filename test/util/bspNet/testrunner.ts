@@ -1,4 +1,4 @@
-import { after, before, describe, it } from "node:test";
+import { after, before, beforeEach, describe, it } from "node:test";
 import { createApiObject } from "./api";
 import { NODE_INFOS } from "./consts";
 import {
@@ -9,6 +9,7 @@ import {
 } from "./helpers";
 import type { BspNetApi, BspNetConfig, BspNetContext, TestOptions } from "./types";
 import { EventEmitter } from "node:events";
+import { BspNetTestApi } from "./test-api";
 
 export const launchEventEmitter = new EventEmitter();
 
@@ -63,8 +64,13 @@ export async function describeBspNet<
         // Launch the network
         const launchResponse = await launchNetwork(bspNetConfig, options?.initialised);
         launchEventEmitter.emit("networkLaunched", launchResponse);
-        userApiPromise = createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
-        bspApiPromise = createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
+
+        userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+        bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
+      });
+
+      beforeEach(async () => {
+        console.log(`Is connected: ${(await userApiPromise).isConnected}`);
       });
 
       after(async () => {

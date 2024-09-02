@@ -10,7 +10,7 @@ import type { launchNetwork } from "./testrunner";
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
  */
-export type BspNetApi = ApiPromise & {
+export interface BspNetApi extends ApiPromise {
   /**
    * Seals a block optionally with a given extrinsic and signer.
    *
@@ -18,57 +18,57 @@ export type BspNetApi = ApiPromise & {
    * @param signer - The keyring pair used to sign the block.
    * @returns A promise that resolves to a sealed block.
    */
-  sealBlock: (
+  sealBlock(
     calls?:
       | SubmittableExtrinsic<"promise", ISubmittableResult>
       | SubmittableExtrinsic<"promise", ISubmittableResult>[],
     signer?: KeyringPair
-  ) => Promise<SealedBlock>;
+  ): Promise<SealedBlock>;
 
   /**
-   * @description Creates a new bucket and submits a new storage request.
+   * Creates a new bucket and submits a new storage request.
    *
    * @param source - The local path to the file to be uploaded.
    * @param location - The StorageHub "location" field of the file to be uploaded.
    * @param bucketName - The name of the bucket to be created.
-   * @returns
+   * @returns A promise that resolves to file metadata.
    */
-  sendNewStorageRequest: (
+  sendNewStorageRequest(
     source: string,
     location: string,
     bucketName: string
-  ) => Promise<FileMetadata>;
+  ): Promise<FileMetadata>;
 
   /**
-   * @description Creates a new bucket.
+   * Creates a new bucket.
    *
    * @param bucketName - The name of the bucket to be created.
    * @returns A promise that resolves to a new bucket event.
    */
-  createBucket: (bucketName: string) => Promise<Event>;
+  createBucket(bucketName: string): Promise<Event>;
 
   /**
-   * @description Asserts that a specific event occurred in a list of events.
+   * Asserts that a specific event occurred in a list of events.
    *
    * @param module - The module where the event originated.
    * @param method - The method that triggered the event.
    * @param events - The list of event records to search through.
    * @returns An object containing the event and its data.
    */
-  assertEvent: (
+  assertEvent(
     module: string,
     method: string,
     events?: EventRecord[]
-  ) => { event: Event; data: Codec[] & IEventData };
+  ): { event: Event; data: Codec[] & IEventData };
 
   /**
-   * @description Fetches an event, inferring its type from the module and method.
+   * Fetches an event, inferring its type from the module and method.
    *
    * @remarks
    * This function needs to be implemented.
    */
   // fetchEvent: () => void;
-};
+}
 
 /**
  * Represents information about a network toxicity.
