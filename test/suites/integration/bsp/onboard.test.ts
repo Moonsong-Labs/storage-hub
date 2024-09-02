@@ -79,7 +79,7 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
 
   it("Inserts new blockchain service keys (BCSV)", async () => {
     const keystorePath = "/tmp/test/insert/keystore";
-    const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
+    const { containerName, rpcPort } = await addBspContainer({
       name: "insert-keys-container",
       additionalArgs: [`--keystore-path=${keystorePath}`]
     });
@@ -109,7 +109,7 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
 
   it("Removes BCSV keys from keystore", async () => {
     const keystore_path = "/tmp/test/remove/keystore";
-    const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
+    const { containerName, rpcPort } = await addBspContainer({
       name: "remove-keys-container",
       additionalArgs: [`--keystore-path=${keystore_path}`]
     });
