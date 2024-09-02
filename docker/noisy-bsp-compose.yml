@@ -6,7 +6,7 @@ services:
     ports:
       - "9966:9944"
     volumes:
-      - ./dev-keystores/bsp:/keystore:ro
+      - ./dev-keystores/bsp:/keystore:rw
     command:
       [
         "--dev",
@@ -35,7 +35,7 @@ services:
     ports:
       - "9977:9944"
     volumes:
-      - ./dev-keystores/user:/keystore:ro
+      - ./dev-keystores/user:/keystore:rw
       - ./resource:/res:ro
     command:
       [
