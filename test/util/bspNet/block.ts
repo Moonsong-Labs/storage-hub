@@ -146,26 +146,17 @@ export async function runToNextChallengePeriodBlock(
   nextChallengeTick: number,
   provider: string
 ): Promise<number> {
-  // Assert that challengeTickToChallengedProviders contains an entry for the challenged provider
   const challengeTickToChallengedProviders =
     await api.query.proofsDealer.challengeTickToChallengedProviders(nextChallengeTick, provider);
   strictEqual(challengeTickToChallengedProviders.isSome, true);
 
-  const currentHeight = (await api.rpc.chain.getHeader()).number.toNumber();
-
-  const blocksToSkip = nextChallengeTick - currentHeight - 1;
-  console.log("Current height: ", currentHeight);
-  console.log("Next challenge tick: ", nextChallengeTick);
-  console.log("Blocks to skip: ", blocksToSkip);
-  console.log(`\tSkipping ${blocksToSkip} blocks to reach next challenge period...`);
-  if (blocksToSkip > 0) {
-    await skipBlocks(api, nextChallengeTick);
-  } else {
-    throw new Error("Already past next challenge period");
+  const blockNumber = await api.query.system.number();
+  for (let i = blockNumber.toNumber(); i < nextChallengeTick - 1; i++) {
+    await sealBlock(api);
   }
 
   const oldFailedSubmissionsCount = await api.query.proofsDealer.slashableProviders(provider);
-  console.log(`Block is now : ${(await api.rpc.chain.getHeader()).number.toNumber()}`);
+
   // Assert that the SlashableProvider event is emitted.
   const blockResult = await sealBlock(api);
 

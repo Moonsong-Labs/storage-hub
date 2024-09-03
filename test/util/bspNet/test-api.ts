@@ -77,7 +77,8 @@ export class BspNetTestApi implements AsyncDisposable {
       eventMany: (module: string, method: string, events?: EventRecord[]) =>
         Assertions.eventMany(this._api, module, method, events),
       extrinsicPresent: (options: AssertExtrinsicOptions) =>
-        Assertions.extrinsicPresent(this._api, options)
+        Assertions.extrinsicPresent(this._api, options),
+      providerSlashed: (providerId: string) => Assertions.providerSlashed(this._api, providerId)
     };
 
     const remappedWaitsNs = {
@@ -115,6 +116,11 @@ export class BspNetTestApi implements AsyncDisposable {
           | SubmittableExtrinsic<"promise", ISubmittableResult>[],
         signer?: KeyringPair
       ) => BspNetBlock.seal(this._api, calls, signer),
+      /**
+       * Seal blocks until the next challenge period block.
+       *
+       * It will verify that the SlashableProvider event is emitted and check if the provider is slashable with an additional failed challenge deadline.
+       */
       skipToChallengePeriod: (nextChallengeTick: number, provider: string) =>
         BspNetBlock.skipToChallengePeriod(this._api, nextChallengeTick, provider),
       skip: (blocksToAdvance: number) => BspNetBlock.skip(this._api, blocksToAdvance),

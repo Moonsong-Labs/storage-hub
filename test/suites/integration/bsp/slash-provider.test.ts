@@ -1,5 +1,6 @@
+import "@storagehub/api-augment";
 import { strictEqual } from "node:assert";
-import { BspNetBlock, describeBspNet, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, sleep, type EnrichedBspApi } from "../../../util";
 
 describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi, it }) => {
   let api: EnrichedBspApi;
@@ -8,7 +9,7 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi,
     api = await createUserApi();
   });
 
-  it("Network launches and can be queried", { skip: true }, async () => {
+  it("Network launches and can be queried", async () => {
     const userNodePeerId = await api.rpc.system.localPeerId();
     strictEqual(userNodePeerId.toString(), api.shConsts.NODE_INFOS.user.expectedPeerId);
 
@@ -19,7 +20,6 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi,
   });
 
   it("Slash provider when SlashableProvider event processed", async () => {
-    console.log("hello3");
     // Force initialise challenge cycle of Provider.
     const initialiseChallengeCycleResult = await api.sealBlock(
       api.tx.sudo.sudo(api.tx.proofsDealer.forceInitialiseChallengeCycle(api.shConsts.DUMMY_BSP_ID))
@@ -38,16 +38,15 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi,
         await api.query.system.events()
       );
 
-    console.log("hello");
-    //TODO: Fix me
-    const nextChallengeDeadline2 = await BspNetBlock.skipToChallengePeriod(
-      api,
+    const nextChallengeDeadline2 = await api.block.skipToChallengePeriod(
       nextChallengeDeadline1.toNumber(),
       api.shConsts.DUMMY_BSP_ID
     );
-    console.log("hello2");
 
-    await api.assert.providerSlashed(api, api.shConsts.DUMMY_BSP_ID);
+    // Wait for provider to be slashed.
+    await sleep(500);
+    await api.block.seal();
+    await api.assert.providerSlashed(api.shConsts.DUMMY_BSP_ID);
 
     // Check that the provider is no longer slashable.
     const slashableProvidersAfterSlash = await api.query.proofsDealer.slashableProviders(
@@ -58,6 +57,9 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi,
     // Simulate 2 failed challenge periods
     await api.block.skipToChallengePeriod(nextChallengeDeadline2, api.shConsts.DUMMY_BSP_ID);
 
-    await api.assert.providerSlashed(api, api.shConsts.DUMMY_BSP_ID);
+    // Wait for provider to be slashed.
+    await sleep(500);
+    await api.block.seal();
+    await api.assert.providerSlashed(api.shConsts.DUMMY_BSP_ID);
   });
 });

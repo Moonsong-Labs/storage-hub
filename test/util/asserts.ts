@@ -202,7 +202,7 @@ export async function checkProviderWasSlashed(api: ApiPromise, providerId: strin
     await api.query.system.events()
   );
 
-  strictEqual(provider.toString(), providerId);
+  strictEqual(provider.toString(), providerId, `Provider ${providerId} was not slashed`);
 }
 
 export namespace Assertions {
