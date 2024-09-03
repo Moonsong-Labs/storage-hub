@@ -1053,11 +1053,31 @@ impl<T: pallet::Config> ReadStorageProvidersInterface for pallet::Pallet<T> {
         Self::get_bsp_count()
     }
 
+    fn get_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(who) {
+            bsp.capacity
+        } else if let Some(msp) = MainStorageProviders::<T>::get(who) {
+            msp.capacity
+        } else {
+            Zero::zero()
+        }
+    }
+
     fn get_used_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit {
         if let Some(bsp) = BackupStorageProviders::<T>::get(who) {
             bsp.capacity_used
         } else if let Some(msp) = MainStorageProviders::<T>::get(who) {
             msp.capacity_used
+        } else {
+            Zero::zero()
+        }
+    }
+
+    fn available_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit {
+        if let Some(bsp) = BackupStorageProviders::<T>::get(who) {
+            bsp.capacity.saturating_sub(bsp.capacity_used)
+        } else if let Some(msp) = MainStorageProviders::<T>::get(who) {
+            msp.capacity.saturating_sub(msp.capacity_used)
         } else {
             Zero::zero()
         }

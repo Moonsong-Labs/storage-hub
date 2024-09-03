@@ -1552,6 +1552,71 @@ mod bsp_volunteer {
                 );
             });
         }
+
+        #[test]
+        fn bsp_volunteer_with_insufficient_capacity() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let origin = RuntimeOrigin::signed(owner.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id);
+
+                // Dispatch storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+					origin,
+					bucket_id,
+					location.clone(),
+					fingerprint,
+					4,
+					msp_id,
+					peer_ids.clone(),
+				));
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                let bsp_id =
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
+                        bsp_account_id.clone(),
+                    )
+                        .unwrap();
+
+                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
+                    bsp_id,
+                    |bsp| {
+                        assert!(bsp.is_some());
+                        if let Some(bsp) = bsp {
+                            bsp.capacity = 0;
+                        }
+                    },
+                );
+
+                let file_key = FileSystem::compute_file_key(
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    4,
+                    fingerprint,
+                );
+                
+                // Dispatch BSP volunteer.
+                assert_noop!(
+                    FileSystem::bsp_volunteer(bsp_signed.clone(), file_key),
+                    Error::<Test>::InsufficientCapacity
+                );
+            });
+        }
     }
 
     mod success {
@@ -1895,6 +1960,96 @@ mod bsp_confirm {
                         .unwrap(),
                     ),
                     Error::<Test>::StorageRequestNotFound
+                );
+            });
+        }
+
+        #[test]
+        fn bsp_failing_to_confirm_all_proofs_submitted_insufficient_capacity() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let storage_amount: StorageData<Test> = 100;
+
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                let bsp_id = <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
+                    bsp_account_id.clone(),
+                ).unwrap();
+
+                let mut file_keys = Vec::new();
+
+                // Issue 5 storage requests and volunteer for each
+                for i in 0..5 {
+                    let location = FileLocation::<Test>::try_from(format!("test{}", i).into_bytes()).unwrap();
+                    let size = 4;
+                    let fingerprint = H256::repeat_byte(i as u8);
+
+                    let name = BoundedVec::try_from(format!("bucket{}", i).into_bytes()).unwrap();
+                    let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+                    // Issue storage request
+                    assert_ok!(FileSystem::issue_storage_request(
+                        owner.clone(),
+                        bucket_id,
+                        location.clone(),
+                        fingerprint,
+                        size,
+                        msp_id,
+                        Default::default(),
+                    ));
+
+                    let file_key = FileSystem::compute_file_key(
+                        owner_account_id.clone(),
+                        bucket_id,
+                        location.clone(),
+                        size,
+                        fingerprint,
+                    );
+
+                    file_keys.push(file_key);
+
+                    // Volunteer for storage
+                    assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+                }
+
+                // Set BSP storage capacity to 0
+                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
+                    if let Some(bsp) = bsp {
+                        bsp.capacity = 0;
+                    }
+                });
+
+                // Prepare proofs for all files
+                let non_inclusion_forest_proof = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
+
+                let file_keys_and_proofs: BoundedVec<_, <Test as crate::Config>::MaxBatchConfirmStorageRequests> = file_keys
+                    .into_iter()
+                    .map(|file_key| {
+                        (file_key, CompactProof {
+                            encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        })
+                    })
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap();
+
+                // Attempt to confirm storing all files at once
+                assert_noop!(
+                    FileSystem::bsp_confirm_storing(
+                        bsp_signed.clone(),
+                        non_inclusion_forest_proof,
+                        file_keys_and_proofs,
+                    ),
+                    Error::<Test>::InsufficientCapacity
                 );
             });
         }

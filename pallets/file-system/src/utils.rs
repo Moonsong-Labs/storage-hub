@@ -428,6 +428,15 @@ where
             bool
         );
 
+        let available_capacity =
+            <T::Providers as ReadStorageProvidersInterface>::available_capacity(&bsp_id);
+
+        // Check if the BSP has enough capacity to store the file.
+        ensure!(
+            available_capacity >= storage_request_metadata.size,
+            Error::<T>::InsufficientCapacity
+        );
+
         // Check if the BSP is already volunteered for this storage request.
         ensure!(
             !<StorageRequestBsps<T>>::contains_key(&file_key, &bsp_id),
@@ -556,6 +565,15 @@ where
                 "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
                 Error::<T>::StorageRequestBspsRequiredFulfilled,
                 bool
+            );
+
+            let available_capacity =
+                <T::Providers as ReadStorageProvidersInterface>::available_capacity(&bsp_id);
+
+            // Check if the BSP has enough capacity to store the file.
+            ensure!(
+                available_capacity >= storage_request_metadata.size,
+                Error::<T>::InsufficientCapacity
             );
 
             // Increment the number of bsps confirmed.
