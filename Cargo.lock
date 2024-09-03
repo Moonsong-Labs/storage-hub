@@ -12654,6 +12654,8 @@ dependencies = [
  "log",
  "pallet-file-system",
  "pallet-file-system-runtime-api",
+ "pallet-payment-streams",
+ "pallet-payment-streams-runtime-api",
  "pallet-proofs-dealer",
  "pallet-proofs-dealer-runtime-api",
  "pallet-storage-providers",
@@ -12790,6 +12792,7 @@ dependencies = [
 name = "shc-rpc"
 version = "0.1.0"
 dependencies = [
+ "array-bytes 6.2.3",
  "jsonrpsee",
  "log",
  "serde",
@@ -15260,6 +15263,8 @@ dependencies = [
  "log",
  "pallet-file-system",
  "pallet-file-system-runtime-api",
+ "pallet-payment-streams",
+ "pallet-payment-streams-runtime-api",
  "pallet-proofs-dealer",
  "pallet-proofs-dealer-runtime-api",
  "pallet-storage-providers",

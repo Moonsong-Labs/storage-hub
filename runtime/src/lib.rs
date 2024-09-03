@@ -547,6 +547,9 @@ impl_runtime_apis! {
         fn get_users_with_debt_over_threshold(provider_id: &ProviderIdFor<Runtime>, threshold: Balance) -> Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError> {
             PaymentStreams::get_users_with_debt_over_threshold(provider_id, threshold)
         }
+        fn get_users_of_payment_streams_of_provider(provider_id: &ProviderIdFor<Runtime>) -> Vec<AccountId> {
+            PaymentStreams::get_users_of_payment_streams_of_provider(provider_id)
+        }
     }
 
     impl pallet_proofs_dealer_runtime_api::ProofsDealerApi<Block, ProviderIdFor<Runtime>, BlockNumber, KeyFor<Runtime>, RandomnessOutputFor<Runtime>, TrieRemoveMutation> for Runtime {

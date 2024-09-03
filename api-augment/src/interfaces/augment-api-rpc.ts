@@ -22,7 +22,7 @@ import type {
   u32,
   u64
 } from "@polkadot/types-codec";
-import type { AnyNumber, Codec } from "@polkadot/types-codec/types";
+import type { AnyNumber, Codec, ITuple } from "@polkadot/types-codec/types";
 import type { ExtrinsicOrHash, ExtrinsicStatus } from "@polkadot/types/interfaces/author";
 import type { EpochAuthorship } from "@polkadot/types/interfaces/babe";
 import type { BeefyVersionedFinalityProof } from "@polkadot/types/interfaces/beefy";
@@ -1030,6 +1030,12 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        **/
       getForestRoot: AugmentedRpc<(key: Text | string) => Observable<H256>>;
       /**
+       * Generate and insert new keys of type BCSV into the keystore.
+       **/
+      insertBcsvKeys: AugmentedRpc<
+        (seed: Option<Text> | null | Uint8Array | Text | string) => Observable<Text>
+      >;
+      /**
        * Load a file in the local storage. This is the first step when uploading a file.
        **/
       loadFileInStorage: AugmentedRpc<
@@ -1041,9 +1047,9 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         ) => Observable<FileMetadata>
       >;
       /**
-       * Rotate (generate and insert) new keys of BCSV type for the Blockchain Service.
+       * Remove keys of BCSV type for the Blockchain Service.
        **/
-      rotateBcsvKeys: AugmentedRpc<(seed: Text | string) => Observable<Text>>;
+      removeBcsvKeys: AugmentedRpc<(keystore_path: Text | string) => Observable<ITuple<[]>>>;
       /**
        * Save a file from the local storage to the disk.
        **/
