@@ -6,22 +6,20 @@ use sp_keystore::KeystorePtr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use super::{
+    forest_storage::{ForestStorageCaching, ForestStorageSingle},
+    handler::StorageHubHandler,
+};
+use crate::tasks::{BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT};
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
 use shc_blockchain_service::{spawn_blockchain_service, BlockchainService};
 use shc_common::types::{ParachainClient, ParachainNetworkService};
-use shc_file_manager::{
-    in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage, traits::FileStorage,
-};
+use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_forest_manager::{
     in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorageHandler,
 };
 use shc_rpc::StorageHubClientRpcConfig;
-
-use super::{
-    forest_storage::{ForestStorageCaching, ForestStorageSingle, NoKey},
-    handler::StorageHubHandler,
-};
 
 /// Trait to mark structs as valid roles in the StorageHub system
 pub trait RoleSupport {}
@@ -50,7 +48,7 @@ pub struct RocksDbStorageLayer;
 impl StorageLayerSupport for RocksDbStorageLayer {}
 
 pub trait StorageTypes {
-    type FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static;
+    type FL: FileStorageT;
     type FSH: ForestStorageHandler + Clone + Send + Sync + 'static;
 }
 
@@ -162,10 +160,89 @@ where
         self.blockchain = Some(blockchain_service_handle);
         self
     }
+}
 
+impl<S: StorageLayerSupport> StorageHubBuilder<BspProvider, S>
+where
+    (BspProvider, S): StorageTypes,
+    <(BspProvider, S) as StorageTypes>::FSH: BspForestStorageHandlerT,
+{
     fn build_handler(
         &self,
-    ) -> StorageHubHandler<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH> {
+    ) -> StorageHubHandler<
+        <(BspProvider, S) as StorageTypes>::FL,
+        <(BspProvider, S) as StorageTypes>::FSH,
+    > {
+        StorageHubHandler::new(
+            self.task_spawner
+                .as_ref()
+                .expect("Task Spawner not set")
+                .clone(),
+            self.file_transfer
+                .as_ref()
+                .expect("File Transfer not set.")
+                .clone(),
+            self.blockchain
+                .as_ref()
+                .expect("Blockchain Service not set.")
+                .clone(),
+            self.file_storage
+                .as_ref()
+                .expect("File Storage not set.")
+                .clone(),
+            self.forest_storage_handler
+                .as_ref()
+                .expect("Forest Storage Handler not set.")
+                .clone(),
+        )
+    }
+}
+
+impl<S: StorageLayerSupport> StorageHubBuilder<MspProvider, S>
+where
+    (MspProvider, S): StorageTypes,
+    <(MspProvider, S) as StorageTypes>::FSH: MspForestStorageHandlerT,
+{
+    fn build_handler(
+        &self,
+    ) -> StorageHubHandler<
+        <(MspProvider, S) as StorageTypes>::FL,
+        <(MspProvider, S) as StorageTypes>::FSH,
+    > {
+        StorageHubHandler::new(
+            self.task_spawner
+                .as_ref()
+                .expect("Task Spawner not set")
+                .clone(),
+            self.file_transfer
+                .as_ref()
+                .expect("File Transfer not set.")
+                .clone(),
+            self.blockchain
+                .as_ref()
+                .expect("Blockchain Service not set.")
+                .clone(),
+            self.file_storage
+                .as_ref()
+                .expect("File Storage not set.")
+                .clone(),
+            self.forest_storage_handler
+                .as_ref()
+                .expect("Forest Storage Handler not set.")
+                .clone(),
+        )
+    }
+}
+
+impl<S: StorageLayerSupport> StorageHubBuilder<UserRole, S>
+where
+    (UserRole, S): StorageTypes,
+    <(UserRole, S) as StorageTypes>::FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+{
+    fn build_handler(
+        &self,
+    ) -> StorageHubHandler<<(UserRole, S) as StorageTypes>::FL, <(UserRole, S) as StorageTypes>::FSH>
+    {
         StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
@@ -286,7 +363,7 @@ pub trait Runnable {
 impl<S: StorageLayerSupport> Runnable for StorageHubBuilder<BspProvider, S>
 where
     (BspProvider, S): StorageTypes,
-    <(BspProvider, S) as StorageTypes>::FSH: ForestStorageHandler<Key = NoKey>,
+    <(BspProvider, S) as StorageTypes>::FSH: BspForestStorageHandlerT,
 {
     fn run(self) {
         let handler = self.build_handler();
@@ -297,7 +374,7 @@ where
 impl<S: StorageLayerSupport> Runnable for StorageHubBuilder<MspProvider, S>
 where
     (MspProvider, S): StorageTypes,
-    <(MspProvider, S) as StorageTypes>::FSH: ForestStorageHandler<Key = Vec<u8>>,
+    <(MspProvider, S) as StorageTypes>::FSH: MspForestStorageHandlerT,
 {
     fn run(self) {
         let handler = self.build_handler();
@@ -308,6 +385,8 @@ where
 impl Runnable for StorageHubBuilder<UserRole, NoStorageLayer>
 where
     (UserRole, NoStorageLayer): StorageTypes,
+    <(UserRole, NoStorageLayer) as StorageTypes>::FSH:
+        ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     fn run(self) {
         let handler = self.build_handler();

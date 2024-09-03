@@ -16,13 +16,14 @@ use shc_blockchain_service::{
 use shc_common::types::{
     FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
 };
-use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
+use shc_file_manager::traits::{FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
-use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shc_forest_manager::traits::ForestStorage;
 
 use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
+use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
@@ -45,8 +46,8 @@ const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: usize = 3;
 ///   before updating it's local Forest storage root.
 pub struct BspUploadFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Clone + Send + Sync,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     storage_hub_handler: StorageHubHandler<FL, FSH>,
     file_key_cleanup: Option<H256>,
@@ -54,8 +55,8 @@ where
 
 impl<FL, FSH> Clone for BspUploadFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Clone + Send + Sync,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     fn clone(&self) -> BspUploadFileTask<FL, FSH> {
         Self {
@@ -67,8 +68,8 @@ where
 
 impl<FL, FSH> BspUploadFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Clone + Send + Sync,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
         Self {
@@ -87,8 +88,8 @@ where
 /// upload requests.
 impl<FL, FSH> EventHandler<NewStorageRequest> for BspUploadFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
@@ -114,8 +115,8 @@ where
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
 impl<FL, FSH> EventHandler<RemoteUploadRequest> for BspUploadFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
@@ -234,8 +235,8 @@ where
 /// storing extrinsic (and update the local forest root).
 impl<FL, FSH> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: ProcessConfirmStoringRequest) -> anyhow::Result<()> {
         info!(
@@ -402,8 +403,8 @@ where
 
 impl<FL, FSH> BspUploadFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Clone + Send + Sync,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_new_storage_request_event(
         &mut self,

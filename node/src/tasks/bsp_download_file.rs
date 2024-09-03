@@ -1,28 +1,26 @@
 use sc_tracing::tracing::{error, info};
 use shc_actors_framework::event_bus::EventHandler;
-use shc_common::types::StorageProofsMerkleTrieLayout;
-use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteDownloadRequest,
 };
-use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::services::handler::StorageHubHandler;
+use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 
 const LOG_TARGET: &str = "bsp-download-file-task";
 
 pub struct BspDownloadFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Clone + Send + Sync,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     storage_hub_handler: StorageHubHandler<FL, FSH>,
 }
 
 impl<FL, FSH> Clone for BspDownloadFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Clone + Send + Sync,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     fn clone(&self) -> BspDownloadFileTask<FL, FSH> {
         Self {
@@ -33,8 +31,8 @@ where
 
 impl<FL, FSH> BspDownloadFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Clone + Send + Sync,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
         Self {
@@ -45,8 +43,8 @@ where
 
 impl<FL, FSH> EventHandler<RemoteDownloadRequest> for BspDownloadFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: RemoteDownloadRequest) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "Received remote download request with id {:?} for file {:?}", event.request_id, event.file_key);

@@ -3,11 +3,10 @@ use std::time::Duration;
 use log::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewChallengeSeed};
-use shc_common::types::StorageProofsMerkleTrieLayout;
-use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::services::handler::StorageHubHandler;
+use crate::tasks::FileStorageT;
 
 const LOG_TARGET: &str = "sp-react-to-event-mock-task";
 
@@ -20,7 +19,7 @@ pub type EventToReactTo = NewChallengeSeed;
 /// The event to react to can be configured by setting the [`EventToReactTo`] type.
 pub struct SpReactToEventMockTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FL: FileStorageT,
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     storage_hub_handler: StorageHubHandler<FL, FSH>,
@@ -28,7 +27,7 @@ where
 
 impl<FL, FSH> Clone for SpReactToEventMockTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FL: FileStorageT,
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     fn clone(&self) -> SpReactToEventMockTask<FL, FSH> {
@@ -40,7 +39,7 @@ where
 
 impl<FL, FSH> SpReactToEventMockTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FL: FileStorageT,
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
@@ -52,7 +51,7 @@ where
 
 impl<FL, FSH> EventHandler<EventToReactTo> for SpReactToEventMockTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FL: FileStorageT,
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     async fn handle_event(&mut self, event: EventToReactTo) -> anyhow::Result<()> {

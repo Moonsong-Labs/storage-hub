@@ -1,10 +1,9 @@
-use crate::tasks::StorageHubHandler;
+use crate::tasks::{FileStorageT, StorageHubHandler};
 use log::{debug, error, info};
 use sc_network::PeerId;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::AcceptedBspVolunteer;
 use shc_common::types::{FileMetadata, HashT, StorageProofsMerkleTrieLayout};
-use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::ForestStorageHandler;
 use shp_file_metadata::ChunkId;
@@ -18,7 +17,7 @@ const LOG_TARGET: &str = "user-sends-file-task";
 /// it reacts to every `AcceptedBspVolunteer` from the runtime.
 pub struct UserSendsFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FL: FileStorageT,
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     storage_hub_handler: StorageHubHandler<FL, FSH>,
@@ -26,7 +25,7 @@ where
 
 impl<FL, FSH> Clone for UserSendsFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FL: FileStorageT,
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     fn clone(&self) -> Self {
@@ -38,7 +37,7 @@ where
 
 impl<FL, FSH> UserSendsFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FL: FileStorageT,
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
@@ -50,7 +49,7 @@ where
 
 impl<FL, FSH> EventHandler<AcceptedBspVolunteer> for UserSendsFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FL: FileStorageT,
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     /// Reacts to BSPs volunteering (`AcceptedBspVolunteer` from the runtime) to store the user's file,

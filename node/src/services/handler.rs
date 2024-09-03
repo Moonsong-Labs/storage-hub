@@ -12,27 +12,24 @@ use shc_blockchain_service::{
     },
     BlockchainService,
 };
-use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest},
     FileTransferService,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
-use storage_hub_runtime::StorageProofsMerkleTrieLayout;
 
 use crate::tasks::{
     bsp_charge_fees::BspChargeFeesTask, bsp_download_file::BspDownloadFileTask,
     bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
     sp_slash_provider::SlashProviderTask, user_sends_file::UserSendsFileTask,
+    BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT,
 };
-
-use super::forest_storage::NoKey;
 
 /// Represents the handler for the Storage Hub service.
 pub struct StorageHubHandler<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Clone + Send + Sync,
+    FL: FileStorageT,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     /// The task spawner for spawning asynchronous tasks.
     pub task_spawner: TaskSpawner,
@@ -48,8 +45,8 @@ where
 
 impl<FL, FSH> Clone for StorageHubHandler<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Clone + Send + Sync,
+    FL: FileStorageT,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     fn clone(&self) -> StorageHubHandler<FL, FSH> {
         Self {
@@ -64,7 +61,7 @@ where
 
 impl<FL, FSH> StorageHubHandler<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FL: FileStorageT,
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     pub fn new(
@@ -94,8 +91,8 @@ where
 
 impl<FL, FSH> StorageHubHandler<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Key = Vec<u8>> + Clone + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: MspForestStorageHandlerT,
 {
     pub fn start_msp_tasks(&self) {
         log::info!("Starting MSP tasks");
@@ -106,8 +103,8 @@ where
 
 impl<FL, FSH> StorageHubHandler<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     pub fn start_bsp_tasks(&self) {
         log::info!("Starting BSP tasks");

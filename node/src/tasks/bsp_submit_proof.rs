@@ -13,12 +13,12 @@ use shc_blockchain_service::{
 };
 use shc_common::types::{
     FileKey, KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
-    StorageProofsMerkleTrieLayout, TrieRemoveMutation,
+    TrieRemoveMutation,
 };
-use shc_file_manager::traits::FileStorage;
-use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shc_forest_manager::traits::ForestStorage;
 
 use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
+use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 
 const LOG_TARGET: &str = "bsp-submit-proof-task";
 const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
@@ -47,18 +47,18 @@ const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
 ///     - If the key is still present, logs a warning, as this may indicate that the key was re-added after deletion.
 ///     - If the key is absent from the Forest Storage, safely removes the corresponding file from the File Storage.
 ///   - Ensures that no residual file keys remain in the File Storage when they should have been deleted.
-pub struct BspSubmitProofTask<FL, FS>
+pub struct BspSubmitProofTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Clone + Send + Sync,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     storage_hub_handler: StorageHubHandler<FL, FSH>,
 }
 
 impl<FL, FSH> Clone for BspSubmitProofTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Clone + Send + Sync,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     fn clone(&self) -> BspSubmitProofTask<FL, FSH> {
         Self {
@@ -69,8 +69,8 @@ where
 
 impl<FL, FSH> BspSubmitProofTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Clone + Send + Sync,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
         Self {
@@ -85,10 +85,10 @@ where
 /// - Derives forest challenges from the seed.
 /// - Checks for checkpoint challenges and adds them to the forest challenges.
 /// - Queues the challenges for submission to the runtime, for when the Forest write lock is released.
-impl<FL, FS> EventHandler<NewChallengeSeed> for BspSubmitProofTask<FL, FS>
+impl<FL, FSH> EventHandler<NewChallengeSeed> for BspSubmitProofTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: NewChallengeSeed) -> anyhow::Result<()> {
         info!(
@@ -140,8 +140,8 @@ where
 /// - Ensures the new Forest root matches the one on-chain.
 impl<FL, FSH> EventHandler<ProcessSubmitProofRequest> for BspSubmitProofTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: ProcessSubmitProofRequest) -> anyhow::Result<()> {
         info!(
@@ -309,10 +309,10 @@ where
 ///   - If the key is still present, it logs a warning,
 ///     since this could indicate that the key has been re-added after being deleted.
 ///   - If the key is not present in the Forest Storage, it safely removes the key from the File Storage.
-impl<FL, FS> EventHandler<FinalisedTrieRemoveMutationsApplied> for BspSubmitProofTask<FL, FS>
+impl<FL, FSH> EventHandler<FinalisedTrieRemoveMutationsApplied> for BspSubmitProofTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(
         &mut self,
@@ -330,8 +330,13 @@ where
             let file_key = FileKey::from(mutation.0);
 
             // Check that the file_key is not in the Forest.
-            let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
-            if read_forest_storage.contains_file_key(&file_key.into())? {
+            let read_fs = self
+                .storage_hub_handler
+                .forest_storage_handler
+                .get(&NoKey)
+                .await
+                .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+            if read_fs.read().await.contains_file_key(&file_key.into())? {
                 warn!(
                     target: LOG_TARGET,
                     "TrieRemoveMutation applied and finalised for file key {:?}, but file key is still in Forest. This can only happen if the same file key was added again after deleted by the user.\n Mutation: {:?}",
@@ -350,8 +355,8 @@ where
 
 impl<FL, FSH> BspSubmitProofTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn derive_forest_challenges_from_seed(
         &self,
@@ -401,10 +406,10 @@ where
             forest_challenges.extend(checkpoint_challenges.iter().map(|(key, _)| *key));
 
             // Return the checkpoint challenges.
-            return Ok(checkpoint_challenges);
+            Ok(checkpoint_challenges)
         } else {
             // Else, return an empty checkpoint challenges vector.
-            return Ok(Vec::new());
+            Ok(Vec::new())
         }
     }
 
