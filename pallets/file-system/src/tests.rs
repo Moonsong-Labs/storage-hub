@@ -1973,6 +1973,7 @@ mod bsp_confirm {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let storage_amount: StorageData<Test> = 100;
+                let size = 4;
 
                 let msp_id = add_msp_to_provider_storage(&msp);
 
@@ -1988,7 +1989,6 @@ mod bsp_confirm {
                 // Issue 5 storage requests and volunteer for each
                 for i in 0..5 {
                     let location = FileLocation::<Test>::try_from(format!("test{}", i).into_bytes()).unwrap();
-                    let size = 4;
                     let fingerprint = H256::repeat_byte(i as u8);
 
                     let name = BoundedVec::try_from(format!("bucket{}", i).into_bytes()).unwrap();
@@ -2022,7 +2022,7 @@ mod bsp_confirm {
                 // Set BSP storage capacity to 0
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
                     if let Some(bsp) = bsp {
-                        bsp.capacity = 0;
+                        bsp.capacity = size * 2;
                     }
                 });
 
