@@ -2,14 +2,15 @@ use std::path::PathBuf;
 
 use log::info;
 use rocksdb::{ColumnFamilyDescriptor, Options, DB};
-use shc_common::types::BlockNumber;
+use shc_common::types::{BlockNumber, RandomnessOutput};
 
 use crate::{
-    events::ForestWriteLockTaskData,
+    events::{ForestWriteLockTaskData, NewChallengeSeed},
     handler::{ConfirmStoringRequest, SubmitProofRequest},
     typed_store::{
-        BufferedWriteSupport, CFDequeAPI, ProvidesDbContext, ProvidesTypedDbSingleAccess,
-        ScaleEncodedCf, SingleScaleEncodedValueCf, TypedCf, TypedDbContext, TypedRocksDB,
+        BufferedWriteSupport, CFDequeAPI, ProvidesDbContext, ProvidesTypedDbAccess,
+        ProvidesTypedDbSingleAccess, ScaleEncodedCf, SingleScaleEncodedValueCf, TypedCf,
+        TypedDbContext, TypedRocksDB,
     },
 };
 
@@ -27,6 +28,14 @@ impl SingleScaleEncodedValueCf for OngoingForestWriteLockTaskDataCf {
     type Value = ForestWriteLockTaskData;
 
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "ongoing_forest_write_lock_task_data";
+}
+
+pub struct OngoingNewChallengeSeedEventsCf;
+impl ScaleEncodedCf for OngoingNewChallengeSeedEventsCf {
+    type Key = RandomnessOutput;
+    type Value = NewChallengeSeed;
+
+    const SCALE_ENCODED_NAME: &'static str = "ongoing_new_challenge_seed_events";
 }
 
 /// Pending submit proof requests.
@@ -178,6 +187,8 @@ impl<'a> ProvidesDbContext for BlockchainServiceStateStoreRwContext<'a> {
 }
 
 impl<'a> ProvidesTypedDbSingleAccess for BlockchainServiceStateStoreRwContext<'a> {}
+
+impl<'a> ProvidesTypedDbAccess for BlockchainServiceStateStoreRwContext<'a> {}
 
 pub struct PendingSubmitProofRequestDequeAPI<'a> {
     db_context: &'a TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,

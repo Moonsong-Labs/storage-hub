@@ -41,9 +41,10 @@ use crate::{
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf, OngoingForestWriteLockTaskDataCf,
+        OngoingNewChallengeSeedEventsCf,
     },
     transaction::SubmittedTransaction,
-    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
+    typed_store::{CFDequeAPI, ProvidesTypedDbAccess, ProvidesTypedDbSingleAccess},
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
@@ -534,6 +535,9 @@ impl Actor for BlockchainService {
                 BlockchainServiceCommand::QueueSubmitProofRequest { request, callback } => {
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
+                        .access(&OngoingNewChallengeSeedEventsCf)
+                        .delete(&request.seed);
+                    state_store_context
                         .pending_submit_proof_request_deque()
                         .push_back(request);
                     state_store_context.commit();
@@ -602,7 +606,7 @@ impl BlockchainService {
     async fn catch_up_block_import(&mut self, current_block_number: &BlockNumber) {
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         let latest_processed_block_number = match state_store_context
-            .access(&LastProcessedBlockNumberCf)
+            .access_value(&LastProcessedBlockNumberCf)
             .read()
         {
             Some(block_number) => block_number,
@@ -650,13 +654,25 @@ impl BlockchainService {
             // Check if there is an ongoing forest write lock task.
             let state_store_context = self.persistent_state.open_rw_context_with_overlay();
             let maybe_ongoing_forest_write_lock_task_data = state_store_context
-                .access(&OngoingForestWriteLockTaskDataCf)
+                .access_value(&OngoingForestWriteLockTaskDataCf)
                 .read();
+
+            // Get all the ongoing NewChallengeSeed events.
+            let ongoing_new_challenge_seed_events = state_store_context
+                .access(&OngoingNewChallengeSeedEventsCf)
+                .iterate_without_overlay()
+                .collect::<Vec<_>>();
+
             drop(state_store_context);
 
             // If there was an ongoing forest write lock task, emit the event to restart the task.
             if let Some(event_data) = maybe_ongoing_forest_write_lock_task_data {
                 self.emit_forest_write_event(event_data);
+            }
+
+            // Restart all previous ongoing NewChallengeSeed events.
+            for (_, new_challenge_seed_event) in ongoing_new_challenge_seed_events {
+                self.emit(new_challenge_seed_event);
             }
 
             self.catch_up_block_import(&block_number).await;
@@ -748,11 +764,15 @@ impl BlockchainService {
                                     provider_id,
                                     &challenges_ticker,
                                 ) {
-                                    self.emit(NewChallengeSeed {
+                                    let new_challenge_seed_event = NewChallengeSeed {
                                         provider_id: *provider_id,
                                         tick: challenges_ticker,
                                         seed,
-                                    })
+                                    };
+                                    state_store_context
+                                        .access(&OngoingNewChallengeSeedEventsCf)
+                                        .put(&seed, &new_challenge_seed_event);
+                                    self.emit(new_challenge_seed_event)
                                 } else {
                                     trace!(target: LOG_TARGET, "Challenges tick is not the next one to be submitted for Provider [{:?}]", provider_id);
                                 }
@@ -829,7 +849,7 @@ impl BlockchainService {
             }
         }
         state_store_context
-            .access(&LastProcessedBlockNumberCf)
+            .access_value(&LastProcessedBlockNumberCf)
             .write(block_number);
         state_store_context.commit();
     }

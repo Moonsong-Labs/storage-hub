@@ -441,7 +441,7 @@ impl BlockchainService {
                     trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
-                        .access(&OngoingForestWriteLockTaskDataCf)
+                        .access_value(&OngoingForestWriteLockTaskDataCf)
                         .delete();
                     state_store_context.commit();
                 }
@@ -449,7 +449,7 @@ impl BlockchainService {
                     error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
-                        .access(&OngoingForestWriteLockTaskDataCf)
+                        .access_value(&OngoingForestWriteLockTaskDataCf)
                         .delete();
                     state_store_context.commit();
                 }
@@ -505,7 +505,7 @@ impl BlockchainService {
         }
         if let Some(event_data) = &next_event_data {
             state_store_context
-                .access(&OngoingForestWriteLockTaskDataCf)
+                .access_value(&OngoingForestWriteLockTaskDataCf)
                 .write(event_data);
         }
         state_store_context.commit();

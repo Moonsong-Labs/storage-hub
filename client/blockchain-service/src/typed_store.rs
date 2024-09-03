@@ -1,6 +1,10 @@
 use codec::{Decode, Encode};
-use rocksdb::{AsColumnFamilyRef, ColumnFamily, DBPinnableSlice, WriteBatch, DB};
-use std::{cell::RefCell, collections::HashMap, marker::PhantomData};
+use rocksdb::{AsColumnFamilyRef, ColumnFamily, DBPinnableSlice, IteratorMode, WriteBatch, DB};
+use std::{
+    cell::{Ref, RefCell},
+    collections::BTreeMap,
+    marker::PhantomData,
+};
 
 pub trait DbCodec<T> {
     /// Encode a value to bytes.
@@ -127,6 +131,13 @@ pub trait ReadableRocks {
         cf: &impl AsColumnFamilyRef,
         key: impl AsRef<[u8]>,
     ) -> Option<DBPinnableSlice>;
+
+    /// Gets an iterator over the column family.
+    fn iterator_cf<'a>(
+        &'a self,
+        cf: &impl AsColumnFamilyRef,
+        mode: IteratorMode,
+    ) -> impl Iterator<Item = (Box<[u8]>, Box<[u8]>)> + 'a;
 }
 
 /// A write-supporting interface of a RocksDB database.
@@ -224,7 +235,7 @@ impl<'r, R: WriteableRocks> TypedDbContext<'r, R, BufferedWriteSupport<'r, R>> {
     /// overlay.
     pub fn flush(&self) {
         self.write_support.flush();
-        self.overlay.key_value.borrow_mut().clear();
+        self.overlay.cfs.borrow_mut().clear();
     }
 }
 
@@ -233,7 +244,7 @@ impl<'r, R: WriteableRocks> TypedDbContext<'r, R, BufferedWriteSupport<'r, R>> {
 pub struct TypedCfApi<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> {
     cf: CfHandle<'r, CF>,
     rocks: &'r R,
-    overlay: &'o DbOverlay,
+    cf_overlay: Ref<'o, DbCfOverlay>,
     write_support: &'w W,
 }
 
@@ -242,13 +253,13 @@ impl<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> TypedCfApi<'r, 
     fn new(
         cf: CfHandle<'r, CF>,
         rocks: &'r R,
-        overlay: &'o DbOverlay,
+        cf_overlay: Ref<'o, DbCfOverlay>,
         write_support: &'w W,
     ) -> Self {
         Self {
             cf,
             rocks,
-            overlay,
+            cf_overlay,
             write_support,
         }
     }
@@ -257,11 +268,11 @@ impl<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> TypedCfApi<'r, 
 impl<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> TypedCfApi<'r, 'o, 'w, CF, R, W> {
     /// Gets value by key.
     pub fn get(&self, key: &CF::Key) -> Option<CF::Value> {
-        match self.overlay.get::<CF>(CF::KeyCodec::encode(key)) {
-            Some(DbOverlayValueOp::Put(value)) => {
+        match self.cf_overlay.get(CF::KeyCodec::encode(key)) {
+            Some(DbCfOverlayValueOp::Put(value)) => {
                 return Some(CF::ValueCodec::decode(&value));
             }
-            Some(DbOverlayValueOp::Delete) => {
+            Some(DbCfOverlayValueOp::Delete) => {
                 return None;
             }
             None => {}
@@ -280,7 +291,7 @@ impl<'r, 'o, 'w, CF: TypedCf, R: WriteableRocks>
     pub fn put(&self, key: &CF::Key, value: &CF::Value) {
         let raw_key = CF::KeyCodec::encode(key);
         let raw_value = CF::ValueCodec::encode(value);
-        self.overlay.put::<CF>(raw_key.clone(), raw_value.clone());
+        self.cf_overlay.put(raw_key.clone(), raw_value.clone());
         self.write_support
             .buffer
             .put(self.cf.handle, raw_key, raw_value);
@@ -289,18 +300,28 @@ impl<'r, 'o, 'w, CF: TypedCf, R: WriteableRocks>
     /// Deletes the entry of the given key.
     pub fn delete(&self, key: &CF::Key) {
         let raw_key = CF::KeyCodec::encode(key);
-        self.overlay.delete::<CF>(raw_key.clone());
+        self.cf_overlay.delete(raw_key.clone());
         self.write_support.buffer.delete(self.cf.handle, raw_key);
+    }
+
+    /// Iterates over the column family. This only supports `Start` mode and does not take the overlay into account.
+    pub fn iterate_without_overlay(&'r self) -> impl Iterator<Item = (CF::Key, CF::Value)> + 'r {
+        self.rocks
+            .iterator_cf(self.cf.handle, IteratorMode::Start)
+            .map(|(key, value)| (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value)))
     }
 }
 
 impl<'r, R: ReadableRocks, W: WriteSupport> TypedDbContext<'r, R, W> {
     /// Returns a typed helper scoped at the given column family.
     pub fn cf<CF: TypedCf>(&self, typed_cf: &CF) -> TypedCfApi<'r, '_, '_, CF, R, W> {
+        // Capture the Ref<DbCfOverlay> in a local variable
+        let overlay_cf_ref = self.overlay.cf(CF::NAME);
+
         TypedCfApi::new(
             CfHandle::resolve(self.rocks, typed_cf),
             self.rocks,
-            &self.overlay,
+            overlay_cf_ref,
             &self.write_support,
         )
     }
@@ -323,6 +344,16 @@ impl ReadableRocks for TypedRocksDB {
     ) -> Option<DBPinnableSlice> {
         self.db.get_pinned_cf(cf, key).expect("DB get by key")
     }
+
+    fn iterator_cf<'a>(
+        &'a self,
+        cf: &impl AsColumnFamilyRef,
+        mode: IteratorMode,
+    ) -> impl Iterator<Item = (Box<[u8]>, Box<[u8]>)> + 'a {
+        self.db
+            .iterator_cf(cf, mode)
+            .map(|result| result.expect("DB iterator"))
+    }
 }
 
 impl WriteableRocks for TypedRocksDB {
@@ -333,56 +364,69 @@ impl WriteableRocks for TypedRocksDB {
 
 /// A key-value operation in the overlay.
 #[derive(Debug, Clone)]
-pub enum DbOverlayValueOp {
+pub enum DbCfOverlayValueOp {
     Put(Vec<u8>),
     Delete,
 }
 
 /// A key in the overlay, composed of the column_family and the key.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct DbOverlayKey {
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
+pub struct DbCfOverlayKey {
     pub key: Vec<u8>,
-    pub column_family: &'static str,
 }
 
-impl DbOverlayKey {
-    pub fn new<CF: TypedCf>(key: Vec<u8>) -> Self {
-        Self {
-            key,
-            column_family: CF::NAME,
-        }
+impl DbCfOverlayKey {
+    pub fn new(key: Vec<u8>) -> Self {
+        Self { key }
     }
 }
 
-/// An in memory overlay used by [`TypedCfApi`].
 pub struct DbOverlay {
-    pub key_value: RefCell<HashMap<DbOverlayKey, DbOverlayValueOp>>,
+    pub cfs: RefCell<BTreeMap<String, DbCfOverlay>>,
 }
 
 impl DbOverlay {
     pub fn new() -> Self {
         Self {
-            key_value: RefCell::new(HashMap::new()),
+            cfs: RefCell::new(BTreeMap::new()),
         }
     }
 
-    pub fn get<CF: TypedCf>(&self, key: Vec<u8>) -> Option<DbOverlayValueOp> {
+    // Return a Ref<DbCfOverlay> instead of &DbCfOverlay
+    pub fn cf(&self, cf: &str) -> Ref<DbCfOverlay> {
+        Ref::map(self.cfs.borrow(), |cfs| cfs.get(cf).expect("Overlay CF"))
+    }
+}
+
+/// An in memory overlay for a column family used by [`TypedCfApi`].
+pub struct DbCfOverlay {
+    pub key_value: RefCell<BTreeMap<DbCfOverlayKey, DbCfOverlayValueOp>>,
+}
+
+impl DbCfOverlay {
+    pub fn new() -> Self {
+        Self {
+            key_value: RefCell::new(BTreeMap::new()),
+        }
+    }
+
+    pub fn get(&self, key: Vec<u8>) -> Option<DbCfOverlayValueOp> {
         self.key_value
             .borrow()
-            .get(&DbOverlayKey::new::<CF>(key))
+            .get(&DbCfOverlayKey::new(key))
             .cloned()
     }
 
-    pub fn put<CF: TypedCf>(&self, key: Vec<u8>, value: Vec<u8>) {
+    pub fn put(&self, key: Vec<u8>, value: Vec<u8>) {
         self.key_value
             .borrow_mut()
-            .insert(DbOverlayKey::new::<CF>(key), DbOverlayValueOp::Put(value));
+            .insert(DbCfOverlayKey::new(key), DbCfOverlayValueOp::Put(value));
     }
 
-    pub fn delete<CF: TypedCf>(&self, key: Vec<u8>) {
+    pub fn delete(&self, key: Vec<u8>) {
         self.key_value
             .borrow_mut()
-            .insert(DbOverlayKey::new::<CF>(key), DbOverlayValueOp::Delete);
+            .insert(DbCfOverlayKey::new(key), DbCfOverlayValueOp::Delete);
     }
 }
 
@@ -420,11 +464,20 @@ pub trait ProvidesDbContext {
 
 /// A trait which provides access to single value CFs.
 pub trait ProvidesTypedDbSingleAccess: ProvidesDbContext {
-    fn access<'a, CF: SingleScaleEncodedValueCf>(
+    fn access_value<'a, CF: SingleScaleEncodedValueCf>(
         &'a self,
         cf: &'a CF,
     ) -> SingleValueScopedAccess<'a, CF> {
         SingleValueScopedAccess::new(self.db_context(), cf)
+    }
+}
+
+pub trait ProvidesTypedDbAccess: ProvidesDbContext {
+    fn access<'a, CF: TypedCf>(
+        &'a self,
+        cf: &'a CF,
+    ) -> TypedCfApi<'a, '_, '_, CF, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>> {
+        self.db_context().cf(cf)
     }
 }
 
@@ -440,13 +493,13 @@ pub trait CFDequeAPI: ProvidesTypedDbSingleAccess {
     type DataCF: Default + TypedCf<Key = u64, Value = Self::Value>;
 
     fn left_index(&self) -> u64 {
-        self.access(&Self::LeftIndexCF::default())
+        self.access_value(&Self::LeftIndexCF::default())
             .read()
             .unwrap_or(0)
     }
 
     fn right_index(&self) -> u64 {
-        self.access(&Self::RightIndexCF::default())
+        self.access_value(&Self::RightIndexCF::default())
             .read()
             .unwrap_or(0)
     }
@@ -456,7 +509,7 @@ pub trait CFDequeAPI: ProvidesTypedDbSingleAccess {
         self.db_context()
             .cf(&Self::DataCF::default())
             .put(&right_index, &value);
-        self.access(&Self::RightIndexCF::default())
+        self.access_value(&Self::RightIndexCF::default())
             .write(&(right_index + 1));
     }
 
@@ -472,7 +525,7 @@ pub trait CFDequeAPI: ProvidesTypedDbSingleAccess {
         self.db_context()
             .cf(&Self::DataCF::default())
             .delete(&left_index);
-        self.access(&Self::LeftIndexCF::default())
+        self.access_value(&Self::LeftIndexCF::default())
             .write(&(left_index + 1));
         value
     }

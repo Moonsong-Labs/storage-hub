@@ -17,7 +17,7 @@ use crate::handler::ConfirmStoringRequest;
 /// This event is emitted when there's a new random challenge seed that affects this
 /// BSP. In other words, it only pays attention to the random seeds in the challenge
 /// period of this BSP.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct NewChallengeSeed {
     pub provider_id: ProviderId,
     pub tick: BlockNumber,
