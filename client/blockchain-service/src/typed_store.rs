@@ -394,6 +394,11 @@ impl DbOverlay {
 
     // Return a Ref<DbCfOverlay> instead of &DbCfOverlay
     pub fn cf(&self, cf: &str) -> Ref<DbCfOverlay> {
+        if !self.cfs.borrow().contains_key(cf) {
+            self.cfs
+                .borrow_mut()
+                .insert(cf.to_string(), DbCfOverlay::new());
+        }
         Ref::map(self.cfs.borrow(), |cfs| cfs.get(cf).expect("Overlay CF"))
     }
 }

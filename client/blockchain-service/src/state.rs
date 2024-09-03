@@ -97,9 +97,10 @@ impl SingleScaleEncodedValueCf for PendingConfirmStoringRequestRightIndexCf {
         "pending_confirm_storing_request_right_index";
 }
 
-const ALL_COLUMN_FAMILIES: [&str; 8] = [
+const ALL_COLUMN_FAMILIES: [&str; 9] = [
     LastProcessedBlockNumberCf::NAME,
     OngoingForestWriteLockTaskDataCf::NAME,
+    OngoingNewChallengeSeedEventsCf::NAME,
     PendingSubmitProofRequestLeftIndexCf::NAME,
     PendingSubmitProofRequestRightIndexCf::NAME,
     PendingSubmitProofRequestCf::NAME,
