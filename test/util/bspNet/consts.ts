@@ -54,12 +54,12 @@ export const TEST_ARTEFACTS = {
   "res/half-chunk-file": {
     size: 512n,
     checksum: "c7b3b7dd37d7e0947b04550613692950c72b0551e038a01ab8679a3ea5631104",
-    fingerprint: "0x6a62615cbe76b0ad7052849b414d96f847ea29953ba73ac3d98476d3f54109fe"
+    fingerprint: "0xade3ca4ff2151a2533e816eb9402ae17e21160c6c52b1855ecff29faea8880b5"
   },
   "res/one-chunk-file": {
     size: 1024n,
     checksum: "1f006b6a97eeb0dfd8cbc91ed815e6a429dcfdc2f3f32f2ac3e7977e70df4988",
-    fingerprint: "0xce794511342582a9a466fbf3a02fb81ae4b8d4632ec88f39895e4700d03fb902"
+    fingerprint: "0x0904317e4977ad6f872cd9672d2733da9a628fda86ee9add68623a66918cbd8c"
   }
 } as const;
 
