@@ -125,8 +125,6 @@ where
             .proven::<StorageProofsMerkleTrieLayout>()
         {
             Ok(proven) => {
-                // info!("{:?}", proven);
-                info!("{:?}", proven.len());
                 if proven.len() != 1 {
                     Err(anyhow::anyhow!("Expected exactly one proven chunk."))
                 } else {

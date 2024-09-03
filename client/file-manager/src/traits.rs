@@ -65,6 +65,8 @@ pub enum FileStorageError {
     FailedToParseFileMetadata,
     /// Failed to convert raw bytes into [`Fingerprint`].
     FailedToParseFingerprint,
+    /// Failed to convert raw bytes into [`ChunkWithId`].
+    FailedToParseChunkWithId,
     /// Failed to delete chunk from storage.
     FailedToDeleteFileChunk,
     /// Failed to convert raw bytes into partial root.

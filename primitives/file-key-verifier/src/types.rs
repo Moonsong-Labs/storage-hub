@@ -1,7 +1,9 @@
 use codec::{Decode, Encode};
 use core::fmt::Debug;
 use scale_info::TypeInfo;
-use shp_file_metadata::{Chunk, ChunkId, ChunkIdError, FileMetadata, Fingerprint, Leaf};
+use shp_file_metadata::{
+    Chunk, ChunkId, ChunkIdError, ChunkWithId, FileMetadata, Fingerprint, Leaf,
+};
 use sp_std::vec::Vec;
 use sp_trie::{CompactProof, TrieDBBuilder, TrieLayout};
 use trie_db::Trie;
@@ -25,6 +27,8 @@ pub enum ProvenFileKeyError {
     FailedToGetTrieKey,
     /// Trie internal error: failed to get trie value.
     FailedToGetTrieValue,
+    /// Internal error: failed to decode chunk from proof.
+    FailedToDecodeChunkFromProof,
     /// Internal error: the key is not found in the trie.
     KeyNotFoundInTrie,
     /// Internal error: failed to convert trie key to ChunkId.
@@ -77,11 +81,13 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
             if let Ok((key, _value)) = key {
                 let chunk_id = ChunkId::from_trie_key(&key)
                     .map_err(|e| ProvenFileKeyError::ChunkIdFromKeyError(e))?;
-                let chunk = trie
+                let encoded_chunk = trie
                     .get(&key)
                     .map_err(|_| ProvenFileKeyError::FailedToGetTrieValue)?
                     .ok_or_else(|| ProvenFileKeyError::KeyNotFoundInTrie)?;
-                proven.push(Leaf::new(chunk_id, chunk));
+                let decodec_chunk = ChunkWithId::decode(&mut &encoded_chunk[..])
+                    .map_err(|_| ProvenFileKeyError::FailedToDecodeChunkFromProof)?;
+                proven.push(Leaf::new(chunk_id, decodec_chunk.data));
             }
         }
 

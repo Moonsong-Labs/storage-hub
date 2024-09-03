@@ -25,20 +25,16 @@ describe("Test Reproduction", async () => {
   });
 
   after(async () => {
-    // await cleardownTest({ api });
+    await cleardownTest({ api });
   });
 
-  it(
-    "Can send file of 1MB size",
-    async () => {
-      const source = "res/1MB_file";
-      const location = "test/1MB_file";
-      const bucketName = "nothingmuch-2";
-      await api.sendNewStorageRequest(source, location, bucketName);
-      await waitForBspVolunteer(api);
-      await waitForBspStored(api);
-      // Check for error event
-    }
-  );
-
+  it("Can send file of 1MB size", async () => {
+    const source = "res/1MB_file";
+    const location = "test/1MB_file";
+    const bucketName = "nothingmuch-2";
+    await api.sendNewStorageRequest(source, location, bucketName);
+    await waitForBspVolunteer(api);
+    await waitForBspStored(api);
+    // Check for error event
+  });
 });

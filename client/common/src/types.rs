@@ -5,7 +5,7 @@ use sc_executor::WasmExecutor;
 use sc_network::NetworkService;
 use sc_service::TFullClient;
 pub use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
-pub use shp_file_metadata::{Chunk, ChunkId, Leaf};
+pub use shp_file_metadata::{Chunk, ChunkId, ChunkWithId, Leaf};
 use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
 use sp_runtime::{traits::Block as BlockT, KeyTypeId};
