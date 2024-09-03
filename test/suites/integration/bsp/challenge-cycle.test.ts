@@ -145,7 +145,7 @@ describeBspNet(
         const currentBlockNumber = currentBlock.block.header.number.toNumber();
         const blocksToAdvance = nextChallengeTick - currentBlockNumber;
 
-        await userApi.block.skip(blocksToAdvance);
+        await userApi.block.skipTo(blocksToAdvance);
 
         // Wait for task to execute and seal one more block.
         // In this block, the BSP should have submitted a proof.

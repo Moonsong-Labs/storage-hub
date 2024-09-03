@@ -116,7 +116,18 @@ export class BspNetTestApi implements AsyncDisposable {
         signer?: KeyringPair
       ) => BspNetBlock.seal(this._api, calls, signer),
       skipToChallengePeriod: (nextChallengeTick: number, provider: string) =>
-        BspNetBlock.skipToChallengePeriod(this._api, nextChallengeTick, provider)
+        BspNetBlock.skipToChallengePeriod(this._api, nextChallengeTick, provider),
+      skip: (blocksToAdvance: number) => BspNetBlock.skip(this._api, blocksToAdvance),
+      skipTo: (
+        blockNumber: number,
+        options?: { waitBetweenBlocks?: number | boolean; waitForBspProofs?: string[] }
+      ) =>
+        BspNetBlock.skipTo(
+          this._api,
+          blockNumber,
+          options?.waitBetweenBlocks,
+          options?.waitForBspProofs
+        )
     };
 
     return Object.assign(this._api, {

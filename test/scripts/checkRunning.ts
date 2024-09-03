@@ -13,7 +13,6 @@ async function main() {
     type: "confirm",
     name: "proceed",
     default: false,
-    // @ts-expect-error bug with inquirer
     message:
       "⚠️ Local StorageHub nodes are already running on this machine.\n Are you sure you would like to proceed (may give inconsistent behaviour)?"
   });

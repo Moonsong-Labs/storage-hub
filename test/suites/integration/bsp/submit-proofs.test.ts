@@ -3,10 +3,8 @@ import {
   describeBspNet,
   pauseBspContainer,
   resumeBspContainer,
-  BSP_TWO_ID,
   assertEventPresent,
   shUser,
-  BSP_THREE_ID,
   sleep,
   type EnrichedBspApi,
   type FileMetadata,
@@ -368,7 +366,7 @@ describeBspNet(
       async () => {
         // TODO: Remove this
         const prevLastTickResult =
-          await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_TWO_ID);
+          await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(ShConsts.BSP_TWO_ID);
         assert(prevLastTickResult.isOk);
         const prevLastTickBspTwoSubmittedProof = prevLastTickResult.asOk.toNumber();
         console.log(`Prev last tick BSP-Two: ${prevLastTickBspTwoSubmittedProof}`);
@@ -387,14 +385,16 @@ describeBspNet(
 
         // Advance to next challenge tick for BSP-Two.
         // First we get the last tick for which the BSP submitted a proof.
-        const lastTickResult =
-          await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_TWO_ID);
+        const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+          ShConsts.BSP_TWO_ID
+        );
         assert(lastTickResult.isOk);
         const lastTickBspTwoSubmittedProof = lastTickResult.asOk.toNumber();
         console.log(`Last tick BSP-Two: ${lastTickBspTwoSubmittedProof}`);
         // Then we get the challenge period for the BSP.
-        const challengePeriodResult =
-          await userApi.call.proofsDealerApi.getChallengePeriod(BSP_TWO_ID);
+        const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+          ShConsts.BSP_TWO_ID
+        );
         assert(challengePeriodResult.isOk);
         const challengePeriod = challengePeriodResult.asOk.toNumber();
         // Then we calculate the next challenge tick.
@@ -480,7 +480,7 @@ describeBspNet(
       const deletionRequestEnqueuedResult = await userApi.advanceToBlock(
         currentBlockNumber + deletionRequestTtl,
         {
-          waitForBspProofs: [ShConsts.DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
+          waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
         }
       );
 
@@ -505,7 +505,7 @@ describeBspNet(
       const checkpointChallengeBlockResult = await userApi.advanceToBlock(
         nextCheckpointChallengeBlock,
         {
-          waitForBspProofs: [ShConsts.DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
+          waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
         }
       );
 
@@ -559,12 +559,13 @@ describeBspNet(
       // Calculate next challenge tick for BSP-Two.
       // We first get the last tick for which the BSP submitted a proof.
       const bspTwoLastTickResult =
-        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_TWO_ID);
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(ShConsts.BSP_TWO_ID);
       assert(bspTwoLastTickResult.isOk);
       const bspTwoLastTickBspTwoSubmittedProof = bspTwoLastTickResult.asOk.toNumber();
       // Then we get the challenge period for the BSP.
-      const bspTwoChallengePeriodResult =
-        await userApi.call.proofsDealerApi.getChallengePeriod(BSP_TWO_ID);
+      const bspTwoChallengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+        ShConsts.BSP_TWO_ID
+      );
       assert(bspTwoChallengePeriodResult.isOk);
       const bspTwoChallengePeriod = bspTwoChallengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
@@ -574,11 +575,15 @@ describeBspNet(
         bspTwoNextChallengeTick += bspTwoChallengePeriod;
       }
 
-      const firstBspToRespond =
-        dummyBspNextChallengeTick < bspTwoNextChallengeTick ? ShConsts.DUMMY_BSP_ID : BSP_TWO_ID;
+      const _firstBspToRespond =
+        dummyBspNextChallengeTick < bspTwoNextChallengeTick
+          ? ShConsts.DUMMY_BSP_ID
+          : ShConsts.BSP_TWO_ID;
       const secondBspToRespond =
-        dummyBspNextChallengeTick < bspTwoNextChallengeTick ? BSP_TWO_ID : ShConsts.DUMMY_BSP_ID;
-      const firstBlockToAdvance =
+        dummyBspNextChallengeTick < bspTwoNextChallengeTick
+          ? ShConsts.BSP_TWO_ID
+          : ShConsts.DUMMY_BSP_ID;
+      const _firstBlockToAdvance =
         dummyBspNextChallengeTick < bspTwoNextChallengeTick
           ? dummyBspNextChallengeTick
           : bspTwoNextChallengeTick;
@@ -592,7 +597,7 @@ describeBspNet(
       // TODO: submissions. We need to fix this.
       // // Advance to first next challenge block.
       // await userApi.advanceToBlock(firstBlockToAdvance, {
-      //   waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
+      //   waitForBspProofs: [DUMMY_BSP_ID,ShConsts. BSP_TWO_ID,ShConsts. BSP_THREE_ID]
       // });
 
       // // Wait for BSP to generate the proof and advance one more block.
@@ -618,7 +623,7 @@ describeBspNet(
 
       // Advance to second next challenge block.
       await userApi.advanceToBlock(secondBlockToAdvance, {
-        waitForBspProofs: [ShConsts.DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
+        waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
       });
 
       // Wait for BSP to generate the proof and advance one more block.

@@ -2,7 +2,6 @@ import type { EventRecord } from "@polkadot/types/interfaces";
 import { strictEqual } from "node:assert";
 import type { ApiPromise } from "@polkadot/api";
 import type { AugmentedEvent } from "@polkadot/api/types";
-import { sealBlock } from "./bspNet";
 import { sleep } from "./timer";
 
 export type AssertExtrinsicOptions = {
