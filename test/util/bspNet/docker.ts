@@ -152,48 +152,59 @@ export const pauseBspContainer = async (containerName: string) => {
   await container.pause();
 };
 
-export const stopBspContainer = async (options: { containerName: string; api: EnrichedBspApi }) => {
-  await options.api.disconnect();
+export const stopBspContainer = async (options: { containerName: string }) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
-  await container.stop();
+  await container.stop({});
+  await container.remove({ force: true });
 };
 
 export const startBspContainer = async (options: {
   containerName: string;
-  endpoint?: `ws://${string}`;
+  // endpoint?: `ws://${string}`;
 }) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
   await container.start();
 
-  if (options.endpoint) {
-    await checkNodeAlive(options.endpoint);
-    return await BspNetTestApi.create(options.endpoint);
-  }
+  // if (options.endpoint) {
+  //   await checkNodeAlive(options.endpoint);
+  //   return await BspNetTestApi.create(options.endpoint);
+  // }
 
-  return undefined;
+  // return undefined;
 };
 
 export const restartBspContainer = async (options: {
   containerName: string;
-  api: EnrichedBspApi;
-  endpoint?: `ws://${string}`;
+  // api: EnrichedBspApi;
 }) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
   await container.restart();
 
-  return options.endpoint ? await BspNetTestApi.create(options.endpoint) : undefined;
+  // return options.endpoint ? await BspNetTestApi.create(options.endpoint) : undefined;
 };
 
 export const resumeBspContainer = async (options: {
   containerName: string;
-  endpoint?: `ws://${string}`;
+  // endpoint?: `ws://${string}`;
 }) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
   await container.unpause();
 
-  return options.endpoint ? await BspNetTestApi.create(options.endpoint) : undefined;
+  // return options.endpoint ? await BspNetTestApi.create(options.endpoint) : undefined;
 };
+
+export namespace DockerBspNet {
+  export const checkForFile = checkBspForFile;
+  export const checksum = checkFileChecksum;
+  export const lsContainers = showContainers;
+  export const addContainer = addBspContainer;
+  export const pauseContainer = pauseBspContainer;
+  export const stopContainer = stopBspContainer;
+  export const startContainer = startBspContainer;
+  export const restartContainer = restartBspContainer;
+  export const resumeContainer = resumeBspContainer;
+}

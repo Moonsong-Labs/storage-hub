@@ -11,12 +11,17 @@ import type { BspNetApi, SealBlockOptions } from "./types";
 import { Waits } from "./waits";
 import { ShConsts } from "./consts";
 import { BspNetBlock, sealBlock } from "./block";
+import { NodeBspNet } from "./node";
+import type { HexString } from "@polkadot/util/types";
+import { DockerBspNet } from "./docker";
 
 export class BspNetTestApi implements AsyncDisposable {
   private _api: ApiPromise;
+  private _endpoint: `ws://${string}` | `wss://${string}`;
 
-  private constructor(api: ApiPromise) {
+  private constructor(api: ApiPromise, endpoint: `ws://${string}` | `wss://${string}`) {
     this._api = api;
+    this._endpoint = endpoint;
   }
 
   public static async create(endpoint: `ws://${string}` | `wss://${string}`) {
@@ -27,10 +32,31 @@ export class BspNetTestApi implements AsyncDisposable {
       throwOnUnknown: false,
       typesBundle: BundledTypes
     });
+    await api.isReady;
 
-    const ctx = new BspNetTestApi(api);
+    const ctx = new BspNetTestApi(api, endpoint);
 
     return ctx.enrichApi();
+  }
+
+  public async reconnect(): Promise<void> {
+    if (!this._api.isConnected) {
+      await this._api.disconnect();
+      const newApi = await ApiPromise.create({
+        provider: new WsProvider(this._endpoint),
+        noInitWarn: true,
+        throwOnConnect: false,
+        throwOnUnknown: false,
+        typesBundle: BundledTypes
+      });
+      await newApi.isReady;
+      this._api = newApi;
+      this.enrichApi();
+    }
+  }
+
+  private async disconnect() {
+    await this._api.disconnect();
   }
 
   private async sealBlock(
@@ -142,6 +168,25 @@ export class BspNetTestApi implements AsyncDisposable {
       reOrg: () => BspNetBlock.reOrg(this._api)
     };
 
+    const remappedNodeNs = {
+      /**
+       * Drops transaction(s) from the node's transaction pool.
+       *
+       * @param extrinsic - Optional. Specifies which transaction(s) to drop:
+       *                    - If omitted, all transactions in the pool will be cleared.
+       *                    - If an object with module and method, it will drop matching transactions.
+       *                    - If a hex string, it will drop the transaction with the matching hash.
+       * @param sealAfter - Whether to seal a block after dropping the transaction(s). Defaults to false.
+       */
+      dropTxn: (extrinsic?: { module: string; method: string } | HexString, sealAfter = true) =>
+        NodeBspNet.dropTxn(this._api, extrinsic, sealAfter)
+    };
+
+    const remappedDockerNs = {
+      ...DockerBspNet
+      // stopBspContainer: (containerName: string) => DockerBspNet.stopContainer({containerName, api: this._api}),
+    };
+
     return Object.assign(this._api, {
       sealBlock: this.sealBlock.bind(this),
       sendNewStorageRequest: this.sendNewStorageRequest.bind(this),
@@ -151,9 +196,11 @@ export class BspNetTestApi implements AsyncDisposable {
       assert: remappedAssertNs,
       wait: remappedWaitsNs,
       file: remappedFileNs,
+      node: remappedNodeNs,
       block: remappedBlockNs,
-      shConsts: ShConsts
-      // Add docker
+      shConsts: ShConsts,
+      docker: remappedDockerNs,
+      [Symbol.asyncDispose]: this.disconnect.bind(this)
     }) satisfies BspNetApi;
   }
 
