@@ -4,7 +4,7 @@ import type { BspNetApi } from "./types";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import { createBucket, sealBlock, sendNewStorageRequest } from "./helpers";
+import { advanceToBlock, createBucket, sealBlock, sendNewStorageRequest } from "./helpers";
 import { assertEventPresent } from "../asserts";
 import type { EventRecord } from "@polkadot/types/interfaces";
 import { types as BundledTypes } from "@storagehub/types-bundle";
@@ -26,6 +26,15 @@ export const createApiObject = async (uri: string): Promise<BspNetApi> => {
         | SubmittableExtrinsic<"promise", ISubmittableResult>[],
       signer?: KeyringPair
     ) => sealBlock(baseApi, calls, signer),
+
+    advanceToBlock: async (
+      blockNumber: number,
+      options?: {
+        waitBetweenBlocks?: number | boolean;
+        waitForBspProofs?: string[];
+      }
+    ) =>
+      advanceToBlock(baseApi, blockNumber, options?.waitBetweenBlocks, options?.waitForBspProofs),
 
     sendNewStorageRequest: async (source: string, location: string, bucketName: string) =>
       sendNewStorageRequest(baseApi, source, location, bucketName),
