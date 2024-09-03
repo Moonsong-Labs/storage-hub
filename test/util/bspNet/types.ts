@@ -268,3 +268,28 @@ export type InitialisedMultiBspNetwork = {
    */
   fileData: FileMetadata;
 };
+
+/**
+ * Options for creating a block in the chain.
+ */
+export type SealBlockOptions = {
+  /**
+   * Optional extrinsic(s) to include in the sealed block.
+   * Can be a single extrinsic or an array of extrinsics.
+   */
+  calls?:
+    | SubmittableExtrinsic<"promise", ISubmittableResult>
+    | SubmittableExtrinsic<"promise", ISubmittableResult>[];
+
+  /**
+   * Optional signer for the extrinsics.
+   * If not provided, a default signer (usually 'alice') will be used.
+   */
+  signer?: KeyringPair;
+
+  /**
+   * Whether to finalize the block after sealing.
+   * Defaults to true if not specified.
+   */
+  finaliseBlock?: boolean;
+};

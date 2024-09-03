@@ -7,7 +7,7 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import { Assertions, type AssertExtrinsicOptions } from "../asserts";
 import { Files } from "./fileHelpers";
-import type { BspNetApi } from "./types";
+import type { BspNetApi, SealBlockOptions } from "./types";
 import { Waits } from "./waits";
 import { ShConsts } from "./consts";
 import { BspNetBlock, sealBlock } from "./block";
@@ -37,9 +37,10 @@ export class BspNetTestApi implements AsyncDisposable {
     calls?:
       | SubmittableExtrinsic<"promise", ISubmittableResult>
       | SubmittableExtrinsic<"promise", ISubmittableResult>[],
-    signer?: KeyringPair
+    signer?: KeyringPair,
+    finaliseBlock = true
   ) {
-    return sealBlock(this._api, calls, signer);
+    return sealBlock(this._api, calls, signer, finaliseBlock);
   }
 
   private async sendNewStorageRequest(source: string, location: string, bucketName: string) {
@@ -110,12 +111,12 @@ export class BspNetTestApi implements AsyncDisposable {
 
     const remappedBlockNs = {
       ...BspNetBlock,
-      seal: (
-        calls?:
-          | SubmittableExtrinsic<"promise", ISubmittableResult>
-          | SubmittableExtrinsic<"promise", ISubmittableResult>[],
-        signer?: KeyringPair
-      ) => BspNetBlock.seal(this._api, calls, signer),
+      /**
+       * Creates a new block, with options to include calls, sign with a specific keypair, and finalise the block.
+       * @param options - Options for creating the block.
+       */
+      seal: (options?: SealBlockOptions) =>
+        BspNetBlock.seal(this._api, options?.calls, options?.signer, options?.finaliseBlock),
       /**
        * Seal blocks until the next challenge period block.
        *
@@ -133,7 +134,12 @@ export class BspNetTestApi implements AsyncDisposable {
           blockNumber,
           options?.waitBetweenBlocks,
           options?.waitForBspProofs
-        )
+        ),
+      /**
+       * This will cause a chain re-org by creating a finalized block on top of parent block.
+       * Note: This requires head block to be unfinalized, otherwise will throw!
+       */
+      reOrg: () => BspNetBlock.reOrg(this._api)
     };
 
     return Object.assign(this._api, {

@@ -30,7 +30,8 @@ export const sealBlock = async (
   calls?:
     | SubmittableExtrinsic<"promise", ISubmittableResult>
     | SubmittableExtrinsic<"promise", ISubmittableResult>[],
-  signer?: KeyringPair
+  signer?: KeyringPair,
+  finaliseBlock = true
 ): Promise<SealedBlock> => {
   const initialHeight = (await api.rpc.chain.getHeader()).number.toNumber();
 
@@ -67,7 +68,7 @@ export const sealBlock = async (
   }
 
   const sealedResults = {
-    blockReceipt: await api.rpc.engine.createBlock(true, true),
+    blockReceipt: await api.rpc.engine.createBlock(true, finaliseBlock),
     txHashes: results.hashes.map((hash) => hash.toString())
   };
 
@@ -250,10 +251,25 @@ export const advanceToBlock = async (
   throw new Error("Block wasn't sealed");
 };
 
+export async function reOrgBlocks(api: ApiPromise): Promise<void> {
+  const currentBlockHeader = await api.rpc.chain.getHeader();
+  const finalisedHash = await api.rpc.chain.getFinalizedHead();
+
+  if (currentBlockHeader.hash.eq(finalisedHash)) {
+    console.error(`Head block #${currentBlockHeader.number.toString()} is already finalised`);
+    console.error(
+      "Tip ℹ️: You can create unfinalised blocks in sealBlock() by passing finaliseBlock = false"
+    );
+    throw new Error("Cannot reorg a finalised block");
+  }
+  await api.rpc.engine.createBlock(true, true, finalisedHash);
+}
+
 export namespace BspNetBlock {
   export const seal = sealBlock;
   export const skip = skipBlocks;
   export const skipTo = advanceToBlock;
   export const skipToMinChangeTime = skipBlocksToMinChangeTime;
   export const skipToChallengePeriod = runToNextChallengePeriodBlock;
+  export const reOrg = reOrgBlocks;
 }
