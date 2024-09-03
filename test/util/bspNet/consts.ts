@@ -29,7 +29,7 @@ export const TEST_ARTEFACTS = {
   "res/adolphus.jpg": {
     size: 416400n,
     checksum: "739fb97f7c2b8e7f192b608722a60dc67ee0797c85ff1ea849c41333a40194f2",
-    fingerprint: "0x9e86ecad3f86f52891acf9c0d47c5c5243a3592fc7bcf99811eb7db078997dcb"
+    fingerprint: "0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970"
   },
   "res/smile.jpg": {
     size: 633160n,
