@@ -34,17 +34,17 @@ export const TEST_ARTEFACTS = {
   "res/smile.jpg": {
     size: 633160n,
     checksum: "12094d47c2fdf1a984c0b950c2c0ede733722bea3bee22fef312e017383b410c",
-    fingerprint: "0x00d6e8c6410561b5e59266706b7e82dc1148735c93cbc33bd6d7b6d62d435200"
+    fingerprint: "0x535dd863026735ffe0919cc0fc3d8e5da45b9203f01fbf014dbe98005bd8d2fe"
   },
   "res/whatsup.jpg": {
     size: 216211n,
     checksum: "585ed00a96349499cbc8a3882b0bd6f6aec5ce3b7dbee2d8b3d33f3c09a38ec6",
-    fingerprint: "0x0e2aaf768af5b738eea96084f10dac7ad4f6efa257782bdb9823994ffb233344"
+    fingerprint: "0x2b83b972e63f52abc0d4146c4aee1f1ec8aa8e274d2ad1b626529446da93736c"
   },
   "res/cloud.jpg": {
     size: 346248n,
     checksum: "8e06811883fc3e5e6a0331825b365e4bd7b83ba7683fa9da17e4daea25d7a9f5",
-    fingerprint: "0x00b122b1b40969f3b6ce9277d511d7f771f8a4e213fa1a8a2951662bd3044000"
+    fingerprint: "0x5559299bc73782b5ad7e9dd57ba01bb06b8c44f5cab8d7afab5e1db2ea93da4c"
   },
   "res/empty-file": {
     size: 0n,
