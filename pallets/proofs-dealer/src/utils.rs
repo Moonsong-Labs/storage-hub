@@ -341,9 +341,9 @@ where
         match current_tick_valid_submitters {
             // If the set already exists and has valid submitters, we just insert the new submitter.
             Some(mut valid_submitters) => {
-                let already_existed = expect_or_err!(valid_submitters.try_insert(*submitter), "The set should never be full as the limit we set should be greater than the implicit limit given by max block weight.", Error::<T>::TooManyValidProofSubmitters, result);
+                let did_not_already_exist = expect_or_err!(valid_submitters.try_insert(*submitter), "The set should never be full as the limit we set should be greater than the implicit limit given by max block weight.", Error::<T>::TooManyValidProofSubmitters, result);
                 // We only update storage if the Provider ID wasn't yet in the set to avoid unnecessary writes.
-                if !already_existed {
+                if did_not_already_exist {
                     ValidProofSubmittersLastTicks::<T>::insert(
                         ChallengesTicker::<T>::get(),
                         valid_submitters,

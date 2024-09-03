@@ -221,7 +221,8 @@ pub mod pallet {
         #[pallet::constant]
         type StorageRequestTtl: Get<u32>;
 
-        /// Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.        #[pallet::constant]
+        /// Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.        
+        #[pallet::constant]
         type PendingFileDeletionRequestTtl: Get<u32>;
 
         /// Maximum number of file deletion requests a user can have pending.
@@ -458,6 +459,11 @@ pub mod pallet {
             bsp_id: ProviderIdFor<T>,
             file_key: MerkleHash<T>,
             new_root: MerkleHash<T>,
+        },
+        /// Notifies that a file key has been queued for a priority challenge for file deletion.
+        PriorityChallengeForFileDeletionQueued {
+            user: T::AccountId,
+            file_key: MerkleHash<T>,
         },
         /// Notifies that a priority challenge failed to be queued for pending file deletion.
         FailedToQueuePriorityChallenge {

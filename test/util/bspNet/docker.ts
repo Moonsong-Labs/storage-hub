@@ -71,6 +71,14 @@ export const addBspContainer = async (options?: {
     throw new Error("No bootnode found in docker args");
   }
 
+  let keystorePath: string;
+  const keystoreArg = Args.find((arg) => arg.includes("--keystore-path="));
+  if (keystoreArg) {
+    keystorePath = keystoreArg.split("=")[1];
+  } else {
+    keystorePath = "/keystore";
+  }
+
   const container = await docker.createContainer({
     Image: DOCKER_IMAGE,
     name: containerName,
@@ -85,14 +93,14 @@ export const addBspContainer = async (options?: {
         "9944/tcp": [{ HostPort: rpcPort.toString() }],
         [`${p2pPort}/tcp`]: [{ HostPort: p2pPort.toString() }]
       },
-      Binds: [`${process.cwd()}/../docker/dev-keystores:/keystore:ro`]
+      Binds: [`${process.cwd()}/../docker/dev-keystores:${keystorePath}:rw`]
     },
     Cmd: [
       "--dev",
       "--sealing=manual",
       "--provider",
       "--provider-type=bsp",
-      `--name=sh-bsp-${bspNum + 1}`,
+      `--name=${containerName}`,
       "--no-hardware-benchmarks",
       "--unsafe-rpc-external",
       "--rpc-methods=unsafe",
@@ -131,7 +139,7 @@ export const addBspContainer = async (options?: {
   await api.disconnect();
 
   console.log(
-    `▶️ BSP container started with name: docker-sh-bsp-${bspNum + 1}, rpc port: ${rpcPort}, p2p port: ${p2pPort}, peerId: ${peerId}`
+    `▶️ BSP container started with name: ${containerName}, rpc port: ${rpcPort}, p2p port: ${p2pPort}, peerId: ${peerId}`
   );
 
   return { containerName, rpcPort, p2pPort, peerId };

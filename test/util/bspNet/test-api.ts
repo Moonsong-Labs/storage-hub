@@ -54,6 +54,14 @@ export class BspNetTestApi implements AsyncDisposable {
     return Assertions.eventPresent(this._api, module, method, events);
   }
 
+  private advanceToBlock(blockNumber: number,
+    options?: {
+      waitBetweenBlocks?: number | boolean;
+      waitForBspProofs?: string[];
+    }) {
+    return BspNetBlock.skipTo(this._api, blockNumber, options?.waitBetweenBlocks, options?.waitForBspProofs);
+  }
+
   private enrichApi() {
     const remappedAssertNs = {
       ...Assertions,
@@ -109,6 +117,7 @@ export class BspNetTestApi implements AsyncDisposable {
       sendNewStorageRequest: this.sendNewStorageRequest.bind(this),
       createBucket: this.createBucket.bind(this),
       assertEvent: this.assertEvent.bind(this),
+      advanceToBlock: this.advanceToBlock.bind(this),
       assert: remappedAssertNs,
       wait: remappedWaitsNs,
       file: remappedFileNs,

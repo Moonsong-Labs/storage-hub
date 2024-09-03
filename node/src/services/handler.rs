@@ -5,9 +5,11 @@ use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::{EventBusListener, EventHandler},
 };
-use shc_blockchain_service::events::{ProcessSubmitProofRequest, SlashableProvider};
 use shc_blockchain_service::{
-    events::{NewChallengeSeed, NewStorageRequest, ProcessConfirmStoringRequest},
+    events::{
+        LastChargeableInfoUpdated, NewChallengeSeed, NewStorageRequest,
+        ProcessConfirmStoringRequest, ProcessSubmitProofRequest, SlashableProvider,
+    },
     BlockchainService,
 };
 use shc_file_manager::traits::FileStorage;
@@ -18,10 +20,10 @@ use shc_file_transfer_service::{
 use shc_forest_manager::traits::ForestStorage;
 use storage_hub_runtime::StorageProofsMerkleTrieLayout;
 
-use crate::tasks::sp_slash_provider::SlashProviderTask;
 use crate::tasks::{
-    bsp_download_file::BspDownloadFileTask, bsp_submit_proof::BspSubmitProofTask,
-    bsp_upload_file::BspUploadFileTask, user_sends_file::UserSendsFileTask,
+    bsp_charge_fees::BspChargeFeesTask, bsp_download_file::BspDownloadFileTask,
+    bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
+    sp_slash_provider::SlashProviderTask, user_sends_file::UserSendsFileTask,
 };
 
 /// Represents the handler for the Storage Hub service.
@@ -154,6 +156,16 @@ where
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         slashable_provider_event_bus_listener.start();
+
+        // Collect debt from users after a BSP proof is accepted.
+        let bsp_charge_fees_task = BspChargeFeesTask::new(self.clone());
+        let last_chargeable_info_updated_event_bus_listener: EventBusListener<
+            LastChargeableInfoUpdated,
+            _,
+        > = bsp_charge_fees_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        last_chargeable_info_updated_event_bus_listener.start();
     }
 
     pub fn start_msp_tasks(&self) {

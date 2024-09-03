@@ -27,7 +27,22 @@ export interface BspNetApi extends ApiPromise {
   ): Promise<SealedBlock>;
 
   /**
-   * Creates a new bucket and submits a new storage request.
+   * @description Advances the block number to the given block number.
+   *
+   * @param blockNumber - The block number to advance to.
+   * @param waitBetweenBlocks - Whether to wait between blocks. Defaults to false. Can also be set to a number to wait that many milliseconds between blocks.
+   * @returns A promise that resolves when the block number is advanced.
+   */
+  advanceToBlock: (
+    blockNumber: number,
+    options?: {
+      waitBetweenBlocks?: number | boolean;
+      waitForBspProofs?: string[];
+    }
+  ) => Promise<SealedBlock>;
+
+  /**
+   * @description Creates a new bucket and submits a new storage request.
    *
    * @param source - The local path to the file to be uploaded.
    * @param location - The StorageHub "location" field of the file to be uploaded.

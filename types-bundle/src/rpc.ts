@@ -44,15 +44,25 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
       params: [],
       type: "H256"
     },
-    rotateBcsvKeys: {
-      description: "Rotate (generate and insert) new keys of BCSV type for the Blockchain Service.",
+    insertBcsvKeys: {
+      description: "Generate and insert new keys of type BCSV into the keystore.",
       params: [
         {
           name: "seed",
-          type: "String"
+          type: "Option<String>"
         }
       ],
       type: "String"
+    },
+    removeBcsvKeys: {
+      description: "Remove keys of BCSV type for the Blockchain Service.",
+      params: [
+        {
+          name: "keystore_path",
+          type: "String"
+        }
+      ],
+      type: "()"
     }
   }
 };

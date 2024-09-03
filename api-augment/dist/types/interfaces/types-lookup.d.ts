@@ -1850,6 +1850,11 @@ declare module "@polkadot/types/lookup" {
       readonly fileKey: H256;
       readonly newRoot: H256;
     } & Struct;
+    readonly isPriorityChallengeForFileDeletionQueued: boolean;
+    readonly asPriorityChallengeForFileDeletionQueued: {
+      readonly user: AccountId32;
+      readonly fileKey: H256;
+    } & Struct;
     readonly isFailedToQueuePriorityChallenge: boolean;
     readonly asFailedToQueuePriorityChallenge: {
       readonly user: AccountId32;
@@ -1888,6 +1893,7 @@ declare module "@polkadot/types/lookup" {
       | "StorageRequestRevoked"
       | "BspRequestedToStopStoring"
       | "BspConfirmStoppedStoring"
+      | "PriorityChallengeForFileDeletionQueued"
       | "FailedToQueuePriorityChallenge"
       | "FileDeletionRequest"
       | "ProofSubmittedForPendingFileDeletionRequest"

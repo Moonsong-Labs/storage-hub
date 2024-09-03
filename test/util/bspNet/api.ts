@@ -8,7 +8,7 @@ import { types as BundledTypes } from "@storagehub/types-bundle";
 import { assertEventPresent } from "../asserts";
 import { createBucket, sendNewStorageRequest } from "./fileHelpers";
 import type { BspNetApi } from "./types";
-import { sealBlock } from "./block";
+import { advanceToBlock, sealBlock } from "./block";
 
 /**
  * DEPRECATED: Use BspNetTestApi.create() instead
@@ -32,6 +32,15 @@ export const createApiObject = async (
         | SubmittableExtrinsic<"promise", ISubmittableResult>[],
       signer?: KeyringPair
     ) => sealBlock(baseApi, calls, signer),
+
+    advanceToBlock: async (
+      blockNumber: number,
+      options?: {
+        waitBetweenBlocks?: number | boolean;
+        waitForBspProofs?: string[];
+      }
+    ) =>
+      advanceToBlock(baseApi, blockNumber, options?.waitBetweenBlocks, options?.waitForBspProofs),
 
     sendNewStorageRequest: async (source: string, location: string, bucketName: string) =>
       sendNewStorageRequest(baseApi, source, location, bucketName),
