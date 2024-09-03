@@ -44,6 +44,7 @@ import type {
   GetCheckpointChallengesError,
   GetLastTickProviderSubmittedProofError,
   GetNextDeadlineTickError,
+  GetUsersWithDebtOverThresholdError,
   ProviderId,
   QueryBspConfirmChunksToProveForFileError,
   QueryFileEarliestVolunteerBlockError,
@@ -294,6 +295,30 @@ declare module "@polkadot/api-base/types/calls" {
             | string
             | Uint8Array
         ) => Observable<Null>
+      >;
+      /**
+       * Generic call
+       **/
+      [key: string]: DecoratedCallBase<ApiType>;
+    };
+    /** 0x1078d7ac24a07b0e/1 */
+    paymentStreamsApi: {
+      /**
+       * Get the payment streams of a provider.
+       **/
+      getUsersOfPaymentStreamsOfProvider: AugmentedCall<
+        ApiType,
+        (providerId: ProviderId | string | Uint8Array) => Observable<Vec<AccountId>>
+      >;
+      /**
+       * Get the users that have a debt to the provider greater than the threshold.
+       **/
+      getUsersWithDebtOverThreshold: AugmentedCall<
+        ApiType,
+        (
+          providerId: ProviderId | string | Uint8Array,
+          threshold: Balance | AnyNumber | Uint8Array
+        ) => Observable<Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError>>
       >;
       /**
        * Generic call

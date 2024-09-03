@@ -84,6 +84,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       minWaitForStopStoring: u32 & AugmentedConst<ApiType>;
       /**
+       * Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.
+       **/
+      pendingFileDeletionRequestTtl: u32 & AugmentedConst<ApiType>;
+      /**
        * Time-to-live for a storage request.
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
@@ -260,6 +264,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxSubmittersPerTick: u32 & AugmentedConst<ApiType>;
       /**
+       * The minimum period in which a Provider can be challenged, regardless of their stake.
+       **/
+      minChallengePeriod: u32 & AugmentedConst<ApiType>;
+      /**
        * The number of random challenges that are generated per block, using the random seed
        * generated for that block.
        **/
@@ -267,7 +275,7 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * The ratio to convert staked balance to block period.
        * This is used to determine the period in which a Provider should submit a proof, based on
-       * their stake. The period is calculated as `stake / StakeToBlockPeriod`, saturating at 1.
+       * their stake. The period is calculated as `StakeToChallengePeriod / stake`, saturating at [`Config::MinChallengePeriod`].
        **/
       stakeToChallengePeriod: u128 & AugmentedConst<ApiType>;
       /**
@@ -314,6 +322,12 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxBuckets: u32 & AugmentedConst<ApiType>;
       /**
+       * The estimated maximum size of an unknown file.
+       *
+       * Used primarily to slash a Storage Provider when it fails to provide a chunk of data for an unknown file size.
+       **/
+      maxFileSize: u32 & AugmentedConst<ApiType>;
+      /**
        * The maximum amount of multiaddresses that a Storage Provider can have.
        **/
       maxMultiAddressAmount: u32 & AugmentedConst<ApiType>;
@@ -332,7 +346,7 @@ declare module "@polkadot/api-base/types/consts" {
       /**
        * The slash factor deducted from a Storage Provider's deposit for every single storage proof they fail to provide.
        **/
-      slashFactor: u128 & AugmentedConst<ApiType>;
+      slashAmountPerMaxFileSize: u128 & AugmentedConst<ApiType>;
       /**
        * The amount that a BSP receives as allocation of storage capacity when it deposits SpMinDeposit.
        **/

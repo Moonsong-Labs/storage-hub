@@ -1,5 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer_runtime_api::{
     GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
 };
@@ -16,6 +17,7 @@ use shc_common::types::{
     BlockNumber, ChunkId, ForestLeaf, ProviderId, RandomnessOutput, StorageProviderId,
     TrieRemoveMutation,
 };
+use storage_hub_runtime::{AccountId, Balance};
 
 use super::{
     handler::{BlockchainService, ConfirmStoringRequest, SubmitProofRequest},
@@ -99,6 +101,13 @@ pub enum BlockchainServiceCommand {
     QueryStorageProviderId {
         maybe_node_pub_key: Option<sp_core::sr25519::Public>,
         callback: tokio::sync::oneshot::Sender<Result<Option<StorageProviderId>>>,
+    },
+    QueryUsersWithDebt {
+        provider_id: ProviderId,
+        min_debt: Balance,
+        callback: tokio::sync::oneshot::Sender<
+            Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError>,
+        >,
     },
 }
 
@@ -195,6 +204,12 @@ pub trait BlockchainServiceInterface {
         &self,
         maybe_node_pub_key: Option<sp_core::sr25519::Public>,
     ) -> Result<Option<StorageProviderId>>;
+
+    async fn query_users_with_debt(
+        &self,
+        provider_id: ProviderId,
+        min_debt: Balance,
+    ) -> Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -420,6 +435,21 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryStorageProviderId {
             maybe_node_pub_key,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_users_with_debt(
+        &self,
+        provider_id: ProviderId,
+        min_debt: Balance,
+    ) -> Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryUsersWithDebt {
+            provider_id,
+            min_debt,
             callback,
         };
         self.send(message).await;

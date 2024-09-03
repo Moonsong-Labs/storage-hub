@@ -30,6 +30,7 @@ pallet-bucket-nfts = { workspace = true }
 pallet-file-system = { workspace = true }
 pallet-file-system-runtime-api = { workspace = true }
 pallet-payment-streams = { workspace = true }
+pallet-payment-streams-runtime-api = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-randomness = { workspace = true }
@@ -126,6 +127,8 @@ std = [
 	"pallet-file-system-runtime-api/std",
 	"pallet-message-queue/std",
 	"pallet-nfts/std",
+	"pallet-payment-streams/std",
+	"pallet-payment-streams-runtime-api/std",
 	"pallet-proofs-dealer/std",
 	"pallet-proofs-dealer-runtime-api/std",
 	"pallet-randomness/std",

@@ -1935,6 +1935,11 @@ declare module "@polkadot/types/lookup" {
       readonly fileKey: H256;
       readonly newRoot: H256;
     } & Struct;
+    readonly isPriorityChallengeForFileDeletionQueued: boolean;
+    readonly asPriorityChallengeForFileDeletionQueued: {
+      readonly user: AccountId32;
+      readonly fileKey: H256;
+    } & Struct;
     readonly isFailedToQueuePriorityChallenge: boolean;
     readonly asFailedToQueuePriorityChallenge: {
       readonly user: AccountId32;
@@ -1973,6 +1978,7 @@ declare module "@polkadot/types/lookup" {
       | "StorageRequestRevoked"
       | "BspRequestedToStopStoring"
       | "BspConfirmStoppedStoring"
+      | "PriorityChallengeForFileDeletionQueued"
       | "FailedToQueuePriorityChallenge"
       | "FileDeletionRequest"
       | "ProofSubmittedForPendingFileDeletionRequest"
@@ -2006,6 +2012,10 @@ declare module "@polkadot/types/lookup" {
       readonly provider: H256;
       readonly nextChallengeDeadline: u32;
     } & Struct;
+    readonly isNoRecordOfLastSubmittedProof: boolean;
+    readonly asNoRecordOfLastSubmittedProof: {
+      readonly provider: H256;
+    } & Struct;
     readonly isNewChallengeCycleInitialised: boolean;
     readonly asNewChallengeCycleInitialised: {
       readonly currentTick: u32;
@@ -2025,6 +2035,7 @@ declare module "@polkadot/types/lookup" {
       | "NewChallengeSeed"
       | "NewCheckpointChallenge"
       | "SlashableProvider"
+      | "NoRecordOfLastSubmittedProof"
       | "NewChallengeCycleInitialised"
       | "MutationsApplied";
   }
@@ -4784,15 +4795,6 @@ declare module "@polkadot/types/lookup" {
   /** @name PalletFileSystemStorageRequestBspsMetadata (401) */
   interface PalletFileSystemStorageRequestBspsMetadata extends Struct {
     readonly confirmed: bool;
-  }
-
-  /** @name PalletFileSystemExpiredItems (403) */
-  interface PalletFileSystemExpiredItems extends Enum {
-    readonly isStorageRequest: boolean;
-    readonly asStorageRequest: H256;
-    readonly isPendingFileDeletionRequests: boolean;
-    readonly asPendingFileDeletionRequests: ITuple<[AccountId32, H256]>;
-    readonly type: "StorageRequest" | "PendingFileDeletionRequests";
   }
 
   /** @name PalletFileSystemError (408) */

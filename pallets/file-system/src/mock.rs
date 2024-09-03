@@ -31,7 +31,7 @@ type AccountId = <AccountPublic as IdentifyAccount>::AccountId;
 
 const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10;
 const UNITS: Balance = 1_000_000_000_000;
-const STAKE_TO_CHALLENGE_PERIOD: Balance = 10 * UNITS;
+const STAKE_TO_CHALLENGE_PERIOD: Balance = 100 * UNITS;
 
 // We mock the Randomness trait to use a simple randomness function when testing the pallet
 const BLOCKS_BEFORE_RANDOMNESS_VALID: BlockNumber = 3;
@@ -188,30 +188,31 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
 }
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = H256;
-    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type ValuePropId = H256;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = MockSubmittingProviders;
+    type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
+    type SpMinDeposit = ConstU128<10>;
+    type SpMinCapacity = ConstU32<2>;
+    type DepositPerData = ConstU128<2>;
+    type MaxFileSize = ConstU32<{ u32::MAX }>;
     type MaxMultiAddressSize = MaxMultiAddressSize;
     type MaxMultiAddressAmount = MaxMultiAddressAmount;
     type MaxProtocols = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = ConstU128<10>;
     type BucketNameLimit = ConstU32<100>;
-    type SpMinDeposit = ConstU128<10>;
-    type SpMinCapacity = ConstU32<2>;
-    type DepositPerData = ConstU128<2>;
     type MaxBlocksForRandomness = ConstU64<{ EPOCH_DURATION_IN_BLOCKS * 2 }>;
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
-    type ProvidersRandomness = MockRandomness;
-    type SlashFactor = ConstU128<10>;
-    type ReputationWeightType = u32;
+    type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
+    type SlashAmountPerMaxFileSize = ConstU128<10>;
     type StartingReputationWeight = ConstU32<10>;
 }
 
@@ -262,6 +263,7 @@ impl pallet_proofs_dealer::Config for Test {
     type Treasury = TreasuryAccount;
     type RandomnessProvider = MockRandomness;
     type StakeToChallengePeriod = ConstU128<STAKE_TO_CHALLENGE_PERIOD>;
+    type MinChallengePeriod = ConstU64<4>;
     type ChallengeTicksTolerance = ConstU64<20>;
 }
 

@@ -9,7 +9,7 @@ use frame_support::{BoundedBTreeSet, Parameter};
 use scale_info::prelude::fmt::Debug;
 use scale_info::TypeInfo;
 use sp_core::Get;
-use sp_runtime::traits::{AtLeast32BitUnsigned, CheckedAdd, Hash, One, Saturating, Zero};
+use sp_runtime::traits::{AtLeast32BitUnsigned, CheckedAdd, Hash, One, Saturating};
 use sp_runtime::{BoundedVec, DispatchError};
 use sp_std::collections::btree_set::BTreeSet;
 use sp_std::vec::Vec;
@@ -106,8 +106,9 @@ pub trait ReadBucketsInterface {
     /// Check if a bucket is private.
     fn is_bucket_private(bucket_id: &Self::BucketId) -> Result<bool, DispatchError>;
 
-    /// Derive the Bucket Id of a bucket, from its owner and name.
+    /// Derive the Bucket Id of a bucket, from its MSP, owner and name.
     fn derive_bucket_id(
+        msp_id: &Self::ProviderId,
         owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
     ) -> Self::BucketId;
@@ -274,7 +275,7 @@ pub trait ReadStorageProvidersInterface {
         + One
         + Saturating
         + PartialOrd
-        + Zero;
+        + sp_runtime::traits::Zero;
 
     /// Check if provider is a BSP.
     fn is_bsp(who: &Self::ProviderId) -> bool;

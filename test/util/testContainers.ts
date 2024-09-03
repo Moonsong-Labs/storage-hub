@@ -15,7 +15,7 @@ export class DevTestContext implements AsyncDisposable {
   #disposed = false;
   #initialized = false;
 
-  constructor(public readonly options?: TestOptions) {}
+  constructor(public readonly options?: TCTestOptions) {}
 
   public async initialize() {
     const { extendedApi, runningContainer } = await devnodeSetup(this.options);
@@ -86,12 +86,12 @@ export type ExtendedApiPromise = ApiPromise & {
   createBlock: () => ReturnType<typeof createBlock>;
 };
 
-export type TestOptions = {
+export type TCTestOptions = {
   keepOpen?: boolean;
   printLogs?: boolean;
 };
 
-export const devnodeSetup = async (options?: TestOptions): Promise<TestApis> => {
+export const devnodeSetup = async (options?: TCTestOptions): Promise<TestApis> => {
   process.stdout.write("Starting container... ");
   const container = new GenericContainer("storage-hub:local")
     .withExposedPorts(9944)

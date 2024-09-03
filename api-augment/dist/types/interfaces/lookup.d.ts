@@ -1449,6 +1449,10 @@ declare const _default: {
         fileKey: string;
         newRoot: string;
       };
+      PriorityChallengeForFileDeletionQueued: {
+        user: string;
+        fileKey: string;
+      };
       FailedToQueuePriorityChallenge: {
         user: string;
         fileKey: string;
@@ -1497,6 +1501,9 @@ declare const _default: {
       SlashableProvider: {
         provider: string;
         nextChallengeDeadline: string;
+      };
+      NoRecordOfLastSubmittedProof: {
+        provider: string;
       };
       NewChallengeCycleInitialised: {
         currentTick: string;
@@ -3713,15 +3720,6 @@ declare const _default: {
    **/
   PalletFileSystemStorageRequestBspsMetadata: {
     confirmed: string;
-  };
-  /**
-   * Lookup403: pallet_file_system::types::ExpiredItems<T>
-   **/
-  PalletFileSystemExpiredItems: {
-    _enum: {
-      StorageRequest: string;
-      PendingFileDeletionRequests: string;
-    };
   };
   /**
    * Lookup408: pallet_file_system::pallet::Error<T>

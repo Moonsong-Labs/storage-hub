@@ -450,7 +450,7 @@ impl pallet_randomness::Config for Runtime {
 parameter_types! {
     pub const SpMinDeposit: Balance = 20 * UNIT;
     pub const BucketDeposit: Balance = 20 * UNIT;
-    pub const SlashFactor: Balance = 20 * UNIT;
+    pub const SlashAmountPerChunkOfStorageData: Balance = 20 * UNIT;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -462,30 +462,31 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
 }
 impl pallet_storage_providers::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type NativeBalance = Balances;
+    type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = u32;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
-    type DefaultMerkleRoot = DefaultMerkleRoot<StorageProofsMerkleTrieLayout>;
     type ValuePropId = Hash;
     type ReadAccessGroupId = <Self as pallet_nfts::Config>::CollectionId;
     type ProvidersProofSubmitters = ProofsDealer;
+    type ReputationWeightType = u32;
     type Treasury = TreasuryAccount;
+    type SpMinDeposit = SpMinDeposit;
+    type SpMinCapacity = ConstU32<2>;
+    type DepositPerData = ConstU128<2>;
+    type MaxFileSize = ConstU32<{ u32::MAX }>;
     type MaxMultiAddressSize = ConstU32<100>;
     type MaxMultiAddressAmount = ConstU32<5>;
     type MaxProtocols = ConstU32<100>;
     type MaxBuckets = ConstU32<10000>;
     type BucketDeposit = BucketDeposit;
     type BucketNameLimit = ConstU32<100>;
-    type SpMinDeposit = SpMinDeposit;
-    type SpMinCapacity = ConstU32<2>;
-    type DepositPerData = ConstU128<2>;
-    type RuntimeHoldReason = RuntimeHoldReason;
-    type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = ConstU32<10>;
-    type SlashFactor = SlashFactor;
-    type ReputationWeightType = u32;
+    type DefaultMerkleRoot = DefaultMerkleRoot<StorageProofsMerkleTrieLayout>;
+    type SlashAmountPerMaxFileSize = SlashAmountPerChunkOfStorageData;
     type StartingReputationWeight = ConstU32<10>;
 }
 
@@ -528,7 +529,8 @@ parameter_types! {
     pub const ChallengesQueueLength: u32 = 100;
     pub const CheckpointChallengePeriod: u32 = 10;
     pub const ChallengesFee: Balance = 1 * UNIT;
-    pub const StakeToChallengePeriod: Balance = 10 * UNIT;
+    pub const StakeToChallengePeriod: Balance = 200 * UNIT; // TODO: Change this value into something much higher like 1_000_000 * UNIT
+    pub const MinChallengePeriod: u32 = 30;
     pub const ChallengeTicksTolerance: u32 = 50;
     pub const MaxSubmittersPerTick: u32 = 1000; // TODO: Change this value after benchmarking for it to coincide with the implicit limit given by maximum block weight
     pub const TargetTicksStorageOfSubmitters: u32 = 3;
@@ -559,6 +561,7 @@ impl pallet_proofs_dealer::Config for Runtime {
     type Treasury = TreasuryAccount;
     type RandomnessProvider = pallet_randomness::ParentBlockRandomness<Runtime>;
     type StakeToChallengePeriod = StakeToChallengePeriod;
+    type MinChallengePeriod = MinChallengePeriod;
     type ChallengeTicksTolerance = ChallengeTicksTolerance;
 }
 

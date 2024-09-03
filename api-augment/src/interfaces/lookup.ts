@@ -1465,6 +1465,10 @@ export default {
         fileKey: "H256",
         newRoot: "H256"
       },
+      PriorityChallengeForFileDeletionQueued: {
+        user: "AccountId32",
+        fileKey: "H256"
+      },
       FailedToQueuePriorityChallenge: {
         user: "AccountId32",
         fileKey: "H256"
@@ -1513,6 +1517,9 @@ export default {
       SlashableProvider: {
         provider: "H256",
         nextChallengeDeadline: "u32"
+      },
+      NoRecordOfLastSubmittedProof: {
+        provider: "H256"
       },
       NewChallengeCycleInitialised: {
         currentTick: "u32",
@@ -3858,15 +3865,6 @@ export default {
    **/
   PalletFileSystemStorageRequestBspsMetadata: {
     confirmed: "bool"
-  },
-  /**
-   * Lookup403: pallet_file_system::types::ExpiredItems<T>
-   **/
-  PalletFileSystemExpiredItems: {
-    _enum: {
-      StorageRequest: "H256",
-      PendingFileDeletionRequests: "(AccountId32,H256)"
-    }
   },
   /**
    * Lookup408: pallet_file_system::pallet::Error<T>

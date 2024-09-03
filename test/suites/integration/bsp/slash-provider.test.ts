@@ -1,27 +1,20 @@
 import "@storagehub/api-augment";
+import { sleep } from "@zombienet/utils";
 import { strictEqual } from "node:assert";
-import { after, before, describe, it } from "node:test";
 import {
-  NODE_INFOS,
-  createApiObject,
   type BspNetApi,
-  cleardownTest,
+  createApiObject,
+  describeBspNet,
   DUMMY_BSP_ID,
   fetchEventData,
-  runSimpleBspNet
+  NODE_INFOS
 } from "../../../util";
-import { sleep } from "@zombienet/utils";
 
-describe("BSPNet: Slash Provider", () => {
+describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, it }) => {
   let api: BspNetApi;
 
   before(async () => {
-    await runSimpleBspNet({ noisy: false, rocksdb: false });
-    api = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
-  });
-
-  after(async () => {
-    await cleardownTest({ api });
+    api = await createUserApi();
   });
 
   it("Network launches and can be queried", async () => {
@@ -127,7 +120,8 @@ async function runToNextChallengePeriodBlock(
   const slashableProviders = await api.query.proofsDealer.slashableProviders(provider);
   strictEqual(
     slashableProviders.unwrap().toNumber(),
-    oldFailedSubmissionsCount.unwrapOrDefault().toNumber() + 1
+    oldFailedSubmissionsCount.unwrapOrDefault().toNumber() +
+      api.consts.proofsDealer.randomChallengesPerBlock.toNumber()
   );
 
   return nextChallengeDeadline.toNumber();

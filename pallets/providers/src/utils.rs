@@ -5,7 +5,7 @@ use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 use frame_support::sp_runtime::{
     traits::{CheckedAdd, CheckedMul, CheckedSub, One, Saturating, Zero},
-    ArithmeticError, DispatchError,
+    ArithmeticError, BoundedVec, DispatchError,
 };
 use frame_support::traits::tokens::Restriction;
 use frame_support::traits::{
@@ -21,7 +21,6 @@ use shp_traits::{
     ReadChallengeableProvidersInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
     SystemMetricsInterface,
 };
-use sp_runtime::BoundedVec;
 use types::StorageProviderId;
 
 use crate::*;
@@ -688,7 +687,7 @@ where
 
     /// Slash a Storage Provider.
     ///
-    /// The amount slashed is calculated as the product of the [`SlashFactor`] and the accrued failed proof submissions.
+    /// The amount slashed is calculated as the product of the [`SlashAmountPerChunkOfStorageData`] and the accrued failed proof submissions.
     /// The amount is then slashed from the Storage Provider's held deposit and transferred to the treasury.
     ///
     /// This will return an error when the Storage Provider is not slashable. In the context of the StorageHub protocol,
@@ -704,8 +703,10 @@ where
             return Err(Error::<T>::ProviderNotSlashable.into());
         };
 
-        // Calculate the amount to be slashed.
-        let slashable_amount = T::SlashFactor::get() * <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id).ok_or(Error::<T>::ProviderNotSlashable)?.into();
+        // Calculate slashable amount.
+        // Doubling the slash for each failed proof submission is necessary since it is more probabilistic for a Storage Provider to have
+        // responded with two file key proofs given a random or custom challenge.
+        let slashable_amount = Self::compute_worst_case_scenario_slashable_amount(provider_id)?;
 
         let amount_slashed = T::NativeBalance::transfer_on_hold(
             &HoldReason::StorageProviderDeposit.into(),
@@ -793,6 +794,24 @@ where
 
         Ok(())
     }
+
+    /// Compute the worst case scenario slashable amount for a Storage Provider.
+    ///
+    /// Every failed proof submission counts as for two files which should have been proven due to the low probability of a challenge
+    /// being an exact match to a file key stored by the Storage Provider. The StorageHub protocol requires the Storage Provider to
+    /// submit a proof of storage for the neighboring file keys of the missing challenged file key.
+    ///
+    /// The slashing amount is calculated based on an assumption that every file is the maximum size allowed by the protocol.
+    pub fn compute_worst_case_scenario_slashable_amount(
+        provider_id: &HashId<T>,
+    ) -> Result<BalanceOf<T>, DispatchError> {
+        let accrued_failed_submission_count = <T::ProvidersProofSubmitters as ProofSubmittersInterface>::get_accrued_failed_proof_submissions(&provider_id)
+            .ok_or(Error::<T>::ProviderNotSlashable)?.into();
+
+        Ok(T::SlashAmountPerMaxFileSize::get()
+            .saturating_mul(accrued_failed_submission_count)
+            .saturating_mul(2u32.into()))
+    }
 }
 
 impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
@@ -820,13 +839,19 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
     type MerkleHash = MerklePatriciaRoot<T>;
 
     fn derive_bucket_id(
+        msp_id: &Self::ProviderId,
         owner: &Self::AccountId,
         bucket_name: BoundedVec<u8, Self::BucketNameLimit>,
     ) -> Self::BucketId {
-        let concat = owner
+        let concat = msp_id
             .encode()
             .into_iter()
-            .chain(bucket_name.encode().into_iter())
+            .chain(
+                owner
+                    .encode()
+                    .into_iter()
+                    .chain(bucket_name.encode().into_iter()),
+            )
             .collect::<scale_info::prelude::vec::Vec<u8>>();
 
         <<T as frame_system::Config>::Hashing as sp_runtime::traits::Hash>::hash(&concat)

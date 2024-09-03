@@ -44,6 +44,11 @@ impl SubmittedTransaction {
         }
     }
 
+    /// Getter for the transaction hash.
+    pub fn hash(&self) -> ExtrinsicHash {
+        self.hash
+    }
+
     /// Sets the timeout for the transaction.
     ///
     /// If the transaction is not successful within the specified timeout, it will be considered
