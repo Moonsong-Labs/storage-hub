@@ -1,4 +1,3 @@
-import "@storagehub/api-augment";
 import { notEqual, strictEqual } from "node:assert";
 import { assert } from "node:console";
 import {

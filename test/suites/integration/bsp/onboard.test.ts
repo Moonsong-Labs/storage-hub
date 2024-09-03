@@ -1,4 +1,3 @@
-import "@storagehub/api-augment";
 import Docker from "dockerode";
 import { strictEqual } from "node:assert";
 import { addBspContainer, describeBspNet, DOCKER_IMAGE, type EnrichedBspApi } from "../../../util";

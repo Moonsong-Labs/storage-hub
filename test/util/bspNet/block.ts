@@ -14,6 +14,8 @@ import { isExtSuccess } from "../extrinsics";
 import { sleep } from "../timer";
 import type { EnrichedBspApi } from "./test-api";
 import { ShConsts } from "./consts";
+import { strictEqual } from "node:assert";
+import { Assertions } from "../asserts";
 
 export interface SealedBlock {
   blockReceipt: CreatedBlock;
@@ -114,6 +116,7 @@ export const skipBlocks = async (api: ApiPromise, blocksToSkip: number) => {
   console.log(`\tSkipping ${blocksToSkip} blocks...`);
   for (let i = 0; i < blocksToSkip; i++) {
     await sealBlock(api);
+    await sleep(50);
   }
 };
 
@@ -138,8 +141,53 @@ export const skipBlocksToMinChangeTime: (
   }
 };
 
+export async function runToNextChallengePeriodBlock(
+  api: ApiPromise,
+  nextChallengeTick: number,
+  provider: string
+): Promise<number> {
+  // Assert that challengeTickToChallengedProviders contains an entry for the challenged provider
+  const challengeTickToChallengedProviders =
+    await api.query.proofsDealer.challengeTickToChallengedProviders(nextChallengeTick, provider);
+  strictEqual(challengeTickToChallengedProviders.isSome, true);
+
+  const currentHeight = (await api.rpc.chain.getHeader()).number.toNumber();
+
+  const blocksToSkip = nextChallengeTick - currentHeight - 1;
+  console.log("Current height: ", currentHeight);
+  console.log("Next challenge tick: ", nextChallengeTick);
+  console.log("Blocks to skip: ", blocksToSkip);
+  console.log(`\tSkipping ${blocksToSkip} blocks to reach next challenge period...`);
+  if (blocksToSkip > 0) {
+    await skipBlocks(api, nextChallengeTick);
+  } else {
+    throw new Error("Already past next challenge period");
+  }
+
+  const oldFailedSubmissionsCount = await api.query.proofsDealer.slashableProviders(provider);
+  console.log(`Block is now : ${(await api.rpc.chain.getHeader()).number.toNumber()}`);
+  // Assert that the SlashableProvider event is emitted.
+  const blockResult = await sealBlock(api);
+
+  const [_provider, nextChallengeDeadline] = Assertions.fetchEvent(
+    api.events.proofsDealer.SlashableProvider,
+    blockResult.events
+  );
+
+  // Check provider is slashable for 1 additional failed submission.
+  const slashableProviders = await api.query.proofsDealer.slashableProviders(provider);
+  strictEqual(
+    slashableProviders.unwrap().toNumber(),
+    oldFailedSubmissionsCount.unwrapOrDefault().toNumber() +
+      api.consts.proofsDealer.randomChallengesPerBlock.toNumber()
+  );
+
+  return nextChallengeDeadline.toNumber();
+}
+
 export namespace BspNetBlock {
   export const seal = sealBlock;
   export const skip = skipBlocks;
   export const skipToMinChangeTime = skipBlocksToMinChangeTime;
+  export const skipToChallengePeriod = runToNextChallengePeriodBlock;
 }

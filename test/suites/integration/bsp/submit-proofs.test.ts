@@ -1,4 +1,3 @@
-import "@storagehub/api-augment";
 import assert, { strictEqual } from "node:assert";
 import {
   describeBspNet,
@@ -67,9 +66,7 @@ describeBspNet(
       const blocksToAdvance = nextChallengeTick - currentBlockNumber;
 
       // Advance blocksToAdvance blocks.
-      for (let i = 0; i < blocksToAdvance; i++) {
-        await userApi.sealBlock();
-      }
+      await userApi.block.skip(blocksToAdvance);
 
       // Wait for tasks to execute and for the BSPs to submit proofs.
       await sleep(500);

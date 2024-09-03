@@ -1,4 +1,3 @@
-import "@storagehub/api-augment";
 import { strictEqual } from "node:assert";
 import { describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
 

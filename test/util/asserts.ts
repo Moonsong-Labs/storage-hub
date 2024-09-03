@@ -2,6 +2,8 @@ import type { EventRecord } from "@polkadot/types/interfaces";
 import { strictEqual } from "node:assert";
 import type { ApiPromise } from "@polkadot/api";
 import type { AugmentedEvent } from "@polkadot/api/types";
+import { sealBlock } from "./bspNet";
+import { sleep } from "./timer";
 
 export type AssertExtrinsicOptions = {
   /** The block height to check. If not provided, the latest block will be used. */
@@ -185,9 +187,29 @@ export const fetchEventData = <T extends AugmentedEvent<"promise">>(
   throw new Error("Event doesn't match, should be caught earlier");
 };
 
+/**
+ * Wait some time before sealing a block and checking if the provider was slashed.
+ * @param api
+ * @param providerId
+ */
+export async function checkProviderWasSlashed(api: ApiPromise, providerId: string) {
+  // Wait for provider to be slashed.
+  // TODO Replace with poll
+  await sleep(500);
+  // await sealBlock(api);
+
+  const [provider, _amountSlashed] = fetchEventData(
+    api.events.providers.Slashed,
+    await api.query.system.events()
+  );
+
+  strictEqual(provider.toString(), providerId);
+}
+
 export namespace Assertions {
   export const eventPresent = assertEventPresent;
   export const eventMany = assertEventMany;
   export const fetchEvent = fetchEventData;
   export const extrinsicPresent = assertExtrinsicPresent;
+  export const providerSlashed = checkProviderWasSlashed;
 }

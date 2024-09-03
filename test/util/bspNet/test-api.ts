@@ -100,7 +100,8 @@ export class BspNetTestApi implements AsyncDisposable {
           | SubmittableExtrinsic<"promise", ISubmittableResult>[],
         signer?: KeyringPair
       ) => BspNetBlock.seal(this._api, calls, signer),
-      skip: (blocksToSkip: number) => BspNetBlock.skip(this._api, blocksToSkip)
+      skipToChallengePeriod: (nextChallengeTick: number, provider: string) =>
+        BspNetBlock.skipToChallengePeriod(this._api, nextChallengeTick, provider)
     };
 
     return Object.assign(this._api, {
