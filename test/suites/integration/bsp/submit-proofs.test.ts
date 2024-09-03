@@ -30,8 +30,8 @@ describeBspNet(
     //   fingerprint: string;
     //   fileSize: number;
     // };
-    let oneBspFileData: FileMetadata
-    
+    let oneBspFileData: FileMetadata;
+
     // {
     //   fileKey: string;
     //   bucketId: string;
@@ -243,7 +243,7 @@ describeBspNet(
       // Wait for the remaining BSP to volunteer.
       await sleep(500);
 
-      const volunteerPending = await userApi.assert.extrinsicPresent( {
+      const volunteerPending = await userApi.assert.extrinsicPresent({
         module: "fileSystem",
         method: "bspVolunteer",
         checkTxPool: true
@@ -283,13 +283,15 @@ describeBspNet(
       // extrinsic. So we advance two challenge periods ahead to be sure.
 
       // First we get the last tick for which the BSP submitted a proof.
-      const lastTickResult =
-        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(ShConsts.DUMMY_BSP_ID);
+      const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+        ShConsts.DUMMY_BSP_ID
+      );
       assert(lastTickResult.isOk);
       const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
       // Then we get the challenge period for the BSP.
-      const challengePeriodResult =
-        await userApi.call.proofsDealerApi.getChallengePeriod(ShConsts.DUMMY_BSP_ID);
+      const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+        ShConsts.DUMMY_BSP_ID
+      );
       assert(challengePeriodResult.isOk);
       const challengePeriod = challengePeriodResult.asOk.toNumber();
       // Then we calculate two challenge ticks ahead.
@@ -301,7 +303,7 @@ describeBspNet(
       await sleep(1000);
 
       // There should be at least one pending submit proof transaction.
-      const submitProofsPending = await userApi.assert.extrinsicPresent( {
+      const submitProofsPending = await userApi.assert.extrinsicPresent({
         module: "proofsDealer",
         method: "submitProof",
         checkTxPool: true
@@ -343,7 +345,7 @@ describeBspNet(
       // There shouldn't be any pending volunteer transactions.
       await assert.rejects(
         async () => {
-          await userApi.assert.extrinsicPresent( {
+          await userApi.assert.extrinsicPresent({
             module: "fileSystem",
             method: "bspVolunteer",
             checkTxPool: true
@@ -401,7 +403,7 @@ describeBspNet(
         await userApi.advanceToBlock(nextChallengeTick);
 
         // There should be at least one pending submit proof transaction.
-        const submitProofsPending = await userApi.assert.extrinsicPresent( {
+        const submitProofsPending = await userApi.assert.extrinsicPresent({
           module: "proofsDealer",
           method: "submitProof",
           checkTxPool: true
@@ -542,8 +544,9 @@ describeBspNet(
       assert(dummyBspLastTickResult.isOk);
       const lastTickBspSubmittedProof = dummyBspLastTickResult.asOk.toNumber();
       // Then we get the challenge period for the BSP.
-      const dummyBspChallengePeriodResult =
-        await userApi.call.proofsDealerApi.getChallengePeriod(ShConsts.DUMMY_BSP_ID);
+      const dummyBspChallengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+        ShConsts.DUMMY_BSP_ID
+      );
       assert(dummyBspChallengePeriodResult.isOk);
       const dummyBspChallengePeriod = dummyBspChallengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.

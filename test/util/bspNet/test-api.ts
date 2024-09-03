@@ -54,12 +54,19 @@ export class BspNetTestApi implements AsyncDisposable {
     return Assertions.eventPresent(this._api, module, method, events);
   }
 
-  private advanceToBlock(blockNumber: number,
+  private advanceToBlock(
+    blockNumber: number,
     options?: {
       waitBetweenBlocks?: number | boolean;
       waitForBspProofs?: string[];
-    }) {
-    return BspNetBlock.skipTo(this._api, blockNumber, options?.waitBetweenBlocks, options?.waitForBspProofs);
+    }
+  ) {
+    return BspNetBlock.skipTo(
+      this._api,
+      blockNumber,
+      options?.waitBetweenBlocks,
+      options?.waitForBspProofs
+    );
   }
 
   private enrichApi() {

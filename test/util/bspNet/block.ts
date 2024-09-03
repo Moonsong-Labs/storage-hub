@@ -185,7 +185,6 @@ export async function runToNextChallengePeriodBlock(
   return nextChallengeDeadline.toNumber();
 }
 
-
 export const advanceToBlock = async (
   api: ApiPromise,
   blockNumber: number,
@@ -263,7 +262,7 @@ export const advanceToBlock = async (
 export namespace BspNetBlock {
   export const seal = sealBlock;
   export const skip = skipBlocks;
-  export const skipTo = advanceToBlock
+  export const skipTo = advanceToBlock;
   export const skipToMinChangeTime = skipBlocksToMinChangeTime;
   export const skipToChallengePeriod = runToNextChallengePeriodBlock;
 }
