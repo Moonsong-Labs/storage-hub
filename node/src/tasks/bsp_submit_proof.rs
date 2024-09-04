@@ -9,8 +9,7 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{
-        FinalisedTrieRemoveMutationsApplied, MultipleNewChallengeSeeds, NewChallengeSeed,
-        ProcessSubmitProofRequest,
+        FinalisedTrieRemoveMutationsApplied, MultipleNewChallengeSeeds, ProcessSubmitProofRequest,
     },
     types::SubmitProofRequest,
 };
@@ -29,15 +28,16 @@ const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
 /// BSP Submit Proof Task: Handles the submission of proof for BSP (Backup Storage Provider) to the runtime.
 ///
 /// The flow includes the following steps:
-/// - **NewChallengeSeed Event:**
+/// - **MultipleNewChallengeSeeds Event:**
 ///   - Triggered by the on-chain generation of a new challenge seed.
-///   - Derives forest challenges from the seed.
-///   - Checks for any checkpoint challenges and adds them to the forest challenges.
-///   - Queues the challenges for submission to the runtime, to be processed when the Forest write lock is released.
+///   - For each seed:
+///     - Derives forest challenges from the seed.
+///     - Checks for any checkpoint challenges and adds them to the forest challenges.
+///     - Queues the challenges for submission to the runtime, to be processed when the Forest write lock is released.
 ///
 /// - **ProcessSubmitProofRequest Event:**
 ///   - Triggered when the Blockchain Service detects that the Forest write lock has been released.
-///   - Generates proofs for the queued challenges derived from the `NewChallengeSeed`.
+///   - Generates proofs for the queued challenges derived from the seed in the [`MultipleNewChallengeSeeds`] event.
 ///   - Constructs key proofs for each file key involved in the challenges.
 ///   - Submits the proofs to the runtime, with up to [`MAX_PROOF_SUBMISSION_ATTEMPTS`] retries on failure.
 ///   - Applies any necessary mutations to the Forest Storage (but not the File Storage).
@@ -82,38 +82,14 @@ where
     }
 }
 
-/// Handles the `NewChallengeSeed` event.
-///
-/// This event is triggered by an on-chain event of a new challenge seed being generated. The task performs the following actions:
-/// - Derives forest challenges from the seed.
-/// - Checks for checkpoint challenges and adds them to the forest challenges.
-/// - Queues the challenges for submission to the runtime, for when the Forest write lock is released.
-impl<FL, FSH> EventHandler<NewChallengeSeed> for BspSubmitProofTask<FL, FSH>
-where
-    FL: FileStorageT,
-    FSH: BspForestStorageHandlerT,
-{
-    async fn handle_event(&mut self, event: NewChallengeSeed) -> anyhow::Result<()> {
-        info!(
-            target: LOG_TARGET,
-            "Initiating BSP proof submission for BSP ID: {:?}, at tick: {:?}, with seed: {:?}",
-            event.provider_id,
-            event.tick,
-            event.seed
-        );
-        let provider_id = event.provider_id;
-        let tick = event.tick;
-        let seed = event.seed;
-
-        self.queue_submit_proof_request(provider_id, tick, seed)
-            .await
-    }
-}
-
 /// Handles the `MultipleNewChallengeSeeds` event.
 ///
 /// This event is triggered when catching up to proof submissions, and there are multiple new challenge seeds
 /// that have to be responded in order. It queues the proof submissions for the given seeds.
+/// The task performs the following actions for each seed:
+/// - Derives forest challenges from the seed.
+/// - Checks for checkpoint challenges and adds them to the forest challenges.
+/// - Queues the challenges for submission to the runtime, for when the Forest write lock is released.
 impl<FL, FSH> EventHandler<MultipleNewChallengeSeeds> for BspSubmitProofTask<FL, FSH>
 where
     FL: FileStorageT,

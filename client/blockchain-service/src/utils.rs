@@ -558,7 +558,7 @@ impl BlockchainService {
         }
     }
 
-    /// Emits `NewChallengeSeed` events for all the pending proof submissions for this provider.
+    /// Emits a `MultipleNewChallengeSeeds` event with all the pending proof submissions for this provider.
     /// This is used to catch up to the latest proof submissions that were missed due to a node restart.
     /// Also, it can help to catch up to proofs in case there is a change in the BSP's stake (therefore
     /// also a change in it's challenge period).
@@ -632,7 +632,7 @@ impl BlockchainService {
             }
         };
 
-        // Advance by `challenge_period` ticks and generate `NewChallengeSeed` events for the provider.
+        // Advance by `challenge_period` ticks and add the seed to the list of challenge seeds.
         let mut challenge_seeds = Vec::new();
         let mut next_challenge_tick = last_tick_provider_submitted_proof + challenge_period;
         while next_challenge_tick <= current_tick {

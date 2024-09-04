@@ -7,8 +7,6 @@ use shc_common::types::{BlockNumber, ProviderId, RandomnessOutput, TrieRemoveMut
 use sp_core::H256;
 use sp_runtime::DispatchError;
 
-use crate::events::NewChallengeSeed;
-
 /// A struct that holds the information to submit a storage proof.
 ///
 /// This struct is used as an item in the `pending_submit_proof_requests` queue.
@@ -33,20 +31,6 @@ impl SubmitProofRequest {
             provider_id,
             tick,
             seed,
-            forest_challenges,
-            checkpoint_challenges,
-        }
-    }
-
-    pub fn new_from_event(
-        new_challenge_seed_event: NewChallengeSeed,
-        forest_challenges: Vec<H256>,
-        checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
-    ) -> Self {
-        Self {
-            provider_id: new_challenge_seed_event.provider_id,
-            tick: new_challenge_seed_event.tick,
-            seed: new_challenge_seed_event.seed,
             forest_challenges,
             checkpoint_challenges,
         }
