@@ -795,7 +795,7 @@ impl BlockchainService {
                         RuntimeEvent::ProofsDealer(
                             pallet_proofs_dealer::Event::NewChallengeSeed {
                                 challenges_ticker,
-                                seed,
+                                seed: _,
                             },
                         ) => {
                             // For each Provider ID this node monitors...
@@ -806,11 +806,7 @@ impl BlockchainService {
                                     provider_id,
                                     &challenges_ticker,
                                 ) {
-                                    self.emit(NewChallengeSeed {
-                                        provider_id: *provider_id,
-                                        tick: challenges_ticker,
-                                        seed,
-                                    })
+                                    self.proof_submission_catch_up(&block_hash, provider_id);
                                 } else {
                                     trace!(target: LOG_TARGET, "Challenges tick is not the next one to be submitted for Provider [{:?}]", provider_id);
                                 }

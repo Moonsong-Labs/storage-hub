@@ -5,7 +5,7 @@ use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
 use frame_support::{StorageHasher, Twox128};
 use lazy_static::lazy_static;
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, trace, warn};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetLastTickProviderSubmittedProofError,
     ProofsDealerApi,
@@ -34,7 +34,7 @@ use crate::{
         ProcessConfirmStoringRequestData, ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
-    state::{LastProcessedBlockNumberCf, OngoingProcessConfirmStoringRequestCf},
+    state::OngoingProcessConfirmStoringRequestCf,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{EventsVec, Extrinsic},
     BlockchainService,
@@ -375,6 +375,7 @@ impl BlockchainService {
         provider_id: &ProviderId,
         current_tick: &BlockNumber,
     ) -> bool {
+        // Get the last tick for which the BSP submitted a proof.
         let last_tick_provided = match self
             .client
             .runtime_api()
@@ -402,6 +403,8 @@ impl BlockchainService {
                 return false;
             }
         };
+
+        // Get the challenge period for the provider.
         let provider_challenge_period = match self
             .client
             .runtime_api()
@@ -421,7 +424,18 @@ impl BlockchainService {
                 return false;
             }
         };
-        current_tick == &last_tick_provided.saturating_add(provider_challenge_period)
+
+        // Check if the current tick is a tick this provider should submit a proof for.
+        let current_tick_minus_last_submission = match current_tick.checked_sub(last_tick_provided)
+        {
+            Some(tick) => tick,
+            None => {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Current tick is smaller than the last tick this provider submitted a proof for. This should not happen. \nThis is a bug. Please report it to the StorageHub team.");
+                return false;
+            }
+        };
+
+        (current_tick_minus_last_submission % provider_challenge_period) == 0
     }
 
     /// Check if there are any pending requests to update the forest root on the runtime, and process them.
@@ -551,7 +565,7 @@ impl BlockchainService {
     ///
     /// IMPORTANT: This function takes into account whether a proof should be submitted for the current tick.
     pub(crate) fn proof_submission_catch_up(
-        &mut self,
+        &self,
         current_block_hash: &H256,
         provider_id: &ProviderId,
     ) {
