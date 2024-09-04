@@ -1,6 +1,8 @@
 use anyhow::anyhow;
+use codec::{Decode, Encode};
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
     str::FromStr,
     sync::Arc,
 };
@@ -26,6 +28,7 @@ use storage_hub_runtime::RuntimeEvent;
 use pallet_file_system_runtime_api::{
     FileSystemApi, QueryBspConfirmChunksToProveForFileError, QueryFileEarliestVolunteerBlockError,
 };
+use pallet_payment_streams_runtime_api::{GetUsersWithDebtOverThresholdError, PaymentStreamsApi};
 use pallet_proofs_dealer_runtime_api::{
     GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError, ProofsDealerApi,
 };
@@ -34,14 +37,21 @@ use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
 use crate::{
     commands::BlockchainServiceCommand,
     events::{
-        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, FinalisedMutationsApplied,
-        NewChallengeSeed, NewStorageRequest, SlashableProvider,
+        AcceptedBspVolunteer, BlockchainServiceEventBusProvider,
+        FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewChallengeSeed,
+        NewStorageRequest, SlashableProvider,
+    },
+    state::{
+        BlockchainServiceStateStore, LastProcessedBlockNumberCf, OngoingForestWriteLockTaskDataCf,
+        OngoingNewChallengeSeedEventsCf,
     },
     transaction::SubmittedTransaction,
+    typed_store::{CFDequeAPI, ProvidesTypedDbAccess, ProvidesTypedDbSingleAccess},
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
 
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct SubmitProofRequest {
     pub provider_id: ProviderId,
     pub tick: BlockNumber,
@@ -66,10 +76,10 @@ impl SubmitProofRequest {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct ConfirmStoringRequest {
     pub file_key: H256,
-    pub try_count: usize,
+    pub try_count: u32,
 }
 
 impl ConfirmStoringRequest {
@@ -108,18 +118,14 @@ pub struct BlockchainService {
     /// This could be a BSP or a list of buckets that an MSP has.
     pub(crate) provider_ids: BTreeSet<ProviderId>,
     /// A lock to prevent multiple tasks from writing to the runtime forest root (send transactions) at the same time.
-    /// This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
-    /// T so that we can keep using the current actors event bus (emit) which requires Clone on the
-    /// event. Clone is required because there is no constraint on the number of listeners that can
-    /// subscribe to the event (and each is guaranteed to receive all emitted events).
-    /// Also, this is a oneshot channel instead of a regular mutex because we want to "lock" in 1
+    /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
     /// thread (blockchain service) and unlock it at the end of the spawned task. The alternative
     /// would be to send a [`MutexGuard`].
     pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
-    /// A list of [SubmitProofRequest] that are waiting to be processed (sent to the runtime).
-    pub(crate) pending_submit_proof: VecDeque<SubmitProofRequest>,
-    /// A list of [ConfirmStoringRequest] that are waiting to be processed (sent to the runtime).
-    pub(crate) pending_confirm_storing: VecDeque<ConfirmStoringRequest>,
+    /// A flag to know if we have received the first block import notification.
+    pub(crate) first_block_import_notification: bool,
+    /// A persistent state store for the BlockchainService actor.
+    pub(crate) persistent_state: BlockchainServiceStateStore,
 }
 
 /// Event loop for the BlockchainService actor.
@@ -514,7 +520,11 @@ impl Actor for BlockchainService {
                     }
                 }
                 BlockchainServiceCommand::QueueConfirmBspRequest { request, callback } => {
-                    self.pending_confirm_storing.push_back(request);
+                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                    state_store_context
+                        .pending_confirm_storing_request_deque()
+                        .push_back(request);
+                    state_store_context.commit();
                     // We check right away if we can process the request so we don't waste time.
                     self.check_pending_forest_root_writes();
                     match callback.send(Ok(())) {
@@ -525,7 +535,14 @@ impl Actor for BlockchainService {
                     }
                 }
                 BlockchainServiceCommand::QueueSubmitProofRequest { request, callback } => {
-                    self.pending_submit_proof.push_back(request);
+                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                    state_store_context
+                        .access(&OngoingNewChallengeSeedEventsCf)
+                        .delete(&request.seed);
+                    state_store_context
+                        .pending_submit_proof_request_deque()
+                        .push_back(request);
+                    state_store_context.commit();
                     // We check right away if we can process the request so we don't waste time.
                     self.check_pending_forest_root_writes();
                     match callback.send(Ok(())) {
@@ -557,6 +574,33 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryUsersWithDebt {
+                    provider_id,
+                    min_debt,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let users_with_debt = self
+                        .client
+                        .runtime_api()
+                        .get_users_with_debt_over_threshold(
+                            current_block_hash,
+                            &provider_id,
+                            min_debt,
+                        )
+                        .unwrap_or_else(|e| {
+                            error!(target: LOG_TARGET, "{}", e);
+                            Err(GetUsersWithDebtOverThresholdError::InternalApiError)
+                        });
+
+                    match callback.send(users_with_debt) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back users with debt: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }
@@ -572,6 +616,7 @@ impl BlockchainService {
         client: Arc<ParachainClient>,
         rpc_handlers: Arc<RpcHandlers>,
         keystore: KeystorePtr,
+        rocksdb_root_path: impl Into<PathBuf>,
     ) -> Self {
         Self {
             client,
@@ -582,8 +627,8 @@ impl BlockchainService {
             wait_for_block_request_by_number: BTreeMap::new(),
             provider_ids: BTreeSet::new(),
             forest_root_write_lock: None,
-            pending_submit_proof: VecDeque::new(),
-            pending_confirm_storing: VecDeque::new(),
+            first_block_import_notification: false,
+            persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
         }
     }
 
@@ -597,21 +642,61 @@ impl BlockchainService {
         let block_hash: H256 = notification.hash;
         let block_number: BlockNumber = (*notification.header.number()).saturated_into();
 
+        // If this is the first block import notification, we might need to catch up.
+        if !self.first_block_import_notification {
+            info!(target: LOG_TARGET, "First block import notification: {}", block_hash);
+
+            // Check if there is an ongoing forest write lock task.
+            let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+            let maybe_ongoing_forest_write_lock_task_data = state_store_context
+                .access_value(&OngoingForestWriteLockTaskDataCf)
+                .read();
+
+            // Get all the ongoing NewChallengeSeed events.
+            let ongoing_new_challenge_seed_events = state_store_context
+                .access(&OngoingNewChallengeSeedEventsCf)
+                .iterate_without_overlay()
+                .collect::<Vec<_>>();
+
+            drop(state_store_context);
+
+            // If there was an ongoing forest write lock task, emit the event to restart the task.
+            if let Some(event_data) = maybe_ongoing_forest_write_lock_task_data {
+                self.emit_forest_write_event(event_data);
+            }
+
+            // Restart all previous ongoing NewChallengeSeed events.
+            for (_, new_challenge_seed_event) in ongoing_new_challenge_seed_events {
+                self.emit(new_challenge_seed_event);
+            }
+
+            self.catch_up_block_import(&block_number).await;
+
+            self.first_block_import_notification = true;
+        }
+
         debug!(target: LOG_TARGET, "Import notification #{}: {}", block_number, block_hash);
 
+        self.process_block_import(&block_hash, &block_number).await;
+    }
+
+    pub async fn process_block_import(&mut self, block_hash: &H256, block_number: &BlockNumber) {
+        info!(target: LOG_TARGET, "Processing block import #{}: {}", block_number, block_hash);
+
         // Notify all tasks waiting for this block number (or lower).
-        self.notify_import_block_number(block_number);
+        self.notify_import_block_number(&block_number);
 
         // We query the [`BlockchainService`] account nonce at this height
         // and update our internal counter if it's smaller than the result.
-        self.check_nonce(block_hash);
+        self.check_nonce(&block_hash);
 
         // Get provider IDs linked to keys in this node's keystore.
-        self.get_provider_ids(block_hash);
+        self.get_provider_ids(&block_hash);
 
         // Process pending requests that update the forest root.
         self.check_pending_forest_root_writes();
 
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         // Get events from storage.
         match self.get_events_storage_element(block_hash) {
             Ok(block_events) => {
@@ -674,11 +759,15 @@ impl BlockchainService {
                                     provider_id,
                                     &challenges_ticker,
                                 ) {
-                                    self.emit(NewChallengeSeed {
+                                    let new_challenge_seed_event = NewChallengeSeed {
                                         provider_id: *provider_id,
                                         tick: challenges_ticker,
                                         seed,
-                                    })
+                                    };
+                                    state_store_context
+                                        .access(&OngoingNewChallengeSeedEventsCf)
+                                        .put(&seed, &new_challenge_seed_event);
+                                    self.emit(new_challenge_seed_event)
                                 } else {
                                     trace!(target: LOG_TARGET, "Challenges tick is not the next one to be submitted for Provider [{:?}]", provider_id);
                                 }
@@ -694,6 +783,22 @@ impl BlockchainService {
                             provider,
                             next_challenge_deadline,
                         }),
+                        // The last chargeable info of a provider has been updated
+                        RuntimeEvent::PaymentStreams(
+                            pallet_payment_streams::Event::LastChargeableInfoUpdated {
+                                provider_id,
+                                last_chargeable_tick,
+                                last_chargeable_price_index,
+                            },
+                        ) => {
+                            if self.provider_ids.contains(&provider_id) {
+                                self.emit(LastChargeableInfoUpdated {
+                                    provider_id: provider_id,
+                                    last_chargeable_tick: last_chargeable_tick,
+                                    last_chargeable_price_index: last_chargeable_price_index,
+                                })
+                            }
+                        }
                         // This event should only be of any use if a node is run by as a user.
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::AcceptedBspVolunteer {
@@ -754,6 +859,10 @@ impl BlockchainService {
                 error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
             }
         }
+        state_store_context
+            .access_value(&LastProcessedBlockNumberCf)
+            .write(block_number);
+        state_store_context.commit();
     }
 
     /// Handle a finality notification.
@@ -769,7 +878,7 @@ impl BlockchainService {
         debug!(target: LOG_TARGET, "Finality notification #{}: {}", block_number, block_hash);
 
         // Get events from storage.
-        match self.get_events_storage_element(block_hash) {
+        match self.get_events_storage_element(&block_hash) {
             Ok(block_events) => {
                 // Process the events.
                 for ev in block_events {
@@ -784,7 +893,7 @@ impl BlockchainService {
                         ) => {
                             // Check if the provider ID is one of the provider IDs this node is tracking.
                             if self.provider_ids.contains(&provider) {
-                                self.emit(FinalisedMutationsApplied {
+                                self.emit(FinalisedTrieRemoveMutationsApplied {
                                     provider_id: provider,
                                     mutations: mutations.clone(),
                                     new_root,

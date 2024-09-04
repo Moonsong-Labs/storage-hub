@@ -36,7 +36,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use shp_traits::{ProofSubmittersInterface, ReadProvidersInterface, SystemMetricsInterface};
-    use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, Saturating};
+    use sp_runtime::traits::{AtLeast32BitUnsigned, Convert, MaybeDisplay, One, Saturating};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -199,6 +199,30 @@ pub mod pallet {
     /// - [do_update_price_index](crate::utils::do_update_price_index), which updates the accumulated price index, adding to it the current price.
     #[pallet::storage]
     pub type AccumulatedPriceIndex<T: Config> = StorageValue<_, BalanceOf<T>, ValueQuery>;
+
+    // Genesis config:
+
+    #[pallet::genesis_config]
+    pub struct GenesisConfig<T: Config> {
+        pub current_price: BalanceOf<T>,
+    }
+
+    impl<T: Config> Default for GenesisConfig<T> {
+        fn default() -> Self {
+            let current_price = One::one();
+
+            CurrentPricePerUnitPerTick::<T>::put(current_price);
+
+            Self { current_price }
+        }
+    }
+
+    #[pallet::genesis_build]
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+        fn build(&self) {
+            CurrentPricePerUnitPerTick::<T>::put(self.current_price);
+        }
+    }
 
     // Events & Errors:
 

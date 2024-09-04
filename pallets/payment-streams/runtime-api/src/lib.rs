@@ -14,6 +14,7 @@ sp_api::decl_runtime_apis! {
         AccountId: codec::Codec
     {
         fn get_users_with_debt_over_threshold(provider_id: &ProviderId, threshold: Balance) -> Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError>;
+        fn get_users_of_payment_streams_of_provider(provider_id: &ProviderId) -> Vec<AccountId>;
     }
 }
 

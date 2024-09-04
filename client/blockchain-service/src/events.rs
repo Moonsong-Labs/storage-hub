@@ -1,8 +1,9 @@
+use codec::{Decode, Encode};
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
-    BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, ForestRoot, PeerIds, ProviderId,
-    RandomnessOutput, StorageData, TrieRemoveMutation,
+    Balance, BlockNumber, BucketId, FileKey, FileLocation, Fingerprint, ForestRoot, KeyProofs,
+    PeerIds, ProviderId, RandomnessOutput, StorageData, TrieRemoveMutation,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -16,7 +17,7 @@ use crate::handler::ConfirmStoringRequest;
 /// This event is emitted when there's a new random challenge seed that affects this
 /// BSP. In other words, it only pays attention to the random seeds in the challenge
 /// period of this BSP.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct NewChallengeSeed {
     pub provider_id: ProviderId,
     pub tick: BlockNumber,
@@ -64,21 +65,53 @@ pub struct AcceptedBspVolunteer {
 
 impl EventBusMessage for AcceptedBspVolunteer {}
 
-#[derive(Debug, Clone)]
-pub struct ProcessSubmitProofRequest {
+#[derive(Debug, Clone, Encode, Decode)]
+pub enum ForestWriteLockTaskData {
+    SubmitProofRequest(ProcessSubmitProofRequestData),
+    ConfirmStoringRequest(ProcessConfirmStoringRequestData),
+}
+
+impl From<ProcessSubmitProofRequestData> for ForestWriteLockTaskData {
+    fn from(data: ProcessSubmitProofRequestData) -> Self {
+        Self::SubmitProofRequest(data)
+    }
+}
+
+impl From<ProcessConfirmStoringRequestData> for ForestWriteLockTaskData {
+    fn from(data: ProcessConfirmStoringRequestData) -> Self {
+        Self::ConfirmStoringRequest(data)
+    }
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ProcessSubmitProofRequestData {
     pub provider_id: ProviderId,
     pub tick: BlockNumber,
     pub seed: RandomnessOutput,
     pub forest_challenges: Vec<H256>,
     pub checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProcessSubmitProofRequest {
+    pub data: ProcessSubmitProofRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+}
+
+impl EventBusMessage for ProcessConfirmStoringRequest {}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ProcessConfirmStoringRequestData {
+    pub confirm_storing_requests: Vec<ConfirmStoringRequest>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ProcessConfirmStoringRequest {
-    pub confirm_storing_requests: Vec<ConfirmStoringRequest>,
+    pub data: ProcessConfirmStoringRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
+
+impl EventBusMessage for ProcessSubmitProofRequest {}
 
 /// Slashable Provider event.
 ///
@@ -96,13 +129,30 @@ impl EventBusMessage for SlashableProvider {}
 /// This event is emitted when a finalised block is received by the Blockchain service,
 /// in which there is a `MutationsApplied` event for one of the providers that this node is tracking.
 #[derive(Debug, Clone)]
-pub struct FinalisedMutationsApplied {
+pub struct FinalisedTrieRemoveMutationsApplied {
     pub provider_id: ProviderId,
     pub mutations: Vec<(ForestRoot, TrieRemoveMutation)>,
     pub new_root: H256,
 }
 
-impl EventBusMessage for FinalisedMutationsApplied {}
+impl EventBusMessage for FinalisedTrieRemoveMutationsApplied {}
+
+#[derive(Debug, Clone)]
+pub struct ProofAccepted {
+    pub provider_id: ProviderId,
+    pub proofs: KeyProofs,
+}
+
+impl EventBusMessage for ProofAccepted {}
+
+#[derive(Debug, Clone)]
+pub struct LastChargeableInfoUpdated {
+    pub provider_id: ProviderId,
+    pub last_chargeable_tick: BlockNumber,
+    pub last_chargeable_price_index: Balance,
+}
+
+impl EventBusMessage for LastChargeableInfoUpdated {}
 
 /// The event bus provider for the BlockchainService actor.
 ///
@@ -116,10 +166,10 @@ pub struct BlockchainServiceEventBusProvider {
     process_submit_proof_request_event_bus: EventBus<ProcessSubmitProofRequest>,
     process_confirm_storage_request_event_bus: EventBus<ProcessConfirmStoringRequest>,
     slashable_provider_event_bus: EventBus<SlashableProvider>,
-    finalised_mutations_applied_event_bus: EventBus<FinalisedMutationsApplied>,
+    finalised_mutations_applied_event_bus: EventBus<FinalisedTrieRemoveMutationsApplied>,
+    proof_accepted_event_bus: EventBus<ProofAccepted>,
+    last_chargeable_info_updated_event_bus: EventBus<LastChargeableInfoUpdated>,
 }
-
-impl EventBusMessage for ProcessSubmitProofRequest {}
 
 impl BlockchainServiceEventBusProvider {
     pub fn new() -> Self {
@@ -131,11 +181,11 @@ impl BlockchainServiceEventBusProvider {
             process_confirm_storage_request_event_bus: EventBus::new(),
             slashable_provider_event_bus: EventBus::new(),
             finalised_mutations_applied_event_bus: EventBus::new(),
+            proof_accepted_event_bus: EventBus::new(),
+            last_chargeable_info_updated_event_bus: EventBus::new(),
         }
     }
 }
-
-impl EventBusMessage for ProcessConfirmStoringRequest {}
 
 impl ProvidesEventBus<NewChallengeSeed> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<NewChallengeSeed> {
@@ -173,8 +223,20 @@ impl ProvidesEventBus<SlashableProvider> for BlockchainServiceEventBusProvider {
     }
 }
 
-impl ProvidesEventBus<FinalisedMutationsApplied> for BlockchainServiceEventBusProvider {
-    fn event_bus(&self) -> &EventBus<FinalisedMutationsApplied> {
+impl ProvidesEventBus<FinalisedTrieRemoveMutationsApplied> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<FinalisedTrieRemoveMutationsApplied> {
         &self.finalised_mutations_applied_event_bus
+    }
+}
+
+impl ProvidesEventBus<ProofAccepted> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<ProofAccepted> {
+        &self.proof_accepted_event_bus
+    }
+}
+
+impl ProvidesEventBus<LastChargeableInfoUpdated> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<LastChargeableInfoUpdated> {
+        &self.last_chargeable_info_updated_event_bus
     }
 }

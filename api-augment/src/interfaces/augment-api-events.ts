@@ -501,6 +501,14 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Notifies that a file key has been queued for a priority challenge for file deletion.
+       **/
+      PriorityChallengeForFileDeletionQueued: AugmentedEvent<
+        ApiType,
+        [user: AccountId32, fileKey: H256],
+        { user: AccountId32; fileKey: H256 }
+      >;
+      /**
        * Notifies that a proof has been submitted for a pending file deletion request.
        **/
       ProofSubmittedForPendingFileDeletionRequest: AugmentedEvent<

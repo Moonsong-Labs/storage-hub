@@ -3,7 +3,7 @@ use sc_network::{config::IncomingRequest, ProtocolName};
 use sc_service::RpcHandlers;
 use shc_common::types::StorageProofsMerkleTrieLayout;
 use sp_keystore::KeystorePtr;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
@@ -29,6 +29,7 @@ pub struct StorageHubBuilder<FL, FS> {
     file_storage: Option<Arc<RwLock<FL>>>,
     forest_storage: Option<Arc<RwLock<FS>>>,
     provider_pub_key: Option<[u8; 32]>,
+    storage_path: Option<String>,
 }
 
 impl<FL, FS> StorageHubBuilder<FL, FS>
@@ -44,6 +45,7 @@ where
             file_storage: None,
             forest_storage: None,
             provider_pub_key: None,
+            storage_path: None,
         }
     }
 
@@ -72,6 +74,24 @@ where
         self
     }
 
+    /// Returns the storage path that the StorageHub will use based on the available configuration.
+    pub fn get_storage_path(&self) -> String {
+        if let Some(path) = &self.storage_path {
+            path.clone()
+        } else {
+            let provider_pub_key = self
+                .provider_pub_key
+                .expect("Could not get storage path: Provider public key not set.");
+            hex::encode(provider_pub_key)
+        }
+    }
+
+    /// Set the storage path that the StorageHub will use.
+    pub fn with_storage_path(&mut self, storage_path: Option<String>) -> &mut Self {
+        self.storage_path = storage_path;
+        self
+    }
+
     /// Add a new [`BlockchainService`] to the builder and spawn it.
     ///
     /// This is the service that handles the interaction with the blockchain.
@@ -82,6 +102,7 @@ where
         client: Arc<ParachainClient>,
         rpc_handlers: Arc<RpcHandlers>,
         keystore: KeystorePtr,
+        rocksdb_root_path: impl Into<PathBuf>,
     ) -> &mut Self {
         let blockchain_service_handle = spawn_blockchain_service(
             &self
@@ -91,6 +112,7 @@ where
             client.clone(),
             rpc_handlers.clone(),
             keystore.clone(),
+            rocksdb_root_path,
         )
         .await;
 
@@ -151,7 +173,7 @@ where
 /// Provides an interface for defining the concrete types of
 /// each `StorageLayer` kind, so that their specific requirements can be fulfilled.
 pub trait StorageLayerBuilder {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self;
+    fn setup_storage_layer(&mut self) -> &mut Self;
 }
 
 impl StorageLayerBuilder
@@ -160,7 +182,7 @@ impl StorageLayerBuilder
         InMemoryForestStorage<StorageProofsMerkleTrieLayout>,
     >
 {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+    fn setup_storage_layer(&mut self) -> &mut Self {
         self.with_file_storage(Arc::new(RwLock::new(InMemoryFileStorage::new())))
             .with_forest_storage(Arc::new(RwLock::new(InMemoryForestStorage::new())))
     }
@@ -172,22 +194,14 @@ impl StorageLayerBuilder
         RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
     >
 {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
-        let rocksdb_path = if let Some(path) = storage_path {
-            path
-        } else {
-            let provider_pub_key = self
-                .provider_pub_key
-                .expect("Provider public key not set before building the storage layer.");
-            hex::encode(provider_pub_key)
-        };
-
+    fn setup_storage_layer(&mut self) -> &mut Self {
+        let storage_path = self.get_storage_path();
         let forest_storage = RocksDBForestStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(
-            rocksdb_path.clone(),
+            storage_path.clone(),
         )
         .expect("Failed to create RocksDB");
         let file_storage =
-            RocksDbFileStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(rocksdb_path)
+            RocksDbFileStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(storage_path)
                 .expect("Failed to create RocksDB");
 
         self.with_file_storage(Arc::new(RwLock::new(RocksDbFileStorage::<

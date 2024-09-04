@@ -5,7 +5,7 @@ use sc_executor::WasmExecutor;
 use sc_network::NetworkService;
 use sc_service::TFullClient;
 pub use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
-pub use shp_file_metadata::{Chunk, ChunkId, Leaf};
+pub use shp_file_metadata::{Chunk, ChunkId, ChunkWithId, Leaf};
 use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
 use sp_runtime::{traits::Block as BlockT, KeyTypeId};
@@ -38,12 +38,14 @@ pub type ProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
 pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
 pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;
 pub type ForestRoot = pallet_proofs_dealer::types::ForestRootFor<Runtime>;
+pub type TrieMutation = shp_traits::TrieMutation;
 pub type TrieRemoveMutation = shp_traits::TrieRemoveMutation;
 pub type StorageProofsMerkleTrieLayout = storage_hub_runtime::StorageProofsMerkleTrieLayout;
 pub type StorageProof = pallet_proofs_dealer::types::Proof<Runtime>;
 pub type ForestVerifierProof = pallet_proofs_dealer::types::ForestVerifierProofFor<Runtime>;
 pub type KeyProof = pallet_proofs_dealer::types::KeyProof<Runtime>;
 pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
+pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = (

@@ -1,7 +1,7 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
 // std
-use std::{cell::RefCell, sync::Arc, time::Duration};
+use std::{cell::RefCell, path::PathBuf, sync::Arc, time::Duration};
 
 use async_channel::Receiver;
 use chrono::Utc;
@@ -10,6 +10,7 @@ use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
 
 use futures::{Stream, StreamExt};
+use log::info;
 use shc_file_manager::{
     in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage, traits::FileStorage,
 };
@@ -206,11 +207,22 @@ where
 {
     match provider_options {
         Some(ProviderOptions { storage_path, .. }) => {
+            info!(
+                "Starting as a Storage Provider. Storage path: {:?}",
+                storage_path
+            );
+
             // Start building the StorageHubHandler, if running as a provider.
             let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
             // Create builder for the StorageHubHandler.
             let mut storage_hub_builder = StorageHubBuilder::new(task_spawner);
+
+            // Getting the caller pub key used for the blockchain service, from the keystore.
+            // Then add it to the StorageHub builder.
+            let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
+            storage_hub_builder.with_provider_pub_key(caller_pub_key);
+            storage_hub_builder.with_storage_path(storage_path.clone());
 
             // Add FileTransfer Service to the StorageHubHandler.
             let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
@@ -224,12 +236,7 @@ where
                 )
                 .await;
 
-            // Getting the caller pub key used for the blockchain service, from the keystore.
-            // Then add it to the StorageHub builder.
-            let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-            storage_hub_builder.with_provider_pub_key(caller_pub_key);
-
-            storage_hub_builder.setup_storage_layer(storage_path.clone());
+            storage_hub_builder.setup_storage_layer();
             Some(storage_hub_builder)
         }
         None => None,
@@ -242,6 +249,7 @@ async fn finish_sh_builder_and_build<FL, FS>(
     rpc_handlers: RpcHandlers,
     keystore: KeystorePtr,
     provider_options: ProviderOptions,
+    rocksdb_root_path: impl Into<PathBuf>,
 ) where
     StorageHubBuilder<FL, FS>: StorageLayerBuilder,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
@@ -250,7 +258,12 @@ async fn finish_sh_builder_and_build<FL, FS>(
     // Spawn the Blockchain Service if node is running as a Storage Provider, now that
     // the rpc handlers has been created.
     sh_builder
-        .with_blockchain(client.clone(), Arc::new(rpc_handlers), keystore.clone())
+        .with_blockchain(
+            client.clone(),
+            Arc::new(rpc_handlers),
+            keystore.clone(),
+            rocksdb_root_path,
+        )
         .await;
 
     // Finally build the StorageHubBuilder and start the Provider tasks.
@@ -440,6 +453,8 @@ where
         })
     };
 
+    let base_path = config.base_path.path().to_path_buf().clone();
+
     let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
         rpc_builder,
         client: client.clone(),
@@ -463,6 +478,7 @@ where
             rpc_handlers,
             keystore.clone(),
             provider_options,
+            base_path,
         )
         .await;
     }
@@ -752,6 +768,8 @@ where
         })
     };
 
+    let base_path = parachain_config.base_path.path().to_path_buf().clone();
+
     let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
         rpc_builder,
         client: client.clone(),
@@ -775,6 +793,7 @@ where
             rpc_handlers,
             keystore.clone(),
             provider_options,
+            base_path,
         )
         .await;
     }

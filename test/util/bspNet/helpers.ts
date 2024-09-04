@@ -12,7 +12,7 @@ import type { ISubmittableResult } from "@polkadot/types/types";
 import "@storagehub/api-augment";
 import { v2 as compose } from "docker-compose";
 import Docker from "dockerode";
-import { strictEqual } from "node:assert";
+import assert from "node:assert";
 import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
 import crypto from "node:crypto";
@@ -489,6 +489,80 @@ export const sealBlock = async (
   }) satisfies SealedBlock;
 };
 
+export const advanceToBlock = async (
+  api: ApiPromise,
+  blockNumber: number,
+  waitBetweenBlocks?: number | boolean,
+  watchForBspProofs?: string[]
+): Promise<SealedBlock> => {
+  // If watching for BSP proofs, we need to know the blocks at which they are challenged.
+  const challengeBlockNumbers: { nextChallengeBlock: number; challengePeriod: number }[] = [];
+  if (watchForBspProofs) {
+    for (const bspId of watchForBspProofs) {
+      // First we get the last tick for which the BSP submitted a proof.
+      const lastTickResult =
+        await api.call.proofsDealerApi.getLastTickProviderSubmittedProof(bspId);
+      assert(lastTickResult.isOk);
+      const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
+      // Then we get the challenge period for the BSP.
+      const challengePeriodResult = await api.call.proofsDealerApi.getChallengePeriod(bspId);
+      assert(challengePeriodResult.isOk);
+      const challengePeriod = challengePeriodResult.asOk.toNumber();
+      // Then we calculate the next challenge tick.
+      const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
+
+      challengeBlockNumbers.push({
+        nextChallengeBlock: nextChallengeTick,
+        challengePeriod
+      });
+    }
+  }
+
+  const currentBlock = await api.rpc.chain.getBlock();
+  let currentBlockNumber = currentBlock.block.header.number.toNumber();
+
+  let blockResult = null;
+  if (blockNumber > currentBlockNumber) {
+    const blocksToAdvance = blockNumber - currentBlockNumber;
+    for (let i = 0; i < blocksToAdvance; i++) {
+      blockResult = await sealBlock(api);
+      currentBlockNumber += 1;
+
+      // Check if we need to wait for BSP proofs.
+      if (watchForBspProofs) {
+        for (const challengeBlockNumber of challengeBlockNumbers) {
+          if (currentBlockNumber === challengeBlockNumber.nextChallengeBlock) {
+            // Wait for the BSP to process the proof.
+            await sleep(500);
+
+            // Update next challenge block.
+            challengeBlockNumbers[0].nextChallengeBlock += challengeBlockNumber.challengePeriod;
+            break;
+          }
+        }
+      }
+
+      if (waitBetweenBlocks) {
+        if (typeof waitBetweenBlocks === "number") {
+          await sleep(waitBetweenBlocks);
+        } else {
+          await sleep(500);
+        }
+      }
+    }
+  } else {
+    throw new Error(
+      `Block number ${blockNumber} is lower than current block number ${currentBlockNumber}`
+    );
+  }
+
+  if (blockResult) {
+    return blockResult;
+  }
+
+  throw new Error("Block wasn't sealed");
+};
+
 export const sendNewStorageRequest = async (
   api: ApiPromise,
   source: string,
@@ -603,9 +677,12 @@ export const addBsp = async (
   const additionalArgs = options?.additionalArgs ?? [];
   if (options?.rocksdb) {
     additionalArgs.push("--storage-layer=rocks-db");
-    additionalArgs.push(`--storage-path=/tmp/bsp/${bspKey.address}`);
   }
-  const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer(options);
+  additionalArgs.push(`--storage-path=/tmp/bsp/${bspKey.address}`);
+  const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
+    ...options,
+    additionalArgs
+  });
 
   //Give it some balance.
   const amount = 10000n * 10n ** 12n;

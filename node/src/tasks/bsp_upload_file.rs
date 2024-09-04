@@ -26,7 +26,7 @@ use crate::services::handler::StorageHubHandler;
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
-const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: usize = 3;
+const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: u32 = 3;
 
 /// BSP Upload File Task: Handles the whole flow of a file being uploaded to a BSP, from
 /// the BSP's perspective.
@@ -241,7 +241,7 @@ where
         info!(
             target: LOG_TARGET,
             "Processing ConfirmStoringRequest: {:?}",
-            event.confirm_storing_requests,
+            event.data.confirm_storing_requests,
         );
 
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
@@ -278,7 +278,7 @@ where
 
         // Query runtime for the chunks to prove for the file.
         let mut confirm_storing_requests_with_chunks_to_prove = Vec::new();
-        for confirm_storing_request in event.confirm_storing_requests.iter() {
+        for confirm_storing_request in event.data.confirm_storing_requests.iter() {
             match self
                 .storage_hub_handler
                 .blockchain

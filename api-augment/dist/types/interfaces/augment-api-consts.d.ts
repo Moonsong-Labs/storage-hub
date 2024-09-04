@@ -84,6 +84,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       minWaitForStopStoring: u32 & AugmentedConst<ApiType>;
       /**
+       * Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.
+       **/
+      pendingFileDeletionRequestTtl: u32 & AugmentedConst<ApiType>;
+      /**
        * Time-to-live for a storage request.
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
