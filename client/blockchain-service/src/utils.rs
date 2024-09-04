@@ -30,7 +30,7 @@ use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use crate::{
     events::{
-        ForestWriteLockTaskData, NewChallengeSeed, ProcessConfirmStoringRequest,
+        ForestWriteLockTaskData, MultipleNewChallengeSeeds, ProcessConfirmStoringRequest,
         ProcessConfirmStoringRequestData, ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
@@ -615,6 +615,7 @@ impl BlockchainService {
         };
 
         // Advance by `challenge_period` ticks and generate `NewChallengeSeed` events for the provider.
+        let mut challenge_seeds = Vec::new();
         let mut next_challenge_tick = last_tick_provider_submitted_proof + challenge_period;
         while next_challenge_tick < current_tick {
             // Get the seed for the challenge tick.
@@ -645,15 +646,15 @@ impl BlockchainService {
                     return;
                 }
             };
-
-            // Emit the `NewChallengeSeed` event.
-            self.emit(NewChallengeSeed {
-                provider_id: *provider_id,
-                tick: next_challenge_tick,
-                seed,
-            });
+            challenge_seeds.push((next_challenge_tick, seed));
             next_challenge_tick += challenge_period;
         }
+
+        // Emit the `MultiNewChallengeSeeds` event.
+        self.emit(MultipleNewChallengeSeeds {
+            provider_id: *provider_id,
+            seeds: challenge_seeds,
+        });
     }
 
     // TODO: Reconsider how to use this for catching up to unsubmitted storage proofs.

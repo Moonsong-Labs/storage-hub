@@ -8,11 +8,14 @@ use sp_core::H256;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
-    events::{FinalisedTrieRemoveMutationsApplied, NewChallengeSeed, ProcessSubmitProofRequest},
+    events::{
+        FinalisedTrieRemoveMutationsApplied, MultipleNewChallengeSeeds, NewChallengeSeed,
+        ProcessSubmitProofRequest,
+    },
     handler::SubmitProofRequest,
 };
 use shc_common::types::{
-    FileKey, KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
+    BlockNumber, FileKey, KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
     StorageProofsMerkleTrieLayout, TrieRemoveMutation,
 };
 use shc_file_manager::traits::FileStorage;
@@ -98,30 +101,39 @@ where
             event.tick,
             event.seed
         );
-        let seed = event.seed;
         let provider_id = event.provider_id;
+        let tick = event.tick;
+        let seed = event.seed;
 
-        // Derive forest challenges from seed.
-        let mut forest_challenges = self
-            .derive_forest_challenges_from_seed(seed, provider_id)
-            .await?;
-        trace!(target: LOG_TARGET, "Forest challenges to respond to: {:?}", forest_challenges);
+        self.queue_submit_proof_request(provider_id, tick, seed)
+            .await
+    }
+}
 
-        // Check if there are checkpoint challenges since last tick this provider submitted a proof for.
-        // If so, this will add them to the forest challenges.
-        let checkpoint_challenges = self
-            .add_checkpoint_challenges_to_forest_challenges(provider_id, &mut forest_challenges)
-            .await?;
-        trace!(target: LOG_TARGET, "Checkpoint challenges to respond to: {:?}", checkpoint_challenges);
+/// Handles the `MultipleNewChallengeSeeds` event.
+///
+/// This event is triggered when catching up to proof submissions, and there are multiple new challenge seeds
+/// that have to be responded in order. It queues the proof submissions for the given seeds.
+impl<FL, FS> EventHandler<MultipleNewChallengeSeeds> for BspSubmitProofTask<FL, FS>
+where
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+{
+    async fn handle_event(&mut self, event: MultipleNewChallengeSeeds) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET,
+            "Initiating BSP multiple proof submissions for BSP ID: {:?}, with seeds: {:?}",
+            event.provider_id,
+            event.seeds
+        );
 
-        self.storage_hub_handler
-            .blockchain
-            .queue_submit_proof_request(SubmitProofRequest::new(
-                event,
-                forest_challenges,
-                checkpoint_challenges,
-            ))
-            .await?;
+        for seed in event.seeds {
+            let provider_id = event.provider_id;
+            let tick = seed.0;
+            let seed = seed.1;
+            self.queue_submit_proof_request(provider_id, tick, seed)
+                .await?;
+        }
 
         Ok(())
     }
@@ -343,6 +355,39 @@ where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {
+    async fn queue_submit_proof_request(
+        &self,
+        provider_id: ProviderId,
+        tick: BlockNumber,
+        seed: RandomnessOutput,
+    ) -> anyhow::Result<()> {
+        // Derive forest challenges from seed.
+        let mut forest_challenges = self
+            .derive_forest_challenges_from_seed(seed, provider_id)
+            .await?;
+        trace!(target: LOG_TARGET, "Forest challenges to respond to: {:?}", forest_challenges);
+
+        // Check if there are checkpoint challenges since last tick this provider submitted a proof for.
+        // If so, this will add them to the forest challenges.
+        let checkpoint_challenges = self
+            .add_checkpoint_challenges_to_forest_challenges(provider_id, &mut forest_challenges)
+            .await?;
+        trace!(target: LOG_TARGET, "Checkpoint challenges to respond to: {:?}", checkpoint_challenges);
+
+        self.storage_hub_handler
+            .blockchain
+            .queue_submit_proof_request(SubmitProofRequest::new(
+                provider_id,
+                tick,
+                seed,
+                forest_challenges,
+                checkpoint_challenges,
+            ))
+            .await?;
+
+        Ok(())
+    }
+
     async fn derive_forest_challenges_from_seed(
         &self,
         seed: RandomnessOutput,
