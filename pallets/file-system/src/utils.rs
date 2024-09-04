@@ -433,7 +433,7 @@ where
 
         // Check if the BSP has enough capacity to store the file.
         ensure!(
-            available_capacity >= storage_request_metadata.size,
+            available_capacity > storage_request_metadata.size,
             Error::<T>::InsufficientCapacity
         );
 
@@ -572,7 +572,7 @@ where
 
             // Check if the BSP has enough capacity to store the file.
             ensure!(
-                available_capacity >= storage_request_metadata.size,
+                available_capacity > storage_request_metadata.size,
                 Error::<T>::InsufficientCapacity
             );
 

@@ -47,7 +47,6 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
 
   it(
     "Maxed out storages not volunteered",
-    { skip: "Capacity check not Implemented yet" },
     async () => {
       const capacityUsed = (await api.query.providers.backupStorageProviders(DUMMY_BSP_ID))
         .unwrap()

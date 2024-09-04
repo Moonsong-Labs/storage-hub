@@ -239,6 +239,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
       /**
+       * BSP does not have enough storage capacity to store the file.
+       **/
+      InsufficientCapacity: AugmentedError<ApiType>;
+      /**
        * Metadata does not correspond to expected file key.
        **/
       InvalidFileKeyMetadata: AugmentedError<ApiType>;
