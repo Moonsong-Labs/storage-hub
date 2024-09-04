@@ -56,7 +56,7 @@ export const waitForChain = async (
     }
 
     invariant(
-      performance.now() - startTime > (options?.timeoutMs || 60_000),
+      performance.now() - startTime < (options?.timeoutMs || 60_000),
       "Timeout waiting for chain to be ready"
     );
   }
