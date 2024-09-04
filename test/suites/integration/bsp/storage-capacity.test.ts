@@ -82,6 +82,9 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
   it("Total capacity updated when single BSP capacity updated", async () => {
     const newCapacity = BigInt(Math.floor(Math.random() * 1000 * 1024 * 1024)) + CAPACITY_512;
 
+    // Skip block height past threshold
+    await skipBlocksToMinChangeTime(api);
+
     await api.sealBlock(api.tx.providers.changeCapacity(newCapacity), bspKey);
 
     const totalCapacityAfter = await api.query.providers.totalBspsCapacity();
