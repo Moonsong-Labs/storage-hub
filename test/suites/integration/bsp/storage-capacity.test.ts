@@ -29,8 +29,6 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     assert.strictEqual(eventInfo.asModule.index.toNumber(), 40); // providers
     assert.strictEqual(eventInfo.asModule.error.toHex(), "0x0f000000"); // NotRegistered
 
-    api.rpc.storagehubclient.getForestRoot();
-
     const totalCapacityAfter = await api.query.providers.totalBspsCapacity();
     const bspCapacityAfter = await api.query.providers.backupStorageProviders(
       api.shConsts.DUMMY_BSP_ID
