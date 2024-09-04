@@ -1609,7 +1609,7 @@ mod bsp_volunteer {
                     4,
                     fingerprint,
                 );
-                
+
                 // Dispatch BSP volunteer.
                 assert_noop!(
                     FileSystem::bsp_volunteer(bsp_signed.clone(), file_key),
