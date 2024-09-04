@@ -93,7 +93,7 @@ pub trait StorageHubClientApi {
     ) -> RpcResult<SaveFileToDisk>;
 
     #[method(name = "getForestRoot")]
-    async fn get_forest_root(&self, key: String) -> RpcResult<H256>;
+    async fn get_forest_root(&self, key: Option<String>) -> RpcResult<H256>;
 
     #[method(name = "insertBcsvKeys")]
     async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String>;
@@ -260,8 +260,8 @@ where
         Ok(SaveFileToDisk::Success(file_metadata))
     }
 
-    async fn get_forest_root(&self, key: String) -> RpcResult<H256> {
-        let key = FSH::Key::from(key);
+    async fn get_forest_root(&self, key: Option<String>) -> RpcResult<H256> {
+        let key = FSH::Key::from(key.unwrap_or_default());
 
         let fs =
             self.forest_storage_handler.get(&key).await.ok_or_else(|| {

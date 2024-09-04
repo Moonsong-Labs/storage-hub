@@ -6,11 +6,6 @@ use sp_keystore::KeystorePtr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use super::{
-    forest_storage::{ForestStorageCaching, ForestStorageSingle},
-    handler::StorageHubHandler,
-};
-use crate::tasks::{BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT};
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
 use shc_blockchain_service::{spawn_blockchain_service, BlockchainService};
 use shc_common::types::{ParachainClient, ParachainNetworkService};
@@ -21,10 +16,15 @@ use shc_forest_manager::{
 };
 use shc_rpc::StorageHubClientRpcConfig;
 
-/// Trait to mark structs as valid roles in the StorageHub system
+use super::{
+    forest_storage::{ForestStorageCaching, ForestStorageSingle},
+    handler::StorageHubHandler,
+};
+use crate::tasks::{BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT};
+
+/// Abstraction over the supported roles used in the StorageHub system
 pub trait RoleSupport {}
 
-/// Concrete implementations of RoleSupport
 pub struct BspProvider;
 impl RoleSupport for BspProvider {}
 
@@ -34,10 +34,9 @@ impl RoleSupport for MspProvider {}
 pub struct UserRole;
 impl RoleSupport for UserRole {}
 
-/// Trait to mark structs as valid storage layer types in the StorageHub system
+/// Abstraction over the supported storage layers used in the StorageHub system
 pub trait StorageLayerSupport {}
 
-/// Concrete implementations of StorageLayerSupport
 pub struct NoStorageLayer;
 impl StorageLayerSupport for NoStorageLayer {}
 
@@ -47,6 +46,7 @@ impl StorageLayerSupport for InMemoryStorageLayer {}
 pub struct RocksDbStorageLayer;
 impl StorageLayerSupport for RocksDbStorageLayer {}
 
+/// Abstraction over the [`FileStorage`](shc_file_manager::traits::FileStorage) and [`ForestStorageHandler`] used based on a specific configuration of [`RoleSupport`] and [`StorageLayerSupport`].
 pub trait StorageTypes {
     type FL: FileStorageT;
     type FSH: ForestStorageHandler + Clone + Send + Sync + 'static;
@@ -77,14 +77,18 @@ impl StorageTypes for (MspProvider, RocksDbStorageLayer) {
     >;
 }
 
-// TODO: Implement default empty implementations for the storage layers.
-/// There is no default empty implementation for [`FileStorage`] and [`ForestStorageHandler`] so
+// TODO: Implement default empty implementations for the forest storage handler since the user role only needs the file storage.
+/// There is no default empty implementation for [`FileStorageT`] and [`ForestStorageHandler`] so
 /// we use the in-memory storage layers which won't be used by the user role.
 impl StorageTypes for (UserRole, NoStorageLayer) {
     type FL = InMemoryFileStorage<StorageProofsMerkleTrieLayout>;
     type FSH = ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>>;
 }
 
+/// Builder for the [`StorageHubHandler`].
+///
+/// Abstracted over [`RoleSupport`] `R` and [`StorageLayerSupport`] `S` to avoid any callers from having to know the internals of the
+/// StorageHub system, such as the right storage layers to use for a given role.
 pub struct StorageHubBuilder<R, S>
 where
     R: RoleSupport,
@@ -100,6 +104,7 @@ where
     provider_pub_key: Option<[u8; 32]>,
 }
 
+/// Common components to build for any given configuration of [`RoleSupport`] and [`StorageLayerSupport`].
 impl<R: RoleSupport, S: StorageLayerSupport> StorageHubBuilder<R, S>
 where
     (R, S): StorageTypes,
@@ -159,6 +164,95 @@ where
 
         self.blockchain = Some(blockchain_service_handle);
         self
+    }
+}
+
+/// Abstraction over the [`StorageTypes`] used based on a specific configuration of [`RoleSupport`] and [`StorageLayerSupport`].
+pub trait StorageLayerBuilder {
+    fn setup_storage_layer(&mut self, storage_path: Option<String>);
+}
+
+impl StorageLayerBuilder for StorageHubBuilder<BspProvider, InMemoryStorageLayer> {
+    fn setup_storage_layer(&mut self, _storage_path: Option<String>) {
+        self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
+        self.forest_storage_handler = Some(ForestStorageSingle::new(InMemoryForestStorage::new()));
+    }
+}
+
+impl StorageLayerBuilder for StorageHubBuilder<BspProvider, RocksDbStorageLayer> {
+    fn setup_storage_layer(&mut self, storage_path: Option<String>) {
+        self.storage_path = storage_path.clone();
+
+        let storage_path = storage_path.expect("Storage path not set");
+
+        let file_storage =
+            RocksDbFileStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(storage_path.clone())
+                .expect("Failed to create RocksDB");
+        self.file_storage = Some(Arc::new(RwLock::new(RocksDbFileStorage::new(file_storage))));
+
+        let forest_storage = RocksDBForestStorage::<
+            StorageProofsMerkleTrieLayout,
+            kvdb_rocksdb::Database,
+        >::rocksdb_storage(storage_path)
+        .expect("Failed to create RocksDB for BspProvider");
+        let forest_storage =
+            RocksDBForestStorage::new(forest_storage).expect("Failed to create Forest Storage");
+        self.forest_storage_handler = Some(ForestStorageSingle::new(forest_storage));
+    }
+}
+
+impl StorageLayerBuilder for StorageHubBuilder<MspProvider, InMemoryStorageLayer> {
+    fn setup_storage_layer(&mut self, _storage_path: Option<String>) {
+        self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
+        self.forest_storage_handler = Some(ForestStorageCaching::new());
+    }
+}
+
+impl StorageLayerBuilder for StorageHubBuilder<MspProvider, RocksDbStorageLayer> {
+    fn setup_storage_layer(&mut self, storage_path: Option<String>) {
+        self.storage_path = storage_path.clone();
+
+        let file_storage = RocksDbFileStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(
+            storage_path.expect("Storage path not set"),
+        )
+        .expect("Failed to create RocksDB");
+        self.file_storage = Some(Arc::new(RwLock::new(RocksDbFileStorage::new(file_storage))));
+
+        self.forest_storage_handler = Some(ForestStorageCaching::new());
+    }
+}
+
+impl StorageLayerBuilder for StorageHubBuilder<UserRole, NoStorageLayer> {
+    fn setup_storage_layer(&mut self, _storage_path: Option<String>) {
+        self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
+        self.forest_storage_handler = Some(ForestStorageSingle::new(InMemoryForestStorage::new()));
+    }
+}
+
+pub trait RpcConfigBuilder<FL, FSH> {
+    fn create_rpc_config(&self, keystore: KeystorePtr) -> StorageHubClientRpcConfig<FL, FSH>;
+}
+
+impl<R: RoleSupport, S: StorageLayerSupport>
+    RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
+    for StorageHubBuilder<R, S>
+where
+    (R, S): StorageTypes,
+{
+    fn create_rpc_config(
+        &self,
+        keystore: KeystorePtr,
+    ) -> StorageHubClientRpcConfig<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
+    {
+        StorageHubClientRpcConfig::new(
+            self.file_storage
+                .clone()
+                .expect("File Storage not initialized"),
+            self.forest_storage_handler
+                .clone()
+                .expect("Forest Storage Handler not initialized"),
+            keystore,
+        )
     }
 }
 
@@ -268,94 +362,7 @@ where
     }
 }
 
-pub trait StorageLayerBuilder {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>);
-}
-
-impl StorageLayerBuilder for StorageHubBuilder<BspProvider, InMemoryStorageLayer> {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) {
-        self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler = Some(ForestStorageSingle::new(InMemoryForestStorage::new()));
-    }
-}
-
-impl StorageLayerBuilder for StorageHubBuilder<BspProvider, RocksDbStorageLayer> {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) {
-        self.storage_path = storage_path.clone();
-
-        let storage_path = storage_path.expect("Storage path not set");
-
-        let file_storage =
-            RocksDbFileStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(storage_path.clone())
-                .expect("Failed to create RocksDB");
-        self.file_storage = Some(Arc::new(RwLock::new(RocksDbFileStorage::new(file_storage))));
-
-        let forest_storage = RocksDBForestStorage::<
-            StorageProofsMerkleTrieLayout,
-            kvdb_rocksdb::Database,
-        >::rocksdb_storage(storage_path)
-        .expect("Failed to create RocksDB for BspProvider");
-        let forest_storage =
-            RocksDBForestStorage::new(forest_storage).expect("Failed to create Forest Storage");
-        self.forest_storage_handler = Some(ForestStorageSingle::new(forest_storage));
-    }
-}
-
-impl StorageLayerBuilder for StorageHubBuilder<MspProvider, InMemoryStorageLayer> {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) {
-        self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler = Some(ForestStorageCaching::new());
-    }
-}
-
-impl StorageLayerBuilder for StorageHubBuilder<MspProvider, RocksDbStorageLayer> {
-    fn setup_storage_layer(&mut self, storage_path: Option<String>) {
-        self.storage_path = storage_path.clone();
-
-        let file_storage = RocksDbFileStorage::<_, kvdb_rocksdb::Database>::rocksdb_storage(
-            storage_path.expect("Storage path not set"),
-        )
-        .expect("Failed to create RocksDB");
-        self.file_storage = Some(Arc::new(RwLock::new(RocksDbFileStorage::new(file_storage))));
-
-        self.forest_storage_handler = Some(ForestStorageCaching::new());
-    }
-}
-
-impl StorageLayerBuilder for StorageHubBuilder<UserRole, NoStorageLayer> {
-    fn setup_storage_layer(&mut self, _storage_path: Option<String>) {
-        self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler = Some(ForestStorageSingle::new(InMemoryForestStorage::new()));
-    }
-}
-
-pub trait RpcConfigBuilder<FL, FSH> {
-    fn create_rpc_config(&self, keystore: KeystorePtr) -> StorageHubClientRpcConfig<FL, FSH>;
-}
-
-impl<R: RoleSupport, S: StorageLayerSupport>
-    RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
-    for StorageHubBuilder<R, S>
-where
-    (R, S): StorageTypes,
-{
-    fn create_rpc_config(
-        &self,
-        keystore: KeystorePtr,
-    ) -> StorageHubClientRpcConfig<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
-    {
-        StorageHubClientRpcConfig::new(
-            self.file_storage
-                .clone()
-                .expect("File Storage not initialized"),
-            self.forest_storage_handler
-                .clone()
-                .expect("Forest Storage Handler not initialized"),
-            keystore,
-        )
-    }
-}
-
+/// Abstraction layer to run the [`StorageHubHandler`] built from a specific configuration of [`RoleSupport`] and [`StorageLayerSupport`].
 pub trait Runnable {
     fn run(self);
 }
@@ -394,7 +401,7 @@ where
     }
 }
 
-// Helper function to setup provider
+// Helper function to setup a storage provider
 pub fn setup_provider<R: RoleSupport, S: StorageLayerSupport>(
     storage_hub_builder: &mut StorageHubBuilder<R, S>,
     keystore: KeystorePtr,

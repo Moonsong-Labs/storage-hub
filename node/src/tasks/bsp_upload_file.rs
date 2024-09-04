@@ -362,7 +362,7 @@ where
             .await
             .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
-        // Get a read lock on the forest storage to generate a proof for the file.
+        // Generate a proof of non-inclusion (executed in closure to drop the read lock on the forest storage).
         let non_inclusion_forest_proof = { fs.read().await.generate_proof(file_keys)? };
 
         // Build extrinsic.
@@ -387,7 +387,7 @@ where
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
-        // Save `FileMetadata` of the successfully retrieved stored files in the forest storage.
+        // Save `FileMetadata` of the successfully retrieved stored files in the forest storage (executed in closure to drop the read lock on the forest storage).
         {
             fs.write()
                 .await

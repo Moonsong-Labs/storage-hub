@@ -54,6 +54,7 @@ pub enum ProviderType {
     Msp,
     /// Backup Storage Provider
     Bsp,
+    /// User role
     User,
 }
 
