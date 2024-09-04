@@ -1875,6 +1875,31 @@ declare module "@polkadot/api-base/types/submittable" {
         [AccountId32]
       >;
       /**
+       * Dispatchable extrinsic that allows a user flagged as without funds long ago enough to clear this flag from its account,
+       * allowing it to begin contracting and paying for services again. If there's any outstanding debt, it will be charged and cleared.
+       *
+       * The dispatch origin for this call must be Signed.
+       * The origin must be the User that has been flagged as without funds.
+       *
+       * This extrinsic will perform the following checks and logic:
+       * 1. Check that the extrinsic was signed and get the signer.
+       * 2. Check that the user has been flagged as without funds.
+       * 3. Check that the cooldown period has passed since the user was flagged as without funds.
+       * 4. Check if there's any outstanding debt and charge it. This is done by:
+       * a. Releasing any remaining funds held as a deposit for each payment stream.
+       * b. Getting all payment streams of the user and charging them, paying the Providers for the services.
+       * c. Returning the User any remaining funds.
+       * d. Deleting all payment streams of the user.
+       * 5. Unflag the user as without funds.
+       *
+       * Emits a 'UserSolvent' event when successful.
+       *
+       * Notes: this extrinsic iterates over all remaining payment streams of the user and charges them, so it can be expensive in terms of weight.
+       * The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
+       * finds more convenient to wait for Providers to get its deposits one by one instead.
+       **/
+      clearInsolventFlag: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+      /**
        * Dispatchable extrinsic that allows root to add a dynamic-rate payment stream from a User to a Provider.
        *
        * The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
@@ -1980,7 +2005,7 @@ declare module "@polkadot/api-base/types/submittable" {
       >;
       /**
        * Dispatchable extrinsic that allows a user flagged as without funds to pay all remaining payment streams to be able to recover
-       * its deposits and be able to pay for services again.
+       * its deposits.
        *
        * The dispatch origin for this call must be Signed.
        * The origin must be the User that has been flagged as without funds.
@@ -1991,9 +2016,8 @@ declare module "@polkadot/api-base/types/submittable" {
        * 3. Release the user's funds that were held as a deposit for each payment stream.
        * 4. Get all payment streams of the user and charge them, paying the Providers for the services.
        * 5. Delete all payment streams of the user.
-       * 6. Unflag the user as without funds.
        *
-       * Emits a 'UserSolvent' event when successful.
+       * Emits a 'UserPaidDebts' event when successful.
        *
        * Notes: this extrinsic iterates over all payment streams of the user and charges them, so it can be expensive in terms of weight.
        * The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user

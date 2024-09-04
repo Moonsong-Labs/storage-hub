@@ -1108,8 +1108,12 @@ declare module "@polkadot/api-base/types/events" {
         { userAccount: AccountId32; providerId: H256; amount: u128 }
       >;
       /**
-       * Event emitted when a User that has been flagged as not having enough funds to pay for their services has correctly paid all their outstanding debt
-       * and can now contract new services again.
+       * Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has paid all its outstanding debt.
+       **/
+      UserPaidDebts: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
+      /**
+       * Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has waited the cooldown period,
+       * correctly paid all their outstanding debt and can now contract new services again.
        **/
       UserSolvent: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
       /**

@@ -631,6 +631,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ChargeOverflow: AugmentedError<ApiType>;
       /**
+       * Error thrown when a user tries to clear the flag of being without funds before the cooldown period has passed
+       **/
+      CooldownPeriodNotPassed: AugmentedError<ApiType>;
+      /**
        * Error thrown when the new last chargeable tick number that is trying to be set is greater than the current tick number or smaller than the previous last chargeable tick number
        **/
       InvalidLastChargeableBlockNumber: AugmentedError<ApiType>;

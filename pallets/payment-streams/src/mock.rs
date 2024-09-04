@@ -236,6 +236,7 @@ impl crate::Config for Test {
     type RuntimeHoldReason = RuntimeHoldReason;
     type Units = StorageUnit;
     type NewStreamDeposit = ConstU64<10>;
+    type UserWithoutFundsCooldown = ConstU64<100>;
     type BlockNumberToBalance = BlockNumberToBalance;
     type ProvidersProofSubmitters = MockSubmittingProviders;
 }

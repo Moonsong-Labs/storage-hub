@@ -1628,6 +1628,9 @@ declare const _default: {
       UserWithoutFunds: {
         who: string;
       };
+      UserPaidDebts: {
+        who: string;
+      };
       UserSolvent: {
         who: string;
       };
@@ -3159,6 +3162,7 @@ declare const _default: {
         userAccount: string;
       };
       pay_outstanding_debt: string;
+      clear_insolvent_flag: string;
     };
   };
   /**

@@ -1644,6 +1644,9 @@ export default {
       UserWithoutFunds: {
         who: "AccountId32"
       },
+      UserPaidDebts: {
+        who: "AccountId32"
+      },
       UserSolvent: {
         who: "AccountId32"
       }
@@ -3207,7 +3210,8 @@ export default {
       charge_payment_streams: {
         userAccount: "AccountId32"
       },
-      pay_outstanding_debt: "Null"
+      pay_outstanding_debt: "Null",
+      clear_insolvent_flag: "Null"
     }
   },
   /**
@@ -4011,7 +4015,8 @@ export default {
       "InvalidLastChargeablePriceIndex",
       "ChargeOverflow",
       "UserWithoutFunds",
-      "UserNotFlaggedAsWithoutFunds"
+      "UserNotFlaggedAsWithoutFunds",
+      "CooldownPeriodNotPassed"
     ]
   },
   /**

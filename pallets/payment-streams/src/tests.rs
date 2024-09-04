@@ -23,6 +23,7 @@ use sp_runtime::{traits::Convert, DispatchError};
 type NativeBalance = <Test as crate::Config>::NativeBalance;
 type AccountId = <Test as frame_system::Config>::AccountId;
 pub type NewStreamDeposit = <Test as crate::Config>::NewStreamDeposit;
+pub type UserWithoutFundsCooldown = <Test as crate::Config>::UserWithoutFundsCooldown;
 pub type BlockNumberToBalance = <Test as crate::Config>::BlockNumberToBalance;
 
 // `storage-providers` types:
@@ -1499,7 +1500,8 @@ mod fixed_rate_streams {
         }
 
         #[test]
-        fn charge_payment_streams_unflags_user_if_it_has_no_more_streams() {
+        fn charge_payment_streams_emits_correct_event_for_insolvent_user_if_it_has_no_more_streams()
+        {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
@@ -1608,8 +1610,11 @@ mod fixed_rate_streams {
                 // Check that Bob has no remaining payment streams
                 assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 0);
 
-                // Check that Bob is no longer flagged as a user without funds
-                assert!(!UsersWithoutFunds::<Test>::contains_key(bob));
+                // Check that Bob is still flagged as a user without funds
+                assert!(UsersWithoutFunds::<Test>::contains_key(bob));
+
+                // Check that the UserPaidDebts event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserPaidDebts { who: bob }.into());
             });
         }
     }
@@ -3313,7 +3318,8 @@ mod dynamic_rate_streams {
         }
 
         #[test]
-        fn charge_payment_streams_unflags_user_if_it_has_no_more_streams() {
+        fn charge_payment_streams_emits_correct_event_for_insolvent_user_if_it_has_no_more_streams()
+        {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
@@ -3447,8 +3453,11 @@ mod dynamic_rate_streams {
                 // Check that Bob has no remaining payment streams
                 assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 0);
 
-                // Check that Bob is no longer flagged as a user without funds
-                assert!(!UsersWithoutFunds::<Test>::contains_key(bob));
+                // Check that Bob is still flagged as a user without funds
+                assert!(UsersWithoutFunds::<Test>::contains_key(bob));
+
+                // Check that the UserPaidDebts event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserPaidDebts { who: bob }.into());
             });
         }
     }
@@ -3664,10 +3673,7 @@ mod user_without_funds {
                     bob
                 )));
 
-                // Check that Bob is no longer flagged as a user without funds
-                assert!(!UsersWithoutFunds::<Test>::contains_key(bob));
-
-                // Check that Bob's balance has been updated with the correct amount after paying charlie
+                // Check that Bob's balance has been updated with the correct amount after paying Charlie
                 let amount_to_pay_for_storage = current_price * (amount_provided as u128);
                 let bob_new_balance =
                     bob_new_balance - amount_to_pay_for_storage + charlie_deposit_amount;
@@ -3688,14 +3694,14 @@ mod user_without_funds {
                     0
                 );
 
-                // Check that the UserSolvent event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserSolvent { who: bob }.into());
+                // Check that Bob is still flagged as a user without funds
+                assert!(UsersWithoutFunds::<Test>::contains_key(bob));
 
-                // Check that the payment stream from Bob to Charlie does not exist anymore
-                assert_eq!(
-                    DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob),
-                    None
-                );
+                // Check that the UserPaidDebts event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserPaidDebts { who: bob }.into());
+
+                // Check that Bob has no remaining payment streams
+                assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 0);
             });
         }
 
@@ -3885,9 +3891,6 @@ mod user_without_funds {
                     bob
                 )));
 
-                // Check that Bob is no longer flagged as a user without funds
-                assert!(!UsersWithoutFunds::<Test>::contains_key(bob));
-
                 // Check that Bob's balance has been updated with the correct amount after paying charlie and david
                 let amount_to_pay_for_storage = 3 * current_price * (amount_provided as u128);
                 let bob_new_balance = bob_new_balance - amount_to_pay_for_storage
@@ -3907,7 +3910,7 @@ mod user_without_funds {
                     david_initial_balance + 2 * amount_to_pay_for_storage / 3
                 );
 
-                // Check that Bob no longer has any deposits
+                // Check that Bob no longer has any deposits nor payment streams
                 assert_eq!(
                     NativeBalance::balance_on_hold(
                         &RuntimeHoldReason::PaymentStreams(crate::HoldReason::PaymentStreamDeposit),
@@ -3915,21 +3918,13 @@ mod user_without_funds {
                     ),
                     0
                 );
+                assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 0);
 
-                // Check that the UserSolvent event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserSolvent { who: bob }.into());
+                // Check that Bob is still flagged as a user without funds
+                assert!(UsersWithoutFunds::<Test>::contains_key(bob));
 
-                // Check that the payment stream from Bob to Charlie does not exist anymore
-                assert_eq!(
-                    DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob),
-                    None
-                );
-
-                // Check that the payment stream from Bob to David does not exist anymore
-                assert_eq!(
-                    DynamicRatePaymentStreams::<Test>::get(&david_bsp_id, &bob),
-                    None
-                );
+                // Check that the UserPaidDebts event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserPaidDebts { who: bob }.into());
             });
         }
 
@@ -3965,6 +3960,497 @@ mod user_without_funds {
                     PaymentStreams::pay_outstanding_debt(RuntimeOrigin::signed(bob)),
                     Error::<Test>::UserNotFlaggedAsWithoutFunds
                 );
+            });
+        }
+    }
+
+    mod clear_insolvent_flag {
+
+        use super::*;
+
+        #[test]
+        fn clear_insolvent_flag_works() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let bob: AccountId = 1;
+                let charlie: AccountId = 2;
+                let bob_initial_balance = NativeBalance::free_balance(&bob);
+                let amount_provided = 100;
+                let current_price = 10;
+                let current_price_index = 10000;
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
+                // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
+                register_account_as_bsp(alice, 100);
+                let alice_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
+                let alice_initial_balance = NativeBalance::free_balance(&alice);
+
+                // Register Charlie as a BSP with 1000 units of data and get his BSP ID and free balance
+                register_account_as_bsp(charlie, 1000);
+                let charlie_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
+                let charlie_initial_balance = NativeBalance::free_balance(&charlie);
+
+                // Create a payment stream from Bob to Alice of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &alice_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Create a payment stream from Bob to Charlie of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &charlie_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Check the new free balance of Bob (after the new user deposit)
+                let new_stream_deposit_blocks_balance_typed =
+                    BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let total_deposit_amount = 2
+                    * current_price
+                    * (amount_provided as u128)
+                    * new_stream_deposit_blocks_balance_typed;
+                let bob_new_balance = bob_initial_balance - total_deposit_amount;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Check that the deposit of Bob to Alice is half of the total deposit
+                let alice_deposit_amount =
+                    DynamicRatePaymentStreams::<Test>::get(&alice_bsp_id, &bob)
+                        .unwrap()
+                        .user_deposit;
+                assert_eq!(alice_deposit_amount, total_deposit_amount / 2);
+
+                // And that Charlie has the other half
+                let charlie_deposit_amount =
+                    DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob)
+                        .unwrap()
+                        .user_deposit;
+                assert_eq!(charlie_deposit_amount, total_deposit_amount / 2);
+
+                // Set the last chargeable price index of Charlie to the equivalent of one block ahead
+                LastChargeableInfo::<Test>::insert(
+                    &charlie_bsp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob)
+                            .unwrap()
+                            .price_index_when_last_charged
+                            + current_price,
+                    },
+                );
+
+                // Set the last chargeable price index of Alice to something that will make Bob run out of funds
+                run_to_block(System::block_number() + 10);
+                let current_price_index = AccumulatedPriceIndex::<Test>::get()
+                    + bob_new_balance / (amount_provided as u128)
+                    + 1;
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: current_price_index,
+                    },
+                );
+
+                // Charge the payment stream from Bob to Alice
+                assert_ok!(PaymentStreams::charge_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    bob
+                ));
+
+                // Advance enough blocks for Bob to be flagged as a user without funds
+                run_to_block(System::block_number() + <NewStreamDeposit as Get<u64>>::get() + 1);
+                assert_ok!(PaymentStreams::charge_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    bob
+                ));
+
+                // Check that the UserWithoutFunds event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+
+                // Check that no funds were charged from Bob's free balance
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+                System::assert_has_event(
+                    Event::<Test>::PaymentStreamCharged {
+                        user_account: bob,
+                        provider_id: alice_bsp_id,
+                        amount: 0,
+                    }
+                    .into(),
+                );
+
+                // Check that Bob is flagged as a user without funds
+                assert!(UsersWithoutFunds::<Test>::contains_key(bob));
+
+                // Check that the payment stream from Bob to Alice does not exist anymore
+                assert_eq!(
+                    DynamicRatePaymentStreams::<Test>::get(&alice_bsp_id, &bob),
+                    None
+                );
+
+                // Check that the payment stream from Bob to Charlie still exists
+                assert!(DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob).is_some());
+
+                // Check that Bob's free balance has not changed but it's deposit to Alice has been transferred to her
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+                assert_eq!(
+                    NativeBalance::free_balance(&alice),
+                    alice_initial_balance + alice_deposit_amount
+                );
+
+                // Check that Bob still has its deposit with Charlie
+                assert_eq!(
+                    NativeBalance::balance_on_hold(
+                        &RuntimeHoldReason::PaymentStreams(crate::HoldReason::PaymentStreamDeposit),
+                        &bob
+                    ),
+                    charlie_deposit_amount
+                );
+
+                // Pay the outstanding debt of Bob
+                assert_ok!(PaymentStreams::pay_outstanding_debt(RuntimeOrigin::signed(
+                    bob
+                )));
+
+                // Check that Bob's balance has been updated with the correct amount after paying Charlie
+                let amount_to_pay_for_storage = current_price * (amount_provided as u128);
+                let bob_new_balance =
+                    bob_new_balance - amount_to_pay_for_storage + charlie_deposit_amount;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Check that Charlie has been paid
+                assert_eq!(
+                    NativeBalance::free_balance(&charlie),
+                    charlie_initial_balance + amount_to_pay_for_storage
+                );
+
+                // Check that Bob no longer has any deposits
+                assert_eq!(
+                    NativeBalance::balance_on_hold(
+                        &RuntimeHoldReason::PaymentStreams(crate::HoldReason::PaymentStreamDeposit),
+                        &bob
+                    ),
+                    0
+                );
+
+                // Check that Bob is still flagged as a user without funds
+                assert!(UsersWithoutFunds::<Test>::contains_key(bob));
+
+                // Check that the UserPaidDebts event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserPaidDebts { who: bob }.into());
+
+                // Check that Bob has no remaining payment streams
+                assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 0);
+
+                // Wait enough blocks to allow Bob to clear himself as an insolvent user
+                run_to_block(
+                    System::block_number() + <UserWithoutFundsCooldown as Get<u64>>::get() + 1,
+                );
+
+                // Clear the insolvent flag of Bob
+                assert_ok!(PaymentStreams::clear_insolvent_flag(RuntimeOrigin::signed(
+                    bob
+                )));
+
+                // Check that Bob is no longer flagged as a user without funds
+                assert!(!UsersWithoutFunds::<Test>::contains_key(bob));
+            });
+        }
+
+        #[test]
+        fn clear_insolvent_flag_works_if_there_are_remaining_payment_streams() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let bob: AccountId = 1;
+                let charlie: AccountId = 2;
+                let bob_initial_balance = NativeBalance::free_balance(&bob);
+                let amount_provided = 100;
+                let current_price = 10;
+                let current_price_index = 10000;
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
+                // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
+                register_account_as_bsp(alice, 100);
+                let alice_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
+                let alice_initial_balance = NativeBalance::free_balance(&alice);
+
+                // Register Charlie as a BSP with 1000 units of data and get his BSP ID and free balance
+                register_account_as_bsp(charlie, 1000);
+                let charlie_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
+                let charlie_initial_balance = NativeBalance::free_balance(&charlie);
+
+                // Create a payment stream from Bob to Alice of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &alice_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Create a payment stream from Bob to Charlie of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &charlie_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Check the new free balance of Bob (after the new user deposit)
+                let new_stream_deposit_blocks_balance_typed =
+                    BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let total_deposit_amount = 2
+                    * current_price
+                    * (amount_provided as u128)
+                    * new_stream_deposit_blocks_balance_typed;
+                let bob_new_balance = bob_initial_balance - total_deposit_amount;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Check that the deposit of Bob to Alice is half of the total deposit
+                let alice_deposit_amount =
+                    DynamicRatePaymentStreams::<Test>::get(&alice_bsp_id, &bob)
+                        .unwrap()
+                        .user_deposit;
+                assert_eq!(alice_deposit_amount, total_deposit_amount / 2);
+
+                // And that Charlie has the other half
+                let charlie_deposit_amount =
+                    DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob)
+                        .unwrap()
+                        .user_deposit;
+                assert_eq!(charlie_deposit_amount, total_deposit_amount / 2);
+
+                // Set the last chargeable price index of Charlie to the equivalent of one block ahead
+                LastChargeableInfo::<Test>::insert(
+                    &charlie_bsp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob)
+                            .unwrap()
+                            .price_index_when_last_charged
+                            + current_price,
+                    },
+                );
+
+                // Set the last chargeable price index of Alice to something that will make Bob run out of funds
+                run_to_block(System::block_number() + 10);
+                let current_price_index = AccumulatedPriceIndex::<Test>::get()
+                    + bob_new_balance / (amount_provided as u128)
+                    + 1;
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: current_price_index,
+                    },
+                );
+
+                // Charge the payment stream from Bob to Alice
+                assert_ok!(PaymentStreams::charge_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    bob
+                ));
+
+                // Advance enough blocks for Bob to be flagged as a user without funds
+                run_to_block(System::block_number() + <NewStreamDeposit as Get<u64>>::get() + 1);
+                assert_ok!(PaymentStreams::charge_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    bob
+                ));
+
+                // Check that the UserWithoutFunds event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+
+                // Check that no funds were charged from Bob's free balance
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+                System::assert_has_event(
+                    Event::<Test>::PaymentStreamCharged {
+                        user_account: bob,
+                        provider_id: alice_bsp_id,
+                        amount: 0,
+                    }
+                    .into(),
+                );
+
+                // Check that Bob is flagged as a user without funds
+                assert!(UsersWithoutFunds::<Test>::contains_key(bob));
+
+                // Check that the payment stream from Bob to Alice does not exist anymore
+                assert_eq!(
+                    DynamicRatePaymentStreams::<Test>::get(&alice_bsp_id, &bob),
+                    None
+                );
+
+                // Check that the payment stream from Bob to Charlie still exists
+                assert!(DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob).is_some());
+
+                // Check that Bob's free balance has not changed but it's deposit to Alice has been transferred to her
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+                assert_eq!(
+                    NativeBalance::free_balance(&alice),
+                    alice_initial_balance + alice_deposit_amount
+                );
+
+                // Check that Bob still has its deposit with Charlie
+                assert_eq!(
+                    NativeBalance::balance_on_hold(
+                        &RuntimeHoldReason::PaymentStreams(crate::HoldReason::PaymentStreamDeposit),
+                        &bob
+                    ),
+                    charlie_deposit_amount
+                );
+
+                // Wait enough blocks to allow Bob to clear himself as an insolvent user
+                run_to_block(
+                    System::block_number() + <UserWithoutFundsCooldown as Get<u64>>::get() + 1,
+                );
+
+                // Clear the insolvent flag of Bob
+                assert_ok!(PaymentStreams::clear_insolvent_flag(RuntimeOrigin::signed(
+                    bob
+                )));
+
+                // Check that Bob's balance has been updated with the correct amount after paying Charlie
+                let amount_to_pay_for_storage = current_price * (amount_provided as u128);
+                let bob_new_balance =
+                    bob_new_balance - amount_to_pay_for_storage + charlie_deposit_amount;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Check that Charlie has been paid
+                assert_eq!(
+                    NativeBalance::free_balance(&charlie),
+                    charlie_initial_balance + amount_to_pay_for_storage
+                );
+
+                // Check that Bob no longer has any deposits
+                assert_eq!(
+                    NativeBalance::balance_on_hold(
+                        &RuntimeHoldReason::PaymentStreams(crate::HoldReason::PaymentStreamDeposit),
+                        &bob
+                    ),
+                    0
+                );
+
+                // Check that the UserSolvent event was emitted for Bob
+                System::assert_last_event(Event::<Test>::UserSolvent { who: bob }.into());
+
+                // Check that Bob has no remaining payment streams
+                assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 0);
+
+                // Check that Bob is no longer flagged as a user without funds
+                assert!(!UsersWithoutFunds::<Test>::contains_key(bob));
+            });
+        }
+
+        #[test]
+        fn clear_insolvent_flag_fails_if_the_cooldown_period_has_not_passed() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let bob: AccountId = 1;
+                let charlie: AccountId = 2;
+                let amount_provided = 100;
+                let current_price = 10;
+                let current_price_index = 10000;
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
+                // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
+                register_account_as_bsp(alice, 100);
+                let alice_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
+
+                // Register Charlie as a BSP with 1000 units of data and get his BSP ID and free balance
+                register_account_as_bsp(charlie, 1000);
+                let charlie_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
+
+                // Create a payment stream from Bob to Alice of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &alice_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Create a payment stream from Bob to Charlie of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &charlie_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Get Bob's free balance after the deposits for the payment streams
+                let bob_new_balance = NativeBalance::free_balance(&bob);
+
+                // Set the last chargeable price index of Alice to something that will make Bob run out of funds
+                run_to_block(System::block_number() + 10);
+                let current_price_index = AccumulatedPriceIndex::<Test>::get()
+                    + bob_new_balance / (amount_provided as u128)
+                    + 1;
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: current_price_index,
+                    },
+                );
+
+                // Charge the payment stream from Bob to Alice
+                assert_ok!(PaymentStreams::charge_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    bob
+                ));
+
+                // Advance enough blocks for Bob to be flagged as a user without funds
+                run_to_block(System::block_number() + <NewStreamDeposit as Get<u64>>::get() + 1);
+                assert_ok!(PaymentStreams::charge_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    bob
+                ));
+
+                // Check that the UserWithoutFunds event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+
+                // Check that Bob is flagged as a user without funds
+                assert!(UsersWithoutFunds::<Test>::contains_key(bob));
+
+                // Wait less than what would be enough blocks to allow Bob to clear himself as an insolvent user
+                run_to_block(
+                    System::block_number() + <UserWithoutFundsCooldown as Get<u64>>::get() - 10,
+                );
+
+                // Clear the insolvent flag of Bob
+                assert_noop!(
+                    PaymentStreams::clear_insolvent_flag(RuntimeOrigin::signed(bob)),
+                    Error::<Test>::CooldownPeriodNotPassed
+                );
+
+                // Check that the payment stream between Bob and Charlie still exists
+                assert!(DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob).is_some());
+
+                // Check that Bob is still flagged as a user without funds
+                assert!(UsersWithoutFunds::<Test>::contains_key(bob));
             });
         }
     }

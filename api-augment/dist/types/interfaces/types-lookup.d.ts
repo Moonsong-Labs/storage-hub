@@ -2055,6 +2055,10 @@ declare module "@polkadot/types/lookup" {
     readonly asUserWithoutFunds: {
       readonly who: AccountId32;
     } & Struct;
+    readonly isUserPaidDebts: boolean;
+    readonly asUserPaidDebts: {
+      readonly who: AccountId32;
+    } & Struct;
     readonly isUserSolvent: boolean;
     readonly asUserSolvent: {
       readonly who: AccountId32;
@@ -2069,6 +2073,7 @@ declare module "@polkadot/types/lookup" {
       | "PaymentStreamCharged"
       | "LastChargeableInfoUpdated"
       | "UserWithoutFunds"
+      | "UserPaidDebts"
       | "UserSolvent";
   }
   /** @name PalletBucketNftsEvent (155) */
@@ -3841,6 +3846,7 @@ declare module "@polkadot/types/lookup" {
       readonly userAccount: AccountId32;
     } & Struct;
     readonly isPayOutstandingDebt: boolean;
+    readonly isClearInsolventFlag: boolean;
     readonly type:
       | "CreateFixedRatePaymentStream"
       | "UpdateFixedRatePaymentStream"
@@ -3849,7 +3855,8 @@ declare module "@polkadot/types/lookup" {
       | "UpdateDynamicRatePaymentStream"
       | "DeleteDynamicRatePaymentStream"
       | "ChargePaymentStreams"
-      | "PayOutstandingDebt";
+      | "PayOutstandingDebt"
+      | "ClearInsolventFlag";
   }
   /** @name PalletBucketNftsCall (308) */
   interface PalletBucketNftsCall extends Enum {
@@ -4777,6 +4784,7 @@ declare module "@polkadot/types/lookup" {
     readonly isChargeOverflow: boolean;
     readonly isUserWithoutFunds: boolean;
     readonly isUserNotFlaggedAsWithoutFunds: boolean;
+    readonly isCooldownPeriodNotPassed: boolean;
     readonly type:
       | "PaymentStreamAlreadyExists"
       | "PaymentStreamNotFound"
@@ -4792,7 +4800,8 @@ declare module "@polkadot/types/lookup" {
       | "InvalidLastChargeablePriceIndex"
       | "ChargeOverflow"
       | "UserWithoutFunds"
-      | "UserNotFlaggedAsWithoutFunds";
+      | "UserNotFlaggedAsWithoutFunds"
+      | "CooldownPeriodNotPassed";
   }
   /** @name PalletBucketNftsError (421) */
   interface PalletBucketNftsError extends Enum {

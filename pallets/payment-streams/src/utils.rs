@@ -553,7 +553,7 @@ where
         if let Some(fixed_rate_payment_stream) = fixed_rate_payment_stream {
             // Check if the user is flagged as without funds to execute the correct charging logic
             match UsersWithoutFunds::<T>::get(user_account) {
-                Some(()) => {
+                Some(_) => {
                     // If the user has been flagged as without funds, manage it accordingly
                     Self::manage_user_without_funds(
                         &provider_id,
@@ -695,7 +695,7 @@ where
         // If the dynamic-rate payment stream exists:
         if let Some(dynamic_rate_payment_stream) = dynamic_rate_payment_stream {
             match UsersWithoutFunds::<T>::get(user_account) {
-                Some(()) => {
+                Some(_) => {
                     // If the user has been flagged as without funds, manage it accordingly
                     Self::manage_user_without_funds(
                         &provider_id,
@@ -834,6 +834,12 @@ where
         Ok(total_amount_charged)
     }
 
+    /// This function holds the logic that checks if a user has outstanding debt and, if so, pays it by transferring each contracted Provider
+    /// the amount owed, deleting the corresponding payment stream and decreasing the user's payment streams count until all outstanding debt is paid.
+    ///
+    /// Note: This could be achieved by calling `manage_user_without_funds` for each payment stream, but this function is more efficient as it
+    /// avoids repeating the same checks and operations for each payment stream, such as releasing all the deposit of the user at once instead
+    /// of doing it for each payment stream.
     pub fn do_pay_outstanding_debt(user_account: &T::AccountId) -> DispatchResult {
         // Check that the user is flagged as without funds
         ensure!(
@@ -929,6 +935,31 @@ where
                 .ok_or(ArithmeticError::Underflow)?;
             RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
         }
+
+        Ok(())
+    }
+
+    pub fn do_clear_insolvent_flag(user_account: &T::AccountId) -> DispatchResult {
+        // Check that the user is flagged as without funds
+        ensure!(
+            UsersWithoutFunds::<T>::contains_key(user_account),
+            Error::<T>::UserNotFlaggedAsWithoutFunds
+        );
+
+        // Check that enough time has passed since the user was flagged as without funds
+        let current_tick = OnPollTicker::<T>::get();
+        let out_of_funds_tick = expect_or_err!(
+            UsersWithoutFunds::<T>::get(user_account),
+            "User should be flagged as without funds if it was found before.",
+            Error::<T>::UserNotFlaggedAsWithoutFunds
+        );
+        ensure!(
+            current_tick.saturating_sub(out_of_funds_tick) >= T::UserWithoutFundsCooldown::get(),
+            Error::<T>::CooldownPeriodNotPassed
+        );
+
+        // Pay the user outstanding debt
+        Self::do_pay_outstanding_debt(user_account)?;
 
         // Remove the user from the UsersWithoutFunds mapping
         UsersWithoutFunds::<T>::remove(user_account);
@@ -1137,25 +1168,23 @@ where
             .ok_or(ArithmeticError::Underflow)?;
         RegisteredUsers::<T>::insert(user_account, user_payment_streams_count);
 
-        // If the user still has remaining payment streams and wasn't added to the UsersWithoutFunds mapping,
-        // add it and emit the UserWithoutFunds event. If not, remove it from the UsersWithoutFunds mapping.
+        // Add the user to the UsersWithoutFunds mapping and emit the UserWithoutFunds event. If the user has no remaining
+        // payment streams, emit the UserPaidDebts event as well.
         // Note: once a user is flagged as without funds, it is considered insolvent by the system and every Provider
         // will be incentivized to stop providing services to that user.
-        // The user has two ways of being unflagged and being allowed to use the system again:
-        // - Wait until all its Providers remove their payment streams, paying its debt with its deposit for each one.
-        // - Executing an expensive extrinsic after depositing enough funds to pay all its outstanding debt.
-        if user_payment_streams_count > Zero::zero() {
-            if !UsersWithoutFunds::<T>::contains_key(user_account) {
-                UsersWithoutFunds::<T>::insert(user_account, ());
-                Self::deposit_event(Event::<T>::UserWithoutFunds {
-                    who: user_account.clone(),
-                });
-            }
-        } else {
-            UsersWithoutFunds::<T>::remove(user_account);
-            Self::deposit_event(Event::<T>::UserSolvent {
+        // To be unflagged, the user will have to pay its remaining debt and wait the cooldown period, after which it will
+        // need to execute the `clear_insolvent_flag` extrinsic. If it hasn't paid its debt by then, the extrinsic will
+        // pay it for the user using the payment streams' deposits.
+        if !UsersWithoutFunds::<T>::contains_key(user_account) {
+            UsersWithoutFunds::<T>::insert(user_account, frame_system::Pallet::<T>::block_number());
+            Self::deposit_event(Event::<T>::UserWithoutFunds {
                 who: user_account.clone(),
-            })
+            });
+        }
+        if user_payment_streams_count == 0 {
+            Self::deposit_event(Event::<T>::UserPaidDebts {
+                who: user_account.clone(),
+            });
         }
 
         Ok(())
