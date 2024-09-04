@@ -514,8 +514,6 @@ pub mod pallet {
             provider_id: ProviderIdFor<T>,
             user_account: T::AccountId,
             amount_provided: UnitsProvidedFor<T>,
-            current_price: BalanceOf<T>,
-            current_accumulated_price_index: BalanceOf<T>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was executed by the root origin
             ensure_root(origin)?;
@@ -525,8 +523,6 @@ pub mod pallet {
                 &provider_id,
                 &user_account,
                 amount_provided,
-                current_price,
-                current_accumulated_price_index,
             )?;
 
             // Emit the corresponding event
@@ -563,7 +559,6 @@ pub mod pallet {
             provider_id: ProviderIdFor<T>,
             user_account: T::AccountId,
             new_amount_provided: UnitsProvidedFor<T>,
-            current_price: BalanceOf<T>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was executed by the root origin
             ensure_root(origin)?;
@@ -573,7 +568,6 @@ pub mod pallet {
                 &provider_id,
                 &user_account,
                 new_amount_provided,
-                current_price,
             )?;
 
             // Emit the corresponding event

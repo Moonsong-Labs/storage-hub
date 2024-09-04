@@ -280,8 +280,6 @@ where
         provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
         amount_provided: UnitsProvidedFor<T>,
-        current_price: BalanceOf<T>,
-        current_accumulated_price_index: BalanceOf<T>,
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual Provider
         ensure!(
@@ -317,6 +315,7 @@ where
             Preservation::Preserve,
             Fortitude::Polite,
         );
+        let current_price = CurrentPricePerUnitPerTick::<T>::get();
         let deposit = current_price
             .checked_mul(&amount_provided.into())
             .ok_or(ArithmeticError::Overflow)?
@@ -366,7 +365,7 @@ where
             user_account,
             DynamicRatePaymentStream {
                 amount_provided,
-                price_index_when_last_charged: current_accumulated_price_index,
+                price_index_when_last_charged: AccumulatedPriceIndex::<T>::get(),
                 user_deposit: deposit,
                 out_of_funds_tick: None,
             },
@@ -381,7 +380,6 @@ where
         provider_id: &ProviderIdFor<T>,
         user_account: &T::AccountId,
         new_amount_provided: UnitsProvidedFor<T>,
-        current_price: BalanceOf<T>,
     ) -> DispatchResult {
         // Check that the given ID belongs to an actual Provider
         ensure!(
@@ -429,6 +427,7 @@ where
         }
 
         // Update the user's deposit based on the new amount provided
+        let current_price = CurrentPricePerUnitPerTick::<T>::get();
         let new_deposit = new_amount_provided
             .into()
             .checked_mul(&current_price)
@@ -1209,17 +1208,9 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         amount_provided: &Self::Units,
-        current_price: <Self::Balance as Inspect<Self::AccountId>>::Balance,
-        current_accumulated_price_index: <Self::Balance as Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult {
         // Execute the logic to create a dynamic-rate payment stream
-        Self::do_create_dynamic_rate_payment_stream(
-            provider_id,
-            user_account,
-            *amount_provided,
-            current_price,
-            current_accumulated_price_index,
-        )?;
+        Self::do_create_dynamic_rate_payment_stream(provider_id, user_account, *amount_provided)?;
 
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::DynamicRatePaymentStreamCreated {
@@ -1236,14 +1227,12 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         new_amount_provided: &Self::Units,
-        current_price: <Self::Balance as Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult {
         // Execute the logic to update a dynamic-rate payment stream
         Self::do_update_dynamic_rate_payment_stream(
             &provider_id,
             &user_account,
             *new_amount_provided,
-            current_price,
         )?;
 
         // Emit the corresponding event

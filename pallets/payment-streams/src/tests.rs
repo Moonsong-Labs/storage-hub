@@ -1,14 +1,17 @@
 use crate::{
     mock::*,
     types::{BalanceOf, ProviderLastChargeableInfo},
-    AccumulatedPriceIndex, CurrentPricePerUnitPerTick, Error, Event, LastChargeableInfo,
-    RegisteredUsers, UsersWithoutFunds,
+    AccumulatedPriceIndex, CurrentPricePerUnitPerTick, DynamicRatePaymentStreams, Error, Event,
+    LastChargeableInfo, RegisteredUsers, UsersWithoutFunds,
 };
 
 use frame_support::{
     assert_noop, assert_ok,
     pallet_prelude::Weight,
-    traits::{fungible::Mutate, Get, Hooks, OnFinalize, OnIdle, OnInitialize},
+    traits::{
+        fungible::{InspectHold, Mutate},
+        Get, Hooks, OnFinalize, OnIdle, OnInitialize,
+    },
     weights::WeightMeter,
     BoundedVec,
 };
@@ -1690,8 +1693,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -1773,8 +1774,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -1784,8 +1783,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     ),
                     Error::<Test>::PaymentStreamAlreadyExists
                 );
@@ -1810,8 +1807,6 @@ mod dynamic_rate_streams {
                         &H256::random(),
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     ),
                     Error::<Test>::NotAProvider
                 );
@@ -1849,8 +1844,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -1860,8 +1853,6 @@ mod dynamic_rate_streams {
                         &charlie_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -1909,8 +1900,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     ),
                     Error::<Test>::UserWithoutFunds
                 );
@@ -1955,8 +1944,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     ),
                     Error::<Test>::CannotHoldDeposit
                 );
@@ -1974,6 +1961,10 @@ mod dynamic_rate_streams {
                 let current_price_index = 10000;
                 let bob_initial_balance = NativeBalance::free_balance(&bob);
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
@@ -1984,10 +1975,6 @@ mod dynamic_rate_streams {
                 let charlie_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
 
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
-
                 // Set the amount of payment streams that Bob has to u32::MAX - 1
                 RegisteredUsers::<Test>::insert(&bob, u32::MAX - 1);
 
@@ -1997,8 +1984,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     ),
                 );
 
@@ -2023,8 +2008,6 @@ mod dynamic_rate_streams {
                         &charlie_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     ),
                     DispatchError::Arithmetic(sp_runtime::ArithmeticError::Overflow)
                 );
@@ -2071,14 +2054,14 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2086,8 +2069,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -2098,7 +2079,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &new_amount_provided,
-                        current_price,
                     )
                 );
 
@@ -2131,14 +2111,14 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2146,8 +2126,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -2158,7 +2136,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &new_amount_provided,
-                        current_price
                     ),
                     Error::<Test>::AmountProvidedCantBeZero
                 );
@@ -2174,14 +2151,14 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2189,8 +2166,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -2200,7 +2175,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price
                     ),
                     Error::<Test>::UpdateAmountToSameAmount
                 );
@@ -2213,7 +2187,6 @@ mod dynamic_rate_streams {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
                 let amount_provided = 100;
-                let current_price = 10;
 
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
@@ -2226,7 +2199,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price
                     ),
                     Error::<Test>::PaymentStreamNotFound
                 );
@@ -2237,7 +2209,6 @@ mod dynamic_rate_streams {
         fn update_payment_stream_fails_if_bsp_account_has_not_registered_as_bsp() {
             ExtBuilder::build().execute_with(|| {
                 let bob: AccountId = 1;
-                let current_price = 10;
 
                 // Try to update a payment stream from Bob to a random not registered BSP to 200 units per block
                 let new_amount_provided = 200;
@@ -2246,7 +2217,6 @@ mod dynamic_rate_streams {
                         &H256::random(),
                         &bob,
                         &new_amount_provided,
-                        current_price
                     ),
                     Error::<Test>::NotAProvider
                 );
@@ -2264,6 +2234,10 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
@@ -2274,18 +2248,12 @@ mod dynamic_rate_streams {
                 let charlie_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
 
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
-
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -2295,8 +2263,6 @@ mod dynamic_rate_streams {
                         &charlie_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -2311,8 +2277,9 @@ mod dynamic_rate_streams {
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index to something that will make Bob run out of funds
-                let current_price_index =
-                    current_price_index + bob_new_balance / (amount_provided as u128) + 1;
+                let current_price_index = AccumulatedPriceIndex::<Test>::get()
+                    + bob_new_balance / (amount_provided as u128)
+                    + 1;
                 run_to_block(System::block_number() + 10);
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -2345,7 +2312,6 @@ mod dynamic_rate_streams {
                         &charlie_bsp_id,
                         &bob,
                         &new_amount_provided,
-                        current_price
                     ),
                     Error::<Test>::UserWithoutFunds
                 );
@@ -2362,14 +2328,14 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2377,8 +2343,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -2392,8 +2356,8 @@ mod dynamic_rate_streams {
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
-                let current_price_index = current_price_index + 10 * current_price;
                 run_to_block(System::block_number() + 10);
+                let current_price_index = AccumulatedPriceIndex::<Test>::get();
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
@@ -2409,7 +2373,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &new_amount_provided,
-                        current_price
                     )
                 );
 
@@ -2469,14 +2432,14 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2484,8 +2447,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -2578,6 +2539,10 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
@@ -2588,18 +2553,12 @@ mod dynamic_rate_streams {
                 let charlie_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
 
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
-
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -2609,8 +2568,6 @@ mod dynamic_rate_streams {
                         &charlie_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -2625,8 +2582,9 @@ mod dynamic_rate_streams {
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to something that will make Bob run out of funds
-                let current_price_index =
-                    current_price_index + bob_new_balance / (amount_provided as u128) + 1;
+                let current_price_index = AccumulatedPriceIndex::<Test>::get()
+                    + bob_new_balance / (amount_provided as u128)
+                    + 1;
                 run_to_block(System::block_number() + 10);
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -2673,14 +2631,14 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units
                 assert_ok!(
@@ -2688,8 +2646,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -2703,9 +2659,9 @@ mod dynamic_rate_streams {
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
-                let current_price_index = current_price_index + 10 * current_price;
-                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
                 run_to_block(System::block_number() + 10);
+                let current_price_index = AccumulatedPriceIndex::<Test>::get();
+                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
@@ -2768,14 +2724,14 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2783,8 +2739,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -2798,9 +2752,9 @@ mod dynamic_rate_streams {
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
-                let current_price_index = current_price_index + 10 * current_price;
-                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
                 run_to_block(System::block_number() + 10);
+                let current_price_index = AccumulatedPriceIndex::<Test>::get();
+                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
@@ -2853,14 +2807,14 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2868,8 +2822,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -2883,9 +2835,9 @@ mod dynamic_rate_streams {
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
-                let current_price_index = current_price_index + 10 * current_price;
-                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
                 run_to_block(System::block_number() + 10);
+                let current_price_index = AccumulatedPriceIndex::<Test>::get();
+                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
@@ -2941,14 +2893,14 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -2956,8 +2908,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -2977,7 +2927,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &new_amount_provided,
-                        current_price
                     )
                 );
 
@@ -2989,9 +2938,9 @@ mod dynamic_rate_streams {
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
-                let current_price_index = current_price_index + 10 * current_price;
-                let amount_to_pay_for_storage = 10 * current_price * (new_amount_provided as u128);
                 run_to_block(System::block_number() + 10);
+                let current_price_index = AccumulatedPriceIndex::<Test>::get();
+                let amount_to_pay_for_storage = 10 * current_price * (new_amount_provided as u128);
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
@@ -3053,14 +3002,14 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -3068,8 +3017,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -3083,9 +3030,9 @@ mod dynamic_rate_streams {
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to 10 blocks ahead
-                let current_price_index = current_price_index + 10 * current_price;
-                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
                 run_to_block(System::block_number() + 10);
+                let current_price_index = AccumulatedPriceIndex::<Test>::get();
+                let amount_to_pay_for_storage = 10 * current_price * (amount_provided as u128);
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
@@ -3124,9 +3071,9 @@ mod dynamic_rate_streams {
                 );
 
                 // Set the last valid proof of the payment stream from Bob to Alice to 20 blocks ahead
-                let current_price_index = current_price_index + 20 * current_price;
-                let amount_to_pay_for_storage = 20 * current_price * (amount_provided as u128);
                 run_to_block(System::block_number() + 20);
+                let current_price_index = AccumulatedPriceIndex::<Test>::get();
+                let amount_to_pay_for_storage = 20 * current_price * (amount_provided as u128);
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
                     ProviderLastChargeableInfo {
@@ -3209,14 +3156,14 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 100;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
-
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
@@ -3224,8 +3171,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -3239,8 +3184,9 @@ mod dynamic_rate_streams {
                 assert_eq!(NativeBalance::free_balance(&bob), bob_balance_after_deposit);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to something that would overflow the balance type
-                let current_price_index =
-                    current_price_index + u128::MAX / (amount_provided as u128) + 1;
+                let current_price_index = AccumulatedPriceIndex::<Test>::get()
+                    + u128::MAX / (amount_provided as u128)
+                    + 1;
                 run_to_block(System::block_number() + 1000);
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3272,6 +3218,10 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
@@ -3282,18 +3232,12 @@ mod dynamic_rate_streams {
                 let charlie_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
 
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
-
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -3303,8 +3247,6 @@ mod dynamic_rate_streams {
                         &charlie_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -3319,8 +3261,9 @@ mod dynamic_rate_streams {
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to something that will make Bob run out of funds
-                let current_price_index =
-                    current_price_index + bob_new_balance / (amount_provided as u128) + 1;
+                let current_price_index = AccumulatedPriceIndex::<Test>::get()
+                    + bob_new_balance / (amount_provided as u128)
+                    + 1;
                 run_to_block(System::block_number() + 10);
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3363,8 +3306,6 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     ),
                     Error::<Test>::UserWithoutFunds
                 );
@@ -3382,6 +3323,10 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let current_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice, 100);
                 let alice_bsp_id =
@@ -3392,18 +3337,12 @@ mod dynamic_rate_streams {
                 let charlie_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
 
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(current_price_index);
-
                 // Create a payment stream from Bob to Alice of 100 units provided
                 assert_ok!(
                     <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -3413,8 +3352,6 @@ mod dynamic_rate_streams {
                         &charlie_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        current_price_index
                     )
                 );
 
@@ -3429,8 +3366,9 @@ mod dynamic_rate_streams {
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
 
                 // Set the last chargeable price index of Alice to something that will make Bob run out of funds
-                let current_price_index =
-                    current_price_index + bob_new_balance / (amount_provided as u128) + 1;
+                let current_price_index = AccumulatedPriceIndex::<Test>::get()
+                    + bob_new_balance / (amount_provided as u128)
+                    + 1;
                 run_to_block(System::block_number() + 10);
                 LastChargeableInfo::<Test>::insert(
                     &alice_bsp_id,
@@ -3505,15 +3443,15 @@ mod dynamic_rate_streams {
                 let current_price = 10;
                 let initial_price_index = 10000;
 
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(initial_price_index);
+
                 // Register Alice as a BSP with 100 units of data and get her BSP ID
                 register_account_as_bsp(alice_on_poll, 100);
                 let alice_bsp_id =
                     <StorageProviders as ReadProvidersInterface>::get_provider_id(alice_on_poll)
                         .unwrap();
-
-                // Update the current price and current price index
-                CurrentPricePerUnitPerTick::<Test>::put(current_price);
-                AccumulatedPriceIndex::<Test>::put(initial_price_index);
 
                 // Create a payment stream from Bob to Alice of 100 units per block
                 assert_ok!(
@@ -3521,15 +3459,14 @@ mod dynamic_rate_streams {
                         &alice_bsp_id,
                         &bob,
                         &amount_provided,
-                        current_price,
-                        initial_price_index
                     )
                 );
 
                 // Set the last chargeable price index of the payment stream from Bob to Alice to block 123
                 let blocks_to_advance = alice_on_poll - System::block_number();
                 let price_index_increment = current_price * (blocks_to_advance - 1) as u128; // We substract one since price index is updated after the chargeable info (since this one is for the previous block)
-                let current_price_index = initial_price_index + price_index_increment;
+                let current_price_index =
+                    AccumulatedPriceIndex::<Test>::get() + price_index_increment;
                 run_to_block(alice_on_poll);
 
                 // Get Alice's last chargeable info
@@ -3538,6 +3475,474 @@ mod dynamic_rate_streams {
 
                 // The payment stream should be updated with the correct last chargeable price index
                 assert_eq!(alice_last_chargeable_info.price_index, current_price_index);
+            });
+        }
+    }
+}
+
+mod user_without_funds {
+
+    use super::*;
+
+    mod pay_outstanding_debt {
+
+        use super::*;
+
+        #[test]
+        fn pay_outstanding_debt_works() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let bob: AccountId = 1;
+                let charlie: AccountId = 2;
+                let bob_initial_balance = NativeBalance::free_balance(&bob);
+                let amount_provided = 100;
+                let current_price = 10;
+                let current_price_index = 10000;
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
+                // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
+                register_account_as_bsp(alice, 100);
+                let alice_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
+                let alice_initial_balance = NativeBalance::free_balance(&alice);
+
+                // Register Charlie as a BSP with 1000 units of data and get his BSP ID and free balance
+                register_account_as_bsp(charlie, 1000);
+                let charlie_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
+                let charlie_initial_balance = NativeBalance::free_balance(&charlie);
+
+                // Create a payment stream from Bob to Alice of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &alice_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Create a payment stream from Bob to Charlie of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &charlie_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Check the new free balance of Bob (after the new user deposit)
+                let new_stream_deposit_blocks_balance_typed =
+                    BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let total_deposit_amount = 2
+                    * current_price
+                    * (amount_provided as u128)
+                    * new_stream_deposit_blocks_balance_typed;
+                let bob_new_balance = bob_initial_balance - total_deposit_amount;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Check that the deposit of Bob to Alice is half of the total deposit
+                let alice_deposit_amount =
+                    DynamicRatePaymentStreams::<Test>::get(&alice_bsp_id, &bob)
+                        .unwrap()
+                        .user_deposit;
+                assert_eq!(alice_deposit_amount, total_deposit_amount / 2);
+
+                // And that Charlie has the other half
+                let charlie_deposit_amount =
+                    DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob)
+                        .unwrap()
+                        .user_deposit;
+                assert_eq!(charlie_deposit_amount, total_deposit_amount / 2);
+
+                // Set the last chargeable price index of Charlie to the equivalent of one block ahead
+                LastChargeableInfo::<Test>::insert(
+                    &charlie_bsp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob)
+                            .unwrap()
+                            .price_index_when_last_charged
+                            + current_price,
+                    },
+                );
+
+                // Set the last chargeable price index of Alice to something that will make Bob run out of funds
+                run_to_block(System::block_number() + 10);
+                let current_price_index = AccumulatedPriceIndex::<Test>::get()
+                    + bob_new_balance / (amount_provided as u128)
+                    + 1;
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: current_price_index,
+                    },
+                );
+
+                // Charge the payment stream from Bob to Alice
+                assert_ok!(PaymentStreams::charge_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    bob
+                ));
+
+                // Advance enough blocks for Bob to be flagged as a user without funds
+                run_to_block(System::block_number() + <NewStreamDeposit as Get<u64>>::get() + 1);
+                assert_ok!(PaymentStreams::charge_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    bob
+                ));
+
+                // Check that the UserWithoutFunds event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+
+                // Check that no funds were charged from Bob's free balance
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+                System::assert_has_event(
+                    Event::<Test>::PaymentStreamCharged {
+                        user_account: bob,
+                        provider_id: alice_bsp_id,
+                        amount: 0,
+                    }
+                    .into(),
+                );
+
+                // Check that Bob is flagged as a user without funds
+                assert!(UsersWithoutFunds::<Test>::contains_key(bob));
+
+                // Check that the payment stream from Bob to Alice does not exist anymore
+                assert_eq!(
+                    DynamicRatePaymentStreams::<Test>::get(&alice_bsp_id, &bob),
+                    None
+                );
+
+                // Check that the payment stream from Bob to Charlie still exists
+                assert!(DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob).is_some());
+
+                // Check that Bob's free balance has not changed but it's deposit to Alice has been transferred to her
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+                assert_eq!(
+                    NativeBalance::free_balance(&alice),
+                    alice_initial_balance + alice_deposit_amount
+                );
+
+                // Check that Bob still has its deposit with Charlie
+                assert_eq!(
+                    NativeBalance::balance_on_hold(
+                        &RuntimeHoldReason::PaymentStreams(crate::HoldReason::PaymentStreamDeposit),
+                        &bob
+                    ),
+                    charlie_deposit_amount
+                );
+
+                // Pay the outstanding debt of Bob
+                assert_ok!(PaymentStreams::pay_outstanding_debt(RuntimeOrigin::signed(
+                    bob
+                )));
+
+                // Check that Bob is no longer flagged as a user without funds
+                assert!(!UsersWithoutFunds::<Test>::contains_key(bob));
+
+                // Check that Bob's balance has been updated with the correct amount after paying charlie
+                let amount_to_pay_for_storage = current_price * (amount_provided as u128);
+                let bob_new_balance =
+                    bob_new_balance - amount_to_pay_for_storage + charlie_deposit_amount;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Check that Charlie has been paid
+                assert_eq!(
+                    NativeBalance::free_balance(&charlie),
+                    charlie_initial_balance + amount_to_pay_for_storage
+                );
+
+                // Check that Bob no longer has any deposits
+                assert_eq!(
+                    NativeBalance::balance_on_hold(
+                        &RuntimeHoldReason::PaymentStreams(crate::HoldReason::PaymentStreamDeposit),
+                        &bob
+                    ),
+                    0
+                );
+
+                // Check that the UserSolvent event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserSolvent { who: bob }.into());
+
+                // Check that the payment stream from Bob to Charlie does not exist anymore
+                assert_eq!(
+                    DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob),
+                    None
+                );
+            });
+        }
+
+        #[test]
+        fn pay_outstanding_debt_works_with_multiple_streams() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let bob: AccountId = 1;
+                let charlie: AccountId = 2;
+                let david: AccountId = 3;
+                let bob_initial_balance = NativeBalance::free_balance(&bob);
+                let amount_provided = 100;
+                let current_price = 10;
+                let current_price_index = 10000;
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
+                // Register Alice as a BSP with 100 units of data and get her BSP ID and free balance
+                register_account_as_bsp(alice, 100);
+                let alice_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
+                let alice_initial_balance = NativeBalance::free_balance(&alice);
+
+                // Register Charlie as a BSP with 1000 units of data and get his BSP ID and free balance
+                register_account_as_bsp(charlie, 1000);
+                let charlie_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(charlie).unwrap();
+                let charlie_initial_balance = NativeBalance::free_balance(&charlie);
+
+                // Register David as a BSP with 1000 units of data and get his BSP ID and free balance
+                register_account_as_bsp(david, 1000);
+                let david_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(david).unwrap();
+                let david_initial_balance = NativeBalance::free_balance(&david);
+
+                // Create a payment stream from Bob to Alice of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &alice_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Create a payment stream from Bob to Charlie of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &charlie_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Create a payment stream from Bob to David of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &david_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Check the new free balance of Bob (after the new user deposit)
+                let new_stream_deposit_blocks_balance_typed =
+                    BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let total_deposit_amount = 3
+                    * current_price
+                    * (amount_provided as u128)
+                    * new_stream_deposit_blocks_balance_typed;
+                let bob_new_balance = bob_initial_balance - total_deposit_amount;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Check that the deposit of Bob to Alice is one third of the total deposit
+                let alice_deposit_amount =
+                    DynamicRatePaymentStreams::<Test>::get(&alice_bsp_id, &bob)
+                        .unwrap()
+                        .user_deposit;
+                assert_eq!(alice_deposit_amount, total_deposit_amount / 3);
+
+                // And that Charlie has the other third
+                let charlie_deposit_amount =
+                    DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob)
+                        .unwrap()
+                        .user_deposit;
+                assert_eq!(charlie_deposit_amount, total_deposit_amount / 3);
+
+                // And that David has the last third
+                let david_deposit_amount =
+                    DynamicRatePaymentStreams::<Test>::get(&david_bsp_id, &bob)
+                        .unwrap()
+                        .user_deposit;
+                assert_eq!(david_deposit_amount, total_deposit_amount / 3);
+
+                // Set the last chargeable price index of David to the equivalent of two blocks ahead
+                LastChargeableInfo::<Test>::insert(
+                    &david_bsp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: DynamicRatePaymentStreams::<Test>::get(&david_bsp_id, &bob)
+                            .unwrap()
+                            .price_index_when_last_charged
+                            + 2 * current_price,
+                    },
+                );
+
+                // Set the last chargeable price index of Charlie to the equivalent of one block ahead
+                LastChargeableInfo::<Test>::insert(
+                    &charlie_bsp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob)
+                            .unwrap()
+                            .price_index_when_last_charged
+                            + current_price,
+                    },
+                );
+
+                // Set the last chargeable price index of Alice to something that will make Bob run out of funds
+                run_to_block(System::block_number() + 10);
+                let current_price_index = AccumulatedPriceIndex::<Test>::get()
+                    + bob_new_balance / (amount_provided as u128)
+                    + 1;
+                LastChargeableInfo::<Test>::insert(
+                    &alice_bsp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: current_price_index,
+                    },
+                );
+
+                // Charge the payment stream from Bob to Alice
+                assert_ok!(PaymentStreams::charge_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    bob
+                ));
+
+                // Advance enough blocks for Bob to be flagged as a user without funds
+                run_to_block(System::block_number() + <NewStreamDeposit as Get<u64>>::get() + 1);
+
+                // Charge the payment stream from Bob to Alice
+                assert_ok!(PaymentStreams::charge_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    bob
+                ));
+
+                // Check that the UserWithoutFunds event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+
+                // Check that no funds were charged from Bob's free balance
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Check that Bob is flagged as a user without funds
+                assert!(UsersWithoutFunds::<Test>::contains_key(bob));
+
+                // Check that the payment stream from Bob to Alice does not exist anymore
+                assert_eq!(
+                    DynamicRatePaymentStreams::<Test>::get(&alice_bsp_id, &bob),
+                    None
+                );
+
+                // Check that the payment stream from Bob to Charlie still exists
+                assert!(DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob).is_some());
+
+                // Check that the payment stream from Bob to David still exists
+                assert!(DynamicRatePaymentStreams::<Test>::get(&david_bsp_id, &bob).is_some());
+
+                // Check that Bob's free balance has not changed but it's deposit to Alice has been transferred to her
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+                assert_eq!(
+                    NativeBalance::free_balance(&alice),
+                    alice_initial_balance + alice_deposit_amount
+                );
+
+                // Check that Bob still has its deposit with Charlie and David
+                assert_eq!(
+                    NativeBalance::balance_on_hold(
+                        &RuntimeHoldReason::PaymentStreams(crate::HoldReason::PaymentStreamDeposit),
+                        &bob
+                    ),
+                    charlie_deposit_amount + david_deposit_amount
+                );
+
+                // Pay the outstanding debt of Bob
+                assert_ok!(PaymentStreams::pay_outstanding_debt(RuntimeOrigin::signed(
+                    bob
+                )));
+
+                // Check that Bob is no longer flagged as a user without funds
+                assert!(!UsersWithoutFunds::<Test>::contains_key(bob));
+
+                // Check that Bob's balance has been updated with the correct amount after paying charlie and david
+                let amount_to_pay_for_storage = 3 * current_price * (amount_provided as u128);
+                let bob_new_balance = bob_new_balance - amount_to_pay_for_storage
+                    + charlie_deposit_amount
+                    + david_deposit_amount;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Check that Charlie has been paid
+                assert_eq!(
+                    NativeBalance::free_balance(&charlie),
+                    charlie_initial_balance + amount_to_pay_for_storage / 3
+                );
+
+                // Check that David has been paid
+                assert_eq!(
+                    NativeBalance::free_balance(&david),
+                    david_initial_balance + 2 * amount_to_pay_for_storage / 3
+                );
+
+                // Check that Bob no longer has any deposits
+                assert_eq!(
+                    NativeBalance::balance_on_hold(
+                        &RuntimeHoldReason::PaymentStreams(crate::HoldReason::PaymentStreamDeposit),
+                        &bob
+                    ),
+                    0
+                );
+
+                // Check that the UserSolvent event was emitted for Bob
+                System::assert_has_event(Event::<Test>::UserSolvent { who: bob }.into());
+
+                // Check that the payment stream from Bob to Charlie does not exist anymore
+                assert_eq!(
+                    DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob),
+                    None
+                );
+
+                // Check that the payment stream from Bob to David does not exist anymore
+                assert_eq!(
+                    DynamicRatePaymentStreams::<Test>::get(&david_bsp_id, &bob),
+                    None
+                );
+            });
+        }
+
+        #[test]
+        fn pay_outstanding_debt_fails_if_user_is_not_flagged_as_without_funds() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let bob: AccountId = 1;
+                let current_price = 10;
+                let current_price_index = 10000;
+                let amount_provided = 100;
+
+                // Update the current price and current price index
+                CurrentPricePerUnitPerTick::<Test>::put(current_price);
+                AccumulatedPriceIndex::<Test>::put(current_price_index);
+
+                // Register Alice as a BSP with 100 units of data and get her BSP ID
+                register_account_as_bsp(alice, 100);
+                let alice_bsp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
+
+                // Create a payment stream from Bob to Alice of 100 units provided
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+                        &alice_bsp_id,
+                        &bob,
+                        &amount_provided,
+                    )
+                );
+
+                // Try to pay the outstanding debt of Bob without him being flagged as a user without funds
+                assert_noop!(
+                    PaymentStreams::pay_outstanding_debt(RuntimeOrigin::signed(bob)),
+                    Error::<Test>::UserNotFlaggedAsWithoutFunds
+                );
             });
         }
     }
