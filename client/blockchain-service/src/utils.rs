@@ -545,6 +545,8 @@ impl BlockchainService {
     /// This is used to catch up to the latest proof submissions that were missed due to a node restart.
     /// Also, it can help to catch up to proofs in case there is a change in the BSP's stake (therefore
     /// also a change in it's challenge period).
+    ///
+    /// IMPORTANT: This function assumes that the current block will be
     #[allow(dead_code)] // TODO: Remove this when finally used.
     pub(crate) fn proof_submission_catch_up(
         &mut self,
@@ -617,7 +619,7 @@ impl BlockchainService {
         // Advance by `challenge_period` ticks and generate `NewChallengeSeed` events for the provider.
         let mut challenge_seeds = Vec::new();
         let mut next_challenge_tick = last_tick_provider_submitted_proof + challenge_period;
-        while next_challenge_tick < current_tick {
+        while next_challenge_tick <= current_tick {
             // Get the seed for the challenge tick.
             let seed = match self
                 .client
@@ -632,7 +634,7 @@ impl BlockchainService {
                             return;
                         }
                         GetChallengeSeedError::TickIsInTheFuture => {
-                            debug!(target: LOG_TARGET, "CRITICAL❗️❗️ Tick [{:?}] is in the future. This should never happen. \nThis is a bug. Please report it to the StorageHub team.", next_challenge_tick);
+                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Tick [{:?}] is in the future. This should never happen. \nThis is a bug. Please report it to the StorageHub team.", next_challenge_tick);
                             return;
                         }
                         GetChallengeSeedError::InternalApiError => {
