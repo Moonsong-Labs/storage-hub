@@ -39,7 +39,7 @@ describeBspNet(
       const alice = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
       const createDynamicRatePaymentStreamResult = await userApi.sealBlock(
         userApi.tx.sudo.sudo(
-          userApi.tx.paymentStreams.createDynamicRatePaymentStream(DUMMY_BSP_ID, alice, 100, 1, 0)
+          userApi.tx.paymentStreams.createDynamicRatePaymentStream(DUMMY_BSP_ID, alice, 100)
         )
       );
 
