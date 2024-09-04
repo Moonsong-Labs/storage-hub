@@ -6,12 +6,13 @@ use jsonrpsee::{
 use shc_common::types::{
     ChunkId, FileMetadata, HashT, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
 };
+use shc_forest_manager::traits::ForestStorage;
+use shc_forest_manager::traits::ForestStorageHandler;
 use sp_core::{sr25519::Pair as Sr25519Pair, Pair, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{AccountId32, Deserialize, KeyTypeId, Serialize};
 
 use shc_file_manager::traits::{FileDataTrie, FileStorage, FileStorageError};
-use shc_forest_manager::traits::ForestStorage;
 
 use log::{debug, error};
 use tokio::fs;
@@ -21,35 +22,35 @@ use tokio::{fs::create_dir_all, sync::RwLock};
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
 
-pub struct StorageHubClientRpcConfig<FL, FS> {
+pub struct StorageHubClientRpcConfig<FL, FSH> {
     pub file_storage: Arc<RwLock<FL>>,
-    pub forest_storage: Arc<RwLock<FS>>,
+    pub forest_storage_handler: FSH,
     pub keystore: KeystorePtr,
 }
 
-impl<FL, FS> Clone for StorageHubClientRpcConfig<FL, FS> {
+impl<FL, FSH: Clone> Clone for StorageHubClientRpcConfig<FL, FSH> {
     fn clone(&self) -> Self {
         Self {
             file_storage: self.file_storage.clone(),
-            forest_storage: self.forest_storage.clone(),
+            forest_storage_handler: self.forest_storage_handler.clone(),
             keystore: self.keystore.clone(),
         }
     }
 }
 
-impl<FL, FS> StorageHubClientRpcConfig<FL, FS>
+impl<FL, FSH> StorageHubClientRpcConfig<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FSH: ForestStorageHandler + Send + Sync,
 {
     pub fn new(
         file_storage: Arc<RwLock<FL>>,
-        forest_storage: Arc<RwLock<FS>>,
+        forest_storage_handler: FSH,
         keystore: KeystorePtr,
     ) -> Self {
         Self {
             file_storage,
-            forest_storage,
+            forest_storage_handler,
             keystore,
         }
     }
@@ -92,7 +93,7 @@ pub trait StorageHubClientApi {
     ) -> RpcResult<SaveFileToDisk>;
 
     #[method(name = "getForestRoot")]
-    async fn get_forest_root(&self) -> RpcResult<H256>;
+    async fn get_forest_root(&self, key: Option<String>) -> RpcResult<H256>;
 
     #[method(name = "insertBcsvKeys")]
     async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String>;
@@ -102,21 +103,21 @@ pub trait StorageHubClientApi {
 }
 
 /// Stores the required objects to be used in our RPC method.
-pub struct StorageHubClientRpc<FL, FS> {
+pub struct StorageHubClientRpc<FL, FSH> {
     file_storage: Arc<RwLock<FL>>,
-    forest_storage: Arc<RwLock<FS>>,
+    forest_storage_handler: FSH,
     keystore: KeystorePtr,
 }
 
-impl<FL, FS> StorageHubClientRpc<FL, FS>
+impl<FL, FSH> StorageHubClientRpc<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FSH: ForestStorageHandler + Send + Sync,
 {
-    pub fn new(storage_hub_client_rpc_config: StorageHubClientRpcConfig<FL, FS>) -> Self {
+    pub fn new(storage_hub_client_rpc_config: StorageHubClientRpcConfig<FL, FSH>) -> Self {
         Self {
             file_storage: storage_hub_client_rpc_config.file_storage,
-            forest_storage: storage_hub_client_rpc_config.forest_storage,
+            forest_storage_handler: storage_hub_client_rpc_config.forest_storage_handler,
             keystore: storage_hub_client_rpc_config.keystore,
         }
     }
@@ -127,10 +128,10 @@ where
 // file uploads, even if the file is not in its storage. So we need a way to inform the task
 // to only react to its file.
 #[async_trait]
-impl<FL, FS> StorageHubClientApiServer for StorageHubClientRpc<FL, FS>
+impl<FL, FSH> StorageHubClientApiServer for StorageHubClientRpc<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FSH: ForestStorageHandler + Send + Sync + 'static,
 {
     async fn load_file_in_storage(
         &self,
@@ -259,9 +260,16 @@ where
         Ok(SaveFileToDisk::Success(file_metadata))
     }
 
-    async fn get_forest_root(&self) -> RpcResult<H256> {
-        let forest_storage_read_lock = self.forest_storage.read().await;
-        Ok(forest_storage_read_lock.root())
+    async fn get_forest_root(&self, key: Option<String>) -> RpcResult<H256> {
+        let key = FSH::Key::from(key.unwrap_or_default());
+
+        let fs =
+            self.forest_storage_handler.get(&key).await.ok_or_else(|| {
+                into_rpc_error(format!("Forest storage not found for key {:?}", key))
+            })?;
+
+        let read_fs = fs.read().await;
+        Ok(read_fs.root())
     }
 
     // If a seed is provided, we manually generate and persist it into the file system.

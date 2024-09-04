@@ -12,25 +12,24 @@ use shc_blockchain_service::{
     },
     BlockchainService,
 };
-use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest},
     FileTransferService,
 };
-use shc_forest_manager::traits::ForestStorage;
-use storage_hub_runtime::StorageProofsMerkleTrieLayout;
+use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::tasks::{
     bsp_charge_fees::BspChargeFeesTask, bsp_download_file::BspDownloadFileTask,
     bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
     sp_slash_provider::SlashProviderTask, user_sends_file::UserSendsFileTask,
+    BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT,
 };
 
 /// Represents the handler for the Storage Hub service.
-pub struct StorageHubHandler<FL, FS>
+pub struct StorageHubHandler<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FL: FileStorageT,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     /// The task spawner for spawning asynchronous tasks.
     pub task_spawner: TaskSpawner,
@@ -41,43 +40,43 @@ where
     /// The file storage layer which stores all files in chunks.
     pub file_storage: Arc<RwLock<FL>>,
     /// The forest storage layer which tracks all complete files stored in the file storage layer.
-    pub forest_storage: Arc<RwLock<FS>>,
+    pub forest_storage_handler: FSH,
 }
 
-impl<FL, FS> Clone for StorageHubHandler<FL, FS>
+impl<FL, FSH> Clone for StorageHubHandler<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FL: FileStorageT,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
-    fn clone(&self) -> StorageHubHandler<FL, FS> {
+    fn clone(&self) -> StorageHubHandler<FL, FSH> {
         Self {
             task_spawner: self.task_spawner.clone(),
             file_transfer: self.file_transfer.clone(),
             blockchain: self.blockchain.clone(),
             file_storage: self.file_storage.clone(),
-            forest_storage: self.forest_storage.clone(),
+            forest_storage_handler: self.forest_storage_handler.clone(),
         }
     }
 }
 
-impl<FL, FS> StorageHubHandler<FL, FS>
+impl<FL, FSH> StorageHubHandler<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     pub fn new(
         task_spawner: TaskSpawner,
         file_transfer: ActorHandle<FileTransferService>,
         blockchain: ActorHandle<BlockchainService>,
         file_storage: Arc<RwLock<FL>>,
-        forest_storage: Arc<RwLock<FS>>,
+        forest_storage_handler: FSH,
     ) -> Self {
         Self {
             task_spawner,
             file_transfer,
             blockchain,
             file_storage,
-            forest_storage,
+            forest_storage_handler,
         }
     }
 
@@ -88,7 +87,25 @@ where
             .subscribe_to(&self.task_spawner, &self.blockchain)
             .start();
     }
+}
 
+impl<FL, FSH> StorageHubHandler<FL, FSH>
+where
+    FL: FileStorageT,
+    FSH: MspForestStorageHandlerT,
+{
+    pub fn start_msp_tasks(&self) {
+        log::info!("Starting MSP tasks");
+
+        // TODO: Implement MSP tasks
+    }
+}
+
+impl<FL, FSH> StorageHubHandler<FL, FSH>
+where
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
+{
     pub fn start_bsp_tasks(&self) {
         log::info!("Starting BSP tasks");
 
@@ -166,11 +183,5 @@ where
             .clone()
             .subscribe_to(&self.task_spawner, &self.blockchain);
         last_chargeable_info_updated_event_bus_listener.start();
-    }
-
-    pub fn start_msp_tasks(&self) {
-        log::info!("Starting MSP tasks");
-
-        // TODO: Implement MSP tasks
     }
 }

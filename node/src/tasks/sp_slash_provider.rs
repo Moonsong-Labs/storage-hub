@@ -4,11 +4,10 @@ use sc_tracing::tracing::*;
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::SlashableProvider};
-use shc_common::types::StorageProofsMerkleTrieLayout;
-use shc_file_manager::traits::FileStorage;
-use shc_forest_manager::traits::ForestStorage;
+use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::services::handler::StorageHubHandler;
+use crate::tasks::FileStorageT;
 
 const LOG_TARGET: &str = "slash-provider-task";
 
@@ -16,32 +15,32 @@ const LOG_TARGET: &str = "slash-provider-task";
 ///
 /// This task is responsible for slashing a provider. It listens for the `SlashableProvider` event and sends an extrinsic
 /// to StorageHub runtime to slash the provider.
-pub struct SlashProviderTask<FL, FS>
+pub struct SlashProviderTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
-    storage_hub_handler: StorageHubHandler<FL, FS>,
+    storage_hub_handler: StorageHubHandler<FL, FSH>,
 }
 
-impl<FL, FS> Clone for SlashProviderTask<FL, FS>
+impl<FL, FSH> Clone for SlashProviderTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
-    fn clone(&self) -> SlashProviderTask<FL, FS> {
+    fn clone(&self) -> SlashProviderTask<FL, FSH> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FS> SlashProviderTask<FL, FS>
+impl<FL, FSH> SlashProviderTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -51,10 +50,10 @@ where
 /// Handles the `SlashaProvider` event.
 ///
 /// This event is triggered by the runtime when a provider is marked as slashable.
-impl<FL, FS> EventHandler<SlashableProvider> for SlashProviderTask<FL, FS>
+impl<FL, FSH> EventHandler<SlashableProvider> for SlashProviderTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     async fn handle_event(&mut self, event: SlashableProvider) -> anyhow::Result<()> {
         info!(
@@ -67,10 +66,10 @@ where
     }
 }
 
-impl<FL, FS> SlashProviderTask<FL, FS>
+impl<FL, FSH> SlashProviderTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     async fn handle_slashable_provider_event(
         &mut self,

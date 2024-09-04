@@ -15,15 +15,18 @@ publish = false
 workspace = true
 
 [dependencies]
+async-trait = { workspace = true }
 bincode = { workspace = true }
 codec = { workspace = true }
 hash-db = { workspace = true }
 kvdb = { workspace = true }
 kvdb-rocksdb = { workspace = true }
-kvdb-memorydb = { workspace =  true }
+kvdb-memorydb = { workspace = true }
 log = { workspace = true }
 reference-trie = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
 trie-db = { workspace = true }
 
 sp-core = { workspace = true }
