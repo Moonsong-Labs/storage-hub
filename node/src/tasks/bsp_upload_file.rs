@@ -16,17 +16,18 @@ use shc_blockchain_service::{
 use shc_common::types::{
     FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
 };
-use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
+use shc_file_manager::traits::{FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::ForestStorage;
 
-use crate::services::handler::StorageHubHandler;
+use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
+use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
-const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: usize = 3;
+const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: u32 = 3;
 
 /// BSP Upload File Task: Handles the whole flow of a file being uploaded to a BSP, from
 /// the BSP's perspective.
@@ -43,21 +44,21 @@ const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: usize = 3;
 /// - [`ProcessConfirmStoringRequest`] event: The third part of the flow. It is triggered by the
 ///   runtime when the BSP should construct a proof for the new file(s) and submit a confirm storing
 ///   before updating it's local Forest storage root.
-pub struct BspUploadFileTask<FL, FS>
+pub struct BspUploadFileTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    storage_hub_handler: StorageHubHandler<FL, FS>,
+    storage_hub_handler: StorageHubHandler<FL, FSH>,
     file_key_cleanup: Option<H256>,
 }
 
-impl<FL, FS> Clone for BspUploadFileTask<FL, FS>
+impl<FL, FSH> Clone for BspUploadFileTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    fn clone(&self) -> BspUploadFileTask<FL, FS> {
+    fn clone(&self) -> BspUploadFileTask<FL, FSH> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_key_cleanup: self.file_key_cleanup,
@@ -65,12 +66,12 @@ where
     }
 }
 
-impl<FL, FS> BspUploadFileTask<FL, FS>
+impl<FL, FSH> BspUploadFileTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
         Self {
             storage_hub_handler,
             file_key_cleanup: None,
@@ -85,10 +86,10 @@ where
 /// receiving the file. This task optimistically assumes the transaction will succeed, and registers
 /// the user and file key in the registry of the File Transfer Service, which handles incoming p2p
 /// upload requests.
-impl<FL, FS> EventHandler<NewStorageRequest> for BspUploadFileTask<FL, FS>
+impl<FL, FSH> EventHandler<NewStorageRequest> for BspUploadFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
@@ -112,10 +113,10 @@ where
 ///
 /// This event is triggered by a user sending a chunk of the file to the BSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
-impl<FL, FS> EventHandler<RemoteUploadRequest> for BspUploadFileTask<FL, FS>
+impl<FL, FSH> EventHandler<RemoteUploadRequest> for BspUploadFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
@@ -232,16 +233,16 @@ where
 ///
 /// This event is triggered by the runtime when it decides it is the right time to submit a confirm
 /// storing extrinsic (and update the local forest root).
-impl<FL, FS> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<FL, FS>
+impl<FL, FSH> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: ProcessConfirmStoringRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing ConfirmStoringRequest: {:?}",
-            event.confirm_storing_requests,
+            event.data.confirm_storing_requests,
         );
 
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
@@ -278,7 +279,7 @@ where
 
         // Query runtime for the chunks to prove for the file.
         let mut confirm_storing_requests_with_chunks_to_prove = Vec::new();
-        for confirm_storing_request in event.confirm_storing_requests.iter() {
+        for confirm_storing_request in event.data.confirm_storing_requests.iter() {
             match self
                 .storage_hub_handler
                 .blockchain
@@ -354,13 +355,15 @@ where
             .map(|(file_key, _)| *file_key)
             .collect::<Vec<_>>();
 
-        // Get a read lock on the forest storage to generate a proof for the file.
-        let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
-        let non_inclusion_forest_proof = read_forest_storage
-            .generate_proof(file_keys)
-            .map_err(|_| anyhow!("Failed to generate forest proof."))?;
-        // Release the forest storage read lock.
-        drop(read_forest_storage);
+        let fs = self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get(&NoKey)
+            .await
+            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+
+        // Generate a proof of non-inclusion (executed in closure to drop the read lock on the forest storage).
+        let non_inclusion_forest_proof = { fs.read().await.generate_proof(file_keys)? };
 
         // Build extrinsic.
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
@@ -384,13 +387,12 @@ where
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
-        // Save [`FileMetadata`] of the successfully retrieved stored files in the forest storage.
-        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
-        write_forest_storage
-            .insert_files_metadata(&file_metadatas)
-            .map_err(|_| anyhow!("Failed to insert files metadata into forest storage."))?;
-        // Release the forest storage write lock.
-        drop(write_forest_storage);
+        // Save `FileMetadata` of the successfully retrieved stored files in the forest storage (executed in closure to drop the read lock on the forest storage).
+        {
+            fs.write()
+                .await
+                .insert_files_metadata(file_metadatas.as_slice())?;
+        }
 
         // Release the forest root write "lock".
         let _ = forest_root_write_tx.send(());
@@ -399,10 +401,10 @@ where
     }
 }
 
-impl<FL, FS> BspUploadFileTask<FL, FS>
+impl<FL, FSH> BspUploadFileTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_new_storage_request_event(
         &mut self,

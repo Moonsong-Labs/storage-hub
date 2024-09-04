@@ -1,3 +1,4 @@
+use codec::{Decode, Encode};
 use sc_network::Multiaddr;
 use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
 use shc_common::types::{
@@ -16,7 +17,7 @@ use crate::handler::ConfirmStoringRequest;
 /// This event is emitted when there's a new random challenge seed that affects this
 /// BSP. In other words, it only pays attention to the random seeds in the challenge
 /// period of this BSP.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct NewChallengeSeed {
     pub provider_id: ProviderId,
     pub tick: BlockNumber,
@@ -64,21 +65,53 @@ pub struct AcceptedBspVolunteer {
 
 impl EventBusMessage for AcceptedBspVolunteer {}
 
-#[derive(Debug, Clone)]
-pub struct ProcessSubmitProofRequest {
+#[derive(Debug, Clone, Encode, Decode)]
+pub enum ForestWriteLockTaskData {
+    SubmitProofRequest(ProcessSubmitProofRequestData),
+    ConfirmStoringRequest(ProcessConfirmStoringRequestData),
+}
+
+impl From<ProcessSubmitProofRequestData> for ForestWriteLockTaskData {
+    fn from(data: ProcessSubmitProofRequestData) -> Self {
+        Self::SubmitProofRequest(data)
+    }
+}
+
+impl From<ProcessConfirmStoringRequestData> for ForestWriteLockTaskData {
+    fn from(data: ProcessConfirmStoringRequestData) -> Self {
+        Self::ConfirmStoringRequest(data)
+    }
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ProcessSubmitProofRequestData {
     pub provider_id: ProviderId,
     pub tick: BlockNumber,
     pub seed: RandomnessOutput,
     pub forest_challenges: Vec<H256>,
     pub checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProcessSubmitProofRequest {
+    pub data: ProcessSubmitProofRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+}
+
+impl EventBusMessage for ProcessConfirmStoringRequest {}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ProcessConfirmStoringRequestData {
+    pub confirm_storing_requests: Vec<ConfirmStoringRequest>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ProcessConfirmStoringRequest {
-    pub confirm_storing_requests: Vec<ConfirmStoringRequest>,
+    pub data: ProcessConfirmStoringRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
+
+impl EventBusMessage for ProcessSubmitProofRequest {}
 
 /// Slashable Provider event.
 ///
@@ -138,8 +171,6 @@ pub struct BlockchainServiceEventBusProvider {
     last_chargeable_info_updated_event_bus: EventBus<LastChargeableInfoUpdated>,
 }
 
-impl EventBusMessage for ProcessSubmitProofRequest {}
-
 impl BlockchainServiceEventBusProvider {
     pub fn new() -> Self {
         Self {
@@ -155,8 +186,6 @@ impl BlockchainServiceEventBusProvider {
         }
     }
 }
-
-impl EventBusMessage for ProcessConfirmStoringRequest {}
 
 impl ProvidesEventBus<NewChallengeSeed> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<NewChallengeSeed> {

@@ -3,51 +3,49 @@ use std::time::Duration;
 use log::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
-use shc_common::types::StorageProofsMerkleTrieLayout;
-use shc_file_manager::traits::FileStorage;
-use shc_forest_manager::traits::ForestStorage;
 use sp_core::H256;
 
 use crate::services::handler::StorageHubHandler;
+use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 
 const LOG_TARGET: &str = "bsp-volunteer-mock-task";
 
-pub struct BspVolunteerMockTask<FL, FS>
+pub struct BspVolunteerMockTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    storage_hub_handler: StorageHubHandler<FL, FS>,
+    storage_hub_handler: StorageHubHandler<FL, FSH>,
 }
 
-impl<FL, FS> Clone for BspVolunteerMockTask<FL, FS>
+impl<FL, FSH> Clone for BspVolunteerMockTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    fn clone(&self) -> BspVolunteerMockTask<FL, FS> {
+    fn clone(&self) -> BspVolunteerMockTask<FL, FSH> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FS> BspVolunteerMockTask<FL, FS>
+impl<FL, FSH> BspVolunteerMockTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<FL, FS> EventHandler<NewStorageRequest> for BspVolunteerMockTask<FL, FS>
+impl<FL, FSH> EventHandler<NewStorageRequest> for BspVolunteerMockTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(

@@ -413,9 +413,12 @@ export const addBsp = async (
   const additionalArgs = options?.additionalArgs ?? [];
   if (options?.rocksdb) {
     additionalArgs.push("--storage-layer=rocks-db");
-    additionalArgs.push(`--storage-path=/tmp/bsp/${bspKey.address}`);
   }
-  const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer(options);
+  additionalArgs.push(`--storage-path=/tmp/bsp/${bspKey.address}`);
+  const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
+    ...options,
+    additionalArgs
+  });
 
   //Give it some balance.
   const amount = 10000n * 10n ** 12n;
