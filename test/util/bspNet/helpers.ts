@@ -23,6 +23,7 @@ import { ShConsts } from "./consts.ts";
 import { addBspContainer, showContainers } from "./docker";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api.ts";
 import type { BspNetConfig, InitialisedMultiBspNetwork } from "./types";
+import invariant from "tiny-invariant";
 
 const exec = util.promisify(child_process.exec);
 
@@ -57,7 +58,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
     } seconds`
   );
   showContainers();
-  throw new Error("Error fetching container IP");
+  throw "Error fetching container IP";
 };
 
 export const checkNodeAlive = async (url: string, verbose = false) => getContainerIp(url, verbose);
@@ -84,9 +85,8 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      invariant(response.ok, `HTTP error! status: ${response.status}`);
+
       const resp = (await response.json()) as any;
       return resp.result as string;
     } catch {
@@ -96,7 +96,7 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
 
   console.log(`Error fetching peerId from ${url} after ${(maxRetries * sleepTime) / 1000} seconds`);
   showContainers();
-  throw new Error(`Error fetching peerId from ${url}`);
+  throw `Error fetching peerId from ${url}`;
 };
 
 export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
@@ -263,9 +263,7 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
     const newBucketEventDataBlob =
       userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-    if (!newBucketEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
+    invariant(newBucketEventDataBlob, "Event doesn't match Type");
 
     const { fingerprint, file_size, location } =
       await userApi.rpc.storagehubclient.loadFileInStorage(
@@ -395,9 +393,8 @@ export const createCheckBucket = async (api: EnrichedBspApi, bucketName: string)
   const newBucketEventDataBlob =
     api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-  if (!newBucketEventDataBlob) {
-    throw new Error("Event doesn't match Type");
-  }
+  invariant(newBucketEventDataBlob, "Event doesn't match Type");
+
   return newBucketEventDataBlob;
 };
 

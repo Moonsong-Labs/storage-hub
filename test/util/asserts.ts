@@ -1,5 +1,5 @@
 import type { EventRecord } from "@polkadot/types/interfaces";
-import { strictEqual } from "node:assert";
+import invariant from "tiny-invariant";
 import type { ApiPromise } from "@polkadot/api";
 import type { AugmentedEvent } from "@polkadot/api/types";
 import { sleep } from "./timer";
@@ -42,14 +42,14 @@ export const assertExtrinsicPresent = async (
   }[]
 > => {
   if (options.ignoreParamCheck !== true) {
-    strictEqual(
+    invariant(
       options.module in api.tx,
-      true,
+
       `Module ${options.module} not found in API metadata. Turn off this check with "ignoreParamCheck: true" if you are sure this exists`
     );
-    strictEqual(
+    invariant(
       options.method in api.tx[options.module],
-      true,
+
       `Method ${options.module}.${options.method} not found in metadata. Turn off this check with "ignoreParamCheck: true" if you are sure this exists`
     );
   }
@@ -80,9 +80,9 @@ export const assertExtrinsicPresent = async (
     ({ method, module }) => method === options?.method && module === options?.module
   );
 
-  strictEqual(
+  invariant(
     matches.length > 0,
-    true,
+
     `No extrinsics matching ${options?.module}.${options?.method} found. \n Extrinsics in block ${options.blockHeight || blockHash}: ${extrinsics.map(({ method: { method, section } }) => `${section}.${method}`).join(" | ")}`
   );
 
@@ -110,20 +110,15 @@ export const assertEventPresent = (
   method: string,
   events?: EventRecord[]
 ) => {
-  strictEqual(events && events.length > 0, true, "No events emitted in block");
-  if (!events) {
-    throw new Error("No events found, should be caught by assert");
-  }
+  invariant(events && events.length > 0, "No events emitted in block");
 
   const event = events.find((e) => e.event.section === module && e.event.method === method);
-  strictEqual(event !== undefined, true, `No events matching ${module}.${method}`);
-  if (!event) {
-    throw new Error("No event found, should be caught by assert");
-  }
-  strictEqual(api.events[module][method].is(event.event), true);
-  if (!api.events[module][method].is(event.event)) {
-    throw new Error("Event doesn't match, should be caught by assert");
-  }
+  invariant(event !== undefined, `No events matching ${module}.${method}`);
+
+  invariant(
+    api.events[module][method].is(event.event),
+    "Event doesn't match, should be caught by assert"
+  );
 
   return { event: event.event, data: event.event.data };
 };
@@ -144,16 +139,10 @@ export const assertEventMany = (
   method: string,
   events?: EventRecord[]
 ) => {
-  strictEqual(events && events.length > 0, true, "No events emitted in block");
-  if (!events) {
-    throw new Error("No events found, should be caught by assert");
-  }
-
+  invariant(events && events.length > 0, "No events emitted in block");
   const matchingEvents = events.filter((event) => api.events[module][method].is(event.event));
 
-  if (matchingEvents.length === 0) {
-    throw new Error(`No events matching ${module}.${method} found`);
-  }
+  invariant(matchingEvents.length !== 0, `No events matching ${module}.${method} found`);
 
   return matchingEvents;
 };
@@ -166,24 +155,15 @@ export const fetchEventData = <T extends AugmentedEvent<"promise">>(
   matcher: T,
   events?: EventRecord[]
 ): EventData<T> => {
-  strictEqual(events && events.length > 0, true, "No events emitted in block");
-  if (!events) {
-    throw new Error("No events found, should be caught by assert");
-  }
+  invariant(events && events.length > 0, "No events emitted in block");
 
   const eventRecord = events.find((e) => matcher.is(e.event));
 
-  if (!eventRecord) {
-    throw new Error(`No event found for matcher, ${matcher.meta.name}`);
-  }
+  invariant(eventRecord !== undefined, `No event found for matcher, ${matcher.meta.name}`);
 
   const event = eventRecord.event;
 
-  if (matcher.is(event)) {
-    return event.data as unknown as EventData<T>;
-  }
-
-  throw new Error("Event doesn't match, should be caught earlier");
+  return event.data as unknown as EventData<T>;
 };
 
 /**
@@ -202,7 +182,7 @@ export async function checkProviderWasSlashed(api: ApiPromise, providerId: strin
     await api.query.system.events()
   );
 
-  strictEqual(provider.toString(), providerId, `Provider ${providerId} was not slashed`);
+  invariant(provider.toString() === providerId, `Provider ${providerId} was not slashed`);
 }
 
 export namespace Assertions {

@@ -15,6 +15,7 @@ import { sleep } from "../timer";
 import { ShConsts } from "./consts";
 import assert, { strictEqual } from "node:assert";
 import { Assertions } from "../asserts";
+import invariant from "tiny-invariant";
 
 export interface SealedBlock {
   blockReceipt: CreatedBlock;
@@ -209,45 +210,42 @@ export const advanceToBlock = async (
   let currentBlockNumber = currentBlock.block.header.number.toNumber();
 
   let blockResult = null;
-  if (blockNumber > currentBlockNumber) {
-    const blocksToAdvance = blockNumber - currentBlockNumber;
-    for (let i = 0; i < blocksToAdvance; i++) {
-      blockResult = await sealBlock(api);
-      currentBlockNumber += 1;
 
-      // Check if we need to wait for BSP proofs.
-      if (watchForBspProofs) {
-        for (const challengeBlockNumber of challengeBlockNumbers) {
-          if (currentBlockNumber === challengeBlockNumber.nextChallengeBlock) {
-            // Wait for the BSP to process the proof.
-            await sleep(500);
+  invariant(
+    blockNumber > currentBlockNumber,
+    `Block number ${blockNumber} is lower than current block number ${currentBlockNumber}`
+  );
+  const blocksToAdvance = blockNumber - currentBlockNumber;
+  for (let i = 0; i < blocksToAdvance; i++) {
+    blockResult = await sealBlock(api);
+    currentBlockNumber += 1;
 
-            // Update next challenge block.
-            challengeBlockNumbers[0].nextChallengeBlock += challengeBlockNumber.challengePeriod;
-            break;
-          }
-        }
-      }
-
-      if (waitBetweenBlocks) {
-        if (typeof waitBetweenBlocks === "number") {
-          await sleep(waitBetweenBlocks);
-        } else {
+    // Check if we need to wait for BSP proofs.
+    if (watchForBspProofs) {
+      for (const challengeBlockNumber of challengeBlockNumbers) {
+        if (currentBlockNumber === challengeBlockNumber.nextChallengeBlock) {
+          // Wait for the BSP to process the proof.
           await sleep(500);
+
+          // Update next challenge block.
+          challengeBlockNumbers[0].nextChallengeBlock += challengeBlockNumber.challengePeriod;
+          break;
         }
       }
     }
-  } else {
-    throw new Error(
-      `Block number ${blockNumber} is lower than current block number ${currentBlockNumber}`
-    );
+
+    if (waitBetweenBlocks) {
+      if (typeof waitBetweenBlocks === "number") {
+        await sleep(waitBetweenBlocks);
+      } else {
+        await sleep(500);
+      }
+    }
   }
 
-  if (blockResult) {
-    return blockResult;
-  }
+  invariant(blockResult, "Block wasn't sealed");
 
-  throw new Error("Block wasn't sealed");
+  return blockResult;
 };
 
 export async function reOrgBlocks(api: ApiPromise): Promise<void> {
@@ -259,7 +257,7 @@ export async function reOrgBlocks(api: ApiPromise): Promise<void> {
     console.error(
       "Tip ℹ️: You can create unfinalised blocks in sealBlock() by passing finaliseBlock = false"
     );
-    throw new Error("Cannot reorg a finalised block");
+    throw "Cannot reorg a finalised block";
   }
   await api.rpc.engine.createBlock(true, true, finalisedHash);
 }

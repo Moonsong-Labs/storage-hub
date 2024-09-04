@@ -5,6 +5,7 @@ import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
 import { NodeBspNet } from "./node";
 import { BspNetTestApi } from "./test-api";
+import invariant from "tiny-invariant";
 
 export const checkBspForFile = async (filePath: string) => {
   const containerId = "docker-sh-bsp-1";
@@ -19,7 +20,7 @@ export const checkBspForFile = async (filePath: string) => {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   }
-  throw new Error(`File not found: ${loc} in ${containerId}`);
+  throw `File not found: ${loc} in ${containerId}`;
 };
 
 export const checkFileChecksum = async (filePath: string) => {
@@ -55,9 +56,8 @@ export const addBspContainer = async (options?: {
 
   const bspNum = existingBsps.length;
 
-  if (bspNum < 1) {
-    throw new Error("No existing BSP containers");
-  }
+  invariant(bspNum > 0, "No existing BSP containers");
+
   const p2pPort = 30350 + bspNum;
   const rpcPort = 9977 + bspNum * 7;
   const containerName = options?.name || `docker-sh-bsp-${bspNum + 1}`;
@@ -67,9 +67,7 @@ export const addBspContainer = async (options?: {
 
   const bootNodeArg = Args.find((arg) => arg.includes("--bootnodes="));
 
-  if (!bootNodeArg) {
-    throw new Error("No bootnode found in docker args");
-  }
+  invariant(bootNodeArg, "No bootnode found in docker args");
 
   let keystorePath: string;
   const keystoreArg = Args.find((arg) => arg.includes("--keystore-path="));
@@ -123,18 +121,16 @@ export const addBspContainer = async (options?: {
     }
   }
 
-  if (!peerId) {
-    console.error("Failed to connect after 10s. Exiting...");
-    throw new Error("Failed to connect to the new BSP container");
-  }
+  invariant(peerId, "Failed to connect after 10s. Exiting...");
 
   const api = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
 
   const chainName = api.consts.system.version.specName.toString();
-  if (chainName !== "storage-hub-runtime") {
-    console.log(chainName);
-    throw new Error(`Error connecting to BSP via api ${containerName}`);
-  }
+
+  invariant(
+    chainName === "storage-hub-runtime",
+    `Error connecting to BSP via api ${containerName}`
+  );
 
   await api.disconnect();
 

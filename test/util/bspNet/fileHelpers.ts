@@ -4,6 +4,7 @@ import { assertEventPresent } from "../asserts";
 import { shUser } from "../pjsKeyring";
 import { ShConsts } from "./consts";
 import { sealBlock } from "./block";
+import invariant from "tiny-invariant";
 
 export const sendNewStorageRequest = async (
   api: ApiPromise,
@@ -15,9 +16,7 @@ export const sendNewStorageRequest = async (
   const newBucketEventDataBlob =
     api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-  if (!newBucketEventDataBlob) {
-    throw new Error("Event doesn't match Type");
-  }
+  invariant(newBucketEventDataBlob, "Event doesn't match Type");
 
   const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
     source,
@@ -49,9 +48,7 @@ export const sendNewStorageRequest = async (
     api.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent.event) &&
     newStorageRequestEvent.event.data;
 
-  if (!newStorageRequestEventDataBlob) {
-    throw new Error("Event doesn't match Type");
-  }
+  invariant(newStorageRequestEventDataBlob, "Event doesn't match Type");
 
   return {
     fileKey: newStorageRequestEventDataBlob.fileKey.toString(),

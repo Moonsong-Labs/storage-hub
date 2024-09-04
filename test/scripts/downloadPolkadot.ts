@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import invariant from "tiny-invariant";
 
 async function main() {
   const binaries = ["polkadot", "polkadot-prepare-worker", "polkadot-execute-worker"];
@@ -45,9 +46,10 @@ async function main() {
 
 function getVersionArg() {
   const args = process.argv.slice(2);
-  if (args.length === 0) {
-    throw new Error("No version provided. Usage: pnpm tsx scripts/downloadPolkadot.ts <version>");
-  }
+  invariant(
+    args.length > 0,
+    "No version provided. Usage: pnpm tsx scripts/downloadPolkadot.ts <version>"
+  );
   return args[0];
 }
 

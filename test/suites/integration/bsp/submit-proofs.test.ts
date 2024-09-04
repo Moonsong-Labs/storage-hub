@@ -328,10 +328,7 @@ describeBspNet(
             checkTxPool: true
           });
         },
-        (err: Error) => {
-          const firstThreeWords = err.message.split(" ").slice(0, 3).join(" ");
-          return firstThreeWords === "No extrinsics matching";
-        },
+        /No extrinsics matching fileSystem\.bspVolunteer found/,
         "There should be no pending volunteer transactions"
       );
     });

@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { convertExponentials } from "@zombienet/utils";
 import jsonBg from "json-bigint";
+import invariant from "tiny-invariant";
 
 const JSONbig = jsonBg({ useNativeBigInt: true });
 
@@ -13,13 +14,8 @@ if (args.length !== 2) {
 
 const [inputPath, outputPath] = args;
 
-if (!inputPath) {
-  throw new Error("Input path is required");
-}
-
-if (!outputPath) {
-  throw new Error("Output path is required");
-}
+invariant(inputPath, "Input path is required");
+invariant(outputPath, "Output path is required");
 
 process.stdout.write(`Reading from: ${inputPath} ...`);
 const plainSpec = JSONbig.parse((await fs.readFile(inputPath)).toString());

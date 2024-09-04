@@ -1,6 +1,7 @@
 import "@polkadot/api-augment/kusama";
 import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
+import invariant from "tiny-invariant";
 
 export type ZombieClients = Promise<{
   [Symbol.asyncDispose]: () => Promise<void>;
@@ -54,9 +55,10 @@ export const waitForChain = async (
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
-    if (performance.now() - startTime > (options?.timeoutMs || 60_000)) {
-      throw new Error("Timeout waiting for chain to be ready");
-    }
+    invariant(
+      performance.now() - startTime > (options?.timeoutMs || 60_000),
+      "Timeout waiting for chain to be ready"
+    );
   }
 };
 
@@ -77,9 +79,7 @@ export const waitForRandomness = async (api: ApiPromise, timeoutMs = 60_000) => 
           reject(new Error("Randomness value is undefined"));
         }
         if (valueCount === 2) {
-          if (!data) {
-            throw new Error("Randomness value is undefined");
-          }
+          invariant(data, "Randomness value is undefined");
           clearTimeout(timeout);
           unsub();
           resolve(data);

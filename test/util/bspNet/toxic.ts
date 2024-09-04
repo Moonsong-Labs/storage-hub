@@ -35,6 +35,6 @@ export const registerToxics = async (toxics: ToxicInfo[]) => {
   if (receivedToxics.length !== toxics.length) {
     console.log("❌ Toxic registration failed");
     console.log(receivedToxics);
-    throw new Error("Toxic registration failed");
+    throw "Toxic registration failed";
   }
 };
