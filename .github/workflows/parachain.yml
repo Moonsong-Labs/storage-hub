@@ -344,5 +344,37 @@ jobs:
               --test-force-exit                    \
               ./suites/integration/**/**.test.ts
 
-# TODO: Add a typescript generation check for tests
-# This will catch any issues with interfaces not being up-to-date
+  typegen_check:
+    needs: [build_image, setup]
+    if: always()
+    name: "Check Rust/TS bindings are up to date"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflow-templates/setup-pnpm
+        with:
+          node_version: 22
+      - run: mkdir -p target/release/
+      - name: Get Node Binary if changed
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: target/release/
+      - name: Get Latest Node Binary if not changed
+        if: needs.setup.outputs.node_changed == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub:latest
+          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+      - name: Build Local Docker Image
+        run: |
+          chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
+          cd test
+          pnpm install
+          pnpm docker:build
+      - name: Check for changes
+        run: |
+          git diff --exit-code || (echo "Typegen produced changes. Please run 'pnpm typegen' locally and commit the changes." && exit 1)
