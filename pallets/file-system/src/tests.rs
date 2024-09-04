@@ -3979,14 +3979,13 @@ mod stop_storing_for_insolvent_user {
     #[test]
     fn stop_storing_for_insolvent_user_works_for_bsps() {
         new_test_ext().execute_with(|| {
-            let owner = Keyring::Alice.to_account_id();
-            let origin = RuntimeOrigin::signed(owner.clone());
+            let owner_account_id = Keyring::Eve.to_account_id();
+            let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
             let bsp_account_id = Keyring::Bob.to_account_id();
             let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
             let msp = Keyring::Charlie.to_account_id();
             let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-            let size = StorageData::<Test>::try_from(4).unwrap();
-            // TODO: right now we are bypassing the volunteer assignment threshold
+            let size = 4;
             let fingerprint = H256::zero();
             let peer_id = BoundedVec::try_from(vec![1]).unwrap();
             let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
@@ -3995,15 +3994,15 @@ mod stop_storing_for_insolvent_user {
             let msp_id = add_msp_to_provider_storage(&msp);
 
             let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-            let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id);
+            let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
 
             // Dispatch storage request.
             assert_ok!(FileSystem::issue_storage_request(
-                origin,
+                owner_signed.clone(),
                 bucket_id,
                 location.clone(),
                 fingerprint,
-                4,
+                size,
                 msp_id,
                 peer_ids.clone(),
             ));
@@ -4012,42 +4011,105 @@ mod stop_storing_for_insolvent_user {
             assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
             let file_key = FileSystem::compute_file_key(
-                owner.clone(),
+                owner_account_id.clone(),
                 bucket_id,
                 location.clone(),
-                4,
+                size,
                 fingerprint,
             );
 
             let bsp_id =
 				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
-					bsp_account_id,
+					bsp_account_id.clone(),
 				)
 					.unwrap();
 
             // Dispatch BSP volunteer.
-            assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+            assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-            // Assert that the RequestStorageBsps has the correct value
+            // In this case, the tick number is going to be equal to the current block number
+            // minus one (on_poll hook not executed in first block)
+            let tick_when_confirming = System::block_number() - 1;
+
+            // Dispatch BSP confirm storing.
+            assert_ok!(FileSystem::bsp_confirm_storing(
+                bsp_signed.clone(),
+                CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                },
+                BoundedVec::try_from(vec![(
+                    file_key,
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    }
+                )])
+                .unwrap(),
+            ));
+
+            // Assert that the storage was updated
+            assert_eq!(
+                FileSystem::storage_requests(file_key),
+                Some(StorageRequestMetadata {
+                    requested_at: 1,
+                    owner: owner_account_id.clone(),
+                    bucket_id,
+                    location: location.clone(),
+                    fingerprint,
+                    size,
+                    msp: Some(msp_id),
+                    user_peer_ids: peer_ids.clone(),
+                    data_server_sps: BoundedVec::default(),
+                    bsps_required: ReplicationTarget::<Test>::get(),
+                    bsps_confirmed: 1,
+                    bsps_volunteered: 1,
+                })
+            );
+
+            // Assert that the RequestStorageBsps was updated
             assert_eq!(
                 FileSystem::storage_request_bsps(file_key, bsp_id)
                     .expect("BSP should exist in storage"),
                 StorageRequestBspsMetadata::<Test> {
-                    confirmed: false,
+                    confirmed: true,
                     _phantom: Default::default()
                 }
             );
 
+            let file_key = FileSystem::compute_file_key(
+                owner_account_id.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            );
+
+            let new_root =
+				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_root(
+					bsp_id,
+				)
+					.unwrap();
+
             // Assert that the correct event was deposited
             System::assert_last_event(
-                Event::AcceptedBspVolunteer {
+                Event::BspConfirmedStoring {
+                    who: bsp_account_id.clone(),
                     bsp_id,
-                    bucket_id,
-                    location,
-                    fingerprint,
-                    multiaddresses: create_sp_multiaddresses(),
-                    owner,
-                    size,
+                    file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                    new_root,
+                }
+                .into(),
+            );
+
+            // Assert that the proving cycle was initialised for this BSP.
+            let last_tick_provider_submitted_proof =
+                LastTickProviderSubmittedAProofFor::<Test>::get(&bsp_id).unwrap();
+            assert_eq!(last_tick_provider_submitted_proof, tick_when_confirming);
+
+            // Assert that the correct event was deposited.
+            System::assert_has_event(
+                Event::BspChallengeCycleInitialised {
+                    who: bsp_account_id,
+                    bsp_id,
                 }
                 .into(),
             );

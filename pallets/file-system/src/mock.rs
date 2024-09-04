@@ -365,8 +365,12 @@ pub struct MockUserSolvency;
 impl ReadUserSolvencyInterface for MockUserSolvency {
     type AccountId = AccountId;
 
-    fn is_user_insolvent(_user_account: &Self::AccountId) -> bool {
-        false
+    fn is_user_insolvent(user_account: &Self::AccountId) -> bool {
+        if user_account == &Keyring::Eve.to_account_id() {
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -390,6 +394,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
             (Keyring::Bob.to_account_id(), 1_000_000_000_000_000),
             (Keyring::Charlie.to_account_id(), 1_000_000_000_000_000),
             (Keyring::Dave.to_account_id(), 1_000_000_000_000_000),
+            (Keyring::Eve.to_account_id(), 1_000_000_000_000_000),
         ],
     }
     .assimilate_storage(&mut t)
