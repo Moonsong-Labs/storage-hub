@@ -1,7 +1,7 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
 // std
-use std::{cell::RefCell, sync::Arc, time::Duration};
+use std::{cell::RefCell, path::PathBuf, sync::Arc, time::Duration};
 
 use async_channel::Receiver;
 use chrono::Utc;
@@ -10,6 +10,7 @@ use cumulus_client_cli::CollatorOptions;
 use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, MockXcmConfig};
 
 use futures::{Stream, StreamExt};
+use log::info;
 
 use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
@@ -206,9 +207,21 @@ where
 {
     match provider_options {
         Some(ProviderOptions { storage_path, .. }) => {
+            info!(
+                "Starting as a Storage Provider. Storage path: {:?}",
+                storage_path
+            );
+
+            // Start building the StorageHubHandler, if running as a provider.
             let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
             let mut storage_hub_builder = StorageHubBuilder::<R, S>::new(task_spawner);
+
+            // Getting the caller pub key used for the blockchain service, from the keystore.
+            // Then add it to the StorageHub builder.
+            let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
+            storage_hub_builder.with_provider_pub_key(caller_pub_key);
+            storage_hub_builder.with_storage_path(storage_path.clone());
 
             let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
                 file_transfer_request_protocol
@@ -241,6 +254,7 @@ async fn finish_sh_builder_and_build<R, S>(
     client: Arc<ParachainClient>,
     rpc_handlers: RpcHandlers,
     keystore: KeystorePtr,
+    rocksdb_root_path: impl Into<PathBuf>,
 ) -> Result<(), sc_service::Error>
 where
     R: RoleSupport,
@@ -252,7 +266,12 @@ where
 {
     // Spawn the Blockchain Service if node is running as a Storage Provider
     sh_builder
-        .with_blockchain(client.clone(), Arc::new(rpc_handlers), keystore.clone())
+        .with_blockchain(
+            client.clone(),
+            Arc::new(rpc_handlers),
+            keystore.clone(),
+            rocksdb_root_path,
+        )
         .await;
 
     // Call run using the Runnable trait
@@ -428,6 +447,8 @@ where
         })
     };
 
+    let base_path = config.base_path.path().to_path_buf().clone();
+
     let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
         rpc_builder,
         client: client.clone(),
@@ -450,6 +471,7 @@ where
             client.clone(),
             rpc_handlers,
             keystore.clone(),
+            base_path,
         )
         .await?;
     }
@@ -739,6 +761,8 @@ where
         })
     };
 
+    let base_path = parachain_config.base_path.path().to_path_buf().clone();
+
     let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
         rpc_builder,
         client: client.clone(),
@@ -761,6 +785,7 @@ where
             client.clone(),
             rpc_handlers,
             keystore.clone(),
+            base_path,
         )
         .await?;
     }

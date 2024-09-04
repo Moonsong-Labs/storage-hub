@@ -3,7 +3,7 @@ use sc_network::{config::IncomingRequest, ProtocolName};
 use sc_service::RpcHandlers;
 use shc_common::types::StorageProofsMerkleTrieLayout;
 use sp_keystore::KeystorePtr;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
@@ -102,6 +102,7 @@ where
     file_storage: Option<Arc<RwLock<<(R, S) as StorageTypes>::FL>>>,
     forest_storage_handler: Option<<(R, S) as StorageTypes>::FSH>,
     provider_pub_key: Option<[u8; 32]>,
+    storage_path: Option<String>,
 }
 
 /// Common components to build for any given configuration of [`RoleSupport`] and [`StorageLayerSupport`].
@@ -118,6 +119,7 @@ where
             file_storage: None,
             forest_storage_handler: None,
             provider_pub_key: None,
+            storage_path: None,
         }
     }
 
@@ -151,6 +153,7 @@ where
         client: Arc<ParachainClient>,
         rpc_handlers: Arc<RpcHandlers>,
         keystore: KeystorePtr,
+        rocksdb_root_path: impl Into<PathBuf>,
     ) -> &mut Self {
         let blockchain_service_handle = spawn_blockchain_service(
             self.task_spawner
@@ -159,6 +162,7 @@ where
             client.clone(),
             rpc_handlers.clone(),
             keystore.clone(),
+            rocksdb_root_path,
         )
         .await;
 
