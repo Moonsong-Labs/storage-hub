@@ -205,7 +205,7 @@ export class BspNetTestApi implements AsyncDisposable {
        *                    - If a hex string, it will drop the transaction with the matching hash.
        * @param sealAfter - Whether to seal a block after dropping the transaction(s). Defaults to false.
        */
-      dropTxn: (extrinsic?: { module: string; method: string } | HexString, sealAfter = true) =>
+      dropTxn: (extrinsic?: { module: string; method: string } | HexString, sealAfter = false) =>
         NodeBspNet.dropTxn(this._api, extrinsic, sealAfter)
     };
 

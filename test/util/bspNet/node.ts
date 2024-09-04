@@ -1,5 +1,5 @@
 import type { ApiPromise } from "@polkadot/api";
-import { strictEqual } from "node:assert";
+import invariant from "tiny-invariant";
 import type { HexString } from "@polkadot/util/types";
 import { sealBlock } from "./block";
 
@@ -20,34 +20,36 @@ export async function dropTransaction(
   const pendingBefore = await api.rpc.author.pendingExtrinsics();
 
   if (!extrinsic) {
+    // Remove all extrinsics from the txPool
     await Promise.all(
       pendingBefore
         .map(({ hash }) => hash.toHex())
         .map((hash) => api.rpc.author.removeExtrinsic([{ Hash: hash }]))
     );
     const pendingAfter = await api.rpc.author.pendingExtrinsics();
-    strictEqual(pendingAfter.length, 0, "Not all extrinsics removed from txPool");
+    invariant(pendingAfter.length === 0, "Not all extrinsics removed from txPool");
   } else if (typeof extrinsic === "object" && "module" in extrinsic && "method" in extrinsic) {
+    // Remove extrinsics matching the specified module and method
     const matches = pendingBefore
       .filter(
         ({ method }) => method.section === extrinsic.module && method.method === extrinsic.method
       )
       .map(({ hash }) => hash.toHex());
 
-    strictEqual(
+    invariant(
       matches.length > 0,
-      true,
       `No extrinsics found in txPool matching ${extrinsic.module}:${extrinsic.method}`
     );
     const result = await api.rpc.author.removeExtrinsic(matches.map((hash) => ({ Hash: hash })));
     const pendingAfter = await api.rpc.author.pendingExtrinsics();
-    strictEqual(result.length > 0, true, "No removal confirmation returned by RPC");
-    strictEqual(pendingBefore > pendingAfter, true, "Extrinsic not removed from txPool");
+    invariant(result.length > 0, "No removal confirmation returned by RPC");
+    invariant(pendingBefore > pendingAfter, "Extrinsic not removed from txPool");
   } else {
+    // Remove the extrinsic with the specified hash
     const result = await api.rpc.author.removeExtrinsic([{ Hash: extrinsic }]);
     const pendingAfter = await api.rpc.author.pendingExtrinsics();
-    strictEqual(result.length > 0, true, "No removal confirmation returned by RPC");
-    strictEqual(pendingBefore > pendingAfter, true, "Extrinsic not removed from txPool");
+    invariant(result.length > 0, "No removal confirmation returned by RPC");
+    invariant(pendingBefore > pendingAfter, "Extrinsic not removed from txPool");
   }
 
   if (sealAfter) {

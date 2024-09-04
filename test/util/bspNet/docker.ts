@@ -199,7 +199,11 @@ export const dropAllTransactionsGlobally = async () => {
     )[0].PublicPort;
     const endpoint: `ws://${string}` = `ws://127.0.0.1:${publicPort}`;
     await using api = await BspNetTestApi.connect(endpoint);
-    await NodeBspNet.dropTxn(api);
+    try {
+      await NodeBspNet.dropTxn(api);
+    } catch {
+      console.log(`Error dropping txn from ${container.Id}, continuing...`);
+    }
   }
 };
 
