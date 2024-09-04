@@ -10,53 +10,81 @@ pub mod mock_sp_react_to_event;
 pub mod sp_slash_provider;
 pub mod user_sends_file;
 
+use crate::services::forest_storage::{ForestStorageCaching, ForestStorageSingle, NoKey};
+use crate::services::handler::StorageHubHandler;
+use kvdb::KeyValueDB;
 use sc_tracing::tracing::info;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::{AcceptedBspVolunteer, NewStorageRequest};
 use shc_common::types::StorageProofsMerkleTrieLayout;
+use shc_file_manager::in_memory::InMemoryFileStorage;
+use shc_file_manager::rocksdb::RocksDbFileStorage;
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::events::RemoteUploadRequest;
-use shc_forest_manager::traits::ForestStorage;
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
-use crate::services::handler::StorageHubHandler;
-
-// ! The following are examples of task definitions.
-pub struct ResolveRemoteUploadRequest<FL, FS>
-where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+pub trait FileStorageT: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync {}
+impl FileStorageT for InMemoryFileStorage<StorageProofsMerkleTrieLayout> {}
+impl<DB> FileStorageT for RocksDbFileStorage<StorageProofsMerkleTrieLayout, DB> where
+    DB: KeyValueDB + 'static
 {
-    _storage_hub_handler: StorageHubHandler<FL, FS>,
 }
 
-impl<FL, FS> Clone for ResolveRemoteUploadRequest<FL, FS>
-where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+pub trait BspForestStorageHandlerT:
+    ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static
 {
-    fn clone(&self) -> ResolveRemoteUploadRequest<FL, FS> {
+}
+impl<FS> BspForestStorageHandlerT for ForestStorageSingle<FS> where
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static
+{
+}
+
+pub trait MspForestStorageHandlerT:
+    ForestStorageHandler<Key = Vec<u8>> + Clone + Send + Sync + 'static
+{
+}
+impl<FS> MspForestStorageHandlerT for ForestStorageCaching<Vec<u8>, FS> where
+    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static
+{
+}
+
+// ! The following are examples of task definitions.
+pub struct ResolveRemoteUploadRequest<FL, FSH>
+where
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
+{
+    _storage_hub_handler: StorageHubHandler<FL, FSH>,
+}
+
+impl<FL, FSH> Clone for ResolveRemoteUploadRequest<FL, FSH>
+where
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
+{
+    fn clone(&self) -> ResolveRemoteUploadRequest<FL, FSH> {
         Self {
             _storage_hub_handler: self._storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FS> ResolveRemoteUploadRequest<FL, FS>
+impl<FL, FSH> ResolveRemoteUploadRequest<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
         Self {
             _storage_hub_handler: storage_hub_handler,
         }
     }
 }
 
-impl<FL, FS> EventHandler<RemoteUploadRequest> for ResolveRemoteUploadRequest<FL, FS>
+impl<FL, FSH> EventHandler<RemoteUploadRequest> for ResolveRemoteUploadRequest<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         info!(
@@ -70,42 +98,42 @@ where
     }
 }
 
-pub struct NewStorageRequestHandler<FL, FS>
+pub struct NewStorageRequestHandler<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    _storage_hub_handler: StorageHubHandler<FL, FS>,
+    _storage_hub_handler: StorageHubHandler<FL, FSH>,
 }
 
-impl<FL, FS> NewStorageRequestHandler<FL, FS>
+impl<FL, FSH> NewStorageRequestHandler<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
         Self {
             _storage_hub_handler: storage_hub_handler,
         }
     }
 }
 
-impl<FL, FS> Clone for NewStorageRequestHandler<FL, FS>
+impl<FL, FSH> Clone for NewStorageRequestHandler<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    fn clone(&self) -> NewStorageRequestHandler<FL, FS> {
+    fn clone(&self) -> NewStorageRequestHandler<FL, FSH> {
         Self {
             _storage_hub_handler: self._storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FS> EventHandler<NewStorageRequest> for NewStorageRequestHandler<FL, FS>
+impl<FL, FSH> EventHandler<NewStorageRequest> for NewStorageRequestHandler<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!("[NewStorageRequestHandler] - received event: {:?}", event);
@@ -116,42 +144,42 @@ where
     }
 }
 
-pub struct AcceptedBspVolunteerHandler<FL, FS>
+pub struct AcceptedBspVolunteerHandler<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    _storage_hub_handler: StorageHubHandler<FL, FS>,
+    _storage_hub_handler: StorageHubHandler<FL, FSH>,
 }
 
-impl<FL, FS> Clone for AcceptedBspVolunteerHandler<FL, FS>
+impl<FL, FSH> Clone for AcceptedBspVolunteerHandler<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    fn clone(&self) -> AcceptedBspVolunteerHandler<FL, FS> {
+    fn clone(&self) -> AcceptedBspVolunteerHandler<FL, FSH> {
         Self {
             _storage_hub_handler: self._storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FS> AcceptedBspVolunteerHandler<FL, FS>
+impl<FL, FSH> AcceptedBspVolunteerHandler<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
         Self {
             _storage_hub_handler: storage_hub_handler,
         }
     }
 }
 
-impl<FL, FS> EventHandler<AcceptedBspVolunteer> for AcceptedBspVolunteerHandler<FL, FS>
+impl<FL, FSH> EventHandler<AcceptedBspVolunteer> for AcceptedBspVolunteerHandler<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout> + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: AcceptedBspVolunteer) -> anyhow::Result<()> {
         info!("[NewStorageRequestHandler] - received event: {:?}", event);

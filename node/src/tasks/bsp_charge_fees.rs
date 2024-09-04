@@ -6,12 +6,10 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface, events::LastChargeableInfoUpdated,
 };
-use shc_common::types::StorageProofsMerkleTrieLayout;
-use shc_file_manager::traits::FileStorage;
-use shc_forest_manager::traits::ForestStorage;
 use storage_hub_runtime::Balance;
 
 use crate::services::handler::StorageHubHandler;
+use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 
 const LOG_TARGET: &str = "bsp-charge-fees-task";
 const MIN_DEBT: Balance = 0;
@@ -22,42 +20,42 @@ const MIN_DEBT: Balance = 0;
 /// - Reacting to [`LastChargeableInfoUpdated`] event from the runtime:
 ///     - Calls a Runtime API to retrieve a list of users with debt over a certain custom threshold.
 ///     - For each user, submits an extrinsic to [`pallet_payment_streams`] to charge them.
-pub struct BspChargeFeesTask<FL, FS>
+pub struct BspChargeFeesTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    storage_hub_handler: StorageHubHandler<FL, FS>,
+    storage_hub_handler: StorageHubHandler<FL, FSH>,
 }
 
-impl<FL, FS> Clone for BspChargeFeesTask<FL, FS>
+impl<FL, FSH> Clone for BspChargeFeesTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    fn clone(&self) -> BspChargeFeesTask<FL, FS> {
+    fn clone(&self) -> BspChargeFeesTask<FL, FSH> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FS> BspChargeFeesTask<FL, FS>
+impl<FL, FSH> BspChargeFeesTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<FL, FS> EventHandler<LastChargeableInfoUpdated> for BspChargeFeesTask<FL, FS>
+impl<FL, FSH> EventHandler<LastChargeableInfoUpdated> for BspChargeFeesTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: LastChargeableInfoUpdated) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "A proof was accepted for provider {:?} and users' fees are going to be charged.", event.provider_id);

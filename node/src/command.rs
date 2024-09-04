@@ -18,6 +18,7 @@ use crate::{
     service::new_partial,
 };
 
+// TODO: Have specific StorageHub role options (i.e. ProviderOptions, UserOptions).
 /// Configuration for the provider.
 #[derive(Debug, Clone)]
 pub struct ProviderOptions {

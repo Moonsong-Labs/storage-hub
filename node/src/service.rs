@@ -11,18 +11,12 @@ use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, 
 
 use futures::{Stream, StreamExt};
 use log::info;
-use shc_file_manager::{
-    in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage, traits::FileStorage,
-};
-use shc_forest_manager::{
-    in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorage,
-};
 
 use polkadot_primitives::{BlakeTwo256, HashT, HeadData, ValidationCode};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
-use shc_blockchain_service::BlockchainService;
-use shc_common::types::{StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE};
+use shc_common::types::BCSV_KEY_TYPE;
+use shc_rpc::StorageHubClientRpcConfig;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
 // Local Runtime Types
@@ -61,9 +55,10 @@ use substrate_prometheus_endpoint::Registry;
 
 use crate::{
     cli::StorageLayer,
-    services::{
-        builder::{StorageHubBuilder, StorageLayerBuilder},
-        handler::StorageHubHandler,
+    services::builder::{
+        setup_provider, BspProvider, InMemoryStorageLayer, MspProvider, NoStorageLayer,
+        RocksDbStorageLayer, RoleSupport, RpcConfigBuilder, Runnable, StorageHubBuilder,
+        StorageLayerBuilder, StorageLayerSupport, StorageTypes, UserRole,
     },
 };
 use crate::{
@@ -193,17 +188,22 @@ pub fn new_partial(
     })
 }
 
-async fn init_sh_builder<FL, FS>(
+async fn init_sh_builder<R, S>(
     provider_options: &Option<ProviderOptions>,
     task_manager: &TaskManager,
     file_transfer_request_protocol: Option<(ProtocolName, Receiver<IncomingRequest>)>,
     network: Arc<ParachainNetworkService>,
     keystore: KeystorePtr,
-) -> Option<StorageHubBuilder<FL, FS>>
+) -> Option<(
+    StorageHubBuilder<R, S>,
+    StorageHubClientRpcConfig<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>,
+)>
 where
-    StorageHubBuilder<FL, FS>: StorageLayerBuilder,
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    R: RoleSupport,
+    S: StorageLayerSupport,
+    (R, S): StorageTypes,
+    StorageHubBuilder<R, S>: StorageLayerBuilder
+        + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>,
 {
     match provider_options {
         Some(ProviderOptions { storage_path, .. }) => {
@@ -215,19 +215,12 @@ where
             // Start building the StorageHubHandler, if running as a provider.
             let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "generic");
 
-            // Create builder for the StorageHubHandler.
-            let mut storage_hub_builder = StorageHubBuilder::new(task_spawner);
+            let mut storage_hub_builder = StorageHubBuilder::<R, S>::new(task_spawner);
 
-            // Getting the caller pub key used for the blockchain service, from the keystore.
-            // Then add it to the StorageHub builder.
-            let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-            storage_hub_builder.with_provider_pub_key(caller_pub_key);
-            storage_hub_builder.with_storage_path(storage_path.clone());
-
-            // Add FileTransfer Service to the StorageHubHandler.
             let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
                 file_transfer_request_protocol
                     .expect("FileTransfer request protocol should already be initialized.");
+
             storage_hub_builder
                 .with_file_transfer(
                     file_transfer_request_receiver,
@@ -236,27 +229,36 @@ where
                 )
                 .await;
 
-            storage_hub_builder.setup_storage_layer();
-            Some(storage_hub_builder)
+            setup_provider(
+                &mut storage_hub_builder,
+                keystore.clone(),
+                storage_path.clone(),
+            );
+
+            let rpc_config = storage_hub_builder.create_rpc_config(keystore);
+
+            Some((storage_hub_builder, rpc_config))
         }
         None => None,
     }
 }
 
-async fn finish_sh_builder_and_build<FL, FS>(
-    mut sh_builder: StorageHubBuilder<FL, FS>,
+async fn finish_sh_builder_and_build<R, S>(
+    mut sh_builder: StorageHubBuilder<R, S>,
     client: Arc<ParachainClient>,
     rpc_handlers: RpcHandlers,
     keystore: KeystorePtr,
-    provider_options: ProviderOptions,
     rocksdb_root_path: impl Into<PathBuf>,
-) where
-    StorageHubBuilder<FL, FS>: StorageLayerBuilder,
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+) -> Result<(), sc_service::Error>
+where
+    R: RoleSupport,
+    S: StorageLayerSupport,
+    (R, S): StorageTypes,
+    StorageHubBuilder<R, S>: StorageLayerBuilder
+        + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
+        + Runnable,
 {
-    // Spawn the Blockchain Service if node is running as a Storage Provider, now that
-    // the rpc handlers has been created.
+    // Spawn the Blockchain Service if node is running as a Storage Provider
     sh_builder
         .with_blockchain(
             client.clone(),
@@ -266,29 +268,14 @@ async fn finish_sh_builder_and_build<FL, FS>(
         )
         .await;
 
-    // Finally build the StorageHubBuilder and start the Provider tasks.
-    let sh_handler = sh_builder.build();
-    start_provider_tasks(provider_options, sh_handler);
-}
+    // Call run using the Runnable trait
+    sh_builder.run();
 
-fn start_provider_tasks<FL, FS>(
-    provider_options: ProviderOptions,
-    sh_handler: StorageHubHandler<FL, FS>,
-) where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
-{
-    // Starting the tasks according to the provider type.
-    match provider_options.provider_type {
-        ProviderType::Bsp => sh_handler.start_bsp_tasks(),
-        ProviderType::Msp => sh_handler.start_msp_tasks(),
-        ProviderType::User => sh_handler.start_user_tasks(),
-    }
+    Ok(())
 }
 
 /// Start a development node with the given solo chain `Configuration`.
-#[sc_tracing::logging::prefix_logs_with("Solo chain 💾")]
-async fn start_dev_impl<FL, FS>(
+async fn start_dev_impl<R, S>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     hwbench: Option<sc_sysinfo::HwBench>,
@@ -296,9 +283,12 @@ async fn start_dev_impl<FL, FS>(
     sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager>
 where
-    StorageHubBuilder<FL, FS>: StorageLayerBuilder,
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    R: RoleSupport,
+    S: StorageLayerSupport,
+    (R, S): StorageTypes,
+    StorageHubBuilder<R, S>: StorageLayerBuilder
+        + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
+        + Runnable,
 {
     use async_io::Timer;
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
@@ -421,19 +411,17 @@ where
         };
 
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
-    let sh_builder = init_sh_builder(
+    let (sh_builder, maybe_storage_hub_client_rpc_config) = match init_sh_builder::<R, S>(
         &provider_options,
         &task_manager,
         file_transfer_request_protocol,
         network.clone(),
         keystore.clone(),
     )
-    .await;
-
-    let maybe_storage_hub_client_rpc_config = if let Some(ref sh_builder) = sh_builder {
-        Some(sh_builder.rpc_config(keystore.clone()))
-    } else {
-        None
+    .await
+    {
+        Some((shb, rpc)) => (Some(shb), Some(rpc)),
+        None => (None, None),
     };
 
     let rpc_builder = {
@@ -471,16 +459,15 @@ where
     })?;
 
     // Finish building the StorageHubBuilder if node is running as a Storage Provider.
-    if let Some(provider_options) = provider_options {
+    if let Some(_) = provider_options {
         finish_sh_builder_and_build(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
             rpc_handlers,
             keystore.clone(),
-            provider_options,
             base_path,
         )
-        .await;
+        .await?;
     }
 
     if let Some(hwbench) = hwbench {
@@ -646,8 +633,7 @@ where
 /// Start a node with the given parachain `Configuration` and relay chain `Configuration`.
 ///
 /// This is the actual implementation that is abstract over the executor and the runtime api.
-#[sc_tracing::logging::prefix_logs_with("StorageHub 💾")]
-async fn start_node_impl<FL, FS>(
+async fn start_node_impl<R, S>(
     parachain_config: Configuration,
     polkadot_config: Configuration,
     collator_options: CollatorOptions,
@@ -656,9 +642,12 @@ async fn start_node_impl<FL, FS>(
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
 where
-    StorageHubBuilder<FL, FS>: StorageLayerBuilder,
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    R: RoleSupport,
+    S: StorageLayerSupport,
+    (R, S): StorageTypes,
+    StorageHubBuilder<R, S>: StorageLayerBuilder
+        + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
+        + Runnable,
 {
     let parachain_config = prepare_node_config(parachain_config);
 
@@ -736,19 +725,17 @@ where
     }
 
     // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
-    let sh_builder = init_sh_builder(
+    let (sh_builder, maybe_storage_hub_client_rpc_config) = match init_sh_builder::<R, S>(
         &provider_options,
         &task_manager,
         file_transfer_request_protocol,
         network.clone(),
         keystore.clone(),
     )
-    .await;
-
-    let maybe_storage_hub_client_rpc_config = if let Some(ref sh_builder) = sh_builder {
-        Some(sh_builder.rpc_config(keystore.clone()))
-    } else {
-        None
+    .await
+    {
+        Some((shb, rpc)) => (Some(shb), Some(rpc)),
+        None => (None, None),
     };
 
     let rpc_builder = {
@@ -786,16 +773,15 @@ where
     })?;
 
     // Finish building the StorageHubBuilder if node is running as a Storage Provider.
-    if let Some(provider_options) = provider_options {
+    if let Some(_) = provider_options {
         finish_sh_builder_and_build(
             sh_builder.expect("StorageHubBuilder should already be initialised."),
             client.clone(),
             rpc_handlers,
             keystore.clone(),
-            provider_options,
             base_path,
         )
-        .await;
+        .await?;
     }
 
     if let Some(hwbench) = hwbench {
@@ -988,7 +974,6 @@ fn start_consensus(
     Ok(())
 }
 
-/// Start a development node.
 pub async fn start_dev_node(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
@@ -996,10 +981,13 @@ pub async fn start_dev_node(
     para_id: ParaId,
     sealing: cli::Sealing,
 ) -> sc_service::error::Result<TaskManager> {
-    match provider_options {
-        Some(provider_options) => match provider_options.storage_layer {
-            StorageLayer::Memory => {
-                start_dev_impl::<InMemoryFileStorage<_>, InMemoryForestStorage<_>>(
+    if let Some(provider_options) = provider_options {
+        match (
+            &provider_options.provider_type,
+            &provider_options.storage_layer,
+        ) {
+            (&ProviderType::Bsp, &StorageLayer::Memory) => {
+                start_dev_impl::<BspProvider, InMemoryStorageLayer>(
                     config,
                     Some(provider_options),
                     hwbench,
@@ -1008,26 +996,53 @@ pub async fn start_dev_node(
                 )
                 .await
             }
-            StorageLayer::RocksDB => {
-                start_dev_impl::<
-                    RocksDbFileStorage<_, kvdb_rocksdb::Database>,
-                    RocksDBForestStorage<_, kvdb_rocksdb::Database>,
-                >(config, Some(provider_options), hwbench, para_id, sealing)
+            (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
+                start_dev_impl::<BspProvider, RocksDbStorageLayer>(
+                    config,
+                    Some(provider_options),
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
                 .await
             }
-        },
-        // In this case, it is not really important the types used for the storage layer, as
-        // the node will not run as a provider.
-        None => {
-            start_dev_impl::<InMemoryFileStorage<_>, InMemoryForestStorage<_>>(
-                config, None, hwbench, para_id, sealing,
-            )
-            .await
+            (&ProviderType::Msp, &StorageLayer::Memory) => {
+                start_dev_impl::<MspProvider, InMemoryStorageLayer>(
+                    config,
+                    Some(provider_options),
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
+                .await
+            }
+            (&ProviderType::Msp, &StorageLayer::RocksDB) => {
+                start_dev_impl::<MspProvider, RocksDbStorageLayer>(
+                    config,
+                    Some(provider_options),
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
+                .await
+            }
+            (&ProviderType::User, _) => {
+                start_dev_impl::<UserRole, NoStorageLayer>(
+                    config,
+                    Some(provider_options),
+                    hwbench,
+                    para_id,
+                    sealing,
+                )
+                .await
+            }
         }
+    } else {
+        // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
+        start_dev_impl::<UserRole, NoStorageLayer>(config, None, hwbench, para_id, sealing).await
     }
 }
 
-/// Start a parachain node.
 pub async fn start_parachain_node(
     parachain_config: Configuration,
     polkadot_config: Configuration,
@@ -1036,10 +1051,13 @@ pub async fn start_parachain_node(
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
-    match provider_options {
-        Some(provider_options) => match provider_options.storage_layer {
-            StorageLayer::Memory => {
-                start_node_impl::<InMemoryFileStorage<_>, InMemoryForestStorage<_>>(
+    if let Some(provider_options) = provider_options {
+        match (
+            &provider_options.provider_type,
+            &provider_options.storage_layer,
+        ) {
+            (&ProviderType::Bsp, &StorageLayer::Memory) => {
+                start_node_impl::<BspProvider, InMemoryStorageLayer>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -1049,11 +1067,8 @@ pub async fn start_parachain_node(
                 )
                 .await
             }
-            StorageLayer::RocksDB => {
-                start_node_impl::<
-                    RocksDbFileStorage<_, kvdb_rocksdb::Database>,
-                    RocksDBForestStorage<_, kvdb_rocksdb::Database>,
-                >(
+            (&ProviderType::Bsp, &StorageLayer::RocksDB) => {
+                start_node_impl::<BspProvider, RocksDbStorageLayer>(
                     parachain_config,
                     polkadot_config,
                     collator_options,
@@ -1063,19 +1078,50 @@ pub async fn start_parachain_node(
                 )
                 .await
             }
-        },
-        None => {
-            // In this case, it is not really important the types used for the storage layer, as
-            // the node will not run as a provider.
-            start_node_impl::<InMemoryFileStorage<_>, InMemoryForestStorage<_>>(
-                parachain_config,
-                polkadot_config,
-                collator_options,
-                None,
-                para_id,
-                hwbench,
-            )
-            .await
+            (&ProviderType::Msp, &StorageLayer::Memory) => {
+                start_node_impl::<MspProvider, InMemoryStorageLayer>(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            (&ProviderType::Msp, &StorageLayer::RocksDB) => {
+                start_node_impl::<MspProvider, RocksDbStorageLayer>(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
+            (&ProviderType::User, _) => {
+                start_node_impl::<UserRole, NoStorageLayer>(
+                    parachain_config,
+                    polkadot_config,
+                    collator_options,
+                    Some(provider_options),
+                    para_id,
+                    hwbench,
+                )
+                .await
+            }
         }
+    } else {
+        // Start node without provider options which in turn will not start any storage hub related role services (e.g. Storage Provider, User)
+        start_node_impl::<UserRole, NoStorageLayer>(
+            parachain_config,
+            polkadot_config,
+            collator_options,
+            None,
+            para_id,
+            hwbench,
+        )
+        .await
     }
 }
