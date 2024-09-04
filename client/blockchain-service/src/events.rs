@@ -26,6 +26,21 @@ pub struct NewChallengeSeed {
 
 impl EventBusMessage for NewChallengeSeed {}
 
+/// Multiple new challenge seeds that have to be responded in order.
+///
+/// This event is emitted when catching up to proof submissions, and there are multiple
+/// new challenge seeds that have to be responded in order.
+/// The `seeds` vector is expected to be sorted in ascending order, where the first element
+/// is the seed that should be responded to first, and the last element is the seed that
+/// should be responded to last.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct MultipleNewChallengeSeeds {
+    pub provider_id: ProviderId,
+    pub seeds: Vec<(BlockNumber, RandomnessOutput)>,
+}
+
+impl EventBusMessage for MultipleNewChallengeSeeds {}
+
 /// New storage request event.
 ///
 /// This event is emitted when a new storage request is created on-chain.
@@ -161,6 +176,7 @@ impl EventBusMessage for LastChargeableInfoUpdated {}
 #[derive(Clone, Default)]
 pub struct BlockchainServiceEventBusProvider {
     new_challenge_seed_event_bus: EventBus<NewChallengeSeed>,
+    multiple_new_challenge_seeds_event_bus: EventBus<MultipleNewChallengeSeeds>,
     new_storage_request_event_bus: EventBus<NewStorageRequest>,
     accepted_bsp_volunteer_event_bus: EventBus<AcceptedBspVolunteer>,
     process_submit_proof_request_event_bus: EventBus<ProcessSubmitProofRequest>,
@@ -175,6 +191,7 @@ impl BlockchainServiceEventBusProvider {
     pub fn new() -> Self {
         Self {
             new_challenge_seed_event_bus: EventBus::new(),
+            multiple_new_challenge_seeds_event_bus: EventBus::new(),
             new_storage_request_event_bus: EventBus::new(),
             accepted_bsp_volunteer_event_bus: EventBus::new(),
             process_submit_proof_request_event_bus: EventBus::new(),
@@ -190,6 +207,12 @@ impl BlockchainServiceEventBusProvider {
 impl ProvidesEventBus<NewChallengeSeed> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<NewChallengeSeed> {
         &self.new_challenge_seed_event_bus
+    }
+}
+
+impl ProvidesEventBus<MultipleNewChallengeSeeds> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<MultipleNewChallengeSeeds> {
+        &self.multiple_new_challenge_seeds_event_bus
     }
 }
 
