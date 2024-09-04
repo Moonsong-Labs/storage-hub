@@ -2,6 +2,7 @@ import type { ApiPromise } from "@polkadot/api";
 import { assertEventPresent, assertExtrinsicPresent } from "../asserts";
 import { sleep } from "../timer";
 import { sealBlock } from "./block";
+import invariant from "tiny-invariant";
 
 /**
  * Waits for a BSP to volunteer for a storage request.
@@ -15,18 +16,28 @@ import { sealBlock } from "./block";
  * @returns A Promise that resolves when a BSP has volunteered and been accepted.
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
- *
- * @todo Implement polling instead of fixed sleep.
  */
 export const waitForBspVolunteer = async (api: ApiPromise) => {
-  // To allow node to react
-  // TODO poll
-  await sleep(500);
-  await assertExtrinsicPresent(api, {
-    module: "fileSystem",
-    method: "bspVolunteer",
-    checkTxPool: true
-  });
+  const iterations = 41;
+  const delay = 50;
+
+  // To allow node time to react on chain events
+  for (let i = 0; i < iterations; i++) {
+    try {
+      await sleep(delay);
+      await assertExtrinsicPresent(api, {
+        module: "fileSystem",
+        method: "bspVolunteer",
+        checkTxPool: true
+      });
+    } catch {
+      invariant(
+        i < iterations - 1,
+        `Failed to detect BSP volunteer extrinsic in txPool after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+
   const { events } = await sealBlock(api);
   assertEventPresent(api, "fileSystem", "AcceptedBspVolunteer", events);
 };
@@ -43,18 +54,28 @@ export const waitForBspVolunteer = async (api: ApiPromise) => {
  * @returns A Promise that resolves when a BSP has confirmed storing a file.
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
- *
- * @todo Implement polling instead of fixed sleep.
  */
 export const waitForBspStored = async (api: ApiPromise) => {
-  // To allow for local file transfer
-  // TODO poll
-  await sleep(5000);
-  await assertExtrinsicPresent(api, {
-    module: "fileSystem",
-    method: "bspConfirmStoring",
-    checkTxPool: true
-  });
+  const iterations = 41;
+  const delay = 50;
+  // To allow time for local file transfer to complete
+  for (let i = 0; i < iterations; i++) {
+    try {
+      await sleep(delay);
+      await assertExtrinsicPresent(api, {
+        module: "fileSystem",
+        method: "bspConfirmStoring",
+        checkTxPool: true
+      });
+      break;
+    } catch {
+      invariant(
+        i < iterations - 1,
+        `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+
   const { events } = await sealBlock(api);
   assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
 };
