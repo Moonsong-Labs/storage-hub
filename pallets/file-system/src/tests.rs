@@ -3972,6 +3972,89 @@ mod compute_threshold {
     }
 }
 
+mod stop_storing_for_insolvent_user {
+
+    use super::*;
+
+    #[test]
+    fn stop_storing_for_insolvent_user_works_for_bsps() {
+        new_test_ext().execute_with(|| {
+            let owner = Keyring::Alice.to_account_id();
+            let origin = RuntimeOrigin::signed(owner.clone());
+            let bsp_account_id = Keyring::Bob.to_account_id();
+            let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+            let msp = Keyring::Charlie.to_account_id();
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let size = StorageData::<Test>::try_from(4).unwrap();
+            // TODO: right now we are bypassing the volunteer assignment threshold
+            let fingerprint = H256::zero();
+            let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+            let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+            let storage_amount: StorageData<Test> = 100;
+
+            let msp_id = add_msp_to_provider_storage(&msp);
+
+            let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+            let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id);
+
+            // Dispatch storage request.
+            assert_ok!(FileSystem::issue_storage_request(
+                origin,
+                bucket_id,
+                location.clone(),
+                fingerprint,
+                4,
+                msp_id,
+                peer_ids.clone(),
+            ));
+
+            // Sign up account as a Backup Storage Provider
+            assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+            let file_key = FileSystem::compute_file_key(
+                owner.clone(),
+                bucket_id,
+                location.clone(),
+                4,
+                fingerprint,
+            );
+
+            let bsp_id =
+				<<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
+					bsp_account_id,
+				)
+					.unwrap();
+
+            // Dispatch BSP volunteer.
+            assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+
+            // Assert that the RequestStorageBsps has the correct value
+            assert_eq!(
+                FileSystem::storage_request_bsps(file_key, bsp_id)
+                    .expect("BSP should exist in storage"),
+                StorageRequestBspsMetadata::<Test> {
+                    confirmed: false,
+                    _phantom: Default::default()
+                }
+            );
+
+            // Assert that the correct event was deposited
+            System::assert_last_event(
+                Event::AcceptedBspVolunteer {
+                    bsp_id,
+                    bucket_id,
+                    location,
+                    fingerprint,
+                    multiaddresses: create_sp_multiaddresses(),
+                    owner,
+                    size,
+                }
+                .into(),
+            );
+        });
+    }
+}
+
 /// Helper function that registers an account as a Backup Storage Provider
 fn bsp_sign_up(
     bsp_signed: RuntimeOrigin,
