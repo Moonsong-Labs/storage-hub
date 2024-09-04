@@ -632,6 +632,7 @@ impl BlockchainService {
         }
     }
 
+    // TODO: Reconsider how to use this for catching up to unsubmitted storage proofs.
     async fn catch_up_block_import(&mut self, current_block_number: &BlockNumber) {
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         let latest_processed_block_number = match state_store_context
