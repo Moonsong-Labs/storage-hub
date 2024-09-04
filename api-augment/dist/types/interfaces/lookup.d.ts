@@ -1453,6 +1453,13 @@ declare const _default: {
         user: string;
         fileKey: string;
       };
+      SpStopStoringInsolventUser: {
+        spId: string;
+        fileKey: string;
+        owner: string;
+        location: string;
+        newRoot: string;
+      };
       FailedToQueuePriorityChallenge: {
         user: string;
         fileKey: string;
@@ -1619,6 +1626,9 @@ declare const _default: {
         lastChargeablePriceIndex: string;
       };
       UserWithoutFunds: {
+        who: string;
+      };
+      UserSolvent: {
         who: string;
       };
     };
@@ -3053,6 +3063,18 @@ declare const _default: {
         fileKey: string;
         inclusionForestProof: string;
       };
+      stop_storing_for_insolvent_user: {
+        _alias: {
+          size_: string;
+        };
+        fileKey: string;
+        bucketId: string;
+        location: string;
+        owner: string;
+        fingerprint: string;
+        size_: string;
+        inclusionForestProof: string;
+      };
       delete_file: {
         _alias: {
           size_: string;
@@ -3139,6 +3161,7 @@ declare const _default: {
       charge_payment_streams: {
         userAccount: string;
       };
+      pay_outstanding_debt: string;
     };
   };
   /**
@@ -3740,6 +3763,7 @@ declare const _default: {
     rate: string;
     lastChargedTick: string;
     userDeposit: string;
+    outOfFundsTick: string;
   };
   /**
    * Lookup418: pallet_payment_streams::types::DynamicRatePaymentStream<T>
@@ -3748,6 +3772,7 @@ declare const _default: {
     amountProvided: string;
     priceIndexWhenLastCharged: string;
     userDeposit: string;
+    outOfFundsTick: string;
   };
   /**
    * Lookup419: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
