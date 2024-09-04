@@ -13,6 +13,7 @@ import {
   describeBspNet
 } from "../../../util";
 import { assert } from "node:console";
+import { Option } from "@polkadot/types";
 
 describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: BspNetApi;
@@ -110,7 +111,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     const destination = "test/whatsup.jpg";
     const bucketName = "nothingmuch-2";
 
-    const initialBspForestRoot = await bspApi.rpc.storagehubclient.getForestRoot();
+    const initialBspForestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
 
     strictEqual(
       initialBspForestRoot.toString(),
@@ -185,7 +186,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     strictEqual(bspConfirmRes_bspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
 
     await sleep(1000); // wait for the bsp to process the BspConfirmedStoring event
-    const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot();
+    const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot(null);
     strictEqual(bspForestRootAfterConfirm.toString(), bspConfirmRes_newRoot.toString());
     notEqual(bspForestRootAfterConfirm.toString(), initialBspForestRoot.toString());
     // TODO: check the file key. We need an RPC endpoint to compute the file key.
@@ -281,7 +282,7 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
     strictEqual(bspConfirmRes_fileKeys.length, 1);
 
     await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
-    const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot();
+    const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot(null);
     strictEqual(bspForestRootAfterConfirm.toString(), bspConfirmRes_newRoot.toString());
 
     // This block should trigger the next file to be confirmed.
@@ -313,7 +314,7 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
     strictEqual(bspConfirm2Res_fileKeys.length, 2);
 
     await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
-    const bspForestRootAfterConfirm2 = await bspApi.rpc.storagehubclient.getForestRoot();
+    const bspForestRootAfterConfirm2 = await bspApi.rpc.storagehubclient.getForestRoot(null);
     strictEqual(bspForestRootAfterConfirm2.toString(), bspConfirm2Res_newRoot.toString());
   });
 });
