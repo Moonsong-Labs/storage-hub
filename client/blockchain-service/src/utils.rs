@@ -476,7 +476,7 @@ impl BlockchainService {
         let mut next_event_data = None;
 
         // If we have a submit proof request, prioritize it.
-        if let Some(request) = self.pending_submit_proof_requests.pop_front() {
+        if let Some(request) = self.pending_submit_proof_requests.pop_first() {
             next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
                 ProcessSubmitProofRequestData {
                     seed: request.seed,

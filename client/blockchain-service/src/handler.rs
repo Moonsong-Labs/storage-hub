@@ -1,7 +1,6 @@
 use anyhow::anyhow;
-use codec::{Decode, Encode};
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet},
     path::PathBuf,
     str::FromStr,
     sync::Arc,
@@ -17,7 +16,7 @@ use sc_network::Multiaddr;
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{error, info};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::{Fingerprint, RandomnessOutput, TrieRemoveMutation, BCSV_KEY_TYPE};
+use shc_common::types::{Fingerprint, BCSV_KEY_TYPE};
 use shp_file_metadata::FileKey;
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
@@ -38,8 +37,8 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider,
-        FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewChallengeSeed,
-        NewStorageRequest, SlashableProvider,
+        FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, NewStorageRequest,
+        SlashableProvider,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
@@ -47,69 +46,10 @@ use crate::{
     },
     transaction::SubmittedTransaction,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
+    types::SubmitProofRequest,
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
-
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct SubmitProofRequest {
-    pub provider_id: ProviderId,
-    pub tick: BlockNumber,
-    pub seed: RandomnessOutput,
-    pub forest_challenges: Vec<H256>,
-    pub checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
-}
-
-impl SubmitProofRequest {
-    pub fn new(
-        provider_id: ProviderId,
-        tick: BlockNumber,
-        seed: RandomnessOutput,
-        forest_challenges: Vec<H256>,
-        checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
-    ) -> Self {
-        Self {
-            provider_id,
-            tick,
-            seed,
-            forest_challenges,
-            checkpoint_challenges,
-        }
-    }
-
-    pub fn new_from_event(
-        new_challenge_seed_event: NewChallengeSeed,
-        forest_challenges: Vec<H256>,
-        checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
-    ) -> Self {
-        Self {
-            provider_id: new_challenge_seed_event.provider_id,
-            tick: new_challenge_seed_event.tick,
-            seed: new_challenge_seed_event.seed,
-            forest_challenges,
-            checkpoint_challenges,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Encode, Decode)]
-pub struct ConfirmStoringRequest {
-    pub file_key: H256,
-    pub try_count: u32,
-}
-
-impl ConfirmStoringRequest {
-    pub fn new(file_key: H256) -> Self {
-        Self {
-            file_key,
-            try_count: 0,
-        }
-    }
-
-    pub fn increment_try_count(&mut self) {
-        self.try_count += 1;
-    }
-}
 
 /// The BlockchainService actor.
 ///
@@ -148,7 +88,7 @@ pub struct BlockchainService {
     /// Pending submit proof requests. Note: this is not kept in the persistent state because of
     /// various edge cases when restarting the node, all originating from the "dynamic" way of
     /// computing the next challenges tick. This case is handled separately.
-    pub(crate) pending_submit_proof_requests: VecDeque<SubmitProofRequest>,
+    pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest>,
 }
 
 /// Event loop for the BlockchainService actor.
@@ -578,7 +518,15 @@ impl Actor for BlockchainService {
                     }
                 }
                 BlockchainServiceCommand::QueueSubmitProofRequest { request, callback } => {
-                    self.pending_submit_proof_requests.push_back(request);
+                    // The strategy used here is to replace the request in the set with the new request.
+                    // This is because new insertions are presumed to be done with more information of the current state of the chain,
+                    // so we want to make sure that the request is the most up-to-date one.
+                    if let Some(replaced_request) =
+                        self.pending_submit_proof_requests.take(&request)
+                    {
+                        trace!(target: LOG_TARGET, "Replacing pending submit proof request {:?} with {:?}", replaced_request, request);
+                    }
+
                     // We check right away if we can process the request so we don't waste time.
                     self.check_pending_forest_root_writes();
                     match callback.send(Ok(())) {
@@ -665,7 +613,7 @@ impl BlockchainService {
             forest_root_write_lock: None,
             is_synced: false,
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
-            pending_submit_proof_requests: VecDeque::new(),
+            pending_submit_proof_requests: BTreeSet::new(),
         }
     }
 
