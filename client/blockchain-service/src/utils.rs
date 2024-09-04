@@ -549,8 +549,7 @@ impl BlockchainService {
     /// Also, it can help to catch up to proofs in case there is a change in the BSP's stake (therefore
     /// also a change in it's challenge period).
     ///
-    /// IMPORTANT: This function assumes that the current block will be
-    #[allow(dead_code)] // TODO: Remove this when finally used.
+    /// IMPORTANT: This function takes into account whether a proof should be submitted for the current tick.
     pub(crate) fn proof_submission_catch_up(
         &mut self,
         current_block_hash: &H256,
@@ -660,41 +659,6 @@ impl BlockchainService {
             provider_id: *provider_id,
             seeds: challenge_seeds,
         });
-    }
-
-    // TODO: Reconsider how to use this for catching up to unsubmitted storage proofs.
-    pub async fn catch_up_block_import(&mut self, current_block_number: &BlockNumber) {
-        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-        let latest_processed_block_number = match state_store_context
-            .access_value(&LastProcessedBlockNumberCf)
-            .read()
-        {
-            Some(block_number) => block_number,
-            None => {
-                info!(target: LOG_TARGET, "No last processed block number found in the state store, skipping catch-up.");
-
-                return;
-            }
-        };
-        drop(state_store_context);
-
-        info!(target: LOG_TARGET, "Catching up from block #{} to block #{}", latest_processed_block_number, current_block_number);
-
-        for block_number in latest_processed_block_number..=*current_block_number {
-            let block_hash = match self.client.hash(block_number.into()) {
-                Ok(Some(hash)) => hash,
-                Ok(None) => {
-                    error!(target: LOG_TARGET, "Block #{} not found.", block_number);
-                    continue;
-                }
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Error fetching block hash for block #{}: {:?}", block_number, e);
-                    continue;
-                }
-            };
-
-            self.process_block_import(&block_hash, &block_number).await;
-        }
     }
 }
 
