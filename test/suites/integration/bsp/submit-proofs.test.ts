@@ -548,7 +548,8 @@ describeBspNet(
         bspTwoNextChallengeTick += bspTwoChallengePeriod;
       }
 
-      const _firstBspToRespond =
+      // @ts-expect-error test not implemented yet
+      const firstBspToRespond =
         dummyBspNextChallengeTick < bspTwoNextChallengeTick
           ? ShConsts.DUMMY_BSP_ID
           : ShConsts.BSP_TWO_ID;
@@ -556,6 +557,7 @@ describeBspNet(
         dummyBspNextChallengeTick < bspTwoNextChallengeTick
           ? ShConsts.BSP_TWO_ID
           : ShConsts.DUMMY_BSP_ID;
+      // @ts-expect-error test not implemented yet
       const _firstBlockToAdvance =
         dummyBspNextChallengeTick < bspTwoNextChallengeTick
           ? dummyBspNextChallengeTick
