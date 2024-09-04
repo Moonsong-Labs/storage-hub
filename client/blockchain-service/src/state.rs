@@ -2,11 +2,11 @@ use std::path::PathBuf;
 
 use log::info;
 use rocksdb::{ColumnFamilyDescriptor, Options, DB};
-use shc_common::types::{BlockNumber, RandomnessOutput};
+use shc_common::types::BlockNumber;
 
 use crate::{
-    events::{ForestWriteLockTaskData, NewChallengeSeed},
-    handler::{ConfirmStoringRequest, SubmitProofRequest},
+    events::ProcessConfirmStoringRequestData,
+    handler::ConfirmStoringRequest,
     typed_store::{
         BufferedWriteSupport, CFDequeAPI, ProvidesDbContext, ProvidesTypedDbAccess,
         ProvidesTypedDbSingleAccess, ScaleEncodedCf, SingleScaleEncodedValueCf, TypedCf,
@@ -23,48 +23,11 @@ impl SingleScaleEncodedValueCf for LastProcessedBlockNumberCf {
 }
 
 /// Current ongoing task which requires a forest write lock.
-pub struct OngoingForestWriteLockTaskDataCf;
-impl SingleScaleEncodedValueCf for OngoingForestWriteLockTaskDataCf {
-    type Value = ForestWriteLockTaskData;
+pub struct OngoingProcessConfirmStoringRequestCf;
+impl SingleScaleEncodedValueCf for OngoingProcessConfirmStoringRequestCf {
+    type Value = ProcessConfirmStoringRequestData;
 
-    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "ongoing_forest_write_lock_task_data";
-}
-
-pub struct OngoingNewChallengeSeedEventsCf;
-impl ScaleEncodedCf for OngoingNewChallengeSeedEventsCf {
-    type Key = RandomnessOutput;
-    type Value = NewChallengeSeed;
-
-    const SCALE_ENCODED_NAME: &'static str = "ongoing_new_challenge_seed_events";
-}
-
-/// Pending submit proof requests.
-#[derive(Default)]
-pub struct PendingSubmitProofRequestCf;
-impl ScaleEncodedCf for PendingSubmitProofRequestCf {
-    type Key = u64;
-    type Value = SubmitProofRequest;
-
-    const SCALE_ENCODED_NAME: &'static str = "pending_submit_proof_request";
-}
-
-/// Pending submit proof requests left side (inclusive) index for the [`PendingSubmitProofRequestLeftIndexCf`] CF.
-#[derive(Default)]
-pub struct PendingSubmitProofRequestLeftIndexCf;
-impl SingleScaleEncodedValueCf for PendingSubmitProofRequestLeftIndexCf {
-    type Value = u64;
-
-    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "pending_submit_proof_request_left_index";
-}
-
-/// Pending submit proof requests right side (exclusive) index for the [`PendingSubmitProofRequestLeftIndexCf`] CF.
-#[derive(Default)]
-pub struct PendingSubmitProofRequestRightIndexCf;
-impl SingleScaleEncodedValueCf for PendingSubmitProofRequestRightIndexCf {
-    type Value = u64;
-
-    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
-        "pending_submit_proof_request_right_index";
+    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "ongoing_process_confirm_storing_request";
 }
 
 /// Pending confirm storing requests.
@@ -97,13 +60,9 @@ impl SingleScaleEncodedValueCf for PendingConfirmStoringRequestRightIndexCf {
         "pending_confirm_storing_request_right_index";
 }
 
-const ALL_COLUMN_FAMILIES: [&str; 9] = [
+const ALL_COLUMN_FAMILIES: [&str; 5] = [
     LastProcessedBlockNumberCf::NAME,
-    OngoingForestWriteLockTaskDataCf::NAME,
-    OngoingNewChallengeSeedEventsCf::NAME,
-    PendingSubmitProofRequestLeftIndexCf::NAME,
-    PendingSubmitProofRequestRightIndexCf::NAME,
-    PendingSubmitProofRequestCf::NAME,
+    OngoingProcessConfirmStoringRequestCf::NAME,
     PendingConfirmStoringRequestLeftIndexCf::NAME,
     PendingConfirmStoringRequestRightIndexCf::NAME,
     PendingConfirmStoringRequestCf::NAME,
@@ -161,12 +120,6 @@ impl<'a> BlockchainServiceStateStoreRwContext<'a> {
         BlockchainServiceStateStoreRwContext { db_context }
     }
 
-    pub fn pending_submit_proof_request_deque(&'a self) -> PendingSubmitProofRequestDequeAPI<'a> {
-        PendingSubmitProofRequestDequeAPI {
-            db_context: &self.db_context,
-        }
-    }
-
     pub fn pending_confirm_storing_request_deque(
         &'a self,
     ) -> PendingConfirmStoringRequestDequeAPI<'a> {
@@ -190,25 +143,6 @@ impl<'a> ProvidesDbContext for BlockchainServiceStateStoreRwContext<'a> {
 impl<'a> ProvidesTypedDbSingleAccess for BlockchainServiceStateStoreRwContext<'a> {}
 
 impl<'a> ProvidesTypedDbAccess for BlockchainServiceStateStoreRwContext<'a> {}
-
-pub struct PendingSubmitProofRequestDequeAPI<'a> {
-    db_context: &'a TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
-}
-
-impl<'a> ProvidesDbContext for PendingSubmitProofRequestDequeAPI<'a> {
-    fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
-        &self.db_context
-    }
-}
-
-impl<'a> ProvidesTypedDbSingleAccess for PendingSubmitProofRequestDequeAPI<'a> {}
-
-impl<'a> CFDequeAPI for PendingSubmitProofRequestDequeAPI<'a> {
-    type Value = SubmitProofRequest;
-    type LeftIndexCF = PendingSubmitProofRequestLeftIndexCf;
-    type RightIndexCF = PendingSubmitProofRequestRightIndexCf;
-    type DataCF = PendingSubmitProofRequestCf;
-}
 
 pub struct PendingConfirmStoringRequestDequeAPI<'a> {
     db_context: &'a TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,

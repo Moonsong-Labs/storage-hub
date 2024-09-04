@@ -33,7 +33,7 @@ use crate::{
         ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
-    state::{LastProcessedBlockNumberCf, OngoingForestWriteLockTaskDataCf},
+    state::{LastProcessedBlockNumberCf, OngoingProcessConfirmStoringRequestCf},
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{EventsVec, Extrinsic},
     BlockchainService,
@@ -441,7 +441,7 @@ impl BlockchainService {
                     trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
-                        .access_value(&OngoingForestWriteLockTaskDataCf)
+                        .access_value(&OngoingProcessConfirmStoringRequestCf)
                         .delete();
                     state_store_context.commit();
                 }
@@ -449,7 +449,7 @@ impl BlockchainService {
                     error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
-                        .access_value(&OngoingForestWriteLockTaskDataCf)
+                        .access_value(&OngoingProcessConfirmStoringRequestCf)
                         .delete();
                     state_store_context.commit();
                 }
@@ -461,10 +461,7 @@ impl BlockchainService {
         let mut next_event_data = None;
 
         // If we have a submit proof request, prioritize it.
-        if let Some(request) = state_store_context
-            .pending_submit_proof_request_deque()
-            .pop_front()
-        {
+        if let Some(request) = self.pending_submit_proof_requests.pop_front() {
             next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
                 ProcessSubmitProofRequestData {
                     seed: request.seed,
@@ -503,11 +500,6 @@ impl BlockchainService {
                 );
             }
         }
-        if let Some(event_data) = &next_event_data {
-            state_store_context
-                .access_value(&OngoingForestWriteLockTaskDataCf)
-                .write(event_data);
-        }
         state_store_context.commit();
 
         if let Some(event_data) = next_event_data {
@@ -518,6 +510,17 @@ impl BlockchainService {
     pub(crate) fn emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData>) {
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.forest_root_write_lock = Some(rx);
+
+        let data = data.into();
+
+        // If this is a confirm storing request, we need to store it in the state store.
+        if let ForestWriteLockTaskData::ConfirmStoringRequest(data) = &data {
+            let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+            state_store_context
+                .access_value(&OngoingProcessConfirmStoringRequestCf)
+                .write(data);
+            state_store_context.commit();
+        }
 
         // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
         // T so that we can keep using the current actors event bus (emit) which requires Clone on the

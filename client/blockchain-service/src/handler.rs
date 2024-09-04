@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use codec::{Decode, Encode};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     path::PathBuf,
     str::FromStr,
     sync::Arc,
@@ -42,11 +42,11 @@ use crate::{
         NewStorageRequest, SlashableProvider,
     },
     state::{
-        BlockchainServiceStateStore, LastProcessedBlockNumberCf, OngoingForestWriteLockTaskDataCf,
-        OngoingNewChallengeSeedEventsCf,
+        BlockchainServiceStateStore, LastProcessedBlockNumberCf,
+        OngoingProcessConfirmStoringRequestCf,
     },
     transaction::SubmittedTransaction,
-    typed_store::{CFDequeAPI, ProvidesTypedDbAccess, ProvidesTypedDbSingleAccess},
+    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
@@ -122,10 +122,17 @@ pub struct BlockchainService {
     /// thread (blockchain service) and unlock it at the end of the spawned task. The alternative
     /// would be to send a [`MutexGuard`].
     pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
-    /// A flag to know if we have received the first block import notification.
-    pub(crate) first_block_import_notification: bool,
+    /// A flag to know if the node has finished syncing. This is derived from the first block import
+    /// notification.
+    /// Note: this assumes that first block import notification block number is not far from the actual
+    /// blockchain head (a maximum difference of 10).
+    pub(crate) is_synced: bool,
     /// A persistent state store for the BlockchainService actor.
     pub(crate) persistent_state: BlockchainServiceStateStore,
+    /// Pending submit proof requests. Note: this is not kept in the persistent state because of
+    /// various edge cases when restarting the node, all originating from the "dynamic" way of
+    /// computing the next challenges tick. This case is handled separately.
+    pub(crate) pending_submit_proof_requests: VecDeque<SubmitProofRequest>,
 }
 
 /// Event loop for the BlockchainService actor.
@@ -141,6 +148,7 @@ where
 {
     Command(BlockchainServiceCommand),
     BlockImportNotification(BlockImportNotification<Block>),
+    EveryBlockImportNotification(BlockImportNotification<Block>),
     FinalityNotification(FinalityNotification<Block>),
 }
 
@@ -158,7 +166,13 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
 
         // Import notification stream to be notified of new blocks.
         // This will notify us when sync to the latest block, or if there is a re-org.
+        // Note: We use this stream only to know when we are synced, after which we will use
+        // the every_import_notification_stream.
         let block_import_notification_stream = self.actor.client.import_notification_stream();
+
+        // Block import notification stream to be notified of every imported block.
+        let every_block_import_notification_stream =
+            self.actor.client.every_import_notification_stream();
 
         // Finality notification stream to be notified of blocks being finalised.
         let finality_notification_stream = self.actor.client.finality_notification_stream();
@@ -172,6 +186,9 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
             finality_notification_stream
                 .map(MergedEventLoopMessage::FinalityNotification)
                 .boxed(),
+            every_block_import_notification_stream
+                .map(MergedEventLoopMessage::EveryBlockImportNotification)
+                .boxed(),
         ]);
 
         // Process incoming messages.
@@ -181,12 +198,24 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
                     self.actor.handle_message(command).await;
                 }
                 MergedEventLoopMessage::BlockImportNotification(notification) => {
-                    self.actor
-                        .handle_block_import_notification(notification)
-                        .await;
+                    if !self.actor.is_synced {
+                        self.actor.is_synced = true;
+                        self.actor
+                            .handle_block_import_notification(notification)
+                            .await;
+                    }
+                }
+                MergedEventLoopMessage::EveryBlockImportNotification(notification) => {
+                    if self.actor.is_synced {
+                        self.actor
+                            .handle_every_block_import_notification(notification)
+                            .await;
+                    }
                 }
                 MergedEventLoopMessage::FinalityNotification(notification) => {
-                    self.actor.handle_finality_notification(notification).await;
+                    if self.actor.is_synced {
+                        self.actor.handle_finality_notification(notification).await;
+                    }
                 }
             };
         }
@@ -535,14 +564,7 @@ impl Actor for BlockchainService {
                     }
                 }
                 BlockchainServiceCommand::QueueSubmitProofRequest { request, callback } => {
-                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                    state_store_context
-                        .access(&OngoingNewChallengeSeedEventsCf)
-                        .delete(&request.seed);
-                    state_store_context
-                        .pending_submit_proof_request_deque()
-                        .push_back(request);
-                    state_store_context.commit();
+                    self.pending_submit_proof_requests.push_back(request);
                     // We check right away if we can process the request so we don't waste time.
                     self.check_pending_forest_root_writes();
                     match callback.send(Ok(())) {
@@ -627,8 +649,9 @@ impl BlockchainService {
             wait_for_block_request_by_number: BTreeMap::new(),
             provider_ids: BTreeSet::new(),
             forest_root_write_lock: None,
-            first_block_import_notification: false,
+            is_synced: false,
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
+            pending_submit_proof_requests: VecDeque::new(),
         }
     }
 
@@ -643,39 +666,39 @@ impl BlockchainService {
         let block_number: BlockNumber = (*notification.header.number()).saturated_into();
 
         // If this is the first block import notification, we might need to catch up.
-        if !self.first_block_import_notification {
-            info!(target: LOG_TARGET, "First block import notification: {}", block_hash);
+        info!(target: LOG_TARGET, "First block import notification (synced to #{}): {}", block_number, block_hash);
 
-            // Check if there is an ongoing forest write lock task.
-            let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-            let maybe_ongoing_forest_write_lock_task_data = state_store_context
-                .access_value(&OngoingForestWriteLockTaskDataCf)
-                .read();
+        // Check if there was an ongoing process confirm storing task.
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        let maybe_ongoing_process_confirm_storing_request = state_store_context
+            .access_value(&OngoingProcessConfirmStoringRequestCf)
+            .read();
 
-            // Get all the ongoing NewChallengeSeed events.
-            let ongoing_new_challenge_seed_events = state_store_context
-                .access(&OngoingNewChallengeSeedEventsCf)
-                .iterate_without_overlay()
-                .collect::<Vec<_>>();
-
-            drop(state_store_context);
-
-            // If there was an ongoing forest write lock task, emit the event to restart the task.
-            if let Some(event_data) = maybe_ongoing_forest_write_lock_task_data {
-                self.emit_forest_write_event(event_data);
+        // If there was an ongoing process confirm storing task, we need to re-queue the requests.
+        if let Some(process_confirm_storing_request) = maybe_ongoing_process_confirm_storing_request
+        {
+            for request in process_confirm_storing_request.confirm_storing_requests {
+                state_store_context
+                    .pending_confirm_storing_request_deque()
+                    .push_back(request);
             }
-
-            // Restart all previous ongoing NewChallengeSeed events.
-            for (_, new_challenge_seed_event) in ongoing_new_challenge_seed_events {
-                self.emit(new_challenge_seed_event);
-            }
-
-            self.catch_up_block_import(&block_number).await;
-
-            self.first_block_import_notification = true;
         }
+        state_store_context.commit();
 
-        debug!(target: LOG_TARGET, "Import notification #{}: {}", block_number, block_hash);
+        self.process_block_import(&block_hash, &block_number).await;
+    }
+
+    async fn handle_every_block_import_notification<Block>(
+        &mut self,
+        notification: BlockImportNotification<Block>,
+    ) where
+        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+    {
+        let block_hash: H256 = notification.hash;
+        let block_number: BlockNumber = (*notification.header.number()).saturated_into();
+
+        // If this is the first block import notification, we might need to catch up.
+        info!(target: LOG_TARGET, "Block import notification (#{}): {}", block_number, block_hash);
 
         self.process_block_import(&block_hash, &block_number).await;
     }
@@ -759,15 +782,11 @@ impl BlockchainService {
                                     provider_id,
                                     &challenges_ticker,
                                 ) {
-                                    let new_challenge_seed_event = NewChallengeSeed {
+                                    self.emit(NewChallengeSeed {
                                         provider_id: *provider_id,
                                         tick: challenges_ticker,
                                         seed,
-                                    };
-                                    state_store_context
-                                        .access(&OngoingNewChallengeSeedEventsCf)
-                                        .put(&seed, &new_challenge_seed_event);
-                                    self.emit(new_challenge_seed_event)
+                                    })
                                 } else {
                                     trace!(target: LOG_TARGET, "Challenges tick is not the next one to be submitted for Provider [{:?}]", provider_id);
                                 }
