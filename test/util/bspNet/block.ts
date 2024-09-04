@@ -25,6 +25,20 @@ export interface SealedBlock {
   extSuccess?: boolean;
 }
 
+/**
+ * Seals a block with optional extrinsics and finalizes it.
+ *
+ * This function creates a new block, optionally including specified extrinsics.
+ * It handles the process of sending transactions, creating the block, and collecting events.
+ *
+ * @param api - The ApiPromise instance.
+ * @param calls - Optional extrinsic(s) to include in the block.
+ * @param signer - Optional signer for the extrinsics.
+ * @param finaliseBlock - Whether to finalize the block. Defaults to true.
+ * @returns A Promise resolving to a SealedBlock object containing block details and events.
+ *
+ * @throws Will throw an error if the block creation fails or if extrinsics are unsuccessful.
+ */
 export const sealBlock = async (
   api: ApiPromise,
   calls?:
@@ -113,6 +127,16 @@ export const sealBlock = async (
   }) satisfies SealedBlock;
 };
 
+/**
+ * Skips a specified number of blocks in the blockchain.
+ *
+ * This function seals empty blocks to advance the blockchain by a given number of blocks.
+ * It's useful for simulating the passage of time in the network.
+ *
+ * @param api - The ApiPromise instance.
+ * @param blocksToSkip - The number of blocks to skip.
+ * @returns A Promise that resolves when all blocks have been skipped.
+ */
 export const skipBlocks = async (api: ApiPromise, blocksToSkip: number) => {
   console.log(`\tSkipping ${blocksToSkip} blocks...`);
   for (let i = 0; i < blocksToSkip; i++) {
@@ -177,6 +201,38 @@ export async function runToNextChallengePeriodBlock(
   return nextChallengeDeadline.toNumber();
 }
 
+/**
+ * Advances the blockchain to a specified block number.
+ *
+ * This function is crucial for testing scenarios that depend on specific blockchain states.
+ * It allows for precise control over the blockchain's progression, including the ability
+ * to simulate BSP proof submissions and challenge periods.
+ *
+ * @param api - The ApiPromise instance to interact with the blockchain.
+ * @param blockNumber - The target block number to advance to.
+ * @param waitBetweenBlocks - Optional. If specified:
+ *                            - If a number, waits for that many milliseconds between blocks.
+ *                            - If true, waits for 500ms between blocks.
+ *                            - If false or undefined, doesn't wait between blocks.
+ * @param watchForBspProofs - Optional. An array of BSP IDs to watch for proofs.
+ *                            If specified, the function will wait for BSP proofs at appropriate intervals.
+ *
+ * @returns A Promise that resolves to a SealedBlock object representing the last sealed block.
+ *
+ * @throws Will throw an error if the target block number is lower than the current block number.
+ *
+ * @example
+ * // Advance to block 100 with no waiting
+ * const result = await advanceToBlock(api, 100);
+ *
+ * @example
+ * // Advance to block 200, waiting 1000ms between blocks
+ * const result = await advanceToBlock(api, 200, 1000);
+ *
+ * @example
+ * // Advance to block 300, watching for proofs from two BSPs
+ * const result = await advanceToBlock(api, 300, true, ['bsp1', 'bsp2']);
+ */
 export const advanceToBlock = async (
   api: ApiPromise,
   blockNumber: number,
@@ -248,6 +304,17 @@ export const advanceToBlock = async (
   return blockResult;
 };
 
+/**
+ * Performs a chain reorganization by creating a finalized block on top of the parent block.
+ *
+ * This function is used to simulate network forks and test the system's ability to handle
+ * chain reorganizations. It's a critical tool for ensuring the robustness of the BSP network
+ * in face of potential consensus issues.
+ *
+ * @param api - The ApiPromise instance.
+ * @throws Will throw an error if the head block is already finalized.
+ * @returns A Promise that resolves when the chain reorganization is complete.
+ */
 export async function reOrgBlocks(api: ApiPromise): Promise<void> {
   const currentBlockHeader = await api.rpc.chain.getHeader();
   const finalisedHash = await api.rpc.chain.getFinalizedHead();
@@ -262,9 +329,19 @@ export async function reOrgBlocks(api: ApiPromise): Promise<void> {
   await api.rpc.engine.createBlock(true, true, finalisedHash);
 }
 
+/**
+ * Namespace containing block-related operations for the BSP network.
+ *
+ * This namespace provides a convenient interface to access various block manipulation
+ * and interaction functions. It's designed to be used as part of the enhanced BSP API,
+ * offering a cohesive set of tools for block-level operations in testing scenarios.
+ */
 export namespace BspNetBlock {
   export const seal = sealBlock;
   export const skip = skipBlocks;
+  /**
+   * @see {@link advanceToBlock}
+   */
   export const skipTo = advanceToBlock;
   export const skipToMinChangeTime = skipBlocksToMinChangeTime;
   export const skipToChallengePeriod = runToNextChallengePeriodBlock;
