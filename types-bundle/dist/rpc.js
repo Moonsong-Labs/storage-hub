@@ -42,7 +42,7 @@ export const rpcDefinitions = {
       params: [
         {
           name: "key",
-          type: "String"
+          type: "Option<String>"
         }
       ],
       type: "H256"

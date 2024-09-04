@@ -44,7 +44,7 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
       params: [
         {
           name: "key",
-          type: "String"
+          type: "Option<String>"
         }
       ],
       type: "H256"
