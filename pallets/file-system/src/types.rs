@@ -143,10 +143,7 @@ impl<T: Config> ExpirationItem<T> {
         let mut next_expiration_block = expiration_block;
         while let Err(_) = match self {
             ExpirationItem::StorageRequest(storage_request) => {
-                <StorageRequestExpirations<T>>::try_append(
-                    next_expiration_block,
-                    storage_request.clone(),
-                )
+                <StorageRequestExpirations<T>>::try_append(next_expiration_block, *storage_request)
             }
             ExpirationItem::PendingFileDeletionRequests(pending_file_deletion_requests) => {
                 <FileDeletionRequestExpirations<T>>::try_append(

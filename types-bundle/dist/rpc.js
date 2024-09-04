@@ -39,7 +39,12 @@ export const rpcDefinitions = {
     },
     getForestRoot: {
       description: "Get the root of the forest trie.",
-      params: [],
+      params: [
+        {
+          name: "key",
+          type: "Option<String>"
+        }
+      ],
       type: "H256"
     },
     insertBcsvKeys: {
