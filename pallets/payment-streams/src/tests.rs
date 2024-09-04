@@ -3378,6 +3378,18 @@ mod dynamic_rate_streams {
                     },
                 );
 
+                // Set the last chargeable price index of Charlie to the equivalent of one block ahead
+                LastChargeableInfo::<Test>::insert(
+                    &charlie_bsp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick: System::block_number(),
+                        price_index: DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob)
+                            .unwrap()
+                            .price_index_when_last_charged
+                            + current_price,
+                    },
+                );
+
                 // Try to charge the payment stream (Bob will not have enough balance to pay for it and will get flagged as without funds)
                 assert_ok!(PaymentStreams::charge_payment_streams(
                     RuntimeOrigin::signed(alice),
@@ -3405,14 +3417,24 @@ mod dynamic_rate_streams {
                     .into(),
                 );
 
+                // Get the deposit of the payment stream from Bob to Charlie
+                let charlie_stream_deposit =
+                    DynamicRatePaymentStreams::<Test>::get(&charlie_bsp_id, &bob)
+                        .unwrap()
+                        .user_deposit;
+
                 // Try to charge the payment stream from Bob to Charlie
                 assert_ok!(PaymentStreams::charge_payment_streams(
                     RuntimeOrigin::signed(charlie),
                     bob
                 ));
 
-                // Check that no funds were charged from Bob's free balance
-                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+                // Check that no funds were charged from Bob's free balance, and he got the rest of his deposit (minus the block he paid)
+                assert_eq!(
+                    NativeBalance::free_balance(&bob),
+                    bob_new_balance + charlie_stream_deposit
+                        - current_price * amount_provided as u128
+                );
                 System::assert_has_event(
                     Event::<Test>::PaymentStreamCharged {
                         user_account: bob,

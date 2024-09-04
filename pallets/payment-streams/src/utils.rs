@@ -1067,13 +1067,43 @@ where
         user_account: &T::AccountId,
         payment_stream: &PaymentStream<T>,
     ) -> DispatchResult {
-        // Get the user deposit from the payment stream
-        let deposit = match payment_stream {
-            PaymentStream::FixedRatePaymentStream(payment_stream) => payment_stream.user_deposit,
-            PaymentStream::DynamicRatePaymentStream(payment_stream) => payment_stream.user_deposit,
+        // Get the amount that should be charged for this payment stream
+        let last_chargeable_info = LastChargeableInfo::<T>::get(provider_id);
+
+        // Get the user deposit and amount to charge from the payment stream
+        let (deposit, amount_to_charge) = match payment_stream {
+            PaymentStream::FixedRatePaymentStream(fixed_rate_payment_stream) => {
+                let amount_to_charge = fixed_rate_payment_stream
+                    .rate
+                    .checked_mul(&T::BlockNumberToBalance::convert(
+                        last_chargeable_info
+                            .last_chargeable_tick
+                            .saturating_sub(fixed_rate_payment_stream.last_charged_tick),
+                    ))
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                // If the amount to charge is greater than the deposit, just charge the deposit
+                let amount_to_charge = amount_to_charge.min(fixed_rate_payment_stream.user_deposit);
+
+                (fixed_rate_payment_stream.user_deposit, amount_to_charge)
+            }
+            PaymentStream::DynamicRatePaymentStream(dynamic_rate_payment_stream) => {
+                // Get the amount that should be charged for this payment stream
+                let price_index_at_last_chargeable_tick = last_chargeable_info.price_index;
+                let amount_to_charge = price_index_at_last_chargeable_tick
+                    .saturating_sub(dynamic_rate_payment_stream.price_index_when_last_charged)
+                    .checked_mul(&dynamic_rate_payment_stream.amount_provided.into())
+                    .ok_or(ArithmeticError::Overflow)?;
+
+                // If the amount to charge is greater than the deposit, just charge the deposit
+                let amount_to_charge =
+                    amount_to_charge.min(dynamic_rate_payment_stream.user_deposit);
+
+                (dynamic_rate_payment_stream.user_deposit, amount_to_charge)
+            }
         };
 
-        // Release the deposit from the user and transfer it to the Provider to pay for the unpaid services
+        // Release the deposit from the user and transfer the amount to charge to the Provider to pay for the unpaid services
         let provider_payment_account = expect_or_err!(
             <T::ProvidersPallet as ReadProvidersInterface>::get_payment_account(*provider_id),
             "Provider should exist and have a payment account if its ID exists.",
@@ -1088,7 +1118,7 @@ where
         T::NativeBalance::transfer(
             &user_account,
             &provider_payment_account,
-            deposit,
+            amount_to_charge,
             Preservation::Preserve,
         )?;
 
