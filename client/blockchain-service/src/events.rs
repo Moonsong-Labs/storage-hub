@@ -98,6 +98,8 @@ pub struct ProcessSubmitProofRequest {
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
+impl EventBusMessage for ProcessConfirmStoringRequest {}
+
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ProcessConfirmStoringRequestData {
     pub confirm_storing_requests: Vec<ConfirmStoringRequest>,
@@ -108,6 +110,8 @@ pub struct ProcessConfirmStoringRequest {
     pub data: ProcessConfirmStoringRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
+
+impl EventBusMessage for ProcessSubmitProofRequest {}
 
 /// Slashable Provider event.
 ///
@@ -167,8 +171,6 @@ pub struct BlockchainServiceEventBusProvider {
     last_chargeable_info_updated_event_bus: EventBus<LastChargeableInfoUpdated>,
 }
 
-impl EventBusMessage for ProcessSubmitProofRequest {}
-
 impl BlockchainServiceEventBusProvider {
     pub fn new() -> Self {
         Self {
@@ -184,8 +186,6 @@ impl BlockchainServiceEventBusProvider {
         }
     }
 }
-
-impl EventBusMessage for ProcessConfirmStoringRequest {}
 
 impl ProvidesEventBus<NewChallengeSeed> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<NewChallengeSeed> {

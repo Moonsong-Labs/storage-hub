@@ -5,7 +5,7 @@ use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
 use frame_support::{StorageHasher, Twox128};
 use lazy_static::lazy_static;
-use log::{debug, error, trace, warn};
+use log::{debug, error, info, trace, warn};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetLastTickProviderSubmittedProofError, ProofsDealerApi,
 };
@@ -33,7 +33,7 @@ use crate::{
         ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
-    state::OngoingForestWriteLockTaskDataCf,
+    state::{LastProcessedBlockNumberCf, OngoingForestWriteLockTaskDataCf},
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{EventsVec, Extrinsic},
     BlockchainService,
@@ -537,6 +537,40 @@ impl BlockchainService {
                     forest_root_write_tx,
                 });
             }
+        }
+    }
+
+    pub async fn catch_up_block_import(&mut self, current_block_number: &BlockNumber) {
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        let latest_processed_block_number = match state_store_context
+            .access_value(&LastProcessedBlockNumberCf)
+            .read()
+        {
+            Some(block_number) => block_number,
+            None => {
+                info!(target: LOG_TARGET, "No last processed block number found in the state store, skipping catch-up.");
+
+                return;
+            }
+        };
+        drop(state_store_context);
+
+        info!(target: LOG_TARGET, "Catching up from block #{} to block #{}", latest_processed_block_number, current_block_number);
+
+        for block_number in latest_processed_block_number..=*current_block_number {
+            let block_hash = match self.client.hash(block_number.into()) {
+                Ok(Some(hash)) => hash,
+                Ok(None) => {
+                    error!(target: LOG_TARGET, "Block #{} not found.", block_number);
+                    continue;
+                }
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Error fetching block hash for block #{}: {:?}", block_number, e);
+                    continue;
+                }
+            };
+
+            self.process_block_import(&block_hash, &block_number).await;
         }
     }
 }

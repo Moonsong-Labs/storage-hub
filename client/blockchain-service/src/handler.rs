@@ -632,40 +632,6 @@ impl BlockchainService {
         }
     }
 
-    async fn catch_up_block_import(&mut self, current_block_number: &BlockNumber) {
-        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-        let latest_processed_block_number = match state_store_context
-            .access_value(&LastProcessedBlockNumberCf)
-            .read()
-        {
-            Some(block_number) => block_number,
-            None => {
-                info!(target: LOG_TARGET, "No last processed block number found in the state store, skipping catch-up.");
-
-                return;
-            }
-        };
-        drop(state_store_context);
-
-        info!(target: LOG_TARGET, "Catching up from block #{} to block #{}", latest_processed_block_number, current_block_number);
-
-        for block_number in latest_processed_block_number..=*current_block_number {
-            let block_hash = match self.client.hash(block_number.into()) {
-                Ok(Some(hash)) => hash,
-                Ok(None) => {
-                    error!(target: LOG_TARGET, "Block #{} not found.", block_number);
-                    continue;
-                }
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Error fetching block hash for block #{}: {:?}", block_number, e);
-                    continue;
-                }
-            };
-
-            self.process_block_import(&block_hash, &block_number).await;
-        }
-    }
-
     /// Handle a block import notification.
     async fn handle_block_import_notification<Block>(
         &mut self,
@@ -714,7 +680,7 @@ impl BlockchainService {
         self.process_block_import(&block_hash, &block_number).await;
     }
 
-    async fn process_block_import(&mut self, block_hash: &H256, block_number: &BlockNumber) {
+    pub async fn process_block_import(&mut self, block_hash: &H256, block_number: &BlockNumber) {
         info!(target: LOG_TARGET, "Processing block import #{}: {}", block_number, block_hash);
 
         // Notify all tasks waiting for this block number (or lower).

@@ -258,8 +258,6 @@ pub fn run() -> Result<()> {
 
                 info!("Is collating: {}", if config.role.is_authority() { "yes" } else { "no" });
 
-                info!("config.base_path = {:?}", config.base_path);
-
                 if dev_service {
                     crate::service::start_dev_node(
                         config,
