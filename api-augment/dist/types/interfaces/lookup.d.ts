@@ -3145,14 +3145,11 @@ declare const _default: {
         providerId: string;
         userAccount: string;
         amountProvided: string;
-        currentPrice: string;
-        currentAccumulatedPriceIndex: string;
       };
       update_dynamic_rate_payment_stream: {
         providerId: string;
         userAccount: string;
         newAmountProvided: string;
-        currentPrice: string;
       };
       delete_dynamic_rate_payment_stream: {
         providerId: string;

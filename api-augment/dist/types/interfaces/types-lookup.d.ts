@@ -3824,15 +3824,12 @@ declare module "@polkadot/types/lookup" {
       readonly providerId: H256;
       readonly userAccount: AccountId32;
       readonly amountProvided: u32;
-      readonly currentPrice: u128;
-      readonly currentAccumulatedPriceIndex: u128;
     } & Struct;
     readonly isUpdateDynamicRatePaymentStream: boolean;
     readonly asUpdateDynamicRatePaymentStream: {
       readonly providerId: H256;
       readonly userAccount: AccountId32;
       readonly newAmountProvided: u32;
-      readonly currentPrice: u128;
     } & Struct;
     readonly isDeleteDynamicRatePaymentStream: boolean;
     readonly asDeleteDynamicRatePaymentStream: {

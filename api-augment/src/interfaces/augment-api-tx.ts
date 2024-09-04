@@ -1898,11 +1898,9 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           providerId: H256 | string | Uint8Array,
           userAccount: AccountId32 | string | Uint8Array,
-          amountProvided: u32 | AnyNumber | Uint8Array,
-          currentPrice: u128 | AnyNumber | Uint8Array,
-          currentAccumulatedPriceIndex: u128 | AnyNumber | Uint8Array
+          amountProvided: u32 | AnyNumber | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, AccountId32, u32, u128, u128]
+        [H256, AccountId32, u32]
       >;
       /**
        * Dispatchable extrinsic that allows root to add a fixed-rate payment stream from a User to a Provider.
@@ -2024,10 +2022,9 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           providerId: H256 | string | Uint8Array,
           userAccount: AccountId32 | string | Uint8Array,
-          newAmountProvided: u32 | AnyNumber | Uint8Array,
-          currentPrice: u128 | AnyNumber | Uint8Array
+          newAmountProvided: u32 | AnyNumber | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, AccountId32, u32, u128]
+        [H256, AccountId32, u32]
       >;
       /**
        * Dispatchable extrinsic that allows root to update an existing fixed-rate payment stream between a User and a Provider.

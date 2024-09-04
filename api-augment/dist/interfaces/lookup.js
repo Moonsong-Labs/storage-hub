@@ -3191,15 +3191,12 @@ export default {
       create_dynamic_rate_payment_stream: {
         providerId: "H256",
         userAccount: "AccountId32",
-        amountProvided: "u32",
-        currentPrice: "u128",
-        currentAccumulatedPriceIndex: "u128"
+        amountProvided: "u32"
       },
       update_dynamic_rate_payment_stream: {
         providerId: "H256",
         userAccount: "AccountId32",
-        newAmountProvided: "u32",
-        currentPrice: "u128"
+        newAmountProvided: "u32"
       },
       delete_dynamic_rate_payment_stream: {
         providerId: "H256",
