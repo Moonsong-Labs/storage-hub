@@ -102,7 +102,6 @@ where
     file_storage: Option<Arc<RwLock<<(R, S) as StorageTypes>::FL>>>,
     forest_storage_handler: Option<<(R, S) as StorageTypes>::FSH>,
     provider_pub_key: Option<[u8; 32]>,
-    storage_path: Option<String>,
 }
 
 /// Common components to build for any given configuration of [`RoleSupport`] and [`StorageLayerSupport`].
@@ -119,7 +118,6 @@ where
             file_storage: None,
             forest_storage_handler: None,
             provider_pub_key: None,
-            storage_path: None,
         }
     }
 

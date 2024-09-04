@@ -217,12 +217,6 @@ where
 
             let mut storage_hub_builder = StorageHubBuilder::<R, S>::new(task_spawner);
 
-            // Getting the caller pub key used for the blockchain service, from the keystore.
-            // Then add it to the StorageHub builder.
-            let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-            storage_hub_builder.with_provider_pub_key(caller_pub_key);
-            storage_hub_builder.with_storage_path(storage_path.clone());
-
             let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
                 file_transfer_request_protocol
                     .expect("FileTransfer request protocol should already be initialized.");
