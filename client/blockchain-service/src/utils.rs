@@ -669,10 +669,12 @@ impl BlockchainService {
         }
 
         // Emit the `MultiNewChallengeSeeds` event.
-        self.emit(MultipleNewChallengeSeeds {
-            provider_id: *provider_id,
-            seeds: challenge_seeds,
-        });
+        if challenge_seeds.len() > 0 {
+            self.emit(MultipleNewChallengeSeeds {
+                provider_id: *provider_id,
+                seeds: challenge_seeds,
+            });
+        }
     }
 }
 

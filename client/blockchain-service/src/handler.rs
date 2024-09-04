@@ -522,7 +522,7 @@ impl Actor for BlockchainService {
                     // This is because new insertions are presumed to be done with more information of the current state of the chain,
                     // so we want to make sure that the request is the most up-to-date one.
                     if let Some(replaced_request) =
-                        self.pending_submit_proof_requests.take(&request)
+                        self.pending_submit_proof_requests.replace(request.clone())
                     {
                         trace!(target: LOG_TARGET, "Replacing pending submit proof request {:?} with {:?}", replaced_request, request);
                     }
