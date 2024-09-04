@@ -237,6 +237,13 @@ impl ChunkId {
 /// Typed chunk of a file. This is what is stored in the leaf of the stored Merkle tree.
 pub type Chunk = Vec<u8>;
 
+/// A chunk with its ID. This is the actual data stored in the Merkle tree for each chunk.
+#[derive(Clone, Debug, Encode, Decode, PartialEq)]
+pub struct ChunkWithId {
+    pub chunk_id: ChunkId,
+    pub data: Chunk,
+}
+
 /// A leaf in the in a trie.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Leaf<K, D: Debug> {

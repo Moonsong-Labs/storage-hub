@@ -4,7 +4,7 @@ use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use log::{debug, error};
 use shc_common::types::{
-    Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
+    Chunk, ChunkId, ChunkWithId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
 };
 use sp_state_machine::{warn, Storage};
 use sp_trie::{prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieLayout, TrieMut};
@@ -17,6 +17,7 @@ use crate::{
     },
     LOG_TARGET,
 };
+use codec::{Decode, Encode};
 
 const METADATA_COLUMN: u32 = 0;
 const ROOTS_COLUMN: u32 = 1;
@@ -236,17 +237,24 @@ where
             .with_recorder(&mut trie_recorder)
             .build();
 
-        // We Read all the chunks to prove from the trie.
+        // We read all the chunks to prove from the trie.
         // This is step is required to actually record the proof.
         let mut chunks = Vec::new();
         for chunk_id in chunk_ids {
-            let chunk: Option<Vec<u8>> = trie.get(&chunk_id.as_trie_key()).map_err(|e| {
-                error!(target: LOG_TARGET, "Failed to find file chunk in File Trie {}", e);
-                FileStorageError::FailedToGetFileChunk
-            })?;
+            // Get the encoded chunk from the trie.
+            let encoded_chunk: Vec<u8> = trie
+                .get(&chunk_id.as_trie_key())
+                .map_err(|e| {
+                    error!(target: LOG_TARGET, "Failed to find file chunk in File Trie {}", e);
+                    FileStorageError::FailedToGetFileChunk
+                })?
+                .ok_or(FileStorageError::FileChunkDoesNotExist)?;
 
-            let chunk = chunk.ok_or(FileStorageError::FileChunkDoesNotExist)?;
-            chunks.push((*chunk_id, chunk));
+            // Decode it to its chunk ID and data.
+            let decoded_chunk = ChunkWithId::decode(&mut encoded_chunk.as_slice())
+                .map_err(|_| FileStorageError::FailedToParseChunkWithId)?;
+
+            chunks.push((decoded_chunk.chunk_id, decoded_chunk.data));
         }
         // Drop the `trie_recorder` to release the `recorder`
         drop(trie_recorder);
@@ -268,12 +276,21 @@ where
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
 
-        trie.get(&chunk_id.as_trie_key())
+        // Get the encoded chunk from the trie.
+        let encoded_chunk: Vec<u8> = trie
+            .get(&chunk_id.as_trie_key())
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{}", e);
                 FileStorageError::FailedToGetFileChunk
             })?
-            .ok_or(FileStorageError::FileChunkDoesNotExist)
+            .ok_or(FileStorageError::FileChunkDoesNotExist)?;
+
+        // Decode it to its chunk ID and data.
+        let decoded_chunk = ChunkWithId::decode(&mut encoded_chunk.as_slice())
+            .map_err(|_| FileStorageError::FailedToParseChunkWithId)?;
+
+        // Return the data.
+        Ok(decoded_chunk.data)
     }
 
     // TODO: make it accept a list of chunks to be written
@@ -294,16 +311,22 @@ where
             return Err(FileStorageWriteError::FileChunkAlreadyExists);
         }
 
-        // Insert the chunk into the file trie.
-        trie.insert(&chunk_id.as_trie_key(), &data).map_err(|e| {
-            error!(target: LOG_TARGET, "{}", e);
-            FileStorageWriteError::FailedToInsertFileChunk
-        })?;
+        // Insert the encoded chunk with its ID into the file trie.
+        let decoded_chunk = ChunkWithId {
+            chunk_id: *chunk_id,
+            data: data.clone(),
+        };
+        let encoded_chunk = decoded_chunk.encode();
+        trie.insert(&chunk_id.as_trie_key(), &encoded_chunk)
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{}", e);
+                FileStorageWriteError::FailedToInsertFileChunk
+            })?;
 
-        // get new root after trie modifications
+        // Get new root after trie modifications
         let new_root = *trie.root();
 
-        // drop trie to commit to underlying db and release `self`
+        // Drop trie to commit to underlying db and release `self`
         drop(trie);
 
         // TODO: improve error handling
@@ -883,27 +906,38 @@ mod tests {
 
     #[test]
     fn file_storage_write_chunk_works() {
-        let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(3)),
-            _marker: Default::default(),
-        };
-
         let chunks = vec![
             Chunk::from([5u8; 32]),
             Chunk::from([6u8; 32]),
             Chunk::from([7u8; 32]),
         ];
 
+        let storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(3)),
+            _marker: Default::default(),
+        };
+
+        let user_storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(3)),
+            _marker: Default::default(),
+        };
+
+        let mut user_file_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(user_storage.clone());
+
+        for (id, chunk) in chunks.iter().enumerate() {
+            user_file_trie
+                .write_chunk(&ChunkId::new(id as u64), chunk)
+                .unwrap();
+        }
+
+        let fingerprint = Fingerprint::from(user_file_trie.get_root().as_ref());
+
         let chunk_ids: Vec<ChunkId> = chunks
             .iter()
             .enumerate()
             .map(|(id, _)| ChunkId::new(id as u64))
             .collect();
-
-        let fingerprint = Fingerprint::from([
-            190, 196, 118, 254, 134, 253, 205, 124, 200, 168, 162, 243, 230, 168, 28, 95, 248, 74,
-            107, 170, 6, 31, 30, 108, 229, 69, 238, 93, 250, 61, 178, 77,
-        ]);
 
         let file_metadata = FileMetadata {
             file_size: 32u64 * chunks.len() as u64,
@@ -1050,27 +1084,38 @@ mod tests {
 
     #[test]
     fn file_storage_generate_proof_works() {
+        let chunks = vec![
+            Chunk::from([5u8; 32]),
+            Chunk::from([6u8; 32]),
+            Chunk::from([7u8; 32]),
+        ];
+
         let storage = StorageDb {
             db: Arc::new(kvdb_memorydb::create(3)),
             _marker: Default::default(),
         };
 
-        let chunks = vec![
-            Chunk::from([5u8; 1024]),
-            Chunk::from([6u8; 1024]),
-            Chunk::from([7u8; 1024]),
-        ];
+        let user_storage = StorageDb {
+            db: Arc::new(kvdb_memorydb::create(3)),
+            _marker: Default::default(),
+        };
+
+        let mut user_file_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(user_storage.clone());
+
+        for (id, chunk) in chunks.iter().enumerate() {
+            user_file_trie
+                .write_chunk(&ChunkId::new(id as u64), chunk)
+                .unwrap();
+        }
+
+        let fingerprint = Fingerprint::from(user_file_trie.get_root().as_ref());
 
         let chunk_ids: Vec<ChunkId> = chunks
             .iter()
             .enumerate()
             .map(|(id, _)| ChunkId::new(id as u64))
             .collect();
-
-        let fingerprint = Fingerprint::from([
-            15, 252, 18, 97, 24, 47, 65, 165, 92, 78, 226, 44, 145, 12, 214, 13, 136, 192, 20, 12,
-            208, 83, 145, 58, 56, 16, 32, 208, 129, 195, 30, 66,
-        ]);
 
         let file_metadata = FileMetadata {
             file_size: 1024u64 * chunks.len() as u64,

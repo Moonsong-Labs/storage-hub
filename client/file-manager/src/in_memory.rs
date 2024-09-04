@@ -3,12 +3,14 @@ use std::collections::HashMap;
 use trie_db::TrieDBMutBuilder;
 
 use shc_common::types::{
-    Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
+    Chunk, ChunkId, ChunkWithId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
 };
 
 use crate::traits::{
     FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError, FileStorageWriteOutcome,
 };
+
+use codec::{Decode, Encode};
 
 pub struct InMemoryFileDataTrie<T: TrieLayout + 'static> {
     root: HasherOutT<T>,
@@ -51,12 +53,17 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
         // Read all the chunks to prove from the trie.
         let mut chunks = Vec::new();
         for chunk_id in chunk_ids {
-            let chunk: Option<Vec<u8>> = trie
+            // Get the encoded chunk from the trie.
+            let encoded_chunk: Vec<u8> = trie
                 .get(&chunk_id.as_trie_key())
-                .map_err(|_| FileStorageError::FailedToGetFileChunk)?;
+                .map_err(|_| FileStorageError::FailedToGetFileChunk)?
+                .ok_or(FileStorageError::FileChunkDoesNotExist)?;
 
-            let chunk = chunk.ok_or(FileStorageError::FileChunkDoesNotExist)?;
-            chunks.push((*chunk_id, chunk));
+            // Decode it to its chunk ID and data.
+            let decoded_chunk = ChunkWithId::decode(&mut encoded_chunk.as_slice())
+                .map_err(|_| FileStorageError::FailedToParseChunkWithId)?;
+
+            chunks.push((decoded_chunk.chunk_id, decoded_chunk.data));
         }
 
         // Drop the `trie_recorder` to release the `recorder`
@@ -77,9 +84,18 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError> {
         let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
 
-        trie.get(&chunk_id.as_trie_key())
+        // Get the encoded chunk from the trie.
+        let encoded_chunk = trie
+            .get(&chunk_id.as_trie_key())
             .map_err(|_| FileStorageError::FailedToGetFileChunk)?
-            .ok_or(FileStorageError::FileChunkDoesNotExist)
+            .ok_or(FileStorageError::FileChunkDoesNotExist)?;
+
+        // Decode it to its chunk ID and data.
+        let decoded_chunk = ChunkWithId::decode(&mut encoded_chunk.as_slice())
+            .map_err(|_| FileStorageError::FailedToParseChunkWithId)?;
+
+        // Return the chunk data.
+        Ok(decoded_chunk.data)
     }
 
     fn write_chunk(
@@ -103,8 +119,13 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
             return Err(FileStorageWriteError::FileChunkAlreadyExists);
         }
 
-        // Insert the chunk into the file trie.
-        trie.insert(&chunk_id.as_trie_key(), &data)
+        // Insert the encoded chunk with its ID into the file trie.
+        let decoded_chunk = ChunkWithId {
+            chunk_id: *chunk_id,
+            data: data.clone(),
+        };
+        let encoded_chunk = decoded_chunk.encode();
+        trie.insert(&chunk_id.as_trie_key(), &encoded_chunk)
             .map_err(|_| FileStorageWriteError::FailedToInsertFileChunk)?;
 
         // dropping the trie automatically commits changes to the underlying db
@@ -177,7 +198,7 @@ where
 
         if metadata.fingerprint
             != file_data
-                .root
+                .get_root()
                 .as_ref()
                 .try_into()
                 .expect("Hasher output mismatch!")
@@ -290,7 +311,7 @@ where
 
         // If we have all the chunks, check if the file metadata fingerprint and the file trie
         // root matches.
-        if metadata.fingerprint != file_data.root.as_ref().into() {
+        if metadata.fingerprint != file_data.get_root().as_ref().into() {
             return Err(FileStorageWriteError::FingerprintAndStoredFileMismatch);
         }
 

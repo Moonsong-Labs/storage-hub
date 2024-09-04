@@ -13,12 +13,12 @@ use shc_blockchain_service::{
 };
 use shc_common::types::{
     FileKey, KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
-    StorageProofsMerkleTrieLayout, TrieRemoveMutation,
+    TrieRemoveMutation,
 };
-use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorage;
 
-use crate::services::handler::StorageHubHandler;
+use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
+use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
 
 const LOG_TARGET: &str = "bsp-submit-proof-task";
 const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
@@ -47,32 +47,32 @@ const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
 ///     - If the key is still present, logs a warning, as this may indicate that the key was re-added after deletion.
 ///     - If the key is absent from the Forest Storage, safely removes the corresponding file from the File Storage.
 ///   - Ensures that no residual file keys remain in the File Storage when they should have been deleted.
-pub struct BspSubmitProofTask<FL, FS>
+pub struct BspSubmitProofTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    storage_hub_handler: StorageHubHandler<FL, FS>,
+    storage_hub_handler: StorageHubHandler<FL, FSH>,
 }
 
-impl<FL, FS> Clone for BspSubmitProofTask<FL, FS>
+impl<FL, FSH> Clone for BspSubmitProofTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    fn clone(&self) -> BspSubmitProofTask<FL, FS> {
+    fn clone(&self) -> BspSubmitProofTask<FL, FSH> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<FL, FS> BspSubmitProofTask<FL, FS>
+impl<FL, FSH> BspSubmitProofTask<FL, FSH>
 where
-    FL: Send + Sync + FileStorage<StorageProofsMerkleTrieLayout>,
-    FS: Send + Sync + ForestStorage<StorageProofsMerkleTrieLayout>,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<FL, FS>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<FL, FSH>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -85,10 +85,10 @@ where
 /// - Derives forest challenges from the seed.
 /// - Checks for checkpoint challenges and adds them to the forest challenges.
 /// - Queues the challenges for submission to the runtime, for when the Forest write lock is released.
-impl<FL, FS> EventHandler<NewChallengeSeed> for BspSubmitProofTask<FL, FS>
+impl<FL, FSH> EventHandler<NewChallengeSeed> for BspSubmitProofTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: NewChallengeSeed) -> anyhow::Result<()> {
         info!(
@@ -138,16 +138,16 @@ where
 ///   - Retries up to [`MAX_PROOF_SUBMISSION_ATTEMPTS`] times if the submission fails.
 /// - Applies any necessary mutations to the Forest Storage (not the File Storage).
 /// - Ensures the new Forest root matches the one on-chain.
-impl<FL, FS> EventHandler<ProcessSubmitProofRequest> for BspSubmitProofTask<FL, FS>
+impl<FL, FSH> EventHandler<ProcessSubmitProofRequest> for BspSubmitProofTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(&mut self, event: ProcessSubmitProofRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing SubmitProofRequest {:?}",
-            event.forest_challenges
+            event.data.forest_challenges
         );
 
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
@@ -160,12 +160,22 @@ where
             }
         };
 
-        let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
-        let proven_file_keys = read_forest_storage
-            .generate_proof(event.forest_challenges)
-            .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
-        // Release the forest storage read lock.
-        drop(read_forest_storage);
+        let proven_file_keys = {
+            let fs = self
+                .storage_hub_handler
+                .forest_storage_handler
+                .get(&NoKey)
+                .await
+                .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+
+            let p = fs
+                .read()
+                .await
+                .generate_proof(event.data.forest_challenges)
+                .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
+
+            p
+        };
 
         // Get the keys that were proven.
         let mut proven_keys = Vec::new();
@@ -195,7 +205,7 @@ where
         for file_key in &proven_keys {
             // Generate the key proof for each file key.
             let key_proof = self
-                .generate_key_proof(*file_key, event.seed, event.provider_id)
+                .generate_key_proof(*file_key, event.data.seed, event.data.provider_id)
                 .await?;
 
             key_proofs.insert(*file_key, key_proof);
@@ -251,7 +261,7 @@ where
 
         // Apply mutations, if any.
         let mut mutations_applied = false;
-        for (file_key, maybe_mutation) in &event.checkpoint_challenges {
+        for (file_key, maybe_mutation) in &event.data.checkpoint_challenges {
             if proven_keys.contains(file_key) {
                 // If the file key is proven, it means that this provider had an exact match for a checkpoint challenge.
                 trace!(target: LOG_TARGET, "Checkpoint challenge proven with exact match for file key: {:?}", file_key);
@@ -276,7 +286,7 @@ where
             trace!(target: LOG_TARGET, "Mutations applied successfully");
 
             // Check that the new Forest root matches the one on-chain.
-            self.check_provider_root(event.provider_id).await?;
+            self.check_provider_root(event.data.provider_id).await?;
         }
 
         // Release the forest root write "lock".
@@ -299,10 +309,10 @@ where
 ///   - If the key is still present, it logs a warning,
 ///     since this could indicate that the key has been re-added after being deleted.
 ///   - If the key is not present in the Forest Storage, it safely removes the key from the File Storage.
-impl<FL, FS> EventHandler<FinalisedTrieRemoveMutationsApplied> for BspSubmitProofTask<FL, FS>
+impl<FL, FSH> EventHandler<FinalisedTrieRemoveMutationsApplied> for BspSubmitProofTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn handle_event(
         &mut self,
@@ -320,8 +330,13 @@ where
             let file_key = FileKey::from(mutation.0);
 
             // Check that the file_key is not in the Forest.
-            let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
-            if read_forest_storage.contains_file_key(&file_key.into())? {
+            let read_fs = self
+                .storage_hub_handler
+                .forest_storage_handler
+                .get(&NoKey)
+                .await
+                .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+            if read_fs.read().await.contains_file_key(&file_key.into())? {
                 warn!(
                     target: LOG_TARGET,
                     "TrieRemoveMutation applied and finalised for file key {:?}, but file key is still in Forest. This can only happen if the same file key was added again after deleted by the user.\n Mutation: {:?}",
@@ -338,10 +353,10 @@ where
     }
 }
 
-impl<FL, FS> BspSubmitProofTask<FL, FS>
+impl<FL, FSH> BspSubmitProofTask<FL, FSH>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FL: FileStorageT,
+    FSH: BspForestStorageHandlerT,
 {
     async fn derive_forest_challenges_from_seed(
         &self,
@@ -391,10 +406,10 @@ where
             forest_challenges.extend(checkpoint_challenges.iter().map(|(key, _)| *key));
 
             // Return the checkpoint challenges.
-            return Ok(checkpoint_challenges);
+            Ok(checkpoint_challenges)
         } else {
             // Else, return an empty checkpoint challenges vector.
-            return Ok(Vec::new());
+            Ok(Vec::new())
         }
     }
 
@@ -446,16 +461,23 @@ where
 
     async fn remove_file_from_forest(&self, file_key: &H256) -> anyhow::Result<()> {
         // Remove the file key from the Forest.
-        let mut write_forest_storage = self.storage_hub_handler.forest_storage.write().await;
-        write_forest_storage.delete_file_key(file_key).map_err(|e| {
-            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
-            anyhow!(
-                "Failed to remove file key from Forest storage: {:?}",
-                e
-            )
-        })?;
-        // Release the forest storage write lock.
-        drop(write_forest_storage);
+        // Check that the new Forest root matches the one on-chain.
+        {
+            let fs = self
+                .storage_hub_handler
+                .forest_storage_handler
+                .get(&NoKey)
+                .await
+                .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+
+            fs.write().await.delete_file_key(file_key).map_err(|e| {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                anyhow!(
+                    "Failed to remove file key from Forest storage: {:?}",
+                    e
+                )
+            })?;
+        };
 
         Ok(())
     }
@@ -494,10 +516,14 @@ where
         trace!(target: LOG_TARGET, "Provider root according to runtime: {:?}", onchain_root);
 
         // Check that the new Forest root matches the one on-chain.
-        let read_forest_storage = self.storage_hub_handler.forest_storage.read().await;
-        let root = read_forest_storage.root();
-        // Release the forest storage read lock.
-        drop(read_forest_storage);
+        let fs = self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get(&NoKey)
+            .await
+            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+
+        let root = { fs.read().await.root() };
 
         trace!(target: LOG_TARGET, "Provider root according to Forest Storage: {:?}", root);
 
