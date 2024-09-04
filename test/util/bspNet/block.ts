@@ -12,7 +12,6 @@ import type { KeyringPair } from "@polkadot/keyring/types";
 import { alice } from "../pjsKeyring";
 import { isExtSuccess } from "../extrinsics";
 import { sleep } from "../timer";
-import type { EnrichedBspApi } from "./test-api";
 import { ShConsts } from "./consts";
 import assert, { strictEqual } from "node:assert";
 import { Assertions } from "../asserts";
@@ -122,7 +121,7 @@ export const skipBlocks = async (api: ApiPromise, blocksToSkip: number) => {
 };
 
 export const skipBlocksToMinChangeTime: (
-  api: EnrichedBspApi,
+  api: ApiPromise,
   bspId?: `0x${string}` | H256 | Uint8Array
 ) => Promise<void> = async (api, bspId = ShConsts.DUMMY_BSP_ID) => {
   const lastCapacityChangeHeight = (await api.query.providers.backupStorageProviders(bspId))

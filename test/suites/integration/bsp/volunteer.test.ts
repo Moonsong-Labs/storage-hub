@@ -1,13 +1,5 @@
-import { notEqual, strictEqual } from "node:assert";
-import { assert } from "node:console";
-import {
-  checkFileChecksum,
-  describeBspNet,
-  fetchEventData,
-  shUser,
-  sleep,
-  type EnrichedBspApi
-} from "../../../util";
+import assert, { notEqual, strictEqual } from "node:assert";
+import { describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
 
 describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
@@ -149,10 +141,11 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     );
 
     await userApi.sealBlock();
-    const [resBspId, resBucketId, resLoc, resFinger, resMulti, _, resSize] = fetchEventData(
-      userApi.events.fileSystem.AcceptedBspVolunteer,
-      await userApi.query.system.events()
-    );
+    const [resBspId, resBucketId, resLoc, resFinger, resMulti, _, resSize] =
+      userApi.assert.fetchEvent(
+        userApi.events.fileSystem.AcceptedBspVolunteer,
+        await userApi.query.system.events()
+      );
 
     strictEqual(resBspId.toHuman(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);
     strictEqual(resBucketId.toString(), newBucketEventDataBlob.bucketId.toString());
@@ -175,7 +168,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
     await userApi.sealBlock();
     const [_bspConfirmRes_who, bspConfirmRes_bspId, bspConfirmRes_fileKeys, bspConfirmRes_newRoot] =
-      fetchEventData(
+      userApi.assert.fetchEvent(
         userApi.events.fileSystem.BspConfirmedStoring,
         await userApi.query.system.events()
       );
@@ -194,7 +187,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
         "/storage/test/whatsup.jpg"
       );
       assert(saveFileToDisk.isSuccess);
-      const sha = await checkFileChecksum("test/whatsup.jpg");
+      const sha = await userApi.docker.checksum("test/whatsup.jpg");
       strictEqual(sha, userApi.shConsts.TEST_ARTEFACTS["res/whatsup.jpg"].checksum);
     });
   });
@@ -270,7 +263,7 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
       _bspConfirmRes_bspId,
       bspConfirmRes_fileKeys,
       bspConfirmRes_newRoot
-    ] = fetchEventData(
+    ] = userApi.assert.fetchEvent(
       userApi.events.fileSystem.BspConfirmedStoring,
       await userApi.query.system.events()
     );
@@ -302,7 +295,7 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
       _bspConfirm2Res_bspId,
       bspConfirm2Res_fileKeys,
       bspConfirm2Res_newRoot
-    ] = fetchEventData(
+    ] = userApi.assert.fetchEvent(
       userApi.events.fileSystem.BspConfirmedStoring,
       await userApi.query.system.events()
     );

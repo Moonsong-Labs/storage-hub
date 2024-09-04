@@ -1,20 +1,23 @@
-import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { EventRecord } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
+import type { HexString } from "@polkadot/util/types";
+import "@storagehub/api-augment";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import { Assertions, type AssertExtrinsicOptions } from "../asserts";
+import { BspNetBlock, sealBlock } from "./block";
+import { ShConsts } from "./consts";
+import { DockerBspNet } from "./docker";
 import { Files } from "./fileHelpers";
+import { NodeBspNet } from "./node";
 import type { BspNetApi, SealBlockOptions } from "./types";
 import { Waits } from "./waits";
-import { ShConsts } from "./consts";
-import { BspNetBlock, sealBlock } from "./block";
-import { NodeBspNet } from "./node";
-import type { HexString } from "@polkadot/util/types";
-import { DockerBspNet } from "./docker";
 
+/**
+ * Represents an enhanced API for interacting with StorageHub BSPNet.
+ */
 export class BspNetTestApi implements AsyncDisposable {
   private _api: ApiPromise;
   private _endpoint: `ws://${string}` | `wss://${string}`;
@@ -24,14 +27,14 @@ export class BspNetTestApi implements AsyncDisposable {
     this._endpoint = endpoint;
   }
 
+  /**
+   * Creates a new instance of BspNetTestApi.
+   *
+   * @param endpoint - The WebSocket endpoint to connect to.
+   * @returns A promise that resolves to an enriched BspNetApi.
+   */
   public static async create(endpoint: `ws://${string}` | `wss://${string}`) {
-    const api = await ApiPromise.create({
-      provider: new WsProvider(endpoint),
-      noInitWarn: true,
-      throwOnConnect: false,
-      throwOnUnknown: false,
-      typesBundle: BundledTypes
-    });
+    const api = await BspNetTestApi.connect(endpoint);
     await api.isReady;
 
     const ctx = new BspNetTestApi(api, endpoint);
@@ -53,6 +56,28 @@ export class BspNetTestApi implements AsyncDisposable {
       this._api = newApi;
       this.enrichApi();
     }
+  }
+
+  /**
+   * Establishes a connection to the specified endpoint.
+   * Note: This method shouldn't be called directly in tests. Use `create` instead.
+   *
+   * @param endpoint - The WebSocket endpoint to connect to.
+   * @returns A promise that resolves to an ApiPromise with async disposal.
+   */
+  public static async connect(endpoint: `ws://${string}` | `wss://${string}`) {
+    const api = await ApiPromise.create({
+      provider: new WsProvider(endpoint),
+      noInitWarn: true,
+      throwOnConnect: false,
+      throwOnUnknown: false,
+      typesBundle: BundledTypes
+    });
+    return Object.assign(api, {
+      [Symbol.asyncDispose]: async () => {
+        await api.disconnect();
+      }
+    });
   }
 
   private async disconnect() {
@@ -161,6 +186,8 @@ export class BspNetTestApi implements AsyncDisposable {
           options?.waitBetweenBlocks,
           options?.waitForBspProofs
         ),
+
+      skipToMinChangeTime: () => BspNetBlock.skipToMinChangeTime(this._api),
       /**
        * This will cause a chain re-org by creating a finalized block on top of parent block.
        * Note: This requires head block to be unfinalized, otherwise will throw!
@@ -184,7 +211,6 @@ export class BspNetTestApi implements AsyncDisposable {
 
     const remappedDockerNs = {
       ...DockerBspNet
-      // stopBspContainer: (containerName: string) => DockerBspNet.stopContainer({containerName, api: this._api}),
     };
 
     return Object.assign(this._api, {

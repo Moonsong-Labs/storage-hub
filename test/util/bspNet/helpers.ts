@@ -350,7 +350,7 @@ export const runMultipleInitialisedBspsNet = async (
     await userApi.wait.bspStored();
 
     // Stopping BSP that is supposed to be down.
-    await stopBsp(bspDownContainerName);
+    await userApi.docker.stopContainer(bspDownContainerName);
 
     return {
       bspTwoRpcPort,
@@ -441,15 +441,4 @@ export const addBsp = async (
   );
 
   return { containerName, rpcPort, p2pPort, peerId };
-};
-
-const stopBsp = async (name: string) => {
-  const docker = new Docker();
-
-  const containersToStop = await docker.listContainers({
-    filters: { name: [name] }
-  });
-
-  await docker.getContainer(containersToStop[0].Id).stop();
-  await docker.getContainer(containersToStop[0].Id).remove();
 };

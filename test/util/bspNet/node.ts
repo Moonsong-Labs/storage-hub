@@ -56,5 +56,14 @@ export async function dropTransaction(
 }
 
 export namespace NodeBspNet {
+  /**
+   * Drops transaction(s) from the node's transaction pool.
+   *
+   * @param extrinsic - Optional. Specifies which transaction(s) to drop:
+   *                    - If omitted, all transactions in the pool will be cleared.
+   *                    - If an object with module and method, it will drop matching transactions.
+   *                    - If a hex string, it will drop the transaction with the matching hash.
+   * @param sealAfter - Whether to seal a block after dropping the transaction(s). Defaults to false.
+   */
   export const dropTxn = dropTransaction;
 }

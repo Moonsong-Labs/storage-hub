@@ -1,9 +1,6 @@
 import assert, { strictEqual } from "node:assert";
 import {
   describeBspNet,
-  pauseBspContainer,
-  resumeBspContainer,
-  assertEventPresent,
   shUser,
   sleep,
   type EnrichedBspApi,
@@ -19,25 +16,7 @@ describeBspNet(
     let bspTwoApi: EnrichedBspApi;
     let bspThreeApi: EnrichedBspApi;
     let fileData: FileMetadata;
-
-    // let fileData: {
-    //   fileKey: string;
-    //   bucketId: string;
-    //   location: string;
-    //   owner: string;
-    //   fingerprint: string;
-    //   fileSize: number;
-    // };
     let oneBspFileData: FileMetadata;
-
-    // {
-    //   fileKey: string;
-    //   bucketId: string;
-    //   location: string;
-    //   owner: string;
-    //   fingerprint: string;
-    //   fileSize: number;
-    // };
 
     before(async () => {
       const launchResponse = await getLaunchResponse();
@@ -226,8 +205,8 @@ describeBspNet(
 
     it("New storage request sent by user, to only one BSP", async () => {
       // Pause BSP-Two and BSP-Three.
-      await pauseBspContainer("sh-bsp-two");
-      await pauseBspContainer("sh-bsp-three");
+      await userApi.docker.pauseContainer("sh-bsp-two");
+      await userApi.docker.pauseContainer("sh-bsp-three");
 
       // Send transaction to create new storage request.
       const source = "res/adolphus.jpg";
@@ -334,8 +313,8 @@ describeBspNet(
       });
 
       // Resume BSP-Two and BSP-Three.
-      await resumeBspContainer({ containerName: "sh-bsp-two" });
-      await resumeBspContainer({ containerName: "sh-bsp-three" });
+      await userApi.docker.resumeContainer({ containerName: "sh-bsp-two" });
+      await userApi.docker.resumeContainer({ containerName: "sh-bsp-three" });
 
       // Wait for BSPs to resync.
       await sleep(500);
@@ -466,8 +445,7 @@ describeBspNet(
       );
 
       // Check for a file deletion request event.
-      assertEventPresent(
-        userApi,
+      userApi.assert.eventPresent(
         "fileSystem",
         "FileDeletionRequest",
         deleteFileExtrinsicResult.events
@@ -485,8 +463,7 @@ describeBspNet(
       );
 
       // Check for a file deletion request event.
-      assertEventPresent(
-        userApi,
+      userApi.assert.eventPresent(
         "fileSystem",
         "PriorityChallengeForFileDeletionQueued",
         deletionRequestEnqueuedResult.events
@@ -510,8 +487,7 @@ describeBspNet(
       );
 
       // Check that the event for the priority challenge is emitted.
-      const newCheckpointChallengesEvent = assertEventPresent(
-        userApi,
+      const newCheckpointChallengesEvent = userApi.assert.eventPresent(
         "proofsDealer",
         "NewCheckpointChallenge",
         checkpointChallengeBlockResult.events
@@ -631,8 +607,7 @@ describeBspNet(
       const secondChallengeBlockResult = await userApi.sealBlock();
 
       // Check for a ProofAccepted event.
-      const secondChallengeBlockEvents = assertEventPresent(
-        userApi,
+      const secondChallengeBlockEvents = userApi.assert.eventPresent(
         "proofsDealer",
         "ProofAccepted",
         secondChallengeBlockResult.events

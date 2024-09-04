@@ -1,12 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import {
-  describeBspNet,
-  pauseBspContainer,
-  resumeBspContainer,
-  sleep,
-  type EnrichedBspApi,
-  type SealedBlock
-} from "../../../util";
+import { describeBspNet, sleep, type EnrichedBspApi, type SealedBlock } from "../../../util";
 
 describeBspNet(
   "BSPNet: BSP Challenge Cycle and Proof Submission",
@@ -66,7 +59,7 @@ describeBspNet(
 
     it("BSP fails to submit proof and is marked as slashable", async () => {
       // Stop BSP.
-      await pauseBspContainer(userApi.shConsts.NODE_INFOS.bsp.containerName);
+      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.bsp.containerName);
 
       // Calculate the next deadline tick for the BSP. That is `ChallengeTicksTolerance`
       // after the next challenge tick for this BSP.
@@ -117,7 +110,9 @@ describeBspNet(
       },
       async () => {
         // Resume BSP.
-        await resumeBspContainer({ containerName: userApi.shConsts.NODE_INFOS.bsp.containerName });
+        await userApi.docker.resumeContainer({
+          containerName: userApi.shConsts.NODE_INFOS.bsp.containerName
+        });
 
         // Advance to the next tick the BSP should submit a proof for, that is after the current block.
         // We first get the last tick for which the BSP submitted a proof.
