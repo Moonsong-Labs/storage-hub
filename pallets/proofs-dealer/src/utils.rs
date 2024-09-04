@@ -8,8 +8,8 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer_runtime_api::{
-    GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
-    GetNextDeadlineTickError,
+    GetChallengePeriodError, GetChallengeSeedError, GetCheckpointChallengesError,
+    GetLastTickProviderSubmittedProofError, GetNextDeadlineTickError,
 };
 use shp_traits::{
     CommitmentVerifier, MutateChallengeableProvidersInterface, ProofSubmittersInterface,
@@ -1004,6 +1004,20 @@ where
             .ok_or(GetCheckpointChallengesError::NoCheckpointChallengesInTick)?;
 
         Ok(checkpoint_challenges.into())
+    }
+
+    pub fn get_challenge_seed(
+        tick: BlockNumberFor<T>,
+    ) -> Result<RandomnessOutputFor<T>, GetChallengeSeedError> {
+        let current_tick = ChallengesTicker::<T>::get();
+        if tick > current_tick {
+            return Err(GetChallengeSeedError::TickIsInTheFuture);
+        }
+
+        let seed = TickToChallengesSeed::<T>::get(tick)
+            .ok_or(GetChallengeSeedError::TickBeyondLastSeedStored)?;
+
+        Ok(seed)
     }
 
     pub fn get_challenge_period(

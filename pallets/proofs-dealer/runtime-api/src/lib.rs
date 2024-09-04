@@ -20,6 +20,7 @@ sp_api::decl_runtime_apis! {
         fn get_checkpoint_challenges(
             tick: BlockNumber
         ) -> Result<Vec<(Key, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError>;
+        fn get_challenge_seed(tick: BlockNumber) -> Result<RandomnessOutput, GetChallengeSeedError>;
         fn get_challenge_period(provider_id: &ProviderId) -> Result<BlockNumber, GetChallengePeriodError>;
         fn get_checkpoint_challenge_period() -> BlockNumber;
         fn get_challenges_from_seed(seed: &RandomnessOutput, provider_id: &ProviderId, count: u32) -> Vec<Key>;
@@ -42,6 +43,14 @@ pub enum GetLastTickProviderSubmittedProofError {
 pub enum GetCheckpointChallengesError {
     TickGreaterThanLastCheckpointTick,
     NoCheckpointChallengesInTick,
+    InternalApiError,
+}
+
+/// Error type for the `get_challenge_seed` runtime API call.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum GetChallengeSeedError {
+    TickBeyondLastSeedStored,
+    TickIsInTheFuture,
     InternalApiError,
 }
 

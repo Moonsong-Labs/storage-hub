@@ -43,6 +43,14 @@ export interface GetChallengePeriodError extends Enum {
   readonly type: "ProviderNotRegistered";
 }
 
+/** @name GetChallengeSeedError */
+export interface GetChallengeSeedError extends Enum {
+  readonly isTickBeyondLastSeedStored: boolean;
+  readonly isTickIsInTheFuture: boolean;
+  readonly isInternalApiError: boolean;
+  readonly type: "TickBeyondLastSeedStored" | "TickIsInTheFuture" | "InternalApiError";
+}
+
 /** @name GetCheckpointChallengesError */
 export interface GetCheckpointChallengesError extends Enum {
   readonly isTickGreaterThanLastCheckpointTick: boolean;

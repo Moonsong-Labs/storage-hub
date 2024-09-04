@@ -41,6 +41,7 @@ import type {
   ChunkId,
   GetBspInfoError,
   GetChallengePeriodError,
+  GetChallengeSeedError,
   GetCheckpointChallengesError,
   GetLastTickProviderSubmittedProofError,
   GetNextDeadlineTickError,
@@ -335,6 +336,15 @@ declare module "@polkadot/api-base/types/calls" {
         (
           providerId: ProviderId | string | Uint8Array
         ) => Observable<Result<BlockNumber, GetChallengePeriodError>>
+      >;
+      /**
+       * Get the seed for a given challenge tick.
+       **/
+      getChallengeSeed: AugmentedCall<
+        ApiType,
+        (
+          tick: BlockNumber | AnyNumber | Uint8Array
+        ) => Observable<Result<RandomnessOutput, GetChallengeSeedError>>
       >;
       /**
        * Get challenges from a seed.

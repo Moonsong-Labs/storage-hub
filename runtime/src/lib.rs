@@ -49,8 +49,8 @@ use pallet_file_system_runtime_api::{
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer::types::{KeyFor, ProviderIdFor, RandomnessOutputFor};
 use pallet_proofs_dealer_runtime_api::{
-    GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
-    GetNextDeadlineTickError,
+    GetChallengePeriodError, GetChallengeSeedError, GetCheckpointChallengesError,
+    GetLastTickProviderSubmittedProofError, GetNextDeadlineTickError,
 };
 use pallet_storage_providers::types::{
     BackupStorageProvider, BackupStorageProviderId, StorageProviderId,
@@ -565,6 +565,10 @@ impl_runtime_apis! {
             tick: BlockNumber
         ) -> Result<Vec<(KeyFor<Runtime>, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError> {
             ProofsDealer::get_checkpoint_challenges(tick)
+        }
+
+        fn get_challenge_seed(tick: BlockNumber) -> Result<RandomnessOutputFor<Runtime>, GetChallengeSeedError> {
+            ProofsDealer::get_challenge_seed(tick)
         }
 
         fn get_challenge_period(provider_id: &ProviderIdFor<Runtime>) -> Result<BlockNumber, GetChallengePeriodError> {
