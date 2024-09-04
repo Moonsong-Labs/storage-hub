@@ -5396,7 +5396,9 @@ dependencies = [
  "glob",
  "libc",
  "libz-sys",
+ "lz4-sys",
  "tikv-jemalloc-sys",
+ "zstd-sys",
 ]
 
 [[package]]
@@ -12664,6 +12666,7 @@ dependencies = [
  "parity-scale-codec",
  "polkadot-primitives 7.0.0",
  "polkadot-runtime-common 7.0.0",
+ "rocksdb",
  "sc-client-api",
  "sc-network",
  "sc-service",
