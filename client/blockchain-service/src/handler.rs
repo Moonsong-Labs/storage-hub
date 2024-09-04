@@ -216,9 +216,7 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
                 MergedEventLoopMessage::BlockImportNotification(notification) => {
                     if !self.actor.is_synced {
                         self.actor.is_synced = true;
-                        self.actor
-                            .handle_block_import_notification(notification)
-                            .await;
+                        self.actor.handle_initial_sync(notification).await;
                     }
                 }
                 MergedEventLoopMessage::EveryBlockImportNotification(notification) => {
@@ -671,11 +669,9 @@ impl BlockchainService {
         }
     }
 
-    /// Handle a block import notification.
-    async fn handle_block_import_notification<Block>(
-        &mut self,
-        notification: BlockImportNotification<Block>,
-    ) where
+    /// Handle the first time this node syncs with the chain.
+    async fn handle_initial_sync<Block>(&mut self, notification: BlockImportNotification<Block>)
+    where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
         let block_hash: H256 = notification.hash;
@@ -701,6 +697,15 @@ impl BlockchainService {
         }
         state_store_context.commit();
 
+        // Get provider IDs linked to keys in this node's keystore and update the nonce.
+        self.pre_block_processing_checks(&block_hash);
+
+        // Catch up to proofs that this node might have missed.
+        for provider_id in self.provider_ids.clone() {
+            self.proof_submission_catch_up(&block_hash, &provider_id);
+        }
+
+        // Finally, process the current block.
         self.process_block_import(&block_hash, &block_number).await;
     }
 
@@ -716,21 +721,24 @@ impl BlockchainService {
         // If this is the first block import notification, we might need to catch up.
         info!(target: LOG_TARGET, "Block import notification (#{}): {}", block_number, block_hash);
 
+        self.pre_block_processing_checks(&block_hash);
         self.process_block_import(&block_hash, &block_number).await;
     }
 
-    pub async fn process_block_import(&mut self, block_hash: &H256, block_number: &BlockNumber) {
-        info!(target: LOG_TARGET, "Processing block import #{}: {}", block_number, block_hash);
-
-        // Notify all tasks waiting for this block number (or lower).
-        self.notify_import_block_number(&block_number);
-
+    fn pre_block_processing_checks(&mut self, block_hash: &H256) {
         // We query the [`BlockchainService`] account nonce at this height
         // and update our internal counter if it's smaller than the result.
         self.check_nonce(&block_hash);
 
         // Get provider IDs linked to keys in this node's keystore.
         self.get_provider_ids(&block_hash);
+    }
+
+    async fn process_block_import(&mut self, block_hash: &H256, block_number: &BlockNumber) {
+        info!(target: LOG_TARGET, "Processing block import #{}: {}", block_number, block_hash);
+
+        // Notify all tasks waiting for this block number (or lower).
+        self.notify_import_block_number(&block_number);
 
         // Process pending requests that update the forest root.
         self.check_pending_forest_root_writes();
