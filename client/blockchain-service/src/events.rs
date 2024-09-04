@@ -10,7 +10,7 @@ use sp_runtime::AccountId32;
 use std::sync::Arc;
 use tokio::sync::{oneshot, Mutex};
 
-use crate::handler::ConfirmStoringRequest;
+use crate::types::ConfirmStoringRequest;
 
 /// New random challenge emitted by the StorageHub runtime.
 ///

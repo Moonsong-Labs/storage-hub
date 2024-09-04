@@ -19,10 +19,10 @@ use shc_common::types::{
 };
 use storage_hub_runtime::{AccountId, Balance};
 
-use super::{
-    handler::{BlockchainService, ConfirmStoringRequest, SubmitProofRequest},
+use crate::{
+    handler::BlockchainService,
     transaction::SubmittedTransaction,
-    types::{Extrinsic, ExtrinsicResult},
+    types::{ConfirmStoringRequest, Extrinsic, ExtrinsicResult, SubmitProofRequest},
 };
 
 /// Commands that can be sent to the BlockchainService actor.

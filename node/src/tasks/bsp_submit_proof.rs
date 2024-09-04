@@ -12,7 +12,7 @@ use shc_blockchain_service::{
         FinalisedTrieRemoveMutationsApplied, MultipleNewChallengeSeeds, NewChallengeSeed,
         ProcessSubmitProofRequest,
     },
-    handler::SubmitProofRequest,
+    types::SubmitProofRequest,
 };
 use shc_common::types::{
     BlockNumber, FileKey, KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,

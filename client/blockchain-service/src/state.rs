@@ -6,12 +6,12 @@ use shc_common::types::BlockNumber;
 
 use crate::{
     events::ProcessConfirmStoringRequestData,
-    handler::ConfirmStoringRequest,
     typed_store::{
         BufferedWriteSupport, CFDequeAPI, ProvidesDbContext, ProvidesTypedDbAccess,
         ProvidesTypedDbSingleAccess, ScaleEncodedCf, SingleScaleEncodedValueCf, TypedCf,
         TypedDbContext, TypedRocksDB,
     },
+    types::ConfirmStoringRequest,
 };
 
 /// Last processed block number.
