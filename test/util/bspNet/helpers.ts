@@ -219,10 +219,6 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
         )
       )
     );
-
-    await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, u32Max, 1))
-    );
   } catch (e) {
     console.error("Error ", e);
   } finally {

@@ -45,43 +45,39 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     assert.ok(totalCapacityAfter.eq(totalCapacityBefore));
   });
 
-  it(
-    "Maxed out storages not volunteered",
-    async () => {
-      const capacityUsed = (await api.query.providers.backupStorageProviders(DUMMY_BSP_ID))
-        .unwrap()
-        .capacityUsed.toNumber();
-      await skipBlocksToMinChangeTime(api);
-      const minCapacity = api.consts.providers.spMinCapacity.toNumber();
-      const newCapacity = Math.max(minCapacity, capacityUsed + 1);
+  it("Maxed out storages not volunteered", async () => {
+    const capacityUsed = (await api.query.providers.backupStorageProviders(DUMMY_BSP_ID))
+      .unwrap()
+      .capacityUsed.toNumber();
+    await skipBlocksToMinChangeTime(api);
+    const minCapacity = api.consts.providers.spMinCapacity.toNumber();
+    const newCapacity = Math.max(minCapacity, capacityUsed + 1);
 
-      const { extSuccess } = await api.sealBlock(
-        api.tx.providers.changeCapacity(newCapacity),
-        bspKey
-      );
-      assert.strictEqual(extSuccess, true);
+    const { extSuccess } = await api.sealBlock(
+      api.tx.providers.changeCapacity(newCapacity),
+      bspKey
+    );
+    assert.strictEqual(extSuccess, true);
 
-      const source = "res/cloud.jpg";
-      const location = "test/cloud.jpg";
-      const bucketName = "toobig-1";
-      await api.sendNewStorageRequest(source, location, bucketName);
+    const source = "res/cloud.jpg";
+    const location = "test/cloud.jpg";
+    const bucketName = "toobig-1";
+    await api.sendNewStorageRequest(source, location, bucketName);
 
-      //To allow for BSP to react to request
-      await sleep(500);
-      await assert.rejects(
-        async () => {
-          assertExtrinsicPresent(api, {
-            module: "fileSystem",
-            method: "bspVolunteer",
-            checkTxPool: true,
-            skipSuccessCheck: true
-          });
-        },
-        /No events matching system\.ExtrinsicSuccess/,
-        "BSP should not have volunteered to a file that's too big"
-      );
-    }
-  );
+    //To allow for BSP to react to request
+    await sleep(500);
+    await assertExtrinsicPresent(api, {
+      module: "fileSystem",
+      method: "bspVolunteer",
+      checkTxPool: true
+    });
+
+    const { events } = await api.sealBlock();
+    const [eventInfo, _eventError] = fetchEventData(api.events.system.ExtrinsicFailed, events);
+
+    assert.strictEqual(eventInfo.asModule.index.toNumber(), 41); // FileSystem
+    assert.strictEqual(eventInfo.asModule.error.toHex(), "0x0b000000"); // InsufficientCapacity
+  });
 
   it("Total capacity updated when single BSP capacity updated", async () => {
     const newCapacity = BigInt(Math.floor(Math.random() * 1000 * 1024 * 1024)) + CAPACITY_512;
