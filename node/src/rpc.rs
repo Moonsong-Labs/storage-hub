@@ -11,15 +11,14 @@ use sc_consensus_manual_seal::{
     rpc::{ManualSeal, ManualSealApiServer},
     EngineCommand,
 };
-use shc_common::types::StorageProofsMerkleTrieLayout;
-use shc_file_manager::traits::FileStorage;
-use shc_forest_manager::traits::ForestStorage;
+use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::StorageHubClientApiServer;
 use shc_rpc::StorageHubClientRpc;
 use shc_rpc::StorageHubClientRpcConfig;
 use sp_core::H256;
 use storage_hub_runtime::{opaque::Block, AccountId, Balance, Nonce};
 
+use crate::tasks::FileStorageT;
 pub use sc_rpc::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
 use sp_api::ProvideRuntimeApi;
@@ -44,8 +43,8 @@ pub struct FullDeps<C, P, FL, FS> {
 }
 
 /// Instantiate all RPC extensions.
-pub fn create_full<C, P, FL, FS>(
-    deps: FullDeps<C, P, FL, FS>,
+pub fn create_full<C, P, FL, FSH>(
+    deps: FullDeps<C, P, FL, FSH>,
 ) -> Result<RpcExtension, Box<dyn std::error::Error + Send + Sync>>
 where
     C: ProvideRuntimeApi<Block>
@@ -58,8 +57,8 @@ where
     C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
     C::Api: BlockBuilder<Block>,
     P: TransactionPool + Send + Sync + 'static,
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FL: FileStorageT,
+    FSH: ForestStorageHandler + Send + Sync + 'static,
 {
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
     use substrate_frame_rpc_system::{System, SystemApiServer};

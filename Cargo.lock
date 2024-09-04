@@ -12771,6 +12771,7 @@ dependencies = [
 name = "shc-forest-manager"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "bincode",
  "hash-db",
  "kvdb",
@@ -12779,12 +12780,14 @@ dependencies = [
  "log",
  "parity-scale-codec",
  "reference-trie",
+ "serde",
  "shc-common",
  "sp-core 28.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-runtime 31.0.1 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-state-machine 0.35.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-v1.9.0)",
  "sp-trie 29.0.0 (git+https://github.com/paritytech/polkadot-sdk.git)",
  "thiserror",
+ "tokio",
  "trie-db 0.29.1",
 ]
 
