@@ -481,10 +481,7 @@ where
                 .max_storage_capacity;
 
             if max_storage_capacity == capacity {
-                let err_msg: String = format!(
-                    "Reached maximum storage capacity limit. Unable to add more more storage capacity. Max: {}, New: {}",
-                    max_storage_capacity, capacity
-                );
+                let err_msg = "Reached maximum storage capacity limit. Unable to add more more storage capacity.";
                 warn!(
                     target: LOG_TARGET, "{}", err_msg
                 );
@@ -503,12 +500,12 @@ where
             let bytes_to_add = gibs_to_add * GIB;
 
             // Increase storage capacity by a minimum of 1 GiB or
-            let new_capacity = capacity.checked_add(bytes_to_add).ok_or_else(|| {
+            let required_capacity = capacity.checked_add(bytes_to_add).ok_or_else(|| {
                 anyhow::anyhow!("Reached maximum storage capacity limit. Unable to add more more storage capacity.")
             })?;
 
             // Saturate to max storage capacity
-            let new_capacity = std::cmp::min(new_capacity, max_storage_capacity);
+            let new_capacity = std::cmp::min(required_capacity, max_storage_capacity);
 
             let call = storage_hub_runtime::RuntimeCall::Providers(
                 pallet_storage_providers::Call::change_capacity { new_capacity },
@@ -546,6 +543,28 @@ where
                 "Increased storage capacity to {:?} bytes",
                 new_capacity
             );
+
+            let available_capacity = self
+                .storage_hub_handler
+                .blockchain
+                .query_available_storage_capacity(own_bsp_id)
+                .await
+                .map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to query available storage capacity: {:?}", e
+                    );
+                    anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
+                })?;
+
+            // Skip volunteering if the new available capacity is still less than the file size.
+            if available_capacity < event.size {
+                let err_msg = "Failed to increase storage capacity to the required amount to volunteer for storage request.";
+                warn!(
+                    target: LOG_TARGET, "{}", err_msg
+                );
+                return Err(anyhow::anyhow!(err_msg));
+            }
         }
 
         // Get the file key.
