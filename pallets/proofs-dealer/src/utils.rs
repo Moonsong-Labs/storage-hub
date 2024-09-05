@@ -884,7 +884,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         )
     }
 
-	fn generic_apply_delta(
+    fn generic_apply_delta(
         root: &Self::MerkleHash,
         mutations: &[(Self::MerkleHash, TrieMutation)],
         proof: &Self::ForestProof,

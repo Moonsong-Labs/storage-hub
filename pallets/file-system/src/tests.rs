@@ -6,7 +6,7 @@ use crate::{
         StorageRequestTtl,
     },
     BlockRangeToMaximumThreshold, Config, Error, Event, MaximumThreshold,
-    PendingStopStoringRequests, ReplicationTarget, StorageRequestExpirations, StorageRequests
+    PendingStopStoringRequests, ReplicationTarget, StorageRequestExpirations, StorageRequests,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -1443,433 +1443,523 @@ mod msp_accept_storage_request {
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
-                    Event::MspAcceptedStoring { 
-						file_key, 
-						msp_id, 
-						bucket_id, 
-						owner: owner_account_id, 
-						new_bucket_root 
-					} 
+                    Event::MspAcceptedStoring {
+						file_key,
+						msp_id,
+						bucket_id,
+						owner: owner_account_id,
+						new_bucket_root
+					}
                     .into(),
                 );
             });
         }
     }
 
-	mod failure {
+    mod failure {
 
-		use super::*;
+        use super::*;
 
-		#[test]
-		fn fails_if_storage_request_not_found() {
-			new_test_ext().execute_with(|| {
-				let msp = Keyring::Charlie.to_account_id();
-				let msp_signed = RuntimeOrigin::signed(msp.clone());
-				let file_key = H256::zero();
+        #[test]
+        fn fails_if_storage_request_not_found() {
+            new_test_ext().execute_with(|| {
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let file_key = H256::zero();
 
-				assert_noop!(
-					FileSystem::msp_accept_storage_request(msp_signed.clone(), file_key, CompactProof { encoded_nodes: vec![] }, CompactProof { encoded_nodes: vec![] }),
-					Error::<Test>::StorageRequestNotFound
-				);
-			});
-		}
+                assert_noop!(
+                    FileSystem::msp_accept_storage_request(
+                        msp_signed.clone(),
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![]
+                        },
+                        CompactProof {
+                            encoded_nodes: vec![]
+                        }
+                    ),
+                    Error::<Test>::StorageRequestNotFound
+                );
+            });
+        }
 
-		#[test]
-		fn fails_if_caller_not_a_provider() {
-			new_test_ext().execute_with(|| {
-				let owner_account_id = Keyring::Alice.to_account_id();
-				let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
-				let msp = Keyring::Charlie.to_account_id();
-				let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-				let size = 4;
-				let fingerprint = H256::zero();
-				let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-				let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+        #[test]
+        fn fails_if_caller_not_a_provider() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-				let msp_id = add_msp_to_provider_storage(&msp);
+                let msp_id = add_msp_to_provider_storage(&msp);
 
-				let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-				let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
 
-				// Dispatch a storage request.
-				assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                // Dispatch a storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
-				let file_key = FileSystem::compute_file_key(
-					owner_account_id.clone(),
-					bucket_id,
-					location.clone(),
-					size,
-					fingerprint,
-				);
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
 
-				let not_msp = Keyring::Bob.to_account_id();
-				let not_msp_signed = RuntimeOrigin::signed(not_msp.clone());
+                let not_msp = Keyring::Bob.to_account_id();
+                let not_msp_signed = RuntimeOrigin::signed(not_msp.clone());
 
-				assert_noop!(
-					FileSystem::msp_accept_storage_request(not_msp_signed.clone(), file_key, CompactProof { encoded_nodes: vec![] }, CompactProof { encoded_nodes: vec![] }),
-					Error::<Test>::NotASp
-				);
-			});
-		}
+                assert_noop!(
+                    FileSystem::msp_accept_storage_request(
+                        not_msp_signed.clone(),
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![]
+                        },
+                        CompactProof {
+                            encoded_nodes: vec![]
+                        }
+                    ),
+                    Error::<Test>::NotASp
+                );
+            });
+        }
 
-		#[test]
-		fn fails_if_caller_not_a_msp() {
-			new_test_ext().execute_with(|| {
-				let owner_account_id = Keyring::Alice.to_account_id();
-				let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
-				let bsp_account_id = Keyring::Bob.to_account_id();
-				let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-				let msp = Keyring::Charlie.to_account_id();
-				let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-				let size = 4;
-				let fingerprint = H256::zero();
-				let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-				let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-				let storage_amount = 100;
+        #[test]
+        fn fails_if_caller_not_a_msp() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount = 100;
 
-				let msp_id = add_msp_to_provider_storage(&msp);
+                let msp_id = add_msp_to_provider_storage(&msp);
 
-				let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-				let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
 
-				// Dispatch a storage request.
-				assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                // Dispatch a storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
-				let file_key = FileSystem::compute_file_key(
-					owner_account_id.clone(),
-					bucket_id,
-					location.clone(),
-					size,
-					fingerprint,
-				);
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
 
-				// Sign up account as a Backup Storage Provider
+                // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-				assert_noop!(
-					FileSystem::msp_accept_storage_request(bsp_signed.clone(), file_key, CompactProof { encoded_nodes: vec![] }, CompactProof { encoded_nodes: vec![] }),
-					Error::<Test>::NotAMsp
-				);
-			});
-		}
+                assert_noop!(
+                    FileSystem::msp_accept_storage_request(
+                        bsp_signed.clone(),
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![]
+                        },
+                        CompactProof {
+                            encoded_nodes: vec![]
+                        }
+                    ),
+                    Error::<Test>::NotAMsp
+                );
+            });
+        }
 
-		#[test]
-		fn fails_if_request_is_not_expecting_a_msp() {
-			new_test_ext().execute_with(|| {
-				let owner_account_id = Keyring::Alice.to_account_id();
-				let msp = Keyring::Charlie.to_account_id();
-				let msp_signed = RuntimeOrigin::signed(msp.clone());
-				let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-				let size = 4;
-				let fingerprint = H256::zero();
-				let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-				let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+        #[test]
+        fn fails_if_request_is_not_expecting_a_msp() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-				let msp_id = add_msp_to_provider_storage(&msp);
+                let msp_id = add_msp_to_provider_storage(&msp);
 
-				let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-				let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
 
-				let file_key = FileSystem::compute_file_key(
-					owner_account_id.clone(),
-					bucket_id,
-					location.clone(),
-					size,
-					fingerprint,
-				);
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
 
-				// Insert a storage request that is not expecting a MSP.
-				StorageRequests::<Test>::insert(
-					file_key,
-					StorageRequestMetadata {
-						requested_at: 1,
-						owner: owner_account_id.clone(),
-						bucket_id,
-						location: location.clone(),
-						fingerprint,
-						size,
-						msp: None,
-						user_peer_ids: peer_ids.clone(),
-						data_server_sps: BoundedVec::default(),
-						bsps_required: ReplicationTarget::<Test>::get(),
-						bsps_confirmed: 0,
-						bsps_volunteered: 0,
-					},
-				);
+                // Insert a storage request that is not expecting a MSP.
+                StorageRequests::<Test>::insert(
+                    file_key,
+                    StorageRequestMetadata {
+                        requested_at: 1,
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        size,
+                        msp: None,
+                        user_peer_ids: peer_ids.clone(),
+                        data_server_sps: BoundedVec::default(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
+                        bsps_confirmed: 0,
+                        bsps_volunteered: 0,
+                    },
+                );
 
-				assert_noop!(
-					FileSystem::msp_accept_storage_request(msp_signed.clone(), file_key, CompactProof { encoded_nodes: vec![] }, CompactProof { encoded_nodes: vec![] }),
-					Error::<Test>::RequestWithoutMsp
-				);
-			});
-		}
+                assert_noop!(
+                    FileSystem::msp_accept_storage_request(
+                        msp_signed.clone(),
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![]
+                        },
+                        CompactProof {
+                            encoded_nodes: vec![]
+                        }
+                    ),
+                    Error::<Test>::RequestWithoutMsp
+                );
+            });
+        }
 
-		#[test]
-		fn fails_if_caller_is_msp_but_not_assigned_one() {
-			new_test_ext().execute_with(|| {
-				let owner_account_id = Keyring::Alice.to_account_id();
-				let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
-				let expected_msp = Keyring::Charlie.to_account_id();
-				let caller_msp = Keyring::Dave.to_account_id();
-				let caller_msp_signed = RuntimeOrigin::signed(caller_msp.clone());
-				let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-				let size = 4;
-				let fingerprint = H256::zero();
-				let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-				let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+        #[test]
+        fn fails_if_caller_is_msp_but_not_assigned_one() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let expected_msp = Keyring::Charlie.to_account_id();
+                let caller_msp = Keyring::Dave.to_account_id();
+                let caller_msp_signed = RuntimeOrigin::signed(caller_msp.clone());
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-				let expected_msp_id = add_msp_to_provider_storage(&expected_msp);
-				let _caller_msp_id = add_msp_to_provider_storage(&caller_msp);
+                let expected_msp_id = add_msp_to_provider_storage(&expected_msp);
+                let _caller_msp_id = add_msp_to_provider_storage(&caller_msp);
 
-				let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-				let bucket_id = create_bucket(&owner_account_id.clone(), name, expected_msp_id);
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, expected_msp_id);
 
-				// Dispatch a storage request.
-				assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					expected_msp_id,
-					peer_ids.clone(),
-				));
+                // Dispatch a storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    expected_msp_id,
+                    peer_ids.clone(),
+                ));
 
-				let file_key = FileSystem::compute_file_key(
-					owner_account_id.clone(),
-					bucket_id,
-					location.clone(),
-					size,
-					fingerprint,
-				);
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
 
-				// Try to accept storing a file with a MSP that is not the one assigned to the file.
-				assert_noop!(
-					FileSystem::msp_accept_storage_request(caller_msp_signed.clone(), file_key, CompactProof { encoded_nodes: vec![] }, CompactProof { encoded_nodes: vec![] }),
-					Error::<Test>::NotSelectedMsp
-				);
-			});
-		}
+                // Try to accept storing a file with a MSP that is not the one assigned to the file.
+                assert_noop!(
+                    FileSystem::msp_accept_storage_request(
+                        caller_msp_signed.clone(),
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![]
+                        },
+                        CompactProof {
+                            encoded_nodes: vec![]
+                        }
+                    ),
+                    Error::<Test>::NotSelectedMsp
+                );
+            });
+        }
 
-		#[test]
-		fn fails_if_msp_already_accepted_storing() {
-			new_test_ext().execute_with(|| {
-				let owner_account_id = Keyring::Alice.to_account_id();
-				let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
-				let msp = Keyring::Charlie.to_account_id();
-				let msp_signed = RuntimeOrigin::signed(msp.clone());
-				let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-				let size = 4;
-				let fingerprint = H256::zero();
-				let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-				let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+        #[test]
+        fn fails_if_msp_already_accepted_storing() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-				let msp_id = add_msp_to_provider_storage(&msp);
+                let msp_id = add_msp_to_provider_storage(&msp);
 
-				let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-				let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
 
-				// Dispatch a storage request.
-				assert_ok!(FileSystem::issue_storage_request(
-					owner_signed.clone(),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                // Dispatch a storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
-				let file_key = FileSystem::compute_file_key(
-					owner_account_id.clone(),
-					bucket_id,
-					location.clone(),
-					size,
-					fingerprint,
-				);
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
 
-				// Accept storing the file.
-				assert_ok!(FileSystem::msp_accept_storage_request(msp_signed.clone(), file_key, CompactProof { encoded_nodes: vec![H256::default().as_ref().to_vec()] }, CompactProof { encoded_nodes: vec![H256::default().as_ref().to_vec()] }));
+                // Accept storing the file.
+                assert_ok!(FileSystem::msp_accept_storage_request(
+                    msp_signed.clone(),
+                    file_key,
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()]
+                    },
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()]
+                    }
+                ));
 
-				// Try to accept storing the file again.
-				assert_noop!(
-					FileSystem::msp_accept_storage_request(msp_signed.clone(), file_key, CompactProof { encoded_nodes: vec![H256::default().as_ref().to_vec()] }, CompactProof { encoded_nodes: vec![H256::default().as_ref().to_vec()] }),
-					Error::<Test>::MspAlreadyConfirmed
-				);
-			});
-		}
+                // Try to accept storing the file again.
+                assert_noop!(
+                    FileSystem::msp_accept_storage_request(
+                        msp_signed.clone(),
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()]
+                        },
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()]
+                        }
+                    ),
+                    Error::<Test>::MspAlreadyConfirmed
+                );
+            });
+        }
 
-		#[test]
-		fn fails_if_msp_is_not_the_one_storing_the_bucket() {
-			new_test_ext().execute_with(|| {
-				let owner_account_id = Keyring::Alice.to_account_id();
-				let expected_msp = Keyring::Charlie.to_account_id();
-				let expected_msp_signed = RuntimeOrigin::signed(expected_msp.clone());
-				let other_msp = Keyring::Dave.to_account_id();
-				let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-				let size = 4;
-				let fingerprint = H256::zero();
-				let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-				let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+        #[test]
+        fn fails_if_msp_is_not_the_one_storing_the_bucket() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let expected_msp = Keyring::Charlie.to_account_id();
+                let expected_msp_signed = RuntimeOrigin::signed(expected_msp.clone());
+                let other_msp = Keyring::Dave.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-				let expected_msp_id = add_msp_to_provider_storage(&expected_msp);
-				let other_msp_id = add_msp_to_provider_storage(&other_msp);
+                let expected_msp_id = add_msp_to_provider_storage(&expected_msp);
+                let other_msp_id = add_msp_to_provider_storage(&other_msp);
 
-				let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-				let bucket_id = create_bucket(&owner_account_id.clone(), name, other_msp_id);
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, other_msp_id);
 
-				let file_key = FileSystem::compute_file_key(
-					owner_account_id.clone(),
-					bucket_id,
-					location.clone(),
-					size,
-					fingerprint,
-				);
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
 
-				// Insert a storage request with the expected MSP but a bucket ID from another MSP.
-				// Note: this should never happen since `issue_storage_request` checks that the bucket ID
-				// belongs to the MSP, but we are testing it just in case.
-				StorageRequests::<Test>::insert(
-					file_key,
-					StorageRequestMetadata {
-						requested_at: 1,
-						owner: owner_account_id.clone(),
-						bucket_id,
-						location: location.clone(),
-						fingerprint,
-						size,
-						msp: Some((expected_msp_id, false)),
-						user_peer_ids: peer_ids.clone(),
-						data_server_sps: BoundedVec::default(),
-						bsps_required: ReplicationTarget::<Test>::get(),
-						bsps_confirmed: 0,
-						bsps_volunteered: 0,
-					},
-				);
+                // Insert a storage request with the expected MSP but a bucket ID from another MSP.
+                // Note: this should never happen since `issue_storage_request` checks that the bucket ID
+                // belongs to the MSP, but we are testing it just in case.
+                StorageRequests::<Test>::insert(
+                    file_key,
+                    StorageRequestMetadata {
+                        requested_at: 1,
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        size,
+                        msp: Some((expected_msp_id, false)),
+                        user_peer_ids: peer_ids.clone(),
+                        data_server_sps: BoundedVec::default(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
+                        bsps_confirmed: 0,
+                        bsps_volunteered: 0,
+                    },
+                );
 
-				// Try to accept storing a file with a MSP that is not the owner of the bucket ID
-				assert_noop!(
-					FileSystem::msp_accept_storage_request(expected_msp_signed.clone(), file_key, CompactProof { encoded_nodes: vec![] }, CompactProof { encoded_nodes: vec![] }),
-					Error::<Test>::MspNotStoringBucket
-				);
-			});
-		}
+                // Try to accept storing a file with a MSP that is not the owner of the bucket ID
+                assert_noop!(
+                    FileSystem::msp_accept_storage_request(
+                        expected_msp_signed.clone(),
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![]
+                        },
+                        CompactProof {
+                            encoded_nodes: vec![]
+                        }
+                    ),
+                    Error::<Test>::MspNotStoringBucket
+                );
+            });
+        }
 
-		#[test]
-		fn fails_if_msp_does_not_have_enough_available_capacity() {
-			new_test_ext().execute_with(|| {
-				let owner_account_id = Keyring::Alice.to_account_id();
-				let msp = Keyring::Charlie.to_account_id();
-				let msp_signed = RuntimeOrigin::signed(msp.clone());
-				let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-				let size = 200;
-				let fingerprint = H256::zero();
-				let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-				let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+        #[test]
+        fn fails_if_msp_does_not_have_enough_available_capacity() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 200;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-				let msp_id = add_msp_to_provider_storage(&msp);
+                let msp_id = add_msp_to_provider_storage(&msp);
 
-				let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-				let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
 
-				let file_key = FileSystem::compute_file_key(
-					owner_account_id.clone(),
-					bucket_id,
-					location.clone(),
-					size,
-					fingerprint,
-				);
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
 
-				// Insert a storage request for a MSP with not enough available capacity.
-				// Note: `issue_storage_request` checks that the MSP has enough available capacity, but it could happen
-				// that when the storage request was initially created the MSP had enough available capacity but it
-				// accepted other storage requests in the meantime and now it does not have enough available capacity.
-				StorageRequests::<Test>::insert(
-					file_key,
-					StorageRequestMetadata {
-						requested_at: 1,
-						owner: owner_account_id.clone(),
-						bucket_id,
-						location: location.clone(),
-						fingerprint,
-						size,
-						msp: Some((msp_id, false)),
-						user_peer_ids: peer_ids.clone(),
-						data_server_sps: BoundedVec::default(),
-						bsps_required: ReplicationTarget::<Test>::get(),
-						bsps_confirmed: 0,
-						bsps_volunteered: 0,
-					},
-				);
+                // Insert a storage request for a MSP with not enough available capacity.
+                // Note: `issue_storage_request` checks that the MSP has enough available capacity, but it could happen
+                // that when the storage request was initially created the MSP had enough available capacity but it
+                // accepted other storage requests in the meantime and now it does not have enough available capacity.
+                StorageRequests::<Test>::insert(
+                    file_key,
+                    StorageRequestMetadata {
+                        requested_at: 1,
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        size,
+                        msp: Some((msp_id, false)),
+                        user_peer_ids: peer_ids.clone(),
+                        data_server_sps: BoundedVec::default(),
+                        bsps_required: ReplicationTarget::<Test>::get(),
+                        bsps_confirmed: 0,
+                        bsps_volunteered: 0,
+                    },
+                );
 
-				// Try to accept storing a file with a MSP that does not have enough available capacity
-				assert_noop!(
-					FileSystem::msp_accept_storage_request(msp_signed.clone(), file_key, CompactProof { encoded_nodes: vec![] }, CompactProof { encoded_nodes: vec![] }),
-					Error::<Test>::InsufficientAvailableCapacity
-				);
-			});
-		}
+                // Try to accept storing a file with a MSP that does not have enough available capacity
+                assert_noop!(
+                    FileSystem::msp_accept_storage_request(
+                        msp_signed.clone(),
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![]
+                        },
+                        CompactProof {
+                            encoded_nodes: vec![]
+                        }
+                    ),
+                    Error::<Test>::InsufficientAvailableCapacity
+                );
+            });
+        }
 
-		#[test]
-		fn fails_if_the_non_inclusion_proof_includes_the_file_key() {
-			new_test_ext().execute_with(|| {
-				let owner_account_id = Keyring::Alice.to_account_id();
-				let msp = Keyring::Charlie.to_account_id();
-				let msp_signed = RuntimeOrigin::signed(msp.clone());
-				let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-				let size = 4;
-				let fingerprint = H256::zero();
-				let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-				let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+        #[test]
+        fn fails_if_the_non_inclusion_proof_includes_the_file_key() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-				let msp_id = add_msp_to_provider_storage(&msp);
+                let msp_id = add_msp_to_provider_storage(&msp);
 
-				let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-				let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
 
-				// Dispatch a storage request.
-				assert_ok!(FileSystem::issue_storage_request(
-					RuntimeOrigin::signed(owner_account_id.clone()),
-					bucket_id,
-					location.clone(),
-					fingerprint,
-					size,
-					msp_id,
-					peer_ids.clone(),
-				));
+                // Dispatch a storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner_account_id.clone()),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
 
-				let file_key = FileSystem::compute_file_key(
-					owner_account_id.clone(),
-					bucket_id,
-					location.clone(),
-					size,
-					fingerprint,
-				);
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
 
-				// Try to accept storing a file with a non-inclusion proof that includes the file key
-				assert_noop!(
-					FileSystem::msp_accept_storage_request(msp_signed.clone(), file_key, CompactProof { encoded_nodes: vec![H256::default().as_ref().to_vec()] }, CompactProof { encoded_nodes: vec![file_key.as_ref().to_vec()] }),
-					Error::<Test>::ExpectedNonInclusionProof
-				);
-			});
-		}
-	}
+                // Try to accept storing a file with a non-inclusion proof that includes the file key
+                assert_noop!(
+                    FileSystem::msp_accept_storage_request(
+                        msp_signed.clone(),
+                        file_key,
+                        CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()]
+                        },
+                        CompactProof {
+                            encoded_nodes: vec![file_key.as_ref().to_vec()]
+                        }
+                    ),
+                    Error::<Test>::ExpectedNonInclusionProof
+                );
+            });
+        }
+    }
 }
 
 mod bsp_volunteer {
