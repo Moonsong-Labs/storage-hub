@@ -42,6 +42,7 @@ import {
   DUMMY_BSP_ID,
   DUMMY_MSP_ID,
   NODE_INFOS,
+  U32_MAX,
   VALUE_PROP
 } from "./consts";
 import { addBspContainer, showContainers } from "./docker";
@@ -186,11 +187,8 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
       userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(shUser.address, amount))
     );
 
-    // u32 max value
-    const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
-
     await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, u32Max, 1))
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, U32_MAX, 1))
     );
 
     // Make BSP
@@ -676,7 +674,7 @@ export const addBsp = async (
     additionalArgs.push("--storage-layer=rocks-db");
   }
   additionalArgs.push(`--storage-path=/tmp/bsp/${bspKey.address}`);
-  additionalArgs.push(`--max-storage-capacity=${options?.maxStorageCapacity ?? 4294967296}`);
+  additionalArgs.push(`--max-storage-capacity=${options?.maxStorageCapacity ?? U32_MAX}`);
   const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
     ...options,
     additionalArgs

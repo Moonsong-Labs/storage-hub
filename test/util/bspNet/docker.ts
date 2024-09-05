@@ -101,7 +101,6 @@ export const addBspContainer = async (options?: {
       "--sealing=manual",
       "--provider",
       "--provider-type=bsp",
-      "--max-storage-capacity=4294967295",
       `--name=${containerName}`,
       "--no-hardware-benchmarks",
       "--unsafe-rpc-external",
