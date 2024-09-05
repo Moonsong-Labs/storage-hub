@@ -135,13 +135,18 @@ where
         info!(
             target: LOG_TARGET,
             "Processing SubmitProofRequest {:?}",
-            event.data.forest_challenges
+            event.data
         );
+
+        // Check if this proof is the next one to be submitted.
+        // This is, for example, in case that this provider is trying to submit a proof for a tick that is not the next one to be submitted.
+        // Exiting early in this case is important so that the provider doesn't get stuck trying to submit an outdated proof.
+        self.check_if_proof_is_outdated(&event).await?;
 
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
             Some(tx) => tx,
             None => {
-                error!(target: LOG_TARGET, "This is a bug! Forest root write tx already taken.");
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.");
                 return Err(anyhow!(
                     "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken!"
                 ));
@@ -159,7 +164,7 @@ where
             let p = fs
                 .read()
                 .await
-                .generate_proof(event.data.forest_challenges)
+                .generate_proof(event.data.forest_challenges.clone())
                 .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
 
             p
@@ -217,6 +222,10 @@ where
         // Attempt three times to submit extrinsic if it fails.
         let mut extrinsic_submitted = false;
         for attempt in 0..MAX_PROOF_SUBMISSION_ATTEMPTS {
+            // First check if this proof is still the next one to be submitted.
+            self.check_if_proof_is_outdated(&event).await?;
+
+            // Send the extrinsic and wait for it to be included in the block.
             let mut transaction = self
                 .storage_hub_handler
                 .blockchain
@@ -224,11 +233,13 @@ where
                 .await?
                 .with_timeout(Duration::from_secs(60));
 
+            // Check if the extrinsic was successful.
             if transaction
                 .watch_for_success(&self.storage_hub_handler.blockchain)
                 .await
                 .is_ok()
             {
+                // If the extrinsic was successful, break out of the loop.
                 extrinsic_submitted = true;
                 break;
             }
@@ -432,6 +443,28 @@ where
             // Else, return an empty checkpoint challenges vector.
             Ok(Vec::new())
         }
+    }
+
+    async fn check_if_proof_is_outdated(
+        &self,
+        event: &ProcessSubmitProofRequest,
+    ) -> anyhow::Result<()> {
+        // Get the next challenge tick for this provider.
+        let next_challenge_tick = self
+            .storage_hub_handler
+            .blockchain
+            .get_next_challenge_tick_for_provider(event.data.provider_id)
+            .await?;
+
+        if next_challenge_tick != event.data.tick {
+            warn!(target: LOG_TARGET, "The proof for tick [{:?}] is not the next one to be submitted. Next challenge tick is [{:?}]", event.data.tick, next_challenge_tick);
+            return Err(anyhow!(
+                "The proof for tick [{:?}] is not the next one to be submitted.",
+                event.data.tick,
+            ));
+        }
+
+        Ok(())
     }
 
     async fn generate_key_proof(
