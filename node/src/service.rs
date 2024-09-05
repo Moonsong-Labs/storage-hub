@@ -56,9 +56,9 @@ use substrate_prometheus_endpoint::Registry;
 use crate::{
     cli::StorageLayer,
     services::builder::{
-        setup_provider, BspProvider, InMemoryStorageLayer, MspProvider, NoStorageLayer,
-        RocksDbStorageLayer, RoleSupport, RpcConfigBuilder, Runnable, StorageHubBuilder,
-        StorageLayerBuilder, StorageLayerSupport, StorageTypes, UserRole,
+        BspProvider, InMemoryStorageLayer, MspProvider, NoStorageLayer,
+        RequiredStorageProviderSetup, RocksDbStorageLayer, RoleSupport, RpcConfigBuilder, Runnable,
+        StorageHubBuilder, StorageLayerBuilder, StorageLayerSupport, StorageTypes, UserRole,
     },
 };
 use crate::{
@@ -202,7 +202,8 @@ where
     R: RoleSupport,
     S: StorageLayerSupport,
     (R, S): StorageTypes,
-    StorageHubBuilder<R, S>: StorageLayerBuilder
+    StorageHubBuilder<R, S>: RequiredStorageProviderSetup
+        + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>,
 {
     match provider_options {
@@ -229,8 +230,7 @@ where
                 )
                 .await;
 
-            setup_provider(
-                &mut storage_hub_builder,
+            storage_hub_builder.setup(
                 keystore.clone(),
                 storage_path.clone(),
                 match provider_options {
@@ -261,7 +261,8 @@ where
     R: RoleSupport,
     S: StorageLayerSupport,
     (R, S): StorageTypes,
-    StorageHubBuilder<R, S>: StorageLayerBuilder
+    StorageHubBuilder<R, S>: RequiredStorageProviderSetup
+        + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
         + Runnable,
 {
@@ -293,7 +294,8 @@ where
     R: RoleSupport,
     S: StorageLayerSupport,
     (R, S): StorageTypes,
-    StorageHubBuilder<R, S>: StorageLayerBuilder
+    StorageHubBuilder<R, S>: RequiredStorageProviderSetup
+        + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
         + Runnable,
 {
@@ -652,7 +654,8 @@ where
     R: RoleSupport,
     S: StorageLayerSupport,
     (R, S): StorageTypes,
-    StorageHubBuilder<R, S>: StorageLayerBuilder
+    StorageHubBuilder<R, S>: RequiredStorageProviderSetup
+        + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
         + Runnable,
 {

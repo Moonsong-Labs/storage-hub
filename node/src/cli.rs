@@ -85,7 +85,10 @@ pub struct ProviderConfigurations {
     /// Maximum storage capacity of the provider (bytes).
     ///
     /// Default: 4294967295 bytes (4GiB)
-    #[clap(long, default_value = "4294967295")]
+    #[clap(long, required_if_eq_any([
+        ("provider_type", "msp"),
+        ("provider_type", "bsp")
+    ]))]
     pub max_storage_capacity: Option<MaxStorageCapacity>,
 
     /// Type of StorageHub provider.
@@ -115,10 +118,9 @@ impl ProviderConfigurations {
                 .clone()
                 .expect("Storage layer is required"),
             storage_path: self.storage_path.clone(),
-            max_storage_capacity: self
-                .max_storage_capacity
-                .clone()
-                .expect("Max storage capacity is required"),
+            // We can default since the clap would have errored out if it was not provided when required.
+            // In any other case, max_storage_capacity is not required and can be set to default.
+            max_storage_capacity: self.max_storage_capacity.clone().unwrap_or_default(),
         }
     }
 }
