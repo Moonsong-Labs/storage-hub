@@ -18,7 +18,7 @@ use shc_rpc::StorageHubClientRpcConfig;
 
 use super::{
     forest_storage::{ForestStorageCaching, ForestStorageSingle},
-    handler::StorageHubHandler,
+    handler::{MaxStorageCapacity, ProviderConfig, StorageHubHandler},
 };
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT};
 
@@ -102,6 +102,7 @@ where
     file_storage: Option<Arc<RwLock<<(R, S) as StorageTypes>::FL>>>,
     forest_storage_handler: Option<<(R, S) as StorageTypes>::FSH>,
     provider_pub_key: Option<[u8; 32]>,
+    max_storage_capacity: Option<MaxStorageCapacity>,
 }
 
 /// Common components to build for any given configuration of [`RoleSupport`] and [`StorageLayerSupport`].
@@ -118,6 +119,7 @@ where
             file_storage: None,
             forest_storage_handler: None,
             provider_pub_key: None,
+            max_storage_capacity: None,
         }
     }
 
@@ -143,6 +145,14 @@ where
 
     pub fn with_provider_pub_key(&mut self, provider_pub_key: [u8; 32]) -> &mut Self {
         self.provider_pub_key = Some(provider_pub_key);
+        self
+    }
+
+    pub fn with_max_storage_capacity(
+        &mut self,
+        max_storage_capacity: Option<MaxStorageCapacity>,
+    ) -> &mut Self {
+        self.max_storage_capacity = max_storage_capacity;
         self
     }
 
@@ -290,6 +300,11 @@ where
                 .as_ref()
                 .expect("Forest Storage Handler not set.")
                 .clone(),
+            ProviderConfig {
+                max_storage_capacity: self
+                    .max_storage_capacity
+                    .expect("Max Storage Capacity not set"),
+            },
         )
     }
 }
@@ -326,6 +341,11 @@ where
                 .as_ref()
                 .expect("Forest Storage Handler not set.")
                 .clone(),
+            ProviderConfig {
+                max_storage_capacity: self
+                    .max_storage_capacity
+                    .expect("Max Storage Capacity not set"),
+            },
         )
     }
 }
@@ -360,6 +380,11 @@ where
                 .as_ref()
                 .expect("Forest Storage Handler not set.")
                 .clone(),
+            ProviderConfig {
+                max_storage_capacity: self
+                    .max_storage_capacity
+                    .expect("Max Storage Capacity not set"),
+            },
         )
     }
 }
@@ -403,11 +428,14 @@ where
     }
 }
 
-// Helper function to setup a storage provider
+/// Helper function to setup a storage provider
+///
+/// If no `max_storage_capacity` is provided, the default value is set to 1GiB.
 pub fn setup_provider<R: RoleSupport, S: StorageLayerSupport>(
     storage_hub_builder: &mut StorageHubBuilder<R, S>,
     keystore: KeystorePtr,
     storage_path: Option<String>,
+    max_storage_capacity: Option<MaxStorageCapacity>,
 ) -> &mut StorageHubBuilder<R, S>
 where
     (R, S): StorageTypes,
@@ -416,5 +444,6 @@ where
     let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
     storage_hub_builder.with_provider_pub_key(caller_pub_key);
     storage_hub_builder.setup_storage_layer(storage_path);
+    storage_hub_builder.with_max_storage_capacity(Some(max_storage_capacity.unwrap_or(u32::MAX)));
     storage_hub_builder
 }

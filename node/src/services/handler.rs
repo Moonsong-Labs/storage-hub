@@ -25,6 +25,17 @@ use crate::tasks::{
     BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT,
 };
 
+pub type MaxStorageCapacity = u32;
+
+/// Configuration paramaters for Storage Providers.
+#[derive(Clone)]
+pub struct ProviderConfig {
+    /// Maximum storage capacity of the provider (bytes).
+    ///
+    /// The Storage Provider will not request to increase its storage capacity beyond this value.
+    pub max_storage_capacity: MaxStorageCapacity,
+}
+
 /// Represents the handler for the Storage Hub service.
 pub struct StorageHubHandler<FL, FSH>
 where
@@ -41,6 +52,8 @@ where
     pub file_storage: Arc<RwLock<FL>>,
     /// The forest storage layer which tracks all complete files stored in the file storage layer.
     pub forest_storage_handler: FSH,
+    /// The configuration parameters for the provider.
+    pub provider_config: ProviderConfig,
 }
 
 impl<FL, FSH> Clone for StorageHubHandler<FL, FSH>
@@ -55,6 +68,7 @@ where
             blockchain: self.blockchain.clone(),
             file_storage: self.file_storage.clone(),
             forest_storage_handler: self.forest_storage_handler.clone(),
+            provider_config: self.provider_config.clone(),
         }
     }
 }
@@ -70,6 +84,7 @@ where
         blockchain: ActorHandle<BlockchainService>,
         file_storage: Arc<RwLock<FL>>,
         forest_storage_handler: FSH,
+        provider_config: ProviderConfig,
     ) -> Self {
         Self {
             task_spawner,
@@ -77,6 +92,7 @@ where
             blockchain,
             file_storage,
             forest_storage_handler,
+            provider_config,
         }
     }
 

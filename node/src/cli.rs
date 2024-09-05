@@ -2,7 +2,7 @@ use std::{path::PathBuf, str::FromStr};
 
 use clap::{Parser, ValueEnum};
 
-use crate::command::ProviderOptions;
+use crate::{command::ProviderOptions, services::handler::MaxStorageCapacity};
 
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
@@ -82,6 +82,12 @@ pub struct ProviderConfigurations {
     )]
     pub provider_type: Option<ProviderType>,
 
+    /// Maximum storage capacity of the provider (bytes).
+    ///
+    /// Default: 4294967295 bytes (4GiB)
+    #[clap(long, default_value = "4294967295")]
+    pub max_storage_capacity: Option<MaxStorageCapacity>,
+
     /// Type of StorageHub provider.
     /// Currently: `memory` and `rocks-db`.
     #[clap(
@@ -93,7 +99,7 @@ pub struct ProviderConfigurations {
     pub storage_layer: Option<StorageLayer>,
 
     /// Storage location in the file system
-    #[clap(long, required_if_eq("storage-layer", "rocks-db"))]
+    #[clap(long, required_if_eq("storage_layer", "rocks-db"))]
     pub storage_path: Option<String>,
 }
 
@@ -109,6 +115,10 @@ impl ProviderConfigurations {
                 .clone()
                 .expect("Storage layer is required"),
             storage_path: self.storage_path.clone(),
+            max_storage_capacity: self
+                .max_storage_capacity
+                .clone()
+                .expect("Max storage capacity is required"),
         }
     }
 }

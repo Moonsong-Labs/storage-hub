@@ -1,4 +1,4 @@
-use std::{str::FromStr, time::Duration};
+use std::{cmp::max, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
@@ -419,15 +419,6 @@ where
             location: event.location.to_vec(),
         };
 
-        // Get the file key.
-        let file_key: FileKey = metadata
-            .file_key::<HashT<StorageProofsMerkleTrieLayout>>()
-            .as_ref()
-            .try_into()?;
-
-        self.file_key_cleanup = Some(file_key.into());
-
-        // Get the node's provider id needed for threshold calculation.
         let own_provider_id = self
             .storage_hub_handler
             .blockchain
@@ -449,6 +440,118 @@ where
                 return Err(anyhow!("Failed to get own BSP ID."));
             }
         };
+
+        let available_capacity = self
+            .storage_hub_handler
+            .blockchain
+            .query_available_storage_capacity(own_bsp_id)
+            .await
+            .map_err(|e| {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to query available storage capacity: {:?}", e
+                );
+                anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
+            })?;
+
+        // Increase storage capacity if the available capacity is less than the file size.
+        if available_capacity < event.size {
+            warn!(
+                target: LOG_TARGET,
+                "Insufficient storage capacity to volunteer for file key: {:?}",
+                event.file_key
+            );
+
+            let capacity = self
+                .storage_hub_handler
+                .blockchain
+                .query_storage_provider_capacity(own_bsp_id)
+                .await
+                .map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to query storage provider capacity: {:?}", e
+                    );
+                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+                })?;
+
+            const GIB: u32 = 1 << 30;
+
+            // Calculate GiBs needed, rounding up
+            let gibs_needed = (event.size + GIB - 1) / GIB;
+
+            // Ensure at least 1 GiB is added
+            let gibs_to_add = max(gibs_needed, 1);
+
+            // Calculate bytes to add
+            let bytes_to_add = gibs_to_add * GIB;
+
+            // Increase storage capacity by a minimum of 1 GiB or
+            let new_capacity = capacity.checked_add(bytes_to_add).ok_or_else(|| {
+                anyhow::anyhow!("Reached maximum storage capacity limit. Unable to add more more storage capacity.")
+            })?;
+
+            let max_storage_capacity = self
+                .storage_hub_handler
+                .provider_config
+                .max_storage_capacity;
+
+            if max_storage_capacity < new_capacity {
+                let err_msg = format!(
+                    "Reached maximum storage capacity limit. Unable to add more more storage capacity. Max: {}, New: {}",
+                    max_storage_capacity, new_capacity
+                );
+                warn!(
+                    target: LOG_TARGET, "{}", err_msg
+                );
+                return Err(anyhow::anyhow!(err_msg));
+            }
+
+            let call = storage_hub_runtime::RuntimeCall::Providers(
+                pallet_storage_providers::Call::change_capacity { new_capacity },
+            );
+
+            let earliest_change_capacity_block = self
+                .storage_hub_handler
+                .blockchain
+                .query_earliest_change_capacity_block(own_bsp_id)
+                .await
+                .map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to query storage provider capacity: {:?}", e
+                    );
+                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+                })?;
+
+            // Wait for the earliest block where the capacity can be changed.
+            self.storage_hub_handler
+                .blockchain
+                .wait_for_block(earliest_change_capacity_block)
+                .await?;
+
+            self.storage_hub_handler
+                .blockchain
+                .send_extrinsic(call)
+                .await?
+                .with_timeout(Duration::from_secs(60))
+                .watch_for_success(&self.storage_hub_handler.blockchain)
+                .await?;
+
+            info!(
+                target: LOG_TARGET,
+                "Increased storage capacity to {:?} bytes",
+                new_capacity
+            );
+        }
+
+        // Get the file key.
+        let file_key: FileKey = metadata
+            .file_key::<HashT<StorageProofsMerkleTrieLayout>>()
+            .as_ref()
+            .try_into()?;
+
+        self.file_key_cleanup = Some(file_key.into());
 
         // Query runtime for the earliest block where the BSP can volunteer for the file.
         let earliest_volunteer_block = self

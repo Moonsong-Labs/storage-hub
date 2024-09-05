@@ -16,6 +16,7 @@ use crate::{
     chain_spec,
     cli::{Cli, ProviderType, RelayChainCli, StorageLayer, Subcommand},
     service::new_partial,
+    services::handler::MaxStorageCapacity,
 };
 
 // TODO: Have specific StorageHub role options (i.e. ProviderOptions, UserOptions).
@@ -28,6 +29,8 @@ pub struct ProviderOptions {
     pub storage_layer: StorageLayer,
     /// RocksDB Path.
     pub storage_path: Option<String>,
+    /// Maximum storage capacity of the Storage Provider (bytes).
+    pub max_storage_capacity: MaxStorageCapacity,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {

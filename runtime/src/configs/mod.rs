@@ -79,7 +79,7 @@ use super::{
     MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
     RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
 };
-use crate::PolkadotXcm;
+use crate::{PolkadotXcm, StorageDataUnit};
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
 pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
@@ -465,7 +465,7 @@ impl pallet_storage_providers::Config for Runtime {
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = u32;
+    type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
     type ValuePropId = Hash;

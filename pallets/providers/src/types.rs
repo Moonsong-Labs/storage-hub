@@ -84,13 +84,14 @@ pub enum StorageProviderId<T: Config> {
 pub type BalanceOf<T> =
     <<T as Config>::NativeBalance as Inspect<<T as frame_system::Config>::AccountId>>::Balance;
 
+pub type ProviderId<T> = HashId<T>;
 /// BackupStorageProviderId is the type that represents an ID of a Backup Storage Provider, uniquely linked with an AccountId
 /// TODO: We should make these IDs configurable from the runtime...
-pub type BackupStorageProviderId<T> = <T as frame_system::Config>::Hash;
+pub type BackupStorageProviderId<T> = ProviderId<T>;
 /// MainStorageProviderId is the type that represents an ID of a Main Storage Provider, uniquely linked with an AccountId
-pub type MainStorageProviderId<T> = <T as frame_system::Config>::Hash;
+pub type MainStorageProviderId<T> = ProviderId<T>;
 /// BucketId is the type that identifies the different buckets that a Main Storage Provider can have.
-pub type BucketId<T> = <T as frame_system::Config>::Hash;
+pub type BucketId<T> = HashId<T>;
 
 /// MaxMultiAddressSize is the maximum size of the libp2p multiaddress of a Storage Provider in bytes.
 pub type MaxMultiAddressSize<T> = <T as crate::Config>::MaxMultiAddressSize;

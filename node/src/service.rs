@@ -233,6 +233,13 @@ where
                 &mut storage_hub_builder,
                 keystore.clone(),
                 storage_path.clone(),
+                match provider_options {
+                    Some(ProviderOptions {
+                        max_storage_capacity,
+                        ..
+                    }) => Some(*max_storage_capacity),
+                    None => None,
+                },
             );
 
             let rpc_config = storage_hub_builder.create_rpc_config(keystore);

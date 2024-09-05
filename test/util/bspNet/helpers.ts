@@ -666,6 +666,7 @@ export const addBsp = async (
     rocksdb?: boolean;
     bspKeySeed?: string;
     bspId?: string;
+    maxStorageCapacity?: number;
     additionalArgs?: string[];
   }
 ) => {
@@ -675,6 +676,7 @@ export const addBsp = async (
     additionalArgs.push("--storage-layer=rocks-db");
   }
   additionalArgs.push(`--storage-path=/tmp/bsp/${bspKey.address}`);
+  additionalArgs.push(`--max-storage-capacity=${options?.maxStorageCapacity ?? 4294967296}`);
   const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
     ...options,
     additionalArgs

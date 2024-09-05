@@ -9,7 +9,10 @@ use std::{
 
 use futures::prelude::*;
 use log::{debug, trace, warn};
-use pallet_storage_providers_runtime_api::{GetBspInfoError, StorageProvidersApi};
+use pallet_storage_providers_runtime_api::{
+    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
+    QueryStorageProviderCapacityError, StorageProvidersApi,
+};
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
 };
@@ -325,6 +328,27 @@ impl Actor for BlockchainService {
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryEarliestChangeCapacityBlock { bsp_id, callback } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let earliest_block_to_change_capacity = self
+                        .client
+                        .runtime_api()
+                        .query_earliest_change_capacity_block(current_block_hash, &bsp_id)
+                        .unwrap_or_else(|_| {
+                            error!(target: LOG_TARGET, "Failed to query earliest block to change capacity");
+                            Err(QueryEarliestChangeCapacityBlockError::InternalError)
+                        });
+
+                    match callback.send(earliest_block_to_change_capacity) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Earliest block to change capacity result sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send earliest block to change capacity: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::QueryFileEarliestVolunteerBlock {
                     bsp_id,
                     file_key,
@@ -516,6 +540,48 @@ impl Actor for BlockchainService {
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send BSP root: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryStorageProviderCapacity {
+                    provider_id,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let capacity = self
+                        .client
+                        .runtime_api()
+                        .query_storage_provider_capacity(current_block_hash, &provider_id)
+                        .unwrap_or_else(|_| Err(QueryStorageProviderCapacityError::InternalError));
+
+                    match callback.send(capacity) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Storage provider capacity sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send storage provider capacity: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryAvailableStorageCapacity {
+                    provider_id,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let capacity = self
+                        .client
+                        .runtime_api()
+                        .query_available_storage_capacity(current_block_hash, &provider_id)
+                        .unwrap_or_else(|_| Err(QueryAvailableStorageCapacityError::InternalError));
+
+                    match callback.send(capacity) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Available storage capacity sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send available storage capacity: {:?}", e);
                         }
                     }
                 }
