@@ -475,6 +475,22 @@ where
                     anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
                 })?;
 
+            let max_storage_capacity = self
+                .storage_hub_handler
+                .provider_config
+                .max_storage_capacity;
+
+            if max_storage_capacity == capacity {
+                let err_msg: String = format!(
+                    "Reached maximum storage capacity limit. Unable to add more more storage capacity. Max: {}, New: {}",
+                    max_storage_capacity, capacity
+                );
+                warn!(
+                    target: LOG_TARGET, "{}", err_msg
+                );
+                return Err(anyhow::anyhow!(err_msg));
+            }
+
             const GIB: u32 = 1 << 30;
 
             // Calculate GiBs needed, rounding up
@@ -491,21 +507,8 @@ where
                 anyhow::anyhow!("Reached maximum storage capacity limit. Unable to add more more storage capacity.")
             })?;
 
-            let max_storage_capacity = self
-                .storage_hub_handler
-                .provider_config
-                .max_storage_capacity;
-
-            if max_storage_capacity < new_capacity {
-                let err_msg = format!(
-                    "Reached maximum storage capacity limit. Unable to add more more storage capacity. Max: {}, New: {}",
-                    max_storage_capacity, new_capacity
-                );
-                warn!(
-                    target: LOG_TARGET, "{}", err_msg
-                );
-                return Err(anyhow::anyhow!(err_msg));
-            }
+            // Saturate to max storage capacity
+            let new_capacity = std::cmp::min(new_capacity, max_storage_capacity);
 
             let call = storage_hub_runtime::RuntimeCall::Providers(
                 pallet_storage_providers::Call::change_capacity { new_capacity },
