@@ -450,7 +450,7 @@ impl pallet_randomness::Config for Runtime {
 parameter_types! {
     pub const SpMinDeposit: Balance = 20 * UNIT;
     pub const BucketDeposit: Balance = 20 * UNIT;
-    pub const SlashAmountPerChunkOfStorageData: Balance = 20 * UNIT;
+    pub const SlashAmountPerMaxFileSize: Balance = 0 * UNIT;
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -486,7 +486,7 @@ impl pallet_storage_providers::Config for Runtime {
     type MaxBlocksForRandomness = MaxBlocksForRandomness;
     type MinBlocksBetweenCapacityChanges = ConstU32<10>;
     type DefaultMerkleRoot = DefaultMerkleRoot<StorageProofsMerkleTrieLayout>;
-    type SlashAmountPerMaxFileSize = SlashAmountPerChunkOfStorageData;
+    type SlashAmountPerMaxFileSize = SlashAmountPerMaxFileSize;
     type StartingReputationWeight = ConstU32<10>;
 }
 
