@@ -351,14 +351,8 @@ describeBspNet(
     });
 
     it("BSP-Two still correctly responds to challenges with same forest root", async () => {
-      const prevLastTickResult =
-        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_TWO_ID);
-      assert(prevLastTickResult.isOk);
-      const prevLastTickBspTwoSubmittedProof = prevLastTickResult.asOk.toNumber();
-      console.log(`Prev last tick BSP-Two: ${prevLastTickBspTwoSubmittedProof}`);
-
       // Advance some blocks to allow the BSP to process the challenges and submit proofs.
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 20; i++) {
         await userApi.sealBlock();
         await sleep(500);
       }
@@ -369,7 +363,6 @@ describeBspNet(
         await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(BSP_TWO_ID);
       assert(lastTickResult.isOk);
       const lastTickBspTwoSubmittedProof = lastTickResult.asOk.toNumber();
-      console.log(`Last tick BSP-Two: ${lastTickBspTwoSubmittedProof}`);
       // Then we get the challenge period for the BSP.
       const challengePeriodResult =
         await userApi.call.proofsDealerApi.getChallengePeriod(BSP_TWO_ID);
@@ -379,6 +372,9 @@ describeBspNet(
       const nextChallengeTick = lastTickBspTwoSubmittedProof + challengePeriod;
       // Finally, advance to the next challenge tick.
       await userApi.advanceToBlock(nextChallengeTick);
+
+      // Wait for tasks to execute and for the BSPs to submit proofs.
+      await sleep(500);
 
       // There should be at least one pending submit proof transaction.
       const submitProofsPending = await assertExtrinsicPresent(userApi, {
@@ -561,37 +557,34 @@ describeBspNet(
           : bspTwoNextChallengeTick;
       const secondBlockToAdvance =
         dummyBspNextChallengeTick < bspTwoNextChallengeTick
-          ? bspTwoNextChallengeTick
-          : dummyBspNextChallengeTick;
+          ? bspTwoNextChallengeTick + bspTwoChallengePeriod
+          : dummyBspNextChallengeTick + dummyBspChallengePeriod;
 
-      // TODO: FIX THIS.
-      // TODO: The first challenge block is for BSP-Two, who as of now lags behind in proof
-      // TODO: submissions. We need to fix this.
-      // // Advance to first next challenge block.
-      // await userApi.advanceToBlock(firstBlockToAdvance, {
-      //   waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
-      // });
+      // Advance to first next challenge block.
+      await userApi.advanceToBlock(firstBlockToAdvance, {
+        waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
+      });
 
-      // // Wait for BSP to generate the proof and advance one more block.
-      // await sleep(500);
-      // const firstChallengeBlockResult = await userApi.sealBlock();
+      // Wait for BSP to generate the proof and advance one more block.
+      await sleep(500);
+      const firstChallengeBlockResult = await userApi.sealBlock();
 
-      // // Check for a ProofAccepted event.
-      // const firstChallengeBlockEvents = assertEventPresent(
-      //   userApi,
-      //   "proofsDealer",
-      //   "ProofAccepted",
-      //   firstChallengeBlockResult.events
-      // );
-      // const firstChallengeBlockEventDataBlob =
-      //   userApi.events.proofsDealer.ProofAccepted.is(firstChallengeBlockEvents.event) &&
-      //   firstChallengeBlockEvents.event.data;
-      // assert(firstChallengeBlockEventDataBlob, "Event doesn't match Type");
-      // strictEqual(
-      //   firstChallengeBlockEventDataBlob.provider.toString(),
-      //   firstBspToRespond,
-      //   "The BSP should be the one who submitted the proof."
-      // );
+      // Check for a ProofAccepted event.
+      const firstChallengeBlockEvents = assertEventPresent(
+        userApi,
+        "proofsDealer",
+        "ProofAccepted",
+        firstChallengeBlockResult.events
+      );
+      const firstChallengeBlockEventDataBlob =
+        userApi.events.proofsDealer.ProofAccepted.is(firstChallengeBlockEvents.event) &&
+        firstChallengeBlockEvents.event.data;
+      assert(firstChallengeBlockEventDataBlob, "Event doesn't match Type");
+      strictEqual(
+        firstChallengeBlockEventDataBlob.provider.toString(),
+        firstBspToRespond,
+        "The BSP should be the one who submitted the proof."
+      );
 
       // Advance to second next challenge block.
       await userApi.advanceToBlock(secondBlockToAdvance, {
