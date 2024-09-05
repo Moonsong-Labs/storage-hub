@@ -120,7 +120,7 @@ impl ProviderConfigurations {
             storage_path: self.storage_path.clone(),
             // We can default since the clap would have errored out if it was not provided when required.
             // In any other case, max_storage_capacity is not required and can be set to default.
-            max_storage_capacity: self.max_storage_capacity.clone().unwrap_or_default(),
+            max_storage_capacity: self.max_storage_capacity.clone(),
         }
     }
 }

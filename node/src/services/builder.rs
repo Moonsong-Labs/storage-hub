@@ -101,7 +101,6 @@ where
     storage_path: Option<String>,
     file_storage: Option<Arc<RwLock<<(R, S) as StorageTypes>::FL>>>,
     forest_storage_handler: Option<<(R, S) as StorageTypes>::FSH>,
-    provider_pub_key: Option<[u8; 32]>,
     max_storage_capacity: Option<MaxStorageCapacity>,
 }
 
@@ -118,7 +117,6 @@ where
             storage_path: None,
             file_storage: None,
             forest_storage_handler: None,
-            provider_pub_key: None,
             max_storage_capacity: None,
         }
     }
@@ -140,11 +138,6 @@ where
         .await;
 
         self.file_transfer = Some(file_transfer_service_handle);
-        self
-    }
-
-    pub fn with_provider_pub_key(&mut self, provider_pub_key: [u8; 32]) -> &mut Self {
-        self.provider_pub_key = Some(provider_pub_key);
         self
     }
 
@@ -392,7 +385,6 @@ where
 pub trait RequiredStorageProviderSetup {
     fn setup(
         &mut self,
-        keystore: KeystorePtr,
         storage_path: Option<String>,
         max_storage_capacity: Option<MaxStorageCapacity>,
     );
@@ -405,12 +397,9 @@ where
 {
     fn setup(
         &mut self,
-        keystore: KeystorePtr,
         storage_path: Option<String>,
         max_storage_capacity: Option<MaxStorageCapacity>,
     ) {
-        let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-        self.with_provider_pub_key(caller_pub_key);
         self.setup_storage_layer(storage_path);
         if max_storage_capacity.is_none() {
             panic!("Max storage capacity not set");
@@ -426,18 +415,17 @@ where
 {
     fn setup(
         &mut self,
-        keystore: KeystorePtr,
         storage_path: Option<String>,
         max_storage_capacity: Option<MaxStorageCapacity>,
     ) {
-        let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-        self.with_provider_pub_key(caller_pub_key);
+        if storage_path.is_none() {
+            panic!("Storage path not set");
+        }
         self.setup_storage_layer(storage_path);
-        if let Some(max_capacity) = max_storage_capacity {
-            self.with_max_storage_capacity(Some(max_capacity));
-        } else {
+        if max_storage_capacity.is_none() {
             panic!("Max storage capacity not set");
         }
+        self.with_max_storage_capacity(max_storage_capacity);
     }
 }
 
@@ -448,12 +436,9 @@ where
 {
     fn setup(
         &mut self,
-        keystore: KeystorePtr,
         storage_path: Option<String>,
         max_storage_capacity: Option<MaxStorageCapacity>,
     ) {
-        let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-        self.with_provider_pub_key(caller_pub_key);
         if storage_path.is_none() {
             panic!("Storage path not set");
         }
@@ -472,12 +457,9 @@ where
 {
     fn setup(
         &mut self,
-        keystore: KeystorePtr,
         storage_path: Option<String>,
         max_storage_capacity: Option<MaxStorageCapacity>,
     ) {
-        let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-        self.with_provider_pub_key(caller_pub_key);
         if storage_path.is_none() {
             panic!("Storage path not set");
         }
@@ -496,7 +478,6 @@ where
 {
     fn setup(
         &mut self,
-        _keystore: KeystorePtr,
         _storage_path: Option<String>,
         _max_storage_capacity: Option<MaxStorageCapacity>,
     ) {

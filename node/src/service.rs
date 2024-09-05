@@ -207,10 +207,14 @@ where
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>,
 {
     match provider_options {
-        Some(ProviderOptions { storage_path, .. }) => {
+        Some(ProviderOptions {
+            storage_path,
+            max_storage_capacity,
+            ..
+        }) => {
             info!(
-                "Starting as a Storage Provider. Storage path: {:?}",
-                storage_path
+                "Starting as a Storage Provider. Storage path: {:?}, Max storage capacity: {:?}",
+                storage_path, max_storage_capacity
             );
 
             // Start building the StorageHubHandler, if running as a provider.
@@ -230,17 +234,7 @@ where
                 )
                 .await;
 
-            storage_hub_builder.setup(
-                keystore.clone(),
-                storage_path.clone(),
-                match provider_options {
-                    Some(ProviderOptions {
-                        max_storage_capacity,
-                        ..
-                    }) => Some(*max_storage_capacity),
-                    None => None,
-                },
-            );
+            storage_hub_builder.setup(storage_path.clone(), *max_storage_capacity);
 
             let rpc_config = storage_hub_builder.create_rpc_config(keystore);
 

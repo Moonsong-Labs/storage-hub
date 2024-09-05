@@ -30,7 +30,7 @@ pub struct ProviderOptions {
     /// RocksDB Path.
     pub storage_path: Option<String>,
     /// Maximum storage capacity of the Storage Provider (bytes).
-    pub max_storage_capacity: MaxStorageCapacity,
+    pub max_storage_capacity: Option<MaxStorageCapacity>,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
