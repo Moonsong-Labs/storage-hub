@@ -1613,7 +1613,7 @@ mod bsp_volunteer {
                 // Dispatch BSP volunteer.
                 assert_noop!(
                     FileSystem::bsp_volunteer(bsp_signed.clone(), file_key),
-                    Error::<Test>::InsufficientCapacity
+                    Error::<Test>::InsufficientAvailableCapacity
                 );
             });
         }
@@ -2049,7 +2049,7 @@ mod bsp_confirm {
                         non_inclusion_forest_proof,
                         file_keys_and_proofs,
                     ),
-                    Error::<Test>::InsufficientCapacity
+                    Error::<Test>::InsufficientAvailableCapacity
                 );
             });
         }

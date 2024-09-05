@@ -4588,7 +4588,7 @@ declare module "@polkadot/types/lookup" {
     readonly isBspAlreadyConfirmed: boolean;
     readonly isStorageRequestBspsRequiredFulfilled: boolean;
     readonly isBspAlreadyVolunteered: boolean;
-    readonly isInsufficientCapacity: boolean;
+    readonly isInsufficientAvailableCapacity: boolean;
     readonly isUnexpectedNumberOfRemovedVolunteeredBsps: boolean;
     readonly isStorageRequestExpiredNoSlotAvailable: boolean;
     readonly isStorageRequestNotAuthorized: boolean;
@@ -4634,7 +4634,7 @@ declare module "@polkadot/types/lookup" {
       | "BspAlreadyConfirmed"
       | "StorageRequestBspsRequiredFulfilled"
       | "BspAlreadyVolunteered"
-      | "InsufficientCapacity"
+      | "InsufficientAvailableCapacity"
       | "UnexpectedNumberOfRemovedVolunteeredBsps"
       | "StorageRequestExpiredNoSlotAvailable"
       | "StorageRequestNotAuthorized"

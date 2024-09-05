@@ -109,11 +109,6 @@ describeBspNet("BSPNet: Validating max storage", {only: true},  ({ before, it, c
       "AcceptedBspVolunteer",
       await api.query.system.events()
     );
-
-    // const [eventInfo, _eventError] = fetchEventData(api.events.system.ExtrinsicFailed, events);
-
-    // assert.strictEqual(eventInfo.asModule.index.toNumber(), 41); // FileSystem
-    // assert.strictEqual(eventInfo.asModule.error.toHex(), "0x0b000000"); // InsufficientCapacity
   });
 
   it("Total capacity updated when single BSP capacity updated", async () => {

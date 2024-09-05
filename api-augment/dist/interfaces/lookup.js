@@ -3880,7 +3880,7 @@ export default {
       "BspAlreadyConfirmed",
       "StorageRequestBspsRequiredFulfilled",
       "BspAlreadyVolunteered",
-      "InsufficientCapacity",
+      "InsufficientAvailableCapacity",
       "UnexpectedNumberOfRemovedVolunteeredBsps",
       "StorageRequestExpiredNoSlotAvailable",
       "StorageRequestNotAuthorized",

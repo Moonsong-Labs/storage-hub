@@ -434,7 +434,7 @@ where
         // Check if the BSP has enough capacity to store the file.
         ensure!(
             available_capacity > storage_request_metadata.size,
-            Error::<T>::InsufficientCapacity
+            Error::<T>::InsufficientAvailableCapacity
         );
 
         // Check if the BSP is already volunteered for this storage request.
@@ -573,7 +573,7 @@ where
             // Check if the BSP has enough capacity to store the file.
             ensure!(
                 available_capacity > storage_request_metadata.size,
-                Error::<T>::InsufficientCapacity
+                Error::<T>::InsufficientAvailableCapacity
             );
 
             // Increment the number of bsps confirmed.

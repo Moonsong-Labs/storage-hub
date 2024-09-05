@@ -521,7 +521,7 @@ pub mod pallet {
         /// BSP already volunteered to store the given file.
         BspAlreadyVolunteered,
         /// BSP does not have enough storage capacity to store the file.
-        InsufficientCapacity,
+        InsufficientAvailableCapacity,
         /// Number of removed BSPs volunteered from storage request prefix did not match the expected number.
         UnexpectedNumberOfRemovedVolunteeredBsps,
         /// No slot available found in blocks to insert storage request expiration time.
