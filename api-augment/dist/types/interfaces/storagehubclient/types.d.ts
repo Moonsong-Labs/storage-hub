@@ -31,7 +31,8 @@ export interface GetBspInfoError extends Enum {
 /** @name GetChallengePeriodError */
 export interface GetChallengePeriodError extends Enum {
   readonly isProviderNotRegistered: boolean;
-  readonly type: "ProviderNotRegistered";
+  readonly isInternalApiError: boolean;
+  readonly type: "ProviderNotRegistered" | "InternalApiError";
 }
 /** @name GetChallengeSeedError */
 export interface GetChallengeSeedError extends Enum {

@@ -29,7 +29,8 @@ use pallet_file_system_runtime_api::{
 };
 use pallet_payment_streams_runtime_api::{GetUsersWithDebtOverThresholdError, PaymentStreamsApi};
 use pallet_proofs_dealer_runtime_api::{
-    GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError, ProofsDealerApi,
+    GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+    ProofsDealerApi,
 };
 use shc_common::types::{BlockNumber, ParachainClient, ProviderId};
 
@@ -127,8 +128,7 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
         let block_import_notification_stream = self.actor.client.import_notification_stream();
 
         // Block import notification stream to be notified of every imported block.
-        let every_block_import_notification_stream =
-            self.actor.client.every_import_notification_stream();
+        let every_block_import_notification_stream = self.actor.client.import_notification_stream();
 
         // Finality notification stream to be notified of blocks being finalised.
         let finality_notification_stream = self.actor.client.finality_notification_stream();
@@ -441,6 +441,46 @@ impl Actor for BlockchainService {
                         }
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send last tick provider submitted proof: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryChallengePeriod {
+                    provider_id,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let challenge_period = self
+                        .client
+                        .runtime_api()
+                        .get_challenge_period(current_block_hash, &provider_id)
+                        .unwrap_or_else(|_| {
+                            error!(target: LOG_TARGET, "Failed to query challenge period for provider [{:?}]", provider_id);
+                            Err(GetChallengePeriodError::InternalApiError)
+                        });
+
+                    match callback.send(challenge_period) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Challenge period sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send challenge period: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryNextChallengeTickForProvider {
+                    provider_id,
+                    callback,
+                } => {
+                    let next_challenge_tick =
+                        self.get_next_challenge_tick_for_provider(&provider_id);
+
+                    match callback.send(next_challenge_tick) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Next challenge tick sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send next challenge tick: {:?}", e);
                         }
                     }
                 }
