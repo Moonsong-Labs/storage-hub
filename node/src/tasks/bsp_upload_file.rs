@@ -543,7 +543,7 @@ where
 
             // Skip volunteering if the new available capacity is still less than the file size.
             if available_capacity < event.size {
-                let err_msg = "Failed to increase storage capacity to the required amount to volunteer for storage request.";
+                let err_msg = "Increased storage capacity is still insufficient to volunteer for file. Skipping volunteering.";
                 warn!(
                     target: LOG_TARGET, "{}", err_msg
                 );
@@ -641,7 +641,7 @@ where
         let bytes_to_add = jumps * jump_capacity;
         let required_capacity = current_capacity.checked_add(bytes_to_add).ok_or_else(|| {
             anyhow::anyhow!(
-                "Reached maximum storage capacity limit. Unable to add more more storage capacity."
+                "Reached maximum storage capacity limit. Skipping volunteering for file."
             )
         })?;
 
@@ -651,6 +651,7 @@ where
             .max_storage_capacity;
 
         let new_capacity = std::cmp::min(required_capacity, max_storage_capacity);
+
         Ok(new_capacity)
     }
 

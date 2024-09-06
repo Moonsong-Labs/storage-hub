@@ -243,6 +243,8 @@ export type TestOptions = {
    * - "multi": Runs tests with both initialised and non-initialised network configurations
    */
   initialised?: boolean | "multi";
+  /** Set a custom capacity for the BSP */
+  capacity?: bigint;
 };
 
 /**
