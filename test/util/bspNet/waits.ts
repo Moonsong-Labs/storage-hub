@@ -1,28 +1,81 @@
+import type { ApiPromise } from "@polkadot/api";
 import { assertEventPresent, assertExtrinsicPresent } from "../asserts";
 import { sleep } from "../timer";
-import type { BspNetApi } from "./types";
-import { sealBlock } from "./helpers";
+import { sealBlock } from "./block";
+import invariant from "tiny-invariant";
 
-export const waitForBspVolunteer = async (api: BspNetApi) => {
-  // To allow node to react
-  await sleep(500);
-  await assertExtrinsicPresent(api, {
-    module: "fileSystem",
-    method: "bspVolunteer",
-    checkTxPool: true
-  });
+/**
+ * Waits for a BSP to volunteer for a storage request.
+ *
+ * This function performs the following steps:
+ * 1. Waits for a short period to allow the node to react.
+ * 2. Checks for the presence of a 'bspVolunteer' extrinsic in the transaction pool.
+ * 3. Seals a block and verifies the presence of an 'AcceptedBspVolunteer' event.
+ *
+ * @param api - The ApiPromise instance to interact with the blockchain.
+ * @returns A Promise that resolves when a BSP has volunteered and been accepted.
+ *
+ * @throws Will throw an error if the expected extrinsic or event is not found.
+ */
+export const waitForBspVolunteer = async (api: ApiPromise) => {
+  const iterations = 41;
+  const delay = 50;
+
+  // To allow node time to react on chain events
+  for (let i = 0; i < iterations; i++) {
+    try {
+      await sleep(delay);
+      await assertExtrinsicPresent(api, {
+        module: "fileSystem",
+        method: "bspVolunteer",
+        checkTxPool: true
+      });
+    } catch {
+      invariant(
+        i < iterations - 1,
+        `Failed to detect BSP volunteer extrinsic in txPool after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+
   const { events } = await sealBlock(api);
   assertEventPresent(api, "fileSystem", "AcceptedBspVolunteer", events);
 };
 
-export const waitForBspStored = async (api: BspNetApi) => {
-  // To allow for local file transfer
-  await sleep(5000);
-  await assertExtrinsicPresent(api, {
-    module: "fileSystem",
-    method: "bspConfirmStoring",
-    checkTxPool: true
-  });
-  const { events } = await api.sealBlock();
+/**
+ * Waits for a BSP to confirm storing a file.
+ *
+ * This function performs the following steps:
+ * 1. Waits for a longer period to allow for local file transfer.
+ * 2. Checks for the presence of a 'bspConfirmStoring' extrinsic in the transaction pool.
+ * 3. Seals a block and verifies the presence of a 'BspConfirmedStoring' event.
+ *
+ * @param api - The ApiPromise instance to interact with the blockchain.
+ * @returns A Promise that resolves when a BSP has confirmed storing a file.
+ *
+ * @throws Will throw an error if the expected extrinsic or event is not found.
+ */
+export const waitForBspStored = async (api: ApiPromise) => {
+  const iterations = 41;
+  const delay = 50;
+  // To allow time for local file transfer to complete
+  for (let i = 0; i < iterations; i++) {
+    try {
+      await sleep(delay);
+      await assertExtrinsicPresent(api, {
+        module: "fileSystem",
+        method: "bspConfirmStoring",
+        checkTxPool: true
+      });
+      break;
+    } catch {
+      invariant(
+        i < iterations - 1,
+        `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+
+  const { events } = await sealBlock(api);
   assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
 };

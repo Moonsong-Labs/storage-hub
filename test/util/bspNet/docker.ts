@@ -3,9 +3,9 @@ import { execSync } from "node:child_process";
 import path from "node:path";
 import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
-import { createApiObject } from "./api";
-import type { BspNetApi } from "./types";
-import { checkNodeAlive } from "./helpers";
+import * as NodeBspNet from "./node";
+import { BspNetTestApi } from "./test-api";
+import invariant from "tiny-invariant";
 
 export const checkBspForFile = async (filePath: string) => {
   const containerId = "docker-sh-bsp-1";
@@ -20,7 +20,7 @@ export const checkBspForFile = async (filePath: string) => {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   }
-  throw new Error(`File not found: ${loc} in ${containerId}`);
+  throw `File not found: ${loc} in ${containerId}`;
 };
 
 export const checkFileChecksum = async (filePath: string) => {
@@ -56,9 +56,8 @@ export const addBspContainer = async (options?: {
 
   const bspNum = existingBsps.length;
 
-  if (bspNum < 1) {
-    throw new Error("No existing BSP containers");
-  }
+  invariant(bspNum > 0, "No existing BSP containers");
+
   const p2pPort = 30350 + bspNum;
   const rpcPort = 9977 + bspNum * 7;
   const containerName = options?.name || `docker-sh-bsp-${bspNum + 1}`;
@@ -68,9 +67,7 @@ export const addBspContainer = async (options?: {
 
   const bootNodeArg = Args.find((arg) => arg.includes("--bootnodes="));
 
-  if (!bootNodeArg) {
-    throw new Error("No bootnode found in docker args");
-  }
+  invariant(bootNodeArg, "No bootnode found in docker args");
 
   let keystorePath: string;
   const keystoreArg = Args.find((arg) => arg.includes("--keystore-path="));
@@ -124,18 +121,16 @@ export const addBspContainer = async (options?: {
     }
   }
 
-  if (!peerId) {
-    console.error("Failed to connect after 10s. Exiting...");
-    throw new Error("Failed to connect to the new BSP container");
-  }
+  invariant(peerId, "Failed to connect after 10s. Exiting...");
 
-  const api = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
+  const api = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
 
   const chainName = api.consts.system.version.specName.toString();
-  if (chainName !== "storage-hub-runtime") {
-    console.log(chainName);
-    throw new Error(`Error connecting to BSP via api ${containerName}`);
-  }
+
+  invariant(
+    chainName === "storage-hub-runtime",
+    `Error connecting to BSP via api ${containerName}`
+  );
 
   await api.disconnect();
 
@@ -153,48 +148,74 @@ export const pauseBspContainer = async (containerName: string) => {
   await container.pause();
 };
 
-export const stopBspContainer = async (options: { containerName: string; api: BspNetApi }) => {
-  await options.api.disconnect();
+export const stopBspContainer = async (containerName: string) => {
   const docker = new Docker();
-  const container = docker.getContainer(options.containerName);
-  await container.stop();
+  const containersToStop = await docker.listContainers({
+    filters: { name: [containerName] }
+  });
+
+  await docker.getContainer(containersToStop[0].Id).stop();
+  await docker.getContainer(containersToStop[0].Id).remove({ force: true });
 };
 
 export const startBspContainer = async (options: {
   containerName: string;
-  endpoint?: string;
 }) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
   await container.start();
-
-  if (options.endpoint) {
-    await checkNodeAlive(options.endpoint);
-    return await createApiObject(options.endpoint);
-  }
-
-  return undefined;
 };
 
 export const restartBspContainer = async (options: {
   containerName: string;
-  api: BspNetApi;
-  endpoint?: string;
 }) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
   await container.restart();
-
-  return options.endpoint ? await createApiObject(options.endpoint) : undefined;
 };
 
 export const resumeBspContainer = async (options: {
   containerName: string;
-  endpoint?: string;
 }) => {
   const docker = new Docker();
   const container = docker.getContainer(options.containerName);
   await container.unpause();
+};
 
-  return options.endpoint ? await createApiObject(options.endpoint) : undefined;
+export const dropAllTransactionsGlobally = async () => {
+  const docker = new Docker();
+
+  const containersToStop = await docker.listContainers({
+    filters: { ancestor: ["storage-hub:local"] }
+  });
+
+  for (const container of containersToStop) {
+    const publicPort = container.Ports.filter(
+      ({ IP, PrivatePort }) => IP === "0.0.0.0" && PrivatePort === 9944
+    )[0].PublicPort;
+    const endpoint: `ws://${string}` = `ws://127.0.0.1:${publicPort}`;
+    await using api = await BspNetTestApi.connect(endpoint);
+    try {
+      await NodeBspNet.dropTransaction(api);
+    } catch {
+      console.log(`Error dropping txn from ${container.Id}, continuing...`);
+    }
+  }
+};
+
+export const dropTransactionGlobally = async (options: { module: string; method: string }) => {
+  const docker = new Docker();
+
+  const containersToStop = await docker.listContainers({
+    filters: { ancestor: ["storage-hub:local"] }
+  });
+
+  for (const container of containersToStop) {
+    const publicPort = container.Ports.filter(
+      ({ IP, PrivatePort }) => IP === "0.0.0.0" && PrivatePort === 9944
+    )[0].PublicPort;
+    const endpoint: `ws://${string}` = `ws://127.0.0.1:${publicPort}`;
+    await using api = await BspNetTestApi.connect(endpoint);
+    await NodeBspNet.dropTransaction(api, { module: options.module, method: options.method });
+  }
 };
