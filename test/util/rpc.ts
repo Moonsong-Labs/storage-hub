@@ -1,3 +1,5 @@
+import invariant from "tiny-invariant";
+
 export const sendCustomRpc = async (url: string, method: string, params = [], verbose = false) => {
   const maxRetries = 60;
   const sleepTime = 500;
@@ -21,9 +23,8 @@ export const sendCustomRpc = async (url: string, method: string, params = [], ve
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      invariant(response.ok, `HTTP error! status: ${response.status}`);
+
       const resp = (await response.json()) as any;
       return resp.result as string;
     } catch {
@@ -36,5 +37,5 @@ export const sendCustomRpc = async (url: string, method: string, params = [], ve
       (maxRetries * sleepTime) / 1000
     } seconds`
   );
-  throw new Error(`Error sending custom RPC to ${url}`);
+  throw `Error sending custom RPC to ${url}`;
 };
