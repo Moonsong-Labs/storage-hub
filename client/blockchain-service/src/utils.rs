@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
 use frame_support::{StorageHasher, Twox128};
 use lazy_static::lazy_static;
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, trace, warn};
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetLastTickProviderSubmittedProofError,
     ProofsDealerApi,
@@ -34,7 +34,7 @@ use crate::{
         ProcessConfirmStoringRequestData, ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
     },
     handler::LOG_TARGET,
-    state::{LastProcessedBlockNumberCf, OngoingForestWriteLockTaskDataCf},
+    state::OngoingProcessConfirmStoringRequestCf,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{EventsVec, Extrinsic},
     BlockchainService,
@@ -375,6 +375,7 @@ impl BlockchainService {
         provider_id: &ProviderId,
         current_tick: &BlockNumber,
     ) -> bool {
+        // Get the last tick for which the BSP submitted a proof.
         let last_tick_provided = match self
             .client
             .runtime_api()
@@ -402,6 +403,8 @@ impl BlockchainService {
                 return false;
             }
         };
+
+        // Get the challenge period for the provider.
         let provider_challenge_period = match self
             .client
             .runtime_api()
@@ -414,6 +417,10 @@ impl BlockchainService {
                         debug!(target: LOG_TARGET, "Provider [{:?}] is not registered", provider_id);
                         return false;
                     }
+                    GetChallengePeriodError::InternalApiError => {
+                        error!(target: LOG_TARGET, "This should be impossible, we just checked the API error. \nInternal API error while getting challenge period for Provider [{:?}]", provider_id);
+                        return false;
+                    }
                 },
             },
             Err(e) => {
@@ -421,7 +428,18 @@ impl BlockchainService {
                 return false;
             }
         };
-        current_tick == &last_tick_provided.saturating_add(provider_challenge_period)
+
+        // Check if the current tick is a tick this provider should submit a proof for.
+        let current_tick_minus_last_submission = match current_tick.checked_sub(last_tick_provided)
+        {
+            Some(tick) => tick,
+            None => {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Current tick is smaller than the last tick this provider submitted a proof for. This should not happen. \nThis is a bug. Please report it to the StorageHub team.");
+                return false;
+            }
+        };
+
+        (current_tick_minus_last_submission % provider_challenge_period) == 0
     }
 
     /// Check if there are any pending requests to update the forest root on the runtime, and process them.
@@ -442,7 +460,7 @@ impl BlockchainService {
                     trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
-                        .access_value(&OngoingForestWriteLockTaskDataCf)
+                        .access_value(&OngoingProcessConfirmStoringRequestCf)
                         .delete();
                     state_store_context.commit();
                 }
@@ -450,7 +468,7 @@ impl BlockchainService {
                     error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
-                        .access_value(&OngoingForestWriteLockTaskDataCf)
+                        .access_value(&OngoingProcessConfirmStoringRequestCf)
                         .delete();
                     state_store_context.commit();
                 }
@@ -461,21 +479,41 @@ impl BlockchainService {
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         let mut next_event_data = None;
 
-        // If we have a submit proof request, prioritize it.
-        if let Some(request) = state_store_context
-            .pending_submit_proof_request_deque()
-            .pop_front()
-        {
-            next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
-                ProcessSubmitProofRequestData {
-                    seed: request.seed,
-                    provider_id: request.provider_id,
-                    tick: request.tick,
-                    forest_challenges: request.forest_challenges,
-                    checkpoint_challenges: request.checkpoint_challenges,
-                },
-            ));
-        } else {
+        // If we have a submit proof request, prioritise it.
+        while let Some(request) = self.pending_submit_proof_requests.pop_first() {
+            // Check if the proof is still the next one to be submitted.
+            let provider_id = request.provider_id;
+            let next_challenge_tick = match self.get_next_challenge_tick_for_provider(&provider_id)
+            {
+                Ok(next_challenge_tick) => next_challenge_tick,
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Failed to get next challenge tick for provider [{:?}]: {:?}", provider_id, e);
+                    break;
+                }
+            };
+
+            // Thi is to avoid starting a new task if the proof is not the next one to be submitted.
+            if next_challenge_tick == request.tick {
+                // If the proof is still the next one to be submitted, we can process it.
+                next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
+                    ProcessSubmitProofRequestData {
+                        seed: request.seed,
+                        provider_id: request.provider_id,
+                        tick: request.tick,
+                        forest_challenges: request.forest_challenges,
+                        checkpoint_challenges: request.checkpoint_challenges,
+                    },
+                ));
+                break;
+            } else {
+                // If the proof is not the next one to be submitted, we can remove it from the list of pending submit proof requests.
+                trace!(target: LOG_TARGET, "Proof for tick [{:?}] is not the next one to be submitted. Removing it from the list of pending submit proof requests.", request.tick);
+                self.pending_submit_proof_requests.remove(&request);
+            }
+        }
+
+        // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
+        if next_event_data.is_none() {
             let max_batch_confirm =
                 <<Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests as Get<
                     u32,
@@ -504,11 +542,6 @@ impl BlockchainService {
                 );
             }
         }
-        if let Some(event_data) = &next_event_data {
-            state_store_context
-                .access_value(&OngoingForestWriteLockTaskDataCf)
-                .write(event_data);
-        }
         state_store_context.commit();
 
         if let Some(event_data) = next_event_data {
@@ -519,6 +552,17 @@ impl BlockchainService {
     pub(crate) fn emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData>) {
         let (tx, rx) = tokio::sync::oneshot::channel();
         self.forest_root_write_lock = Some(rx);
+
+        let data = data.into();
+
+        // If this is a confirm storing request, we need to store it in the state store.
+        if let ForestWriteLockTaskData::ConfirmStoringRequest(data) = &data {
+            let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+            state_store_context
+                .access_value(&OngoingProcessConfirmStoringRequestCf)
+                .write(data);
+            state_store_context.commit();
+        }
 
         // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
         // T so that we can keep using the current actors event bus (emit) which requires Clone on the
@@ -541,15 +585,14 @@ impl BlockchainService {
         }
     }
 
-    /// Emits `NewChallengeSeed` events for all the pending proof submissions for this provider.
+    /// Emits a `MultipleNewChallengeSeeds` event with all the pending proof submissions for this provider.
     /// This is used to catch up to the latest proof submissions that were missed due to a node restart.
     /// Also, it can help to catch up to proofs in case there is a change in the BSP's stake (therefore
     /// also a change in it's challenge period).
     ///
-    /// IMPORTANT: This function assumes that the current block will be
-    #[allow(dead_code)] // TODO: Remove this when finally used.
+    /// IMPORTANT: This function takes into account whether a proof should be submitted for the current tick.
     pub(crate) fn proof_submission_catch_up(
-        &mut self,
+        &self,
         current_block_hash: &H256,
         provider_id: &ProviderId,
     ) {
@@ -581,6 +624,7 @@ impl BlockchainService {
                 return;
             }
         };
+        trace!(target: LOG_TARGET, "Last tick Provider [{:?}] submitted a proof for: {}", provider_id, last_tick_provider_submitted_proof);
 
         // Get the current challenge period for this provider.
         let challenge_period = match self
@@ -593,6 +637,10 @@ impl BlockchainService {
                 Err(e) => match e {
                     GetChallengePeriodError::ProviderNotRegistered => {
                         debug!(target: LOG_TARGET, "Provider [{:?}] is not registered", provider_id);
+                        return;
+                    }
+                    GetChallengePeriodError::InternalApiError => {
+                        error!(target: LOG_TARGET, "This should be impossible, we just checked the API error. \nInternal API error while getting challenge period for Provider [{:?}]", provider_id);
                         return;
                     }
                 },
@@ -616,7 +664,7 @@ impl BlockchainService {
             }
         };
 
-        // Advance by `challenge_period` ticks and generate `NewChallengeSeed` events for the provider.
+        // Advance by `challenge_period` ticks and add the seed to the list of challenge seeds.
         let mut challenge_seeds = Vec::new();
         let mut next_challenge_tick = last_tick_provider_submitted_proof + challenge_period;
         while next_challenge_tick <= current_tick {
@@ -653,45 +701,91 @@ impl BlockchainService {
         }
 
         // Emit the `MultiNewChallengeSeeds` event.
-        self.emit(MultipleNewChallengeSeeds {
-            provider_id: *provider_id,
-            seeds: challenge_seeds,
-        });
+        if challenge_seeds.len() > 0 {
+            trace!(target: LOG_TARGET, "Emitting MultipleNewChallengeSeeds event for provider [{:?}] with challenge seeds: {:?}", provider_id, challenge_seeds);
+            self.emit(MultipleNewChallengeSeeds {
+                provider_id: *provider_id,
+                seeds: challenge_seeds,
+            });
+        }
     }
 
-    // TODO: Reconsider how to use this for catching up to unsubmitted storage proofs.
-    pub async fn catch_up_block_import(&mut self, current_block_number: &BlockNumber) {
-        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-        let latest_processed_block_number = match state_store_context
-            .access_value(&LastProcessedBlockNumberCf)
-            .read()
-        {
-            Some(block_number) => block_number,
-            None => {
-                info!(target: LOG_TARGET, "No last processed block number found in the state store, skipping catch-up.");
+    pub(crate) fn get_next_challenge_tick_for_provider(
+        &self,
+        provider_id: &ProviderId,
+    ) -> Result<BlockNumber> {
+        // Get the current block hash.
+        let current_block_hash = self.client.info().best_hash;
 
-                return;
+        // Get the last tick for which the provider submitted a proof.
+        let last_tick_provider_submitted_proof = match self
+            .client
+            .runtime_api()
+            .get_last_tick_provider_submitted_proof(current_block_hash, provider_id)
+        {
+            Ok(last_tick_provided_result) => match last_tick_provided_result {
+                Ok(last_tick_provided) => last_tick_provided,
+                Err(e) => match e {
+                    GetLastTickProviderSubmittedProofError::ProviderNotRegistered => {
+                        return Err(anyhow!("Provider [{:?}] is not registered", provider_id));
+                    }
+                    GetLastTickProviderSubmittedProofError::ProviderNeverSubmittedProof => {
+                        return Err(anyhow!(
+                            "Provider [{:?}] does not have an initialised challenge cycle",
+                            provider_id
+                        ));
+                    }
+                    GetLastTickProviderSubmittedProofError::InternalApiError => {
+                        return Err(anyhow!(
+                            "Internal API error while getting last tick Provider [{:?}] submitted a proof for: {:?}",
+                            provider_id, e
+                        ));
+                    }
+                },
+            },
+            Err(e) => {
+                return Err(anyhow!(
+                    "Runtime API error while getting last tick Provider [{:?}] submitted a proof for: {:?}",
+                    provider_id,
+                    e
+                ));
             }
         };
-        drop(state_store_context);
 
-        info!(target: LOG_TARGET, "Catching up from block #{} to block #{}", latest_processed_block_number, current_block_number);
+        // Get the challenge period for the provider.
+        let challenge_period = match self
+            .client
+            .runtime_api()
+            .get_challenge_period(current_block_hash, provider_id)
+        {
+            Ok(challenge_period_result) => match challenge_period_result {
+                Ok(challenge_period) => challenge_period,
+                Err(e) => match e {
+                    GetChallengePeriodError::ProviderNotRegistered => {
+                        return Err(anyhow!("Provider [{:?}] is not registered", provider_id));
+                    }
+                    GetChallengePeriodError::InternalApiError => {
+                        return Err(anyhow!(
+                            "Internal API error while getting challenge period for Provider [{:?}]",
+                            provider_id
+                        ));
+                    }
+                },
+            },
+            Err(e) => {
+                return Err(anyhow!(
+                    "Runtime API error while getting challenge period for Provider [{:?}]: {:?}",
+                    provider_id,
+                    e
+                ));
+            }
+        };
 
-        for block_number in latest_processed_block_number..=*current_block_number {
-            let block_hash = match self.client.hash(block_number.into()) {
-                Ok(Some(hash)) => hash,
-                Ok(None) => {
-                    error!(target: LOG_TARGET, "Block #{} not found.", block_number);
-                    continue;
-                }
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Error fetching block hash for block #{}: {:?}", block_number, e);
-                    continue;
-                }
-            };
+        // Calculate the next challenge tick.
+        let next_challenge_tick = last_tick_provider_submitted_proof + challenge_period;
 
-            self.process_block_import(&block_hash, &block_number).await;
-        }
+        // Check if the current tick is a tick this provider should submit a proof for.
+        Ok(next_challenge_tick)
     }
 }
 

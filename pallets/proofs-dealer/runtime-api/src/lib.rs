@@ -58,6 +58,7 @@ pub enum GetChallengeSeedError {
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum GetChallengePeriodError {
     ProviderNotRegistered,
+    InternalApiError,
 }
 
 /// Error type for the `get_next_deadline_tick` runtime API call.

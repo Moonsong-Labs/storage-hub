@@ -11,7 +11,7 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
-    handler::ConfirmStoringRequest,
+    types::ConfirmStoringRequest,
 };
 use shc_common::types::{
     FileKey, FileMetadata, HashT, StorageProofsMerkleTrieLayout, StorageProviderId,
