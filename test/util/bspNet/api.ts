@@ -1,16 +1,22 @@
 import "@storagehub/types-bundle";
 import { ApiPromise, WsProvider } from "@polkadot/api";
-import type { BspNetApi } from "./types";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
-import type { ISubmittableResult } from "@polkadot/types/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import { advanceToBlock, createBucket, sealBlock, sendNewStorageRequest } from "./helpers";
-import { assertEventPresent } from "../asserts";
 import type { EventRecord } from "@polkadot/types/interfaces";
+import type { ISubmittableResult } from "@polkadot/types/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
+import { assertEventPresent } from "../asserts";
+import { createBucket, sendNewStorageRequest } from "./fileHelpers";
+import type { BspNetApi } from "./types";
+import { advanceToBlock, sealBlock } from "./block";
 
-//TODO: Maybe make this a resource?
-export const createApiObject = async (uri: string): Promise<BspNetApi> => {
+/**
+ * DEPRECATED: Use BspNetTestApi.create() instead
+ *
+ */
+export const createApiObject = async (
+  uri: `ws://${string}` | `wss://${string}`
+): Promise<BspNetApi> => {
   const baseApi = await ApiPromise.create({
     provider: new WsProvider(uri),
     noInitWarn: true,

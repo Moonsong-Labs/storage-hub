@@ -1,23 +1,9 @@
-import "@storagehub/api-augment";
-import { strictEqual, notEqual } from "node:assert";
-import {
-  DUMMY_MSP_ID,
-  NODE_INFOS,
-  TEST_ARTEFACTS,
-  createApiObject,
-  fetchEventData,
-  shUser,
-  checkFileChecksum,
-  type BspNetApi,
-  sleep,
-  describeBspNet
-} from "../../../util";
-import { assert } from "node:console";
-import { Option } from "@polkadot/types";
+import assert, { notEqual, strictEqual } from "node:assert";
+import { describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
 
 describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
-  let userApi: BspNetApi;
-  let bspApi: BspNetApi;
+  let userApi: EnrichedBspApi;
+  let bspApi: EnrichedBspApi;
 
   before(async () => {
     userApi = await createUserApi();
@@ -26,12 +12,10 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
   it("Network launches and can be queried", async () => {
     const userNodePeerId = await userApi.rpc.system.localPeerId();
-    strictEqual(userNodePeerId.toString(), NODE_INFOS.user.expectedPeerId);
+    strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
-    const bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
     const bspNodePeerId = await bspApi.rpc.system.localPeerId();
-    await bspApi.disconnect();
-    strictEqual(bspNodePeerId.toString(), NODE_INFOS.bsp.expectedPeerId);
+    strictEqual(bspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.bsp.expectedPeerId);
   });
 
   it("file is finger printed correctly", async () => {
@@ -51,13 +35,13 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
-        NODE_INFOS.user.AddressId,
+        userApi.shConsts.NODE_INFOS.user.AddressId,
         newBucketEventDataBlob.bucketId
       );
 
     strictEqual(location.toHuman(), destination);
-    strictEqual(fingerprint.toString(), TEST_ARTEFACTS[source].fingerprint);
-    strictEqual(file_size.toBigInt(), TEST_ARTEFACTS[source].size);
+    strictEqual(fingerprint.toString(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);
+    strictEqual(file_size.toBigInt(), userApi.shConsts.TEST_ARTEFACTS[source].size);
   });
 
   it("issueStorageRequest sent correctly", async () => {
@@ -77,10 +61,10 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       userApi.tx.fileSystem.issueStorageRequest(
         newBucketEventDataBlob.bucketId,
         destination,
-        TEST_ARTEFACTS["res/smile.jpg"].fingerprint,
-        TEST_ARTEFACTS["res/smile.jpg"].size,
-        DUMMY_MSP_ID,
-        [NODE_INFOS.user.expectedPeerId]
+        userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].fingerprint,
+        userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size,
+        userApi.shConsts.DUMMY_MSP_ID,
+        [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
       ),
       shUser
     );
@@ -98,12 +82,15 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       throw new Error("Event doesn't match Type");
     }
 
-    strictEqual(dataBlob.who.toString(), NODE_INFOS.user.AddressId);
+    strictEqual(dataBlob.who.toString(), userApi.shConsts.NODE_INFOS.user.AddressId);
     strictEqual(dataBlob.location.toHuman(), destination);
-    strictEqual(dataBlob.fingerprint.toString(), TEST_ARTEFACTS["res/smile.jpg"].fingerprint);
-    strictEqual(dataBlob.size_.toBigInt(), TEST_ARTEFACTS["res/smile.jpg"].size);
+    strictEqual(
+      dataBlob.fingerprint.toString(),
+      userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].fingerprint
+    );
+    strictEqual(dataBlob.size_.toBigInt(), userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size);
     strictEqual(dataBlob.peerIds.length, 1);
-    strictEqual(dataBlob.peerIds[0].toHuman(), NODE_INFOS.user.expectedPeerId);
+    strictEqual(dataBlob.peerIds[0].toHuman(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
   });
 
   it("bsp volunteers when issueStorageRequest sent", async () => {
@@ -130,7 +117,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
-        NODE_INFOS.user.AddressId,
+        userApi.shConsts.NODE_INFOS.user.AddressId,
         newBucketEventDataBlob.bucketId
       );
 
@@ -140,8 +127,8 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
         location,
         fingerprint,
         file_size,
-        DUMMY_MSP_ID,
-        [NODE_INFOS.user.expectedPeerId]
+        userApi.shConsts.DUMMY_MSP_ID,
+        [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
       ),
       shUser
     );
@@ -155,17 +142,21 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     );
 
     await userApi.sealBlock();
-    const [resBspId, resBucketId, resLoc, resFinger, resMulti, _, resSize] = fetchEventData(
-      userApi.events.fileSystem.AcceptedBspVolunteer,
-      await userApi.query.system.events()
-    );
+    const [resBspId, resBucketId, resLoc, resFinger, resMulti, _, resSize] =
+      userApi.assert.fetchEventData(
+        userApi.events.fileSystem.AcceptedBspVolunteer,
+        await userApi.query.system.events()
+      );
 
-    strictEqual(resBspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
+    strictEqual(resBspId.toHuman(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);
     strictEqual(resBucketId.toString(), newBucketEventDataBlob.bucketId.toString());
     strictEqual(resLoc.toHuman(), destination);
     strictEqual(resFinger.toString(), fingerprint.toString());
     strictEqual(resMulti.length, 1);
-    strictEqual((resMulti[0].toHuman() as string).includes(NODE_INFOS.bsp.expectedPeerId), true);
+    strictEqual(
+      (resMulti[0].toHuman() as string).includes(userApi.shConsts.NODE_INFOS.bsp.expectedPeerId),
+      true
+    );
     strictEqual(resSize.toBigInt(), file_size.toBigInt());
 
     await sleep(5000); // wait for the bsp to download the file
@@ -178,12 +169,12 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
     await userApi.sealBlock();
     const [_bspConfirmRes_who, bspConfirmRes_bspId, bspConfirmRes_fileKeys, bspConfirmRes_newRoot] =
-      fetchEventData(
+      userApi.assert.fetchEventData(
         userApi.events.fileSystem.BspConfirmedStoring,
         await userApi.query.system.events()
       );
 
-    strictEqual(bspConfirmRes_bspId.toHuman(), TEST_ARTEFACTS[source].fingerprint);
+    strictEqual(bspConfirmRes_bspId.toHuman(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);
 
     await sleep(1000); // wait for the bsp to process the BspConfirmedStoring event
     const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot(null);
@@ -197,15 +188,15 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
         "/storage/test/whatsup.jpg"
       );
       assert(saveFileToDisk.isSuccess);
-      const sha = await checkFileChecksum("test/whatsup.jpg");
-      strictEqual(sha, TEST_ARTEFACTS["res/whatsup.jpg"].checksum);
+      const sha = await userApi.docker.checkFileChecksum("test/whatsup.jpg");
+      strictEqual(sha, userApi.shConsts.TEST_ARTEFACTS["res/whatsup.jpg"].checksum);
     });
   });
 });
 
 describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserApi, it }) => {
-  let userApi: BspNetApi;
-  let bspApi: BspNetApi;
+  let userApi: EnrichedBspApi;
+  let bspApi: EnrichedBspApi;
 
   before(async () => {
     userApi = await createUserApi();
@@ -231,7 +222,7 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
         await userApi.rpc.storagehubclient.loadFileInStorage(
           source[i],
           destination[i],
-          NODE_INFOS.user.AddressId,
+          userApi.shConsts.NODE_INFOS.user.AddressId,
           newBucketEventDataBlob.bucketId
         );
 
@@ -241,8 +232,8 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
           location,
           fingerprint,
           file_size,
-          DUMMY_MSP_ID,
-          [NODE_INFOS.user.expectedPeerId]
+          userApi.shConsts.DUMMY_MSP_ID,
+          [userApi.shConsts.NODE_INFOS.user.expectedPeerId]
         )
       );
     }
@@ -273,7 +264,7 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
       _bspConfirmRes_bspId,
       bspConfirmRes_fileKeys,
       bspConfirmRes_newRoot
-    ] = fetchEventData(
+    ] = userApi.assert.fetchEventData(
       userApi.events.fileSystem.BspConfirmedStoring,
       await userApi.query.system.events()
     );
@@ -305,7 +296,7 @@ describeBspNet("Multiple BSPs volunteer ", ({ before, createBspApi, createUserAp
       _bspConfirm2Res_bspId,
       bspConfirm2Res_fileKeys,
       bspConfirm2Res_newRoot
-    ] = fetchEventData(
+    ] = userApi.assert.fetchEventData(
       userApi.events.fileSystem.BspConfirmedStoring,
       await userApi.query.system.events()
     );

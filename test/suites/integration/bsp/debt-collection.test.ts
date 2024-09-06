@@ -2,31 +2,30 @@ import "@storagehub/api-augment";
 import assert, { strictEqual } from "node:assert";
 import { after } from "node:test";
 import {
-  createApiObject,
-  type BspNetApi,
   describeBspNet,
-  DUMMY_BSP_ID,
   sleep,
   assertEventMany,
-  fetchEventData
+  fetchEventData,
+  ShConsts,
+  type EnrichedBspApi
 } from "../../../util";
 
 describeBspNet(
   "BSPNet: Collect users debt",
   { initialised: "multi", networkConfig: "standard" },
-  ({ before, it, createUserApi, createBspApi, getLaunchResponse }) => {
-    let userApi: BspNetApi;
-    let bspApi: BspNetApi;
-    let bspTwoApi: BspNetApi;
-    let bspThreeApi: BspNetApi;
+  ({ before, it, createUserApi, createBspApi, getLaunchResponse, createApi }) => {
+    let userApi: EnrichedBspApi;
+    let bspApi: EnrichedBspApi;
+    let bspTwoApi: EnrichedBspApi;
+    let bspThreeApi: EnrichedBspApi;
 
     before(async () => {
       const launchResponse = await getLaunchResponse();
       assert(launchResponse, "BSPNet failed to initialise");
       userApi = await createUserApi();
       bspApi = await createBspApi();
-      bspTwoApi = await createApiObject(`ws://127.0.0.1:${launchResponse?.bspTwoRpcPort}`);
-      bspThreeApi = await createApiObject(`ws://127.0.0.1:${launchResponse?.bspThreeRpcPort}`);
+      bspTwoApi = await createApi(`ws://127.0.0.1:${launchResponse?.bspTwoRpcPort}`);
+      bspThreeApi = await createApi(`ws://127.0.0.1:${launchResponse?.bspThreeRpcPort}`);
     });
 
     after(async () => {
@@ -39,7 +38,7 @@ describeBspNet(
       const alice = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
       const createDynamicRatePaymentStreamResult = await userApi.sealBlock(
         userApi.tx.sudo.sudo(
-          userApi.tx.paymentStreams.createDynamicRatePaymentStream(DUMMY_BSP_ID, alice, 100)
+          userApi.tx.paymentStreams.createDynamicRatePaymentStream(ShConsts.DUMMY_BSP_ID, alice, 100)
         )
       );
 
@@ -58,12 +57,14 @@ describeBspNet(
 
       // Assert that the information on-chain is correct
       strictEqual(userAccount.toString(), alice);
-      strictEqual(providerId.toString(), DUMMY_BSP_ID.toString());
+      strictEqual(providerId.toString(), ShConsts.DUMMY_BSP_ID.toString());
       strictEqual(amountProvided.toNumber(), 100);
 
       // Make sure the payment stream between Alice and the DUMMY_BSP_ID actually exists
       const paymentStreamExistsResult =
-        await userApi.call.paymentStreamsApi.getUsersOfPaymentStreamsOfProvider(DUMMY_BSP_ID);
+        await userApi.call.paymentStreamsApi.getUsersOfPaymentStreamsOfProvider(
+          ShConsts.DUMMY_BSP_ID
+        );
       // Check if the first element of the returned vector is alice
       assert(paymentStreamExistsResult[0].toString() === alice);
       assert(paymentStreamExistsResult.length === 1);
@@ -73,7 +74,7 @@ describeBspNet(
 
       // Check if Alice owes the provider.
       let usersWithDebtResult = await bspApi.call.paymentStreamsApi.getUsersWithDebtOverThreshold(
-        DUMMY_BSP_ID,
+        ShConsts.DUMMY_BSP_ID,
         0
       );
       assert(usersWithDebtResult.isOk);
@@ -87,13 +88,15 @@ describeBspNet(
       // since they all have the same file they were initialised with, and responded to it at
       // the same time.
       // We first get the last tick for which the BSP submitted a proof.
-      const lastTickResult =
-        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(DUMMY_BSP_ID);
+      const lastTickResult = await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+        ShConsts.DUMMY_BSP_ID
+      );
       assert(lastTickResult.isOk);
       const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
       // Then we get the challenge period for the BSP.
-      const challengePeriodResult =
-        await userApi.call.proofsDealerApi.getChallengePeriod(DUMMY_BSP_ID);
+      const challengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+        ShConsts.DUMMY_BSP_ID
+      );
       assert(challengePeriodResult.isOk);
       const challengePeriod = challengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
@@ -153,7 +156,9 @@ describeBspNet(
       );
 
       // Check that the last chargeable info of the dummy BSP has not been updated yet
-      let lastChargeableInfo = await userApi.query.paymentStreams.lastChargeableInfo(DUMMY_BSP_ID);
+      let lastChargeableInfo = await userApi.query.paymentStreams.lastChargeableInfo(
+        ShConsts.DUMMY_BSP_ID
+      );
       assert(lastChargeableInfo.priceIndex.toNumber() === 0);
 
       // Seal one more block to update the last chargeable info of the Provider
@@ -173,11 +178,13 @@ describeBspNet(
       );
 
       // Check the last chargeable info of the dummy BSP
-      lastChargeableInfo = await userApi.query.paymentStreams.lastChargeableInfo(DUMMY_BSP_ID);
+      lastChargeableInfo = await userApi.query.paymentStreams.lastChargeableInfo(
+        ShConsts.DUMMY_BSP_ID
+      );
 
       // Check the info of the payment stream between Alice and the DUMMY_BSP_ID
       const paymentStreamInfo = await userApi.query.paymentStreams.dynamicRatePaymentStreams(
-        DUMMY_BSP_ID,
+        ShConsts.DUMMY_BSP_ID,
         alice
       );
 
@@ -189,7 +196,7 @@ describeBspNet(
 
       // Check that Alice now owes the provider.
       usersWithDebtResult = await userApi.call.paymentStreamsApi.getUsersWithDebtOverThreshold(
-        DUMMY_BSP_ID,
+        ShConsts.DUMMY_BSP_ID,
         1
       );
       assert(usersWithDebtResult.isOk);
