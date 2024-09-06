@@ -1,14 +1,14 @@
+import { EventEmitter } from "node:events";
 import { after, before, describe, it } from "node:test";
-import { createApiObject } from "./api";
-import { NODE_INFOS } from "./consts";
 import {
   cleardownTest,
   runInitialisedBspsNet,
   runMultipleInitialisedBspsNet,
   runSimpleBspNet
 } from "./helpers";
-import type { BspNetApi, BspNetConfig, BspNetContext, TestOptions } from "./types";
-import { EventEmitter } from "node:events";
+import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
+import type { BspNetConfig, BspNetContext, TestOptions } from "./types";
+import * as ShConsts from "./consts";
 
 export const launchEventEmitter = new EventEmitter();
 
@@ -51,8 +51,8 @@ export async function describeBspNet<
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
     describeFunc(`BSPNet: ${title} (${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
-      let userApiPromise: Promise<BspNetApi>;
-      let bspApiPromise: Promise<BspNetApi>;
+      let userApiPromise: Promise<EnrichedBspApi>;
+      let bspApiPromise: Promise<EnrichedBspApi>;
       let responseListenerPromise: ReturnType<typeof launchNetwork>;
 
       before(async () => {
@@ -63,8 +63,9 @@ export async function describeBspNet<
         // Launch the network
         const launchResponse = await launchNetwork(bspNetConfig, options?.initialised);
         launchEventEmitter.emit("networkLaunched", launchResponse);
-        userApiPromise = createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
-        bspApiPromise = createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
+
+        userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
+        bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
       });
 
       after(async () => {
@@ -88,6 +89,7 @@ export async function describeBspNet<
         it,
         createUserApi: () => userApiPromise,
         createBspApi: () => bspApiPromise,
+        createApi: (endpoint) => BspNetTestApi.create(endpoint),
         bspNetConfig,
         before,
         after,

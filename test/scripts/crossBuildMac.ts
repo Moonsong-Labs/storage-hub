@@ -22,7 +22,7 @@ async function main() {
       name: "wrongArch",
       message:
         "⚠️ This script is intended for Apple Silicon devices ⚠️\nℹ️ You can probably just run 'cargo build --release' to build the node.\n Are you sure you want to crossbuild?",
-      default: false
+      default: true
     });
     if (!wrongArch) {
       return;

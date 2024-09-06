@@ -9,15 +9,13 @@ async function main() {
     return;
   }
 
-  const { proceed } = await inquirer.prompt([
-    {
-      type: "confirm",
-      name: "proceed",
-      default: false,
-      message:
-        "⚠️ Local StorageHub nodes are already running on this machine.\n Are you sure you would like to proceed (may give inconsistent behaviour)?"
-    }
-  ]);
+  const { proceed } = await inquirer.prompt({
+    type: "confirm",
+    name: "proceed",
+    default: false,
+    message:
+      "⚠️ Local StorageHub nodes are already running on this machine.\n Are you sure you would like to proceed (may give inconsistent behaviour)?"
+  });
 
   if (!proceed) {
     process.exit(2);
