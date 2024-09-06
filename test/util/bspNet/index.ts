@@ -1,4 +1,4 @@
-export * from "./consts";
+export * as ShConsts from "./consts";
 export * from "./types";
 export * from "./helpers";
 export * from "./api";

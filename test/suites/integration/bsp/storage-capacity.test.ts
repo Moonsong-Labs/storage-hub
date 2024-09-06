@@ -22,7 +22,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     assert.strictEqual(extSuccess, false);
 
     await api.block.skip(20);
-    const [eventInfo, _eventError] = api.assert.fetchEvent(
+    const [eventInfo, _eventError] = api.assert.fetchEventData(
       api.events.system.ExtrinsicFailed,
       events
     );
@@ -106,7 +106,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
 
     const { events, extSuccess } = await api.sealBlock(api.tx.providers.changeCapacity(2n), bspKey);
     assert.strictEqual(extSuccess, false);
-    const [eventInfo, _eventError] = api.assert.fetchEvent(
+    const [eventInfo, _eventError] = api.assert.fetchEventData(
       api.events.system.ExtrinsicFailed,
       events
     );

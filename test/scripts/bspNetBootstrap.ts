@@ -2,11 +2,11 @@ import {
   BspNetTestApi,
   registerToxics,
   runSimpleBspNet,
-  ShConsts,
   type BspNetConfig,
   type EnrichedBspApi,
   type ToxicInfo
 } from "../util";
+import * as ShConsts from "../util/bspNet/consts";
 
 let api: EnrichedBspApi | undefined;
 const bspNetConfig: BspNetConfig = {

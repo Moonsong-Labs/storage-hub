@@ -32,7 +32,7 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi,
     );
 
     const [_currentTick, nextChallengeDeadline1, _provider, _maybeProviderAccount] =
-      api.assert.fetchEvent(
+      api.assert.fetchEventData(
         api.events.proofsDealer.NewChallengeCycleInitialised,
         await api.query.system.events()
       );

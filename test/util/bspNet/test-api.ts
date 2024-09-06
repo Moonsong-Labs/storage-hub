@@ -6,14 +6,16 @@ import type { EventRecord } from "@polkadot/types/interfaces";
 import type { ISubmittableResult } from "@polkadot/types/types";
 import type { HexString } from "@polkadot/util/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
-import { Assertions, type AssertExtrinsicOptions } from "../asserts";
-import { BspNetBlock, sealBlock } from "./block";
-import { ShConsts } from "./consts";
-import { DockerBspNet } from "./docker";
-import { Files } from "./fileHelpers";
-import { NodeBspNet } from "./node";
+import type { AssertExtrinsicOptions } from "../asserts";
+import * as Assertions from "../asserts";
+import * as BspNetBlock from "./block";
+import { sealBlock } from "./block";
+import * as ShConsts from "./consts";
+import * as DockerBspNet from "./docker";
+import * as Files from "./fileHelpers";
+import * as NodeBspNet from "./node";
 import type { BspNetApi, SealBlockOptions } from "./types";
-import { Waits } from "./waits";
+import * as Waits from "./waits";
 
 /**
  * Represents an enhanced API for interacting with StorageHub BSPNet.
@@ -103,15 +105,15 @@ export class BspNetTestApi implements AsyncDisposable {
   }
 
   private async sendNewStorageRequest(source: string, location: string, bucketName: string) {
-    return Files.newStorageRequest(this._api, source, location, bucketName);
+    return Files.sendNewStorageRequest(this._api, source, location, bucketName);
   }
 
   private async createBucket(bucketName: string) {
-    return Files.newBucket(this._api, bucketName);
+    return Files.createBucket(this._api, bucketName);
   }
 
   private assertEvent(module: string, method: string, events?: EventRecord[]) {
-    return Assertions.eventPresent(this._api, module, method, events);
+    return Assertions.assertEventPresent(this._api, module, method, events);
   }
 
   /**
@@ -152,7 +154,7 @@ export class BspNetTestApi implements AsyncDisposable {
       waitForBspProofs?: string[];
     }
   ) {
-    return BspNetBlock.skipTo(
+    return BspNetBlock.advanceToBlock(
       this._api,
       blockNumber,
       options?.waitBetweenBlocks,
@@ -171,7 +173,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns The matching event and its data.
        */
       eventPresent: (module: string, method: string, events?: EventRecord[]) =>
-        Assertions.eventPresent(this._api, module, method, events),
+        Assertions.assertEventPresent(this._api, module, method, events),
       /**
        * Asserts that multiple instances of a specific event are present.
        * @param module - The module name of the event.
@@ -180,20 +182,21 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns An array of matching events and their data.
        */
       eventMany: (module: string, method: string, events?: EventRecord[]) =>
-        Assertions.eventMany(this._api, module, method, events),
+        Assertions.assertEventMany(this._api, module, method, events),
       /**
        * Asserts that a specific extrinsic is present in the transaction pool or recent blocks.
        * @param options - Options specifying the extrinsic to search for.
        * @returns An array of matching extrinsics.
        */
       extrinsicPresent: (options: AssertExtrinsicOptions) =>
-        Assertions.extrinsicPresent(this._api, options),
+        Assertions.assertExtrinsicPresent(this._api, options),
       /**
        * Asserts that a specific provider has been slashed.
        * @param providerId - The ID of the provider to check.
        * @returns A boolean indicating whether the provider was slashed.
        */
-      providerSlashed: (providerId: string) => Assertions.providerSlashed(this._api, providerId)
+      providerSlashed: (providerId: string) =>
+        Assertions.checkProviderWasSlashed(this._api, providerId)
     };
 
     /**
@@ -206,13 +209,13 @@ export class BspNetTestApi implements AsyncDisposable {
        * Waits for a BSP to volunteer for a storage request.
        * @returns A promise that resolves when a BSP has volunteered.
        */
-      bspVolunteer: () => Waits.bspVolunteer(this._api),
+      bspVolunteer: () => Waits.waitForBspVolunteer(this._api),
 
       /**
        * Waits for a BSP to confirm storing a file.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: () => Waits.bspStored(this._api)
+      bspStored: () => Waits.waitForBspStored(this._api)
     };
 
     const remappedFileNs = {
@@ -223,7 +226,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param bucketName - The name of the bucket to be created.
        * @returns A promise that resolves to a new bucket event.
        */
-      newBucket: (bucketName: string) => Files.newBucket(this._api, bucketName),
+      newBucket: (bucketName: string) => Files.createBucket(this._api, bucketName),
       /**
        * Creates a new bucket and submits a new storage request.
        *
@@ -233,7 +236,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves to file metadata.
        */
       newStorageRequest: (source: string, location: string, bucketName: string) =>
-        Files.newStorageRequest(this._api, source, location, bucketName)
+        Files.sendNewStorageRequest(this._api, source, location, bucketName)
     };
 
     /**
@@ -248,7 +251,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves to a SealedBlock object.
        */
       seal: (options?: SealBlockOptions) =>
-        BspNetBlock.seal(this._api, options?.calls, options?.signer, options?.finaliseBlock),
+        BspNetBlock.sealBlock(this._api, options?.calls, options?.signer, options?.finaliseBlock),
       /**
        * Seal blocks until the next challenge period block.
        * It will verify that the SlashableProvider event is emitted and check if the provider is slashable with an additional failed challenge deadline.
@@ -257,14 +260,14 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when the challenge period block is reached.
        */
       skipToChallengePeriod: (nextChallengeTick: number, provider: string) =>
-        BspNetBlock.skipToChallengePeriod(this._api, nextChallengeTick, provider),
+        BspNetBlock.runToNextChallengePeriodBlock(this._api, nextChallengeTick, provider),
       /**
        * Skips a specified number of blocks.
        * Note: This skips too quickly for nodes to BSPs to react. Use skipTo where reaction extrinsics are required.
        * @param blocksToAdvance - The number of blocks to skip.
        * @returns A promise that resolves when the specified number of blocks have been skipped.
        */
-      skip: (blocksToAdvance: number) => BspNetBlock.skip(this._api, blocksToAdvance),
+      skip: (blocksToAdvance: number) => BspNetBlock.skipBlocks(this._api, blocksToAdvance),
       /**
        * Advances the chain to a specific block number.
        * @param blockNumber - The target block number to advance to.
@@ -275,7 +278,7 @@ export class BspNetTestApi implements AsyncDisposable {
         blockNumber: number,
         options?: { waitBetweenBlocks?: number | boolean; waitForBspProofs?: string[] }
       ) =>
-        BspNetBlock.skipTo(
+        BspNetBlock.advanceToBlock(
           this._api,
           blockNumber,
           options?.waitBetweenBlocks,
@@ -286,13 +289,13 @@ export class BspNetTestApi implements AsyncDisposable {
        * Skips blocks until the minimum time for capacity changes is reached.
        * @returns A promise that resolves when the minimum change time is reached.
        */
-      skipToMinChangeTime: () => BspNetBlock.skipToMinChangeTime(this._api),
+      skipToMinChangeTime: () => BspNetBlock.skipBlocksToMinChangeTime(this._api),
       /**
        * Causes a chain re-org by creating a finalized block on top of the parent block.
        * Note: This requires the head block to be unfinalized, otherwise it will throw!
        * @returns A promise that resolves when the chain re-org is complete.
        */
-      reOrg: () => BspNetBlock.reOrg(this._api)
+      reOrg: () => BspNetBlock.reOrgBlocks(this._api)
     };
 
     const remappedNodeNs = {
@@ -306,7 +309,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param sealAfter - Whether to seal a block after dropping the transaction(s). Defaults to false.
        */
       dropTxn: (extrinsic?: { module: string; method: string } | HexString, sealAfter = false) =>
-        NodeBspNet.dropTxn(this._api, extrinsic, sealAfter)
+        NodeBspNet.dropTransaction(this._api, extrinsic, sealAfter)
     };
 
     const remappedDockerNs = {

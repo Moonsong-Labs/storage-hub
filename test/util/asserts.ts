@@ -184,11 +184,3 @@ export async function checkProviderWasSlashed(api: ApiPromise, providerId: strin
 
   invariant(provider.toString() === providerId, `Provider ${providerId} was not slashed`);
 }
-
-export namespace Assertions {
-  export const eventPresent = assertEventPresent;
-  export const eventMany = assertEventMany;
-  export const fetchEvent = fetchEventData;
-  export const extrinsicPresent = assertExtrinsicPresent;
-  export const providerSlashed = checkProviderWasSlashed;
-}

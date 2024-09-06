@@ -12,9 +12,9 @@ import type { KeyringPair } from "@polkadot/keyring/types";
 import { alice } from "../pjsKeyring";
 import { isExtSuccess } from "../extrinsics";
 import { sleep } from "../timer";
-import { ShConsts } from "./consts";
+import * as ShConsts from "./consts";
 import assert, { strictEqual } from "node:assert";
-import { Assertions } from "../asserts";
+import * as Assertions from "../asserts";
 import invariant from "tiny-invariant";
 
 export interface SealedBlock {
@@ -185,7 +185,7 @@ export async function runToNextChallengePeriodBlock(
   // Assert that the SlashableProvider event is emitted.
   const blockResult = await sealBlock(api);
 
-  const [_provider, nextChallengeDeadline] = Assertions.fetchEvent(
+  const [_provider, nextChallengeDeadline] = Assertions.fetchEventData(
     api.events.proofsDealer.SlashableProvider,
     blockResult.events
   );
@@ -327,23 +327,4 @@ export async function reOrgBlocks(api: ApiPromise): Promise<void> {
     throw "Cannot reorg a finalised block";
   }
   await api.rpc.engine.createBlock(true, true, finalisedHash);
-}
-
-/**
- * Namespace containing block-related operations for the BSP network.
- *
- * This namespace provides a convenient interface to access various block manipulation
- * and interaction functions. It's designed to be used as part of the enhanced BSP API,
- * offering a cohesive set of tools for block-level operations in testing scenarios.
- */
-export namespace BspNetBlock {
-  export const seal = sealBlock;
-  export const skip = skipBlocks;
-  /**
-   * @see {@link advanceToBlock}
-   */
-  export const skipTo = advanceToBlock;
-  export const skipToMinChangeTime = skipBlocksToMinChangeTime;
-  export const skipToChallengePeriod = runToNextChallengePeriodBlock;
-  export const reOrg = reOrgBlocks;
 }

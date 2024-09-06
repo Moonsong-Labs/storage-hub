@@ -79,17 +79,3 @@ export const waitForBspStored = async (api: ApiPromise) => {
   const { events } = await sealBlock(api);
   assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
 };
-
-/**
- * Namespace containing wait functions for BSP-related events.
- *
- * This namespace provides a convenient interface to access various wait functions
- * related to BSP operations. It's designed to be used as part of the enhanced BSP API,
- * offering a cohesive set of tools for managing asynchronous operations in testing scenarios.
- */
-export namespace Waits {
-  /**  * @see {@link waitForBspVolunteer} for waiting on BSP volunteer events */
-  export const bspVolunteer = waitForBspVolunteer;
-  /** * @see {@link waitForBspStored} for waiting on BSP storage confirmation events */
-  export const bspStored = waitForBspStored;
-}

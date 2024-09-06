@@ -59,7 +59,7 @@ describeBspNet(
 
     it("BSP fails to submit proof and is marked as slashable", async () => {
       // Stop BSP.
-      await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.bsp.containerName);
+      await userApi.docker.pauseBspContainer(userApi.shConsts.NODE_INFOS.bsp.containerName);
 
       // Calculate the next deadline tick for the BSP. That is `ChallengeTicksTolerance`
       // after the next challenge tick for this BSP.
@@ -110,7 +110,7 @@ describeBspNet(
       },
       async () => {
         // Resume BSP.
-        await userApi.docker.resumeContainer({
+        await userApi.docker.resumeBspContainer({
           containerName: userApi.shConsts.NODE_INFOS.bsp.containerName
         });
 

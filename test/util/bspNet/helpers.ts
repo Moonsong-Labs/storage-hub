@@ -19,7 +19,7 @@ import {
   bspTwoSeed,
   shUser
 } from "../pjsKeyring";
-import { ShConsts } from "./consts.ts";
+import * as ShConsts from "./consts.ts";
 import { addBspContainer, showContainers } from "./docker";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api.ts";
 import type { BspNetConfig, InitialisedMultiBspNetwork } from "./types";
@@ -348,7 +348,7 @@ export const runMultipleInitialisedBspsNet = async (
     await userApi.wait.bspStored();
 
     // Stopping BSP that is supposed to be down.
-    await userApi.docker.stopContainer(bspDownContainerName);
+    await userApi.docker.stopBspContainer(bspDownContainerName);
 
     return {
       bspTwoRpcPort,

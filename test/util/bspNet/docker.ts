@@ -3,7 +3,7 @@ import { execSync } from "node:child_process";
 import path from "node:path";
 import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
-import { NodeBspNet } from "./node";
+import * as NodeBspNet from "./node";
 import { BspNetTestApi } from "./test-api";
 import invariant from "tiny-invariant";
 
@@ -196,7 +196,7 @@ export const dropAllTransactionsGlobally = async () => {
     const endpoint: `ws://${string}` = `ws://127.0.0.1:${publicPort}`;
     await using api = await BspNetTestApi.connect(endpoint);
     try {
-      await NodeBspNet.dropTxn(api);
+      await NodeBspNet.dropTransaction(api);
     } catch {
       console.log(`Error dropping txn from ${container.Id}, continuing...`);
     }
@@ -216,20 +216,6 @@ export const dropTransactionGlobally = async (options: { module: string; method:
     )[0].PublicPort;
     const endpoint: `ws://${string}` = `ws://127.0.0.1:${publicPort}`;
     await using api = await BspNetTestApi.connect(endpoint);
-    await NodeBspNet.dropTxn(api, { module: options.module, method: options.method });
+    await NodeBspNet.dropTransaction(api, { module: options.module, method: options.method });
   }
 };
-
-export namespace DockerBspNet {
-  export const checkForFile = checkBspForFile;
-  export const checksum = checkFileChecksum;
-  export const lsContainers = showContainers;
-  export const addContainer = addBspContainer;
-  export const pauseContainer = pauseBspContainer;
-  export const stopContainer = stopBspContainer;
-  export const startContainer = startBspContainer;
-  export const restartContainer = restartBspContainer;
-  export const resumeContainer = resumeBspContainer;
-  export const dropAllTxns = dropAllTransactionsGlobally;
-  export const dropTxn = dropTransactionGlobally;
-}

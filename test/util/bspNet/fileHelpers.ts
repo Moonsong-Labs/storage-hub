@@ -2,7 +2,7 @@ import type { ApiPromise } from "@polkadot/api";
 import type { FileMetadata } from "./types";
 import { assertEventPresent } from "../asserts";
 import { shUser } from "../pjsKeyring";
-import { ShConsts } from "./consts";
+import * as ShConsts from "./consts";
 import { sealBlock } from "./block";
 import invariant from "tiny-invariant";
 
@@ -70,8 +70,3 @@ export const createBucket = async (api: ApiPromise, bucketName: string) => {
 
   return event;
 };
-
-export namespace Files {
-  export const newStorageRequest = sendNewStorageRequest;
-  export const newBucket = createBucket;
-}

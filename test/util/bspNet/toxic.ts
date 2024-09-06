@@ -1,4 +1,4 @@
-import { ShConsts } from "./consts";
+import * as ShConsts from "./consts";
 import type { ToxicInfo } from "./types";
 
 export const registerToxic = async (toxicDef: ToxicInfo) => {
