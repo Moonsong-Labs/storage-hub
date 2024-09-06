@@ -1,5 +1,12 @@
 import assert from "node:assert";
-import {bspKey, describeBspNet, type EnrichedBspApi, ferdie, skipBlocksToMinChangeTime, sleep} from "../../../util";
+import {
+  bspKey,
+  describeBspNet,
+  type EnrichedBspApi,
+  ferdie,
+  skipBlocksToMinChangeTime,
+  sleep
+} from "../../../util";
 
 describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi }) => {
   let api: EnrichedBspApi;
@@ -61,7 +68,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
 
     //To allow for BSP to react to request
     await sleep(500);
-  
+
     // Skip block height until BSP sends a call to change capacity.
     await skipBlocksToMinChangeTime(api);
     // Allow BSP enough time to send call to change capacity.
