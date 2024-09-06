@@ -531,8 +531,6 @@ pub mod pallet {
         NotAMsp,
         /// Account is not a SP.
         NotASp,
-        /// Account is not a SP.
-        NotASp,
         /// BSP has not volunteered to store the given file.
         BspNotVolunteered,
         /// BSP has not confirmed storing the given file.
