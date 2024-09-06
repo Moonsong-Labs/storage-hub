@@ -82,3 +82,5 @@ export const CAPACITY = {
   512: CAPACITY_512,
   1024: CAPACITY_1024
 } as const;
+
+export const MAX_STORAGE_CAPACITY = 1024n * 1024n * 1024n - 1n;

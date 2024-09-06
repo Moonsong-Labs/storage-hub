@@ -75,7 +75,7 @@ Now, navigate to the `/test` directory and run:
 pnpm typegen
 ```
 
-From there you should be able to see the new RPC in your tests for the `BspNetApi` object.
+From there you should be able to see the new RPC in your tests for the `EnrichedBspApi` object.
 
 > [!TIP]
 > If the TS is still yelling at you with red squiggles, use command pallete to restart language server.

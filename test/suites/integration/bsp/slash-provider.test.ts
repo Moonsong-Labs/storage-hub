@@ -1,17 +1,8 @@
-import "@storagehub/api-augment";
-import { sleep } from "@zombienet/utils";
-import { strictEqual } from "node:assert";
-import {
-  type BspNetApi,
-  createApiObject,
-  describeBspNet,
-  DUMMY_BSP_ID,
-  fetchEventData,
-  NODE_INFOS
-} from "../../../util";
+import {strictEqual} from "node:assert";
+import {describeBspNet, type EnrichedBspApi, sleep} from "../../../util";
 
-describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, it }) => {
-  let api: BspNetApi;
+describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, createBspApi, it }) => {
+  let api: EnrichedBspApi;
 
   before(async () => {
     api = await createUserApi();
@@ -19,18 +10,18 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, it }) => {
 
   it("Network launches and can be queried", async () => {
     const userNodePeerId = await api.rpc.system.localPeerId();
-    strictEqual(userNodePeerId.toString(), NODE_INFOS.user.expectedPeerId);
+    strictEqual(userNodePeerId.toString(), api.shConsts.NODE_INFOS.user.expectedPeerId);
 
-    const bspApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.bsp.port}`);
+    const bspApi = await createBspApi();
     const bspNodePeerId = await bspApi.rpc.system.localPeerId();
     await bspApi.disconnect();
-    strictEqual(bspNodePeerId.toString(), NODE_INFOS.bsp.expectedPeerId);
+    strictEqual(bspNodePeerId.toString(), api.shConsts.NODE_INFOS.bsp.expectedPeerId);
   });
 
   it("Slash provider when SlashableProvider event processed", async () => {
     // Force initialise challenge cycle of Provider.
     const initialiseChallengeCycleResult = await api.sealBlock(
-      api.tx.sudo.sudo(api.tx.proofsDealer.forceInitialiseChallengeCycle(DUMMY_BSP_ID))
+      api.tx.sudo.sudo(api.tx.proofsDealer.forceInitialiseChallengeCycle(api.shConsts.DUMMY_BSP_ID))
     );
 
     // Assert that event for challenge cycle initialisation is emitted.
@@ -40,89 +31,34 @@ describeBspNet("BSPNet: Slash Provider", ({ before, createUserApi, it }) => {
       initialiseChallengeCycleResult.events
     );
 
-    const [_currentTick, nextChallengeDeadline1, _provider, _maybeProviderAccount] = fetchEventData(
-      api.events.proofsDealer.NewChallengeCycleInitialised,
-      await api.query.system.events()
-    );
+    const [_currentTick, nextChallengeDeadline1, _provider, _maybeProviderAccount] =
+      api.assert.fetchEventData(
+        api.events.proofsDealer.NewChallengeCycleInitialised,
+        await api.query.system.events()
+      );
 
-    const nextChallengeDeadline2 = await runToNextChallengePeriodBlock(
-      api,
+    const nextChallengeDeadline2 = await api.block.skipToChallengePeriod(
       nextChallengeDeadline1.toNumber(),
-      DUMMY_BSP_ID
+      api.shConsts.DUMMY_BSP_ID
     );
 
-    await checkProviderWasSlashed(api, DUMMY_BSP_ID);
+    // Wait for provider to be slashed.
+    await sleep(500);
+    await api.block.seal();
+    await api.assert.providerSlashed(api.shConsts.DUMMY_BSP_ID);
 
     // Check that the provider is no longer slashable.
-    const slashableProvidersAfterSlash =
-      await api.query.proofsDealer.slashableProviders(DUMMY_BSP_ID);
+    const slashableProvidersAfterSlash = await api.query.proofsDealer.slashableProviders(
+      api.shConsts.DUMMY_BSP_ID
+    );
     strictEqual(slashableProvidersAfterSlash.isNone, true);
 
     // Simulate 2 failed challenge periods
-    await runToNextChallengePeriodBlock(api, nextChallengeDeadline2, DUMMY_BSP_ID);
+    await api.block.skipToChallengePeriod(nextChallengeDeadline2, api.shConsts.DUMMY_BSP_ID);
 
-    await checkProviderWasSlashed(api, DUMMY_BSP_ID);
+    // Wait for provider to be slashed.
+    await sleep(500);
+    await api.block.seal();
+    await api.assert.providerSlashed(api.shConsts.DUMMY_BSP_ID);
   });
 });
-
-/**
- * Wait some time before sealing a block and checking if the provider was slashed.
- * @param api
- * @param providerId
- */
-async function checkProviderWasSlashed(api: BspNetApi, providerId: string) {
-  // Wait for provider to be slashed.
-  await sleep(500);
-  await api.sealBlock();
-
-  const [provider, _amountSlashed] = fetchEventData(
-    api.events.providers.Slashed,
-    await api.query.system.events()
-  );
-
-  strictEqual(provider.toString(), providerId);
-}
-
-/**
- * Seal blocks until the next challenge period block.
- *
- * It will verify that the SlashableProvider event is emitted and check if the provider is slashable with an additional failed challenge deadline.
- * @param api
- * @param nextChallengeTick
- * @param provider
- */
-async function runToNextChallengePeriodBlock(
-  api: BspNetApi,
-  nextChallengeTick: number,
-  provider: string
-): Promise<number> {
-  // Assert that challengeTickToChallengedProviders contains an entry for the challenged provider
-  const challengeTickToChallengedProviders =
-    await api.query.proofsDealer.challengeTickToChallengedProviders(nextChallengeTick, provider);
-  strictEqual(challengeTickToChallengedProviders.isSome, true);
-
-  const blockNumber = await api.query.system.number();
-  for (let i = blockNumber.toNumber(); i < nextChallengeTick - 1; i++) {
-    await api.sealBlock();
-  }
-
-  const oldFailedSubmissionsCount = await api.query.proofsDealer.slashableProviders(provider);
-
-  // Assert that the SlashableProvider event is emitted.
-  const blockResult = await api.sealBlock();
-
-  const [_provider, nextChallengeDeadline] = fetchEventData(
-    api.events.proofsDealer.SlashableProvider,
-    blockResult.events
-  );
-
-  // Check provider is slashable for 1 additional failed submission.
-  const slashableProviders = await api.query.proofsDealer.slashableProviders(provider);
-  strictEqual(
-    slashableProviders.unwrap().toNumber(),
-    oldFailedSubmissionsCount.unwrapOrDefault().toNumber() +
-      api.consts.proofsDealer.randomChallengesPerBlock.toNumber()
-  );
-
-  return nextChallengeDeadline.toNumber();
-}

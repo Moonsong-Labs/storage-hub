@@ -65,6 +65,22 @@ pub struct SubmitProofRequest {
 
 impl SubmitProofRequest {
     pub fn new(
+        provider_id: ProviderId,
+        tick: BlockNumber,
+        seed: RandomnessOutput,
+        forest_challenges: Vec<H256>,
+        checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,
+    ) -> Self {
+        Self {
+            provider_id,
+            tick,
+            seed,
+            forest_challenges,
+            checkpoint_challenges,
+        }
+    }
+
+    pub fn new_from_event(
         new_challenge_seed_event: NewChallengeSeed,
         forest_challenges: Vec<H256>,
         checkpoint_challenges: Vec<(H256, Option<TrieRemoveMutation>)>,

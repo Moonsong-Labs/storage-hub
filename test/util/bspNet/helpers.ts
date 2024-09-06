@@ -1,26 +1,13 @@
-import type { ApiPromise } from "@polkadot/api";
-import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type {
-  CreatedBlock,
-  EventRecord,
-  H256,
-  Hash,
-  SignedBlock
-} from "@polkadot/types/interfaces";
-import type { ISubmittableResult } from "@polkadot/types/types";
 import "@storagehub/api-augment";
 import { v2 as compose } from "docker-compose";
 import Docker from "dockerode";
-import assert from "node:assert";
 import * as child_process from "node:child_process";
 import { execSync } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 import * as util from "node:util";
-import { assertEventPresent } from "../asserts.ts";
 import { DOCKER_IMAGE } from "../constants.ts";
-import { isExtSuccess } from "../extrinsics";
 import {
   alice,
   bspDownKey,
@@ -32,22 +19,12 @@ import {
   bspTwoSeed,
   shUser
 } from "../pjsKeyring";
-import { sleep } from "../timer.ts";
-import { createApiObject } from "./api";
-import {
-  BSP_DOWN_ID,
-  BSP_THREE_ID,
-  BSP_TWO_ID,
-  CAPACITY,
-  CAPACITY_512,
-  DUMMY_BSP_ID,
-  DUMMY_MSP_ID,
-  NODE_INFOS,
-  VALUE_PROP
-} from "./consts";
 import { addBspContainer, showContainers } from "./docker";
-import type { BspNetApi, BspNetConfig, FileMetadata, InitialisedMultiBspNetwork } from "./types";
-import { waitForBspStored, waitForBspVolunteer } from "./waits.ts";
+import type { BspNetConfig, InitialisedMultiBspNetwork } from "./types";
+import { CAPACITY, MAX_STORAGE_CAPACITY } from "./consts";
+import * as ShConsts from "./consts.ts";
+import { BspNetTestApi, type EnrichedBspApi } from "./test-api.ts";
+import invariant from "tiny-invariant";
 
 const exec = util.promisify(child_process.exec);
 
@@ -82,7 +59,7 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
     } seconds`
   );
   showContainers();
-  throw new Error("Error fetching container IP");
+  throw "Error fetching container IP";
 };
 
 export const checkNodeAlive = async (url: string, verbose = false) => getContainerIp(url, verbose);
@@ -109,9 +86,8 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      invariant(response.ok, `HTTP error! status: ${response.status}`);
+
       const resp = (await response.json()) as any;
       return resp.result as string;
     } catch {
@@ -121,11 +97,11 @@ export const getContainerPeerId = async (url: string, verbose = false) => {
 
   console.log(`Error fetching peerId from ${url} after ${(maxRetries * sleepTime) / 1000} seconds`);
   showContainers();
-  throw new Error(`Error fetching peerId from ${url}`);
+  throw `Error fetching peerId from ${url}`;
 };
 
 export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
-  let userApi: BspNetApi | undefined;
+  let userApi: EnrichedBspApi | undefined;
   try {
     console.log(`SH user id: ${shUser.address}`);
     console.log(`SH BSP id: ${bspKey.address}`);
@@ -145,7 +121,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
     await compose.upOne("sh-bsp", { config: composeFilePath, log: true });
 
     const bspIp = await getContainerIp(
-      bspNetConfig.noisy ? "toxiproxy" : NODE_INFOS.bsp.containerName
+      bspNetConfig.noisy ? "toxiproxy" : ShConsts.NODE_INFOS.bsp.containerName
     );
 
     if (bspNetConfig.noisy) {
@@ -154,7 +130,10 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
       console.log(`sh-bsp IP: ${bspIp}`);
     }
 
-    const bspPeerId = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.bsp.port}`, true);
+    const bspPeerId = await getContainerPeerId(
+      `http://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`,
+      true
+    );
     console.log(`sh-bsp Peer ID: ${bspPeerId}`);
 
     process.env.BSP_IP = bspIp;
@@ -170,13 +149,15 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
       }
     });
 
-    const peerIDUser = await getContainerPeerId(`http://127.0.0.1:${NODE_INFOS.user.port}`);
+    const peerIDUser = await getContainerPeerId(
+      `http://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`
+    );
     console.log(`sh-user Peer ID: ${peerIDUser}`);
 
     const multiAddressBsp = `/ip4/${bspIp}/tcp/30350/p2p/${bspPeerId}`;
 
     // Create Connection API Object to User Node
-    userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+    userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
     // Give Balances
     const amount = 10000n * 10n ** 12n;
@@ -188,7 +169,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
     );
 
     await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, U32_MAX, 1))
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, CAPACITY[1024], 1))
     );
 
     // Make BSP
@@ -196,8 +177,8 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
       api: userApi,
       who: bspKey.address,
       multiaddress: multiAddressBsp,
-      bspId: DUMMY_BSP_ID,
-      capacity: bspNetConfig.capacity || CAPACITY_512
+      bspId: ShConsts.DUMMY_BSP_ID,
+      capacity: bspNetConfig.capacity || ShConsts.CAPACITY_512
     });
 
     // Make MSP
@@ -205,11 +186,11 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
       userApi.tx.sudo.sudo(
         userApi.tx.providers.forceMspSignUp(
           alice.address,
-          DUMMY_MSP_ID,
-          bspNetConfig.capacity || CAPACITY_512,
+          ShConsts.DUMMY_MSP_ID,
+          bspNetConfig.capacity || ShConsts.CAPACITY_512,
           [multiAddressBsp],
           {
-            identifier: VALUE_PROP,
+            identifier: ShConsts.VALUE_PROP,
             dataLimit: 500,
             protocols: ["https", "ssh", "telnet"]
           },
@@ -225,7 +206,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
 };
 
 export const forceSignupBsp = async (options: {
-  api: BspNetApi;
+  api: EnrichedBspApi;
   multiaddress: string;
   who: string | Uint8Array;
   bspId?: string;
@@ -238,7 +219,7 @@ export const forceSignupBsp = async (options: {
       options.api.tx.providers.forceBspSignUp(
         options.who,
         bspId,
-        options.capacity || CAPACITY_512,
+        options.capacity || ShConsts.CAPACITY_512,
         [options.multiaddress],
         options.payeeAddress || options.who
       )
@@ -263,9 +244,9 @@ export const closeSimpleBspNet = async () => {
 export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
   await runSimpleBspNet(bspNetConfig);
 
-  let userApi: BspNetApi | undefined;
+  let userApi: EnrichedBspApi | undefined;
   try {
-    userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+    userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
     /**** CREATE BUCKET AND ISSUE STORAGE REQUEST ****/
     const source = "res/whatsup.jpg";
@@ -276,15 +257,13 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
     const newBucketEventDataBlob =
       userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-    if (!newBucketEventDataBlob) {
-      throw new Error("Event doesn't match Type");
-    }
+    invariant(newBucketEventDataBlob, "Event doesn't match Type");
 
     const { fingerprint, file_size, location } =
       await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
-        NODE_INFOS.user.AddressId,
+        ShConsts.NODE_INFOS.user.AddressId,
         newBucketEventDataBlob.bucketId
       );
 
@@ -294,15 +273,14 @@ export const runInitialisedBspsNet = async (bspNetConfig: BspNetConfig) => {
         location,
         fingerprint,
         file_size,
-        DUMMY_MSP_ID,
-        [NODE_INFOS.user.expectedPeerId]
+        ShConsts.DUMMY_MSP_ID,
+        [ShConsts.NODE_INFOS.user.expectedPeerId]
       ),
       shUser
     );
 
-    await waitForBspVolunteer(userApi);
-
-    await waitForBspStored(userApi);
+    await userApi.wait.bspVolunteer();
+    await userApi.wait.bspStored();
   } catch (e) {
     console.error("Error ", e);
   } finally {
@@ -315,9 +293,9 @@ export const runMultipleInitialisedBspsNet = async (
 ): Promise<undefined | InitialisedMultiBspNetwork> => {
   await runSimpleBspNet(bspNetConfig);
 
-  let userApi: BspNetApi | undefined;
+  let userApi: EnrichedBspApi | undefined;
   try {
-    userApi = await createApiObject(`ws://127.0.0.1:${NODE_INFOS.user.port}`);
+    userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
     // u32 max value
     const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
@@ -332,21 +310,21 @@ export const runMultipleInitialisedBspsNet = async (
       name: "sh-bsp-down",
       rocksdb: bspNetConfig.rocksdb,
       bspKeySeed: bspDownSeed,
-      bspId: BSP_DOWN_ID,
+      bspId: ShConsts.BSP_DOWN_ID,
       additionalArgs: ["--keystore-path=/keystore/bsp-down"]
     });
     const { rpcPort: bspTwoRpcPort } = await addBsp(userApi, bspTwoKey, {
       name: "sh-bsp-two",
       rocksdb: bspNetConfig.rocksdb,
       bspKeySeed: bspTwoSeed,
-      bspId: BSP_TWO_ID,
+      bspId: ShConsts.BSP_TWO_ID,
       additionalArgs: ["--keystore-path=/keystore/bsp-two"]
     });
     const { rpcPort: bspThreeRpcPort } = await addBsp(userApi, bspThreeKey, {
       name: "sh-bsp-three",
       rocksdb: bspNetConfig.rocksdb,
       bspKeySeed: bspThreeSeed,
-      bspId: BSP_THREE_ID,
+      bspId: ShConsts.BSP_THREE_ID,
       additionalArgs: ["--keystore-path=/keystore/bsp-three"]
     });
 
@@ -358,13 +336,13 @@ export const runMultipleInitialisedBspsNet = async (
     const location = "test/smile.jpg";
     const bucketName = "nothingmuch-1";
 
-    const fileMetadata = await sendNewStorageRequest(userApi, source, location, bucketName);
+    const fileMetadata = await userApi.file.newStorageRequest(source, location, bucketName);
 
-    await waitForBspVolunteer(userApi);
-    await waitForBspStored(userApi);
+    await userApi.wait.bspVolunteer();
+    await userApi.wait.bspStored();
 
     // Stopping BSP that is supposed to be down.
-    await stopBsp(bspDownContainerName);
+    await userApi.docker.stopBspContainer(bspDownContainerName);
 
     return {
       bspTwoRpcPort,
@@ -385,249 +363,8 @@ export const runMultipleInitialisedBspsNet = async (
   }
 };
 
-// TODO: Add a successful flag to track whether ext was successful or not
-//        Determine whether extrinsic was successful or not based on the
-//        ExtrinsicSuccess event
-export interface SealedBlock {
-  blockReceipt: CreatedBlock;
-  txHash?: string;
-  blockData?: SignedBlock;
-  events?: EventRecord[];
-  extSuccess?: boolean;
-}
-
-export const sealBlock = async (
-  api: ApiPromise,
-  calls?:
-    | SubmittableExtrinsic<"promise", ISubmittableResult>
-    | SubmittableExtrinsic<"promise", ISubmittableResult>[],
-  signer?: KeyringPair
-): Promise<SealedBlock> => {
-  const initialHeight = (await api.rpc.chain.getHeader()).number.toNumber();
-
-  const results: {
-    hashes: Hash[];
-    events: EventRecord[];
-    blockData?: SignedBlock;
-    success: boolean[];
-  } = {
-    hashes: [],
-    events: [],
-    success: []
-  };
-
-  // Normalize to array
-  const callArray = Array.isArray(calls) ? calls : calls ? [calls] : [];
-
-  if (callArray.length > 0) {
-    const nonce = await api.rpc.system.accountNextIndex((signer || alice).address);
-
-    // Send all transactions in sequence
-    for (let i = 0; i < callArray.length; i++) {
-      const call = callArray[i];
-      let hash: Hash;
-
-      if (call.isSigned) {
-        hash = await call.send();
-      } else {
-        hash = await call.signAndSend(signer || alice, { nonce: nonce.addn(i) });
-      }
-
-      results.hashes.push(hash);
-    }
-  }
-
-  const sealedResults = {
-    blockReceipt: await api.rpc.engine.createBlock(true, true),
-    txHashes: results.hashes.map((hash) => hash.toString())
-  };
-
-  const blockHash = sealedResults.blockReceipt.blockHash;
-  const allEvents = await (await api.at(blockHash)).query.system.events();
-
-  if (results.hashes.length > 0) {
-    const blockData = await api.rpc.chain.getBlock(blockHash);
-    results.blockData = blockData;
-
-    const getExtIndex = (txHash: Hash) => {
-      return blockData.block.extrinsics.findIndex((ext) => ext.hash.toHex() === txHash.toString());
-    };
-
-    for (const hash of results.hashes) {
-      const extIndex = getExtIndex(hash);
-      const extEvents = allEvents.filter(
-        ({ phase }) =>
-          phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex
-      );
-      results.events.push(...extEvents);
-      results.success.push(isExtSuccess(extEvents) ?? false);
-    }
-  } else {
-    results.events.push(...allEvents);
-  }
-
-  const extSuccess = results.success.every((success) => success);
-
-  // Allow time for chain to settle
-  for (let i = 0; i < 20; i++) {
-    const currentHeight = (await api.rpc.chain.getHeader()).number.toNumber();
-    if (currentHeight > initialHeight) {
-      break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-
-  return Object.assign(sealedResults, {
-    events: results.events,
-    extSuccess: extSuccess
-  }) satisfies SealedBlock;
-};
-
-export const advanceToBlock = async (
-  api: ApiPromise,
-  blockNumber: number,
-  waitBetweenBlocks?: number | boolean,
-  watchForBspProofs?: string[]
-): Promise<SealedBlock> => {
-  // If watching for BSP proofs, we need to know the blocks at which they are challenged.
-  const challengeBlockNumbers: { nextChallengeBlock: number; challengePeriod: number }[] = [];
-  if (watchForBspProofs) {
-    for (const bspId of watchForBspProofs) {
-      // First we get the last tick for which the BSP submitted a proof.
-      const lastTickResult =
-        await api.call.proofsDealerApi.getLastTickProviderSubmittedProof(bspId);
-      assert(lastTickResult.isOk);
-      const lastTickBspSubmittedProof = lastTickResult.asOk.toNumber();
-      // Then we get the challenge period for the BSP.
-      const challengePeriodResult = await api.call.proofsDealerApi.getChallengePeriod(bspId);
-      assert(challengePeriodResult.isOk);
-      const challengePeriod = challengePeriodResult.asOk.toNumber();
-      // Then we calculate the next challenge tick.
-      const nextChallengeTick = lastTickBspSubmittedProof + challengePeriod;
-
-      challengeBlockNumbers.push({
-        nextChallengeBlock: nextChallengeTick,
-        challengePeriod
-      });
-    }
-  }
-
-  const currentBlock = await api.rpc.chain.getBlock();
-  let currentBlockNumber = currentBlock.block.header.number.toNumber();
-
-  let blockResult = null;
-  if (blockNumber > currentBlockNumber) {
-    const blocksToAdvance = blockNumber - currentBlockNumber;
-    for (let i = 0; i < blocksToAdvance; i++) {
-      blockResult = await sealBlock(api);
-      currentBlockNumber += 1;
-
-      // Check if we need to wait for BSP proofs.
-      if (watchForBspProofs) {
-        for (const challengeBlockNumber of challengeBlockNumbers) {
-          if (currentBlockNumber === challengeBlockNumber.nextChallengeBlock) {
-            // Wait for the BSP to process the proof.
-            await sleep(500);
-
-            // Update next challenge block.
-            challengeBlockNumbers[0].nextChallengeBlock += challengeBlockNumber.challengePeriod;
-            break;
-          }
-        }
-      }
-
-      if (waitBetweenBlocks) {
-        if (typeof waitBetweenBlocks === "number") {
-          await sleep(waitBetweenBlocks);
-        } else {
-          await sleep(500);
-        }
-      }
-    }
-  } else {
-    throw new Error(
-      `Block number ${blockNumber} is lower than current block number ${currentBlockNumber}`
-    );
-  }
-
-  if (blockResult) {
-    return blockResult;
-  }
-
-  throw new Error("Block wasn't sealed");
-};
-
-export const sendNewStorageRequest = async (
-  api: ApiPromise,
-  source: string,
-  location: string,
-  bucketName: string
-): Promise<FileMetadata> => {
-  const newBucketEventEvent = await createBucket(api, bucketName);
-  const newBucketEventDataBlob =
-    api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
-
-  if (!newBucketEventDataBlob) {
-    throw new Error("Event doesn't match Type");
-  }
-
-  const fileMetadata = await api.rpc.storagehubclient.loadFileInStorage(
-    source,
-    location,
-    NODE_INFOS.user.AddressId,
-    newBucketEventDataBlob.bucketId
-  );
-
-  const issueStorageRequestResult = await sealBlock(
-    api,
-    api.tx.fileSystem.issueStorageRequest(
-      newBucketEventDataBlob.bucketId,
-      location,
-      fileMetadata.fingerprint,
-      fileMetadata.file_size,
-      DUMMY_MSP_ID,
-      [NODE_INFOS.user.expectedPeerId]
-    ),
-    shUser
-  );
-
-  const newStorageRequestEvent = assertEventPresent(
-    api,
-    "fileSystem",
-    "NewStorageRequest",
-    issueStorageRequestResult.events
-  );
-  const newStorageRequestEventDataBlob =
-    api.events.fileSystem.NewStorageRequest.is(newStorageRequestEvent.event) &&
-    newStorageRequestEvent.event.data;
-
-  if (!newStorageRequestEventDataBlob) {
-    throw new Error("Event doesn't match Type");
-  }
-
-  return {
-    fileKey: newStorageRequestEventDataBlob.fileKey.toString(),
-    bucketId: newBucketEventDataBlob.bucketId.toString(),
-    location: newStorageRequestEventDataBlob.location.toString(),
-    owner: newBucketEventDataBlob.who.toString(),
-    fingerprint: fileMetadata.fingerprint,
-    fileSize: fileMetadata.file_size
-  };
-};
-
-export const createBucket = async (api: ApiPromise, bucketName: string) => {
-  const createBucketResult = await sealBlock(
-    api,
-    api.tx.fileSystem.createBucket(DUMMY_MSP_ID, bucketName, false),
-    shUser
-  );
-  const { event } = assertEventPresent(api, "fileSystem", "NewBucket", createBucketResult.events);
-
-  return event;
-};
-
 export const cleardownTest = async (cleardownOptions: {
-  api: BspNetApi | BspNetApi[];
+  api: EnrichedBspApi | EnrichedBspApi[];
   keepNetworkAlive?: boolean;
 }) => {
   try {
@@ -645,19 +382,18 @@ export const cleardownTest = async (cleardownOptions: {
   cleardownOptions.keepNetworkAlive === true ? null : await closeSimpleBspNet();
 };
 
-export const createCheckBucket = async (api: BspNetApi, bucketName: string) => {
+export const createCheckBucket = async (api: EnrichedBspApi, bucketName: string) => {
   const newBucketEventEvent = await api.createBucket(bucketName);
   const newBucketEventDataBlob =
     api.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-  if (!newBucketEventDataBlob) {
-    throw new Error("Event doesn't match Type");
-  }
+  invariant(newBucketEventDataBlob, "Event doesn't match Type");
+
   return newBucketEventDataBlob;
 };
 
 export const addBsp = async (
-  api: BspNetApi,
+  api: EnrichedBspApi,
   bspKey: KeyringPair,
   options?: {
     name?: string;
@@ -675,7 +411,7 @@ export const addBsp = async (
   }
   additionalArgs.push(`--storage-path=/tmp/bsp/${bspKey.address}`);
   additionalArgs.push(
-    `--max-storage-capacity=${options?.maxStorageCapacity ?? CAPACITY[1024] * BigInt(4)}`
+    `--max-storage-capacity=${options?.maxStorageCapacity ?? MAX_STORAGE_CAPACITY}`
   );
   additionalArgs.push(`--jump-capacity=${options?.maxStorageCapacity ?? CAPACITY[1024]}`);
   const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
@@ -696,7 +432,7 @@ export const addBsp = async (
       api.tx.providers.forceBspSignUp(
         bspKey.address,
         options?.bspId ?? bspKey.publicKey,
-        CAPACITY_512,
+        ShConsts.CAPACITY_512,
         [multiAddressBsp],
         bspKey.address
       )
@@ -704,43 +440,4 @@ export const addBsp = async (
   );
 
   return { containerName, rpcPort, p2pPort, peerId };
-};
-
-const stopBsp = async (name: string) => {
-  const docker = new Docker();
-
-  const containersToStop = await docker.listContainers({
-    filters: { name: [name] }
-  });
-
-  await docker.getContainer(containersToStop[0].Id).stop();
-  await docker.getContainer(containersToStop[0].Id).remove();
-};
-
-export const skipBlocks = async (api: ApiPromise, blocksToSkip: number) => {
-  console.log(`\tSkipping ${blocksToSkip} blocks...`);
-  for (let i = 0; i < blocksToSkip; i++) {
-    await sealBlock(api);
-  }
-};
-
-export const skipBlocksToMinChangeTime = async (
-  api: BspNetApi,
-  bspId: `0x${string}` | H256 | Uint8Array = DUMMY_BSP_ID
-) => {
-  const lastCapacityChangeHeight = (await api.query.providers.backupStorageProviders(bspId))
-    .unwrap()
-    .lastCapacityChange.toNumber();
-  const currentHeight = (await api.rpc.chain.getHeader()).number.toNumber();
-  const minChangeTime = api.consts.providers.minBlocksBetweenCapacityChanges.toNumber();
-  const blocksToSkip = minChangeTime - (currentHeight - lastCapacityChangeHeight);
-
-  if (blocksToSkip > 0) {
-    console.log(
-      `\tSkipping blocks to reach MinBlocksBetweenCapacityChanges height: #${minChangeTime}`
-    );
-    await skipBlocks(api, blocksToSkip);
-  } else {
-    console.log("\tNo need to skip blocks, already past MinBlocksBetweenCapacityChanges");
-  }
 };

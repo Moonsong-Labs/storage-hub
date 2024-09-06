@@ -57,6 +57,13 @@ export const ALL_TYPES = {
       InternalApiError: null
     }
   },
+  GetChallengeSeedError: {
+    _enum: {
+      TickBeyondLastSeedStored: null,
+      TickIsInTheFuture: null,
+      InternalApiError: null
+    }
+  },
   GetChallengePeriodError: {
     _enum: {
       ProviderNotRegistered: null

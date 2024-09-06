@@ -54,6 +54,16 @@ const PROOFS_DEALER_V1 = {
     ],
     type: "Result<Vec<(Key, Option<TrieRemoveMutation>)>, GetCheckpointChallengesError>"
   },
+  get_challenge_seed: {
+    description: "Get the seed for a given challenge tick.",
+    params: [
+      {
+        name: "tick",
+        type: "BlockNumber"
+      }
+    ],
+    type: "Result<RandomnessOutput, GetChallengeSeedError>"
+  },
   get_challenge_period: {
     description: "Get the challenge period for a given Provider.",
     params: [

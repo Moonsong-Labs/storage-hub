@@ -7,6 +7,7 @@ import { createBlock } from "./blocks";
 export { ApiPromise } from "@polkadot/api";
 export type { StartedTestContainer } from "testcontainers";
 import dotenv from "dotenv";
+import invariant from "tiny-invariant";
 dotenv.config();
 
 export class DevTestContext implements AsyncDisposable {
@@ -41,26 +42,14 @@ export class DevTestContext implements AsyncDisposable {
   }
 
   public get api(): ExtendedApiPromise {
-    if (!this.#initialized) {
-      throw new Error("API is not initialized");
-    }
-
-    if (!this._api) {
-      throw new Error("API is not initialized");
-    }
-
+    invariant(this.#initialized, "API is not initialized");
+    invariant(this._api, "API is not initialized");
     return this._api;
   }
 
   public get container(): StartedTestContainer {
-    if (!this.#initialized) {
-      throw new Error("Container is not initialized");
-    }
-
-    if (!this._container) {
-      throw new Error("Container is not initialized");
-    }
-
+    invariant(this.#initialized, "Container is not initialized");
+    invariant(this._container, "Container is not initialized");
     return this._container;
   }
 

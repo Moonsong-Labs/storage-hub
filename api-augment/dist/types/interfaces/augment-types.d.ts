@@ -1261,6 +1261,7 @@ import type {
   FileMetadata,
   GetBspInfoError,
   GetChallengePeriodError,
+  GetChallengeSeedError,
   GetCheckpointChallengesError,
   GetLastTickProviderSubmittedProofError,
   GetNextDeadlineTickError,
@@ -1745,6 +1746,7 @@ declare module "@polkadot/types/types/registry" {
     GenesisBuildErr: GenesisBuildErr;
     GetBspInfoError: GetBspInfoError;
     GetChallengePeriodError: GetChallengePeriodError;
+    GetChallengeSeedError: GetChallengeSeedError;
     GetCheckpointChallengesError: GetCheckpointChallengesError;
     GetLastTickProviderSubmittedProofError: GetLastTickProviderSubmittedProofError;
     GetNextDeadlineTickError: GetNextDeadlineTickError;
