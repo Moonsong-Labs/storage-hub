@@ -21,7 +21,10 @@ use shp_file_metadata::FileKey;
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::{traits::Header, AccountId32, SaturatedConversion};
+use sp_runtime::{
+    traits::{Header, Zero},
+    AccountId32, SaturatedConversion,
+};
 use storage_hub_runtime::RuntimeEvent;
 
 use pallet_file_system_runtime_api::{
@@ -51,6 +54,7 @@ use crate::{
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
+pub(crate) const SYNC_MODE_MIN_BLOCKS_BEHIND: BlockNumber = 5;
 
 /// The BlockchainService actor.
 ///
@@ -79,11 +83,10 @@ pub struct BlockchainService {
     /// thread (blockchain service) and unlock it at the end of the spawned task. The alternative
     /// would be to send a [`MutexGuard`].
     pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
-    /// A flag to know if the node has finished syncing. This is derived from the first block import
-    /// notification.
-    /// Note: this assumes that first block import notification block number is not far from the actual
-    /// blockchain head (a maximum difference of 10).
-    pub(crate) is_synced: bool,
+    /// The last block number that was processed by the BlockchainService.
+    /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
+    /// run some initialisation tasks.
+    pub(crate) last_block_processed: BlockNumber,
     /// A persistent state store for the BlockchainService actor.
     pub(crate) persistent_state: BlockchainServiceStateStore,
     /// Pending submit proof requests. Note: this is not kept in the persistent state because of
@@ -105,7 +108,6 @@ where
 {
     Command(BlockchainServiceCommand),
     BlockImportNotification(BlockImportNotification<Block>),
-    EveryBlockImportNotification(BlockImportNotification<Block>),
     FinalityNotification(FinalityNotification<Block>),
 }
 
@@ -122,13 +124,11 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
         info!(target: LOG_TARGET, "BlockchainService starting up!");
 
         // Import notification stream to be notified of new blocks.
-        // This will notify us when sync to the latest block, or if there is a re-org.
-        // Note: We use this stream only to know when we are synced, after which we will use
-        // the every_import_notification_stream.
+        // The behaviour of this stream is:
+        // 1. While the node is syncing to the tip of the chain (initial sync, i.e. it just started
+        // or got behind due to connectivity issues), it will only notify us of re-orgs.
+        // 2. Once the node is synced, it will notify us of every new block.
         let block_import_notification_stream = self.actor.client.import_notification_stream();
-
-        // Block import notification stream to be notified of every imported block.
-        let every_block_import_notification_stream = self.actor.client.import_notification_stream();
 
         // Finality notification stream to be notified of blocks being finalised.
         let finality_notification_stream = self.actor.client.finality_notification_stream();
@@ -142,9 +142,6 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
             finality_notification_stream
                 .map(MergedEventLoopMessage::FinalityNotification)
                 .boxed(),
-            every_block_import_notification_stream
-                .map(MergedEventLoopMessage::EveryBlockImportNotification)
-                .boxed(),
         ]);
 
         // Process incoming messages.
@@ -154,22 +151,12 @@ impl ActorEventLoop<BlockchainService> for BlockchainServiceEventLoop {
                     self.actor.handle_message(command).await;
                 }
                 MergedEventLoopMessage::BlockImportNotification(notification) => {
-                    if !self.actor.is_synced {
-                        self.actor.is_synced = true;
-                        self.actor.handle_initial_sync(notification).await;
-                    }
-                }
-                MergedEventLoopMessage::EveryBlockImportNotification(notification) => {
-                    if self.actor.is_synced {
-                        self.actor
-                            .handle_every_block_import_notification(notification)
-                            .await;
-                    }
+                    self.actor
+                        .handle_block_import_notification(notification)
+                        .await;
                 }
                 MergedEventLoopMessage::FinalityNotification(notification) => {
-                    if self.actor.is_synced {
-                        self.actor.handle_finality_notification(notification).await;
-                    }
+                    self.actor.handle_finality_notification(notification).await;
                 }
             };
         }
@@ -651,10 +638,42 @@ impl BlockchainService {
             wait_for_block_request_by_number: BTreeMap::new(),
             provider_ids: BTreeSet::new(),
             forest_root_write_lock: None,
-            is_synced: false,
+            last_block_processed: Zero::zero(),
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
             pending_submit_proof_requests: BTreeSet::new(),
         }
+    }
+
+    async fn handle_block_import_notification<Block>(
+        &mut self,
+        notification: BlockImportNotification<Block>,
+    ) where
+        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+    {
+        let block_hash: H256 = notification.hash;
+        let block_number: BlockNumber = (*notification.header.number()).saturated_into();
+
+        // If this is the first block import notification, we might need to catch up.
+        info!(target: LOG_TARGET, "Block import notification (#{}): {}", block_number, block_hash);
+
+        // Get provider IDs linked to keys in this node's keystore and update the nonce.
+        self.pre_block_processing_checks(&block_hash);
+
+        // Check if we just came out of syncing mode.
+        if block_number - self.last_block_processed < SYNC_MODE_MIN_BLOCKS_BEHIND {
+            self.handle_initial_sync(notification).await;
+        }
+
+        self.process_block_import(&block_hash, &block_number).await;
+    }
+
+    fn pre_block_processing_checks(&mut self, block_hash: &H256) {
+        // We query the [`BlockchainService`] account nonce at this height
+        // and update our internal counter if it's smaller than the result.
+        self.check_nonce(&block_hash);
+
+        // Get provider IDs linked to keys in this node's keystore.
+        self.get_provider_ids(&block_hash);
     }
 
     /// Handle the first time this node syncs with the chain.
@@ -685,41 +704,10 @@ impl BlockchainService {
         }
         state_store_context.commit();
 
-        // Get provider IDs linked to keys in this node's keystore and update the nonce.
-        self.pre_block_processing_checks(&block_hash);
-
         // Catch up to proofs that this node might have missed.
         for provider_id in self.provider_ids.clone() {
             self.proof_submission_catch_up(&block_hash, &provider_id);
         }
-
-        // Finally, process the current block.
-        self.process_block_import(&block_hash, &block_number).await;
-    }
-
-    async fn handle_every_block_import_notification<Block>(
-        &mut self,
-        notification: BlockImportNotification<Block>,
-    ) where
-        Block: cumulus_primitives_core::BlockT<Hash = H256>,
-    {
-        let block_hash: H256 = notification.hash;
-        let block_number: BlockNumber = (*notification.header.number()).saturated_into();
-
-        // If this is the first block import notification, we might need to catch up.
-        info!(target: LOG_TARGET, "Block import notification (#{}): {}", block_number, block_hash);
-
-        self.pre_block_processing_checks(&block_hash);
-        self.process_block_import(&block_hash, &block_number).await;
-    }
-
-    fn pre_block_processing_checks(&mut self, block_hash: &H256) {
-        // We query the [`BlockchainService`] account nonce at this height
-        // and update our internal counter if it's smaller than the result.
-        self.check_nonce(&block_hash);
-
-        // Get provider IDs linked to keys in this node's keystore.
-        self.get_provider_ids(&block_hash);
     }
 
     async fn process_block_import(&mut self, block_hash: &H256, block_number: &BlockNumber) {

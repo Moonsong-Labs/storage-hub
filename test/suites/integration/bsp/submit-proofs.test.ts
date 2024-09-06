@@ -20,7 +20,7 @@ import {
 
 describeBspNet(
   "Many BSPs Submit Proofs",
-  { initialised: "multi", networkConfig: "standard", only: true },
+  { initialised: "multi", networkConfig: "standard" },
   ({ before, createUserApi, after, it, getLaunchResponse }) => {
     let userApi: BspNetApi;
     let bspTwoApi: BspNetApi;
@@ -570,21 +570,22 @@ describeBspNet(
       const firstChallengeBlockResult = await userApi.sealBlock();
 
       // Check for a ProofAccepted event.
-      const firstChallengeBlockEvents = assertEventPresent(
+      const firstChallengeBlockEvents = assertEventMany(
         userApi,
         "proofsDealer",
         "ProofAccepted",
         firstChallengeBlockResult.events
       );
-      const firstChallengeBlockEventDataBlob =
-        userApi.events.proofsDealer.ProofAccepted.is(firstChallengeBlockEvents.event) &&
-        firstChallengeBlockEvents.event.data;
-      assert(firstChallengeBlockEventDataBlob, "Event doesn't match Type");
-      strictEqual(
-        firstChallengeBlockEventDataBlob.provider.toString(),
-        firstBspToRespond,
-        "The BSP should be the one who submitted the proof."
-      );
+
+      // Check that at least one of the `ProofAccepted` events belongs to `firstBspToRespond`.
+      const atLeastOneEventBelongsToFirstBsp = firstChallengeBlockEvents.some((eventRecord) => {
+        const firstChallengeBlockEventDataBlob =
+          userApi.events.proofsDealer.ProofAccepted.is(eventRecord.event) && eventRecord.event.data;
+        assert(firstChallengeBlockEventDataBlob, "Event doesn't match Type");
+
+        return firstChallengeBlockEventDataBlob.provider.toString() === firstBspToRespond;
+      });
+      assert(atLeastOneEventBelongsToFirstBsp, "No ProofAccepted event belongs to the first BSP");
 
       // Advance to second next challenge block.
       await userApi.advanceToBlock(secondBlockToAdvance, {
@@ -596,21 +597,22 @@ describeBspNet(
       const secondChallengeBlockResult = await userApi.sealBlock();
 
       // Check for a ProofAccepted event.
-      const secondChallengeBlockEvents = assertEventPresent(
+      const secondChallengeBlockEvents = assertEventMany(
         userApi,
         "proofsDealer",
         "ProofAccepted",
         secondChallengeBlockResult.events
       );
-      const secondChallengeBlockEventDataBlob =
-        userApi.events.proofsDealer.ProofAccepted.is(secondChallengeBlockEvents.event) &&
-        secondChallengeBlockEvents.event.data;
-      assert(secondChallengeBlockEventDataBlob, "Event doesn't match Type");
-      strictEqual(
-        secondChallengeBlockEventDataBlob.provider.toString(),
-        secondBspToRespond,
-        "The BSP should be the one who submitted the proof."
-      );
+
+      // Check that at least one of the `ProofAccepted` events belongs to `secondBspToRespond`.
+      const atLeastOneEventBelongsToSecondBsp = secondChallengeBlockEvents.some((eventRecord) => {
+        const secondChallengeBlockEventDataBlob =
+          userApi.events.proofsDealer.ProofAccepted.is(eventRecord.event) && eventRecord.event.data;
+        assert(secondChallengeBlockEventDataBlob, "Event doesn't match Type");
+
+        return secondChallengeBlockEventDataBlob.provider.toString() === secondBspToRespond;
+      });
+      assert(atLeastOneEventBelongsToSecondBsp, "No ProofAccepted event belongs to the second BSP");
     });
 
     it("File is removed from Forest by BSP", { skip: "Not implemented yet." }, async () => {
