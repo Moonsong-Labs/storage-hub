@@ -68,7 +68,8 @@ export const ALL_TYPES: RegistryTypes = {
   },
   GetChallengePeriodError: {
     _enum: {
-      ProviderNotRegistered: null
+      ProviderNotRegistered: null,
+      InternalApiError: null
     }
   },
   GetBspInfoError: {

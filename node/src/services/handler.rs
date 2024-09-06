@@ -8,7 +8,7 @@ use shc_actors_framework::{
 };
 use shc_blockchain_service::{
     events::{
-        LastChargeableInfoUpdated, NewChallengeSeed, NewStorageRequest,
+        LastChargeableInfoUpdated, MultipleNewChallengeSeeds, NewStorageRequest,
         ProcessConfirmStoringRequest, ProcessSubmitProofRequest, SlashableProvider,
     },
     BlockchainService,
@@ -161,19 +161,21 @@ where
             bsp_download_file_task.subscribe_to(&self.task_spawner, &self.file_transfer);
         remote_download_request_event_bus_listener.start();
 
-        // BspSubmitProofTask is triggered by a NewChallengeSeed event emitted by the BlockchainService.
-        // It responds by computing challenges derived from the seed, taking also into account
+        // BspSubmitProofTask is triggered by a MultipleNewChallengeSeeds event emitted by the BlockchainService.
+        // It responds by computing challenges derived from the seeds, taking also into account
         // the custom challenges in checkpoint challenge rounds and enqueuing them in BlockchainService.
         // BspSubmitProofTask also listens to ProcessSubmitProofRequest events, which are emitted by the
         // BlockchainService when it is time to actually submit the proof of storage.
         // Additionally, it handles file deletions as a consequence of inclusion proofs in custom challenges.
         let bsp_submit_proof_task = BspSubmitProofTask::new(self.clone());
-        // Subscribing to NewChallengeSeed event from the BlockchainService.
-        let new_challenge_seed_event_bus_listener: EventBusListener<NewChallengeSeed, _> =
-            bsp_submit_proof_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain);
-        new_challenge_seed_event_bus_listener.start();
+        // Subscribing to MultipleNewChallengeSeeds event from the BlockchainService.
+        let multiple_new_challenge_seeds_event_bus_listener: EventBusListener<
+            MultipleNewChallengeSeeds,
+            _,
+        > = bsp_submit_proof_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        multiple_new_challenge_seeds_event_bus_listener.start();
         // Subscribing to ProcessSubmitProofRequest event from the BlockchainService.
         let process_submit_proof_request_event_bus_listener: EventBusListener<
             ProcessSubmitProofRequest,

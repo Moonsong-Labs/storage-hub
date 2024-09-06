@@ -66,7 +66,8 @@ export const ALL_TYPES = {
   },
   GetChallengePeriodError: {
     _enum: {
-      ProviderNotRegistered: null
+      ProviderNotRegistered: null,
+      InternalApiError: null
     }
   },
   GetBspInfoError: {

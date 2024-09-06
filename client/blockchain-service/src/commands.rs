@@ -2,7 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer_runtime_api::{
-    GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
+    GetChallengePeriodError, GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
 };
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
@@ -22,10 +22,10 @@ use shc_common::types::{
 };
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
-use super::{
-    handler::{BlockchainService, ConfirmStoringRequest, SubmitProofRequest},
+use crate::{
+    handler::BlockchainService,
     transaction::SubmittedTransaction,
-    types::{Extrinsic, ExtrinsicResult},
+    types::{ConfirmStoringRequest, Extrinsic, ExtrinsicResult, SubmitProofRequest},
 };
 
 /// Commands that can be sent to the BlockchainService actor.
@@ -93,6 +93,14 @@ pub enum BlockchainServiceCommand {
         callback: tokio::sync::oneshot::Sender<
             Result<BlockNumber, GetLastTickProviderSubmittedProofError>,
         >,
+    },
+    QueryChallengePeriod {
+        provider_id: ProviderId,
+        callback: tokio::sync::oneshot::Sender<Result<BlockNumber, GetChallengePeriodError>>,
+    },
+    QueryNextChallengeTickForProvider {
+        provider_id: ProviderId,
+        callback: tokio::sync::oneshot::Sender<Result<BlockNumber>>,
     },
     QueryLastCheckpointChallengeTick {
         callback: tokio::sync::oneshot::Sender<Result<BlockNumber, ApiError>>,
@@ -208,6 +216,18 @@ pub trait BlockchainServiceInterface {
         &self,
         provider_id: ProviderId,
     ) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError>;
+
+    /// Query the challenge period for a given Provider.
+    async fn query_challenge_period(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<BlockNumber, GetChallengePeriodError>;
+
+    /// Query the next challenge tick for a given Provider.
+    async fn get_next_challenge_tick_for_provider(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<BlockNumber>;
 
     /// Query the last checkpoint tick.
     async fn query_last_checkpoint_challenge_tick(&self) -> Result<BlockNumber, ApiError>;
@@ -440,6 +460,32 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     ) -> Result<BlockNumber, GetLastTickProviderSubmittedProofError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueryLastTickProviderSubmittedProof {
+            provider_id,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_challenge_period(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<BlockNumber, GetChallengePeriodError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryChallengePeriod {
+            provider_id,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn get_next_challenge_tick_for_provider(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<BlockNumber> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryNextChallengeTickForProvider {
             provider_id,
             callback,
         };
