@@ -21,7 +21,8 @@ use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettin
 use shp_file_metadata::ChunkId;
 use shp_traits::{
     MutateBucketsInterface, MutateStorageProvidersInterface, ReadBucketsInterface,
-    ReadProvidersInterface, ReadStorageProvidersInterface, TrieAddMutation, TrieRemoveMutation,
+    ReadProvidersInterface, ReadStorageProvidersInterface, ReadUserSolvencyInterface,
+    TrieAddMutation, TrieRemoveMutation,
 };
 use sp_runtime::traits::CheckedMul;
 
@@ -144,7 +145,7 @@ where
         };
 
         // Generate the list of chunks to prove.
-        let challenges = Self::generate_chunk_challenges_on_bsp_confirm(
+        let challenges = Self::generate_chunk_challenges_on_sp_confirm(
             bsp_id,
             file_key,
             &storage_request_metadata,
@@ -169,8 +170,8 @@ where
         Ok(chunks_to_prove)
     }
 
-    fn generate_chunk_challenges_on_bsp_confirm(
-        bsp_id: ProviderIdFor<T>,
+    fn generate_chunk_challenges_on_sp_confirm(
+        sp_id: ProviderIdFor<T>,
         file_key: MerkleHash<T>,
         storage_request_metadata: &StorageRequestMetadata<T>,
     ) -> Vec<<<T as pallet::Config>::Providers as ReadProvidersInterface>::MerkleHash> {
@@ -180,7 +181,7 @@ where
         let mut challenges =
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::generate_challenges_from_seed(
                 T::MerkleHashToRandomnessOutput::convert(file_key),
-                &bsp_id,
+                &sp_id,
                 chunks_to_check - 1,
             );
 
@@ -311,30 +312,47 @@ where
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
-        msp: Option<ProviderIdFor<T>>,
+        msp_id: Option<ProviderIdFor<T>>,
         bsps_required: Option<ReplicationTargetType<T>>,
         user_peer_ids: Option<PeerIds<T>>,
         data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
         // TODO: Check user funds and lock them for the storage request.
-        // TODO: Check storage capacity of chosen MSP (when we support MSPs)
         // TODO: Return error if the file is already stored and overwrite is false.
 
         // Check that the file size is greater than zero.
         ensure!(size > Zero::zero(), Error::<T>::FileSizeCannotBeZero);
 
-        if let Some(ref msp) = msp {
-            ensure!(
-                <T::Providers as ReadStorageProvidersInterface>::is_msp(msp),
-                Error::<T>::NotAMsp
-            );
-        }
-
-        // Check that bucket exists and that the sender is the owner of the bucket.
+        // Check that a bucket under the received ID exists and that the sender is the owner of the bucket.
         ensure!(
             <T::Providers as ReadBucketsInterface>::is_bucket_owner(&sender, &bucket_id)?,
             Error::<T>::NotBucketOwner
         );
+
+        // If a specific MSP ID is provided, check that it is a valid MSP and that it has enough available capacity to store the file.
+        let msp = if let Some(ref msp_id) = msp_id {
+            // Check that the received Provider ID corresponds to a valid MSP.
+            ensure!(
+                <T::Providers as ReadStorageProvidersInterface>::is_msp(msp_id),
+                Error::<T>::NotAMsp
+            );
+
+            // Check that the MSP has enough available capacity to store the file.
+            ensure!(
+                <T::Providers as ReadStorageProvidersInterface>::available_capacity(msp_id) >= size,
+                Error::<T>::InsufficientAvailableCapacity
+            );
+
+            // Check that the MSP received is the one storing the bucket.
+            ensure!(
+                <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(msp_id, &bucket_id),
+                Error::<T>::MspNotStoringBucket
+            );
+
+            Some((*msp_id, false))
+        } else {
+            None
+        };
 
         let bsps_required = bsps_required.unwrap_or(ReplicationTarget::<T>::get());
 
@@ -383,6 +401,115 @@ where
         Self::enqueue_expiration_item(expiration_item)?;
 
         Ok(file_key)
+    }
+
+    pub(crate) fn do_msp_accept_storage_request(
+        sender: T::AccountId,
+        file_key: MerkleHash<T>,
+        file_proof: KeyProof<T>,
+        non_inclusion_forest_proof: ForestProof<T>,
+    ) -> Result<(ProviderIdFor<T>, MerkleHash<T>, StorageRequestMetadata<T>), DispatchError> {
+        // Check that the storage request exists for the file key.
+        let mut storage_request_metadata =
+            <StorageRequests<T>>::get(&file_key).ok_or(Error::<T>::StorageRequestNotFound)?;
+
+        // Check that the sender is a Storage Provider and get its SP ID
+        let sp_id =
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
+                .ok_or(Error::<T>::NotASp)?;
+
+        // Check that the sender is a MSP.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_msp(&sp_id),
+            Error::<T>::NotAMsp
+        );
+
+        // Check that the sender corresponds to the MSP in the storage request and that it hasn't yet confirmed storing the file.
+        let (request_msp_id, confirm_status) = storage_request_metadata
+            .msp
+            .clone()
+            .ok_or(Error::<T>::RequestWithoutMsp)?;
+        ensure!(request_msp_id == sp_id, Error::<T>::NotSelectedMsp);
+        ensure!(confirm_status == false, Error::<T>::MspAlreadyConfirmed);
+
+        // Get the bucket ID from the storage request metadata
+        let bucket_id = storage_request_metadata.bucket_id;
+
+        // Check that the MSP is the one storing the bucket.
+        ensure!(
+            <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&sp_id, &bucket_id),
+            Error::<T>::MspNotStoringBucket
+        );
+
+        // Check that the MSP still has enough available capacity to store the file.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::available_capacity(&sp_id)
+                >= storage_request_metadata.size,
+            Error::<T>::InsufficientAvailableCapacity
+        );
+
+        // Get the current root of the bucket where the file will be stored.
+        let bucket_root = expect_or_err!(
+            <T::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id),
+            "Failed to get root for bucket, when it was already checked to exist",
+            Error::<T>::BucketNotFound
+        );
+
+        // Verify the proof of non-inclusion.
+        let proven_keys: BTreeSet<MerkleHash<T>> =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
+                &bucket_root,
+                &[file_key],
+                &non_inclusion_forest_proof,
+            )?;
+
+        // Ensure that the file key IS NOT part of the bucket's forest.
+        ensure!(
+            !proven_keys.contains(&file_key),
+            Error::<T>::ExpectedNonInclusionProof
+        );
+
+        // Generate the challenges to verify that the file proof is valid.
+        let chunk_challenges = Self::generate_chunk_challenges_on_sp_confirm(
+            sp_id,
+            file_key,
+            &storage_request_metadata,
+        );
+
+        // Check that the key proof is valid.
+        <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
+            &file_key,
+            &chunk_challenges,
+            &file_proof,
+        )?;
+
+        // Compute the new bucket root after inserting new file key in its forest partial trie.
+        let new_bucket_root =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::generic_apply_delta(
+                &bucket_root,
+                &[(file_key, TrieAddMutation::default().into())],
+                &non_inclusion_forest_proof,
+            )?;
+
+        // Update root of the bucket.
+        <T::Providers as shp_traits::MutateBucketsInterface>::change_root_bucket(
+            bucket_id,
+            new_bucket_root,
+        )?;
+
+        // Increase the used capacity of the MSP
+        <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
+            &sp_id,
+            storage_request_metadata.size,
+        )?;
+
+        // Set as confirmed the MSP in the storage request metadata.
+        storage_request_metadata.msp = Some((request_msp_id, true));
+
+        // Update storage request metadata.
+        <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata.clone()));
+
+        Ok((sp_id, new_bucket_root, storage_request_metadata))
     }
 
     /// Volunteer to store a file.
@@ -596,7 +723,7 @@ where
                 Error::<T>::ExpectedNonInclusionProof
             );
 
-            let chunk_challenges = Self::generate_chunk_challenges_on_bsp_confirm(
+            let chunk_challenges = Self::generate_chunk_challenges_on_sp_confirm(
                 bsp_id,
                 file_key.0,
                 &storage_request_metadata,
@@ -968,6 +1095,102 @@ where
         <PendingStopStoringRequests<T>>::remove(&bsp_id, &file_key);
 
         Ok((bsp_id, new_root))
+    }
+
+    /// SP stops storing a file from a User that has been flagged as insolvent.
+    ///
+    /// *Callable only by SP accounts*
+    ///
+    /// A proof of inclusion is required to record the new root of the SPs merkle patricia trie. First we validate the proof
+    /// and ensure the `file_key` is indeed part of the merkle patricia trie. Then finally compute the new merkle patricia trie root
+    /// by removing the `file_key` and update the root of the SP.
+    pub(crate) fn do_sp_stop_storing_for_insolvent_user(
+        sender: T::AccountId,
+        file_key: MerkleHash<T>,
+        bucket_id: BucketIdFor<T>,
+        location: FileLocation<T>,
+        owner: T::AccountId,
+        fingerprint: Fingerprint<T>,
+        size: StorageData<T>,
+        inclusion_forest_proof: ForestProof<T>,
+    ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
+        // Get the SP ID
+        let sp_id =
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
+                .ok_or(Error::<T>::NotASp)?;
+
+        // Check that the owner of the file has been flagged as insolvent
+        ensure!(
+            <T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&owner),
+            Error::<T>::UserNotInsolvent
+        );
+
+        // Compute the file key hash.
+        let computed_file_key = Self::compute_file_key(
+            owner.clone(),
+            bucket_id,
+            location.clone(),
+            size,
+            fingerprint,
+        );
+
+        // Check that the metadata corresponds to the expected file key.
+        ensure!(
+            file_key == computed_file_key,
+            Error::<T>::InvalidFileKeyMetadata
+        );
+
+        // Verify the proof of inclusion.
+        // If the Provider is a BSP, the proof is verified against the BSP's forest.
+        let proven_keys = if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&sp_id) {
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_forest_proof(
+                &sp_id,
+                &[file_key],
+                &inclusion_forest_proof,
+            )?
+        } else {
+            // If the Provider is a MSP, the proof is verified against the Bucket's root.
+
+            // Check that the Bucket is stored by the MSP
+            ensure!(
+                <T::Providers as shp_traits::ReadBucketsInterface>::is_bucket_stored_by_msp(
+                    &sp_id, &bucket_id
+                ),
+                Error::<T>::MspNotStoringBucket
+            );
+
+            // Get the Bucket's root
+            let bucket_root =
+                <T::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
+                    .ok_or(Error::<T>::BucketNotFound)?;
+
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
+                &bucket_root,
+                &[file_key],
+                &inclusion_forest_proof,
+            )?
+        };
+
+        // Ensure that the file key IS part of the SP's forest.
+        ensure!(
+            proven_keys.contains(&file_key),
+            Error::<T>::ExpectedInclusionProof
+        );
+
+        // Compute new root after removing file key from forest partial trie.
+        let new_root = <T::ProofDealer as shp_traits::ProofsDealerInterface>::apply_delta(
+            &sp_id,
+            &[(file_key, TrieRemoveMutation::default().into())],
+            &inclusion_forest_proof,
+        )?;
+
+        // Update root of SP.
+        <T::Providers as shp_traits::MutateProvidersInterface>::update_root(sp_id, new_root)?;
+
+        // Decrease data used by the SP.
+        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&sp_id, size)?;
+
+        Ok((sp_id, new_root))
     }
 
     pub(crate) fn do_delete_file(

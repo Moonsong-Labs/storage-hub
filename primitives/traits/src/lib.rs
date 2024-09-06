@@ -86,6 +86,9 @@ pub trait ReadBucketsInterface {
     /// Byte limit of a bucket's name.
     type BucketNameLimit: Get<u32>;
 
+    /// Check if a bucket exists.
+    fn bucket_exists(bucket_id: &Self::BucketId) -> bool;
+
     /// Return if a bucket (represented by its Bucket ID) is stored by a specific MSP.
     fn is_bucket_stored_by_msp(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId) -> bool;
 
@@ -677,6 +680,19 @@ pub trait ProofsDealerInterface {
         proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, DispatchError>;
 
+    /// Apply delta (mutations) to the partial trie based on the proof and the commitment.
+    ///
+    /// WARNING: This function should be used with caution, as it does not verify the root against a specific Provider.
+    /// This means this function should only be used when the root is previously known to be correct, and in NO case should
+    /// it be used to verify proofs associated with a challengeable Provider. That is what `apply_delta` is for.
+    ///
+    /// The new root is returned.
+    fn generic_apply_delta(
+        root: &Self::MerkleHash,
+        mutations: &[(Self::MerkleHash, TrieMutation)],
+        proof: &Self::ForestProof,
+    ) -> Result<Self::MerkleHash, DispatchError>;
+
     /// Initialise a Provider's challenge cycle.
     ///
     /// Sets the last tick the Provider submitted a proof for to the current tick and sets the
@@ -840,8 +856,6 @@ pub trait PaymentStreamsInterface {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         amount_provided: &Self::Units,
-        current_price: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
-        current_accumulated_price_index: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult;
 
     /// Update the amount provided of an existing dynamic-rate payment stream.
@@ -849,7 +863,6 @@ pub trait PaymentStreamsInterface {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         new_amount_provided: &Self::Units,
-        current_price: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult;
 
     /// Delete a dynamic-rate payment stream.
@@ -863,6 +876,15 @@ pub trait PaymentStreamsInterface {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> Option<Self::DynamicRatePaymentStream>;
+}
+
+/// The interface of the Payment Streams pallet that allows for the reading of user's solvency.
+pub trait ReadUserSolvencyInterface {
+    /// The type which represents a User account identifier.
+    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+
+    /// Get if a user has been flagged as insolvent (without funds)
+    fn is_user_insolvent(user_account: &Self::AccountId) -> bool;
 }
 
 pub trait ProofSubmittersInterface {

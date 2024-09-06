@@ -447,6 +447,14 @@ declare module "@polkadot/api-base/types/events" {
         { user: AccountId32; fileKey: H256; bucketId: H256; mspId: H256; proofOfInclusion: bool }
       >;
       /**
+       * Notifies that a MSP has accepted to store a file.
+       **/
+      MspAcceptedStoring: AugmentedEvent<
+        ApiType,
+        [fileKey: H256, mspId: H256, bucketId: H256, owner: AccountId32, newBucketRoot: H256],
+        { fileKey: H256; mspId: H256; bucketId: H256; owner: AccountId32; newBucketRoot: H256 }
+      >;
+      /**
        * Notifies that a new bucket has been created.
        **/
       NewBucket: AugmentedEvent<
@@ -515,6 +523,14 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [mspId: H256, user: AccountId32, fileKey: H256, bucketId: H256, proofOfInclusion: bool],
         { mspId: H256; user: AccountId32; fileKey: H256; bucketId: H256; proofOfInclusion: bool }
+      >;
+      /**
+       * Notifies that a SP has stopped storing a file because its owner has become insolvent.
+       **/
+      SpStopStoringInsolventUser: AugmentedEvent<
+        ApiType,
+        [spId: H256, fileKey: H256, owner: AccountId32, location: Bytes, newRoot: H256],
+        { spId: H256; fileKey: H256; owner: AccountId32; location: Bytes; newRoot: H256 }
       >;
       /**
        * Notifies the expiration of a storage request.
@@ -1099,6 +1115,15 @@ declare module "@polkadot/api-base/types/events" {
         [userAccount: AccountId32, providerId: H256, amount: u128],
         { userAccount: AccountId32; providerId: H256; amount: u128 }
       >;
+      /**
+       * Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has paid all its outstanding debt.
+       **/
+      UserPaidDebts: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
+      /**
+       * Event emitted when a User that has been flagged as not having enough funds to pay for their contracted services has waited the cooldown period,
+       * correctly paid all their outstanding debt and can now contract new services again.
+       **/
+      UserSolvent: AugmentedEvent<ApiType, [who: AccountId32], { who: AccountId32 }>;
       /**
        * Event emitted when a Provider is correctly trying to charge a User and that User does not have enough funds to pay for their services.
        * This event is emitted to flag the user and let the network know that the user is not paying for the requested services, so other Providers can

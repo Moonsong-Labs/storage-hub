@@ -841,6 +841,10 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
     type ReadAccessGroupId = T::ReadAccessGroupId;
     type MerkleHash = MerklePatriciaRoot<T>;
 
+    fn bucket_exists(bucket_id: &Self::BucketId) -> bool {
+        Buckets::<T>::contains_key(bucket_id)
+    }
+
     fn derive_bucket_id(
         msp_id: &Self::ProviderId,
         owner: &Self::AccountId,

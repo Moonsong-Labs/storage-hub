@@ -884,6 +884,20 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         )
     }
 
+    fn generic_apply_delta(
+        root: &Self::MerkleHash,
+        mutations: &[(Self::MerkleHash, TrieMutation)],
+        proof: &Self::ForestProof,
+    ) -> Result<Self::MerkleHash, DispatchError> {
+        Ok(
+            <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
+                &root, mutations, proof,
+            )
+            .map_err(|_| Error::<T>::FailedToApplyDelta)?
+            .1,
+        )
+    }
+
     fn initialise_challenge_cycle(provider_id: &Self::ProviderId) -> DispatchResult {
         // Check that `who` is a registered Provider.
         if !ProvidersPalletFor::<T>::is_provider(*provider_id) {

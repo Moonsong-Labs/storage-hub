@@ -1002,7 +1002,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       usersWithoutFunds: AugmentedQuery<
         ApiType,
-        (arg: AccountId32 | string | Uint8Array) => Observable<Option<Null>>,
+        (arg: AccountId32 | string | Uint8Array) => Observable<Option<u32>>,
         [AccountId32]
       > &
         QueryableStorageEntry<ApiType, [AccountId32]>;

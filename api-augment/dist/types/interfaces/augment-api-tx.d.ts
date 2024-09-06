@@ -609,6 +609,35 @@ declare module "@polkadot/api-base/types/submittable" {
         ) => SubmittableExtrinsic<ApiType>,
         [H256, Bytes, H256, u32, H256, Vec<Bytes>]
       >;
+      /**
+       * Used by a MSP to confirm storing a file that was assigned to it.
+       *
+       * The MSP has to provide a proof of the file's key and a non-inclusion proof for the file's key
+       * in the bucket's Merkle Patricia Forest. The proof of the file's key is necessary to verify that
+       * the MSP actually has the file, while the non-inclusion proof is necessary to verify that the MSP
+       * wasn't storing it before.
+       **/
+      mspAcceptStorageRequest: AugmentedSubmittable<
+        (
+          fileKey: H256 | string | Uint8Array,
+          fileProof:
+            | ShpFileKeyVerifierFileKeyProof
+            | {
+                fileMetadata?: any;
+                proof?: any;
+              }
+            | string
+            | Uint8Array,
+          nonInclusionForestProof:
+            | SpTrieStorageProofCompactProof
+            | {
+                encodedNodes?: any;
+              }
+            | string
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, ShpFileKeyVerifierFileKeyProof, SpTrieStorageProofCompactProof]
+      >;
       pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
         (
           user: AccountId32 | string | Uint8Array,
@@ -638,6 +667,32 @@ declare module "@polkadot/api-base/types/submittable" {
           blockRangeToMaximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber
         ) => SubmittableExtrinsic<ApiType>,
         [Option<u32>, Option<u32>, Option<u32>]
+      >;
+      /**
+       * Executed by a SP to stop storing a file from an insolvent user.
+       *
+       * This is used when a user has become insolvent and the SP needs to stop storing the files of that user, since
+       * it won't be getting paid for it anymore.
+       * The validations are similar to the ones in the `bsp_request_stop_storing` and `bsp_confirm_stop_storing` extrinsics, but the SP doesn't need to
+       * wait for a minimum amount of blocks to confirm to stop storing the file nor it has to be a BSP.
+       **/
+      stopStoringForInsolventUser: AugmentedSubmittable<
+        (
+          fileKey: H256 | string | Uint8Array,
+          bucketId: H256 | string | Uint8Array,
+          location: Bytes | string | Uint8Array,
+          owner: AccountId32 | string | Uint8Array,
+          fingerprint: H256 | string | Uint8Array,
+          size: u32 | AnyNumber | Uint8Array,
+          inclusionForestProof:
+            | SpTrieStorageProofCompactProof
+            | {
+                encodedNodes?: any;
+              }
+            | string
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, H256, Bytes, AccountId32, H256, u32, SpTrieStorageProofCompactProof]
       >;
       updateBucketPrivacy: AugmentedSubmittable<
         (
@@ -2185,6 +2240,31 @@ declare module "@polkadot/api-base/types/submittable" {
         [AccountId32]
       >;
       /**
+       * Dispatchable extrinsic that allows a user flagged as without funds long ago enough to clear this flag from its account,
+       * allowing it to begin contracting and paying for services again. If there's any outstanding debt, it will be charged and cleared.
+       *
+       * The dispatch origin for this call must be Signed.
+       * The origin must be the User that has been flagged as without funds.
+       *
+       * This extrinsic will perform the following checks and logic:
+       * 1. Check that the extrinsic was signed and get the signer.
+       * 2. Check that the user has been flagged as without funds.
+       * 3. Check that the cooldown period has passed since the user was flagged as without funds.
+       * 4. Check if there's any outstanding debt and charge it. This is done by:
+       * a. Releasing any remaining funds held as a deposit for each payment stream.
+       * b. Getting all payment streams of the user and charging them, paying the Providers for the services.
+       * c. Returning the User any remaining funds.
+       * d. Deleting all payment streams of the user.
+       * 5. Unflag the user as without funds.
+       *
+       * Emits a 'UserSolvent' event when successful.
+       *
+       * Notes: this extrinsic iterates over all remaining payment streams of the user and charges them, so it can be expensive in terms of weight.
+       * The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
+       * finds more convenient to wait for Providers to get its deposits one by one instead.
+       **/
+      clearInsolventFlag: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+      /**
        * Dispatchable extrinsic that allows root to add a dynamic-rate payment stream from a User to a Provider.
        *
        * The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
@@ -2208,11 +2288,9 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           providerId: H256 | string | Uint8Array,
           userAccount: AccountId32 | string | Uint8Array,
-          amountProvided: u32 | AnyNumber | Uint8Array,
-          currentPrice: u128 | AnyNumber | Uint8Array,
-          currentAccumulatedPriceIndex: u128 | AnyNumber | Uint8Array
+          amountProvided: u32 | AnyNumber | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, AccountId32, u32, u128, u128]
+        [H256, AccountId32, u32]
       >;
       /**
        * Dispatchable extrinsic that allows root to add a fixed-rate payment stream from a User to a Provider.
@@ -2291,6 +2369,27 @@ declare module "@polkadot/api-base/types/submittable" {
         [H256, AccountId32]
       >;
       /**
+       * Dispatchable extrinsic that allows a user flagged as without funds to pay all remaining payment streams to be able to recover
+       * its deposits.
+       *
+       * The dispatch origin for this call must be Signed.
+       * The origin must be the User that has been flagged as without funds.
+       *
+       * This extrinsic will perform the following checks and logic:
+       * 1. Check that the extrinsic was signed and get the signer.
+       * 2. Check that the user has been flagged as without funds.
+       * 3. Release the user's funds that were held as a deposit for each payment stream.
+       * 4. Get all payment streams of the user and charge them, paying the Providers for the services.
+       * 5. Delete all payment streams of the user.
+       *
+       * Emits a 'UserPaidDebts' event when successful.
+       *
+       * Notes: this extrinsic iterates over all payment streams of the user and charges them, so it can be expensive in terms of weight.
+       * The fee to execute it should be high enough to compensate for the weight of the extrinsic, without being too high that the user
+       * finds more convenient to wait for Providers to get its deposits one by one instead.
+       **/
+      payOutstandingDebt: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+      /**
        * Dispatchable extrinsic that allows root to update an existing dynamic-rate payment stream between a User and a Provider.
        *
        * The dispatch origin for this call must be Root (Payment streams should only be added by traits in other pallets,
@@ -2312,10 +2411,9 @@ declare module "@polkadot/api-base/types/submittable" {
         (
           providerId: H256 | string | Uint8Array,
           userAccount: AccountId32 | string | Uint8Array,
-          newAmountProvided: u32 | AnyNumber | Uint8Array,
-          currentPrice: u128 | AnyNumber | Uint8Array
+          newAmountProvided: u32 | AnyNumber | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, AccountId32, u32, u128]
+        [H256, AccountId32, u32]
       >;
       /**
        * Dispatchable extrinsic that allows root to update an existing fixed-rate payment stream between a User and a Provider.
