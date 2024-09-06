@@ -239,6 +239,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
       /**
+       * SP does not have enough storage capacity to store the file.
+       **/
+      InsufficientAvailableCapacity: AugmentedError<ApiType>;
+      /**
        * Metadata does not correspond to expected file key.
        **/
       InvalidFileKeyMetadata: AugmentedError<ApiType>;
@@ -260,6 +264,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       MinWaitForStopStoringNotReached: AugmentedError<ApiType>;
       /**
+       * The MSP is trying to confirm to store a file from a storage request that it has already confirmed to store.
+       **/
+      MspAlreadyConfirmed: AugmentedError<ApiType>;
+      /**
        * Unauthorized operation, signer is not an MSP of the bucket id.
        **/
       MspNotStoringBucket: AugmentedError<ApiType>;
@@ -276,6 +284,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       NotAMsp: AugmentedError<ApiType>;
       /**
+       * Account is not a SP.
+       **/
+      NotASp: AugmentedError<ApiType>;
+      /**
        * Operation failed because the account is not the owner of the bucket.
        **/
       NotBucketOwner: AugmentedError<ApiType>;
@@ -283,6 +295,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Unauthorized operation, signer does not own the file.
        **/
       NotFileOwner: AugmentedError<ApiType>;
+      /**
+       * The MSP is trying to confirm to store a file from a storage request is not the one selected to store it.
+       **/
+      NotSelectedMsp: AugmentedError<ApiType>;
       /**
        * Pending stop storing request already exists.
        **/
@@ -299,6 +315,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Replication target cannot be zero.
        **/
       ReplicationTargetCannotBeZero: AugmentedError<ApiType>;
+      /**
+       * The MSP is trying to confirm to store a file from a storage request that does not have a MSP assigned.
+       **/
+      RequestWithoutMsp: AugmentedError<ApiType>;
       /**
        * Storage request already registered for the given file.
        **/

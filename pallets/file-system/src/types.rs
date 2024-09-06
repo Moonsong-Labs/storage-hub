@@ -26,42 +26,53 @@ pub struct StorageRequestMetadata<T: Config> {
     /// Used primarily for tracking the age of the request which is useful for
     /// cleaning up old requests.
     pub requested_at: BlockNumberFor<T>,
+
     /// AccountId of the user who owns the data being stored.
     pub owner: T::AccountId,
+
     /// Bucket id where this file is stored.
     pub bucket_id: BucketIdFor<T>,
+
     /// User defined name of the file being stored.
     pub location: FileLocation<T>,
+
     /// Identifier of the data being stored.
     pub fingerprint: Fingerprint<T>,
+
     /// Size of the data being stored.
     ///
     /// SPs will use this to determine if they have enough space to store the data.
     /// This is also used to verify that the data sent by the user matches the size specified here.
     pub size: StorageData<T>,
-    /// MSP who is requested to store the data.
+
+    /// MSP who is requested to store the data, and if it has already confirmed that it is storing it.
     ///
     /// This is optional in the event when a storage request is created solely to replicate data to other BSPs and an MSP is already storing the data.
-    pub msp: Option<ProviderIdFor<T>>,
+    pub msp: Option<(ProviderIdFor<T>, bool)>,
+
     /// Peer Ids of the user who requested the storage.
     ///
     /// SPs will expect a connection request to be initiated by the user with this Peer Id.
     pub user_peer_ids: PeerIds<T>,
+
     /// List of storage providers that can serve the data that is requested to be stored.
     ///
     /// This is useful when a BSP stops serving data and automatically creates a new storage request with no user multiaddresses, since
     /// SPs can prove and serve the data to be replicated to other BSPs without the user having this stored on their local machine.
     pub data_server_sps: BoundedVec<ProviderIdFor<T>, MaxBspsPerStorageRequest<T>>, // TODO: Change the Maximum data servers to be the maximum SPs allowed
+
     /// Number of BSPs requested to store the data.
     ///
     /// The storage request will be dropped/complete once all the minimum required BSPs have
     /// submitted a proof of storage after volunteering to store the data.
     pub bsps_required: ReplicationTargetType<T>,
+
     /// Number of BSPs that have successfully volunteered AND confirmed that they are storing the data.
     ///
     /// This starts at 0 and increases up to `bsps_required`. Once this reaches `bsps_required`, the
     /// storage request is considered complete and will be deleted..
     pub bsps_confirmed: ReplicationTargetType<T>,
+
     /// Number of BSPs that have volunteered to store the data.
     ///
     /// There can be more than `bsps_required` volunteers, but it is essentially a race for BSPs to confirm that they are storing the data.

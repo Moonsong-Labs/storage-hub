@@ -65,7 +65,7 @@ describeBspNet(
       await userApi.advanceToBlock(nextChallengeTick);
 
       // Wait for tasks to execute and for the BSPs to submit proofs.
-      await sleep(500);
+      await sleep(1000);
       // Check that there are 3 pending extrinsics from BSPs (proof submission).
       const submitProofPending = await userApi.rpc.author.pendingExtrinsics();
       strictEqual(

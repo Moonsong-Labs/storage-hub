@@ -86,6 +86,9 @@ pub trait ReadBucketsInterface {
     /// Byte limit of a bucket's name.
     type BucketNameLimit: Get<u32>;
 
+    /// Check if a bucket exists.
+    fn bucket_exists(bucket_id: &Self::BucketId) -> bool;
+
     /// Return if a bucket (represented by its Bucket ID) is stored by a specific MSP.
     fn is_bucket_stored_by_msp(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId) -> bool;
 
@@ -294,8 +297,14 @@ pub trait ReadStorageProvidersInterface {
     /// Get number of registered BSPs.
     fn get_number_of_bsps() -> Self::SpCount;
 
+    /// Get the total capacity of a Provider (MSP or BSP).
+    fn get_total_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit;
+
     /// Get the capacity currently in use of a Provider (MSP or BSP).
     fn get_used_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit;
+
+    /// Get the available capacity of a Provider (MSP or BSP).
+    fn get_available_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit;
 
     /// Get multiaddresses of a BSP.
     fn get_bsp_multiaddresses(
@@ -667,6 +676,19 @@ pub trait ProofsDealerInterface {
     /// The new root is returned.
     fn apply_delta(
         provider_id: &Self::ProviderId,
+        mutations: &[(Self::MerkleHash, TrieMutation)],
+        proof: &Self::ForestProof,
+    ) -> Result<Self::MerkleHash, DispatchError>;
+
+    /// Apply delta (mutations) to the partial trie based on the proof and the commitment.
+    ///
+    /// WARNING: This function should be used with caution, as it does not verify the root against a specific Provider.
+    /// This means this function should only be used when the root is previously known to be correct, and in NO case should
+    /// it be used to verify proofs associated with a challengeable Provider. That is what `apply_delta` is for.
+    ///
+    /// The new root is returned.
+    fn generic_apply_delta(
+        root: &Self::MerkleHash,
         mutations: &[(Self::MerkleHash, TrieMutation)],
         proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, DispatchError>;
