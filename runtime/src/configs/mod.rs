@@ -79,10 +79,13 @@ use super::{
     MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
     RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
 };
-use crate::{PolkadotXcm, StorageDataUnit};
+use crate::PolkadotXcm;
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
 pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
+
+/// Type representing the storage data units in StorageHub.
+pub type StorageDataUnit = u32;
 
 parameter_types! {
     pub const Version: RuntimeVersion = VERSION;

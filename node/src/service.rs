@@ -210,11 +210,12 @@ where
         Some(ProviderOptions {
             storage_path,
             max_storage_capacity,
+            jump_capacity,
             ..
         }) => {
             info!(
-                "Starting as a Storage Provider. Storage path: {:?}, Max storage capacity: {:?}",
-                storage_path, max_storage_capacity
+                "Starting as a Storage Provider. Storage path: {:?}, Max storage capacity: {:?}, Jump capacity: {:?}",
+                storage_path, max_storage_capacity, jump_capacity
             );
 
             // Start building the StorageHubHandler, if running as a provider.
@@ -234,7 +235,7 @@ where
                 )
                 .await;
 
-            storage_hub_builder.setup(storage_path.clone(), *max_storage_capacity);
+            storage_hub_builder.setup(storage_path.clone(), *max_storage_capacity, *jump_capacity);
 
             let rpc_config = storage_hub_builder.create_rpc_config(keystore);
 

@@ -10,13 +10,12 @@ use sc_cli::{
 };
 use sc_service::config::{BasePath, PrometheusConfig};
 use sp_runtime::traits::AccountIdConversion;
-use storage_hub_runtime::Block;
+use storage_hub_runtime::{Block, StorageDataUnit};
 
 use crate::{
     chain_spec,
     cli::{Cli, ProviderType, RelayChainCli, StorageLayer, Subcommand},
     service::new_partial,
-    services::handler::MaxStorageCapacity,
 };
 
 // TODO: Have specific StorageHub role options (i.e. ProviderOptions, UserOptions).
@@ -30,7 +29,9 @@ pub struct ProviderOptions {
     /// RocksDB Path.
     pub storage_path: Option<String>,
     /// Maximum storage capacity of the Storage Provider (bytes).
-    pub max_storage_capacity: Option<MaxStorageCapacity>,
+    pub max_storage_capacity: Option<StorageDataUnit>,
+    /// Jump capacity (bytes).
+    pub jump_capacity: Option<StorageDataUnit>,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {

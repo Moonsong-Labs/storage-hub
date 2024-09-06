@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use storage_hub_runtime::StorageDataUnit;
 use tokio::sync::RwLock;
 
 use shc_actors_framework::{
@@ -25,15 +26,17 @@ use crate::tasks::{
     BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT,
 };
 
-pub type MaxStorageCapacity = u32;
-
 /// Configuration paramaters for Storage Providers.
 #[derive(Clone)]
 pub struct ProviderConfig {
     /// Maximum storage capacity of the provider (bytes).
     ///
     /// The Storage Provider will not request to increase its storage capacity beyond this value.
-    pub max_storage_capacity: MaxStorageCapacity,
+    pub max_storage_capacity: StorageDataUnit,
+    /// Jump capacity (bytes).
+    ///
+    /// Storage capacity increases in jumps of this size.
+    pub jump_capacity: StorageDataUnit,
 }
 
 /// Represents the handler for the Storage Hub service.

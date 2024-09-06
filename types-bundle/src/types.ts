@@ -29,6 +29,7 @@ export const ALL_TYPES: RegistryTypes = {
   StorageData: "u32",
   MerklePatriciaRoot: "H256",
   ChunkId: "u64",
+  StorageDataUnit: "u32",
   BackupStorageProvider: {
     capacity: "StorageData",
     data_used: "StorageData",
@@ -98,6 +99,24 @@ export const ALL_TYPES: RegistryTypes = {
       ProviderWithoutPaymentStreams: null,
       AmountToChargeOverflow: null,
       DebtOverflow: null,
+      InternalApiError: null
+    }
+  },
+  QueryStorageProviderCapacityError: {
+    _enum: {
+      ProviderNotRegistered: null,
+      InternalApiError: null
+    }
+  },
+  QueryAvailableStorageCapacityError: {
+    _enum: {
+      ProviderNotRegistered: null,
+      InternalApiError: null
+    }
+  },
+  QueryEarliestChangeCapacityBlockError: {
+    _enum: {
+      ProviderNotRegistered: null,
       InternalApiError: null
     }
   }

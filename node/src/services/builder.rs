@@ -4,6 +4,7 @@ use sc_service::RpcHandlers;
 use shc_common::types::StorageProofsMerkleTrieLayout;
 use sp_keystore::KeystorePtr;
 use std::{path::PathBuf, sync::Arc};
+use storage_hub_runtime::StorageDataUnit;
 use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
@@ -18,7 +19,7 @@ use shc_rpc::StorageHubClientRpcConfig;
 
 use super::{
     forest_storage::{ForestStorageCaching, ForestStorageSingle},
-    handler::{MaxStorageCapacity, ProviderConfig, StorageHubHandler},
+    handler::{ProviderConfig, StorageHubHandler},
 };
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT};
 
@@ -101,7 +102,8 @@ where
     storage_path: Option<String>,
     file_storage: Option<Arc<RwLock<<(R, S) as StorageTypes>::FL>>>,
     forest_storage_handler: Option<<(R, S) as StorageTypes>::FSH>,
-    max_storage_capacity: Option<MaxStorageCapacity>,
+    max_storage_capacity: Option<StorageDataUnit>,
+    jump_capacity: Option<StorageDataUnit>,
 }
 
 /// Common components to build for any given configuration of [`RoleSupport`] and [`StorageLayerSupport`].
@@ -118,6 +120,7 @@ where
             file_storage: None,
             forest_storage_handler: None,
             max_storage_capacity: None,
+            jump_capacity: None,
         }
     }
 
@@ -143,9 +146,14 @@ where
 
     pub fn with_max_storage_capacity(
         &mut self,
-        max_storage_capacity: Option<MaxStorageCapacity>,
+        max_storage_capacity: Option<StorageDataUnit>,
     ) -> &mut Self {
         self.max_storage_capacity = max_storage_capacity;
+        self
+    }
+
+    pub fn with_jump_capacity(&mut self, jump_capacity: Option<StorageDataUnit>) -> &mut Self {
+        self.jump_capacity = jump_capacity;
         self
     }
 
@@ -297,6 +305,7 @@ where
                 max_storage_capacity: self
                     .max_storage_capacity
                     .expect("Max Storage Capacity not set"),
+                jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
             },
         )
     }
@@ -338,6 +347,7 @@ where
                 max_storage_capacity: self
                     .max_storage_capacity
                     .expect("Max Storage Capacity not set"),
+                jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
             },
         )
     }
@@ -377,6 +387,7 @@ where
             // Not used by the user role
             ProviderConfig {
                 max_storage_capacity: 0,
+                jump_capacity: 0,
             },
         )
     }
@@ -386,7 +397,8 @@ pub trait RequiredStorageProviderSetup {
     fn setup(
         &mut self,
         storage_path: Option<String>,
-        max_storage_capacity: Option<MaxStorageCapacity>,
+        max_storage_capacity: Option<StorageDataUnit>,
+        jump_capacity: Option<StorageDataUnit>,
     );
 }
 
@@ -398,13 +410,15 @@ where
     fn setup(
         &mut self,
         storage_path: Option<String>,
-        max_storage_capacity: Option<MaxStorageCapacity>,
+        max_storage_capacity: Option<StorageDataUnit>,
+        jump_capacity: Option<StorageDataUnit>,
     ) {
         self.setup_storage_layer(storage_path);
         if max_storage_capacity.is_none() {
             panic!("Max storage capacity not set");
         }
         self.with_max_storage_capacity(max_storage_capacity);
+        self.with_jump_capacity(jump_capacity);
     }
 }
 
@@ -416,7 +430,8 @@ where
     fn setup(
         &mut self,
         storage_path: Option<String>,
-        max_storage_capacity: Option<MaxStorageCapacity>,
+        max_storage_capacity: Option<StorageDataUnit>,
+        jump_capacity: Option<StorageDataUnit>,
     ) {
         if storage_path.is_none() {
             panic!("Storage path not set");
@@ -426,6 +441,7 @@ where
             panic!("Max storage capacity not set");
         }
         self.with_max_storage_capacity(max_storage_capacity);
+        self.with_jump_capacity(jump_capacity);
     }
 }
 
@@ -437,7 +453,8 @@ where
     fn setup(
         &mut self,
         storage_path: Option<String>,
-        max_storage_capacity: Option<MaxStorageCapacity>,
+        max_storage_capacity: Option<StorageDataUnit>,
+        jump_capacity: Option<StorageDataUnit>,
     ) {
         if storage_path.is_none() {
             panic!("Storage path not set");
@@ -447,6 +464,7 @@ where
             panic!("Max storage capacity not set");
         }
         self.with_max_storage_capacity(max_storage_capacity);
+        self.with_jump_capacity(jump_capacity);
     }
 }
 
@@ -458,7 +476,8 @@ where
     fn setup(
         &mut self,
         storage_path: Option<String>,
-        max_storage_capacity: Option<MaxStorageCapacity>,
+        max_storage_capacity: Option<StorageDataUnit>,
+        jump_capacity: Option<StorageDataUnit>,
     ) {
         if storage_path.is_none() {
             panic!("Storage path not set");
@@ -468,6 +487,7 @@ where
             panic!("Max storage capacity not set");
         }
         self.with_max_storage_capacity(max_storage_capacity);
+        self.with_jump_capacity(jump_capacity);
     }
 }
 
@@ -479,7 +499,8 @@ where
     fn setup(
         &mut self,
         _storage_path: Option<String>,
-        _max_storage_capacity: Option<MaxStorageCapacity>,
+        _max_storage_capacity: Option<StorageDataUnit>,
+        _jump_capacity: Option<StorageDataUnit>,
     ) {
         self.setup_storage_layer(None);
     }

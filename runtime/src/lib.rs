@@ -66,7 +66,7 @@ pub use sp_runtime::BuildStorage;
 
 use weights::ExtrinsicBaseWeight;
 
-pub use crate::configs::StorageProofsMerkleTrieLayout;
+pub use crate::configs::{StorageDataUnit, StorageProofsMerkleTrieLayout};
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
@@ -124,9 +124,6 @@ pub type Executive = frame_executive::Executive<
     Runtime,
     AllPalletsWithSystem,
 >;
-
-/// Type representing the storage data units in StorageHub.
-pub type StorageDataUnit = u32;
 
 /// Handles converting a weight scalar to a fee value, based on the scale and granularity of the
 /// node's balance type.

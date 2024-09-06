@@ -21,6 +21,7 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::ForestStorage;
+use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::{forest_storage::NoKey, handler::StorageHubHandler};
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT};
@@ -462,7 +463,7 @@ where
                 event.file_key
             );
 
-            let capacity = self
+            let current_capacity = self
                 .storage_hub_handler
                 .blockchain
                 .query_storage_provider_capacity(own_bsp_id)
@@ -480,7 +481,7 @@ where
                 .provider_config
                 .max_storage_capacity;
 
-            if max_storage_capacity == capacity {
+            if max_storage_capacity == current_capacity {
                 let err_msg = "Reached maximum storage capacity limit. Unable to add more more storage capacity.";
                 warn!(
                     target: LOG_TARGET, "{}", err_msg
@@ -488,24 +489,7 @@ where
                 return Err(anyhow::anyhow!(err_msg));
             }
 
-            const GIB: u32 = 1 << 30;
-
-            // Calculate GiBs needed, rounding up
-            let gibs_needed = (event.size + GIB - 1) / GIB;
-
-            // Ensure at least 1 GiB is added
-            let gibs_to_add = max(gibs_needed, 1);
-
-            // Calculate bytes to add
-            let bytes_to_add = gibs_to_add * GIB;
-
-            // Increase storage capacity by a minimum of 1 GiB or
-            let required_capacity = capacity.checked_add(bytes_to_add).ok_or_else(|| {
-                anyhow::anyhow!("Reached maximum storage capacity limit. Unable to add more more storage capacity.")
-            })?;
-
-            // Saturate to max storage capacity
-            let new_capacity = std::cmp::min(required_capacity, max_storage_capacity);
+            let new_capacity = self.calculate_capacity(&event, current_capacity)?;
 
             let call = storage_hub_runtime::RuntimeCall::Providers(
                 pallet_storage_providers::Call::change_capacity { new_capacity },
@@ -638,6 +622,36 @@ where
             .await?;
 
         Ok(())
+    }
+
+    /// Calculate the new capacity after adding the required capacity for the file.
+    ///
+    /// The new storage capacity will be increased by the jump capacity until it reaches the
+    /// `max_storage_capacity` or it
+    ///
+    /// The `max_storage_capacity` is returned if the new capacity exceeds it.
+    fn calculate_capacity(
+        &mut self,
+        event: &NewStorageRequest,
+        current_capacity: StorageDataUnit,
+    ) -> Result<StorageDataUnit, anyhow::Error> {
+        let jump_capacity = self.storage_hub_handler.provider_config.jump_capacity;
+        let jumps_needed = (event.size + jump_capacity - 1) / jump_capacity;
+        let jumps = max(jumps_needed, 1);
+        let bytes_to_add = jumps * jump_capacity;
+        let required_capacity = current_capacity.checked_add(bytes_to_add).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Reached maximum storage capacity limit. Unable to add more more storage capacity."
+            )
+        })?;
+
+        let max_storage_capacity = self
+            .storage_hub_handler
+            .provider_config
+            .max_storage_capacity;
+
+        let new_capacity = std::cmp::min(required_capacity, max_storage_capacity);
+        Ok(new_capacity)
     }
 
     async fn unvolunteer_file(&self, file_key: H256) -> anyhow::Result<()> {

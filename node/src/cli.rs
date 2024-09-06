@@ -1,8 +1,9 @@
 use std::{path::PathBuf, str::FromStr};
 
 use clap::{Parser, ValueEnum};
+use storage_hub_runtime::StorageDataUnit;
 
-use crate::{command::ProviderOptions, services::handler::MaxStorageCapacity};
+use crate::command::ProviderOptions;
 
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
@@ -89,7 +90,16 @@ pub struct ProviderConfigurations {
         ("provider_type", "msp"),
         ("provider_type", "bsp")
     ]))]
-    pub max_storage_capacity: Option<MaxStorageCapacity>,
+    pub max_storage_capacity: Option<StorageDataUnit>,
+
+    /// Jump capacity (bytes).
+    ///
+    /// Default: 4294967295 bytes (4GiB)
+    #[clap(long, required_if_eq_any([
+        ("provider_type", "msp"),
+        ("provider_type", "bsp")
+    ]))]
+    pub jump_capacity: Option<StorageDataUnit>,
 
     /// Type of StorageHub provider.
     /// Currently: `memory` and `rocks-db`.
@@ -121,6 +131,7 @@ impl ProviderConfigurations {
             // We can default since the clap would have errored out if it was not provided when required.
             // In any other case, max_storage_capacity is not required and can be set to default.
             max_storage_capacity: self.max_storage_capacity.clone(),
+            jump_capacity: self.jump_capacity.clone(),
         }
     }
 }

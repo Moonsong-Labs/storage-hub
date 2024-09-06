@@ -38,11 +38,11 @@ import {
   BSP_DOWN_ID,
   BSP_THREE_ID,
   BSP_TWO_ID,
+  CAPACITY,
   CAPACITY_512,
   DUMMY_BSP_ID,
   DUMMY_MSP_ID,
   NODE_INFOS,
-  U32_MAX,
   VALUE_PROP
 } from "./consts";
 import { addBspContainer, showContainers } from "./docker";
@@ -674,7 +674,10 @@ export const addBsp = async (
     additionalArgs.push("--storage-layer=rocks-db");
   }
   additionalArgs.push(`--storage-path=/tmp/bsp/${bspKey.address}`);
-  additionalArgs.push(`--max-storage-capacity=${options?.maxStorageCapacity ?? U32_MAX}`);
+  additionalArgs.push(
+    `--max-storage-capacity=${options?.maxStorageCapacity ?? CAPACITY[1024] * BigInt(4)}`
+  );
+  additionalArgs.push(`--jump-capacity=${options?.maxStorageCapacity ?? CAPACITY[1024]}`);
   const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
     ...options,
     additionalArgs

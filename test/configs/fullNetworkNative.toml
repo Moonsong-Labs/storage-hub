@@ -41,6 +41,7 @@ args = [
     "--provider",
     "--provider-type bsp",
     "--max-storage-capacity 4294967295",
+    "--jump-capacity=1073741824",
 ]
 
 [[parachains.collators]]

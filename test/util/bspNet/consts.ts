@@ -82,5 +82,3 @@ export const CAPACITY = {
   512: CAPACITY_512,
   1024: CAPACITY_1024
 } as const;
-
-export const U32_MAX = 4294967295n;

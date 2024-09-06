@@ -4,6 +4,7 @@ import { strictEqual } from "node:assert";
 import {
   addBspContainer,
   type BspNetApi,
+  CAPACITY,
   createApiObject,
   describeBspNet,
   DOCKER_IMAGE,
@@ -21,7 +22,10 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
   it("New BSP can be created", async () => {
     const { containerName, rpcPort, p2pPort, peerId } = await addBspContainer({
       name: "nueva",
-      additionalArgs: [`--max-storage-capacity=${U32_MAX}`]
+      additionalArgs: [
+        `--max-storage-capacity=${CAPACITY[1024] * BigInt(4)}`,
+        `--jump-capacity=${CAPACITY[1024]}`
+      ]
     });
 
     await it("is in a running container", async () => {
@@ -69,15 +73,27 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
   it("Lots of BSPs can be created", async () => {
     await addBspContainer({
       name: "timbo1",
-      additionalArgs: ["--database=rocksdb", `--max-storage-capacity=${U32_MAX}`]
+      additionalArgs: [
+        "--database=rocksdb",
+        `--max-storage-capacity=${CAPACITY[1024] * BigInt(4)}`,
+        `--jump-capacity=${CAPACITY[1024]}`
+      ]
     });
     await addBspContainer({
       name: "timbo2",
-      additionalArgs: ["--database=paritydb", `--max-storage-capacity=${U32_MAX}`]
+      additionalArgs: [
+        "--database=paritydb",
+        `--max-storage-capacity=${CAPACITY[1024] * BigInt(4)}`,
+        `--jump-capacity=${CAPACITY[1024]}`
+      ]
     });
     await addBspContainer({
       name: "timbo3",
-      additionalArgs: ["--database=auto", `--max-storage-capacity=${U32_MAX}`]
+      additionalArgs: [
+        "--database=auto",
+        `--max-storage-capacity=${CAPACITY[1024] * BigInt(4)}`,
+        `--jump-capacity=${CAPACITY[1024]}`
+      ]
     });
 
     const docker = new Docker();
@@ -94,7 +110,11 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
     const keystorePath = "/tmp/test/insert/keystore";
     const { containerName, rpcPort } = await addBspContainer({
       name: "insert-keys-container",
-      additionalArgs: [`--keystore-path=${keystorePath}`, `--max-storage-capacity=${U32_MAX}`]
+      additionalArgs: [
+        `--keystore-path=${keystorePath}`,
+        `--max-storage-capacity=${CAPACITY[1024] * BigInt(4)}`,
+        `--jump-capacity=${CAPACITY[1024]}`
+      ]
     });
     const insertKeysApi = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
 
@@ -124,7 +144,11 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createBspApi, it }) => {
     const keystore_path = "/tmp/test/remove/keystore";
     const { containerName, rpcPort } = await addBspContainer({
       name: "remove-keys-container",
-      additionalArgs: [`--keystore-path=${keystore_path}`, `--max-storage-capacity=${U32_MAX}`]
+      additionalArgs: [
+        `--keystore-path=${keystore_path}`,
+        `--max-storage-capacity=${CAPACITY[1024] * BigInt(4)}`,
+        `--jump-capacity=${CAPACITY[1024]}`
+      ]
     });
     const removeKeysApi = await createApiObject(`ws://127.0.0.1:${rpcPort}`);
 
