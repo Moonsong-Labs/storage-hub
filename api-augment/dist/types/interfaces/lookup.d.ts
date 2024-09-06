@@ -2992,6 +2992,7 @@ declare const _default: {
         capacity: string;
         multiaddresses: string;
         paymentAccount: string;
+        weight: string;
       };
       slash: {
         providerId: string;

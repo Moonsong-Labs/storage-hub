@@ -3172,9 +3172,10 @@ declare module "@polkadot/api-base/types/submittable" {
           bspId: H256 | string | Uint8Array,
           capacity: u32 | AnyNumber | Uint8Array,
           multiaddresses: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          paymentAccount: AccountId32 | string | Uint8Array
+          paymentAccount: AccountId32 | string | Uint8Array,
+          weight: Option<u32> | null | Uint8Array | u32 | AnyNumber
         ) => SubmittableExtrinsic<ApiType>,
-        [AccountId32, H256, u32, Vec<Bytes>, AccountId32]
+        [AccountId32, H256, u32, Vec<Bytes>, AccountId32, Option<u32>]
       >;
       /**
        * Dispatchable extrinsic that allows to forcefully and automatically sing up a Main Storage Provider.

@@ -4124,6 +4124,84 @@ mod compute_threshold {
                 assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
             });
         }
+
+        #[test]
+        fn compute_threshold_to_succeed_returns_max_when_bsp_weight_max() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let user = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name.clone(), msp_id);
+
+                // Dispatch a signed extrinsic.
+                assert_ok!(FileSystem::issue_storage_request(
+                    user.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                ));
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+
+                let storage_amount: StorageData<Test> = 100;
+
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                let bsp_id =
+                    <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
+                        bsp_account_id,
+                    )
+                        .unwrap();
+                
+                // Set reputation weight of BSP to max
+                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
+                    match bsp {
+                        Some(bsp) => {
+                            bsp.reputation_weight = u32::MAX;
+                        }
+                        None => {
+                            panic!("BSP should exits");
+                        }
+                    }
+                });
+
+                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, None, Some(1)).unwrap();
+
+                assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1);
+
+                let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, 0).unwrap();
+
+                assert_eq!(threshold_to_succeed, MaximumThreshold::<Test>::get());
+                assert!(slope > 0);
+
+                let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
+
+                // BSP should be able to volunteer immediately for the storage request since the reputation weight is so high.
+                assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
+            });
+        }
     }
 }
 

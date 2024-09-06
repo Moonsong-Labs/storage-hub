@@ -154,6 +154,12 @@ export type BspNetConfig = {
    * Measured in bytes.
    */
   capacity?: bigint;
+
+  /**
+   * Optional parameter to set the weight of the BSP.
+   * Measured in bytes.
+   */
+  bspStartingWeight?: bigint;
 };
 
 /**
@@ -245,6 +251,8 @@ export type TestOptions = {
   initialised?: boolean | "multi";
   /** Set a custom capacity for the BSP */
   capacity?: bigint;
+  /** Set a custom BSP weight */
+  bspStartingWeight?: bigint;
 };
 
 /**

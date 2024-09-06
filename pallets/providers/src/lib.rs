@@ -948,6 +948,7 @@ pub mod pallet {
             capacity: StorageDataUnit<T>,
             multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>>,
             payment_account: T::AccountId,
+            weight: Option<ReputationWeightType<T>>,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was sent with root origin.
             ensure_root(origin)?;
@@ -961,7 +962,7 @@ pub mod pallet {
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 owner_account: who.clone(),
                 payment_account,
-                reputation_weight: T::StartingReputationWeight::get(),
+                reputation_weight: weight.unwrap_or(T::StartingReputationWeight::get()),
             };
 
             // Sign up the new BSP (if possible), updating storage

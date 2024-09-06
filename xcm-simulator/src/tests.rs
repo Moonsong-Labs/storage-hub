@@ -1208,7 +1208,8 @@ mod users {
                 bob_bsp_id,
                 capacity,
                 multiaddresses,
-                BOB
+                BOB,
+                None
             ));
         });
 
@@ -1462,7 +1463,8 @@ mod users {
                 bob_bsp_id,
                 capacity,
                 multiaddresses,
-                BOB
+                BOB,
+                None
             ));
         });
 

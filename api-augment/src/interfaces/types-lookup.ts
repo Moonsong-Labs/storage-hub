@@ -3817,6 +3817,7 @@ declare module "@polkadot/types/lookup" {
       readonly capacity: u32;
       readonly multiaddresses: Vec<Bytes>;
       readonly paymentAccount: AccountId32;
+      readonly weight: Option<u32>;
     } & Struct;
     readonly isSlash: boolean;
     readonly asSlash: {

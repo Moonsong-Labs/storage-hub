@@ -178,7 +178,8 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
       who: bspKey.address,
       multiaddress: multiAddressBsp,
       bspId: ShConsts.DUMMY_BSP_ID,
-      capacity: bspNetConfig.capacity || ShConsts.CAPACITY_512
+      capacity: bspNetConfig.capacity || ShConsts.CAPACITY_512,
+      weight: bspNetConfig.bspStartingWeight
     });
 
     // Make MSP
@@ -212,6 +213,7 @@ export const forceSignupBsp = async (options: {
   bspId?: string;
   capacity?: bigint;
   payeeAddress?: string;
+  weight?: bigint;
 }) => {
   const bspId = options.bspId || `0x${crypto.randomBytes(32).toString("hex")}`;
   const blockResults = await options.api.sealBlock(
@@ -221,7 +223,8 @@ export const forceSignupBsp = async (options: {
         bspId,
         options.capacity || ShConsts.CAPACITY_512,
         [options.multiaddress],
-        options.payeeAddress || options.who
+        options.payeeAddress || options.who,
+        options.weight ?? null
       )
     )
   );
@@ -297,11 +300,8 @@ export const runMultipleInitialisedBspsNet = async (
   try {
     userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
-    // u32 max value
-    const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
-
     await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, u32Max, 1))
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, CAPACITY[1024], 1))
     );
 
     // Add more BSPs to the network.
@@ -311,6 +311,7 @@ export const runMultipleInitialisedBspsNet = async (
       rocksdb: bspNetConfig.rocksdb,
       bspKeySeed: bspDownSeed,
       bspId: ShConsts.BSP_DOWN_ID,
+      bspStartingWeight: bspNetConfig.capacity,
       additionalArgs: ["--keystore-path=/keystore/bsp-down"]
     });
     const { rpcPort: bspTwoRpcPort } = await addBsp(userApi, bspTwoKey, {
@@ -318,6 +319,7 @@ export const runMultipleInitialisedBspsNet = async (
       rocksdb: bspNetConfig.rocksdb,
       bspKeySeed: bspTwoSeed,
       bspId: ShConsts.BSP_TWO_ID,
+      bspStartingWeight: bspNetConfig.capacity,
       additionalArgs: ["--keystore-path=/keystore/bsp-two"]
     });
     const { rpcPort: bspThreeRpcPort } = await addBsp(userApi, bspThreeKey, {
@@ -325,6 +327,7 @@ export const runMultipleInitialisedBspsNet = async (
       rocksdb: bspNetConfig.rocksdb,
       bspKeySeed: bspThreeSeed,
       bspId: ShConsts.BSP_THREE_ID,
+      bspStartingWeight: bspNetConfig.capacity,
       additionalArgs: ["--keystore-path=/keystore/bsp-three"]
     });
 
@@ -400,6 +403,7 @@ export const addBsp = async (
     rocksdb?: boolean;
     bspKeySeed?: string;
     bspId?: string;
+    bspStartingWeight?: bigint;
     maxStorageCapacity?: number;
     additionalArgs?: string[];
   }
@@ -434,7 +438,8 @@ export const addBsp = async (
         options?.bspId ?? bspKey.publicKey,
         ShConsts.CAPACITY_512,
         [multiAddressBsp],
-        bspKey.address
+        bspKey.address,
+        options?.bspStartingWeight ?? null
       )
     )
   );
