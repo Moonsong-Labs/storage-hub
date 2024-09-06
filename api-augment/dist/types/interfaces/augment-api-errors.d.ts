@@ -352,6 +352,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       UnexpectedNumberOfRemovedVolunteeredBsps: AugmentedError<ApiType>;
       /**
+       * A SP tried to stop storing files from a user that was supposedly insolvent, but the user is not insolvent.
+       **/
+      UserNotInsolvent: AugmentedError<ApiType>;
+      /**
        * Generic error
        **/
       [key: string]: AugmentedError<ApiType>;
@@ -643,6 +647,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ChargeOverflow: AugmentedError<ApiType>;
       /**
+       * Error thrown when a user tries to clear the flag of being without funds before the cooldown period has passed
+       **/
+      CooldownPeriodNotPassed: AugmentedError<ApiType>;
+      /**
        * Error thrown when the new last chargeable tick number that is trying to be set is greater than the current tick number or smaller than the previous last chargeable tick number
        **/
       InvalidLastChargeableBlockNumber: AugmentedError<ApiType>;
@@ -682,6 +690,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when trying to update the rate of a fixed-rate payment stream to the same rate as before
        **/
       UpdateRateToSameRate: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a user that has not been flagged as without funds tries to use the extrinsic to pay its outstanding debt
+       **/
+      UserNotFlaggedAsWithoutFunds: AugmentedError<ApiType>;
       /**
        * Error thrown when trying to operate when the User has been flagged for not having enough funds.
        **/

@@ -1460,6 +1460,13 @@ declare const _default: {
         user: string;
         fileKey: string;
       };
+      SpStopStoringInsolventUser: {
+        spId: string;
+        fileKey: string;
+        owner: string;
+        location: string;
+        newRoot: string;
+      };
       FailedToQueuePriorityChallenge: {
         user: string;
         fileKey: string;
@@ -1626,6 +1633,12 @@ declare const _default: {
         lastChargeablePriceIndex: string;
       };
       UserWithoutFunds: {
+        who: string;
+      };
+      UserPaidDebts: {
+        who: string;
+      };
+      UserSolvent: {
         who: string;
       };
     };
@@ -3065,6 +3078,18 @@ declare const _default: {
         fileKey: string;
         inclusionForestProof: string;
       };
+      stop_storing_for_insolvent_user: {
+        _alias: {
+          size_: string;
+        };
+        fileKey: string;
+        bucketId: string;
+        location: string;
+        owner: string;
+        fingerprint: string;
+        size_: string;
+        inclusionForestProof: string;
+      };
       delete_file: {
         _alias: {
           size_: string;
@@ -3135,14 +3160,11 @@ declare const _default: {
         providerId: string;
         userAccount: string;
         amountProvided: string;
-        currentPrice: string;
-        currentAccumulatedPriceIndex: string;
       };
       update_dynamic_rate_payment_stream: {
         providerId: string;
         userAccount: string;
         newAmountProvided: string;
-        currentPrice: string;
       };
       delete_dynamic_rate_payment_stream: {
         providerId: string;
@@ -3151,6 +3173,8 @@ declare const _default: {
       charge_payment_streams: {
         userAccount: string;
       };
+      pay_outstanding_debt: string;
+      clear_insolvent_flag: string;
     };
   };
   /**
@@ -3752,6 +3776,7 @@ declare const _default: {
     rate: string;
     lastChargedTick: string;
     userDeposit: string;
+    outOfFundsTick: string;
   };
   /**
    * Lookup420: pallet_payment_streams::types::DynamicRatePaymentStream<T>
@@ -3760,6 +3785,7 @@ declare const _default: {
     amountProvided: string;
     priceIndexWhenLastCharged: string;
     userDeposit: string;
+    outOfFundsTick: string;
   };
   /**
    * Lookup421: pallet_payment_streams::types::ProviderLastChargeableInfo<T>

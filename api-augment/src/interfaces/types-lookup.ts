@@ -1948,6 +1948,14 @@ declare module "@polkadot/types/lookup" {
       readonly user: AccountId32;
       readonly fileKey: H256;
     } & Struct;
+    readonly isSpStopStoringInsolventUser: boolean;
+    readonly asSpStopStoringInsolventUser: {
+      readonly spId: H256;
+      readonly fileKey: H256;
+      readonly owner: AccountId32;
+      readonly location: Bytes;
+      readonly newRoot: H256;
+    } & Struct;
     readonly isFailedToQueuePriorityChallenge: boolean;
     readonly asFailedToQueuePriorityChallenge: {
       readonly user: AccountId32;
@@ -1988,6 +1996,7 @@ declare module "@polkadot/types/lookup" {
       | "BspRequestedToStopStoring"
       | "BspConfirmStoppedStoring"
       | "PriorityChallengeForFileDeletionQueued"
+      | "SpStopStoringInsolventUser"
       | "FailedToQueuePriorityChallenge"
       | "FileDeletionRequest"
       | "ProofSubmittedForPendingFileDeletionRequest"
@@ -2150,6 +2159,14 @@ declare module "@polkadot/types/lookup" {
     readonly asUserWithoutFunds: {
       readonly who: AccountId32;
     } & Struct;
+    readonly isUserPaidDebts: boolean;
+    readonly asUserPaidDebts: {
+      readonly who: AccountId32;
+    } & Struct;
+    readonly isUserSolvent: boolean;
+    readonly asUserSolvent: {
+      readonly who: AccountId32;
+    } & Struct;
     readonly type:
       | "FixedRatePaymentStreamCreated"
       | "FixedRatePaymentStreamUpdated"
@@ -2159,7 +2176,9 @@ declare module "@polkadot/types/lookup" {
       | "DynamicRatePaymentStreamDeleted"
       | "PaymentStreamCharged"
       | "LastChargeableInfoUpdated"
-      | "UserWithoutFunds";
+      | "UserWithoutFunds"
+      | "UserPaidDebts"
+      | "UserSolvent";
   }
 
   /** @name PalletBucketNftsEvent (155) */
@@ -3906,6 +3925,16 @@ declare module "@polkadot/types/lookup" {
       readonly fileKey: H256;
       readonly inclusionForestProof: SpTrieStorageProofCompactProof;
     } & Struct;
+    readonly isStopStoringForInsolventUser: boolean;
+    readonly asStopStoringForInsolventUser: {
+      readonly fileKey: H256;
+      readonly bucketId: H256;
+      readonly location: Bytes;
+      readonly owner: AccountId32;
+      readonly fingerprint: H256;
+      readonly size_: u32;
+      readonly inclusionForestProof: SpTrieStorageProofCompactProof;
+    } & Struct;
     readonly isDeleteFile: boolean;
     readonly asDeleteFile: {
       readonly bucketId: H256;
@@ -3939,6 +3968,7 @@ declare module "@polkadot/types/lookup" {
       | "BspConfirmStoring"
       | "BspRequestStopStoring"
       | "BspConfirmStopStoring"
+      | "StopStoringForInsolventUser"
       | "DeleteFile"
       | "PendingFileDeletionRequestSubmitProof"
       | "SetGlobalParameters";
@@ -3992,15 +4022,12 @@ declare module "@polkadot/types/lookup" {
       readonly providerId: H256;
       readonly userAccount: AccountId32;
       readonly amountProvided: u32;
-      readonly currentPrice: u128;
-      readonly currentAccumulatedPriceIndex: u128;
     } & Struct;
     readonly isUpdateDynamicRatePaymentStream: boolean;
     readonly asUpdateDynamicRatePaymentStream: {
       readonly providerId: H256;
       readonly userAccount: AccountId32;
       readonly newAmountProvided: u32;
-      readonly currentPrice: u128;
     } & Struct;
     readonly isDeleteDynamicRatePaymentStream: boolean;
     readonly asDeleteDynamicRatePaymentStream: {
@@ -4011,6 +4038,8 @@ declare module "@polkadot/types/lookup" {
     readonly asChargePaymentStreams: {
       readonly userAccount: AccountId32;
     } & Struct;
+    readonly isPayOutstandingDebt: boolean;
+    readonly isClearInsolventFlag: boolean;
     readonly type:
       | "CreateFixedRatePaymentStream"
       | "UpdateFixedRatePaymentStream"
@@ -4018,7 +4047,9 @@ declare module "@polkadot/types/lookup" {
       | "CreateDynamicRatePaymentStream"
       | "UpdateDynamicRatePaymentStream"
       | "DeleteDynamicRatePaymentStream"
-      | "ChargePaymentStreams";
+      | "ChargePaymentStreams"
+      | "PayOutstandingDebt"
+      | "ClearInsolventFlag";
   }
 
   /** @name PalletBucketNftsCall (308) */
@@ -4861,6 +4892,7 @@ declare module "@polkadot/types/lookup" {
     readonly isPendingStopStoringRequestNotFound: boolean;
     readonly isMinWaitForStopStoringNotReached: boolean;
     readonly isPendingStopStoringRequestAlreadyExists: boolean;
+    readonly isUserNotInsolvent: boolean;
     readonly isNotSelectedMsp: boolean;
     readonly isMspAlreadyConfirmed: boolean;
     readonly isRequestWithoutMsp: boolean;
@@ -4911,6 +4943,7 @@ declare module "@polkadot/types/lookup" {
       | "PendingStopStoringRequestNotFound"
       | "MinWaitForStopStoringNotReached"
       | "PendingStopStoringRequestAlreadyExists"
+      | "UserNotInsolvent"
       | "NotSelectedMsp"
       | "MspAlreadyConfirmed"
       | "RequestWithoutMsp";
@@ -4968,6 +5001,7 @@ declare module "@polkadot/types/lookup" {
     readonly rate: u128;
     readonly lastChargedTick: u32;
     readonly userDeposit: u128;
+    readonly outOfFundsTick: Option<u32>;
   }
 
   /** @name PalletPaymentStreamsDynamicRatePaymentStream (420) */
@@ -4975,6 +5009,7 @@ declare module "@polkadot/types/lookup" {
     readonly amountProvided: u32;
     readonly priceIndexWhenLastCharged: u128;
     readonly userDeposit: u128;
+    readonly outOfFundsTick: Option<u32>;
   }
 
   /** @name PalletPaymentStreamsProviderLastChargeableInfo (421) */
@@ -4999,6 +5034,8 @@ declare module "@polkadot/types/lookup" {
     readonly isInvalidLastChargeablePriceIndex: boolean;
     readonly isChargeOverflow: boolean;
     readonly isUserWithoutFunds: boolean;
+    readonly isUserNotFlaggedAsWithoutFunds: boolean;
+    readonly isCooldownPeriodNotPassed: boolean;
     readonly type:
       | "PaymentStreamAlreadyExists"
       | "PaymentStreamNotFound"
@@ -5013,7 +5050,9 @@ declare module "@polkadot/types/lookup" {
       | "InvalidLastChargeableBlockNumber"
       | "InvalidLastChargeablePriceIndex"
       | "ChargeOverflow"
-      | "UserWithoutFunds";
+      | "UserWithoutFunds"
+      | "UserNotFlaggedAsWithoutFunds"
+      | "CooldownPeriodNotPassed";
   }
 
   /** @name PalletBucketNftsError (423) */

@@ -856,8 +856,6 @@ pub trait PaymentStreamsInterface {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         amount_provided: &Self::Units,
-        current_price: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
-        current_accumulated_price_index: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult;
 
     /// Update the amount provided of an existing dynamic-rate payment stream.
@@ -865,7 +863,6 @@ pub trait PaymentStreamsInterface {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
         new_amount_provided: &Self::Units,
-        current_price: <Self::Balance as fungible::Inspect<Self::AccountId>>::Balance,
     ) -> DispatchResult;
 
     /// Delete a dynamic-rate payment stream.
@@ -879,6 +876,15 @@ pub trait PaymentStreamsInterface {
         provider_id: &Self::ProviderId,
         user_account: &Self::AccountId,
     ) -> Option<Self::DynamicRatePaymentStream>;
+}
+
+/// The interface of the Payment Streams pallet that allows for the reading of user's solvency.
+pub trait ReadUserSolvencyInterface {
+    /// The type which represents a User account identifier.
+    type AccountId: Parameter + Member + MaybeSerializeDeserialize + Debug + Ord + MaxEncodedLen;
+
+    /// Get if a user has been flagged as insolvent (without funds)
+    fn is_user_insolvent(user_account: &Self::AccountId) -> bool;
 }
 
 pub trait ProofSubmittersInterface {

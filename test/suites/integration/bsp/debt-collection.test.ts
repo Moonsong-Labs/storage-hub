@@ -41,9 +41,7 @@ describeBspNet(
           userApi.tx.paymentStreams.createDynamicRatePaymentStream(
             ShConsts.DUMMY_BSP_ID,
             alice,
-            100,
-            1,
-            0
+            100
           )
         )
       );
