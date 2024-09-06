@@ -184,6 +184,14 @@ impl ProofsDealerInterface for MockProofsDealer {
         Ok(H256::default())
     }
 
+    fn generic_apply_delta(
+        _root: &Self::MerkleHash,
+        _mutations: &[(Self::MerkleHash, TrieMutation)],
+        _proof: &Self::ForestProof,
+    ) -> Result<Self::MerkleHash, sp_runtime::DispatchError> {
+        Ok(H256::default())
+    }
+
     fn initialise_challenge_cycle(
         _who: &Self::ProviderId,
     ) -> frame_support::dispatch::DispatchResult {

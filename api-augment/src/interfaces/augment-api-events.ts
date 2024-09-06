@@ -447,6 +447,14 @@ declare module "@polkadot/api-base/types/events" {
         { user: AccountId32; fileKey: H256; bucketId: H256; mspId: H256; proofOfInclusion: bool }
       >;
       /**
+       * Notifies that a MSP has accepted to store a file.
+       **/
+      MspAcceptedStoring: AugmentedEvent<
+        ApiType,
+        [fileKey: H256, mspId: H256, bucketId: H256, owner: AccountId32, newBucketRoot: H256],
+        { fileKey: H256; mspId: H256; bucketId: H256; owner: AccountId32; newBucketRoot: H256 }
+      >;
+      /**
        * Notifies that a new bucket has been created.
        **/
       NewBucket: AugmentedEvent<
