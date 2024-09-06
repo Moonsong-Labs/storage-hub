@@ -375,6 +375,11 @@ jobs:
           cd test
           pnpm install
           pnpm docker:build
+      - name: Run Typegen
+        run: |
+          cd test
+          pnpm typegen
+      - run: pnpm fmt:fix
       - name: Check for changes
         run: |
           git diff --exit-code || (echo "Typegen produced changes. Please run 'pnpm typegen' locally and commit the changes." && exit 1)
