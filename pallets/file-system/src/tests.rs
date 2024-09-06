@@ -17,7 +17,7 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::{LastTickProviderSubmittedAProofFor, PriorityChallengesQueue};
 use pallet_storage_providers::types::Bucket;
-use shp_traits::{ReadBucketsInterface, TrieRemoveMutation};
+use shp_traits::{ReadBucketsInterface, ReadStorageProvidersInterface, TrieRemoveMutation};
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
@@ -1452,6 +1452,456 @@ mod msp_accept_storage_request {
 					}
                     .into(),
                 );
+            });
+        }
+
+        #[test]
+        fn msp_accept_storage_request_works_multiple_times_for_same_user_same_bucket() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let first_location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+				let second_location = FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec()).unwrap();
+                let first_size = 4;
+				let second_size = 8;
+                let first_fingerprint = H256::zero();
+				let second_fingerprint =  H256::random();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+				// Register the MSP.
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+				// Create the bucket that will hold both files.
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id);
+
+				// Compute the file key for the first file.
+                let first_file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    first_location.clone(),
+                    first_size,
+                    first_fingerprint,
+                );
+
+				// Compute the file key for the second file.
+				let second_file_key = FileSystem::compute_file_key(
+					owner_account_id.clone(),
+					bucket_id,
+					second_location.clone(),
+					second_size,
+					second_fingerprint,
+				);
+
+                // Dispatch a storage request for the first file.
+                assert_ok!(FileSystem::issue_storage_request(
+					owner_signed.clone(),
+					bucket_id,
+					first_location.clone(),
+					first_fingerprint,
+					first_size,
+					msp_id,
+					peer_ids.clone(),
+				));
+
+				// Dispatch a storage request for the second file.
+				assert_ok!(FileSystem::issue_storage_request(
+					owner_signed.clone(),
+					bucket_id,
+					second_location.clone(),
+					second_fingerprint,
+					second_size,
+					msp_id,
+					peer_ids.clone(),
+				));
+
+                // Dispatch the MSP accept request for the first file.
+                assert_ok!(FileSystem::msp_accept_storage_request(
+					RuntimeOrigin::signed(msp.clone()),
+					first_file_key,
+					CompactProof {
+						encoded_nodes: vec![H256::default().as_ref().to_vec()],
+					},
+					CompactProof {
+						encoded_nodes: vec![H256::default().as_ref().to_vec()],
+					}
+				));
+
+                // Assert that the storage was updated
+                assert_eq!(
+                    FileSystem::storage_requests(first_file_key).unwrap().msp,
+                    Some((msp_id, true))
+                );
+
+				// Get the new root of the bucket.
+                let new_bucket_root =
+                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id,)
+                    .unwrap();
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MspAcceptedStoring {
+						file_key: first_file_key,
+						msp_id,
+						bucket_id,
+						owner: owner_account_id.clone(),
+						new_bucket_root
+					}
+                    .into(),
+                );
+
+				// Assert that the MSP used capacity has been updated.
+				assert_eq!(
+					<Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+					first_size
+				);
+
+				// Dispatch the MSP accept request for the second file.
+				assert_ok!(FileSystem::msp_accept_storage_request(
+					RuntimeOrigin::signed(msp.clone()),
+					second_file_key,
+					CompactProof {
+						encoded_nodes: vec![H256::default().as_ref().to_vec()],
+					},
+					CompactProof {
+						encoded_nodes: vec![H256::default().as_ref().to_vec()],
+					}
+				));
+
+				// Assert that the storage was updated
+				assert_eq!(
+					FileSystem::storage_requests(second_file_key).unwrap().msp,
+					Some((msp_id, true))
+				);
+
+				// Get the new root of the bucket.
+				let new_bucket_root =
+					<<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id,)
+					.unwrap();
+
+				// Assert that the correct event was deposited
+				System::assert_last_event(
+					Event::MspAcceptedStoring {
+						file_key: second_file_key,
+						msp_id,
+						bucket_id,
+						owner: owner_account_id,
+						new_bucket_root
+					}
+					.into(),
+				);
+
+				// Assert that the MSP used capacity has been updated.
+				assert_eq!(
+					<Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+					first_size + second_size
+				);
+            });
+        }
+
+        #[test]
+        fn msp_accept_storage_request_works_multiple_times_for_same_user_different_bucket() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let first_location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+				let second_location = FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec()).unwrap();
+                let first_size = 4;
+				let second_size = 8;
+                let first_fingerprint = H256::zero();
+				let second_fingerprint =  H256::random();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+
+				// Register the MSP.
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+				// Create the bucket that will hold the first file.
+                let first_name = BoundedVec::try_from(b"first bucket".to_vec()).unwrap();
+                let first_bucket_id = create_bucket(&owner_account_id.clone(), first_name, msp_id);
+
+				// Create the bucket that will hold the second file.
+				let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
+				let second_bucket_id = create_bucket(&owner_account_id.clone(), second_name, msp_id);
+
+				// Compute the file key for the first file.
+                let first_file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    first_bucket_id,
+                    first_location.clone(),
+                    first_size,
+                    first_fingerprint,
+                );
+
+				// Compute the file key for the second file.
+				let second_file_key = FileSystem::compute_file_key(
+					owner_account_id.clone(),
+					second_bucket_id,
+					second_location.clone(),
+					second_size,
+					second_fingerprint,
+				);
+
+                // Dispatch a storage request for the first file.
+                assert_ok!(FileSystem::issue_storage_request(
+					owner_signed.clone(),
+					first_bucket_id,
+					first_location.clone(),
+					first_fingerprint,
+					first_size,
+					msp_id,
+					peer_ids.clone(),
+				));
+
+				// Dispatch a storage request for the second file.
+				assert_ok!(FileSystem::issue_storage_request(
+					owner_signed.clone(),
+					second_bucket_id,
+					second_location.clone(),
+					second_fingerprint,
+					second_size,
+					msp_id,
+					peer_ids.clone(),
+				));
+
+                // Dispatch the MSP accept request for the first file.
+                assert_ok!(FileSystem::msp_accept_storage_request(
+					RuntimeOrigin::signed(msp.clone()),
+					first_file_key,
+					CompactProof {
+						encoded_nodes: vec![H256::default().as_ref().to_vec()],
+					},
+					CompactProof {
+						encoded_nodes: vec![H256::default().as_ref().to_vec()],
+					}
+				));
+
+                // Assert that the storage was updated
+                assert_eq!(
+                    FileSystem::storage_requests(first_file_key).unwrap().msp,
+                    Some((msp_id, true))
+                );
+
+				// Get the new root of the bucket.
+                let new_bucket_root =
+                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&first_bucket_id,)
+                    .unwrap();
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MspAcceptedStoring {
+						file_key: first_file_key,
+						msp_id,
+						bucket_id: first_bucket_id,
+						owner: owner_account_id.clone(),
+						new_bucket_root
+					}
+                    .into(),
+                );
+
+				// Assert that the MSP used capacity has been updated.
+				assert_eq!(
+					<Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+					first_size
+				);
+
+				// Dispatch the MSP accept request for the second file.
+				assert_ok!(FileSystem::msp_accept_storage_request(
+					RuntimeOrigin::signed(msp.clone()),
+					second_file_key,
+					CompactProof {
+						encoded_nodes: vec![H256::default().as_ref().to_vec()],
+					},
+					CompactProof {
+						encoded_nodes: vec![H256::default().as_ref().to_vec()],
+					}
+				));
+
+				// Assert that the storage was updated
+				assert_eq!(
+					FileSystem::storage_requests(second_file_key).unwrap().msp,
+					Some((msp_id, true))
+				);
+
+				// Get the new root of the bucket.
+				let new_bucket_root =
+					<<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&second_bucket_id,)
+					.unwrap();
+
+				// Assert that the correct event was deposited
+				System::assert_last_event(
+					Event::MspAcceptedStoring {
+						file_key: second_file_key,
+						msp_id,
+						bucket_id: second_bucket_id,
+						owner: owner_account_id,
+						new_bucket_root
+					}
+					.into(),
+				);
+
+				// Assert that the MSP used capacity has been updated.
+				assert_eq!(
+					<Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+					first_size + second_size
+				);
+            });
+        }
+
+        #[test]
+        fn msp_accept_storage_request_works_multiple_times_for_different_users() {
+            new_test_ext().execute_with(|| {
+                let first_owner_account_id = Keyring::Alice.to_account_id();
+                let first_owner_signed = RuntimeOrigin::signed(first_owner_account_id.clone());
+				let second_owner_account_id = Keyring::Bob.to_account_id();
+				let second_owner_signed = RuntimeOrigin::signed(second_owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let first_location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+				let second_location = FileLocation::<Test>::try_from(b"never/go/to/a/second/location".to_vec()).unwrap();
+                let first_size = 4;
+				let second_size = 8;
+                let first_fingerprint = H256::zero();
+				let second_fingerprint =  H256::random();
+                let first_peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let first_peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![first_peer_id]).unwrap();
+				let second_peer_id = BoundedVec::try_from(vec![2]).unwrap();
+				let second_peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![second_peer_id]).unwrap();
+
+				// Register the MSP.
+                let msp_id = add_msp_to_provider_storage(&msp);
+
+				// Create the bucket that will hold the first file.
+                let first_name = BoundedVec::try_from(b"first bucket".to_vec()).unwrap();
+                let first_bucket_id = create_bucket(&first_owner_account_id.clone(), first_name, msp_id);
+
+				// Create the bucket that will hold the second file.
+				let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
+				let second_bucket_id = create_bucket(&second_owner_account_id.clone(), second_name, msp_id);
+
+				// Compute the file key for the first file.
+                let first_file_key = FileSystem::compute_file_key(
+                    first_owner_account_id.clone(),
+                    first_bucket_id,
+                    first_location.clone(),
+                    first_size,
+                    first_fingerprint,
+                );
+
+				// Compute the file key for the second file.
+				let second_file_key = FileSystem::compute_file_key(
+					second_owner_account_id.clone(),
+					second_bucket_id,
+					second_location.clone(),
+					second_size,
+					second_fingerprint,
+				);
+
+                // Dispatch a storage request for the first file.
+                assert_ok!(FileSystem::issue_storage_request(
+					first_owner_signed.clone(),
+					first_bucket_id,
+					first_location.clone(),
+					first_fingerprint,
+					first_size,
+					msp_id,
+					first_peer_ids.clone(),
+				));
+
+				// Dispatch a storage request for the second file.
+				assert_ok!(FileSystem::issue_storage_request(
+					second_owner_signed.clone(),
+					second_bucket_id,
+					second_location.clone(),
+					second_fingerprint,
+					second_size,
+					msp_id,
+					second_peer_ids.clone(),
+				));
+
+                // Dispatch the MSP accept request for the first file.
+                assert_ok!(FileSystem::msp_accept_storage_request(
+					RuntimeOrigin::signed(msp.clone()),
+					first_file_key,
+					CompactProof {
+						encoded_nodes: vec![H256::default().as_ref().to_vec()],
+					},
+					CompactProof {
+						encoded_nodes: vec![H256::default().as_ref().to_vec()],
+					}
+				));
+
+                // Assert that the storage was updated
+                assert_eq!(
+                    FileSystem::storage_requests(first_file_key).unwrap().msp,
+                    Some((msp_id, true))
+                );
+
+				// Get the new root of the bucket.
+                let new_bucket_root =
+                    <<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&first_bucket_id,)
+                    .unwrap();
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MspAcceptedStoring {
+						file_key: first_file_key,
+						msp_id,
+						bucket_id: first_bucket_id,
+						owner: first_owner_account_id.clone(),
+						new_bucket_root
+					}
+                    .into(),
+                );
+
+				// Assert that the MSP used capacity has been updated.
+				assert_eq!(
+					<Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+					first_size
+				);
+
+				// Dispatch the MSP accept request for the second file.
+				assert_ok!(FileSystem::msp_accept_storage_request(
+					RuntimeOrigin::signed(msp.clone()),
+					second_file_key,
+					CompactProof {
+						encoded_nodes: vec![H256::default().as_ref().to_vec()],
+					},
+					CompactProof {
+						encoded_nodes: vec![H256::default().as_ref().to_vec()],
+					}
+				));
+
+				// Assert that the storage was updated
+				assert_eq!(
+					FileSystem::storage_requests(second_file_key).unwrap().msp,
+					Some((msp_id, true))
+				);
+
+				// Get the new root of the bucket.
+				let new_bucket_root =
+					<<Test as crate::Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&second_bucket_id,)
+					.unwrap();
+
+				// Assert that the correct event was deposited
+				System::assert_last_event(
+					Event::MspAcceptedStoring {
+						file_key: second_file_key,
+						msp_id,
+						bucket_id: second_bucket_id,
+						owner: second_owner_account_id,
+						new_bucket_root
+					}
+					.into(),
+				);
+
+				// Assert that the MSP used capacity has been updated.
+				assert_eq!(
+					<Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+					first_size + second_size
+				);
             });
         }
     }
