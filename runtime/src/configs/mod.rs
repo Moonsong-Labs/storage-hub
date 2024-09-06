@@ -69,17 +69,17 @@ use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
 
 // Local module imports
-use super::{
+use crate::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
     AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection, Hash,
-    MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, ProofsDealer, Providers,
-    Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin,
-    RuntimeTask, Session, SessionKeys, Signature, System, WeightToFee, XcmpQueue,
-    AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS, EXISTENTIAL_DEPOSIT, HOURS,
-    MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MINUTES, NORMAL_DISPATCH_RATIO,
-    RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION, UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
+    MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, PolkadotXcm,
+    ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
+    RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
+    WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, DAYS,
+    EXISTENTIAL_DEPOSIT, HOURS, MAXIMUM_BLOCK_WEIGHT, MICROUNIT, MILLIUNIT, MINUTES,
+    NORMAL_DISPATCH_RATIO, RELAY_CHAIN_SLOT_DURATION_MILLIS, SLOT_DURATION,
+    UNINCLUDED_SEGMENT_CAPACITY, UNIT, VERSION,
 };
-use crate::PolkadotXcm;
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
 pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
@@ -450,7 +450,7 @@ impl pallet_randomness::Config for Runtime {
 parameter_types! {
     pub const SpMinDeposit: Balance = 20 * UNIT;
     pub const BucketDeposit: Balance = 20 * UNIT;
-    pub const SlashAmountPerMaxFileSize: Balance = 20 * MICROUNIT; // TODO: Change this to a more realistic slashing amount.
+    pub const SlashAmountPerMaxFileSize: Balance = 20 * MILLIUNIT; // TODO: Change this to a more realistic slashing amount.
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
