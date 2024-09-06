@@ -450,7 +450,7 @@ impl pallet_randomness::Config for Runtime {
 parameter_types! {
     pub const SpMinDeposit: Balance = 20 * UNIT;
     pub const BucketDeposit: Balance = 20 * UNIT;
-    pub const SlashAmountPerMaxFileSize: Balance = 0 * UNIT;
+    pub const SlashAmountPerMaxFileSize: Balance = 20 * MICROUNIT; // TODO: Change this to a more realistic slashing amount.
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;

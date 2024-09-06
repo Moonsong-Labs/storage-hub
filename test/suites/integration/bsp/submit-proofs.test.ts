@@ -331,7 +331,7 @@ describeBspNet(
       await resumeBspContainer({ containerName: "sh-bsp-three" });
 
       // Wait for BSPs to resync.
-      await sleep(3000);
+      await sleep(1000);
 
       // There shouldn't be any pending volunteer transactions.
       await assert.rejects(
