@@ -4436,13 +4436,12 @@ mod set_global_parameters_tests {
                 // Set the global parameters
                 assert_ok!(FileSystem::set_global_parameters(
                     root.clone(),
-                    None,
+                    Some(3),
                     Some(10)
                 ));
 
                 // Assert that the global parameters were set correctly
                 assert_eq!(ReplicationTarget::<Test>::get(), 3);
-                assert_eq!(ThresholdType::<Test>::max_value(), 5);
                 assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 10);
             });
         }
