@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { after, before, describe, it } from "node:test";
+import { after, before, describe, it, afterEach, beforeEach } from "node:test";
 import {
   cleardownTest,
   runInitialisedBspsNet,
@@ -93,6 +93,8 @@ export async function describeBspNet<
         bspNetConfig,
         before,
         after,
+        afterEach, 
+        beforeEach,
         getLaunchResponse: () => responseListenerPromise
       } satisfies BspNetContext;
 

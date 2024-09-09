@@ -3,7 +3,7 @@ import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
 import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
 import type { EventRecord, Event } from "@polkadot/types/interfaces";
-import type { after, before, it } from "node:test";
+import type { after, afterEach, before, beforeEach, it } from "node:test";
 import type { launchNetwork } from "./testrunner";
 import type { BspNetTestApi } from "./test-api";
 import type { SealedBlock } from "./block";
@@ -200,6 +200,10 @@ export type BspNetContext = {
    * After hook for test cleanup operations.
    */
   after: typeof after;
+
+  beforeEach: typeof beforeEach;
+
+  afterEach: typeof afterEach;
 
   /**
    * Retrieves the response from launching the network.

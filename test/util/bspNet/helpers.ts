@@ -167,11 +167,8 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
       userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(shUser.address, amount))
     );
 
-    // u32 max value
-    const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
-
     await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, u32Max, 1))
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, ShConsts.U32_MAX, 1))
     );
 
     // Make BSP
@@ -202,7 +199,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
     );
 
     await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, u32Max, 1))
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, ShConsts.U32_MAX, 1))
     );
   } catch (e) {
     console.error("Error ", e);
@@ -303,11 +300,8 @@ export const runMultipleInitialisedBspsNet = async (
   try {
     userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
-    // u32 max value
-    const u32Max = (BigInt(1) << BigInt(32)) - BigInt(1);
-
     await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, u32Max, 1))
+      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, ShConsts.U32_MAX, 1))
     );
 
     // Add more BSPs to the network.
