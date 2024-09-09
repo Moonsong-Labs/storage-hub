@@ -1,6 +1,5 @@
 import assert, { notEqual, strictEqual } from "node:assert";
 import { describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
-import { CAPACITY } from "../../../util/bspNet/consts";
 
 describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
