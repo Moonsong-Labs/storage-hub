@@ -147,6 +147,36 @@ const STORAGE_PROVIDERS_V1 = {
       }
     ],
     type: "Option<StorageProviderId>"
+  },
+  query_storage_provider_capacity: {
+    description: "Query the storage provider capacity.",
+    params: [
+      {
+        name: "providerId",
+        type: "ProviderId"
+      }
+    ],
+    type: "Result<StorageDataUnit, QueryStorageProviderCapacityError>"
+  },
+  query_available_storage_capacity: {
+    description: "Query the available storage capacity.",
+    params: [
+      {
+        name: "providerId",
+        type: "ProviderId"
+      }
+    ],
+    type: "Result<StorageDataUnit, QueryAvailableStorageCapacityError>"
+  },
+  query_earliest_change_capacity_block: {
+    description: "Query the earliest block number that a BSP can change its capacity.",
+    params: [
+      {
+        name: "providerId",
+        type: "BackupStorageProviderId"
+      }
+    ],
+    type: "Result<BlockNumber, QueryEarliestChangeCapacityBlockError>"
   }
 };
 const PAYMENT_STREAMS_V1 = {

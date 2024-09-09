@@ -4,6 +4,7 @@ use sc_service::RpcHandlers;
 use shc_common::types::StorageProofsMerkleTrieLayout;
 use sp_keystore::KeystorePtr;
 use std::{path::PathBuf, sync::Arc};
+use storage_hub_runtime::StorageDataUnit;
 use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
@@ -18,7 +19,7 @@ use shc_rpc::StorageHubClientRpcConfig;
 
 use super::{
     forest_storage::{ForestStorageCaching, ForestStorageSingle},
-    handler::StorageHubHandler,
+    handler::{ProviderConfig, StorageHubHandler},
 };
 use crate::tasks::{BspForestStorageHandlerT, FileStorageT, MspForestStorageHandlerT};
 
@@ -101,7 +102,8 @@ where
     storage_path: Option<String>,
     file_storage: Option<Arc<RwLock<<(R, S) as StorageTypes>::FL>>>,
     forest_storage_handler: Option<<(R, S) as StorageTypes>::FSH>,
-    provider_pub_key: Option<[u8; 32]>,
+    max_storage_capacity: Option<StorageDataUnit>,
+    jump_capacity: Option<StorageDataUnit>,
 }
 
 /// Common components to build for any given configuration of [`RoleSupport`] and [`StorageLayerSupport`].
@@ -117,7 +119,8 @@ where
             storage_path: None,
             file_storage: None,
             forest_storage_handler: None,
-            provider_pub_key: None,
+            max_storage_capacity: None,
+            jump_capacity: None,
         }
     }
 
@@ -141,8 +144,16 @@ where
         self
     }
 
-    pub fn with_provider_pub_key(&mut self, provider_pub_key: [u8; 32]) -> &mut Self {
-        self.provider_pub_key = Some(provider_pub_key);
+    pub fn with_max_storage_capacity(
+        &mut self,
+        max_storage_capacity: Option<StorageDataUnit>,
+    ) -> &mut Self {
+        self.max_storage_capacity = max_storage_capacity;
+        self
+    }
+
+    pub fn with_jump_capacity(&mut self, jump_capacity: Option<StorageDataUnit>) -> &mut Self {
+        self.jump_capacity = jump_capacity;
         self
     }
 
@@ -290,6 +301,12 @@ where
                 .as_ref()
                 .expect("Forest Storage Handler not set.")
                 .clone(),
+            ProviderConfig {
+                max_storage_capacity: self
+                    .max_storage_capacity
+                    .expect("Max Storage Capacity not set"),
+                jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
+            },
         )
     }
 }
@@ -326,19 +343,28 @@ where
                 .as_ref()
                 .expect("Forest Storage Handler not set.")
                 .clone(),
+            ProviderConfig {
+                max_storage_capacity: self
+                    .max_storage_capacity
+                    .expect("Max Storage Capacity not set"),
+                jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
+            },
         )
     }
 }
 
-impl<S: StorageLayerSupport> StorageHubBuilder<UserRole, S>
+impl StorageHubBuilder<UserRole, NoStorageLayer>
 where
-    (UserRole, S): StorageTypes,
-    <(UserRole, S) as StorageTypes>::FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    (UserRole, NoStorageLayer): StorageTypes,
+    <(UserRole, NoStorageLayer) as StorageTypes>::FSH:
+        ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     fn build_handler(
         &self,
-    ) -> StorageHubHandler<<(UserRole, S) as StorageTypes>::FL, <(UserRole, S) as StorageTypes>::FSH>
-    {
+    ) -> StorageHubHandler<
+        <(UserRole, NoStorageLayer) as StorageTypes>::FL,
+        <(UserRole, NoStorageLayer) as StorageTypes>::FSH,
+    > {
         StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
@@ -356,11 +382,127 @@ where
                 .as_ref()
                 .expect("File Storage not set.")
                 .clone(),
-            self.forest_storage_handler
-                .as_ref()
-                .expect("Forest Storage Handler not set.")
-                .clone(),
+            // Not used by the user role
+            ForestStorageSingle::new(InMemoryForestStorage::<StorageProofsMerkleTrieLayout>::new()),
+            // Not used by the user role
+            ProviderConfig {
+                max_storage_capacity: 0,
+                jump_capacity: 0,
+            },
         )
+    }
+}
+
+pub trait RequiredStorageProviderSetup {
+    fn setup(
+        &mut self,
+        storage_path: Option<String>,
+        max_storage_capacity: Option<StorageDataUnit>,
+        jump_capacity: Option<StorageDataUnit>,
+    );
+}
+
+impl RequiredStorageProviderSetup for StorageHubBuilder<BspProvider, InMemoryStorageLayer>
+where
+    (BspProvider, InMemoryStorageLayer): StorageTypes,
+    Self: StorageLayerBuilder,
+{
+    fn setup(
+        &mut self,
+        storage_path: Option<String>,
+        max_storage_capacity: Option<StorageDataUnit>,
+        jump_capacity: Option<StorageDataUnit>,
+    ) {
+        self.setup_storage_layer(storage_path);
+        if max_storage_capacity.is_none() {
+            panic!("Max storage capacity not set");
+        }
+        self.with_max_storage_capacity(max_storage_capacity);
+        self.with_jump_capacity(jump_capacity);
+    }
+}
+
+impl RequiredStorageProviderSetup for StorageHubBuilder<BspProvider, RocksDbStorageLayer>
+where
+    (BspProvider, RocksDbStorageLayer): StorageTypes,
+    Self: StorageLayerBuilder,
+{
+    fn setup(
+        &mut self,
+        storage_path: Option<String>,
+        max_storage_capacity: Option<StorageDataUnit>,
+        jump_capacity: Option<StorageDataUnit>,
+    ) {
+        if storage_path.is_none() {
+            panic!("Storage path not set");
+        }
+        self.setup_storage_layer(storage_path);
+        if max_storage_capacity.is_none() {
+            panic!("Max storage capacity not set");
+        }
+        self.with_max_storage_capacity(max_storage_capacity);
+        self.with_jump_capacity(jump_capacity);
+    }
+}
+
+impl RequiredStorageProviderSetup for StorageHubBuilder<MspProvider, InMemoryStorageLayer>
+where
+    (MspProvider, InMemoryStorageLayer): StorageTypes,
+    Self: StorageLayerBuilder,
+{
+    fn setup(
+        &mut self,
+        storage_path: Option<String>,
+        max_storage_capacity: Option<StorageDataUnit>,
+        jump_capacity: Option<StorageDataUnit>,
+    ) {
+        if storage_path.is_none() {
+            panic!("Storage path not set");
+        }
+        self.setup_storage_layer(storage_path);
+        if max_storage_capacity.is_none() {
+            panic!("Max storage capacity not set");
+        }
+        self.with_max_storage_capacity(max_storage_capacity);
+        self.with_jump_capacity(jump_capacity);
+    }
+}
+
+impl RequiredStorageProviderSetup for StorageHubBuilder<MspProvider, RocksDbStorageLayer>
+where
+    (MspProvider, RocksDbStorageLayer): StorageTypes,
+    Self: StorageLayerBuilder,
+{
+    fn setup(
+        &mut self,
+        storage_path: Option<String>,
+        max_storage_capacity: Option<StorageDataUnit>,
+        jump_capacity: Option<StorageDataUnit>,
+    ) {
+        if storage_path.is_none() {
+            panic!("Storage path not set");
+        }
+        self.setup_storage_layer(storage_path);
+        if max_storage_capacity.is_none() {
+            panic!("Max storage capacity not set");
+        }
+        self.with_max_storage_capacity(max_storage_capacity);
+        self.with_jump_capacity(jump_capacity);
+    }
+}
+
+impl<S: StorageLayerSupport> RequiredStorageProviderSetup for StorageHubBuilder<UserRole, S>
+where
+    (UserRole, S): StorageTypes,
+    Self: StorageLayerBuilder,
+{
+    fn setup(
+        &mut self,
+        _storage_path: Option<String>,
+        _max_storage_capacity: Option<StorageDataUnit>,
+        _jump_capacity: Option<StorageDataUnit>,
+    ) {
+        self.setup_storage_layer(None);
     }
 }
 
@@ -401,20 +543,4 @@ where
         let handler = self.build_handler();
         handler.start_user_tasks();
     }
-}
-
-// Helper function to setup a storage provider
-pub fn setup_provider<R: RoleSupport, S: StorageLayerSupport>(
-    storage_hub_builder: &mut StorageHubBuilder<R, S>,
-    keystore: KeystorePtr,
-    storage_path: Option<String>,
-) -> &mut StorageHubBuilder<R, S>
-where
-    (R, S): StorageTypes,
-    StorageHubBuilder<R, S>: StorageLayerBuilder,
-{
-    let caller_pub_key = BlockchainService::caller_pub_key(keystore).0;
-    storage_hub_builder.with_provider_pub_key(caller_pub_key);
-    storage_hub_builder.setup_storage_layer(storage_path);
-    storage_hub_builder
 }

@@ -60,7 +60,8 @@ pub mod pallet {
     use shp_file_metadata::ChunkId;
     use sp_runtime::{
         traits::{
-            CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, ConvertBack, One, Saturating, Zero,
+            Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, ConvertBack, One, Saturating,
+            Zero,
         },
         BoundedVec,
     };
@@ -79,7 +80,7 @@ pub mod pallet {
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
             > + shp_traits::MutateStorageProvidersInterface<
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
-				StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
+                StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
             > + shp_traits::ReadBucketsInterface<
                 AccountId = Self::AccountId,
                 BucketId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
@@ -157,6 +158,7 @@ pub mod pallet {
             + CheckedAdd
             + CheckedSub
             + PartialOrd
+            + Bounded
             + One
             + Zero;
 
@@ -348,11 +350,6 @@ pub mod pallet {
     #[pallet::getter(fn replication_target)]
     pub type ReplicationTarget<T: Config> = StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
 
-    /// Maximum threshold a BSP can attain.
-    #[pallet::storage]
-    #[pallet::getter(fn maximum_threshold)]
-    pub type MaximumThreshold<T: Config> = StorageValue<_, T::ThresholdType, ValueQuery>;
-
     /// Number of blocks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
     #[pallet::storage]
     #[pallet::getter(fn block_range_to_maximum_threshold)]
@@ -362,23 +359,19 @@ pub mod pallet {
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub replication_target: ReplicationTargetType<T>,
-        pub maximum_threshold: T::ThresholdType,
         pub block_range_to_maximum_threshold: BlockNumberFor<T>,
     }
 
     impl<T: Config> Default for GenesisConfig<T> {
         fn default() -> Self {
             let replication_target = 1u32.into();
-            let maximum_threshold = u32::MAX.into();
             let block_range_to_maximum_threshold = 10u32.into();
 
             ReplicationTarget::<T>::put(replication_target);
-            MaximumThreshold::<T>::put(maximum_threshold);
             BlockRangeToMaximumThreshold::<T>::put(block_range_to_maximum_threshold);
 
             Self {
                 replication_target,
-                maximum_threshold,
                 block_range_to_maximum_threshold,
             }
         }
@@ -388,7 +381,6 @@ pub mod pallet {
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
             ReplicationTarget::<T>::put(self.replication_target);
-            MaximumThreshold::<T>::put(self.maximum_threshold);
             BlockRangeToMaximumThreshold::<T>::put(self.block_range_to_maximum_threshold);
         }
     }
@@ -1029,7 +1021,6 @@ pub mod pallet {
         pub fn set_global_parameters(
             origin: OriginFor<T>,
             replication_target: Option<T::ReplicationTargetType>,
-            maximum_threshold: Option<T::ThresholdType>,
             block_range_to_maximum_threshold: Option<BlockNumberFor<T>>,
         ) -> DispatchResult {
             // Check that the extrinsic was sent with root origin.
@@ -1042,15 +1033,6 @@ pub mod pallet {
                 );
 
                 ReplicationTarget::<T>::put(replication_target);
-            }
-
-            if let Some(maximum_threshold) = maximum_threshold {
-                ensure!(
-                    maximum_threshold > T::ThresholdType::zero(),
-                    Error::<T>::MaximumThresholdCannotBeZero
-                );
-
-                MaximumThreshold::<T>::put(maximum_threshold);
             }
 
             if let Some(block_range_to_maximum_threshold) = block_range_to_maximum_threshold {

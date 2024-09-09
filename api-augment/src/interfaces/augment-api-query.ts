@@ -302,11 +302,6 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
-       * Maximum threshold a BSP can attain.
-       **/
-      maximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
-        QueryableStorageEntry<ApiType, []>;
-      /**
        * A pointer to the earliest available block to insert a new file deletion request expiration.
        *
        * This should always be greater or equal than current block + [`Config::PendingFileDeletionRequestTtl`].

@@ -48,6 +48,9 @@ export async function describeBspNet<
   const bspNetConfigCases = pickConfig(options);
 
   for (const bspNetConfig of bspNetConfigCases) {
+    bspNetConfig.capacity = options.capacity;
+    bspNetConfig.bspStartingWeight = options.bspStartingWeight;
+
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
     describeFunc(`BSPNet: ${title} (${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {

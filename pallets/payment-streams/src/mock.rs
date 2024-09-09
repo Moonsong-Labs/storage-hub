@@ -156,7 +156,7 @@ impl pallet_storage_providers::Config for Test {
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashAmountPerMaxFileSize = ConstU128<10>;
-    type StartingReputationWeight = ConstU32<10>;
+    type StartingReputationWeight = ConstU32<1>;
 }
 
 parameter_types! {

@@ -56,9 +56,9 @@ use substrate_prometheus_endpoint::Registry;
 use crate::{
     cli::StorageLayer,
     services::builder::{
-        setup_provider, BspProvider, InMemoryStorageLayer, MspProvider, NoStorageLayer,
-        RocksDbStorageLayer, RoleSupport, RpcConfigBuilder, Runnable, StorageHubBuilder,
-        StorageLayerBuilder, StorageLayerSupport, StorageTypes, UserRole,
+        BspProvider, InMemoryStorageLayer, MspProvider, NoStorageLayer,
+        RequiredStorageProviderSetup, RocksDbStorageLayer, RoleSupport, RpcConfigBuilder, Runnable,
+        StorageHubBuilder, StorageLayerBuilder, StorageLayerSupport, StorageTypes, UserRole,
     },
 };
 use crate::{
@@ -202,14 +202,20 @@ where
     R: RoleSupport,
     S: StorageLayerSupport,
     (R, S): StorageTypes,
-    StorageHubBuilder<R, S>: StorageLayerBuilder
+    StorageHubBuilder<R, S>: RequiredStorageProviderSetup
+        + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>,
 {
     match provider_options {
-        Some(ProviderOptions { storage_path, .. }) => {
+        Some(ProviderOptions {
+            storage_path,
+            max_storage_capacity,
+            jump_capacity,
+            ..
+        }) => {
             info!(
-                "Starting as a Storage Provider. Storage path: {:?}",
-                storage_path
+                "Starting as a Storage Provider. Storage path: {:?}, Max storage capacity: {:?}, Jump capacity: {:?}",
+                storage_path, max_storage_capacity, jump_capacity
             );
 
             // Start building the StorageHubHandler, if running as a provider.
@@ -229,11 +235,7 @@ where
                 )
                 .await;
 
-            setup_provider(
-                &mut storage_hub_builder,
-                keystore.clone(),
-                storage_path.clone(),
-            );
+            storage_hub_builder.setup(storage_path.clone(), *max_storage_capacity, *jump_capacity);
 
             let rpc_config = storage_hub_builder.create_rpc_config(keystore);
 
@@ -254,7 +256,8 @@ where
     R: RoleSupport,
     S: StorageLayerSupport,
     (R, S): StorageTypes,
-    StorageHubBuilder<R, S>: StorageLayerBuilder
+    StorageHubBuilder<R, S>: RequiredStorageProviderSetup
+        + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
         + Runnable,
 {
@@ -286,7 +289,8 @@ where
     R: RoleSupport,
     S: StorageLayerSupport,
     (R, S): StorageTypes,
-    StorageHubBuilder<R, S>: StorageLayerBuilder
+    StorageHubBuilder<R, S>: RequiredStorageProviderSetup
+        + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
         + Runnable,
 {
@@ -645,7 +649,8 @@ where
     R: RoleSupport,
     S: StorageLayerSupport,
     (R, S): StorageTypes,
-    StorageHubBuilder<R, S>: StorageLayerBuilder
+    StorageHubBuilder<R, S>: RequiredStorageProviderSetup
+        + StorageLayerBuilder
         + RpcConfigBuilder<<(R, S) as StorageTypes>::FL, <(R, S) as StorageTypes>::FSH>
         + Runnable,
 {

@@ -297,14 +297,14 @@ pub trait ReadStorageProvidersInterface {
     /// Get number of registered BSPs.
     fn get_number_of_bsps() -> Self::SpCount;
 
-    /// Get the total capacity of a Provider (MSP or BSP).
-    fn get_total_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit;
+    /// Get the capacity of a Provider (MSP or BSP).
+    fn get_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit;
 
     /// Get the capacity currently in use of a Provider (MSP or BSP).
     fn get_used_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit;
 
-    /// Get the available capacity of a Provider (MSP or BSP).
-    fn get_available_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit;
+    /// Get available capacity of a Provider (MSP or BSP).
+    fn available_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit;
 
     /// Get multiaddresses of a BSP.
     fn get_bsp_multiaddresses(
