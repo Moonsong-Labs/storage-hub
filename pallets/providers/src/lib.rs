@@ -46,7 +46,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
     use shp_traits::ProofSubmittersInterface;
-    use sp_runtime::traits::CheckedDiv;
+    use sp_runtime::traits::{Bounded, CheckedDiv};
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -153,7 +153,8 @@ pub mod pallet {
             + Zero
             + One
             + CheckedAdd
-            + Ord;
+            + Ord
+            + Bounded;
 
         /// The Treasury AccountId.
         /// The account to which:

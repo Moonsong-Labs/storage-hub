@@ -214,7 +214,7 @@ impl pallet_storage_providers::Config for Test {
     type MinBlocksBetweenCapacityChanges = ConstU64<10>;
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashAmountPerMaxFileSize = ConstU128<10>;
-    type StartingReputationWeight = ConstU32<10>;
+    type StartingReputationWeight = ConstU32<1>;
 }
 
 // Mocked list of Providers that submitted proofs that can be used to test the pallet. It just returns the block number passed to it as the only submitter.
@@ -382,7 +382,6 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 
     crate::GenesisConfig::<Test> {
         replication_target: 2,
-        maximum_threshold: u32::MAX,
         block_range_to_maximum_threshold: 1,
     }
     .assimilate_storage(&mut t)

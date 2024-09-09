@@ -95,7 +95,8 @@ where
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Initiating BSP volunteer for location: {:?}, fingerprint: {:?}",
+            "Initiating BSP volunteer for file_key {:?}, location {:?}, fingerprint {:?}",
+            event.file_key,
             event.location,
             event.fingerprint
         );
@@ -566,6 +567,13 @@ where
             .query_file_earliest_volunteer_block(own_bsp_id, file_key.into())
             .await
             .map_err(|e| anyhow!("Failed to query file earliest volunteer block: {:?}", e))?;
+
+        info!(
+            target: LOG_TARGET,
+            "Waiting for block {:?} to volunteer for file {:?}",
+            earliest_volunteer_block,
+            file_key
+        );
 
         // TODO: if the earliest block is too far away, we should drop the task.
         // TODO: based on the limit above, also add a timeout for the task.

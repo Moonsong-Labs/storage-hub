@@ -3955,7 +3955,6 @@ declare module "@polkadot/types/lookup" {
     readonly isSetGlobalParameters: boolean;
     readonly asSetGlobalParameters: {
       readonly replicationTarget: Option<u32>;
-      readonly maximumThreshold: Option<u32>;
       readonly blockRangeToMaximumThreshold: Option<u32>;
     } & Struct;
     readonly type:

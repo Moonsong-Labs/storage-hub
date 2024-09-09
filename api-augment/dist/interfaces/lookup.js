@@ -3157,7 +3157,6 @@ export default {
       },
       set_global_parameters: {
         replicationTarget: "Option<u32>",
-        maximumThreshold: "Option<u32>",
         blockRangeToMaximumThreshold: "Option<u32>"
       }
     }

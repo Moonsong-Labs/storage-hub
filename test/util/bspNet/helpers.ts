@@ -168,9 +168,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
       userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(shUser.address, amount))
     );
 
-    await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, CAPACITY[1024], 1))
-    );
+    await userApi.sealBlock(userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, 1)));
 
     // Make BSP
     await forceSignupBsp({
@@ -300,9 +298,7 @@ export const runMultipleInitialisedBspsNet = async (
   try {
     userApi = await BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
 
-    await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, CAPACITY[1024], 1))
-    );
+    await userApi.sealBlock(userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, 1)));
 
     // Add more BSPs to the network.
     // One BSP will be down, two more will be up.

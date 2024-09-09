@@ -3,10 +3,10 @@ use crate::{
     types::{
         BucketIdFor, BucketNameFor, FileLocation, PeerIds, PendingFileDeletionRequestTtl,
         ProviderIdFor, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
-        StorageRequestTtl,
+        StorageRequestTtl, ThresholdType,
     },
-    BlockRangeToMaximumThreshold, Config, Error, Event, MaximumThreshold,
-    PendingStopStoringRequests, ReplicationTarget, StorageRequestExpirations, StorageRequests,
+    BlockRangeToMaximumThreshold, Config, Error, Event, PendingStopStoringRequests,
+    ReplicationTarget, StorageRequestExpirations, StorageRequests,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -2415,6 +2415,8 @@ mod msp_accept_storage_request {
 mod bsp_volunteer {
     use super::*;
     mod failure {
+        use core::u32;
+
         use super::*;
 
         #[test]
@@ -2583,8 +2585,12 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                // Set MaximumThreshold to zero
-                MaximumThreshold::<Test>::put(1);
+                // Set very high block range to maximum threshold.
+                assert_ok!(FileSystem::set_global_parameters(
+                    RuntimeOrigin::root(),
+                    None,
+                    Some(u32::MAX.into())
+                ));
 
                 // Dispatch BSP volunteer.
                 assert_noop!(
@@ -2746,6 +2752,8 @@ mod bsp_volunteer {
 mod bsp_confirm {
     use super::*;
     mod failure {
+        use pallet_storage_providers::types::ReputationWeightType;
+
         use super::*;
 
         #[test]
@@ -3024,6 +3032,13 @@ mod bsp_confirm {
                 let bsp_id = <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(
                     bsp_account_id.clone(),
                 ).unwrap();
+
+                // Force BSP to pass all threshold checks when volunteering.
+                pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
+                    if let Some(bsp) = bsp {
+                        bsp.reputation_weight = ReputationWeightType::<Test>::max_value();
+                    }
+                });
 
                 let mut file_keys = Vec::new();
 
@@ -4388,7 +4403,7 @@ mod set_global_parameters_tests {
 
                 // Assert BadOrigin error when non-root account tries to set the threshold
                 assert_noop!(
-                    FileSystem::set_global_parameters(non_root_signed, None, None, None),
+                    FileSystem::set_global_parameters(non_root_signed, None, None),
                     DispatchError::BadOrigin
                 );
             });
@@ -4398,17 +4413,12 @@ mod set_global_parameters_tests {
         fn set_global_parameters_0_value() {
             new_test_ext().execute_with(|| {
                 assert_noop!(
-                    FileSystem::set_global_parameters(RuntimeOrigin::root(), Some(0), None, None),
+                    FileSystem::set_global_parameters(RuntimeOrigin::root(), Some(0), None),
                     Error::<Test>::ReplicationTargetCannotBeZero
                 );
 
                 assert_noop!(
-                    FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(0), None),
-                    Error::<Test>::MaximumThresholdCannotBeZero
-                );
-
-                assert_noop!(
-                    FileSystem::set_global_parameters(RuntimeOrigin::root(), None, None, Some(0)),
+                    FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(0)),
                     Error::<Test>::BlockRangeToMaximumThresholdCannotBeZero
                 );
             });
@@ -4427,13 +4437,12 @@ mod set_global_parameters_tests {
                 assert_ok!(FileSystem::set_global_parameters(
                     root.clone(),
                     Some(3),
-                    Some(5),
                     Some(10)
                 ));
 
                 // Assert that the global parameters were set correctly
                 assert_eq!(ReplicationTarget::<Test>::get(), 3);
-                assert_eq!(MaximumThreshold::<Test>::get(), 5);
+                assert_eq!(ThresholdType::<Test>::max_value(), 5);
                 assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 10);
             });
         }
@@ -5109,13 +5118,13 @@ mod compute_threshold {
 
                 let storage_request = FileSystem::storage_requests(file_key).unwrap();
 
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, None, Some(1)).unwrap();
+                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
 
                 assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1);
 
                 let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
 
-                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= MaximumThreshold::<Test>::get());
+                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= ThresholdType::<Test>::max_value());
                 assert!(slope > 0);
 
                 let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
@@ -5128,13 +5137,13 @@ mod compute_threshold {
                 // Simulate there being many BSPs in the network with high reputation weight
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1000u32.saturating_mul(starting_bsp_weight.into()));
 
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, None, Some(1000000000)).unwrap();
+                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1000000000)).unwrap();
 
                 assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1000000000);
 
                 let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
 
-                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= MaximumThreshold::<Test>::get());
+                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= ThresholdType::<Test>::max_value());
                 assert!(slope > 0);
 
                 let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
@@ -5156,7 +5165,7 @@ mod compute_threshold {
 
                 let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at).unwrap();
 
-                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= MaximumThreshold::<Test>::get());
+                assert!(threshold_to_succeed > 0 && threshold_to_succeed <= ThresholdType::<Test>::max_value());
                 assert!(slope > 0);
 
                 let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();
@@ -5215,7 +5224,7 @@ mod compute_threshold {
                         bsp_account_id,
                     )
                         .unwrap();
-                
+
                 // Set reputation weight of BSP to max
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
                     match bsp {
@@ -5228,13 +5237,13 @@ mod compute_threshold {
                     }
                 });
 
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, None, Some(1)).unwrap();
+                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
 
                 assert_eq!(BlockRangeToMaximumThreshold::<Test>::get(), 1);
 
                 let (threshold_to_succeed, slope) = FileSystem::compute_threshold_to_succeed(&bsp_id, 0).unwrap();
 
-                assert_eq!(threshold_to_succeed, MaximumThreshold::<Test>::get());
+                assert_eq!(threshold_to_succeed, ThresholdType::<Test>::max_value());
                 assert!(slope > 0);
 
                 let block_number = FileSystem::query_earliest_file_volunteer_block(bsp_id, file_key).unwrap();

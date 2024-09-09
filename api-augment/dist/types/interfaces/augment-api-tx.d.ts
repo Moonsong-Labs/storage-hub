@@ -663,10 +663,9 @@ declare module "@polkadot/api-base/types/submittable" {
       setGlobalParameters: AugmentedSubmittable<
         (
           replicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber,
-          maximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber,
           blockRangeToMaximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber
         ) => SubmittableExtrinsic<ApiType>,
-        [Option<u32>, Option<u32>, Option<u32>]
+        [Option<u32>, Option<u32>]
       >;
       /**
        * Executed by a SP to stop storing a file from an insolvent user.

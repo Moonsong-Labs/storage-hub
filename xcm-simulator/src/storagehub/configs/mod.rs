@@ -502,7 +502,7 @@ impl pallet_storage_providers::Config for Runtime {
     type MinBlocksBetweenCapacityChanges = MinBlocksBetweenCapacityChanges;
     type DefaultMerkleRoot = DefaultMerkleRoot<LayoutV1<BlakeTwo256>>;
     type SlashAmountPerMaxFileSize = SlashAmountPerChunkOfStorageData;
-    type StartingReputationWeight = ConstU32<10>;
+    type StartingReputationWeight = ConstU32<1>;
 }
 
 parameter_types! {

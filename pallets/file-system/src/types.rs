@@ -280,3 +280,6 @@ pub type StorageRequestExpirationItem<T> = MerkleHash<T>;
 /// Alias for the type of the file deletion request expiration item.
 pub type FileDeletionRequestExpirationItem<T> =
     (<T as frame_system::Config>::AccountId, MerkleHash<T>);
+
+/// Alias for the `ThresholdType` used in the FileSystem pallet.
+pub type ThresholdType<T> = <T as crate::Config>::ThresholdType;

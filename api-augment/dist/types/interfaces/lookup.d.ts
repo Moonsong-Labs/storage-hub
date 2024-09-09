@@ -3110,7 +3110,6 @@ declare const _default: {
       };
       set_global_parameters: {
         replicationTarget: string;
-        maximumThreshold: string;
         blockRangeToMaximumThreshold: string;
       };
     };
