@@ -4434,11 +4434,7 @@ mod set_global_parameters_tests {
                 let root = RuntimeOrigin::root();
 
                 // Set the global parameters
-                assert_ok!(FileSystem::set_global_parameters(
-                    root.clone(),
-                    Some(3),
-                    Some(10)
-                ));
+                assert_ok!(FileSystem::set_global_parameters(root.clone(), Some(10)));
 
                 // Assert that the global parameters were set correctly
                 assert_eq!(ReplicationTarget::<Test>::get(), 3);

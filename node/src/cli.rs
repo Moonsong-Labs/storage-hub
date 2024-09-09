@@ -84,8 +84,6 @@ pub struct ProviderConfigurations {
     pub provider_type: Option<ProviderType>,
 
     /// Maximum storage capacity of the provider (bytes).
-    ///
-    /// Default: 4294967295 bytes (4GiB)
     #[clap(long, required_if_eq_any([
         ("provider_type", "msp"),
         ("provider_type", "bsp")
@@ -93,8 +91,6 @@ pub struct ProviderConfigurations {
     pub max_storage_capacity: Option<StorageDataUnit>,
 
     /// Jump capacity (bytes).
-    ///
-    /// Default: 4294967295 bytes (4GiB)
     #[clap(long, required_if_eq_any([
         ("provider_type", "msp"),
         ("provider_type", "bsp")
