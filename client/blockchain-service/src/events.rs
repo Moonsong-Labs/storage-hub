@@ -193,6 +193,7 @@ pub struct BlockchainServiceEventBusProvider {
     finalised_mutations_applied_event_bus: EventBus<FinalisedTrieRemoveMutationsApplied>,
     proof_accepted_event_bus: EventBus<ProofAccepted>,
     last_chargeable_info_updated_event_bus: EventBus<LastChargeableInfoUpdated>,
+    user_without_funds_event_bus: EventBus<UserWithoutFunds>,
 }
 
 impl BlockchainServiceEventBusProvider {
@@ -208,6 +209,7 @@ impl BlockchainServiceEventBusProvider {
             finalised_mutations_applied_event_bus: EventBus::new(),
             proof_accepted_event_bus: EventBus::new(),
             last_chargeable_info_updated_event_bus: EventBus::new(),
+            user_without_funds_event_bus: EventBus::new(),
         }
     }
 }
@@ -269,5 +271,11 @@ impl ProvidesEventBus<ProofAccepted> for BlockchainServiceEventBusProvider {
 impl ProvidesEventBus<LastChargeableInfoUpdated> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<LastChargeableInfoUpdated> {
         &self.last_chargeable_info_updated_event_bus
+    }
+}
+
+impl ProvidesEventBus<UserWithoutFunds> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<UserWithoutFunds> {
+        &self.user_without_funds_event_bus
     }
 }

@@ -1,4 +1,3 @@
-use sp_runtime::AccountId32;
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use std::collections::HashMap;
 use trie_db::TrieDBMutBuilder;

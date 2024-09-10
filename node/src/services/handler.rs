@@ -10,6 +10,7 @@ use shc_blockchain_service::{
     events::{
         LastChargeableInfoUpdated, MultipleNewChallengeSeeds, NewStorageRequest,
         ProcessConfirmStoringRequest, ProcessSubmitProofRequest, SlashableProvider,
+        UserWithoutFunds,
     },
     BlockchainService,
 };
@@ -205,5 +206,10 @@ where
             .clone()
             .subscribe_to(&self.task_spawner, &self.blockchain);
         last_chargeable_info_updated_event_bus_listener.start();
+        let user_without_funds_event_bus_listener: EventBusListener<UserWithoutFunds, _> =
+            bsp_charge_fees_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        user_without_funds_event_bus_listener.start();
     }
 }
