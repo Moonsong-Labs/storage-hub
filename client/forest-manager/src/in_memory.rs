@@ -1,5 +1,6 @@
 use hash_db::Hasher;
 use shc_common::types::{FileMetadata, HasherOutT};
+use sp_runtime::AccountId32;
 use sp_trie::{recorder::Recorder, MemoryDB, TrieDBBuilder, TrieLayout, TrieMut};
 use trie_db::{Trie, TrieDBMutBuilder};
 
@@ -76,13 +77,15 @@ where
         files_metadata: &[FileMetadata],
     ) -> Result<Vec<HasherOutT<T>>, ErrorT<T>> {
         let mut file_keys = Vec::with_capacity(files_metadata.len());
+        let mut metadata = Vec::with_capacity(files_metadata.len());
 
         // Pre-check for duplicate keys in input and existing keys in trie
-        for metadata in files_metadata {
-            let file_key = metadata.file_key::<T::Hash>();
+        for file_metadata in files_metadata {
+            let file_key = file_metadata.file_key::<T::Hash>();
             if self.contains_file_key(&file_key)? {
                 return Err(ForestStorageError::FileKeyAlreadyExists(file_key).into());
             }
+            metadata.push(file_metadata);
             file_keys.push(file_key);
         }
 
@@ -90,8 +93,9 @@ where
             TrieDBMutBuilder::<T>::from_existing(&mut self.memdb, &mut self.root).build();
 
         // Batch insert all keys
-        for file_key in &file_keys {
-            trie.insert(file_key.as_ref(), b"")
+        for (idx, file_key) in file_keys.iter().enumerate() {
+            let value = serde_json::to_vec(metadata[idx]).unwrap();
+            trie.insert(file_key.as_ref(), &value)
                 .map_err(|_| ForestStorageError::FailedToInsertFileKey(*file_key))?;
         }
 
@@ -105,5 +109,24 @@ where
         let _ = trie.remove(file_key.as_ref())?;
 
         Ok(())
+    }
+
+    fn get_all_metadata(&self, user: AccountId32) -> Result<Vec<FileMetadata>, ErrorT<T>> {
+        let mut metadata_vec: Vec<FileMetadata> = Vec::new();
+        let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
+
+        let mut trie_iter = trie
+            .iter()
+            .map_err(|_| ForestStorageError::FailedToCreateTrieIterator)?;
+
+        for it in trie_iter.next().unwrap() {
+            let metadata: FileMetadata = serde_json::from_slice(&it.1).unwrap();
+            let owner = <[u8; 32]>::try_from(metadata.owner.clone()).unwrap();
+            if user == AccountId32::from(owner) {
+                metadata_vec.push(metadata)
+            }
+        }
+
+        Ok(metadata_vec)
     }
 }

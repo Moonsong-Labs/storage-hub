@@ -8,6 +8,7 @@ use shc_common::types::{
 use sp_core::H256;
 use sp_runtime::AccountId32;
 use std::sync::Arc;
+use storage_hub_runtime::AccountId;
 use tokio::sync::{oneshot, Mutex};
 
 use crate::types::ConfirmStoringRequest;
@@ -157,6 +158,13 @@ pub struct ProofAccepted {
     pub provider_id: ProviderId,
     pub proofs: KeyProofs,
 }
+
+#[derive(Debug, Clone)]
+pub struct UserWithoutFunds {
+    pub who: AccountId,
+}
+
+impl EventBusMessage for UserWithoutFunds {}
 
 impl EventBusMessage for ProofAccepted {}
 

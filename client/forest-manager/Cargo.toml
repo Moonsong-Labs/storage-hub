@@ -25,6 +25,7 @@ kvdb-memorydb = { workspace = true }
 log = { workspace = true }
 reference-trie = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 trie-db = { workspace = true }

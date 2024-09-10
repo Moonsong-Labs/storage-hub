@@ -2,6 +2,7 @@ use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use log::debug;
 use shc_common::types::{FileMetadata, ForestProof, HashT, HasherOutT};
+use sp_runtime::AccountId32;
 use sp_state_machine::{warn, Storage};
 use sp_trie::{
     prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieDBBuilder, TrieLayout, TrieMut,
@@ -327,15 +328,15 @@ where
         files_metadata: &[FileMetadata],
     ) -> Result<Vec<HasherOutT<T>>, ErrorT<T>> {
         let mut file_keys = Vec::with_capacity(files_metadata.len());
+        let mut metadata = Vec::with_capacity(files_metadata.len());
 
         // Pre-check for existing keys
-        for metadata in files_metadata {
-            let file_key = metadata.file_key::<T::Hash>();
-
+        for file_metadata in files_metadata {
+            let file_key = file_metadata.file_key::<T::Hash>();
             if self.contains_file_key(&file_key)? {
                 return Err(ForestStorageError::FileKeyAlreadyExists(file_key).into());
             }
-
+            metadata.push(file_metadata);
             file_keys.push(file_key);
         }
 
@@ -344,8 +345,10 @@ where
         let mut trie =
             TrieDBMutBuilder::<T>::from_existing(self.as_hash_db_mut(), &mut root).build();
 
-        for file_key in &file_keys {
-            trie.insert(file_key.as_ref(), b"")
+        for (idx, file_key) in file_keys.iter().enumerate() {
+            let value: Vec<u8> = serde_json::to_vec(metadata[idx]).unwrap();
+
+            trie.insert(file_key.as_ref(), &value)
                 .map_err(|_| ForestStorageError::FailedToInsertFileKey(*file_key))?;
         }
 
@@ -377,6 +380,29 @@ where
         self.commit()?;
 
         Ok(())
+    }
+
+    fn get_all_metadata(
+        &self,
+        user: sp_runtime::AccountId32,
+    ) -> Result<Vec<FileMetadata>, ErrorT<T>> {
+        let mut metadata_vec: Vec<FileMetadata> = Vec::new();
+        let db = self.as_hash_db();
+        let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
+
+        let mut trie_iter = trie
+            .iter()
+            .map_err(|_| ForestStorageError::FailedToCreateTrieIterator)?;
+
+        for it in trie_iter.next().unwrap() {
+            let metadata: FileMetadata = serde_json::from_slice(&it.1).unwrap();
+            let owner = <[u8; 32]>::try_from(metadata.owner.clone()).unwrap();
+            if user == AccountId32::from(owner) {
+                metadata_vec.push(metadata)
+            }
+        }
+
+        Ok(metadata_vec)
     }
 }
 

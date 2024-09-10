@@ -195,7 +195,8 @@ where
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         slashable_provider_event_bus_listener.start();
 
-        // Collect debt from users after a BSP proof is accepted.
+        // Collect debt from users after a BSP proof is accepted, by reacting to the
+        // `[LastChargeableInfoUpdated]` event.
         let bsp_charge_fees_task = BspChargeFeesTask::new(self.clone());
         let last_chargeable_info_updated_event_bus_listener: EventBusListener<
             LastChargeableInfoUpdated,
