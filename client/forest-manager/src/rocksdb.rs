@@ -1,6 +1,6 @@
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
-use log::debug;
+use log::{debug, error};
 use shc_common::types::{FileMetadata, ForestProof, HashT, HasherOutT};
 use sp_runtime::AccountId32;
 use sp_state_machine::{warn, Storage};
@@ -390,13 +390,17 @@ where
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
 
-        let mut trie_iter = trie
-            .iter()
-            .map_err(|_| ForestStorageError::FailedToCreateTrieIterator)?;
+        let mut trie_iter = trie.iter().map_err(|e| {
+            error!(target: LOG_TARGET, "{}", e);
+            ForestStorageError::FailedToCreateTrieIterator
+        })?;
 
-        for it in trie_iter.next().unwrap() {
-            let metadata: FileMetadata = serde_json::from_slice(&it.1).unwrap();
-            let owner = <[u8; 32]>::try_from(metadata.owner.clone()).unwrap();
+        while let Some(result) = trie_iter.next() {
+            let node = result.expect("Failed to iterate trie");
+            let metadata: FileMetadata =
+                serde_json::from_slice(&node.1).expect("Failed to parse File Metadata");
+            let owner = <[u8; 32]>::try_from(metadata.owner.clone())
+                .expect("Failed to parse owner from File Metadata");
             if user == AccountId32::from(owner) {
                 metadata_vec.push(metadata)
             }

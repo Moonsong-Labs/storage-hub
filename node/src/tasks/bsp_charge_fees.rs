@@ -22,11 +22,19 @@ const LOG_TARGET: &str = "bsp-charge-fees-task";
 const MIN_DEBT: Balance = 0;
 
 /// BSP Charge Fees Task: Handles the debt collection from users served by a BSP.
+/// The task is split into two handlers, one charges users with debt
+/// and the other one handles users without funds, and allows the BSP to stop storing their files.
 ///
 /// The flow includes the following steps:
 /// - Reacting to [`LastChargeableInfoUpdated`] event from the runtime:
 ///     - Calls a Runtime API to retrieve a list of users with debt over a certain custom threshold.
 ///     - For each user, submits an extrinsic to [`pallet_payment_streams`] to charge them.
+///
+/// - Reacting to [`UserWithoutFunds`] event:
+///     - Calls the Forest Manager to get all files' metadata owned by the user
+///     - For each file, submits extrinsic to [`pallet_file_system`] to stop storing the file.
+///     - Then sends extrinsic to [`pallet_payment_streams`] to charge payments streams for that user.
+
 pub struct BspChargeFeesTask<FL, FSH>
 where
     FL: FileStorageT,
@@ -77,7 +85,6 @@ where
         let fs_read = fs.read().await;
         let files_metadata = fs_read.get_all_metadata(owner.clone())?;
 
-        let mut stop_storing_for_insolvent_calls = Vec::new();
         for metadata in files_metadata {
             let fingerprint = metadata.fingerprint;
             let size = metadata.file_size;
@@ -97,14 +104,11 @@ where
                     inclusion_forest_proof,
                 },
             );
-            stop_storing_for_insolvent_calls.push(stop_storing_for_insolvent_user_call);
-        }
 
-        for call in stop_storing_for_insolvent_calls {
             let result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call)
+                .send_extrinsic(stop_storing_for_insolvent_user_call)
                 .await;
 
             match result {
