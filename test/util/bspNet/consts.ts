@@ -84,3 +84,4 @@ export const CAPACITY = {
 } as const;
 
 export const U32_MAX = (BigInt(1) << BigInt(32)) - BigInt(1);
+export const MAX_STORAGE_CAPACITY = CAPACITY[1024] * 4n - 1n;

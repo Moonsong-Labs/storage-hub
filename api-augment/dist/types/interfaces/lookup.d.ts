@@ -3012,6 +3012,7 @@ declare const _default: {
         capacity: string;
         multiaddresses: string;
         paymentAccount: string;
+        weight: string;
       };
       slash: {
         providerId: string;
@@ -3109,7 +3110,6 @@ declare const _default: {
       };
       set_global_parameters: {
         replicationTarget: string;
-        maximumThreshold: string;
         blockRangeToMaximumThreshold: string;
       };
     };

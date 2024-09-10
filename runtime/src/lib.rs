@@ -53,9 +53,12 @@ use pallet_proofs_dealer_runtime_api::{
     GetLastTickProviderSubmittedProofError, GetNextDeadlineTickError,
 };
 use pallet_storage_providers::types::{
-    BackupStorageProvider, BackupStorageProviderId, StorageProviderId,
+    BackupStorageProvider, BackupStorageProviderId, ProviderId, StorageProviderId,
 };
-use pallet_storage_providers_runtime_api::GetBspInfoError;
+use pallet_storage_providers_runtime_api::{
+    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
+    QueryStorageProviderCapacityError,
+};
 use shp_traits::TrieRemoveMutation;
 
 #[cfg(any(feature = "std", test))]
@@ -63,7 +66,7 @@ pub use sp_runtime::BuildStorage;
 
 use weights::ExtrinsicBaseWeight;
 
-pub use crate::configs::StorageProofsMerkleTrieLayout;
+pub use crate::configs::{StorageDataUnit, StorageProofsMerkleTrieLayout};
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
@@ -596,13 +599,25 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, StorageProviderId<Runtime>> for Runtime {
+    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BlockNumber, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, ProviderId<Runtime>, StorageProviderId<Runtime>, StorageDataUnit> for Runtime {
         fn get_bsp_info(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<BackupStorageProvider<Runtime>, GetBspInfoError> {
             Providers::get_bsp_info(bsp_id)
         }
 
         fn get_storage_provider_id(who: &AccountId) -> Option<StorageProviderId<Runtime>> {
             Providers::get_storage_provider_id(who)
+        }
+
+        fn query_storage_provider_capacity(provider_id: &ProviderId<Runtime>) -> Result<StorageDataUnit, QueryStorageProviderCapacityError> {
+            Providers::query_storage_provider_capacity(provider_id)
+        }
+
+        fn query_available_storage_capacity(provider_id: &ProviderId<Runtime>) -> Result<StorageDataUnit, QueryAvailableStorageCapacityError> {
+            Providers::query_available_storage_capacity(provider_id)
+        }
+
+        fn query_earliest_change_capacity_block(provider_id: &BackupStorageProviderId<Runtime>) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError> {
+            Providers::query_earliest_change_capacity_block(provider_id)
         }
     }
 }

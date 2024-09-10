@@ -1276,10 +1276,14 @@ import type {
   MainStorageProviderId,
   MerklePatriciaRoot,
   ProviderId,
+  QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
+  QueryEarliestChangeCapacityBlockError,
   QueryFileEarliestVolunteerBlockError,
+  QueryStorageProviderCapacityError,
   RandomnessOutput,
   SaveFileToDisk,
+  StorageDataUnit,
   StorageProviderId,
   TrieRemoveMutation
 } from "@storagehub/api-augment/interfaces/storagehubclient";
@@ -2086,10 +2090,13 @@ declare module "@polkadot/types/types/registry" {
     PvfCheckStatement: PvfCheckStatement;
     PvfExecTimeoutKind: PvfExecTimeoutKind;
     PvfPrepTimeoutKind: PvfPrepTimeoutKind;
+    QueryAvailableStorageCapacityError: QueryAvailableStorageCapacityError;
     QueryBspConfirmChunksToProveForFileError: QueryBspConfirmChunksToProveForFileError;
+    QueryEarliestChangeCapacityBlockError: QueryEarliestChangeCapacityBlockError;
     QueryFileEarliestVolunteerBlockError: QueryFileEarliestVolunteerBlockError;
     QueryId: QueryId;
     QueryStatus: QueryStatus;
+    QueryStorageProviderCapacityError: QueryStorageProviderCapacityError;
     QueueConfigData: QueueConfigData;
     QueuedParathread: QueuedParathread;
     Randomness: Randomness;
@@ -2295,6 +2302,7 @@ declare module "@polkadot/types/types/registry" {
     StatementStoreValidStatement: StatementStoreValidStatement;
     StorageChangeSet: StorageChangeSet;
     StorageData: StorageData;
+    StorageDataUnit: StorageDataUnit;
     StorageDeposit: StorageDeposit;
     StorageEntryMetadataLatest: StorageEntryMetadataLatest;
     StorageEntryMetadataV10: StorageEntryMetadataV10;

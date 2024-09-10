@@ -3672,6 +3672,7 @@ declare module "@polkadot/types/lookup" {
       readonly capacity: u32;
       readonly multiaddresses: Vec<Bytes>;
       readonly paymentAccount: AccountId32;
+      readonly weight: Option<u32>;
     } & Struct;
     readonly isSlash: boolean;
     readonly asSlash: {
@@ -3780,7 +3781,6 @@ declare module "@polkadot/types/lookup" {
     readonly isSetGlobalParameters: boolean;
     readonly asSetGlobalParameters: {
       readonly replicationTarget: Option<u32>;
-      readonly maximumThreshold: Option<u32>;
       readonly blockRangeToMaximumThreshold: Option<u32>;
     } & Struct;
     readonly type:

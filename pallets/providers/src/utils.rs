@@ -14,14 +14,17 @@ use frame_support::traits::{
     Get, Randomness,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
-use pallet_storage_providers_runtime_api::GetBspInfoError;
+use pallet_storage_providers_runtime_api::{
+    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
+    QueryStorageProviderCapacityError,
+};
 use shp_traits::{
     MutateBucketsInterface, MutateChallengeableProvidersInterface, MutateProvidersInterface,
     MutateStorageProvidersInterface, ProofSubmittersInterface, ReadBucketsInterface,
     ReadChallengeableProvidersInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
     SystemMetricsInterface,
 };
-use types::StorageProviderId;
+use types::{ProviderId, StorageProviderId};
 
 use crate::*;
 
@@ -1057,7 +1060,7 @@ impl<T: pallet::Config> ReadStorageProvidersInterface for pallet::Pallet<T> {
         Self::get_bsp_count()
     }
 
-    fn get_total_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit {
+    fn get_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit {
         if let Some(bsp) = BackupStorageProviders::<T>::get(who) {
             bsp.capacity
         } else if let Some(msp) = MainStorageProviders::<T>::get(who) {
@@ -1077,7 +1080,7 @@ impl<T: pallet::Config> ReadStorageProvidersInterface for pallet::Pallet<T> {
         }
     }
 
-    fn get_available_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit {
+    fn available_capacity(who: &Self::ProviderId) -> Self::StorageDataUnit {
         if let Some(bsp) = BackupStorageProviders::<T>::get(who) {
             bsp.capacity.saturating_sub(bsp.capacity_used)
         } else if let Some(msp) = MainStorageProviders::<T>::get(who) {
@@ -1382,5 +1385,45 @@ where
         } else {
             None
         }
+    }
+
+    pub fn query_storage_provider_capacity(
+        provider_id: &ProviderId<T>,
+    ) -> Result<StorageDataUnit<T>, QueryStorageProviderCapacityError> {
+        if MainStorageProviders::<T>::contains_key(provider_id) {
+            let msp = MainStorageProviders::<T>::get(provider_id)
+                .ok_or(QueryStorageProviderCapacityError::ProviderNotRegistered)?;
+            Ok(msp.capacity)
+        } else if BackupStorageProviders::<T>::contains_key(provider_id) {
+            let bsp = BackupStorageProviders::<T>::get(provider_id)
+                .ok_or(QueryStorageProviderCapacityError::ProviderNotRegistered)?;
+            Ok(bsp.capacity)
+        } else {
+            Err(QueryStorageProviderCapacityError::ProviderNotRegistered)
+        }
+    }
+
+    pub fn query_available_storage_capacity(
+        provider_id: &ProviderId<T>,
+    ) -> Result<StorageDataUnit<T>, QueryAvailableStorageCapacityError> {
+        if MainStorageProviders::<T>::contains_key(provider_id) {
+            let msp = MainStorageProviders::<T>::get(provider_id)
+                .ok_or(QueryAvailableStorageCapacityError::ProviderNotRegistered)?;
+            Ok(msp.capacity.saturating_sub(msp.capacity_used))
+        } else if BackupStorageProviders::<T>::contains_key(provider_id) {
+            let bsp = BackupStorageProviders::<T>::get(provider_id)
+                .ok_or(QueryAvailableStorageCapacityError::ProviderNotRegistered)?;
+            Ok(bsp.capacity.saturating_sub(bsp.capacity_used))
+        } else {
+            Err(QueryAvailableStorageCapacityError::ProviderNotRegistered)
+        }
+    }
+
+    pub fn query_earliest_change_capacity_block(
+        provider_id: &BackupStorageProviderId<T>,
+    ) -> Result<BlockNumberFor<T>, QueryEarliestChangeCapacityBlockError> {
+        let bsp = BackupStorageProviders::<T>::get(provider_id)
+            .ok_or(QueryEarliestChangeCapacityBlockError::ProviderNotRegistered)?;
+        Ok(bsp.last_capacity_change + T::MinBlocksBetweenCapacityChanges::get())
     }
 }

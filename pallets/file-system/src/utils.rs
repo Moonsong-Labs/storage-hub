@@ -8,7 +8,8 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use num_bigint::BigUint;
 use sp_runtime::{
     traits::{
-        CheckedAdd, CheckedDiv, CheckedSub, Convert, ConvertBack, Hash, One, Saturating, Zero,
+        Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, ConvertBack, Hash, One,
+        Saturating, Zero,
     },
     ArithmeticError, BoundedVec, DispatchError,
 };
@@ -24,7 +25,6 @@ use shp_traits::{
     ReadProvidersInterface, ReadStorageProvidersInterface, ReadUserSolvencyInterface,
     TrieAddMutation, TrieRemoveMutation,
 };
-use sp_runtime::traits::CheckedMul;
 
 use crate::{
     pallet,
@@ -34,9 +34,8 @@ use crate::{
         MerkleHash, MultiAddresses, PeerIds, ProviderIdFor, ReplicationTargetType, StorageData,
         StorageRequestBspsMetadata, StorageRequestMetadata,
     },
-    BlockRangeToMaximumThreshold, Error, Event, MaximumThreshold, Pallet,
-    PendingFileDeletionRequests, PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps,
-    StorageRequests,
+    BlockRangeToMaximumThreshold, Error, Event, Pallet, PendingFileDeletionRequests,
+    PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -339,8 +338,7 @@ where
 
             // Check that the MSP has enough available capacity to store the file.
             ensure!(
-                <T::Providers as ReadStorageProvidersInterface>::get_available_capacity(msp_id)
-                    >= size,
+                <T::Providers as ReadStorageProvidersInterface>::available_capacity(msp_id) >= size,
                 Error::<T>::InsufficientAvailableCapacity
             );
 
@@ -444,7 +442,7 @@ where
 
         // Check that the MSP still has enough available capacity to store the file.
         ensure!(
-            <T::Providers as ReadStorageProvidersInterface>::get_available_capacity(&sp_id)
+            <T::Providers as ReadStorageProvidersInterface>::available_capacity(&sp_id)
                 >= storage_request_metadata.size,
             Error::<T>::InsufficientAvailableCapacity
         );
@@ -537,13 +535,12 @@ where
         let bsp_id =
             <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
                 .ok_or(Error::<T>::NotABsp)?;
+
         // Check that the provider is indeed a BSP.
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_bsp(&bsp_id),
             Error::<T>::NotABsp
         );
-
-        // TODO: Verify BSP has enough storage capacity to store the file
 
         // Check that the storage request exists.
         let mut storage_request_metadata =
@@ -554,6 +551,15 @@ where
             "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
             Error::<T>::StorageRequestBspsRequiredFulfilled,
             bool
+        );
+
+        let available_capacity =
+            <T::Providers as ReadStorageProvidersInterface>::available_capacity(&bsp_id);
+
+        // Check if the BSP has enough capacity to store the file.
+        ensure!(
+            available_capacity > storage_request_metadata.size,
+            Error::<T>::InsufficientAvailableCapacity
         );
 
         // Check if the BSP is already volunteered for this storage request.
@@ -684,6 +690,15 @@ where
                 "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
                 Error::<T>::StorageRequestBspsRequiredFulfilled,
                 bool
+            );
+
+            let available_capacity =
+                <T::Providers as ReadStorageProvidersInterface>::available_capacity(&bsp_id);
+
+            // Check if the BSP has enough capacity to store the file.
+            ensure!(
+                available_capacity > storage_request_metadata.size,
+                Error::<T>::InsufficientAvailableCapacity
             );
 
             // Increment the number of bsps confirmed.
@@ -1419,7 +1434,7 @@ where
         bsp_id: &ProviderIdFor<T>,
         requested_at: BlockNumberFor<T>,
     ) -> Result<(T::ThresholdType, T::ThresholdType), DispatchError> {
-        let maximum_threshold = MaximumThreshold::<T>::get();
+        let maximum_threshold = T::ThresholdType::max_value();
 
         let global_weight =
             T::ThresholdType::from(T::Providers::get_global_bsps_reputation_weight());
@@ -1448,10 +1463,7 @@ where
             .unwrap_or(T::ThresholdType::one())
             .checked_mul(&ReplicationTarget::<T>::get().into()).unwrap_or({
                 log::warn!("Global starting point is beyond MaximumThreshold. Setting it to half of the MaximumThreshold.");
-                maximum_threshold.checked_div(&2u32.into()).unwrap_or({
-                    log::warn!("This should not happen unless MaximumThreshold is 2 or less.");
-                    T::ThresholdType::one()
-                })
+                maximum_threshold
             })
             .checked_div(&T::ThresholdType::from(2u32))
             .unwrap_or(T::ThresholdType::one());
@@ -1471,7 +1483,7 @@ where
             ))
             .unwrap_or(T::ThresholdType::one());
 
-        // Since checked div only returns None on a result of zero, there is the case when the result is between 0 and 1 and rounds down to 0.
+        // Since checked_div only returns None on a result of zero, there is the case when the result is between 0 and 1 and rounds down to 0.
         let threshold_slope = if threshold_slope.is_zero() {
             T::ThresholdType::one()
         } else {

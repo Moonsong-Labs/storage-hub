@@ -259,7 +259,6 @@ pub fn sh_ext() -> sp_io::TestExternalities {
 
     pallet_file_system::GenesisConfig::<Runtime> {
         replication_target: 2,
-        maximum_threshold: u32::MAX,
         block_range_to_maximum_threshold: 1,
     }
     .assimilate_storage(&mut t)

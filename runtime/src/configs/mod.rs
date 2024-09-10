@@ -84,6 +84,9 @@ use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
 
 pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
 
+/// Type representing the storage data units in StorageHub.
+pub type StorageDataUnit = u32;
+
 parameter_types! {
     pub const Version: RuntimeVersion = VERSION;
 
@@ -465,7 +468,7 @@ impl pallet_storage_providers::Config for Runtime {
     type ProvidersRandomness = pallet_randomness::RandomnessFromOneEpochAgo<Runtime>;
     type NativeBalance = Balances;
     type RuntimeHoldReason = RuntimeHoldReason;
-    type StorageDataUnit = u32;
+    type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;
     type MerklePatriciaRoot = Hash;
     type ValuePropId = Hash;
@@ -487,7 +490,7 @@ impl pallet_storage_providers::Config for Runtime {
     type MinBlocksBetweenCapacityChanges = ConstU32<10>;
     type DefaultMerkleRoot = DefaultMerkleRoot<StorageProofsMerkleTrieLayout>;
     type SlashAmountPerMaxFileSize = SlashAmountPerMaxFileSize;
-    type StartingReputationWeight = ConstU32<10>;
+    type StartingReputationWeight = ConstU32<1>;
 }
 
 parameter_types! {

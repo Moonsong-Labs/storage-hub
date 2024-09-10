@@ -3060,7 +3060,8 @@ export default {
         bspId: "H256",
         capacity: "u32",
         multiaddresses: "Vec<Bytes>",
-        paymentAccount: "AccountId32"
+        paymentAccount: "AccountId32",
+        weight: "Option<u32>"
       },
       slash: {
         providerId: "H256"
@@ -3158,7 +3159,6 @@ export default {
       },
       set_global_parameters: {
         replicationTarget: "Option<u32>",
-        maximumThreshold: "Option<u32>",
         blockRangeToMaximumThreshold: "Option<u32>"
       }
     }

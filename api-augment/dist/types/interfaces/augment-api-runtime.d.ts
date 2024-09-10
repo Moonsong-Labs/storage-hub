@@ -41,9 +41,13 @@ import type {
   GetNextDeadlineTickError,
   GetUsersWithDebtOverThresholdError,
   ProviderId,
+  QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
+  QueryEarliestChangeCapacityBlockError,
   QueryFileEarliestVolunteerBlockError,
+  QueryStorageProviderCapacityError,
   RandomnessOutput,
+  StorageDataUnit,
   StorageProviderId,
   TrieRemoveMutation
 } from "@storagehub/api-augment/interfaces/storagehubclient";
@@ -471,6 +475,33 @@ declare module "@polkadot/api-base/types/calls" {
       getStorageProviderId: AugmentedCall<
         ApiType,
         (who: AccountId | string | Uint8Array) => Observable<Option<StorageProviderId>>
+      >;
+      /**
+       * Query the available storage capacity.
+       **/
+      queryAvailableStorageCapacity: AugmentedCall<
+        ApiType,
+        (
+          providerId: ProviderId | string | Uint8Array
+        ) => Observable<Result<StorageDataUnit, QueryAvailableStorageCapacityError>>
+      >;
+      /**
+       * Query the earliest block number that a BSP can change its capacity.
+       **/
+      queryEarliestChangeCapacityBlock: AugmentedCall<
+        ApiType,
+        (
+          providerId: BackupStorageProviderId | string | Uint8Array
+        ) => Observable<Result<BlockNumber, QueryEarliestChangeCapacityBlockError>>
+      >;
+      /**
+       * Query the storage provider capacity.
+       **/
+      queryStorageProviderCapacity: AugmentedCall<
+        ApiType,
+        (
+          providerId: ProviderId | string | Uint8Array
+        ) => Observable<Result<StorageDataUnit, QueryStorageProviderCapacityError>>
       >;
       /**
        * Generic call
