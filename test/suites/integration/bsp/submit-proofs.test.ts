@@ -372,8 +372,7 @@ describeBspNet(
       const blockResult = await userApi.sealBlock();
 
       // Assert for the event of the proof successfully submitted and verified.
-      const proofAcceptedEvents = userApi.assert.assertEventMany(
-        userApi,
+      const proofAcceptedEvents = userApi.assert.eventMany(
         "proofsDealer",
         "ProofAccepted",
         blockResult.events
@@ -557,8 +556,7 @@ describeBspNet(
       const firstChallengeBlockResult = await userApi.sealBlock();
 
       // Check for a ProofAccepted event.
-      const firstChallengeBlockEvents = userApi.assert.assertEventMany(
-        userApi,
+      const firstChallengeBlockEvents = userApi.assert.eventMany(
         "proofsDealer",
         "ProofAccepted",
         firstChallengeBlockResult.events
@@ -584,8 +582,7 @@ describeBspNet(
       const secondChallengeBlockResult = await userApi.sealBlock();
 
       // Check for a ProofAccepted event.
-      const secondChallengeBlockEvents = userApi.assert.assertEventMany(
-        userApi,
+      const secondChallengeBlockEvents = userApi.assert.eventMany(
         "proofsDealer",
         "ProofAccepted",
         secondChallengeBlockResult.events

@@ -96,7 +96,7 @@ export async function describeBspNet<
         bspNetConfig,
         before,
         after,
-        afterEach, 
+        afterEach,
         beforeEach,
         getLaunchResponse: () => responseListenerPromise
       } satisfies BspNetContext;

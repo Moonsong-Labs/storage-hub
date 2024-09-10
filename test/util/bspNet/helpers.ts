@@ -168,9 +168,7 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
       userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(shUser.address, amount))
     );
 
-    await userApi.sealBlock(
-      userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, 1))
-    );
+    await userApi.sealBlock(userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, 1)));
 
     // Make BSP
     await forceSignupBsp({
@@ -199,7 +197,6 @@ export const runSimpleBspNet = async (bspNetConfig: BspNetConfig) => {
         )
       )
     );
-
   } catch (e) {
     console.error("Error ", e);
   } finally {
