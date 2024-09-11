@@ -218,39 +218,8 @@ describeBspNet(
     });
 
     it("Only one BSP confirms it", async () => {
-      // Wait for the remaining BSP to volunteer.
-      await sleep(500);
-
-      const volunteerPending = await userApi.assert.extrinsicPresent({
-        module: "fileSystem",
-        method: "bspVolunteer",
-        checkTxPool: true
-      });
-      strictEqual(
-        volunteerPending.length,
-        1,
-        "There should only be one volunteer transaction, from the remaining BSP"
-      );
-
-      await userApi.sealBlock();
-
-      // Wait for the BSP to download the file.
-      await sleep(5000);
-      const confirmPending = await userApi.assert.extrinsicPresent({
-        module: "fileSystem",
-        method: "bspConfirmStoring",
-        checkTxPool: true
-      });
-      strictEqual(
-        confirmPending.length,
-        1,
-        "There should only be one confirm transaction, from the remaining BSP"
-      );
-
-      await userApi.sealBlock();
-
-      // Wait for the BSP to process the confirmation of the file.
-      await sleep(1000);
+      await userApi.wait.bspVolunteer(1);
+      await userApi.wait.bspStored(1);
     });
 
     it("BSP correctly responds to challenge with new forest root", async () => {

@@ -207,15 +207,17 @@ export class BspNetTestApi implements AsyncDisposable {
     const remappedWaitsNs = {
       /**
        * Waits for a BSP to volunteer for a storage request.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has volunteered.
        */
-      bspVolunteer: () => Waits.waitForBspVolunteer(this._api),
+      bspVolunteer: (expectedExts?: number) => Waits.waitForBspVolunteer(this._api, expectedExts),
 
       /**
        * Waits for a BSP to confirm storing a file.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: () => Waits.waitForBspStored(this._api)
+      bspStored: (expectedExts?: number) => Waits.waitForBspStored(this._api, expectedExts)
     };
 
     const remappedFileNs = {
