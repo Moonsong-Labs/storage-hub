@@ -134,7 +134,7 @@ pub trait FileStorage<T: TrieLayout>: 'static {
 
     // TODO: Return Result<Option> instead of Result only
     /// Get metadata for a file.
-    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<FileMetadata, FileStorageError>;
+    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<Option<FileMetadata>, FileStorageError>;
 
     /// Inserts a new file. If the file already exists, it will return an error.
     /// It is expected that the file key is indeed computed from the [Metadata].

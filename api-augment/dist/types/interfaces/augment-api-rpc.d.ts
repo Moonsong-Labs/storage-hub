@@ -1068,6 +1068,15 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
     };
     storagehubclient: {
       /**
+       * Get the metadata of a file.
+       **/
+      getFileMetadata: AugmentedRpc<
+        (
+          key: Option<Text> | null | Uint8Array | Text | string,
+          file_key: H256 | string | Uint8Array
+        ) => Observable<Option<FileMetadata>>
+      >;
+      /**
        * Get the root of the forest trie.
        **/
       getForestRoot: AugmentedRpc<
@@ -1078,6 +1087,19 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        **/
       insertBcsvKeys: AugmentedRpc<
         (seed: Option<Text> | null | Uint8Array | Text | string) => Observable<Text>
+      >;
+      /**
+       * Check if a file is in the file storage.
+       **/
+      isFileInFileStorage: AugmentedRpc<(file_key: H256 | string | Uint8Array) => Observable<bool>>;
+      /**
+       * Check if a file is in the forest.
+       **/
+      isFileInForest: AugmentedRpc<
+        (
+          key: Option<Text> | null | Uint8Array | Text | string,
+          file_key: H256 | string | Uint8Array
+        ) => Observable<bool>
       >;
       /**
        * Load a file in the local storage. This is the first step when uploading a file.

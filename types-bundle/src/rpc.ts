@@ -49,6 +49,44 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
       ],
       type: "H256"
     },
+    isFileInForest: {
+      description: "Check if a file is in the forest.",
+      params: [
+        {
+          name: "key",
+          type: "Option<String>"
+        },
+        {
+          name: "file_key",
+          type: "H256"
+        }
+      ],
+      type: "bool"
+    },
+    isFileInFileStorage: {
+      description: "Check if a file is in the file storage.",
+      params: [
+        {
+          name: "file_key",
+          type: "H256"
+        }
+      ],
+      type: "bool"
+    },
+    getFileMetadata: {
+      description: "Get the metadata of a file.",
+      params: [
+        {
+          name: "key",
+          type: "Option<String>"
+        },
+        {
+          name: "file_key",
+          type: "H256"
+        }
+      ],
+      type: "Option<FileMetadata>"
+    },
     insertBcsvKeys: {
       description: "Generate and insert new keys of type BCSV into the keystore.",
       params: [
