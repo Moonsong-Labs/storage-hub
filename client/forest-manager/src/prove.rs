@@ -44,6 +44,10 @@ where
     let next = iter.next().transpose()?;
     let prev = iter.next_back().transpose()?;
 
+    // This is just done to allow the `apply_delta` function to remove files from the trie without failing because of an incomplete database.
+    iter.next().transpose()?;
+    iter.next_back().transpose()?;
+
     match (prev, next) {
         // Scenario 1: Exact match
         (_, Some((key, _))) if challenged_file_key.as_ref() == key => Ok(Proven::new_exact_key(

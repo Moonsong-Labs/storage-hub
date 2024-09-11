@@ -38,6 +38,7 @@
     "test:full": "node --no-deprecation --import tsx --test ./suites/zombie/**.spec.ts",
     "test:bspnet": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/bsp/**.test.ts",
     "test:bspnet:only": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --import tsx --test-concurrency 1 --test --test-only ./suites/integration/bsp/**.test.ts",
+	"test:bspnet:subproof": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --import tsx --test-concurrency 1 --test ./suites/integration/bsp/submit-proofs.test.ts",
     "test:user": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/user/**.test.ts",
     "test:user:only": "NODE_OPTIONS='--no-deprecation' pnpm tsx scripts/checkRunning.ts && node --no-deprecation --test-concurrency 1 --import tsx --test --test-only ./suites/integration/user/**.test.ts",
     "test:node": "node --no-deprecation --import tsx --test ./suites/solo-node/**/**.test.ts",
