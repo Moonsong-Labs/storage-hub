@@ -10,7 +10,7 @@ use crate::types::{
 };
 use crate::{mock::*, types::Proof};
 use crate::{
-    ChallengeTickToChallengedProviders, ChallengesTicker, LastCheckpointTick, LastDeletedTick,
+    TickToProvidersDeadlines, ChallengesTicker, LastCheckpointTick, LastDeletedTick,
     LastTickProviderSubmittedAProofFor, SlashableProviders, TickToChallengesSeed,
     TickToCheckpointChallenges, ValidProofSubmittersLastTicks,
 };
@@ -558,7 +558,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
         let expected_deadline =
             last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
         let deadline =
-            ChallengeTickToChallengedProviders::<Test>::get(expected_deadline, provider_id);
+            TickToProvidersDeadlines::<Test>::get(expected_deadline, provider_id);
         assert_eq!(deadline, Some(()));
 
         // Check that the last event emitted is the correct one.
@@ -636,7 +636,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
-        let deadline = ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id);
+        let deadline = TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id);
         assert_eq!(deadline, Some(()));
 
         // Let some blocks pass (less than `ChallengeTicksTolerance` blocks).
@@ -667,11 +667,11 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
         let expected_deadline =
             last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
         let deadline =
-            ChallengeTickToChallengedProviders::<Test>::get(expected_deadline, provider_id);
+            TickToProvidersDeadlines::<Test>::get(expected_deadline, provider_id);
         assert_eq!(deadline, Some(()));
 
         // Check that the Provider no longer has the previous deadline.
-        let deadline = ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id);
+        let deadline = TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id);
         assert_eq!(deadline, None);
 
         // Advance beyond the previous deadline block and check that the Provider is not marked as slashable.
@@ -773,7 +773,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
         let deadline =
-            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id_1);
+            TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id_1);
         assert_eq!(deadline, Some(()));
 
         // Let some blocks pass (less than `ChallengeTicksTolerance` blocks).
@@ -801,12 +801,12 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
         let expected_deadline =
             last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
         let deadline =
-            ChallengeTickToChallengedProviders::<Test>::get(expected_deadline, provider_id_1);
+            TickToProvidersDeadlines::<Test>::get(expected_deadline, provider_id_1);
         assert_eq!(deadline, Some(()));
 
         // Check that the Provider no longer has the previous deadline.
         let deadline =
-            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id_1);
+            TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id_1);
         assert_eq!(deadline, None);
 
         // Advance beyond the previous deadline block and check that the Provider is not marked as slashable.
@@ -903,7 +903,7 @@ fn submit_proof_success() {
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = current_tick + challenge_period_plus_tolerance;
-        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, provider_id, ());
 
         // Advance to the next challenge the Provider should listen to.
         let providers_stake =
@@ -972,12 +972,12 @@ fn submit_proof_success() {
 
         // Check that the Provider's deadline was pushed forward.
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id),
+            TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id),
             None
         );
         let new_deadline = expected_new_tick + challenge_period + challenge_ticks_tolerance;
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(new_deadline, provider_id),
+            TickToProvidersDeadlines::<Test>::get(new_deadline, provider_id),
             Some(()),
         );
     });
@@ -1054,7 +1054,7 @@ fn submit_proof_adds_provider_to_valid_submitters_set() {
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = current_tick + challenge_period_plus_tolerance;
-        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, provider_id, ());
 
         // Advance to the next challenge the Provider should listen to.
         let current_block = System::block_number();
@@ -2905,7 +2905,7 @@ fn new_challenges_round_provider_marked_as_slashable() {
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = current_tick + challenge_period_plus_tolerance;
-        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, provider_id, ());
 
         // Check that Provider is not in the SlashableProviders storage map.
         assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
@@ -2941,13 +2941,13 @@ fn new_challenges_round_provider_marked_as_slashable() {
 
         // Check that the Provider's deadline was pushed forward.
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, provider_id),
+            TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id),
             None
         );
         let new_deadline =
             new_last_tick_provider_submitted_proof + challenge_period + challenge_ticks_tolerance;
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(new_deadline, provider_id),
+            TickToProvidersDeadlines::<Test>::get(new_deadline, provider_id),
             Some(()),
         );
     });
@@ -3021,7 +3021,7 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = current_tick + challenge_period_plus_tolerance;
 
-        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, provider_id, ());
 
         // Check that Provider is not in the SlashableProviders storage map.
         assert!(!SlashableProviders::<Test>::contains_key(&provider_id));
@@ -3072,7 +3072,7 @@ fn multiple_new_challenges_round_provider_accrued_many_failed_proof_submissions(
         // New challenges round
         let current_tick = ChallengesTicker::<Test>::get();
         let prev_deadline = current_tick + challenge_period;
-        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, provider_id, ());
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, provider_id, ());
 
         // Advance to the deadline block for this Provider.
         run_to_block(next_challenge_deadline);
@@ -3200,8 +3200,8 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = current_tick + challenge_period_plus_tolerance;
-        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, alice_provider_id, ());
-        ChallengeTickToChallengedProviders::<Test>::insert(prev_deadline, bob_provider_id, ());
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, alice_provider_id, ());
+        TickToProvidersDeadlines::<Test>::insert(prev_deadline, bob_provider_id, ());
 
         // Check that Alice and Bob are not in the SlashableProviders storage map.
         assert!(!SlashableProviders::<Test>::contains_key(
@@ -3296,22 +3296,22 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
         assert_eq!(expected_new_tick, new_last_interval_tick_bob);
 
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, alice_provider_id),
+            TickToProvidersDeadlines::<Test>::get(prev_deadline, alice_provider_id),
             None
         );
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(prev_deadline, bob_provider_id),
+            TickToProvidersDeadlines::<Test>::get(prev_deadline, bob_provider_id),
             None
         );
 
         // Check that the both Alice and Bob's deadlines were pushed forward.
         let new_deadline = expected_new_tick + challenge_period_plus_tolerance;
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(new_deadline, alice_provider_id),
+            TickToProvidersDeadlines::<Test>::get(new_deadline, alice_provider_id),
             Some(()),
         );
         assert_eq!(
-            ChallengeTickToChallengedProviders::<Test>::get(new_deadline, bob_provider_id),
+            TickToProvidersDeadlines::<Test>::get(new_deadline, bob_provider_id),
             Some(()),
         );
     });

@@ -188,7 +188,7 @@ pub mod pallet {
     /// A mapping from challenges tick to a random seed used for generating the challenges in that tick.
     ///
     /// This is used to keep track of the challenges' seed in the past.
-    /// This mapping goes back only `ChallengeHistoryLength` blocks. Previous challenges are removed.
+    /// This mapping goes back only [`ChallengeHistoryLengthFor`] blocks. Previous challenges are removed.
     #[pallet::storage]
     #[pallet::getter(fn tick_to_challenges)]
     pub type TickToChallengesSeed<T: Config> =
@@ -198,8 +198,8 @@ pub mod pallet {
     ///
     /// This is used to keep track of the challenges that have been made in the past, specifically
     /// in the checkpoint challenge rounds.
-    /// The vector is bounded by `MaxCustomChallengesPerBlockFor`.
-    /// This mapping goes back only `ChallengeHistoryLength` ticks. Previous challenges are removed.
+    /// The vector is bounded by [`MaxCustomChallengesPerBlockFor`].
+    /// This mapping goes back only [`ChallengeHistoryLengthFor`] ticks. Previous challenges are removed.
     #[pallet::storage]
     #[pallet::getter(fn tick_to_checkpoint_challenges)]
     pub type TickToCheckpointChallenges<T: Config> = StorageMap<
@@ -211,8 +211,8 @@ pub mod pallet {
 
     /// The challenge tick of the last checkpoint challenge round.
     ///
-    /// This is used to determine when to include the challenges from the `ChallengesQueue` and
-    /// `PriorityChallengesQueue` in the `TickToCheckpointChallenges` StorageMap. These checkpoint
+    /// This is used to determine when to include the challenges from the [`ChallengesQueue`] and
+    /// [`PriorityChallengesQueue`] in the [`TickToCheckpointChallenges`] StorageMap. These checkpoint
     /// challenge rounds have to be answered by ALL Providers, and this is enforced by the
     /// `submit_proof` extrinsic.
     #[pallet::storage]
@@ -229,7 +229,7 @@ pub mod pallet {
     /// have failed to submit a proof and subject to slashing.
     #[pallet::storage]
     #[pallet::getter(fn tick_to_challenged_providers)]
-    pub type ChallengeTickToChallengedProviders<T: Config> = StorageDoubleMap<
+    pub type TickToProvidersDeadlines<T: Config> = StorageDoubleMap<
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
@@ -239,7 +239,7 @@ pub mod pallet {
     >;
 
     /// A mapping from a Provider to the last tick for which they SHOULD have submitted a proof.
-    /// If for a Provider `p`, `LastTickProviderSubmittedProofFor[p]` is `n`, then the
+    /// If for a Provider `p`, `LastTickProviderSubmittedAProofFor[p]` is `n`, then the
     /// Provider should submit a proof for tick `n + stake_to_challenge_period(p)`.
     ///
     /// This gets updated when a Provider submits a proof successfully and is used to determine the
@@ -501,7 +501,7 @@ pub mod pallet {
         /// Validates that the proof corresponds to a challenge that was made in the past,
         /// by checking the `TickToChallengesSeed` StorageMap. The challenge tick that the
         /// Provider should have submitted a proof is calculated based on the last tick they
-        /// submitted a proof for (`LastTickProviderSubmittedProofFor`), and the proving period for
+        /// submitted a proof for ([`LastTickProviderSubmittedAProofFor`]), and the proving period for
         /// that Provider, which is a function of their stake.
         /// This extrinsic also checks that there hasn't been a checkpoint challenge round
         /// in between the last time the Provider submitted a proof for and the tick
@@ -509,7 +509,7 @@ pub mod pallet {
         /// subject to slashing.
         ///
         /// If valid:
-        /// - Pushes forward the Provider in the `ChallengeTickToChallengedProviders` StorageMap a number
+        /// - Pushes forward the Provider in the [`TickToProvidersDeadlines`] StorageMap a number
         /// of ticks corresponding to the stake of the Provider.
         /// - Registers this tick as the last tick in which the Provider submitted a proof.
         ///

@@ -36,9 +36,9 @@ use crate::{
         RandomChallengesPerBlockFor, RandomnessOutputFor, RandomnessProviderFor,
         StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
     },
-    ChallengeTickToChallengedProviders, ChallengesQueue, ChallengesTicker, Error, Event,
-    LastCheckpointTick, LastDeletedTick, LastTickProviderSubmittedAProofFor, Pallet,
-    PriorityChallengesQueue, SlashableProviders, TickToChallengesSeed, TickToCheckpointChallenges,
+    ChallengesQueue, ChallengesTicker, Error, Event, LastCheckpointTick, LastDeletedTick,
+    LastTickProviderSubmittedAProofFor, Pallet, PriorityChallengesQueue, SlashableProviders,
+    TickToChallengesSeed, TickToCheckpointChallenges, TickToProvidersDeadlines,
     ValidProofSubmittersLastTicks,
 };
 
@@ -198,7 +198,7 @@ where
 
         // Check that the submitter is not submitting the proof to late, i.e. that the challenges tick
         // is not greater or equal than `challenges_tick` + `T::ChallengeTicksTolerance::get()`.
-        // This should never happen, as the `ChallengeTickToChallengedProviders` StorageMap is
+        // This should never happen, as the `TickToProvidersDeadlines` StorageMap is
         // cleaned up every block. Therefore, if a Provider reached this deadline, it should have been
         // slashed, and its next challenge tick pushed forwards.
         let challenges_tick_deadline = challenges_tick
@@ -314,8 +314,8 @@ where
         // submitted a proof for.
         LastTickProviderSubmittedAProofFor::<T>::set(*submitter, Some(challenges_tick));
 
-        // Remove the submitter from its current deadline registered in `ChallengeTickToChallengedProviders`.
-        ChallengeTickToChallengedProviders::<T>::remove(challenges_tick_deadline, submitter);
+        // Remove the submitter from its current deadline registered in `TickToProvidersDeadlines`.
+        TickToProvidersDeadlines::<T>::remove(challenges_tick_deadline, submitter);
 
         // Calculate the next tick for which the submitter should be submitting a proof.
         let next_challenges_tick = challenges_tick
@@ -328,12 +328,8 @@ where
             .checked_add(&T::ChallengeTicksTolerance::get())
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
-        // Add this Provider to the `ChallengeTickToChallengedProviders` StorageMap, with its new deadline.
-        ChallengeTickToChallengedProviders::<T>::set(
-            next_challenges_tick_deadline,
-            submitter,
-            Some(()),
-        );
+        // Add this Provider to the `TickToProvidersDeadlines` StorageMap, with its new deadline.
+        TickToProvidersDeadlines::<T>::set(next_challenges_tick_deadline, submitter, Some(()));
 
         // Add this Provider to the `ValidProofSubmittersLastTicks` StorageMap, with the current tick number.
         let current_tick_valid_submitters =
@@ -373,21 +369,21 @@ where
     /// Generate a new round of challenges, be it random or checkpoint.
     ///
     /// Random challenges are automatically generated based on some external source of
-    /// randomness, and are added to `TickToChallengesSeed`, for this block's number.
+    /// randomness, and are added to [`TickToChallengesSeed`], for this tick's number.
     ///
     /// It also takes care of including the challenges from the `ChallengesQueue` and
     /// `PriorityChallengesQueue`. These custom challenges are only included in "checkpoint"
-    /// blocks
+    /// ticks
     ///
     /// Additionally, it takes care of checking if there are Providers that have
-    /// failed to submit a proof, and should have submitted one by this block. It does so
-    /// by checking the `ChallengeTickToChallengedProviders` StorageMap. If a Provider is found
+    /// failed to submit a proof, and should have submitted one by this tick. It does so
+    /// by checking the [`TickToProvidersDeadlines`] StorageMap. If a Provider is found
     /// to have failed to submit a proof, it is subject to slashing.
     ///
     /// Finally, it cleans up:
-    /// - The `TickToChallengesSeed` StorageMap, removing entries older than `ChallengeHistoryLength`.
-    /// - The `TickToCheckpointChallenges` StorageMap, removing the previous checkpoint challenge block.
-    /// - The `ChallengeTickToChallengedProviders` StorageMap, removing entries for the current challenges tick.
+    /// - The [`TickToChallengesSeed`] StorageMap, removing entries older than `ChallengeHistoryLength`.
+    /// - The [`TickToCheckpointChallenges`] StorageMap, removing the previous checkpoint challenge block.
+    /// - The [`TickToProvidersDeadlines`] StorageMap, removing entries for the current challenges tick.
     pub fn do_new_challenges_round(weight: &mut WeightMeter) {
         // Increment the challenges' ticker.
         let mut challenges_ticker = ChallengesTicker::<T>::get();
@@ -433,10 +429,10 @@ where
         }
         weight.consume(T::DbWeight::get().reads_writes(2, 0));
 
-        // If there are providers left in `ChallengeTickToChallengedProviders` for this tick,
+        // If there are providers left in `TickToProvidersDeadlines` for this tick,
         // they are marked as slashable.
         let mut slashable_providers =
-            ChallengeTickToChallengedProviders::<T>::drain_prefix(challenges_ticker);
+            TickToProvidersDeadlines::<T>::drain_prefix(challenges_ticker);
         while let Some((provider, _)) = slashable_providers.next() {
             // One read for every provider in the prefix, and one write as we're consuming and deleting the entry.
             weight.consume(T::DbWeight::get().reads_writes(1, 1));
@@ -512,11 +508,7 @@ where
                 challenges_ticker.saturating_add(Self::stake_to_challenge_period(stake));
 
             // Update this Provider's next challenge deadline.
-            ChallengeTickToChallengedProviders::<T>::set(
-                next_challenge_deadline,
-                provider,
-                Some(()),
-            );
+            TickToProvidersDeadlines::<T>::set(next_challenge_deadline, provider, Some(()));
 
             weight.consume(T::DbWeight::get().reads_writes(0, 1));
 
@@ -926,10 +918,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
                 .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
             // Remove the old deadline.
-            ChallengeTickToChallengedProviders::<T>::remove(
-                old_next_challenge_deadline,
-                *provider_id,
-            );
+            TickToProvidersDeadlines::<T>::remove(old_next_challenge_deadline, *provider_id);
         }
 
         // Set `LastTickProviderSubmittedAProofFor` to the current tick.
@@ -947,11 +936,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
 
         // Set the deadline for submitting a proof.
-        ChallengeTickToChallengedProviders::<T>::set(
-            next_challenge_deadline,
-            *provider_id,
-            Some(()),
-        );
+        TickToProvidersDeadlines::<T>::set(next_challenge_deadline, *provider_id, Some(()));
 
         // Emit event.
         Self::deposit_event(Event::<T>::NewChallengeCycleInitialised {
