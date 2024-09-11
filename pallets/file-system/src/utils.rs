@@ -35,7 +35,8 @@ use crate::{
         StorageRequestBspsMetadata, StorageRequestMetadata,
     },
     BlockRangeToMaximumThreshold, Error, Event, Pallet, PendingFileDeletionRequests,
-    PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps, StorageRequests,
+    PendingMoveBucketRequests, PendingStopStoringRequests, ReplicationTarget, StorageRequestBsps,
+    StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -225,6 +226,41 @@ where
         )?;
 
         Ok((bucket_id, maybe_collection_id))
+    }
+
+    pub(crate) fn do_request_move_bucket(
+        sender: T::AccountId,
+        bucket_id: BucketIdFor<T>,
+        new_msp_id: ProviderIdFor<T>,
+    ) -> Result<(), DispatchError> {
+        // Check if the sender is the owner of the bucket.
+        ensure!(
+            <T::Providers as ReadBucketsInterface>::is_bucket_owner(&sender, &bucket_id)?,
+            Error::<T>::NotBucketOwner
+        );
+
+        // Check if the new MSP is indeed an MSP.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_msp(&new_msp_id),
+            Error::<T>::NotAMsp
+        );
+
+        // Check if the bucket is already stored by the new MSP.
+        ensure!(
+            <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
+                &new_msp_id,
+                &bucket_id
+            ),
+            Error::<T>::MspAlreadyStoringBucket
+        );
+
+        // Register the move bucket request.
+        <PendingMoveBucketRequests<T>>::insert(&new_msp_id, bucket_id, sender);
+
+        let expiration_item = ExpirationItem::MoveBucketRequest((new_msp_id, bucket_id));
+        Self::enqueue_expiration_item(expiration_item)?;
+
+        Ok(())
     }
 
     /// Update the privacy of a bucket.
@@ -1505,9 +1541,13 @@ where
 }
 
 mod hooks {
+    use crate::MoveBucketRequestExpirations;
     use crate::{
-        pallet, types::MerkleHash, Event, FileDeletionRequestExpirations,
-        NextStartingBlockToCleanUp, Pallet, PendingFileDeletionRequests, ReplicationTarget,
+        pallet,
+        types::MerkleHash,
+        utils::{BucketIdFor, ProviderIdFor},
+        Event, FileDeletionRequestExpirations, NextStartingBlockToCleanUp, Pallet,
+        PendingFileDeletionRequests, PendingMoveBucketRequests, ReplicationTarget,
         StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use frame_support::weights::Weight;
@@ -1583,6 +1623,14 @@ mod hooks {
                 FileDeletionRequestExpirations::<T>::insert(&block, expired_file_deletion_requests);
                 remaining_weight.saturating_reduce(db_weight.writes(1));
             }
+
+            // Remove expired move bucket requests if any existed and process them.
+            let mut expired_move_bucket_requests = MoveBucketRequestExpirations::<T>::take(&block);
+            remaining_weight.saturating_reduce(minimum_required_weight);
+
+            while let Some((msp_id, bucket_id)) = expired_move_bucket_requests.pop() {
+                Self::process_expired_move_bucket_request(msp_id, bucket_id, remaining_weight);
+            }
         }
 
         fn process_expired_storage_request(file_key: MerkleHash<T>, remaining_weight: &mut Weight) {
@@ -1651,6 +1699,25 @@ mod hooks {
             });
 
             remaining_weight.saturating_reduce(potential_weight);
+        }
+
+        fn process_expired_move_bucket_request(
+            msp_id: ProviderIdFor<T>,
+            bucket_id: BucketIdFor<T>,
+            remaining_weight: &mut Weight,
+        ) {
+            let db_weight = T::DbWeight::get();
+            let potential_weight = db_weight.reads_writes(2, 3);
+
+            if !remaining_weight.all_gte(potential_weight) {
+                return;
+            }
+
+            PendingMoveBucketRequests::<T>::remove(&msp_id, &bucket_id);
+
+            remaining_weight.saturating_reduce(potential_weight);
+
+            Self::deposit_event(Event::MoveBucketRequestExpired { msp_id, bucket_id });
         }
     }
 }
