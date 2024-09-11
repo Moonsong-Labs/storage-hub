@@ -887,6 +887,8 @@ pub trait ReadUserSolvencyInterface {
     fn is_user_insolvent(user_account: &Self::AccountId) -> bool;
 }
 
+/// The interface of the ProofsDealer pallet that allows other pallets to query and modify proof
+/// submitters in the last ticks.
 pub trait ProofSubmittersInterface {
     /// The type which represents a provider identifier.
     type ProviderId: Parameter

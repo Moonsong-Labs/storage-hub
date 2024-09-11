@@ -28,7 +28,7 @@ pub mod pallet {
         CommitmentVerifier, MutateChallengeableProvidersInterface, ProofsDealerInterface,
         ReadChallengeableProvidersInterface, TrieProofDeltaApplier, TrieRemoveMutation,
     };
-    use sp_runtime::traits::Convert;
+    use sp_runtime::traits::{Convert, Saturating};
     use sp_std::vec::Vec;
     use types::{KeyFor, ProviderIdFor};
 
@@ -180,6 +180,14 @@ pub mod pallet {
         /// - The slashed funds are transferred.
         #[pallet::constant]
         type Treasury: Get<Self::AccountId>;
+
+        /// The period of blocks for which the block fullness is checked.
+        ///
+        /// This is the amount of blocks from the past, for which the block fullness has been checked
+        /// and is stored. Blocks older than `current_block` - [`Config::BlockFullnessPeriod`] are
+        /// cleared from storage.
+        #[pallet::constant]
+        type BlockFullnessPeriod: Get<BlockNumberFor<Self>>;
     }
 
     #[pallet::pallet]
@@ -328,6 +336,31 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn challenges_ticker_paused)]
     pub type ChallengesTickerPaused<T: Config> = StorageValue<_, bool, ValueQuery>;
+
+    /// A mapping from block number to the weight used in that block.
+    ///
+    /// This is used to check if the network is presumably under a spam attack.
+    /// It is cleared for blocks older than `current_block` - ([`Config::BlockFullnessPeriod`] + 1).
+    /// The oldest block number is stored in [`OldestBlockNumberWeightRegistered`].
+    #[pallet::storage]
+    #[pallet::getter(fn past_blocks_fullness)]
+    pub type PastBlocksWeight<T: Config> =
+        StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Weight>;
+
+    /// The number of blocks that have been considered _not_ full in the last [`Config::BlockFullnessPeriod`].
+    ///
+    /// This is used to check if the network is presumably under a spam attack.
+    #[pallet::storage]
+    #[pallet::getter(fn not_full_blocks_count)]
+    pub type NotFullBlocksCount<T: Config> = StorageValue<_, u32, ValueQuery>;
+
+    /// The oldest block number for which the block weight was registered.
+    ///
+    /// This is used to clear the storage of past blocks.
+    #[pallet::storage]
+    #[pallet::getter(fn oldest_block_fullness_number)]
+    pub type OldestBlockNumberWeightRegistered<T: Config> =
+        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
 
     // Pallets use events to inform users when important changes are made.
     // https://docs.substrate.io/v3/runtime/events-and-errors
@@ -613,9 +646,44 @@ pub mod pallet {
         fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
             // TODO: Benchmark computational weight cost of this hook.
 
-            // Only execute the `do_new_challenges_round` if the [`ChallengesTicker`] is not paused.
+            // Check if the network is presumably under a spam attack.
+            // If so, `ChallengesTicker` will be paused.
+            Self::do_check_spamming_condition(weight);
+
+            // Only execute the `do_new_challenges_round` if the `ChallengesTicker` is not paused.
             if !ChallengesTickerPaused::<T>::get() {
                 Self::do_new_challenges_round(weight);
+            }
+        }
+
+        /// This hook is called on block initialization and returns the Weight of the `on_finalize` hook to
+        /// let block builders know how much weight to reserve for it
+        /// TODO: Benchmark on_finalize to get its weight and replace the placeholder weight for that
+        fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
+            Weight::from_parts(10_000, 0) + T::DbWeight::get().reads_writes(1, 3)
+        }
+
+        fn on_finalize(block_number: BlockNumberFor<T>) {
+            // Get weight usage in this block so far, for the dispatch class of `submit_proof` extrinsics.
+            let weight_used = frame_system::Pallet::<T>::block_weight();
+            let weight_used_for_class = weight_used.get(DispatchClass::Normal);
+
+            // Store the weight usage in this block.
+            PastBlocksWeight::<T>::insert(block_number, weight_used_for_class);
+
+            // Get the oldest block weight registered.
+            let oldest_block_fullness_number = OldestBlockNumberWeightRegistered::<T>::get();
+            let block_fullness_period = T::BlockFullnessPeriod::get();
+
+            // Check if the oldest block weight registered is older than `BlockFullnessPeriod` + 1.
+            if block_number.saturating_sub(oldest_block_fullness_number)
+                > block_fullness_period.saturating_add(1u32.into())
+            {
+                // If it is older than `BlockFullnessPeriod` + 1, we clear the storage.
+                PastBlocksWeight::<T>::remove(oldest_block_fullness_number);
+                OldestBlockNumberWeightRegistered::<T>::put(
+                    oldest_block_fullness_number.saturating_add(1u32.into()),
+                );
             }
         }
 
@@ -624,7 +692,8 @@ pub mod pallet {
         // TODO: to the largest period of a Provider. The provider with largest period would be the one with the
         // TODO: smallest stake.
         fn integrity_test() {
-            // TODO: Check that the `CheckpointChallengePeriod` is greater or equal to the largest period of a Provider.
+            // TODO: Check that the `CheckpointChallengePeriod` is greater or equal to the largest period of a Provider. plus `ChallengeTicksTolerance`.
+            // TODO: Check that `BlockFullnessPeriod` is smaller or equal than `CheckpointChallengePeriod`.
         }
 
         /// This hook is used to trim down the `ValidProofSubmittersLastTicks` StorageMap up to the `TargetTicksOfProofsStorage`.
