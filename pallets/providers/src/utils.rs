@@ -1359,4 +1359,10 @@ where
             None
         }
     }
+
+    pub fn get_worst_case_scenario_slashable_amount(
+        provider_id: &HashId<T>,
+    ) -> Result<BalanceOf<T>, DispatchError> {
+        Self::compute_worst_case_scenario_slashable_amount(provider_id)
+    }
 }

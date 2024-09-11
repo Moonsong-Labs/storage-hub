@@ -221,35 +221,37 @@ impl Actor for BlockchainService {
     ) -> impl std::future::Future<Output = ()> + Send {
         async {
             match message {
-                BlockchainServiceCommand::SendExtrinsic { call, callback } => {
-                    match self.send_extrinsic(call).await {
-                        Ok(output) => {
-                            debug!(target: LOG_TARGET, "Extrinsic sent successfully: {:?}", output);
-                            match callback
-                                .send(Ok(SubmittedTransaction::new(output.receiver, output.hash)))
-                            {
-                                Ok(_) => {
-                                    trace!(target: LOG_TARGET, "Receiver sent successfully");
-                                }
-                                Err(e) => {
-                                    error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
-                                }
+                BlockchainServiceCommand::SendExtrinsic {
+                    call,
+                    tip,
+                    callback,
+                } => match self.send_extrinsic(call, tip).await {
+                    Ok(output) => {
+                        debug!(target: LOG_TARGET, "Extrinsic sent successfully: {:?}", output);
+                        match callback
+                            .send(Ok(SubmittedTransaction::new(output.receiver, output.hash)))
+                        {
+                            Ok(_) => {
+                                trace!(target: LOG_TARGET, "Receiver sent successfully");
                             }
-                        }
-                        Err(e) => {
-                            warn!(target: LOG_TARGET, "Failed to send extrinsic: {:?}", e);
-
-                            match callback.send(Err(e)) {
-                                Ok(_) => {
-                                    trace!(target: LOG_TARGET, "RPC error sent successfully");
-                                }
-                                Err(e) => {
-                                    error!(target: LOG_TARGET, "Failed to send error message through channel: {:?}", e);
-                                }
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
                             }
                         }
                     }
-                }
+                    Err(e) => {
+                        warn!(target: LOG_TARGET, "Failed to send extrinsic: {:?}", e);
+
+                        match callback.send(Err(e)) {
+                            Ok(_) => {
+                                trace!(target: LOG_TARGET, "RPC error sent successfully");
+                            }
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send error message through channel: {:?}", e);
+                            }
+                        }
+                    }
+                },
                 BlockchainServiceCommand::GetExtrinsicFromBlock {
                     block_hash,
                     extrinsic_hash,
@@ -614,6 +616,25 @@ impl Actor for BlockchainService {
                         Ok(_) => {}
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send back users with debt: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryWorstCaseScenarioSlashableAmount {
+                    provider_id,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let worst_case_scenario_slashable_amount = self
+                        .client
+                        .runtime_api()
+                        .get_worst_case_scenario_slashable_amount(current_block_hash, provider_id)
+                        .map_err(|_| anyhow!("Internal API error"));
+
+                    match callback.send(worst_case_scenario_slashable_amount) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back slashable amount: {:?}", e);
                         }
                     }
                 }

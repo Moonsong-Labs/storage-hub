@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shp_file_metadata::ChunkId;
@@ -13,6 +11,7 @@ use shc_blockchain_service::{
         ProcessSubmitProofRequest,
     },
     handler::SubmitProofRequest,
+    types::RetryStrategy,
 };
 use shc_common::types::{
     BlockNumber, FileKey, KeyProof, KeyProofs, Proven, ProviderId, RandomnessOutput, StorageProof,
@@ -238,36 +237,30 @@ where
             },
         );
 
-        // Attempt three times to submit extrinsic if it fails.
-        let mut extrinsic_submitted = false;
-        for attempt in 0..MAX_PROOF_SUBMISSION_ATTEMPTS {
-            let mut transaction = self
-                .storage_hub_handler
-                .blockchain
-                .send_extrinsic(call.clone())
-                .await?
-                .with_timeout(Duration::from_secs(60));
+        let max_tip = self
+            .storage_hub_handler
+            .blockchain
+            .query_worst_case_scenario_slashable_amount(event.data.provider_id)
+            .await?
+            .ok_or(anyhow!("Worst case slashable amount is None. Runtime no longer has this provider registered?"))?;
 
-            if transaction
-                .watch_for_success(&self.storage_hub_handler.blockchain)
-                .await
-                .is_ok()
-            {
-                extrinsic_submitted = true;
-                break;
-            }
-
-            warn!(target: LOG_TARGET, "Failed to submit proof, attempt #{}", attempt + 1);
-        }
-
-        // Exit with error if extrinsic was not submitted.
-        if !extrinsic_submitted {
-            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to submit proof after {} attempts", MAX_PROOF_SUBMISSION_ATTEMPTS);
-            return Err(anyhow!(
-                "Failed to submit proof after {} attempts",
-                MAX_PROOF_SUBMISSION_ATTEMPTS
-            ));
-        }
+        // Attempt to submit the extrinsic with retries and tip increase.
+        self.storage_hub_handler
+            .blockchain
+            .submit_extrinsic_with_retry(
+                call,
+                RetryStrategy::default()
+                    .with_max_retries(MAX_PROOF_SUBMISSION_ATTEMPTS)
+                    .with_max_tip(max_tip as f64),
+            )
+            .await
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to submit proof after {} attempts: {}", MAX_PROOF_SUBMISSION_ATTEMPTS, e);
+                anyhow!(
+                    "Failed to submit proof after {} attempts",
+                    MAX_PROOF_SUBMISSION_ATTEMPTS
+                )
+            })?;
 
         trace!(target: LOG_TARGET, "Proof submitted successfully");
 

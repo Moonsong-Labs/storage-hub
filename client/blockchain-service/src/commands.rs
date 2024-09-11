@@ -1,5 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use log::warn;
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use pallet_proofs_dealer_runtime_api::{
     GetCheckpointChallengesError, GetLastTickProviderSubmittedProofError,
@@ -19,16 +20,21 @@ use shc_common::types::{
 };
 use storage_hub_runtime::{AccountId, Balance};
 
+use crate::types::{RetryStrategy, Tip};
+
 use super::{
     handler::{BlockchainService, ConfirmStoringRequest, SubmitProofRequest},
     transaction::SubmittedTransaction,
     types::{Extrinsic, ExtrinsicResult},
 };
 
+const LOG_TARGET: &str = "blockchain-service-interface";
+
 /// Commands that can be sent to the BlockchainService actor.
 pub enum BlockchainServiceCommand {
     SendExtrinsic {
         call: storage_hub_runtime::RuntimeCall,
+        tip: Tip,
         callback: tokio::sync::oneshot::Sender<Result<SubmittedTransaction>>,
     },
     GetExtrinsicFromBlock {
@@ -109,6 +115,10 @@ pub enum BlockchainServiceCommand {
             Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError>,
         >,
     },
+    QueryWorstCaseScenarioSlashableAmount {
+        provider_id: ProviderId,
+        callback: tokio::sync::oneshot::Sender<Result<Option<Balance>>>,
+    },
 }
 
 /// Interface for interacting with the BlockchainService actor.
@@ -118,6 +128,7 @@ pub trait BlockchainServiceInterface {
     async fn send_extrinsic(
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
+        tip: Tip,
     ) -> Result<SubmittedTransaction>;
 
     /// Get an extrinsic from a block.
@@ -129,9 +140,6 @@ pub trait BlockchainServiceInterface {
 
     /// Unwatch an extrinsic.
     async fn unwatch_extrinsic(&self, subscription_id: Number) -> Result<()>;
-
-    /// Helper function to check if an extrinsic failed or succeeded in a block.
-    fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult>;
 
     /// Wait for a block number.
     async fn wait_for_block(&self, block_number: BlockNumber) -> Result<()>;
@@ -210,6 +218,22 @@ pub trait BlockchainServiceInterface {
         provider_id: ProviderId,
         min_debt: Balance,
     ) -> Result<Vec<AccountId>, GetUsersWithDebtOverThresholdError>;
+
+    async fn query_worst_case_scenario_slashable_amount(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<Option<Balance>>;
+
+    /// Helper function to check if an extrinsic failed or succeeded in a block.
+    fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult>;
+
+    /// Helper function to submit an extrinsic with a retry strategy. Returns when the extrinsic is
+    /// included in a block or when the retry strategy is exhausted.
+    async fn submit_extrinsic_with_retry(
+        &self,
+        call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
+        retry_strategy: RetryStrategy,
+    ) -> Result<()>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -218,11 +242,13 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
     async fn send_extrinsic(
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
+        tip: Tip,
     ) -> Result<SubmittedTransaction> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         // Build command to send to blockchain service.
         let message = BlockchainServiceCommand::SendExtrinsic {
             call: call.into(),
+            tip,
             callback,
         };
         self.send(message).await;
@@ -254,34 +280,6 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
-    }
-
-    fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult> {
-        for ev in extrinsic.events {
-            match ev.event {
-                storage_hub_runtime::RuntimeEvent::System(
-                    frame_system::Event::ExtrinsicFailed {
-                        dispatch_error,
-                        dispatch_info,
-                    },
-                ) => {
-                    return Ok(ExtrinsicResult::Failure {
-                        dispatch_info,
-                        dispatch_error,
-                    });
-                }
-                storage_hub_runtime::RuntimeEvent::System(
-                    frame_system::Event::ExtrinsicSuccess { dispatch_info },
-                ) => {
-                    return Ok(ExtrinsicResult::Success { dispatch_info });
-                }
-                _ => {}
-            }
-        }
-
-        Err(anyhow::anyhow!(
-            "Extrinsic does not contain an ExtrinsicFailed event."
-        ))
     }
 
     async fn wait_for_block(&self, block_number: BlockNumber) -> Result<()> {
@@ -454,5 +452,70 @@ impl BlockchainServiceInterface for ActorHandle<BlockchainService> {
         };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn query_worst_case_scenario_slashable_amount(
+        &self,
+        provider_id: ProviderId,
+    ) -> Result<Option<Balance>> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryWorstCaseScenarioSlashableAmount {
+            provider_id,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult> {
+        for ev in extrinsic.events {
+            match ev.event {
+                storage_hub_runtime::RuntimeEvent::System(
+                    frame_system::Event::ExtrinsicFailed {
+                        dispatch_error,
+                        dispatch_info,
+                    },
+                ) => {
+                    return Ok(ExtrinsicResult::Failure {
+                        dispatch_info,
+                        dispatch_error,
+                    });
+                }
+                storage_hub_runtime::RuntimeEvent::System(
+                    frame_system::Event::ExtrinsicSuccess { dispatch_info },
+                ) => {
+                    return Ok(ExtrinsicResult::Success { dispatch_info });
+                }
+                _ => {}
+            }
+        }
+
+        Err(anyhow::anyhow!(
+            "Extrinsic does not contain an ExtrinsicFailed event."
+        ))
+    }
+
+    async fn submit_extrinsic_with_retry(
+        &self,
+        call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
+        retry_strategy: RetryStrategy,
+    ) -> Result<()> {
+        let call = call.into();
+
+        for retry_count in 0..=retry_strategy.max_retries {
+            let tip = retry_strategy.compute_tip(retry_count);
+            let mut transaction = self
+                .send_extrinsic(call.clone(), Tip::from(tip as u128))
+                .await?
+                .with_timeout(retry_strategy.timeout);
+
+            if transaction.watch_for_success(&self).await.is_ok() {
+                return Ok(());
+            }
+
+            warn!(target: LOG_TARGET, "Failed to submit transaction, attempt #{}", retry_count + 1);
+        }
+
+        Ok(())
     }
 }

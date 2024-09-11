@@ -596,13 +596,17 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, StorageProviderId<Runtime>> for Runtime {
+    impl pallet_storage_providers_runtime_api::StorageProvidersApi<Block, BackupStorageProviderId<Runtime>, BackupStorageProvider<Runtime>, AccountId, StorageProviderId<Runtime>, ProviderIdFor<Runtime>, Balance> for Runtime {
         fn get_bsp_info(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<BackupStorageProvider<Runtime>, GetBspInfoError> {
             Providers::get_bsp_info(bsp_id)
         }
 
         fn get_storage_provider_id(who: &AccountId) -> Option<StorageProviderId<Runtime>> {
             Providers::get_storage_provider_id(who)
+        }
+
+        fn get_worst_case_scenario_slashable_amount(provider_id: ProviderIdFor<Runtime>) -> Option<Balance> {
+            Providers::get_worst_case_scenario_slashable_amount(&provider_id).ok()
         }
     }
 }
