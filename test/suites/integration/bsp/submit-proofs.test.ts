@@ -19,6 +19,7 @@ describeBspNet(
     let bspThreeApi: EnrichedBspApi;
     let fileData: FileMetadata;
     let oneBspFileData: FileMetadata;
+    let rootBeforeDeletion: string;
 
     before(async () => {
       const launchResponse = await getLaunchResponse();
@@ -452,6 +453,22 @@ describeBspNet(
     );
 
     it("File is deleted by user", async () => {
+      // Get the root of the BSP that has the file before deletion.
+      const bspMetadata = await userApi.query.providers.backupStorageProviders(
+        ShConsts.DUMMY_BSP_ID
+      );
+      assert(bspMetadata, "BSP metadata should exist");
+      assert(bspMetadata.isSome, "BSP metadata should be Some");
+      const bspMetadataBlob = bspMetadata.unwrap();
+      rootBeforeDeletion = bspMetadataBlob.root.toHex();
+      // Make sure it matches the one of the actual merkle forest.
+      const actualRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+      strictEqual(
+        rootBeforeDeletion,
+        actualRoot.toHex(),
+        "The root of the BSP should match the actual merkle forest root."
+      );
+
       // User sends file deletion request.
       const deleteFileExtrinsicResult = await userApi.sealBlock(
         userApi.tx.fileSystem.deleteFile(
@@ -616,6 +633,31 @@ describeBspNet(
       });
       assert(atLeastOneEventBelongsToFirstBsp, "No ProofAccepted event belongs to the first BSP");
 
+      // If the first BSP is the one removing the file, assert for the event of the mutations successfully applied in the runtime.
+      if (firstBspToRespond === ShConsts.DUMMY_BSP_ID) {
+        const mutationsAppliedEvents = userApi.assert.eventMany(
+          "proofsDealer",
+          "MutationsApplied",
+          firstChallengeBlockResult.events
+        );
+        strictEqual(
+          mutationsAppliedEvents.length,
+          1,
+          "There should be one mutations applied event"
+        );
+
+        // Check that the mutations applied event belongs to the dummy BSP.
+        const mutationsAppliedEventDataBlob =
+          userApi.events.proofsDealer.MutationsApplied.is(mutationsAppliedEvents[0].event) &&
+          mutationsAppliedEvents[0].event.data;
+        assert(mutationsAppliedEventDataBlob, "Event doesn't match Type");
+        strictEqual(
+          mutationsAppliedEventDataBlob.provider.toString(),
+          ShConsts.DUMMY_BSP_ID,
+          "The mutations applied event should belong to the dummy BSP"
+        );
+      }
+
       // Advance to second next challenge block.
       await userApi.advanceToBlock(secondBlockToAdvance, {
         waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
@@ -642,204 +684,34 @@ describeBspNet(
         return secondChallengeBlockEventDataBlob.provider.toString() === secondBspToRespond;
       });
       assert(atLeastOneEventBelongsToSecondBsp, "No ProofAccepted event belongs to the second BSP");
+
+      // If the second BSP is the one removing the file, assert for the event of the mutations successfully applied in the runtime.
+      if (secondBspToRespond === ShConsts.DUMMY_BSP_ID) {
+        const mutationsAppliedEvents = userApi.assert.eventMany(
+          "proofsDealer",
+          "MutationsApplied",
+          firstChallengeBlockResult.events
+        );
+        strictEqual(
+          mutationsAppliedEvents.length,
+          1,
+          "There should be one mutations applied event"
+        );
+
+        // Check that the mutations applied event belongs to the dummy BSP.
+        const mutationsAppliedEventDataBlob =
+          userApi.events.proofsDealer.MutationsApplied.is(mutationsAppliedEvents[0].event) &&
+          mutationsAppliedEvents[0].event.data;
+        assert(mutationsAppliedEventDataBlob, "Event doesn't match Type");
+        strictEqual(
+          mutationsAppliedEventDataBlob.provider.toString(),
+          ShConsts.DUMMY_BSP_ID,
+          "The mutations applied event should belong to the dummy BSP"
+        );
+      }
     });
 
     it("File is removed from Forest by BSP", async () => {
-      // Get the root of the BSP that has the file before deletion.
-      const bspMetadata = await userApi.query.providers.backupStorageProviders(
-        ShConsts.DUMMY_BSP_ID
-      );
-      assert(bspMetadata, "BSP metadata should exist");
-      assert(bspMetadata.isSome, "BSP metadata should be Some");
-      const bspMetadataBlob = bspMetadata.unwrap();
-      const rootBeforeDeletion = bspMetadataBlob.root;
-      // Make sure it matches the one of the actual merkle forest.
-      const actualRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
-      strictEqual(
-        rootBeforeDeletion.toString(),
-        actualRoot.toString(),
-        "The root of the BSP should match the actual merkle forest root"
-      );
-
-      /* Send file deletion request, make it expire to enqueue priority challenge */
-      // Send out a file deletion request for the file that the BSP has.
-      const fileDeletionRequestResult = await userApi.sealBlock(
-        userApi.tx.fileSystem.deleteFile(
-          oneBspFileData.bucketId,
-          oneBspFileData.fileKey,
-          oneBspFileData.location,
-          oneBspFileData.fileSize,
-          oneBspFileData.fingerprint,
-          null
-        ),
-        shUser
-      );
-
-      // Make sure the file deletion request was successful.
-      const fileDeletionRequestEvent = userApi.assert.eventPresent(
-        "fileSystem",
-        "FileDeletionRequest",
-        fileDeletionRequestResult.events
-      );
-      const fileDeletionRequestEventDataBlob =
-        userApi.events.fileSystem.FileDeletionRequest.is(fileDeletionRequestEvent.event) &&
-        fileDeletionRequestEvent.event.data;
-      assert(fileDeletionRequestEventDataBlob, "Event doesn't match Type");
-      strictEqual(
-        fileDeletionRequestEventDataBlob.fileKey.toString(),
-        oneBspFileData.fileKey,
-        "The file key should match the one that was requested to be deleted"
-      );
-
-      // Wait the required number of blocks till it expires (since we don't have a MSP to send the corresponding challenge)
-      const fileDeletionRequestTtl = Number(
-        userApi.consts.fileSystem.pendingFileDeletionRequestTtl
-      );
-      const currentBlock = await userApi.rpc.chain.getBlock();
-      const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      const fileDeletionRequestEnqueuedResult = await userApi.advanceToBlock(
-        currentBlockNumber + fileDeletionRequestTtl,
-        {
-          waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
-        }
-      );
-
-      // Wait for BSPs to finish tasks and seal the block.
-      await sleep(500);
-      await userApi.sealBlock();
-
-      // Check for a file deletion checkpoint challenge queued event.
-      userApi.assert.eventPresent(
-        "fileSystem",
-        "PriorityChallengeForFileDeletionQueued",
-        fileDeletionRequestEnqueuedResult.events
-      );
-
-      /* Advance to challenge tick, make sure enqueued challenge for file deletion is included in checkpoint challenge */
-      // Advance to the next challenge checkpoint period.
-      const checkpointChallengePeriod = Number(
-        userApi.consts.proofsDealer.checkpointChallengePeriod
-      );
-      const lastCheckpointChallengeTick = Number(
-        await userApi.call.proofsDealerApi.getLastCheckpointChallengeTick()
-      );
-      const nextCheckpointChallengeBlock = lastCheckpointChallengeTick + checkpointChallengePeriod;
-      const checkpointChallengeSentBlockResult = await userApi.advanceToBlock(
-        nextCheckpointChallengeBlock,
-        {
-          waitForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
-        }
-      );
-
-      // Check that the event for the priority challenge is emitted.
-      const newCheckpointChallengeSentEvent = userApi.assert.eventPresent(
-        "proofsDealer",
-        "NewCheckpointChallenge",
-        checkpointChallengeSentBlockResult.events
-      );
-
-      // Check that the file key is in the included checkpoint challenges.
-      const newCheckpointChallengesEventDataBlob =
-        userApi.events.proofsDealer.NewCheckpointChallenge.is(
-          newCheckpointChallengeSentEvent.event
-        ) && newCheckpointChallengeSentEvent.event.data;
-      assert(newCheckpointChallengesEventDataBlob, "Event doesn't match Type");
-      let containsFileKey = false;
-      for (const checkpointChallenge of newCheckpointChallengesEventDataBlob.challenges) {
-        if (checkpointChallenge[0].toHuman() === oneBspFileData.fileKey) {
-          containsFileKey = true;
-          break;
-        }
-      }
-      assert(containsFileKey, "The file key should be included in the checkpoint challenge.");
-
-      /* Advance to next challenge tick of BSP, make sure it responds with proof of inclusion and deletes file */
-      // Calculate next challenge tick for the BSP that has the file:
-      // Get the current tick.
-      const currentTick = (await userApi.call.proofsDealerApi.getCurrentTick()).toNumber();
-
-      // Get the last tick for which the BSP submitted a proof.
-      const dummyBspLastTickResult =
-        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(ShConsts.DUMMY_BSP_ID);
-      assert(dummyBspLastTickResult.isOk);
-      const lastTickBspSubmittedProof = dummyBspLastTickResult.asOk.toNumber();
-
-      // Get the challenge period for the BSP.
-      const dummyBspChallengePeriodResult = await userApi.call.proofsDealerApi.getChallengePeriod(
-        ShConsts.DUMMY_BSP_ID
-      );
-      assert(dummyBspChallengePeriodResult.isOk);
-      const dummyBspChallengePeriod = dummyBspChallengePeriodResult.asOk.toNumber();
-
-      // Calculate the next challenge tick.
-      let dummyBspNextChallengeTick = lastTickBspSubmittedProof + dummyBspChallengePeriod;
-
-      // If it is exactly equal to the current tick, take the next challenge tick.
-      if (dummyBspNextChallengeTick === currentTick) {
-        dummyBspNextChallengeTick += dummyBspChallengePeriod;
-      }
-
-      // Advance to the next challenge block.
-      await userApi.advanceToBlock(dummyBspNextChallengeTick, {
-        waitForBspProofs: [DUMMY_BSP_ID, BSP_TWO_ID, BSP_THREE_ID]
-      });
-
-      // Wait for tasks to execute and for the BSPs to submit proofs.
-      await sleep(500);
-
-      // There should be at least one pending submit proof transaction (for the dummy BSP)
-      const submitProofsPending = await userApi.assert.extrinsicPresent({
-        module: "proofsDealer",
-        method: "submitProof",
-        checkTxPool: true
-      });
-      assert(submitProofsPending.length > 0);
-
-      // Seal block and check that the transaction was successful.
-      const blockResult = await userApi.sealBlock();
-
-      // Assert for the event of the proof successfully submitted and verified.
-      const proofAcceptedEvents = userApi.assert.assertEventMany(
-        userApi,
-        "proofsDealer",
-        "ProofAccepted",
-        blockResult.events
-      );
-      strictEqual(
-        proofAcceptedEvents.length,
-        submitProofsPending.length,
-        "All pending submit proof transactions should have been successful"
-      );
-
-      // Check that at least one of the `ProofAccepted` events belongs to the dummy BSP.
-      const atLeastOneEventBelongsToDummyBsp = proofAcceptedEvents.some((eventRecord) => {
-        const proofAcceptedEventsDataBlob =
-          userApi.events.proofsDealer.ProofAccepted.is(eventRecord.event) && eventRecord.event.data;
-        assert(proofAcceptedEventsDataBlob, "Event doesn't match Type");
-
-        return proofAcceptedEventsDataBlob.provider.toString() === ShConsts.DUMMY_BSP_ID;
-      });
-      assert(atLeastOneEventBelongsToDummyBsp, "No ProofAccepted event belongs to the dummy BSP");
-
-      /* // Assert for the event of the mutations successfully applied in the runtime.
-      const mutationsAppliedEvents = userApi.assert.eventMany(
-        "proofsDealer",
-        "MutationsApplied",
-        blockResult.events
-      );
-      strictEqual(mutationsAppliedEvents.length, 1, "There should be one mutations applied event");
-
-      // Check that the mutations applied event belongs to the dummy BSP.
-      const mutationsAppliedEventDataBlob =
-        userApi.events.proofsDealer.MutationsApplied.is(mutationsAppliedEvents[0].event) &&
-        mutationsAppliedEvents[0].event.data;
-      assert(mutationsAppliedEventDataBlob, "Event doesn't match Type");
-      strictEqual(
-        mutationsAppliedEventDataBlob.provider.toString(),
-        ShConsts.DUMMY_BSP_ID,
-        "The mutations applied event should belong to the dummy BSP"
-      ); */
-
       // Make sure the root was updated in the runtime
       const bspMetadataAfterDeletion = await userApi.query.providers.backupStorageProviders(
         ShConsts.DUMMY_BSP_ID
@@ -847,17 +719,10 @@ describeBspNet(
       assert(bspMetadataAfterDeletion, "BSP metadata should exist");
       assert(bspMetadataAfterDeletion.isSome, "BSP metadata should be Some");
       const bspMetadataAfterDeletionBlob = bspMetadataAfterDeletion.unwrap();
-      console.log("Previous root:", rootBeforeDeletion.toHex());
-      console.log("Current root:", bspMetadataAfterDeletionBlob.root.toHex());
       assert(
-        bspMetadataAfterDeletionBlob.root.toHex() !== rootBeforeDeletion.toHex(),
+        bspMetadataAfterDeletionBlob.root.toHex() !== rootBeforeDeletion,
         "The root should have been updated on chain"
       );
-      /* strictEqual(
-        mutationsAppliedEventDataBlob.newRoot.toString(),
-        bspMetadataAfterDeletionBlob.root.toString(),
-        "The mutations applied event's new root should equal the new root in the runtime"
-      ); */
 
       // Check that the runtime root matches the forest root of the BSP.
       const forestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
@@ -873,7 +738,7 @@ describeBspNet(
       { skip: "Not implemented yet." },
       async () => {
         // TODO: Finalise block with mutations.
-        // TODO: Check that file is removed from File Storage.
+        // TODO: Check that file is removed from File Storage. Need a RPC method for this.
       }
     );
   }
