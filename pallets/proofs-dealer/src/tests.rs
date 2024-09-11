@@ -10,9 +10,9 @@ use crate::types::{
 };
 use crate::{mock::*, types::Proof};
 use crate::{
-    TickToProvidersDeadlines, ChallengesTicker, LastCheckpointTick, LastDeletedTick,
-    LastTickProviderSubmittedAProofFor, SlashableProviders, TickToChallengesSeed,
-    TickToCheckpointChallenges, ValidProofSubmittersLastTicks,
+    ChallengesTicker, LastCheckpointTick, LastDeletedTick, LastTickProviderSubmittedAProofFor,
+    SlashableProviders, TickToChallengesSeed, TickToCheckpointChallenges, TickToProvidersDeadlines,
+    ValidProofSubmittersLastTicks,
 };
 use codec::Encode;
 use frame_support::{
@@ -557,8 +557,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_success() {
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let expected_deadline =
             last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
-        let deadline =
-            TickToProvidersDeadlines::<Test>::get(expected_deadline, provider_id);
+        let deadline = TickToProvidersDeadlines::<Test>::get(expected_deadline, provider_id);
         assert_eq!(deadline, Some(()));
 
         // Check that the last event emitted is the correct one.
@@ -666,8 +665,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_success() 
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let expected_deadline =
             last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
-        let deadline =
-            TickToProvidersDeadlines::<Test>::get(expected_deadline, provider_id);
+        let deadline = TickToProvidersDeadlines::<Test>::get(expected_deadline, provider_id);
         assert_eq!(deadline, Some(()));
 
         // Check that the Provider no longer has the previous deadline.
@@ -772,8 +770,7 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
         let challenge_ticks_tolerance: u64 = ChallengeTicksToleranceFor::<Test>::get();
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let prev_deadline = last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
-        let deadline =
-            TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id_1);
+        let deadline = TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id_1);
         assert_eq!(deadline, Some(()));
 
         // Let some blocks pass (less than `ChallengeTicksTolerance` blocks).
@@ -800,13 +797,11 @@ fn proofs_dealer_trait_initialise_challenge_cycle_already_initialised_and_new_su
         let challenge_period_plus_tolerance = challenge_period + challenge_ticks_tolerance;
         let expected_deadline =
             last_tick_provider_submitted_proof + challenge_period_plus_tolerance;
-        let deadline =
-            TickToProvidersDeadlines::<Test>::get(expected_deadline, provider_id_1);
+        let deadline = TickToProvidersDeadlines::<Test>::get(expected_deadline, provider_id_1);
         assert_eq!(deadline, Some(()));
 
         // Check that the Provider no longer has the previous deadline.
-        let deadline =
-            TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id_1);
+        let deadline = TickToProvidersDeadlines::<Test>::get(prev_deadline, provider_id_1);
         assert_eq!(deadline, None);
 
         // Advance beyond the previous deadline block and check that the Provider is not marked as slashable.
@@ -3314,6 +3309,43 @@ fn new_challenges_round_bad_provider_marked_as_slashable_but_good_no() {
             TickToProvidersDeadlines::<Test>::get(new_deadline, bob_provider_id),
             Some(()),
         );
+    });
+}
+
+#[test]
+fn challenges_ticker_paused_works() {
+    new_test_ext().execute_with(|| {
+        // Go past genesis block so events get deposited.
+        run_to_block(1);
+
+        // Get the current tick.
+        let current_tick = ChallengesTicker::<Test>::get();
+
+        // Set the challenges ticker to paused.
+        assert_ok!(ProofsDealer::set_paused(RuntimeOrigin::root(), true));
+
+        // Assert event emitted.
+        System::assert_last_event(Event::<Test>::ChallengesTickerSet { paused: true }.into());
+
+        // Advance a number of blocks.
+        let current_block = System::block_number();
+        run_to_block(current_block + 10);
+
+        // Check that the challenges ticker is still the same.
+        assert_eq!(ChallengesTicker::<Test>::get(), current_tick);
+
+        // Unpause the challenges ticker.
+        assert_ok!(ProofsDealer::set_paused(RuntimeOrigin::root(), false));
+
+        // Assert event emitted.
+        System::assert_last_event(Event::<Test>::ChallengesTickerSet { paused: false }.into());
+
+        // Advance a number of blocks.
+        let current_block = System::block_number();
+        run_to_block(current_block + 10);
+
+        // Check that the challenges ticker is now incremented.
+        assert_eq!(ChallengesTicker::<Test>::get(), current_tick + 10);
     });
 }
 
